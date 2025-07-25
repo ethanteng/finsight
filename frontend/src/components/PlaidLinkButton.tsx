@@ -1,4 +1,6 @@
-import React, { useCallback, useState, useRef } from 'react';
+"use client";
+
+import React, { useCallback, useState } from 'react';
 import { usePlaidLink } from 'react-plaid-link';
 
 export default function PlaidLinkButton() {
@@ -25,20 +27,25 @@ export default function PlaidLinkButton() {
     const data = await res.json();
     if (data.access_token) {
       setStatus('Account linked!');
-      // Optionally, store access_token in localStorage or state for further API calls
+      localStorage.setItem('access_token', data.access_token);
     } else {
       setStatus('Failed to link account.');
     }
   }, []);
 
-  const plaid = linkToken ? usePlaidLink({ token: linkToken, onSuccess }) : null;
+  // Always call the hook, but only use it when linkToken is set
+  const plaid = usePlaidLink(
+    linkToken
+      ? { token: linkToken, onSuccess }
+      : { token: 'dummy-token', onSuccess: () => {} }
+  );
 
   return (
     <div>
       <button onClick={createLinkToken} disabled={!!linkToken}>
         Get Plaid Link Token
       </button>
-      {plaid && (
+      {linkToken && (
         <button onClick={() => plaid.open()} disabled={!plaid.ready} style={{ marginLeft: 8 }}>
           Connect Bank Account
         </button>

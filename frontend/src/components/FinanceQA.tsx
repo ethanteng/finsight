@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState } from 'react';
 
 export default function FinanceQA() {
@@ -33,31 +35,66 @@ export default function FinanceQA() {
   return (
     <div style={{ marginTop: 32 }}>
       <form onSubmit={askQuestion}>
-        <label htmlFor="finance-question">Ask a question about your finances:</label>
+        <label htmlFor="finance-question" style={{ fontWeight: 500 }}>
+          Ask a question about your finances:
+        </label>
         <div style={{ display: 'flex', marginTop: 8 }}>
           <input
             id="finance-question"
             type="text"
             value={question}
             onChange={e => setQuestion(e.target.value)}
-            style={{ flex: 1, marginRight: 8 }}
+            style={{
+              flex: 1,
+              marginRight: 8,
+              padding: '8px 12px',
+              borderRadius: 6,
+              border: '1px solid #444',
+              background: '#23272f',
+              color: '#f3f6fa',
+              fontSize: 16,
+            }}
             disabled={loading}
             placeholder="e.g. How much did I spend last month?"
             required
           />
-          <button type="submit" disabled={loading || !question.trim()}>
+          <button
+            type="submit"
+            disabled={loading || !question.trim()}
+            style={{
+              background: '#4f8cff',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 6,
+              padding: '8px 18px',
+              fontWeight: 600,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'background 0.2s',
+            }}
+          >
             {loading ? 'Asking...' : 'Ask'}
           </button>
         </div>
       </form>
       {answer && (
-        <div style={{ marginTop: 16, background: '#f6f8fa', padding: 12, borderRadius: 6 }}>
+        <div
+          style={{
+            marginTop: 16,
+            background: '#181c20',
+            color: '#f3f6fa',
+            padding: 16,
+            borderRadius: 8,
+            fontSize: 16,
+            whiteSpace: 'pre-line',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          }}
+        >
           <strong>Answer:</strong>
           <div>{answer}</div>
         </div>
       )}
       {error && (
-        <div style={{ marginTop: 16, color: 'red' }}>{error}</div>
+        <div style={{ marginTop: 16, color: '#ff6b6b' }}>{error}</div>
       )}
     </div>
   );
