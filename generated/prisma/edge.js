@@ -164,6 +164,10 @@ const config = {
         "fromEnvVar": null,
         "value": "darwin-arm64",
         "native": true
+      },
+      {
+        "fromEnvVar": null,
+        "value": "debian-openssl-3.0.x"
       }
     ],
     "previewFeatures": [],
@@ -181,6 +185,7 @@ const config = {
     "db"
   ],
   "activeProvider": "postgresql",
+  "postinstall": false,
   "inlineDatasources": {
     "db": {
       "url": {
@@ -189,8 +194,8 @@ const config = {
       }
     }
   },
-  "inlineSchema": "// This is your Prisma schema file,\n// learn more about it in the docs: https://pris.ly/d/prisma-schema\n\n// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?\n// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init\n\ngenerator client {\n  provider = \"prisma-client-js\"\n  output   = \"../generated/prisma\"\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\nmodel Account {\n  id               String        @id @default(cuid())\n  plaidAccountId   String        @unique\n  name             String\n  type             String\n  subtype          String?\n  mask             String?\n  officialName     String?\n  currentBalance   Float?\n  availableBalance Float?\n  currency         String?\n  institution      String?\n  transactions     Transaction[]\n  createdAt        DateTime      @default(now())\n  updatedAt        DateTime      @updatedAt\n}\n\nmodel Transaction {\n  id                 String   @id @default(cuid())\n  plaidTransactionId String   @unique\n  account            Account  @relation(fields: [accountId], references: [id])\n  accountId          String\n  amount             Float\n  date               DateTime\n  name               String\n  category           String?\n  pending            Boolean\n  currency           String?\n  createdAt          DateTime @default(now())\n  updatedAt          DateTime @updatedAt\n}\n",
-  "inlineSchemaHash": "ed56e89697953238a8f2590a998681e8e8fc3fc5564dfddcbbd18807c937c319",
+  "inlineSchema": "// This is your Prisma schema file,\n// learn more about it in the docs: https://pris.ly/d/prisma-schema\n\n// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?\n// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init\n\ngenerator client {\n  provider      = \"prisma-client-js\"\n  binaryTargets = [\"native\", \"debian-openssl-3.0.x\"]\n  output        = \"../generated/prisma\"\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\nmodel Account {\n  id               String        @id @default(cuid())\n  plaidAccountId   String        @unique\n  name             String\n  type             String\n  subtype          String?\n  mask             String?\n  officialName     String?\n  currentBalance   Float?\n  availableBalance Float?\n  currency         String?\n  institution      String?\n  transactions     Transaction[]\n  createdAt        DateTime      @default(now())\n  updatedAt        DateTime      @updatedAt\n}\n\nmodel Transaction {\n  id                 String   @id @default(cuid())\n  plaidTransactionId String   @unique\n  account            Account  @relation(fields: [accountId], references: [id])\n  accountId          String\n  amount             Float\n  date               DateTime\n  name               String\n  category           String?\n  pending            Boolean\n  currency           String?\n  createdAt          DateTime @default(now())\n  updatedAt          DateTime @updatedAt\n}\n",
+  "inlineSchemaHash": "a52725bd1e8ae8600b75ab0876c74012d6c18bfb991340e918792fc5f20b2459",
   "copyEngine": true
 }
 config.dirname = '/'
