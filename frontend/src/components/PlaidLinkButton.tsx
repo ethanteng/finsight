@@ -10,7 +10,8 @@ export default function PlaidLinkButton() {
   // Fetch link_token from backend
   const createLinkToken = useCallback(async () => {
     setStatus('Requesting link token...');
-    const res = await fetch('http://localhost:3000/plaid/create_link_token', { method: 'POST' });
+    const API_URL = process.env.NEXT_PUBLIC_API_URL;
+    const res = await fetch(`${API_URL}/plaid/create_link_token`, { method: 'POST' });
     const data = await res.json();
     setLinkToken(data.link_token);
     setStatus('Ready to link your account.');
@@ -19,7 +20,8 @@ export default function PlaidLinkButton() {
   // Exchange public_token for access_token
   const onSuccess = useCallback(async (public_token: string) => {
     setStatus('Exchanging public token...');
-    const res = await fetch('http://localhost:3000/plaid/exchange_public_token', {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL;
+    const res = await fetch(`${API_URL}/plaid/exchange_public_token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ public_token }),

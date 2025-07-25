@@ -1,9 +1,17 @@
 import express, { Application, Request, Response } from 'express';
 import { setupPlaidRoutes } from './plaid';
 import { askOpenAI } from './openai';
+import cors from 'cors';
 
 const app: Application = express();
 app.use(express.json());
+app.use(cors({
+  origin: [
+    'https://finsight-rust-one.vercel.app',
+    'http://localhost:3001'
+  ],
+  credentials: true
+}));
 
 app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok' });

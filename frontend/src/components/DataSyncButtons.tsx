@@ -9,6 +9,8 @@ export default function DataSyncButtons() {
     return localStorage.getItem('access_token') || '';
   };
 
+  const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
   const syncAccounts = async () => {
     setStatus('Syncing accounts...');
     const access_token = getAccessToken();
@@ -16,7 +18,7 @@ export default function DataSyncButtons() {
       setStatus('No access token found. Please link an account first.');
       return;
     }
-    const res = await fetch('http://localhost:3000/plaid/sync_accounts', {
+    const res = await fetch(`${API_URL}/plaid/sync_accounts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ access_token }),
@@ -36,7 +38,7 @@ export default function DataSyncButtons() {
       setStatus('No access token found. Please link an account first.');
       return;
     }
-    const res = await fetch('http://localhost:3000/plaid/sync_transactions', {
+    const res = await fetch(`${API_URL}/plaid/sync_transactions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ access_token }),

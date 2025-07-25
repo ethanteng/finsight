@@ -8,13 +8,15 @@ export default function FinanceQA() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
   const askQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     setAnswer('');
     try {
-      const res = await fetch('http://localhost:3000/ask', {
+      const res = await fetch(`${API_URL}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question }),

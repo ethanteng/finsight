@@ -87,6 +87,9 @@ Prisma.NullTypes = {
  * Enums
  */
 exports.Prisma.TransactionIsolationLevel = makeStrictEnum({
+  ReadUncommitted: 'ReadUncommitted',
+  ReadCommitted: 'ReadCommitted',
+  RepeatableRead: 'RepeatableRead',
   Serializable: 'Serializable'
 });
 
@@ -123,6 +126,11 @@ exports.Prisma.TransactionScalarFieldEnum = {
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
+};
+
+exports.Prisma.QueryMode = {
+  default: 'default',
+  insensitive: 'insensitive'
 };
 
 exports.Prisma.NullsOrder = {
@@ -173,7 +181,7 @@ const config = {
   "datasourceNames": [
     "db"
   ],
-  "activeProvider": "sqlite",
+  "activeProvider": "postgresql",
   "inlineDatasources": {
     "db": {
       "url": {
@@ -182,8 +190,8 @@ const config = {
       }
     }
   },
-  "inlineSchema": "// This is your Prisma schema file,\n// learn more about it in the docs: https://pris.ly/d/prisma-schema\n\n// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?\n// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init\n\ngenerator client {\n  provider = \"prisma-client-js\"\n  output   = \"../generated/prisma\"\n}\n\ndatasource db {\n  provider = \"sqlite\"\n  url      = env(\"DATABASE_URL\")\n}\n\nmodel Account {\n  id               String        @id @default(cuid())\n  plaidAccountId   String        @unique\n  name             String\n  type             String\n  subtype          String?\n  mask             String?\n  officialName     String?\n  currentBalance   Float?\n  availableBalance Float?\n  currency         String?\n  institution      String?\n  transactions     Transaction[]\n  createdAt        DateTime      @default(now())\n  updatedAt        DateTime      @updatedAt\n}\n\nmodel Transaction {\n  id                 String   @id @default(cuid())\n  plaidTransactionId String   @unique\n  account            Account  @relation(fields: [accountId], references: [id])\n  accountId          String\n  amount             Float\n  date               DateTime\n  name               String\n  category           String?\n  pending            Boolean\n  currency           String?\n  createdAt          DateTime @default(now())\n  updatedAt          DateTime @updatedAt\n}\n",
-  "inlineSchemaHash": "f70defa82cc2027b9825baa6ffb124b16190255e1321deb3761c0ee44c30a5cc",
+  "inlineSchema": "// This is your Prisma schema file,\n// learn more about it in the docs: https://pris.ly/d/prisma-schema\n\n// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?\n// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init\n\ngenerator client {\n  provider = \"prisma-client-js\"\n  output   = \"../generated/prisma\"\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\nmodel Account {\n  id               String        @id @default(cuid())\n  plaidAccountId   String        @unique\n  name             String\n  type             String\n  subtype          String?\n  mask             String?\n  officialName     String?\n  currentBalance   Float?\n  availableBalance Float?\n  currency         String?\n  institution      String?\n  transactions     Transaction[]\n  createdAt        DateTime      @default(now())\n  updatedAt        DateTime      @updatedAt\n}\n\nmodel Transaction {\n  id                 String   @id @default(cuid())\n  plaidTransactionId String   @unique\n  account            Account  @relation(fields: [accountId], references: [id])\n  accountId          String\n  amount             Float\n  date               DateTime\n  name               String\n  category           String?\n  pending            Boolean\n  currency           String?\n  createdAt          DateTime @default(now())\n  updatedAt          DateTime @updatedAt\n}\n",
+  "inlineSchemaHash": "ed56e89697953238a8f2590a998681e8e8fc3fc5564dfddcbbd18807c937c319",
   "copyEngine": true
 }
 

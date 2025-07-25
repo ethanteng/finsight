@@ -5,7 +5,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "ts-node src/index.ts",
-    "dev": "ts-node src/index.ts"
+    "dev:backend": "ts-node src/index.ts",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\""
   },
   "keywords": [],
   "author": "",
@@ -14,11 +16,14 @@
   "devDependencies": {
     "@types/express": "^5.0.3",
     "@types/node": "^24.1.0",
+    "concurrently": "^9.2.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   },
   "dependencies": {
     "@prisma/client": "^6.12.0",
+    "@types/cors": "^2.8.19",
+    "cors": "^2.8.5",
     "express": "^5.1.0",
     "openai": "^5.10.2",
     "plaid": "^37.0.0",
