@@ -70,7 +70,7 @@ export default function LandingPage() {
       <section style={{ ...sectionStyle, textAlign: 'center', paddingTop: 56 }}>
         <img src="https://placehold.co/80x80?text=FS" alt="FinSight Logo" style={{ borderRadius: 16, marginBottom: 16 }} />
         <h1 style={headingStyle}>FinSight</h1>
-        <div style={subheadStyle}>ChatGPT + your financial life — with real-world context.</div>
+        <div style={subheadStyle}>ChatGPT + your financial life + real-world context.</div>
         <div style={{ color: gray, fontSize: '1.1rem', marginBottom: 24 }}>
           No dashboards. No spreadsheets. Just connect your accounts and ask a question — FinSight analyzes your actual data, plus what’s happening in the market, to give you smart answers.
         </div>
@@ -163,7 +163,7 @@ export default function LandingPage() {
 
       {/* What GPT Can and Can't Do */}
       <section style={sectionStyle}>
-        <h2 style={{ ...headingStyle, fontSize: '1.4rem', color: mutedGreen }}>What GPT Can and Can’t Do</h2>
+        <h2 style={{ ...headingStyle, fontSize: '1.4rem', color: mutedGreen }}>What ChatGPT Can and Can’t Do Out of the Box</h2>
         <div style={{ color: gray, fontSize: '1.05rem', marginBottom: 8 }}>
           <strong>✅ Knows:</strong>
           <ul style={{ margin: 0, paddingLeft: 20 }}>
