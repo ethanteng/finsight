@@ -69,7 +69,7 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section style={{ ...sectionStyle, textAlign: 'center', paddingTop: 56 }}>
         <img src="https://placehold.co/80x80?text=FS" alt="AskLinc Logo" style={{ borderRadius: 16, marginBottom: 16 }} />
-        <h1 style={headingStyle}>Meet Linc</h1>
+        <h1 style={headingStyle}>Ask Linc</h1>
         <div style={subheadStyle}>ChatGPT + your financial life + real-world context.</div>
         <div style={{ color: gray, fontSize: '1.1rem', marginBottom: 24 }}>
           No dashboards. No spreadsheets. Just connect your accounts and ask a question — Linc analyzes your actual data, plus what’s happening in the market, to give you smart answers.
