@@ -68,11 +68,11 @@ export default function LandingPage() {
     <div style={{ background: navy, minHeight: '100vh', fontFamily: 'system-ui, sans-serif', color: white }}>
       {/* Hero Section */}
       <section style={{ ...sectionStyle, textAlign: 'center', paddingTop: 56 }}>
-        <img src="https://placehold.co/80x80?text=FS" alt="FinSight Logo" style={{ borderRadius: 16, marginBottom: 16 }} />
-        <h1 style={headingStyle}>FinSight</h1>
+        <img src="https://placehold.co/80x80?text=FS" alt="AskLinc Logo" style={{ borderRadius: 16, marginBottom: 16 }} />
+        <h1 style={headingStyle}>Meet Linc</h1>
         <div style={subheadStyle}>ChatGPT + your financial life + real-world context.</div>
         <div style={{ color: gray, fontSize: '1.1rem', marginBottom: 24 }}>
-          No dashboards. No spreadsheets. Just connect your accounts and ask a question — FinSight analyzes your actual data, plus what’s happening in the market, to give you smart answers.
+          No dashboards. No spreadsheets. Just connect your accounts and ask a question — Linc analyzes your actual data, plus what’s happening in the market, to give you smart answers.
         </div>
         <button style={ctaStyle}>Join the Waitlist</button>
       </section>
@@ -80,7 +80,7 @@ export default function LandingPage() {
       {/* What You Can Ask */}
       <section style={sectionStyle}>
         <h2 style={{ ...headingStyle, fontSize: '1.4rem', color: mutedGreen }}>What You Can Ask</h2>
-        <div style={{ color: gray, marginBottom: 16 }}>Real-world questions FinSight can answer, using your data and today’s market:</div>
+        <div style={{ color: gray, marginBottom: 16 }}>Real-world questions Linc can answer, using your data and today’s market:</div>
         <ul style={{ color: white, fontSize: '1.05rem', lineHeight: 1.7, paddingLeft: 24 }}>
           <li>What’s our actual asset allocation across all accounts?</li>
           <li>Are we overpaying in fees?</li>
@@ -98,7 +98,7 @@ export default function LandingPage() {
         <ol style={{ color: white, fontSize: '1.05rem', lineHeight: 1.7, paddingLeft: 24 }}>
           <li>Connect your accounts (via Plaid)</li>
           <li>Ask a question in plain English</li>
-          <li>FinSight uses your data + live market info to give you an actionable answer</li>
+          <li>Linc uses your data + live market info to give you an actionable answer</li>
         </ol>
         <div style={{ color: gray, marginTop: 8 }}>No dashboards. No spreadsheets. No setup required.</div>
       </section>
@@ -143,7 +143,7 @@ export default function LandingPage() {
         <div style={{ color: gray, fontSize: '1.1rem', marginBottom: 8 }}>
           Not a tracker. Not a robo-advisor. Not a static dashboard.<br />
           This is <strong style={{ color: mutedGreen }}>on-demand financial analysis</strong>, powered by ChatGPT + real-time market awareness.<br />
-          You ask the questions. FinSight finds the answers — in your data <em>and</em> in the world.
+          You ask the questions. Linc finds the answers — in your data <em>and</em> in the world.
         </div>
       </section>
 
@@ -178,7 +178,7 @@ export default function LandingPage() {
             <li>Anything that’s happened since late 2023</li>
           </ul>
           <div style={{ marginTop: 12 }}>
-            That’s where <strong style={{ color: mutedGreen }}>FinSight</strong> makes a real difference.<br />
+            That’s where <strong style={{ color: mutedGreen }}>Linc</strong> makes a real difference.<br />
             We feed trusted real-time data into ChatGPT behind the scenes — so when you ask, <em>“Should I roll over this CD?”</em>, you get an answer based on <strong>today’s best rates</strong> and <strong>your actual accounts</strong>.
           </div>
         </div>
@@ -186,7 +186,7 @@ export default function LandingPage() {
 
       {/* Final CTA */}
       <section style={{ ...sectionStyle, textAlign: 'center' }}>
-        <h2 style={{ ...headingStyle, fontSize: '1.5rem', color: green, marginBottom: 8 }}>You’ve got financial questions. FinSight has answers — based on your real data and the real world.</h2>
+        <h2 style={{ ...headingStyle, fontSize: '1.5rem', color: green, marginBottom: 8 }}>You’ve got financial questions. Linc has answers — based on your real data and the real world.</h2>
         <button style={ctaStyle}>Join the Waitlist</button>
       </section>
 
@@ -196,12 +196,12 @@ export default function LandingPage() {
         <div style={faqQStyle}>“I don’t want to give ChatGPT all my financial data…”</div>
         <div style={faqAStyle}>Totally fair. That’s why we use <strong>Plaid</strong>, not your login info — and your data is read-only, never stored, and never used to train models.</div>
         <div style={faqQStyle}>“How does GPT know what’s going on in the market?”</div>
-        <div style={faqAStyle}>On its own, it doesn’t. That’s why FinSight pulls in real-time data — like CD rates, bond yields, and current news — and feeds it into ChatGPT as context for your questions.</div>
+        <div style={faqAStyle}>On its own, it doesn’t. That’s why Linc pulls in real-time data — like CD rates, bond yields, and current news — and feeds it into ChatGPT as context for your questions.</div>
       </section>
 
       {/* Footer */}
       <footer style={{ textAlign: 'center', color: gray, fontSize: '0.95rem', padding: '2rem 0 1rem' }}>
-        &copy; {new Date().getFullYear()} FinSight. All rights reserved.
+        &copy; {new Date().getFullYear()} Linc. All rights reserved.
       </footer>
     </div>
   );
