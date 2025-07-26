@@ -22,7 +22,7 @@ export default function PlaidLinkButton() {
       } else {
         setStatus('Failed to create link token.');
       }
-    } catch (error) {
+    } catch {
       setStatus('Network error. Please try again.');
     }
   }, []);
@@ -46,7 +46,7 @@ export default function PlaidLinkButton() {
       } else {
         setStatus('Failed to link account.');
       }
-    } catch (error) {
+    } catch {
       setStatus('Network error. Please try again.');
     }
   }, []);
