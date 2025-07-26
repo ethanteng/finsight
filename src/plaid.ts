@@ -156,6 +156,14 @@ export const setupPlaidRoutes = (app: any) => {
       let count = 0;
 
       for (const transaction of transactions) {
+        // Check if account exists before upserting transaction
+        const account = await prisma.account.findUnique({
+          where: { plaidAccountId: transaction.account_id },
+        });
+        if (!account) {
+          console.warn(`Skipping transaction for unknown accountId: ${transaction.account_id}`);
+          continue;
+        }
         await prisma.transaction.upsert({
           where: { plaidTransactionId: transaction.transaction_id },
           update: {
