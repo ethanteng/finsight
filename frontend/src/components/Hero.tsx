@@ -20,7 +20,7 @@ export const Hero = () => {
           </h2>
           
           <p className="text-lg md:text-xl text-white/90 max-w-3xl mx-auto leading-relaxed">
-            No dashboards. No spreadsheets. Just connect your accounts and ask a question — FinSight analyzes your actual data, plus what's happening in the market, to give you smart answers.
+            No dashboards. No spreadsheets. Just connect your accounts and ask a question — FinSight analyzes your actual data, plus what&apos;s happening in the market, to give you smart answers.
           </p>
           
           <div className="pt-4">

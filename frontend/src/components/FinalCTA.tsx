@@ -6,7 +6,7 @@ export const FinalCTA = () => {
       <div className="container mx-auto px-4 text-center">
         <div className="max-w-4xl mx-auto space-y-8">
           <h2 className="text-4xl md:text-6xl font-bold">
-            You've got financial questions.
+            You&apos;ve got financial questions.
           </h2>
           <h3 className="text-2xl md:text-4xl text-green-light font-light">
             FinSight has answers — based on your real data and the real world.

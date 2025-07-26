@@ -10,7 +10,7 @@ export const WhyItsDifferent = () => {
       <div className="container mx-auto px-4">
         <div className="max-w-4xl mx-auto text-center space-y-12">
           <h2 className="text-4xl md:text-5xl font-bold">
-            Why It's Different
+            Why It&apos;s Different
           </h2>
           
           <div className="space-y-8">

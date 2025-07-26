@@ -33,7 +33,7 @@ export const WhatYouCanAsk = () => {
                 <div className="flex items-start space-x-3">
                   <div className="w-2 h-2 bg-green rounded-full mt-3 flex-shrink-0"></div>
                   <p className="text-navy font-medium text-left">
-                    "{question}"
+                    &ldquo;{question}&rdquo;
                   </p>
                 </div>
               </div>

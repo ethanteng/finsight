@@ -27,7 +27,7 @@ export default function FinanceQA() {
       } else {
         setError('No answer returned.');
       }
-    } catch (err) {
+    } catch {
       setError('Error contacting backend.');
     } finally {
       setLoading(false);
