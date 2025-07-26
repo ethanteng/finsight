@@ -64,27 +64,25 @@ export const setupPlaidRoutes = (app: any) => {
 
       for (const account of accounts) {
         await prisma.account.upsert({
-          where: { plaid_account_id: account.account_id },
+          where: { plaidAccountId: account.account_id },
           update: {
             name: account.name,
             mask: account.mask,
             type: account.type,
             subtype: account.subtype,
-            current_balance: account.balances.current,
-            available_balance: account.balances.available,
-            iso_currency_code: account.balances.iso_currency_code,
-            unofficial_currency_code: account.balances.unofficial_currency_code,
+            currentBalance: account.balances.current,
+            availableBalance: account.balances.available,
+            currency: account.balances.iso_currency_code,
           },
           create: {
-            plaid_account_id: account.account_id,
+            plaidAccountId: account.account_id,
             name: account.name,
             mask: account.mask,
             type: account.type,
             subtype: account.subtype,
-            current_balance: account.balances.current,
-            available_balance: account.balances.available,
-            iso_currency_code: account.balances.iso_currency_code,
-            unofficial_currency_code: account.balances.unofficial_currency_code,
+            currentBalance: account.balances.current,
+            availableBalance: account.balances.available,
+            currency: account.balances.iso_currency_code,
           },
         });
         count++;
@@ -115,23 +113,21 @@ export const setupPlaidRoutes = (app: any) => {
 
       for (const transaction of transactions) {
         await prisma.transaction.upsert({
-          where: { plaid_transaction_id: transaction.transaction_id },
+          where: { plaidTransactionId: transaction.transaction_id },
           update: {
-            account_id: transaction.account_id,
+            accountId: transaction.account_id,
             amount: transaction.amount,
             date: transaction.date,
             name: transaction.name,
-            merchant_name: transaction.merchant_name,
             category: transaction.category?.join(', ') || '',
             pending: transaction.pending,
           },
           create: {
-            plaid_transaction_id: transaction.transaction_id,
-            account_id: transaction.account_id,
+            plaidTransactionId: transaction.transaction_id,
+            accountId: transaction.account_id,
             amount: transaction.amount,
             date: transaction.date,
             name: transaction.name,
-            merchant_name: transaction.merchant_name,
             category: transaction.category?.join(', ') || '',
             pending: transaction.pending,
           },
