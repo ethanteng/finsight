@@ -164,6 +164,7 @@ export const setupPlaidRoutes = (app: any) => {
           console.warn(`Skipping transaction for unknown accountId: ${transaction.account_id}`);
           continue;
         }
+        // Force deployment - account check is active
         await prisma.transaction.upsert({
           where: { plaidTransactionId: transaction.transaction_id },
           update: {
