@@ -161,7 +161,7 @@ export const setupPlaidRoutes = (app: any) => {
           update: {
             accountId: transaction.account_id,
             amount: transaction.amount,
-            date: transaction.date,
+            date: new Date(transaction.date),
             name: transaction.name,
             category: transaction.category?.join(', ') || '',
             pending: transaction.pending,
@@ -170,7 +170,7 @@ export const setupPlaidRoutes = (app: any) => {
             plaidTransactionId: transaction.transaction_id,
             accountId: transaction.account_id,
             amount: transaction.amount,
-            date: transaction.date,
+            date: new Date(transaction.date),
             name: transaction.name,
             category: transaction.category?.join(', ') || '',
             pending: transaction.pending,
