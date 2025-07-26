@@ -168,7 +168,7 @@ export const setupPlaidRoutes = (app: any) => {
         await prisma.transaction.upsert({
           where: { plaidTransactionId: transaction.transaction_id },
           update: {
-            accountId: transaction.account_id,
+            accountId: account.id, // Use Account.id, not Plaid account_id
             amount: transaction.amount,
             date: new Date(transaction.date),
             name: transaction.name,
@@ -177,7 +177,7 @@ export const setupPlaidRoutes = (app: any) => {
           },
           create: {
             plaidTransactionId: transaction.transaction_id,
-            accountId: transaction.account_id,
+            accountId: account.id, // Use Account.id, not Plaid account_id
             amount: transaction.amount,
             date: new Date(transaction.date),
             name: transaction.name,
