@@ -27,7 +27,12 @@ export default function DataSyncButtons() {
     if (data.success) {
       setStatus(`Synced ${data.count} accounts.`);
     } else {
-      setStatus('Failed to sync accounts.');
+      // Handle detailed error messages from backend
+      if (data.error && data.details) {
+        setStatus(`${data.error}: ${data.details}`);
+      } else {
+        setStatus('Failed to sync accounts.');
+      }
     }
   };
 
@@ -47,7 +52,12 @@ export default function DataSyncButtons() {
     if (data.success) {
       setStatus(`Synced ${data.count} transactions.`);
     } else {
-      setStatus('Failed to sync transactions.');
+      // Handle detailed error messages from backend
+      if (data.error && data.details) {
+        setStatus(`${data.error}: ${data.details}`);
+      } else {
+        setStatus('Failed to sync transactions.');
+      }
     }
   };
 

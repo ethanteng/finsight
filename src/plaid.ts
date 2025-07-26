@@ -15,6 +15,50 @@ const configuration = new Configuration({
 
 const plaidClient = new PlaidApi(configuration);
 
+// Helper function to handle Plaid errors
+const handlePlaidError = (error: any, operation: string) => {
+  console.error(`Error in ${operation}:`, error);
+  
+  // Check for specific Plaid error codes
+  if (error.response?.data?.error_code) {
+    const errorCode = error.response.data.error_code;
+    const errorMessage = error.response.data.error_message;
+    
+    switch (errorCode) {
+      case 'ADDITIONAL_CONSENT_REQUIRED':
+        return {
+          error: 'Additional consent required',
+          details: 'This is a sandbox limitation. In production, users would need to provide additional consent.',
+          code: errorCode
+        };
+      case 'INVALID_ACCESS_TOKEN':
+        return {
+          error: 'Invalid access token',
+          details: 'Please reconnect your account.',
+          code: errorCode
+        };
+      case 'ITEM_LOGIN_REQUIRED':
+        return {
+          error: 'Re-authentication required',
+          details: 'Please reconnect your account to refresh access.',
+          code: errorCode
+        };
+      default:
+        return {
+          error: `Plaid error: ${errorCode}`,
+          details: errorMessage || 'An error occurred with Plaid',
+          code: errorCode
+        };
+    }
+  }
+  
+  return {
+    error: 'Failed to complete operation',
+    details: error.message || 'An unexpected error occurred',
+    code: 'UNKNOWN_ERROR'
+  };
+};
+
 export const setupPlaidRoutes = (app: any) => {
   // Create link token
   app.post('/plaid/create_link_token', async (req: any, res: any) => {
@@ -22,7 +66,7 @@ export const setupPlaidRoutes = (app: any) => {
       const request = {
         user: { client_user_id: 'user-id' },
         client_name: 'Linc',
-        products: [Products.Auth],
+        products: [Products.Auth, Products.Transactions],
         country_codes: [CountryCode.Us],
         language: 'en',
       };
@@ -30,8 +74,8 @@ export const setupPlaidRoutes = (app: any) => {
       const createTokenResponse = await plaidClient.linkTokenCreate(request);
       res.json({ link_token: createTokenResponse.data.link_token });
     } catch (error) {
-      console.error('Error creating link token:', error);
-      res.status(500).json({ error: 'Failed to create link token' });
+      const errorInfo = handlePlaidError(error, 'creating link token');
+      res.status(500).json(errorInfo);
     }
   });
 
@@ -46,8 +90,8 @@ export const setupPlaidRoutes = (app: any) => {
       const access_token = exchangeResponse.data.access_token;
       res.json({ access_token });
     } catch (error) {
-      console.error('Error exchanging public token:', error);
-      res.status(500).json({ error: 'Failed to exchange public token' });
+      const errorInfo = handlePlaidError(error, 'exchanging public token');
+      res.status(500).json(errorInfo);
     }
   });
 
@@ -90,8 +134,8 @@ export const setupPlaidRoutes = (app: any) => {
 
       res.json({ success: true, count });
     } catch (error) {
-      console.error('Error syncing accounts:', error);
-      res.status(500).json({ error: 'Failed to sync accounts' });
+      const errorInfo = handlePlaidError(error, 'syncing accounts');
+      res.status(500).json(errorInfo);
     }
   });
 
@@ -137,8 +181,8 @@ export const setupPlaidRoutes = (app: any) => {
 
       res.json({ success: true, count });
     } catch (error) {
-      console.error('Error syncing transactions:', error);
-      res.status(500).json({ error: 'Failed to sync transactions' });
+      const errorInfo = handlePlaidError(error, 'syncing transactions');
+      res.status(500).json(errorInfo);
     }
   });
 };
