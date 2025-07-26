@@ -95,6 +95,33 @@ export const setupPlaidRoutes = (app: any) => {
     }
   });
 
+  app.get('/plaid/accounts', async (req: any, res: any) => {
+    try {
+      const accessToken = req.headers.authorization?.replace('Bearer ', '') || req.query.access_token;
+      
+      if (!accessToken) {
+        return res.status(400).json({ error: 'Access token required' });
+      }
+
+      const accountsResponse = await plaidClient.accountsGet({
+        access_token: accessToken,
+      });
+
+      const accounts = accountsResponse.data.accounts.map(account => ({
+        id: account.account_id,
+        name: account.name,
+        type: account.type,
+        subtype: account.subtype,
+        currentBalance: account.balances.current,
+      }));
+
+      res.json({ accounts });
+    } catch (error) {
+      const errorInfo = handlePlaidError(error, 'fetching accounts');
+      res.status(500).json(errorInfo);
+    }
+  });
+
   // Sync accounts
   app.post('/plaid/sync_accounts', async (req: any, res: any) => {
     try {

@@ -1,7 +1,5 @@
 "use client";
 import { useState, useEffect } from 'react';
-import PlaidLinkButton from '../../components/PlaidLinkButton';
-import DataSyncButtons from '../../components/DataSyncButtons';
 import FinanceQA from '../../components/FinanceQA';
 
 interface PromptHistory {
@@ -81,12 +79,20 @@ export default function AppPage() {
       <div className="bg-gray-800 border-b border-gray-700 p-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-white">Ask Linc</h1>
-          <button
-            onClick={() => setShowSidebar(!showSidebar)}
-            className="lg:hidden bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm"
-          >
-            {showSidebar ? 'Hide' : 'Show'} History
-          </button>
+          <div className="flex items-center space-x-3">
+            <a 
+              href="/profile" 
+              className="text-gray-300 hover:text-white text-sm transition-colors"
+            >
+              Profile
+            </a>
+            <button
+              onClick={() => setShowSidebar(!showSidebar)}
+              className="lg:hidden bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm"
+            >
+              {showSidebar ? 'Hide' : 'Show'} History
+            </button>
+          </div>
         </div>
       </div>
 
@@ -127,14 +133,6 @@ export default function AppPage() {
         {/* Main Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto p-6">
-            {/* Account Management */}
-            <div className="bg-gray-800 rounded-lg p-4 mb-6">
-              <div className="flex flex-wrap gap-3 items-center">
-                <PlaidLinkButton />
-                <DataSyncButtons />
-              </div>
-            </div>
-
             {/* Q&A Interface */}
             <div className="bg-gray-800 rounded-lg p-6">
               <FinanceQA 
