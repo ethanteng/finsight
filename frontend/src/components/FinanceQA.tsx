@@ -1,8 +1,21 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-export default function FinanceQA() {
+interface PromptHistory {
+  id: string;
+  question: string;
+  answer: string;
+  timestamp: number;
+}
+
+interface FinanceQAProps {
+  onNewAnswer?: (question: string, answer: string) => void;
+  selectedPrompt?: PromptHistory | null;
+  onNewQuestion?: () => void;
+}
+
+export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion }: FinanceQAProps) {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(false);
@@ -10,11 +23,33 @@ export default function FinanceQA() {
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+  // Update question and answer when selectedPrompt changes
+  useEffect(() => {
+    if (selectedPrompt) {
+      setQuestion(selectedPrompt.question);
+      setAnswer(selectedPrompt.answer);
+      setError('');
+    } else {
+      // Only clear if not currently showing a selected prompt
+      if (!selectedPrompt) {
+        setAnswer('');
+        setError('');
+      }
+      // Don't clear the question - keep it in the textarea
+    }
+  }, [selectedPrompt]);
+
   const askQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     setAnswer('');
+    
+    // Clear selected prompt when asking a new question
+    if (onNewQuestion) {
+      onNewQuestion();
+    }
+    
     try {
       const res = await fetch(`${API_URL}/ask`, {
         method: 'POST',
@@ -24,6 +59,10 @@ export default function FinanceQA() {
       const data = await res.json();
       if (data.answer) {
         setAnswer(data.answer);
+        // Call onNewAnswer callback if provided
+        if (onNewAnswer) {
+          onNewAnswer(question, data.answer);
+        }
       } else {
         setError('No answer returned.');
       }
@@ -40,7 +79,6 @@ export default function FinanceQA() {
       <div className="bg-gray-700 rounded-lg p-6">
         <form onSubmit={askQuestion} className="space-y-4">
           <div>
-
             <textarea
               id="finance-question"
               value={question}
