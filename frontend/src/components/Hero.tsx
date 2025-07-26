@@ -12,7 +12,7 @@ export const Hero = () => {
       <div className="relative z-10 container mx-auto px-4 text-center text-white">
         <div className="max-w-4xl mx-auto space-y-8">
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight">
-            FinSight
+            Ask Linc
           </h1>
           
           <h2 className="text-xl md:text-3xl font-light text-green-light">
@@ -20,7 +20,7 @@ export const Hero = () => {
           </h2>
           
           <p className="text-lg md:text-xl text-white/90 max-w-3xl mx-auto leading-relaxed">
-            No dashboards. No spreadsheets. Just connect your accounts and ask a question — FinSight analyzes your actual data, plus what&apos;s happening in the market, to give you smart answers.
+            No dashboards. No spreadsheets. Just connect your accounts and ask a question — Linc analyzes your actual data, plus what&apos;s happening in the market, to give you smart answers.
           </p>
           
           <div className="pt-4">

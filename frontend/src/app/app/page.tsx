@@ -22,7 +22,7 @@ export default function AppPage() {
       {/* Header */}
       <div className="bg-gray-800 border-b border-gray-700 p-6">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-3xl font-bold text-white mb-2">FinSight</h1>
+          <h1 className="text-3xl font-bold text-white mb-2">Linc</h1>
           <p className="text-gray-300">Your AI Financial Analyst</p>
         </div>
       </div>

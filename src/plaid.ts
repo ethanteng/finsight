@@ -1,156 +1,148 @@
-import { Application, Request, Response } from 'express';
 import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode } from 'plaid';
-import { PrismaClient } from '../generated/prisma';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-const PLAID_CLIENT_ID = process.env.PLAID_CLIENT_ID || '';
-const PLAID_SECRET = process.env.PLAID_SECRET || '';
-const PLAID_ENV = (process.env.PLAID_ENV || 'sandbox') as keyof typeof PlaidEnvironments;
-
-const config = new Configuration({
-  basePath: PlaidEnvironments[PLAID_ENV],
+const configuration = new Configuration({
+  basePath: PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
   baseOptions: {
     headers: {
-      'PLAID-CLIENT-ID': PLAID_CLIENT_ID,
-      'PLAID-SECRET': PLAID_SECRET,
+      'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID,
+      'PLAID-SECRET': process.env.PLAID_SECRET,
     },
   },
 });
 
-export const plaidClient = new PlaidApi(config);
+const plaidClient = new PlaidApi(configuration);
 
-export function setupPlaidRoutes(app: Application) {
-  // Create Plaid Link token
-  app.post('/plaid/create_link_token', async (req: Request, res: Response) => {
+export const setupPlaidRoutes = (app: any) => {
+  // Create link token
+  app.post('/plaid/create_link_token', async (req: any, res: any) => {
     try {
-      const response = await plaidClient.linkTokenCreate({
-        user: { client_user_id: 'user-1' }, // single user for MVP
-        client_name: 'Finsight',
-        products: [Products.Auth, Products.Transactions],
+      const request = {
+        user: { client_user_id: 'user-id' },
+        client_name: 'Linc',
+        products: [Products.Auth],
         country_codes: [CountryCode.Us],
         language: 'en',
+      };
+
+      const createTokenResponse = await plaidClient.linkTokenCreate(request);
+      res.json({ link_token: createTokenResponse.data.link_token });
+    } catch (error) {
+      console.error('Error creating link token:', error);
+      res.status(500).json({ error: 'Failed to create link token' });
+    }
+  });
+
+  // Exchange public token for access token
+  app.post('/plaid/exchange_public_token', async (req: any, res: any) => {
+    try {
+      const { public_token } = req.body;
+      const exchangeResponse = await plaidClient.itemPublicTokenExchange({
+        public_token: public_token,
       });
-      res.json({ link_token: response.data.link_token });
-    } catch (err) {
-      if (err instanceof Error) {
-        res.status(500).json({ error: err.message });
-      } else {
-        res.status(500).json({ error: 'Unknown error' });
-      }
+      
+      const access_token = exchangeResponse.data.access_token;
+      res.json({ access_token });
+    } catch (error) {
+      console.error('Error exchanging public token:', error);
+      res.status(500).json({ error: 'Failed to exchange public token' });
     }
   });
 
-  // Exchange public_token for access_token
-  app.post('/plaid/exchange_public_token', async (req: Request, res: Response) => {
-    const { public_token } = req.body;
-    if (!public_token) return res.status(400).json({ error: 'Missing public_token' });
+  // Sync accounts
+  app.post('/plaid/sync_accounts', async (req: any, res: any) => {
     try {
-      const response = await plaidClient.itemPublicTokenExchange({ public_token });
-      // For MVP, just return the access_token (in production, store it securely!)
-      res.json({ access_token: response.data.access_token, item_id: response.data.item_id });
-    } catch (err) {
-      if (err instanceof Error) {
-        res.status(500).json({ error: err.message });
-      } else {
-        res.status(500).json({ error: 'Unknown error' });
-      }
-    }
-  });
+      const { access_token } = req.body;
+      const accountsResponse = await plaidClient.accountsGet({
+        access_token: access_token,
+      });
 
-  // Sync Plaid accounts to DB
-  app.post('/plaid/sync_accounts', async (req: Request, res: Response) => {
-    const { access_token } = req.body;
-    if (!access_token) return res.status(400).json({ error: 'Missing access_token' });
-    try {
-      const response = await plaidClient.accountsGet({ access_token });
-      const accounts = response.data.accounts;
-      // Upsert accounts
-      for (const acct of accounts) {
+      const accounts = accountsResponse.data.accounts;
+      let count = 0;
+
+      for (const account of accounts) {
         await prisma.account.upsert({
-          where: { plaidAccountId: acct.account_id },
+          where: { plaid_account_id: account.account_id },
           update: {
-            name: acct.name,
-            type: acct.type,
-            subtype: acct.subtype,
-            mask: acct.mask,
-            officialName: acct.official_name,
-            currentBalance: acct.balances.current ?? undefined,
-            availableBalance: acct.balances.available ?? undefined,
-            currency: acct.balances.iso_currency_code ?? undefined,
-            // institution_id not present on AccountBase, omit
+            name: account.name,
+            mask: account.mask,
+            type: account.type,
+            subtype: account.subtype,
+            current_balance: account.balances.current,
+            available_balance: account.balances.available,
+            iso_currency_code: account.balances.iso_currency_code,
+            unofficial_currency_code: account.balances.unofficial_currency_code,
           },
           create: {
-            plaidAccountId: acct.account_id,
-            name: acct.name,
-            type: acct.type,
-            subtype: acct.subtype,
-            mask: acct.mask,
-            officialName: acct.official_name,
-            currentBalance: acct.balances.current ?? undefined,
-            availableBalance: acct.balances.available ?? undefined,
-            currency: acct.balances.iso_currency_code ?? undefined,
-            // institution_id not present on AccountBase, omit
+            plaid_account_id: account.account_id,
+            name: account.name,
+            mask: account.mask,
+            type: account.type,
+            subtype: account.subtype,
+            current_balance: account.balances.current,
+            available_balance: account.balances.available,
+            iso_currency_code: account.balances.iso_currency_code,
+            unofficial_currency_code: account.balances.unofficial_currency_code,
           },
         });
+        count++;
       }
-      res.json({ success: true, count: accounts.length });
-    } catch (err) {
-      if (err instanceof Error) {
-        res.status(500).json({ error: err.message });
-      } else {
-        res.status(500).json({ error: 'Unknown error' });
-      }
+
+      res.json({ success: true, count });
+    } catch (error) {
+      console.error('Error syncing accounts:', error);
+      res.status(500).json({ error: 'Failed to sync accounts' });
     }
   });
 
-  // Sync Plaid transactions to DB
-  app.post('/plaid/sync_transactions', async (req: Request, res: Response) => {
-    const { access_token } = req.body;
-    if (!access_token) return res.status(400).json({ error: 'Missing access_token' });
+  // Sync transactions
+  app.post('/plaid/sync_transactions', async (req: any, res: any) => {
     try {
-      // Fetch all transactions for the last 30 days
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(endDate.getDate() - 30);
-      const response = await plaidClient.transactionsGet({
-        access_token,
-        start_date: startDate.toISOString().slice(0, 10),
-        end_date: endDate.toISOString().slice(0, 10),
+      const { access_token } = req.body;
+      const now = new Date();
+      const startDate = new Date(now.getFullYear(), now.getMonth(), 1); // First day of current month
+      
+      const transactionsResponse = await plaidClient.transactionsGet({
+        access_token: access_token,
+        start_date: startDate.toISOString().split('T')[0],
+        end_date: now.toISOString().split('T')[0],
       });
-      const transactions = response.data.transactions;
-      // Upsert transactions
-      for (const tx of transactions) {
+
+      const transactions = transactionsResponse.data.transactions;
+      let count = 0;
+
+      for (const transaction of transactions) {
         await prisma.transaction.upsert({
-          where: { plaidTransactionId: tx.transaction_id },
+          where: { plaid_transaction_id: transaction.transaction_id },
           update: {
-            accountId: (await prisma.account.findUnique({ where: { plaidAccountId: tx.account_id } }))?.id ?? '',
-            amount: tx.amount,
-            date: new Date(tx.date),
-            name: tx.name,
-            category: tx.category?.join(', '),
-            pending: tx.pending,
-            currency: tx.iso_currency_code ?? undefined,
+            account_id: transaction.account_id,
+            amount: transaction.amount,
+            date: transaction.date,
+            name: transaction.name,
+            merchant_name: transaction.merchant_name,
+            category: transaction.category?.join(', ') || '',
+            pending: transaction.pending,
           },
           create: {
-            plaidTransactionId: tx.transaction_id,
-            accountId: (await prisma.account.findUnique({ where: { plaidAccountId: tx.account_id } }))?.id ?? '',
-            amount: tx.amount,
-            date: new Date(tx.date),
-            name: tx.name,
-            category: tx.category?.join(', '),
-            pending: tx.pending,
-            currency: tx.iso_currency_code ?? undefined,
+            plaid_transaction_id: transaction.transaction_id,
+            account_id: transaction.account_id,
+            amount: transaction.amount,
+            date: transaction.date,
+            name: transaction.name,
+            merchant_name: transaction.merchant_name,
+            category: transaction.category?.join(', ') || '',
+            pending: transaction.pending,
           },
         });
+        count++;
       }
-      res.json({ success: true, count: transactions.length });
-    } catch (err) {
-      if (err instanceof Error) {
-        res.status(500).json({ error: err.message });
-      } else {
-        res.status(500).json({ error: 'Unknown error' });
-      }
+
+      res.json({ success: true, count });
+    } catch (error) {
+      console.error('Error syncing transactions:', error);
+      res.status(500).json({ error: 'Failed to sync transactions' });
     }
   });
-}
+};

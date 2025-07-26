@@ -46,7 +46,7 @@ export const GPTCapabilities = () => {
           </div>
           
           <div className="bg-green/5 border border-green/20 rounded-lg p-8 space-y-4">
-            <h3 className="text-2xl font-bold text-navy">That&apos;s where FinSight makes a real difference.</h3>
+            <h3 className="text-2xl font-bold text-navy">That&apos;s where Linc makes a real difference.</h3>
             <p className="text-lg text-muted-foreground leading-relaxed">
               We feed trusted real-time data into ChatGPT behind the scenes — so when you ask, 
               <span className="font-semibold text-navy"> &ldquo;Should I roll over this CD?&rdquo;</span>, 

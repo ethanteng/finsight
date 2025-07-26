@@ -9,7 +9,7 @@ export const FAQ = () => {
     },
     {
       question: "How does GPT know what's going on in the market?",
-      answer: "On its own, it doesn't. That's why FinSight pulls in real-time data — like CD rates, bond yields, and current news — and feeds it into ChatGPT as context for your questions."
+      answer: "On its own, it doesn't. That's why Linc pulls in real-time data — like CD rates, bond yields, and current news — and feeds it into ChatGPT as context for your questions."
     }
   ];
 

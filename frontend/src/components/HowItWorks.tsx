@@ -13,7 +13,7 @@ export const HowItWorks = () => {
     {
       number: "3",
       title: "Get actionable answers",
-      description: "FinSight uses your data + live market info to provide smart insights"
+      description: "Linc uses your data + live market info to provide smart insights"
     }
   ];
 

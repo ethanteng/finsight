@@ -59,7 +59,7 @@ export default function FinanceQA() {
             disabled={loading || !question.trim()}
             className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
           >
-            {loading ? 'Analyzing...' : 'Ask FinSight'}
+            {loading ? 'Analyzing...' : 'Ask Linc'}
           </button>
         </form>
       </div>
@@ -67,7 +67,7 @@ export default function FinanceQA() {
       {/* Results Area */}
       {answer && (
         <div className="bg-gray-700 rounded-lg p-6">
-          <h3 className="text-lg font-semibold mb-4 text-green-400">FinSight Analysis</h3>
+          <h3 className="text-lg font-semibold mb-4 text-green-400">Linc Analysis</h3>
           <div className="bg-gray-800 rounded-lg p-4">
             <div className="prose prose-invert max-w-none">
               <div className="whitespace-pre-line text-gray-200 leading-relaxed">

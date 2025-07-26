@@ -7,31 +7,35 @@ const app: Application = express();
 app.use(express.json());
 app.use(cors({
   origin: [
-    'https://finsight-rust-one.vercel.app',
-    'http://localhost:3001'
+    'https://asklinc.com', // your Vercel frontend URL
+    'http://localhost:3001' // for localdev, optional
   ],
   credentials: true
 }));
 
+// Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok' });
 });
 
-// Placeholder for Plaid routes
+// Setup Plaid routes
 setupPlaidRoutes(app);
 
-// Placeholder for OpenAI endpoint
+// OpenAI Q&A endpoint
 app.post('/ask', async (req: Request, res: Response) => {
-  const { question } = req.body;
-  if (!question) return res.status(400).json({ error: 'Missing question' });
   try {
+    const { question } = req.body;
+    if (!question) {
+      return res.status(400).json({ error: 'Question is required' });
+    }
+    
     const answer = await askOpenAI(question);
     res.json({ answer });
   } catch (err) {
     if (err instanceof Error) {
-      res.status(500).json({ error: 'OpenAI error', details: err.message });
+      res.status(500).json({ error: err.message });
     } else {
-      res.status(500).json({ error: 'OpenAI error', details: 'Unknown error' });
+      res.status(500).json({ error: 'Unknown error' });
     }
   }
 });

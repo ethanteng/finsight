@@ -19,7 +19,7 @@ export const WhatYouCanAsk = () => {
             </h2>
             <p className="text-xl text-muted-foreground">
               Real-world examples of simple and complex financial questions — with emphasis on how 
-              FinSight answers based on <span className="font-semibold text-navy">your</span> data and the 
+              Linc answers based on <span className="font-semibold text-navy">your</span> data and the 
               <span className="font-semibold text-navy"> current</span> financial landscape.
             </p>
           </div>
