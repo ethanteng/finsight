@@ -40,16 +40,14 @@ export default function FinanceQA() {
       <div className="bg-gray-700 rounded-lg p-6">
         <form onSubmit={askQuestion} className="space-y-4">
           <div>
-            <label htmlFor="finance-question" className="block text-sm font-medium text-gray-300 mb-2">
-              Ask about your finances
-            </label>
+
             <textarea
               id="finance-question"
               value={question}
               onChange={e => setQuestion(e.target.value)}
               className="w-full h-32 p-4 bg-gray-600 border border-gray-500 rounded-lg text-white placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={loading}
-              placeholder="e.g. How much did I spend on dining last month? What's my current asset allocation? Which accounts have the highest fees?"
+              placeholder="How much did I spend on dining last month? What's my current asset allocation? Which accounts have the highest fees?"
               required
             />
           </div>
