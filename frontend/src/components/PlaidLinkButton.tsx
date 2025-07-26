@@ -43,16 +43,30 @@ export default function PlaidLinkButton() {
   );
 
   return (
-    <div>
-      <button onClick={createLinkToken} disabled={!!linkToken}>
-        Get Plaid Link Token
-      </button>
-      {linkToken && (
-        <button onClick={() => plaid.open()} disabled={!plaid.ready} style={{ marginLeft: 8 }}>
-          Connect Bank Account
+    <div className="space-y-3">
+      <div className="flex space-x-3">
+        <button 
+          onClick={createLinkToken} 
+          disabled={!!linkToken}
+          className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200"
+        >
+          Connect More Accounts
         </button>
+        {linkToken && (
+          <button 
+            onClick={() => plaid.open()} 
+            disabled={!plaid.ready}
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200"
+          >
+            Open Plaid Link
+          </button>
+        )}
+      </div>
+      {status && (
+        <div className="text-sm text-gray-300 bg-gray-700 px-3 py-2 rounded">
+          {status}
+        </div>
       )}
-      <div style={{ marginTop: 12 }}>{status}</div>
     </div>
   );
 } 

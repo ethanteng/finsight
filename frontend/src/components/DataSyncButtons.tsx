@@ -52,14 +52,26 @@ export default function DataSyncButtons() {
   };
 
   return (
-    <div style={{ marginTop: 24 }}>
-      <button onClick={syncAccounts} style={{ marginRight: 8 }}>
-        Sync Accounts
-      </button>
-      <button onClick={syncTransactions}>
-        Sync Transactions
-      </button>
-      <div style={{ marginTop: 12 }}>{status}</div>
+    <div className="space-y-3">
+      <div className="flex space-x-3">
+        <button 
+          onClick={syncAccounts}
+          className="bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200"
+        >
+          Sync Accounts
+        </button>
+        <button 
+          onClick={syncTransactions}
+          className="bg-gray-600 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200"
+        >
+          Sync Transactions
+        </button>
+      </div>
+      {status && (
+        <div className="text-sm text-gray-300 bg-gray-700 px-3 py-2 rounded">
+          {status}
+        </div>
+      )}
     </div>
   );
 } 

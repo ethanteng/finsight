@@ -35,68 +35,53 @@ export default function FinanceQA() {
   };
 
   return (
-    <div style={{ marginTop: 32 }}>
-      <form onSubmit={askQuestion}>
-        <label htmlFor="finance-question" style={{ fontWeight: 500 }}>
-          Ask a question about your finances:
-        </label>
-        <div style={{ display: 'flex', marginTop: 8 }}>
-          <input
-            id="finance-question"
-            type="text"
-            value={question}
-            onChange={e => setQuestion(e.target.value)}
-            style={{
-              flex: 1,
-              marginRight: 8,
-              padding: '8px 12px',
-              borderRadius: 6,
-              border: '1px solid #444',
-              background: '#23272f',
-              color: '#f3f6fa',
-              fontSize: 16,
-            }}
-            disabled={loading}
-            placeholder="e.g. How much did I spend last month?"
-            required
-          />
+    <div className="space-y-6">
+      {/* Big Prompt Area */}
+      <div className="bg-gray-700 rounded-lg p-6">
+        <h3 className="text-lg font-semibold mb-4">Ask Your Financial Question</h3>
+        <form onSubmit={askQuestion} className="space-y-4">
+          <div>
+            <label htmlFor="finance-question" className="block text-sm font-medium text-gray-300 mb-2">
+              What would you like to know about your finances?
+            </label>
+            <textarea
+              id="finance-question"
+              value={question}
+              onChange={e => setQuestion(e.target.value)}
+              className="w-full h-32 p-4 bg-gray-600 border border-gray-500 rounded-lg text-white placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              disabled={loading}
+              placeholder="e.g. How much did I spend on dining last month? What's my current asset allocation? Which accounts have the highest fees?"
+              required
+            />
+          </div>
           <button
             type="submit"
             disabled={loading || !question.trim()}
-            style={{
-              background: '#4f8cff',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 6,
-              padding: '8px 18px',
-              fontWeight: 600,
-              cursor: loading ? 'not-allowed' : 'pointer',
-              transition: 'background 0.2s',
-            }}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
           >
-            {loading ? 'Asking...' : 'Ask'}
+            {loading ? 'Analyzing...' : 'Ask FinSight'}
           </button>
-        </div>
-      </form>
+        </form>
+      </div>
+
+      {/* Results Area */}
       {answer && (
-        <div
-          style={{
-            marginTop: 16,
-            background: '#181c20',
-            color: '#f3f6fa',
-            padding: 16,
-            borderRadius: 8,
-            fontSize: 16,
-            whiteSpace: 'pre-line',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-          }}
-        >
-          <strong>Answer:</strong>
-          <div>{answer}</div>
+        <div className="bg-gray-700 rounded-lg p-6">
+          <h3 className="text-lg font-semibold mb-4 text-green-400">FinSight Analysis</h3>
+          <div className="bg-gray-800 rounded-lg p-4">
+            <div className="prose prose-invert max-w-none">
+              <div className="whitespace-pre-line text-gray-200 leading-relaxed">
+                {answer}
+              </div>
+            </div>
+          </div>
         </div>
       )}
+
       {error && (
-        <div style={{ marginTop: 16, color: '#ff6b6b' }}>{error}</div>
+        <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-4">
+          <p className="text-red-400 text-sm">{error}</p>
+        </div>
       )}
     </div>
   );
