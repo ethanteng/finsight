@@ -41,27 +41,6 @@ app.post('/ask', async (req: Request, res: Response) => {
   }
 });
 
-// Temporary reset endpoint for production debugging
-app.post('/reset-db', async (req: Request, res: Response) => {
-  try {
-    const { PrismaClient } = require('@prisma/client');
-    const prisma = new PrismaClient();
-    
-    // Clear all data
-    await prisma.transaction.deleteMany({});
-    await prisma.account.deleteMany({});
-    
-    await prisma.$disconnect();
-    res.json({ success: true, message: 'Database cleared' });
-  } catch (err) {
-    if (err instanceof Error) {
-      res.status(500).json({ error: err.message });
-    } else {
-      res.status(500).json({ error: 'Unknown error' });
-    }
-  }
-});
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
