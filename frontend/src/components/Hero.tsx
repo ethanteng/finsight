@@ -16,7 +16,7 @@ export const Hero = () => {
           </h1>
           
           <h2 className="text-xl md:text-3xl font-light text-green-light">
-            ChatGPT + your financial life — with real-world context.
+            ChatGPT + your financial life + real-world context.
           </h2>
           
           <p className="text-lg md:text-xl text-white/90 max-w-3xl mx-auto leading-relaxed">
