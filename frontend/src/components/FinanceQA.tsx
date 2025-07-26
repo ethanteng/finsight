@@ -38,11 +38,10 @@ export default function FinanceQA() {
     <div className="space-y-6">
       {/* Big Prompt Area */}
       <div className="bg-gray-700 rounded-lg p-6">
-        <h3 className="text-lg font-semibold mb-4">Ask Your Financial Question</h3>
         <form onSubmit={askQuestion} className="space-y-4">
           <div>
             <label htmlFor="finance-question" className="block text-sm font-medium text-gray-300 mb-2">
-              What would you like to know about your finances?
+              Ask about your finances
             </label>
             <textarea
               id="finance-question"
@@ -67,7 +66,6 @@ export default function FinanceQA() {
       {/* Results Area */}
       {answer && (
         <div className="bg-gray-700 rounded-lg p-6">
-          <h3 className="text-lg font-semibold mb-4 text-green-400">Linc Analysis</h3>
           <div className="bg-gray-800 rounded-lg p-4">
             <div className="prose prose-invert max-w-none">
               <div className="whitespace-pre-line text-gray-200 leading-relaxed">
