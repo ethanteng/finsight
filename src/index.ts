@@ -8,6 +8,7 @@ app.use(express.json());
 app.use(cors({
   origin: [
     'https://asklinc.com', // your Vercel frontend URL
+    'https://www.asklinc.com', // www version
     'http://localhost:3001' // for localdev, optional
   ],
   credentials: true
