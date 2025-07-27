@@ -21,6 +21,7 @@ export default function ProfilePage() {
   const [syncInfo, setSyncInfo] = useState<SyncInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -43,9 +44,32 @@ export default function ProfilePage() {
     }
   }, [API_URL]);
 
-  // Manual refresh function
+  // Manual refresh function - handles both data sync and connection refresh
   const handleManualRefresh = async () => {
     try {
+      // First, try to refresh the connection if we have an access token
+      const accessToken = localStorage.getItem('access_token');
+      if (accessToken) {
+        try {
+          const refreshRes = await fetch(`${API_URL}/plaid/refresh_token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ access_token: accessToken }),
+          });
+          
+          if (!refreshRes.ok) {
+            // Connection is invalid, suggest reconnection
+            setNotification({ message: 'Your account connection has expired. Please reconnect your account.', type: 'error' });
+            return;
+          }
+        } catch (err) {
+          // Connection refresh failed, suggest reconnection
+          setNotification({ message: 'Your account connection has expired. Please reconnect your account.', type: 'error' });
+          return;
+        }
+      }
+
+      // Now sync the data
       const res = await fetch(`${API_URL}/sync/manual`, {
         method: 'POST',
         headers: {
@@ -59,10 +83,12 @@ export default function ProfilePage() {
           // Reload both sync status and accounts after successful refresh
           await loadSyncStatus();
           await loadConnectedAccounts();
+          setNotification({ message: 'Data refreshed successfully!', type: 'success' });
         }
       }
     } catch (err) {
       console.error('Error during manual refresh:', err);
+      setNotification({ message: 'Failed to refresh data. Please try again.', type: 'error' });
     }
   };
 
@@ -110,6 +136,16 @@ export default function ProfilePage() {
     loadSyncStatus();
   }, [loadConnectedAccounts, loadSyncStatus]);
 
+  // Auto-hide notifications after 3 seconds
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => {
+        setNotification(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -119,6 +155,17 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
+      {/* Notification */}
+      {notification && (
+        <div className={`fixed top-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg transition-all duration-300 ${
+          notification.type === 'success' 
+            ? 'bg-green-600 text-white' 
+            : 'bg-red-600 text-white'
+        }`}>
+          {notification.message}
+        </div>
+      )}
+      
       {/* Header */}
       <div className="bg-gray-800 border-b border-gray-700 p-4">
         <div className="flex items-center justify-between">
@@ -146,42 +193,12 @@ export default function ProfilePage() {
           <div className="mb-6">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-medium">Sync Status</h3>
-              <div className="flex space-x-2">
-                <button
-                  onClick={handleManualRefresh}
-                  className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm transition-colors"
-                >
-                  Refresh Data
-                </button>
-                <button
-                  onClick={() => {
-                    const accessToken = localStorage.getItem('access_token');
-                    if (accessToken) {
-                      fetch(`${API_URL}/plaid/refresh_token`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ access_token: accessToken }),
-                      })
-                      .then(res => res.json())
-                      .then(data => {
-                        if (data.success) {
-                          alert('Account connection refreshed successfully!');
-                        } else {
-                          alert('Please reconnect your account - the connection has expired.');
-                        }
-                      })
-                      .catch(() => {
-                        alert('Please reconnect your account - the connection has expired.');
-                      });
-                    } else {
-                      alert('No account connected. Please connect an account first.');
-                    }
-                  }}
-                  className="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm transition-colors"
-                >
-                  Refresh Connection
-                </button>
-              </div>
+              <button
+                onClick={handleManualRefresh}
+                className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm transition-colors"
+              >
+                Refresh Data
+              </button>
             </div>
             {syncInfo ? (
               <div className="text-sm text-gray-400">
