@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 interface PrivacyData {
   accounts: number;
@@ -24,19 +24,19 @@ export default function PrivacyPage() {
     loadPrivacyData();
   }, []);
 
-  const loadPrivacyData = async () => {
+  const loadPrivacyData = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/privacy/data`);
       if (res.ok) {
         const data = await res.json();
         setPrivacyData(data);
       }
-    } catch (err) {
-      console.error('Error loading privacy data:', err);
+    } catch {
+      console.error('Error loading privacy data');
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_URL]);
 
   const handleDisconnectAccounts = async () => {
     if (!confirm('This will disconnect all your linked accounts and clear all financial data. This action cannot be undone. Are you sure?')) {
@@ -55,7 +55,7 @@ export default function PrivacyPage() {
       } else {
         setMessage({ text: 'Failed to disconnect accounts. Please try again.', type: 'error' });
       }
-    } catch (err) {
+    } catch {
       setMessage({ text: 'Error disconnecting accounts. Please try again.', type: 'error' });
     } finally {
       setActionLoading(false);
@@ -79,7 +79,7 @@ export default function PrivacyPage() {
       } else {
         setMessage({ text: 'Failed to delete data. Please try again.', type: 'error' });
       }
-    } catch (err) {
+    } catch {
       setMessage({ text: 'Error deleting data. Please try again.', type: 'error' });
     } finally {
       setActionLoading(false);
@@ -235,7 +235,7 @@ export default function PrivacyPage() {
               <div>
                 <h3 className="font-medium">Secure Plaid Integration</h3>
                 <p className="text-gray-400">
-                  We use Plaid's secure API, the same technology used by major banks and financial institutions.
+                  We use Plaid&apos;s secure API, the same technology used by major banks and financial institutions.
                 </p>
               </div>
             </div>
@@ -245,7 +245,7 @@ export default function PrivacyPage() {
               <div>
                 <h3 className="font-medium">No AI Training</h3>
                 <p className="text-gray-400">
-                  Your data is not used to train AI models. We use OpenAI's API which does not train on your data.
+                  Your data is not used to train AI models. We use OpenAI&apos;s API which does not train on your data.
                 </p>
               </div>
             </div>

@@ -1,4 +1,5 @@
 "use client";
+import Link from 'next/link';
 
 export default function PrivacyPolicyPage() {
   return (
@@ -8,12 +9,12 @@ export default function PrivacyPolicyPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-white">Privacy Policy</h1>
           <div className="flex items-center space-x-3">
-            <a 
+            <Link 
               href="/" 
               className="text-gray-300 hover:text-white text-sm transition-colors"
             >
               Home
-            </a>
+            </Link>
             <a 
               href="/privacy" 
               className="text-gray-300 hover:text-white text-sm transition-colors"
@@ -97,7 +98,7 @@ export default function PrivacyPolicyPage() {
                   <div>
                     <h4 className="text-lg font-medium mb-3 text-green-400">Data Anonymization</h4>
                     <p className="text-gray-300 text-sm">
-                      Before sending any data to AI for analysis, we anonymize sensitive information like account names, institution names, and merchant names. Your data is tokenized (e.g., "Account_1" instead of "Chase Checking").
+                      Before sending any data to AI for analysis, we anonymize sensitive information like account names, institution names, and merchant names. Your data is tokenized (e.g., &quot;Account_1&quot; instead of &quot;Chase Checking&quot;).
                     </p>
                   </div>
 
@@ -118,7 +119,7 @@ export default function PrivacyPolicyPage() {
                   <div>
                     <h4 className="text-lg font-medium mb-3 text-green-400">No AI Training</h4>
                     <p className="text-gray-300 text-sm">
-                      We use OpenAI's API which does not train on your data. Your financial information is never used to improve AI models or shared with AI training datasets.
+                      We use OpenAI&apos;s API which does not train on your data. Your financial information is never used to improve AI models or shared with AI training datasets.
                     </p>
                   </div>
                 </div>
@@ -168,7 +169,7 @@ export default function PrivacyPolicyPage() {
 
                 <h4 className="text-lg font-medium mb-3">OpenAI</h4>
                 <p className="text-gray-300 mb-4">
-                  We use OpenAI's API to power our AI analysis. OpenAI does not train on your data and maintains strict privacy controls. All data sent to OpenAI is anonymized.
+                  We use OpenAI&apos;s API to power our AI analysis. OpenAI does not train on your data and maintains strict privacy controls. All data sent to OpenAI is anonymized.
                 </p>
               </section>
 
@@ -182,7 +183,7 @@ export default function PrivacyPolicyPage() {
               <section>
                 <h3 className="text-xl font-semibold mb-4">Changes to This Policy</h3>
                 <p className="text-gray-300">
-                  We may update this privacy policy from time to time. We will notify you of any material changes by posting the new policy on our website and updating the "Last updated" date.
+                  We may update this privacy policy from time to time. We will notify you of any material changes by posting the new policy on our website and updating the &quot;Last updated&quot; date.
                 </p>
               </section>
 
