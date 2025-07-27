@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { PrismaClient } from '../generated/prisma';
+import { anonymizeAccountData, anonymizeTransactionData, anonymizeConversationHistory } from './privacy';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 export const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
@@ -20,38 +21,16 @@ export async function askOpenAI(question: string, conversationHistory: Conversat
     take: 200, // increased limit for context
   });
 
-  // Format data for context with enhanced metadata
-  const accountSummary = accounts.map(a => {
-    const balance = a.currentBalance ? `$${a.currentBalance.toFixed(2)}` : 'N/A';
-    const available = a.availableBalance ? ` (Available: $${a.availableBalance.toFixed(2)})` : '';
-    const mask = a.mask ? ` (****${a.mask})` : '';
-    const institution = a.institution ? ` at ${a.institution}` : '';
-    return `- ${a.name}${mask} (${a.type}${a.subtype ? '/' + a.subtype : ''}): ${balance}${available}${institution}`;
-  }).join('\n');
-  
-  const transactionSummary = transactions.map(t => {
-    const date = t.date.toISOString().slice(0,10);
-    const amount = `$${t.amount.toFixed(2)}`;
-    const category = t.category ? ` [${t.category}]` : '';
-    const pending = t.pending ? ' [PENDING]' : '';
-    // Add merchant name if available and different from transaction name
-    const merchant = (t as any).merchantName && (t as any).merchantName !== t.name ? ` (${(t as any).merchantName})` : '';
-    // Add payment method if available
-    const paymentMethod = (t as any).paymentMethod ? ` via ${(t as any).paymentMethod}` : '';
-    // Add location if available
-    const location = (t as any).location ? ` at ${JSON.parse((t as any).location).city || 'Unknown location'}` : '';
-    return `- [${date}] ${t.name}${merchant}: ${amount}${category}${pending}${paymentMethod}${location}`;
-  }).join('\n');
+  // Anonymize data before sending to OpenAI
+  const accountSummary = anonymizeAccountData(accounts);
+  const transactionSummary = anonymizeTransactionData(transactions);
   
   console.log(`AI context: ${transactions.length} transactions, ${accounts.length} accounts, ${conversationHistory.length} conversation pairs`);
 
   const systemPrompt = `You are a financial assistant. Here is the user's account summary:\n${accountSummary}\n\nRecent transactions:\n${transactionSummary}\n\nAnswer the user's question using only this data. If the user asks to "show all transactions" or "list all transactions", provide a numbered list of individual transactions rather than summarizing them.`;
 
-  // Build conversation context from history
-  const conversationContext = conversationHistory
-    .reverse() // Show oldest first for context
-    .map(conv => `User: ${conv.question}\nAssistant: ${conv.answer}`)
-    .join('\n\n');
+  // Anonymize conversation history
+  const conversationContext = anonymizeConversationHistory(conversationHistory);
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt },

@@ -147,23 +147,58 @@ app.get('/sync/status', async (req: Request, res: Response) => {
           }
         });
 
+    // Privacy and data control endpoints
+    app.get('/privacy/data', async (req: Request, res: Response) => {
+      try {
+        // Return what data we have about the user (anonymized)
+        const accounts = await prisma.account.findMany();
+        const transactions = await prisma.transaction.findMany();
+        const conversations = await prisma.conversation.findMany({
+          orderBy: { createdAt: 'desc' },
+          take: 10
+        });
 
+        res.json({
+          accounts: accounts.length,
+          transactions: transactions.length,
+          conversations: conversations.length,
+          lastSync: await getLastSyncInfo()
+        });
+      } catch (err) {
+        res.status(500).json({ error: 'Failed to retrieve data summary' });
+      }
+    });
 
+    app.delete('/privacy/delete-all', async (req: Request, res: Response) => {
+      try {
+        // Delete all user data
+        await prisma.conversation.deleteMany();
+        await prisma.transaction.deleteMany();
+        await prisma.account.deleteMany();
+        await prisma.accessToken.deleteMany();
+        await prisma.syncStatus.deleteMany();
 
+        res.json({ success: true, message: 'All data deleted successfully' });
+      } catch (err) {
+        res.status(500).json({ error: 'Failed to delete data' });
+      }
+    });
 
+    app.post('/privacy/disconnect-accounts', async (req: Request, res: Response) => {
+      try {
+        // Remove all Plaid access tokens
+        await prisma.accessToken.deleteMany();
+        
+        // Clear account and transaction data
+        await prisma.transaction.deleteMany();
+        await prisma.account.deleteMany();
+        await prisma.syncStatus.deleteMany();
 
-
-
-
-
-
-
-
-
-
-
-
-
+        res.json({ success: true, message: 'All accounts disconnected and data cleared' });
+      } catch (err) {
+        res.status(500).json({ error: 'Failed to disconnect accounts' });
+      }
+    });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

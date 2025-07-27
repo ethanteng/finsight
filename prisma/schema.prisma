@@ -82,6 +82,20 @@ model Conversation {
   id        String   @id @default(cuid())
   question  String
   answer    String
+  // Privacy: Store anonymized versions for AI context
+  anonymizedQuestion String?
+  anonymizedAnswer   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model PrivacySettings {
+  id                    String   @id @default(cuid())
+  // User preferences for data handling
+  allowDataStorage      Boolean  @default(true)
+  allowAITraining       Boolean  @default(false)
+  anonymizeData         Boolean  @default(true)
+  dataRetentionDays     Int      @default(30)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
