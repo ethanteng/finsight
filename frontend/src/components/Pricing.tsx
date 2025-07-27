@@ -10,7 +10,7 @@ export const Pricing = () => {
         "Unlimited financial questions",
         "Link up to 3 accounts",
         "Great way to try it all risk-free",
-        "No external data or forecasting"
+        "No market data or economic context"
       ],
       popular: false
     },
@@ -21,8 +21,8 @@ export const Pricing = () => {
       features: [
         "Unlimited accounts",
         "Unlimited GPT questions",
-        "Basic market context: inflation, average rates",
-        "No smart modeling or real-time inputs"
+        "Basic market context: CPI, Fed rates, avg. mortgage rates",
+        "No live CD rates or scenario modeling"
       ],
       popular: true
     },
@@ -32,7 +32,7 @@ export const Pricing = () => {
       description: "Everything + live market intelligence + planning tools",
       features: [
         "Everything in Standard",
-        "Live CD, Treasury, mortgage rates",
+        "Live CD rates, Treasury yields, real-time mortgage rates",
         "Advanced 'what-if' scenario planning",
         "Smarter GPT insights with real-world data"
       ],

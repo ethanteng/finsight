@@ -1,33 +1,20 @@
 export const WhatYouCanAsk = () => {
-  const questions = [
-    {
-      question: "What's our actual asset allocation across all accounts?",
-      tier: "Free"
-    },
-    {
-      question: "Are we overpaying in fees?",
-      tier: "Free"
-    },
-    {
-      question: "How much cash is just sitting in low-yield savings?",
-      tier: "Free"
-    },
-    {
-      question: "Which of our CDs mature next month?",
-      tier: "Standard"
-    },
-    {
-      question: "Are Treasuries a better move than CDs right now?",
-      tier: "Premium"
-    },
-    {
-      question: "Should we refinance with today's mortgage rates?",
-      tier: "Premium"
-    },
-    {
-      question: "What happens to my spending power if rates go to 6%?",
-      tier: "Premium"
-    }
+  const freeQuestions = [
+    "What's our actual asset allocation across all accounts?",
+    "Are we overpaying in fees?",
+    "How much cash is just sitting in low-yield savings?"
+  ];
+
+  const standardQuestions = [
+    "Which of our CDs mature next month?",
+    "How does inflation affect our savings goals?",
+    "What's the average credit card APR vs our current rates?"
+  ];
+
+  const premiumQuestions = [
+    "Are Treasuries a better move than CDs right now?",
+    "Should we refinance with today's mortgage rates?",
+    "What happens to my spending power if rates go to 6%?"
   ];
 
   return (
@@ -43,31 +30,72 @@ export const WhatYouCanAsk = () => {
             </p>
           </div>
           
-          <div className="grid md:grid-cols-2 gap-6">
-            {questions.map((item, index) => (
-              <div 
-                key={index}
-                className="bg-card p-6 rounded-lg border border-border hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
-              >
-                <div className="flex items-start space-x-3">
-                  <div className="w-2 h-2 bg-green rounded-full mt-3 flex-shrink-0"></div>
-                  <div className="flex-1">
-                    <p className="text-navy font-medium text-left">
-                      &ldquo;{item.question}&rdquo;
+          <div className="grid md:grid-cols-3 gap-6">
+            {/* Free Tier */}
+            <div className="space-y-4">
+              <div className="text-center">
+                <span className="inline-block px-4 py-2 rounded-full text-sm font-semibold bg-green/10 text-green">
+                  Free
+                </span>
+              </div>
+              {freeQuestions.map((question, index) => (
+                <div 
+                  key={index}
+                  className="bg-card p-4 rounded-lg border border-border hover:shadow-lg transition-all duration-300"
+                >
+                  <div className="flex items-start space-x-3">
+                    <div className="w-2 h-2 bg-green rounded-full mt-3 flex-shrink-0"></div>
+                    <p className="text-navy font-medium text-left text-sm">
+                      &ldquo;{question}&rdquo;
                     </p>
-                    <div className="mt-2">
-                      <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                        item.tier === 'Free' ? 'bg-green/10 text-green' :
-                        item.tier === 'Standard' ? 'bg-blue-500/10 text-blue-500' :
-                        'bg-purple-500/10 text-purple-500'
-                      }`}>
-                        {item.tier}
-                      </span>
-                    </div>
                   </div>
                 </div>
+              ))}
+            </div>
+
+            {/* Standard Tier */}
+            <div className="space-y-4">
+              <div className="text-center">
+                <span className="inline-block px-4 py-2 rounded-full text-sm font-semibold bg-blue-500/10 text-blue-500">
+                  Standard
+                </span>
               </div>
-            ))}
+              {standardQuestions.map((question, index) => (
+                <div 
+                  key={index}
+                  className="bg-card p-4 rounded-lg border border-border hover:shadow-lg transition-all duration-300"
+                >
+                  <div className="flex items-start space-x-3">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full mt-3 flex-shrink-0"></div>
+                    <p className="text-navy font-medium text-left text-sm">
+                      &ldquo;{question}&rdquo;
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Premium Tier */}
+            <div className="space-y-4">
+              <div className="text-center">
+                <span className="inline-block px-4 py-2 rounded-full text-sm font-semibold bg-purple-500/10 text-purple-500">
+                  Premium
+                </span>
+              </div>
+              {premiumQuestions.map((question, index) => (
+                <div 
+                  key={index}
+                  className="bg-card p-4 rounded-lg border border-border hover:shadow-lg transition-all duration-300"
+                >
+                  <div className="flex items-start space-x-3">
+                    <div className="w-2 h-2 bg-purple-500 rounded-full mt-3 flex-shrink-0"></div>
+                    <p className="text-navy font-medium text-left text-sm">
+                      &ldquo;{question}&rdquo;
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
