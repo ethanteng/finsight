@@ -1,20 +1,26 @@
 export const WhatYouCanAsk = () => {
   const freeQuestions = [
-    "What's our actual asset allocation across all accounts?",
-    "Are we overpaying in fees anywhere?",
-    "How much cash is sitting in low-yield savings?"
+    "What's my actual asset allocation across all accounts?",
+    "Are we overpaying in fees?",
+    "How much cash is just sitting in low-yield savings?",
+    "How much do I save each month on average?",
+    "Where is most of my money sitting right now?"
   ];
 
   const standardQuestions = [
     "Which of our CDs mature next month?",
     "How does inflation affect our savings goals?",
-    "What's the average credit card APR vs. our current rates?"
+    "What's the average credit card APR vs. ours?",
+    "Should we move excess cash into something higher-yield?",
+    "How far are we from our house down payment target?"
   ];
 
   const premiumQuestions = [
-    "Are Treasuries a better move than CDs right now?",
-    "Should we refinance given today's mortgage rates?",
-    "What happens to our spending power if rates hit 6%?"
+    "Should we refinance based on current mortgage rates?",
+    "Are Treasuries a better option than CDs right now?",
+    "What happens to our spending power if rates go to 6%?",
+    "What asset mix gives us the right balance of safety and growth?",
+    "How long can we last without touching our emergency fund if the market drops?"
   ];
 
   return (
@@ -26,7 +32,7 @@ export const WhatYouCanAsk = () => {
               What You Can Ask
             </h2>
             <p className="text-xl text-muted-foreground">
-              Real examples of what Linc can help with — from understanding your money to planning ahead with market insights.
+              Choose the plan that fits your current financial journey.
             </p>
           </div>
           
@@ -38,7 +44,7 @@ export const WhatYouCanAsk = () => {
                   Free Tier
                 </span>
                 <p className="text-sm text-muted-foreground">
-                  For curious explorers who want a better view of their own data
+                  For people with checking, savings, and maybe a 401(k). You&apos;re focused on saving more and getting clarity, not complexity.
                 </p>
               </div>
               {freeQuestions.map((question, index) => (
@@ -54,9 +60,7 @@ export const WhatYouCanAsk = () => {
               <div className="bg-green/5 p-4 rounded-lg border border-green/20">
                 <p className="text-sm text-green-700 font-semibold mb-3">You get:</p>
                 <div className="text-sm text-green-600 space-y-2">
-                  <p>Clear answers about your own account data</p>
-                  <p>No guesswork — see what&apos;s really happening</p>
-                  <p>Great for users just beyond spreadsheets</p>
+                  <p>You get a clear view of your own data — no charts, no spreadsheets, no budgeting guilt.</p>
                 </div>
               </div>
             </div>
@@ -68,7 +72,7 @@ export const WhatYouCanAsk = () => {
                   Standard Tier
                 </span>
                 <p className="text-sm text-muted-foreground">
-                  For users who want economic context with their analysis
+                  You&apos;ve gone beyond the basics. You&apos;re exploring CDs, investing a bit, maybe thinking about buying a home. You want smarter context to grow your money.
                 </p>
               </div>
               {standardQuestions.map((question, index) => (
@@ -84,9 +88,7 @@ export const WhatYouCanAsk = () => {
               <div className="bg-blue-500/5 p-4 rounded-lg border border-blue-500/20">
                 <p className="text-sm text-blue-700 font-semibold mb-3">You also get:</p>
                 <div className="text-sm text-blue-600 space-y-2">
-                  <p>Trusted public benchmarks like CPI and Fed rates</p>
-                  <p>Economic framing without the noise</p>
-                  <p>Helps answer &quot;should we adjust?&quot;</p>
+                  <p>Answers are based on your data, plus real-world context like CPI, average rates, and economic trends — so you&apos;re not flying blind.</p>
                 </div>
               </div>
             </div>
@@ -98,7 +100,7 @@ export const WhatYouCanAsk = () => {
                   Premium Tier
                 </span>
                 <p className="text-sm text-muted-foreground">
-                  For financially-savvy users who want smarter answers, faster
+                  You have more complex finances: a mortgage, long-term goals, maybe retirement on the horizon. You&apos;ve worked with advisors before, but want smarter, faster answers without the fees.
                 </p>
               </div>
               {premiumQuestions.map((question, index) => (
@@ -114,9 +116,7 @@ export const WhatYouCanAsk = () => {
               <div className="bg-purple-500/5 p-4 rounded-lg border border-purple-500/20">
                 <p className="text-sm text-purple-700 font-semibold mb-3">You unlock:</p>
                 <div className="text-sm text-purple-600 space-y-2">
-                  <p>Real-time market feeds: CD rates, Treasury yields</p>
-                  <p>Smart &quot;what-if&quot; scenario planning</p>
-                  <p>GPT answers enriched with live data</p>
+                  <p>Premium includes live market data and forward-looking planning tools — so you can stress-test decisions and understand the tradeoffs.</p>
                 </div>
               </div>
             </div>

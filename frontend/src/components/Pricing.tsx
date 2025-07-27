@@ -5,36 +5,35 @@ export const Pricing = () => {
     {
       name: "Free",
       price: "$0",
-      description: "Perfect for exploring your personal finances with no risk",
+      description: "For exploring your finances with no commitment.",
       features: [
-        "Unlimited GPT-powered financial questions",
+        "Unlimited financial questions",
         "Link up to 3 accounts",
-        "See trends across accounts, fees, balances, and allocations",
-        "No economic data or market context"
+        "See your actual spending, savings, and account trends",
+        "No external data or scenario modeling"
       ],
       popular: false
     },
     {
       name: "Standard",
       price: "$9/mo",
-      description: "Adds economic context to help you interpret what you're seeing",
+      description: "For people growing their money and making goal-oriented decisions.",
       features: [
-        "Unlimited accounts",
-        "Unlimited GPT questions",
-        "Access to basic economic data: CPI, Fed rates, avg. mortgage rates",
-        "No live CD/Treasury feeds or predictive models"
+        "Unlimited accounts and questions",
+        "Basic market context: CPI, Fed rates, average mortgage and credit card APRs",
+        "No live rates or forecasting tools"
       ],
       popular: true
     },
     {
       name: "Premium",
       price: "$29/mo", 
-      description: "For advanced users who want real-world signals and powerful 'what-if' tools",
+      description: "For people actively planning for retirement or major financial moves.",
       features: [
         "Everything in Standard",
-        "Live CD rates, Treasury yields, mortgage rates",
-        "Smart 'what-if' planning (e.g. 'What if rates drop 1%?')",
-        "Richer GPT outputs powered by live inputs"
+        "Live market data: CD rates, Treasury yields, mortgage rates",
+        "Smart 'what-if' planning and simulation tools",
+        "Smarter GPT answers using real-world inputs"
       ],
       popular: false
     }
@@ -48,9 +47,9 @@ export const Pricing = () => {
             <h2 className="text-4xl md:text-5xl font-bold text-navy">
               Pricing & Plans
             </h2>
-            <p className="text-xl text-muted-foreground">
-              Start free. Upgrade only if you need more accounts or smarter insights.
-            </p>
+                    <p className="text-xl text-muted-foreground">
+          Choose the plan that fits your current financial journey.
+        </p>
           </div>
           
           <div className="grid md:grid-cols-3 gap-8">

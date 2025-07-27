@@ -41,7 +41,7 @@ export const TrustSecurity = () => {
               Trust & Security
             </h2>
             <p className="text-2xl font-semibold text-green">
-              Your data, your rules.
+              We never store sensitive information, never train on your data, and give you full control over what&apos;s connected or deleted.
             </p>
           </div>
           

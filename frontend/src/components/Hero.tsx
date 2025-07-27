@@ -12,15 +12,15 @@ export const Hero = () => {
       <div className="relative z-10 container mx-auto px-4 text-center text-white">
         <div className="max-w-4xl mx-auto space-y-8">
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight">
-            Ask Linc
+            Meet Your Personal Finance Co-Pilot
           </h1>
           
           <h2 className="text-xl md:text-3xl font-light text-green-light">
-            ChatGPT + your financial life + current market data.
+            Ask real questions about your money — and get answers grounded in your actual accounts, current interest rates, and economic context.
           </h2>
           
           <p className="text-lg md:text-xl text-white/90 max-w-3xl mx-auto leading-relaxed">
-            No dashboards. No spreadsheets. Just connect your accounts and ask a question — Linc analyzes your actual data, plus what&apos;s happening in the market, to give you smart answers.
+            Built with ChatGPT. Backed by your financial data. Designed with privacy in mind.
           </p>
           
           <div className="pt-4">
