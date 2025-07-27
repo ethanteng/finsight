@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from 'react';
 import PlaidLinkButton from '../../components/PlaidLinkButton';
-import DataSyncButtons from '../../components/DataSyncButtons';
 
 interface Account {
   id: string;
@@ -11,12 +10,61 @@ interface Account {
   currentBalance: number;
 }
 
+interface SyncInfo {
+  lastSync: string;
+  accountsSynced: number;
+  transactionsSynced: number;
+}
+
 export default function ProfilePage() {
   const [connectedAccounts, setConnectedAccounts] = useState<Account[]>([]);
+  const [syncInfo, setSyncInfo] = useState<SyncInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+  // Load sync status
+  const loadSyncStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/sync/status`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setSyncInfo(data.syncInfo);
+      }
+    } catch (err) {
+      console.error('Error loading sync status:', err);
+    }
+  }, [API_URL]);
+
+  // Manual refresh function
+  const handleManualRefresh = async () => {
+    try {
+      const res = await fetch(`${API_URL}/sync/manual`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        if (result.success) {
+          // Reload both sync status and accounts after successful refresh
+          await loadSyncStatus();
+          await loadConnectedAccounts();
+        }
+      }
+    } catch (err) {
+      console.error('Error during manual refresh:', err);
+    }
+  };
 
   // Load connected accounts
   const loadConnectedAccounts = useCallback(async () => {
@@ -57,9 +105,10 @@ export default function ProfilePage() {
     }
   }, [API_URL]);
 
-            useEffect(() => {
-            loadConnectedAccounts();
-          }, [loadConnectedAccounts]);
+              useEffect(() => {
+    loadConnectedAccounts();
+    loadSyncStatus();
+  }, [loadConnectedAccounts, loadSyncStatus]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -93,10 +142,28 @@ export default function ProfilePage() {
             <PlaidLinkButton />
           </div>
 
-          {/* Sync Data */}
+          {/* Sync Status */}
           <div className="mb-6">
-            <h3 className="text-lg font-medium mb-3">Sync Data</h3>
-            <DataSyncButtons />
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-medium">Sync Status</h3>
+              <button
+                onClick={handleManualRefresh}
+                className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm transition-colors"
+              >
+                Refresh
+              </button>
+            </div>
+            {syncInfo ? (
+              <div className="text-sm text-gray-400">
+                Last updated: {new Date(syncInfo.lastSync).toLocaleString()}
+                <br />
+                Accounts synced: {syncInfo.accountsSynced} | Transactions synced: {syncInfo.transactionsSynced}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-400">
+                No sync data available yet. Connect an account and click Refresh to sync.
+              </div>
+            )}
           </div>
 
           {/* Connected Accounts List */}

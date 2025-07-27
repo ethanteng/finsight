@@ -26,9 +26,26 @@ model Account {
   availableBalance Float?
   currency      String?
   institution   String?
+  lastSynced    DateTime?
   transactions  Transaction[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model AccessToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SyncStatus {
+  id               String   @id @default(cuid())
+  lastSync         DateTime?
+  accountsSynced   Int      @default(0)
+  transactionsSynced Int    @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 model Transaction {
@@ -42,6 +59,7 @@ model Transaction {
   category        String?
   pending         Boolean
   currency        String?
+  lastSynced      DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

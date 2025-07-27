@@ -88,6 +88,14 @@ export const setupPlaidRoutes = (app: any) => {
       });
       
       const access_token = exchangeResponse.data.access_token;
+      
+      // Store the access token in the database
+      await prisma.accessToken.upsert({
+        where: { token: access_token },
+        update: { token: access_token },
+        create: { token: access_token },
+      });
+      
       res.json({ access_token });
     } catch (error) {
       const errorInfo = handlePlaidError(error, 'exchanging public token');
