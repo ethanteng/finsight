@@ -20,12 +20,13 @@ export async function askOpenAI(question: string, conversationHistory: Conversat
     take: 200, // increased limit for context
   });
 
-  // Format data for context (using basic fields for now to ensure production compatibility)
+  // Format data for context with enhanced metadata
   const accountSummary = accounts.map(a => {
     const balance = a.currentBalance ? `$${a.currentBalance.toFixed(2)}` : 'N/A';
     const available = a.availableBalance ? ` (Available: $${a.availableBalance.toFixed(2)})` : '';
     const mask = a.mask ? ` (****${a.mask})` : '';
-    return `- ${a.name}${mask} (${a.type}${a.subtype ? '/' + a.subtype : ''}): ${balance}${available}`;
+    const institution = a.institution ? ` at ${a.institution}` : '';
+    return `- ${a.name}${mask} (${a.type}${a.subtype ? '/' + a.subtype : ''}): ${balance}${available}${institution}`;
   }).join('\n');
   
   const transactionSummary = transactions.map(t => {
@@ -33,7 +34,13 @@ export async function askOpenAI(question: string, conversationHistory: Conversat
     const amount = `$${t.amount.toFixed(2)}`;
     const category = t.category ? ` [${t.category}]` : '';
     const pending = t.pending ? ' [PENDING]' : '';
-    return `- [${date}] ${t.name}: ${amount}${category}${pending}`;
+    // Add merchant name if available and different from transaction name
+    const merchant = (t as any).merchantName && (t as any).merchantName !== t.name ? ` (${(t as any).merchantName})` : '';
+    // Add payment method if available
+    const paymentMethod = (t as any).paymentMethod ? ` via ${(t as any).paymentMethod}` : '';
+    // Add location if available
+    const location = (t as any).location ? ` at ${JSON.parse((t as any).location).city || 'Unknown location'}` : '';
+    return `- [${date}] ${t.name}${merchant}: ${amount}${category}${pending}${paymentMethod}${location}`;
   }).join('\n');
   
   console.log(`AI context: ${transactions.length} transactions, ${accounts.length} accounts, ${conversationHistory.length} conversation pairs`);
