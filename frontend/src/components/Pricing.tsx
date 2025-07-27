@@ -78,12 +78,17 @@ export const Pricing = () => {
                 
                 <div className="space-y-6 mt-6">
                   <ul className="space-y-3">
-                    {plan.features.map((feature, featureIndex) => (
-                      <li key={featureIndex} className="flex items-start space-x-3">
-                        <div className="w-5 h-5 text-green mt-0.5 flex-shrink-0">✓</div>
-                        <span className="text-card-foreground">{feature}</span>
-                      </li>
-                    ))}
+                    {plan.features.map((feature, featureIndex) => {
+                      const isLimitation = feature.toLowerCase().includes('no ') || feature.toLowerCase().includes('not ');
+                      return (
+                        <li key={featureIndex} className="flex items-start space-x-3">
+                          <div className={`w-5 h-5 mt-0.5 flex-shrink-0 ${isLimitation ? 'text-red-500' : 'text-green'}`}>
+                            {isLimitation ? '✗' : '✓'}
+                          </div>
+                          <span className="text-card-foreground">{feature}</span>
+                        </li>
+                      );
+                    })}
                   </ul>
                   
                   <Button 
