@@ -39,7 +39,22 @@ app.post('/ask', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Question is required' });
     }
     
-    const answer = await askOpenAI(question);
+    // Get recent conversation history (last 5 Q&A pairs)
+    const recentConversations = await prisma.conversation.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
+    
+    const answer = await askOpenAI(question, recentConversations);
+    
+    // Store the new Q&A pair
+    await prisma.conversation.create({
+      data: {
+        question,
+        answer,
+      },
+    });
+    
     res.json({ answer });
   } catch (err) {
     if (err instanceof Error) {
