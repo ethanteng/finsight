@@ -3,38 +3,38 @@ import { Button } from "@/components/ui/button";
 export const Pricing = () => {
   const plans = [
     {
-      name: "Free Tier",
+      name: "🟢 Free",
       price: "$0",
-      description: "Perfect for light users or early exploration",
+      description: "Perfect for exploring your personal finances with no risk",
       features: [
-        "Unlimited financial questions",
+        "Unlimited GPT-powered financial questions",
         "Link up to 3 accounts",
-        "Great way to try it all risk-free",
-        "No market data or economic context"
+        "See trends across accounts, fees, balances, and allocations",
+        "No economic data or market context"
       ],
       popular: false
     },
     {
-      name: "Standard",
+      name: "🔵 Standard",
       price: "$9.99/mo",
-      description: "Full access to your data across accounts + economic context",
+      description: "Adds economic context to help you interpret what you're seeing",
       features: [
         "Unlimited accounts",
         "Unlimited GPT questions",
-        "Basic market context: CPI, Fed rates, avg. mortgage rates",
-        "No live CD rates or scenario modeling"
+        "Access to basic economic data: CPI, Fed rates, avg. mortgage rates",
+        "No live CD/Treasury feeds or predictive models"
       ],
       popular: true
     },
     {
-      name: "Premium",
+      name: "🟣 Premium",
       price: "$29.99/mo", 
-      description: "Everything + live market intelligence + planning tools",
+      description: "For advanced users who want real-world signals and powerful 'what-if' tools",
       features: [
         "Everything in Standard",
-        "Live CD rates, Treasury yields, real-time mortgage rates",
-        "Advanced 'what-if' scenario planning",
-        "Smarter GPT insights with real-world data"
+        "Live CD rates, Treasury yields, mortgage rates",
+        "Smart 'what-if' planning (e.g. 'What if rates drop 1%?')",
+        "Richer GPT outputs powered by live inputs"
       ],
       popular: false
     }
@@ -49,7 +49,7 @@ export const Pricing = () => {
               Pricing & Plans
             </h2>
             <p className="text-xl text-muted-foreground">
-              Start free, upgrade when you need more accounts or smarter insights.
+              Start free. Upgrade only if you need more accounts or smarter insights.
             </p>
           </div>
           
