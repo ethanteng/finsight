@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 export const Pricing = () => {
   const plans = [
     {
-      name: "Free",
-      price: "$0",
+      name: "Starter",
+      price: "$3/month",
       description: "Start getting answers to your financial questions.",
       features: [
         "Unlimited questions",
