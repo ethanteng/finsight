@@ -5,7 +5,7 @@ export const Pricing = () => {
     {
       name: "Free",
       price: "$0",
-      description: "Start getting answers toyour financial questions.",
+      description: "Start getting answers to your financial questions.",
       features: [
         "Unlimited questions",
         "Link up to 3 accounts",
