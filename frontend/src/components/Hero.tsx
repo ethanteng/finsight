@@ -12,7 +12,7 @@ export const Hero = () => {
       <div className="relative z-10 container mx-auto px-4 text-center text-white">
         <div className="max-w-4xl mx-auto space-y-8">
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight">
-            Meet Your Personal Finance Co-Pilot
+            Meet Linc — Your Personal Finance Co-Pilot
           </h1>
           
           <h2 className="text-xl md:text-3xl font-light text-green-light">

@@ -29,7 +29,7 @@ export const WhatYouCanAsk = () => {
         <div className="max-w-4xl mx-auto text-center space-y-12">
           <div className="space-y-4">
             <h2 className="text-4xl md:text-5xl font-bold text-navy">
-              What You Can Ask
+              What You Can Ask Linc
             </h2>
             <p className="text-xl text-muted-foreground">
               Choose the plan that fits your current financial journey.
@@ -44,7 +44,7 @@ export const WhatYouCanAsk = () => {
                   Free Tier
                 </span>
                 <p className="text-sm text-muted-foreground">
-                  For people with checking, savings, and maybe a 401(k). You&apos;re focused on saving more and getting clarity, not complexity.
+                  For people with checking, savings, and maybe a 401(k). You&apos;re focused on saving more and getting clarity, not adding complexity.
                 </p>
               </div>
               {freeQuestions.map((question, index) => (
@@ -72,7 +72,7 @@ export const WhatYouCanAsk = () => {
                   Standard Tier
                 </span>
                 <p className="text-sm text-muted-foreground">
-                  You&apos;ve gone beyond the basics. You&apos;re exploring CDs, investing a bit, maybe thinking about buying a home. You want smarter context to grow your money.
+                  You&apos;ve leveled up. You&apos;re exploring CDs, investing a bit, maybe thinking about buying a home. You want smarter context to grow your money.
                 </p>
               </div>
               {standardQuestions.map((question, index) => (

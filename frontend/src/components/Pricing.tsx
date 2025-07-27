@@ -5,18 +5,18 @@ export const Pricing = () => {
     {
       name: "Free",
       price: "$0",
-      description: "For exploring your finances with no commitment.",
+      description: "Start getting answers toyour financial questions.",
       features: [
-        "Unlimited financial questions",
+        "Unlimited questions",
         "Link up to 3 accounts",
-        "See your actual spending, savings, and account trends",
-        "No external data or scenario modeling"
+        "Ask questions about your spending, savings, and other trends",
+        "No external market data or scenario modeling"
       ],
       popular: false
     },
     {
       name: "Standard",
-      price: "$9/mo",
+      price: "$9/month",
       description: "For people growing their money and making goal-oriented decisions.",
       features: [
         "Unlimited accounts and questions",
@@ -27,7 +27,7 @@ export const Pricing = () => {
     },
     {
       name: "Premium",
-      price: "$29/mo", 
+      price: "$29/month", 
       description: "For people actively planning for retirement or major financial moves.",
       features: [
         "Everything in Standard",
