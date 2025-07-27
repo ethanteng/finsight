@@ -112,7 +112,7 @@ finsight/
 The application uses a scalable, plugin-based architecture for market data feeds:
 
 ### **Tier-Based Access**
-- **Free Tier**: No external market data
+- **Starter Tier**: No external market data
 - **Standard Tier**: Basic economic indicators (CPI, Fed rates, mortgage rates)
 - **Premium Tier**: Live market data (CD rates, Treasury yields, real-time rates)
 

@@ -15,7 +15,7 @@ interface Conversation {
   createdAt: Date;
 }
 
-export async function askOpenAI(question: string, conversationHistory: Conversation[] = [], userTier: UserTier = UserTier.FREE): Promise<string> {
+export async function askOpenAI(question: string, conversationHistory: Conversation[] = [], userTier: UserTier = UserTier.STARTER): Promise<string> {
   // Fetch accounts and transactions from DB
   const accounts = await prisma.account.findMany();
   const transactions = await prisma.transaction.findMany({

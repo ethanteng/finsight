@@ -24,9 +24,9 @@ export class DataOrchestrator {
 
   getTierAccess(tier: UserTier): TierAccess {
     switch (tier) {
-      case UserTier.FREE:
+      case UserTier.STARTER:
         return {
-          tier: UserTier.FREE,
+          tier: UserTier.STARTER,
           hasEconomicContext: false,
           hasLiveData: false,
           hasScenarioPlanning: false
@@ -50,7 +50,7 @@ export class DataOrchestrator {
       
       default:
         return {
-          tier: UserTier.FREE,
+          tier: UserTier.STARTER,
           hasEconomicContext: false,
           hasLiveData: false,
           hasScenarioPlanning: false

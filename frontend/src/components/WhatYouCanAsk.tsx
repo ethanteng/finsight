@@ -1,5 +1,5 @@
 export const WhatYouCanAsk = () => {
-  const freeQuestions = [
+  const starterQuestions = [
     "What's my actual asset allocation across all accounts?",
     "Are we overpaying in fees?",
     "How much cash is just sitting in low-yield savings?",
@@ -37,17 +37,17 @@ export const WhatYouCanAsk = () => {
           </div>
           
           <div className="grid md:grid-cols-3 gap-8">
-            {/* Free Tier */}
+            {/* Starter Tier */}
             <div className="space-y-6">
               <div className="text-center space-y-3">
                 <span className="inline-block px-6 py-3 rounded-full text-lg font-semibold bg-green/10 text-green">
-                  Free Tier
+                  Starter Tier
                 </span>
                 <p className="text-sm text-muted-foreground">
                   For people with checking, savings, and maybe a 401(k). You&apos;re focused on saving more and getting clarity, not adding complexity.
                 </p>
               </div>
-              {freeQuestions.map((question, index) => (
+              {starterQuestions.map((question: string, index: number) => (
                 <div 
                   key={index}
                   className="bg-card p-4 rounded-lg border border-border hover:shadow-lg transition-all duration-300"

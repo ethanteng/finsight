@@ -35,7 +35,7 @@ setupPlaidRoutes(app);
 // OpenAI Q&A endpoint
 app.post('/ask', async (req: Request, res: Response) => {
   try {
-    const { question, userTier = 'free' } = req.body;
+    const { question, userTier = 'starter' } = req.body;
     if (!question) {
       return res.status(400).json({ error: 'Question is required' });
     }
@@ -48,12 +48,12 @@ app.post('/ask', async (req: Request, res: Response) => {
     
     // Map frontend tier to backend enum
     const tierMap: Record<string, string> = {
-      'free': 'FREE',
+      'starter': 'STARTER',
       'standard': 'STANDARD', 
       'premium': 'PREMIUM'
     };
     
-    const backendTier = tierMap[userTier] || 'FREE';
+    const backendTier = tierMap[userTier] || 'STARTER';
     const answer = await askOpenAI(question, recentConversations, backendTier as any);
     
     // Store the new Q&A pair
@@ -79,12 +79,12 @@ app.get('/test/market-data/:tier', async (req: Request, res: Response) => {
   try {
     const { tier } = req.params;
     const tierMap: Record<string, string> = {
-      'free': 'FREE',
+      'starter': 'STARTER',
       'standard': 'STANDARD', 
       'premium': 'PREMIUM'
     };
     
-    const backendTier = tierMap[tier] || 'FREE';
+    const backendTier = tierMap[tier] || 'STARTER';
     const marketContext = await dataOrchestrator.getMarketContext(backendTier as any);
     
     res.json({ 

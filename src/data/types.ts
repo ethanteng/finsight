@@ -40,7 +40,7 @@ export interface MortgageRate {
 
 // User Tier Types
 export enum UserTier {
-  FREE = 'free',
+  STARTER = 'starter',
   STANDARD = 'standard',
   PREMIUM = 'premium'
 }
