@@ -7,33 +7,34 @@ export const Pricing = () => {
       price: "$0",
       description: "Perfect for light users or early exploration",
       features: [
+        "Unlimited financial questions",
         "Link up to 3 accounts",
-        "Ask 5 GPT-powered questions/month",
-        "No market data or scenario modeling"
+        "Great way to try it all risk-free",
+        "No external data or forecasting"
       ],
       popular: false
     },
     {
       name: "Standard",
       price: "$9.99/mo",
-      description: "Full access to your data across accounts",
+      description: "Full access to your data across accounts + economic context",
       features: [
         "Unlimited accounts",
-        "Unlimited financial questions",
-        "Full access to your data across accounts",
-        "No real-time economic context"
+        "Unlimited GPT questions",
+        "Basic market context: inflation, average rates",
+        "No smart modeling or real-time inputs"
       ],
       popular: true
     },
     {
       name: "Premium",
       price: "$29.99/mo", 
-      description: "Everything + live market context",
+      description: "Everything + live market intelligence + planning tools",
       features: [
         "Everything in Standard",
-        "Live market context: CD rates, Treasury yields, mortgage trends",
-        "Smart 'what-if' analysis and planning",
-        "More powerful GPT answers with real-world inputs"
+        "Live CD, Treasury, mortgage rates",
+        "Advanced 'what-if' scenario planning",
+        "Smarter GPT insights with real-world data"
       ],
       popular: false
     }
@@ -48,7 +49,7 @@ export const Pricing = () => {
               Pricing & Plans
             </h2>
             <p className="text-xl text-muted-foreground">
-              Simple plans. Real value. Upgrade only if you need more.
+              Start free, upgrade when you need more accounts or smarter insights.
             </p>
           </div>
           
