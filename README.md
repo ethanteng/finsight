@@ -7,7 +7,7 @@ A personal finance assistant that connects to your financial accounts via Plaid 
 - **Secure Account Connection** - Connect financial accounts securely via Plaid
 - **Natural Language Queries** - Ask questions about your finances in plain English
 - **AI-Powered Analysis** - Get insights based on your actual financial data
-- **Real-Time Market Context** - Answers include current market conditions and rates
+- **Tier-Based Market Context** - Different levels of market data based on subscription tier
 - **Privacy-First Design** - Complete data anonymization and user control
 - **Beautiful Landing Page** - Professional marketing site with complete product information
 - **Responsive Design** - Works seamlessly on desktop and mobile
@@ -74,6 +74,10 @@ PLAID_ENV=sandbox
 # OpenAI
 OPENAI_API_KEY=your_openai_api_key
 
+# Data Feed APIs (for market context)
+FRED_API_KEY=your_fred_api_key
+ALPHA_VANTAGE_API_KEY=your_alpha_vantage_api_key
+
 # Database
 DATABASE_URL="postgresql://username:password@localhost:5432/linc"
 ```
@@ -85,7 +89,16 @@ finsight/
 ├── src/                    # Backend source code
 │   ├── index.ts           # Express server
 │   ├── plaid.ts           # Plaid integration
-│   └── openai.ts          # OpenAI integration
+│   ├── openai.ts          # OpenAI integration
+│   ├── privacy.ts         # Data anonymization
+│   ├── sync.ts            # Data synchronization
+│   └── data/              # Market data feeds
+│       ├── types.ts       # Data type definitions
+│       ├── cache.ts       # Caching layer
+│       ├── orchestrator.ts # Data orchestration
+│       └── providers/     # Data source providers
+│           ├── fred.ts    # FRED API integration
+│           └── alpha-vantage.ts # Alpha Vantage integration
 ├── frontend/              # Next.js frontend
 │   ├── src/app/           # App Router pages
 │   ├── src/components/    # React components
@@ -94,10 +107,40 @@ finsight/
 └── README.md
 ```
 
+## Data Feed Architecture
+
+The application uses a scalable, plugin-based architecture for market data feeds:
+
+### **Tier-Based Access**
+- **Free Tier**: No external market data
+- **Standard Tier**: Basic economic indicators (CPI, Fed rates, mortgage rates)
+- **Premium Tier**: Live market data (CD rates, Treasury yields, real-time rates)
+
+### **Data Sources**
+- **FRED API**: Economic indicators from Federal Reserve Economic Data
+- **Alpha Vantage**: Real-time market data (requires paid plan)
+- **Caching Layer**: In-memory cache with configurable TTL
+- **Fallback Data**: Mock data when APIs are unavailable
+
+### **Architecture Benefits**
+- **Scalable**: Easy to add new data providers
+- **Resilient**: Graceful degradation when APIs fail
+- **Privacy-Safe**: Market data never sent to frontend
+- **Tier-Aware**: Different data access based on subscription level
+
 ## Development
 
 - **Backend**: Runs on `http://localhost:3000`
 - **Frontend**: Runs on `http://localhost:3001`
+
+### **Testing Data Feeds**
+```bash
+# Test Standard tier market data
+curl http://localhost:3000/test/market-data/standard
+
+# Test Premium tier market data  
+curl http://localhost:3000/test/market-data/premium
+```
 - **Database**: Local PostgreSQL via Docker (see setup below)
 
 ### Local Database Setup
