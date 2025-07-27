@@ -33,11 +33,11 @@ export const WhatYouCanAsk = () => {
           <div className="grid md:grid-cols-3 gap-8">
             {/* Free Tier */}
             <div className="space-y-6">
-              <div className="text-center space-y-2">
-                <span className="inline-block px-4 py-2 rounded-full text-sm font-semibold bg-green/10 text-green">
+              <div className="text-center space-y-3">
+                <span className="inline-block px-6 py-3 rounded-full text-lg font-semibold bg-green/10 text-green">
                   Free Tier
                 </span>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   For curious explorers who want a better view of their own data
                 </p>
               </div>
@@ -46,28 +46,28 @@ export const WhatYouCanAsk = () => {
                   key={index}
                   className="bg-card p-4 rounded-lg border border-border hover:shadow-lg transition-all duration-300"
                 >
-                  <p className="text-navy font-medium text-left text-sm">
+                  <p className="text-navy font-medium text-left text-base">
                     &ldquo;{question}&rdquo;
                   </p>
                 </div>
               ))}
               <div className="bg-green/5 p-4 rounded-lg border border-green/20">
                 <p className="text-sm text-green-700 font-semibold mb-3">You get:</p>
-                <ul className="text-sm text-green-600 space-y-2">
-                  <li>• Clear answers about your own account data</li>
-                  <li>• No guesswork — see what's really happening</li>
-                  <li>• Great for users just beyond spreadsheets</li>
-                </ul>
+                <div className="text-sm text-green-600 space-y-2">
+                  <p>Clear answers about your own account data</p>
+                  <p>No guesswork — see what's really happening</p>
+                  <p>Great for users just beyond spreadsheets</p>
+                </div>
               </div>
             </div>
 
             {/* Standard Tier */}
             <div className="space-y-6">
-              <div className="text-center space-y-2">
-                <span className="inline-block px-4 py-2 rounded-full text-sm font-semibold bg-blue-500/10 text-blue-500">
+              <div className="text-center space-y-3">
+                <span className="inline-block px-6 py-3 rounded-full text-lg font-semibold bg-blue-500/10 text-blue-500">
                   Standard Tier
                 </span>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   For users who want economic context with their analysis
                 </p>
               </div>
@@ -76,28 +76,28 @@ export const WhatYouCanAsk = () => {
                   key={index}
                   className="bg-card p-4 rounded-lg border border-border hover:shadow-lg transition-all duration-300"
                 >
-                  <p className="text-navy font-medium text-left text-sm">
+                  <p className="text-navy font-medium text-left text-base">
                     &ldquo;{question}&rdquo;
                   </p>
                 </div>
               ))}
               <div className="bg-blue-500/5 p-4 rounded-lg border border-blue-500/20">
                 <p className="text-sm text-blue-700 font-semibold mb-3">You also get:</p>
-                <ul className="text-sm text-blue-600 space-y-2">
-                  <li>• Trusted public benchmarks like CPI and Fed rates</li>
-                  <li>• Economic framing without the noise</li>
-                  <li>• Helps answer "should we adjust?"</li>
-                </ul>
+                <div className="text-sm text-blue-600 space-y-2">
+                  <p>Trusted public benchmarks like CPI and Fed rates</p>
+                  <p>Economic framing without the noise</p>
+                  <p>Helps answer "should we adjust?"</p>
+                </div>
               </div>
             </div>
 
             {/* Premium Tier */}
             <div className="space-y-6">
-              <div className="text-center space-y-2">
-                <span className="inline-block px-4 py-2 rounded-full text-sm font-semibold bg-purple-500/10 text-purple-500">
+              <div className="text-center space-y-3">
+                <span className="inline-block px-6 py-3 rounded-full text-lg font-semibold bg-purple-500/10 text-purple-500">
                   Premium Tier
                 </span>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   For financially-savvy users who want smarter answers, faster
                 </p>
               </div>
@@ -106,18 +106,18 @@ export const WhatYouCanAsk = () => {
                   key={index}
                   className="bg-card p-4 rounded-lg border border-border hover:shadow-lg transition-all duration-300"
                 >
-                  <p className="text-navy font-medium text-left text-sm">
+                  <p className="text-navy font-medium text-left text-base">
                     &ldquo;{question}&rdquo;
                   </p>
                 </div>
               ))}
               <div className="bg-purple-500/5 p-4 rounded-lg border border-purple-500/20">
                 <p className="text-sm text-purple-700 font-semibold mb-3">You unlock:</p>
-                <ul className="text-sm text-purple-600 space-y-2">
-                  <li>• Real-time market feeds: CD rates, Treasury yields</li>
-                  <li>• Smart "what-if" scenario planning</li>
-                  <li>• GPT answers enriched with live data</li>
-                </ul>
+                <div className="text-sm text-purple-600 space-y-2">
+                  <p>Real-time market feeds: CD rates, Treasury yields</p>
+                  <p>Smart "what-if" scenario planning</p>
+                  <p>GPT answers enriched with live data</p>
+                </div>
               </div>
             </div>
           </div>

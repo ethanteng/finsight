@@ -16,7 +16,7 @@ export const Pricing = () => {
     },
     {
       name: "Standard",
-      price: "$9.99/mo",
+      price: "$9/mo",
       description: "Adds economic context to help you interpret what you're seeing",
       features: [
         "Unlimited accounts",
@@ -28,7 +28,7 @@ export const Pricing = () => {
     },
     {
       name: "Premium",
-      price: "$29.99/mo", 
+      price: "$29/mo", 
       description: "For advanced users who want real-world signals and powerful 'what-if' tools",
       features: [
         "Everything in Standard",
