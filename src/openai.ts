@@ -1,6 +1,8 @@
 import OpenAI from 'openai';
 import { PrismaClient } from '../generated/prisma';
 import { anonymizeAccountData, anonymizeTransactionData, anonymizeConversationHistory } from './privacy';
+import { dataOrchestrator } from './data/orchestrator';
+import { UserTier } from './data/types';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 export const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
@@ -13,7 +15,7 @@ interface Conversation {
   createdAt: Date;
 }
 
-export async function askOpenAI(question: string, conversationHistory: Conversation[] = []): Promise<string> {
+export async function askOpenAI(question: string, conversationHistory: Conversation[] = [], userTier: UserTier = UserTier.FREE): Promise<string> {
   // Fetch accounts and transactions from DB
   const accounts = await prisma.account.findMany();
   const transactions = await prisma.transaction.findMany({
@@ -25,9 +27,25 @@ export async function askOpenAI(question: string, conversationHistory: Conversat
   const accountSummary = anonymizeAccountData(accounts);
   const transactionSummary = anonymizeTransactionData(transactions);
   
-  console.log(`AI context: ${transactions.length} transactions, ${accounts.length} accounts, ${conversationHistory.length} conversation pairs`);
+  console.log(`AI context: ${transactions.length} transactions, ${accounts.length} accounts, ${conversationHistory.length} conversation pairs, tier: ${userTier}`);
 
-  const systemPrompt = `You are a financial assistant. Here is the user's account summary:\n${accountSummary}\n\nRecent transactions:\n${transactionSummary}\n\nAnswer the user's question using only this data. If the user asks to "show all transactions" or "list all transactions", provide a numbered list of individual transactions rather than summarizing them.`;
+  // Get market context based on user tier
+  const marketContext = await dataOrchestrator.getMarketContext(userTier);
+  
+  let systemPrompt = `You are a financial assistant. Here is the user's account summary:\n${accountSummary}\n\nRecent transactions:\n${transactionSummary}`;
+
+  // Add market context based on tier
+  if (marketContext.economicIndicators) {
+    const { cpi, fedRate, mortgageRate, creditCardAPR } = marketContext.economicIndicators;
+    systemPrompt += `\n\nCurrent economic indicators:\n- CPI: ${cpi.value}% (${cpi.date})\n- Fed Funds Rate: ${fedRate.value}%\n- Average 30-year Mortgage Rate: ${mortgageRate.value}%\n- Average Credit Card APR: ${creditCardAPR.value}%`;
+  }
+
+  if (marketContext.liveMarketData) {
+    const { cdRates, treasuryYields, mortgageRates } = marketContext.liveMarketData;
+    systemPrompt += `\n\nLive market data:\nCD Rates: ${cdRates.map(cd => `${cd.term}: ${cd.rate}%`).join(', ')}\nTreasury Yields: ${treasuryYields.slice(0, 4).map(t => `${t.term}: ${t.yield}%`).join(', ')}\nCurrent Mortgage Rates: ${mortgageRates.map(m => `${m.type}: ${m.rate}%`).join(', ')}`;
+  }
+
+  systemPrompt += `\n\nAnswer the user's question using this data. If the user asks to "show all transactions" or "list all transactions", provide a numbered list of individual transactions rather than summarizing them.`;
 
   // Anonymize conversation history
   const conversationContext = anonymizeConversationHistory(conversationHistory);

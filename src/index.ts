@@ -5,6 +5,7 @@ import cors from 'cors';
 import cron from 'node-cron';
 import { syncAllAccounts, getLastSyncInfo } from './sync';
 import { PrismaClient } from '@prisma/client';
+import { dataOrchestrator } from './data/orchestrator';
 
 const prisma = new PrismaClient();
 
@@ -34,7 +35,7 @@ setupPlaidRoutes(app);
 // OpenAI Q&A endpoint
 app.post('/ask', async (req: Request, res: Response) => {
   try {
-    const { question } = req.body;
+    const { question, userTier = 'free' } = req.body;
     if (!question) {
       return res.status(400).json({ error: 'Question is required' });
     }
@@ -45,7 +46,15 @@ app.post('/ask', async (req: Request, res: Response) => {
       take: 5,
     });
     
-    const answer = await askOpenAI(question, recentConversations);
+    // Map frontend tier to backend enum
+    const tierMap: Record<string, string> = {
+      'free': 'FREE',
+      'standard': 'STANDARD', 
+      'premium': 'PREMIUM'
+    };
+    
+    const backendTier = tierMap[userTier] || 'FREE';
+    const answer = await askOpenAI(question, recentConversations, backendTier as any);
     
     // Store the new Q&A pair
     await prisma.conversation.create({
@@ -56,6 +65,33 @@ app.post('/ask', async (req: Request, res: Response) => {
     });
     
     res.json({ answer });
+  } catch (err) {
+    if (err instanceof Error) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+});
+
+// Test endpoint for market data (development only)
+app.get('/test/market-data/:tier', async (req: Request, res: Response) => {
+  try {
+    const { tier } = req.params;
+    const tierMap: Record<string, string> = {
+      'free': 'FREE',
+      'standard': 'STANDARD', 
+      'premium': 'PREMIUM'
+    };
+    
+    const backendTier = tierMap[tier] || 'FREE';
+    const marketContext = await dataOrchestrator.getMarketContext(backendTier as any);
+    
+    res.json({ 
+      tier: backendTier,
+      marketContext,
+      cacheStats: await dataOrchestrator.getCacheStats()
+    });
   } catch (err) {
     if (err instanceof Error) {
       res.status(500).json({ error: err.message });
