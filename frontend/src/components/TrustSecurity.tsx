@@ -12,18 +12,23 @@ export const TrustSecurity = () => {
     },
     {
       icon: "🔒",
-      title: "Data protection",
-      description: "Your account data is not stored, sold, or shared"
+      title: "Data anonymization",
+      description: "All sensitive data is anonymized before AI analysis"
     },
     {
       icon: "🤖",
       title: "Privacy-protected AI",
-      description: "Your questions and data are processed by ChatGPT in a privacy-protected environment"
+      description: "Your data is never used to train AI models"
     },
     {
       icon: "⚡",
-      title: "Always in control",
-      description: "Disconnect anytime with one click"
+      title: "Complete control",
+      description: "View, export, or delete all your data anytime"
+    },
+    {
+      icon: "📊",
+      title: "Transparency",
+      description: "See exactly what data we have about you"
     }
   ];
 
@@ -50,6 +55,21 @@ export const TrustSecurity = () => {
                 <p className="text-muted-foreground">{feature.description}</p>
               </div>
             ))}
+          </div>
+          
+          <div className="text-center space-y-4">
+            <a 
+              href="/privacy" 
+              className="inline-flex items-center px-6 py-3 bg-navy text-white rounded-lg hover:bg-navy/90 transition-colors"
+            >
+              Privacy Dashboard
+            </a>
+            <a 
+              href="/privacy-policy" 
+              className="inline-flex items-center px-6 py-3 border border-navy text-navy rounded-lg hover:bg-navy hover:text-white transition-colors ml-4"
+            >
+              Privacy Policy
+            </a>
           </div>
         </div>
       </div>

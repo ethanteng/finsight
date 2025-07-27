@@ -8,6 +8,7 @@ A personal finance assistant that connects to your financial accounts via Plaid 
 - **Natural Language Queries** - Ask questions about your finances in plain English
 - **AI-Powered Analysis** - Get insights based on your actual financial data
 - **Real-Time Market Context** - Answers include current market conditions and rates
+- **Privacy-First Design** - Complete data anonymization and user control
 - **Beautiful Landing Page** - Professional marketing site with complete product information
 - **Responsive Design** - Works seamlessly on desktop and mobile
 
@@ -144,11 +145,17 @@ npx prisma migrate dev
 - `POST /plaid/sync_accounts` - Sync accounts from Plaid
 - `POST /plaid/sync_transactions` - Sync transactions from Plaid
 - `POST /ask` - Ask financial questions (requires OpenAI API key)
+- `GET /privacy/data` - Get user data summary (anonymized)
+- `DELETE /privacy/delete-all` - Delete all user data
+- `POST /privacy/disconnect-accounts` - Disconnect all Plaid accounts
 
 ## Pages
 
 - `/` - Marketing landing page
 - `/app` - Main application interface
+- `/privacy` - Privacy dashboard and data controls
+- `/privacy-policy` - Privacy policy
+- `/profile` - Account management and sync status
 
 ## Features in Detail
 
@@ -164,6 +171,13 @@ npx prisma migrate dev
 - Data synchronization (accounts and transactions)
 - Natural language Q&A interface
 - Real-time financial analysis
+
+### Privacy & Security
+- **Data Anonymization** - All sensitive data is tokenized before AI analysis
+- **Complete User Control** - View, export, or delete all data anytime
+- **Read-Only Access** - No ability to make transactions or move money
+- **GDPR Compliance** - Full data deletion and export capabilities
+- **Transparency** - See exactly what data we store about you
 
 ## Contributing
 

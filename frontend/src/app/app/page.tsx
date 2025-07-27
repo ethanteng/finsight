@@ -81,6 +81,12 @@ export default function AppPage() {
           <h1 className="text-2xl font-bold text-white">Ask Linc</h1>
           <div className="flex items-center space-x-3">
             <a 
+              href="/privacy" 
+              className="text-gray-300 hover:text-white text-sm transition-colors"
+            >
+              Privacy
+            </a>
+            <a 
               href="/profile" 
               className="text-gray-300 hover:text-white text-sm transition-colors"
             >
