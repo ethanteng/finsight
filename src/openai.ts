@@ -20,9 +20,26 @@ export async function askOpenAI(question: string, conversationHistory: Conversat
     take: 200, // increased limit for context
   });
 
-  // Format data for context
-  const accountSummary = accounts.map(a => `- ${a.name} (${a.type}${a.subtype ? '/' + a.subtype : ''}): $${a.currentBalance ?? 'N/A'}`).join('\n');
-  const transactionSummary = transactions.map(t => `- [${t.date.toISOString().slice(0,10)}] ${t.name}: $${t.amount} (${t.category ?? 'Uncategorized'})`).join('\n');
+  // Format data for context with richer metadata
+  const accountSummary = accounts.map(a => {
+    const balance = a.currentBalance ? `$${a.currentBalance.toFixed(2)}` : 'N/A';
+    const available = a.availableBalance ? ` (Available: $${a.availableBalance.toFixed(2)})` : '';
+    const limit = a.limit ? ` (Limit: $${a.limit.toFixed(2)})` : '';
+    const mask = a.mask ? ` (****${a.mask})` : '';
+    const institution = a.institution ? ` at ${a.institution}` : '';
+    return `- ${a.name}${mask} (${a.type}${a.subtype ? '/' + a.subtype : ''}): ${balance}${available}${limit}${institution}`;
+  }).join('\n');
+  
+  const transactionSummary = transactions.map(t => {
+    const date = t.date.toISOString().slice(0,10);
+    const amount = `$${t.amount.toFixed(2)}`;
+    const merchant = t.merchantName && t.merchantName !== t.name ? ` (${t.merchantName})` : '';
+    const category = t.category ? ` [${t.category}]` : '';
+    const pending = t.pending ? ' [PENDING]' : '';
+    const paymentMethod = t.paymentMethod ? ` via ${t.paymentMethod}` : '';
+    const location = t.location ? ` at ${JSON.parse(t.location).city || 'Unknown location'}` : '';
+    return `- [${date}] ${t.name}${merchant}: ${amount}${category}${pending}${paymentMethod}${location}`;
+  }).join('\n');
   
   console.log(`AI context: ${transactions.length} transactions, ${accounts.length} accounts, ${conversationHistory.length} conversation pairs`);
 

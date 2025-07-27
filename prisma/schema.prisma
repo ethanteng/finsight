@@ -24,8 +24,11 @@ model Account {
   officialName  String?
   currentBalance Float?
   availableBalance Float?
+  limit         Float?
   currency      String?
   institution   String?
+  verificationStatus String?
+  persistentAccountId String?
   lastSynced    DateTime?
   transactions  Transaction[]
   createdAt     DateTime @default(now())
@@ -58,9 +61,18 @@ model Transaction {
   amount          Float
   date            DateTime
   name            String
+  merchantName    String?
+  originalDescription String?
   category        String?
+  categoryId      String?
   pending         Boolean
+  pendingTransactionId String?
+  paymentChannel  String?
+  paymentMethod   String?
   currency        String?
+  authorizedDate  DateTime?
+  checkNumber     String?
+  location        String?
   lastSynced      DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
