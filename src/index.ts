@@ -4,9 +4,12 @@ import { askOpenAI } from './openai';
 import cors from 'cors';
 import cron from 'node-cron';
 import { syncAllAccounts, getLastSyncInfo } from './sync';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 const app: Application = express();
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(cors({
   origin: [
     'https://asklinc.com', // your Vercel frontend URL
@@ -15,6 +18,10 @@ app.use(cors({
   ],
   credentials: true
 }));
+
+// Increase response size limit
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
@@ -57,19 +64,37 @@ app.get('/sync/status', async (req: Request, res: Response) => {
   }
 });
 
-// Manual sync endpoint for testing
-app.post('/sync/manual', async (req: Request, res: Response) => {
-  try {
-    const result = await syncAllAccounts();
-    res.json(result);
-  } catch (err) {
-    if (err instanceof Error) {
-      res.status(500).json({ error: err.message });
-    } else {
-      res.status(500).json({ error: 'Unknown error' });
-    }
-  }
-});
+        // Manual sync endpoint for testing
+        app.post('/sync/manual', async (req: Request, res: Response) => {
+          try {
+            const result = await syncAllAccounts();
+            res.json(result);
+          } catch (err) {
+            if (err instanceof Error) {
+              res.status(500).json({ error: err.message });
+            } else {
+              res.status(500).json({ error: 'Unknown error' });
+            }
+          }
+        });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

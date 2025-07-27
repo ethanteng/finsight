@@ -83,6 +83,8 @@ export const setupPlaidRoutes = (app: any) => {
   app.post('/plaid/exchange_public_token', async (req: any, res: any) => {
     try {
       const { public_token } = req.body;
+      console.log('Exchanging public token for access token...');
+      
       const exchangeResponse = await plaidClient.itemPublicTokenExchange({
         public_token: public_token,
       });
@@ -90,20 +92,36 @@ export const setupPlaidRoutes = (app: any) => {
       const access_token = exchangeResponse.data.access_token;
       const item_id = exchangeResponse.data.item_id;
       
+      console.log(`Received access token: ${access_token.substring(0, 8)}...`);
+      console.log(`Item ID: ${item_id}`);
+      
       // Store the access token and item_id in the database
-      await prisma.accessToken.upsert({
-        where: { token: access_token },
-        update: { 
-          token: access_token,
-          itemId: item_id,
-          lastRefreshed: new Date()
-        },
-        create: { 
-          token: access_token,
-          itemId: item_id,
-          lastRefreshed: new Date()
-        },
+      // Check if we already have an access token for this itemId
+      const existingToken = await prisma.accessToken.findFirst({
+        where: { itemId: item_id }
       });
+
+      if (existingToken) {
+        // Update the existing token with the new access token
+        console.log(`Updating existing token for item ${item_id}`);
+        await prisma.accessToken.update({
+          where: { id: existingToken.id },
+          data: { 
+            token: access_token,
+            lastRefreshed: new Date()
+          }
+        });
+      } else {
+        // Create a new access token
+        console.log(`Creating new token for item ${item_id}`);
+        await prisma.accessToken.create({
+          data: { 
+            token: access_token,
+            itemId: item_id,
+            lastRefreshed: new Date()
+          }
+        });
+      }
       
       res.json({ access_token });
     } catch (error) {
@@ -144,6 +162,7 @@ export const setupPlaidRoutes = (app: any) => {
     }
   });
 
+  // Get accounts for a specific access token
   app.get('/plaid/accounts', async (req: any, res: any) => {
     try {
       const accessToken = req.headers.authorization?.replace('Bearer ', '') || req.query.access_token;
@@ -170,6 +189,64 @@ export const setupPlaidRoutes = (app: any) => {
       res.status(500).json(errorInfo);
     }
   });
+
+  // Get accounts from ALL connected access tokens
+  app.get('/plaid/all-accounts', async (req: any, res: any) => {
+    try {
+      // Get all access tokens from the database
+      const accessTokens = await prisma.accessToken.findMany({
+        select: { token: true, itemId: true }
+      });
+
+      console.log(`Found ${accessTokens.length} access tokens in database`);
+      console.log('Item IDs:', accessTokens.map(t => t.itemId).filter(Boolean));
+
+      if (accessTokens.length === 0) {
+        return res.json({ accounts: [] });
+      }
+
+      let allAccounts: any[] = [];
+      const seenAccountKeys = new Set(); // Track unique account combinations
+
+      // Fetch accounts from each access token
+      for (const { token } of accessTokens) {
+        try {
+          const accountsResponse = await plaidClient.accountsGet({
+            access_token: token,
+          });
+
+          const accounts = accountsResponse.data.accounts.map(account => ({
+            id: account.account_id,
+            name: account.name,
+            type: account.type,
+            subtype: account.subtype,
+            currentBalance: account.balances.current,
+          }));
+
+          // Only add accounts we haven't seen before (deduplicate by name + type + subtype)
+          for (const account of accounts) {
+            const accountKey = `${account.name}-${account.type}-${account.subtype}`;
+            if (!seenAccountKeys.has(accountKey)) {
+              seenAccountKeys.add(accountKey);
+              allAccounts.push(account);
+            }
+          }
+          
+          console.log(`Token ${token.substring(0, 8)}... returned ${accounts.length} accounts`);
+        } catch (error) {
+          console.error(`Error fetching accounts for token: ${error}`);
+          // Continue with other tokens even if one fails
+        }
+      }
+
+      res.json({ accounts: allAccounts });
+    } catch (error) {
+      const errorInfo = handlePlaidError(error, 'fetching all accounts');
+      res.status(500).json(errorInfo);
+    }
+  });
+
+
 
   // Sync accounts
   app.post('/plaid/sync_accounts', async (req: any, res: any) => {

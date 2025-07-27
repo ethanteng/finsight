@@ -3,7 +3,11 @@
 import React, { useCallback, useState } from 'react';
 import { usePlaidLink } from 'react-plaid-link';
 
-export default function PlaidLinkButton() {
+interface PlaidLinkButtonProps {
+  onAccountLinked?: () => void;
+}
+
+export default function PlaidLinkButton({ onAccountLinked }: PlaidLinkButtonProps) {
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
 
@@ -40,7 +44,11 @@ export default function PlaidLinkButton() {
       const data = await res.json();
       if (data.access_token) {
         setStatus('Account linked!');
-        localStorage.setItem('access_token', data.access_token);
+        // Access token is now stored in the database, no need for localStorage
+        // Clear link token so user can link more accounts
+        setLinkToken(null);
+        // Notify parent component that account was linked
+        onAccountLinked?.();
       } else if (data.error) {
         setStatus(`${data.error}: ${data.details || 'Failed to link account'}`);
       } else {

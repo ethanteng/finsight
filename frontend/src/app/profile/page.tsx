@@ -47,27 +47,8 @@ export default function ProfilePage() {
   // Manual refresh function - handles both data sync and connection refresh
   const handleManualRefresh = async () => {
     try {
-      // First, try to refresh the connection if we have an access token
-      const accessToken = localStorage.getItem('access_token');
-      if (accessToken) {
-        try {
-          const refreshRes = await fetch(`${API_URL}/plaid/refresh_token`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ access_token: accessToken }),
-          });
-          
-          if (!refreshRes.ok) {
-            // Connection is invalid, suggest reconnection
-            setNotification({ message: 'Your account connection has expired. Please reconnect your account.', type: 'error' });
-            return;
-          }
-        } catch (err) {
-          // Connection refresh failed, suggest reconnection
-          setNotification({ message: 'Your account connection has expired. Please reconnect your account.', type: 'error' });
-          return;
-        }
-      }
+      // For now, just sync the data since we're managing tokens in the database
+      // In the future, we could add a bulk token refresh endpoint
 
       // Now sync the data
       const res = await fetch(`${API_URL}/sync/manual`, {
@@ -98,14 +79,9 @@ export default function ProfilePage() {
     setError('');
     
     try {
-      const accessToken = localStorage.getItem('access_token');
-      if (!accessToken) {
-        setConnectedAccounts([]);
-        setLoading(false);
-        return;
-      }
+      // No need to check for access token since we're fetching from all tokens in DB
 
-      const res = await fetch(`${API_URL}/plaid/accounts?access_token=${accessToken}`, {
+      const res = await fetch(`${API_URL}/plaid/all-accounts`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -117,12 +93,7 @@ export default function ProfilePage() {
         setConnectedAccounts(data.accounts || []);
       } else {
         const errorData = await res.json();
-        if (errorData.error === 'Invalid access token' || errorData.error === 'INVALID_ACCESS_TOKEN') {
-          setConnectedAccounts([]);
-          setError('No accounts connected. Please connect an account first.');
-        } else {
-          setError('Failed to load accounts');
-        }
+        setError('Failed to load accounts');
       }
                 } catch {
               setError('Error loading accounts');
@@ -184,10 +155,10 @@ export default function ProfilePage() {
         <div className="bg-gray-800 rounded-lg p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">Connected Accounts</h2>
           
-          {/* Connect New Account */}
-          <div className="mb-6">
-            <PlaidLinkButton />
-          </div>
+                            {/* Connect New Account */}
+                  <div className="mb-6">
+                    <PlaidLinkButton onAccountLinked={loadConnectedAccounts} />
+                  </div>
 
           {/* Sync Status */}
           <div className="mb-6">
