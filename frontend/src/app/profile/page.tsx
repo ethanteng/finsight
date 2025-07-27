@@ -146,12 +146,42 @@ export default function ProfilePage() {
           <div className="mb-6">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-medium">Sync Status</h3>
-              <button
-                onClick={handleManualRefresh}
-                className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm transition-colors"
-              >
-                Refresh
-              </button>
+              <div className="flex space-x-2">
+                <button
+                  onClick={handleManualRefresh}
+                  className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm transition-colors"
+                >
+                  Refresh Data
+                </button>
+                <button
+                  onClick={() => {
+                    const accessToken = localStorage.getItem('access_token');
+                    if (accessToken) {
+                      fetch(`${API_URL}/plaid/refresh_token`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ access_token: accessToken }),
+                      })
+                      .then(res => res.json())
+                      .then(data => {
+                        if (data.success) {
+                          alert('Account connection refreshed successfully!');
+                        } else {
+                          alert('Please reconnect your account - the connection has expired.');
+                        }
+                      })
+                      .catch(() => {
+                        alert('Please reconnect your account - the connection has expired.');
+                      });
+                    } else {
+                      alert('No account connected. Please connect an account first.');
+                    }
+                  }}
+                  className="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm transition-colors"
+                >
+                  Refresh Connection
+                </button>
+              </div>
             </div>
             {syncInfo ? (
               <div className="text-sm text-gray-400">
@@ -161,7 +191,7 @@ export default function ProfilePage() {
               </div>
             ) : (
               <div className="text-sm text-gray-400">
-                No sync data available yet. Connect an account and click Refresh to sync.
+                No sync data available yet. Connect an account and click Refresh Data to sync.
               </div>
             )}
           </div>

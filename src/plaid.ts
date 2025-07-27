@@ -88,18 +88,59 @@ export const setupPlaidRoutes = (app: any) => {
       });
       
       const access_token = exchangeResponse.data.access_token;
+      const item_id = exchangeResponse.data.item_id;
       
-      // Store the access token in the database
+      // Store the access token and item_id in the database
       await prisma.accessToken.upsert({
         where: { token: access_token },
-        update: { token: access_token },
-        create: { token: access_token },
+        update: { 
+          token: access_token,
+          itemId: item_id,
+          lastRefreshed: new Date()
+        },
+        create: { 
+          token: access_token,
+          itemId: item_id,
+          lastRefreshed: new Date()
+        },
       });
       
       res.json({ access_token });
     } catch (error) {
       const errorInfo = handlePlaidError(error, 'exchanging public token');
       res.status(500).json(errorInfo);
+    }
+  });
+
+  // Refresh access token - simplified approach
+  app.post('/plaid/refresh_token', async (req: any, res: any) => {
+    try {
+      const { access_token } = req.body;
+      
+      // Test if the token is still valid by making a simple API call
+      const accountsResponse = await plaidClient.accountsGet({
+        access_token: access_token,
+      });
+
+      // If we get here, the token is still valid
+      // Update the last refreshed timestamp
+      await prisma.accessToken.update({
+        where: { token: access_token },
+        data: { lastRefreshed: new Date() }
+      });
+
+      res.json({ 
+        success: true, 
+        message: 'Token is still valid',
+        access_token: access_token
+      });
+    } catch (error) {
+      // If the token is invalid, suggest reconnecting
+      const errorInfo = handlePlaidError(error, 'refreshing token');
+      res.status(500).json({
+        ...errorInfo,
+        needsReconnect: true
+      });
     }
   });
 

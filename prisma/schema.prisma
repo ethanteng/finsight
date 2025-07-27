@@ -33,10 +33,12 @@ model Account {
 }
 
 model AccessToken {
-  id        String   @id @default(cuid())
-  token     String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String    @id @default(cuid())
+  token         String    @unique
+  itemId        String?
+  lastRefreshed DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model SyncStatus {
