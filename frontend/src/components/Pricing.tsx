@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 export const Pricing = () => {
   const plans = [
     {
-      name: "🟢 Free",
+      name: "Free",
       price: "$0",
       description: "Perfect for exploring your personal finances with no risk",
       features: [
@@ -15,7 +15,7 @@ export const Pricing = () => {
       popular: false
     },
     {
-      name: "🔵 Standard",
+      name: "Standard",
       price: "$9.99/mo",
       description: "Adds economic context to help you interpret what you're seeing",
       features: [
@@ -27,7 +27,7 @@ export const Pricing = () => {
       popular: true
     },
     {
-      name: "🟣 Premium",
+      name: "Premium",
       price: "$29.99/mo", 
       description: "For advanced users who want real-world signals and powerful 'what-if' tools",
       features: [

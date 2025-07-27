@@ -35,7 +35,7 @@ export const WhatYouCanAsk = () => {
             <div className="space-y-6">
               <div className="text-center space-y-2">
                 <span className="inline-block px-4 py-2 rounded-full text-sm font-semibold bg-green/10 text-green">
-                  🟢 Free Tier
+                  Free Tier
                 </span>
                 <p className="text-xs text-muted-foreground">
                   For curious explorers who want a better view of their own data
@@ -46,17 +46,14 @@ export const WhatYouCanAsk = () => {
                   key={index}
                   className="bg-card p-4 rounded-lg border border-border hover:shadow-lg transition-all duration-300"
                 >
-                  <div className="flex items-start space-x-3">
-                    <div className="w-2 h-2 bg-green rounded-full mt-3 flex-shrink-0"></div>
-                    <p className="text-navy font-medium text-left text-sm">
-                      &ldquo;{question}&rdquo;
-                    </p>
-                  </div>
+                  <p className="text-navy font-medium text-left text-sm">
+                    &ldquo;{question}&rdquo;
+                  </p>
                 </div>
               ))}
               <div className="bg-green/5 p-4 rounded-lg border border-green/20">
-                <p className="text-xs text-green-700 font-medium mb-2">💡 You get:</p>
-                <ul className="text-xs text-green-600 space-y-1">
+                <p className="text-sm text-green-700 font-semibold mb-3">You get:</p>
+                <ul className="text-sm text-green-600 space-y-2">
                   <li>• Clear answers about your own account data</li>
                   <li>• No guesswork — see what's really happening</li>
                   <li>• Great for users just beyond spreadsheets</li>
@@ -68,7 +65,7 @@ export const WhatYouCanAsk = () => {
             <div className="space-y-6">
               <div className="text-center space-y-2">
                 <span className="inline-block px-4 py-2 rounded-full text-sm font-semibold bg-blue-500/10 text-blue-500">
-                  🔵 Standard Tier
+                  Standard Tier
                 </span>
                 <p className="text-xs text-muted-foreground">
                   For users who want economic context with their analysis
@@ -79,17 +76,14 @@ export const WhatYouCanAsk = () => {
                   key={index}
                   className="bg-card p-4 rounded-lg border border-border hover:shadow-lg transition-all duration-300"
                 >
-                  <div className="flex items-start space-x-3">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full mt-3 flex-shrink-0"></div>
-                    <p className="text-navy font-medium text-left text-sm">
-                      &ldquo;{question}&rdquo;
-                    </p>
-                  </div>
+                  <p className="text-navy font-medium text-left text-sm">
+                    &ldquo;{question}&rdquo;
+                  </p>
                 </div>
               ))}
               <div className="bg-blue-500/5 p-4 rounded-lg border border-blue-500/20">
-                <p className="text-xs text-blue-700 font-medium mb-2">💡 You also get:</p>
-                <ul className="text-xs text-blue-600 space-y-1">
+                <p className="text-sm text-blue-700 font-semibold mb-3">You also get:</p>
+                <ul className="text-sm text-blue-600 space-y-2">
                   <li>• Trusted public benchmarks like CPI and Fed rates</li>
                   <li>• Economic framing without the noise</li>
                   <li>• Helps answer "should we adjust?"</li>
@@ -101,7 +95,7 @@ export const WhatYouCanAsk = () => {
             <div className="space-y-6">
               <div className="text-center space-y-2">
                 <span className="inline-block px-4 py-2 rounded-full text-sm font-semibold bg-purple-500/10 text-purple-500">
-                  🟣 Premium Tier
+                  Premium Tier
                 </span>
                 <p className="text-xs text-muted-foreground">
                   For financially-savvy users who want smarter answers, faster
@@ -112,17 +106,14 @@ export const WhatYouCanAsk = () => {
                   key={index}
                   className="bg-card p-4 rounded-lg border border-border hover:shadow-lg transition-all duration-300"
                 >
-                  <div className="flex items-start space-x-3">
-                    <div className="w-2 h-2 bg-purple-500 rounded-full mt-3 flex-shrink-0"></div>
-                    <p className="text-navy font-medium text-left text-sm">
-                      &ldquo;{question}&rdquo;
-                    </p>
-                  </div>
+                  <p className="text-navy font-medium text-left text-sm">
+                    &ldquo;{question}&rdquo;
+                  </p>
                 </div>
               ))}
               <div className="bg-purple-500/5 p-4 rounded-lg border border-purple-500/20">
-                <p className="text-xs text-purple-700 font-medium mb-2">💡 You unlock:</p>
-                <ul className="text-xs text-purple-600 space-y-1">
+                <p className="text-sm text-purple-700 font-semibold mb-3">You unlock:</p>
+                <ul className="text-sm text-purple-600 space-y-2">
                   <li>• Real-time market feeds: CD rates, Treasury yields</li>
                   <li>• Smart "what-if" scenario planning</li>
                   <li>• GPT answers enriched with live data</li>
