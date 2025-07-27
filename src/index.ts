@@ -78,6 +78,60 @@ app.get('/sync/status', async (req: Request, res: Response) => {
           }
         });
 
+        // Fix transactions appearing under multiple accounts
+        app.post('/sync/fix-transaction-accounts', async (req: Request, res: Response) => {
+          try {
+            // Get all transactions with their account details
+            const allTransactions = await prisma.transaction.findMany({
+              include: { account: true },
+              orderBy: { date: 'desc' }
+            });
+
+            console.log(`Found ${allTransactions.length} total transactions in database`);
+
+            // Group transactions by unique key
+            const uniqueTransactions = new Map();
+            const duplicatesToDelete: string[] = [];
+
+            for (const transaction of allTransactions) {
+              // Use a comprehensive key that includes all relevant fields
+              const key = `${transaction.name}-${transaction.amount}-${transaction.date.toISOString().slice(0, 10)}`;
+              
+              if (uniqueTransactions.has(key)) {
+                // This is a duplicate, mark for deletion
+                console.log(`Duplicate found: ${transaction.name} ${transaction.amount} on ${transaction.date.toISOString().slice(0, 10)} from ${transaction.account.name}`);
+                duplicatesToDelete.push(transaction.id);
+              } else {
+                uniqueTransactions.set(key, transaction);
+                console.log(`Unique: ${transaction.name} ${transaction.amount} on ${transaction.date.toISOString().slice(0, 10)} from ${transaction.account.name}`);
+              }
+            }
+
+            console.log(`Unique transactions: ${uniqueTransactions.size}`);
+            console.log(`Duplicates to remove: ${duplicatesToDelete.length}`);
+
+            // Delete duplicate transactions
+            if (duplicatesToDelete.length > 0) {
+              await prisma.transaction.deleteMany({
+                where: { id: { in: duplicatesToDelete } }
+              });
+            }
+
+            res.json({ 
+              success: true, 
+              duplicatesRemoved: duplicatesToDelete.length,
+              uniqueTransactionsRemaining: uniqueTransactions.size,
+              totalBefore: allTransactions.length
+            });
+          } catch (err) {
+            if (err instanceof Error) {
+              res.status(500).json({ error: err.message });
+            } else {
+              res.status(500).json({ error: 'Unknown error' });
+            }
+          }
+        });
+
 
 
 
