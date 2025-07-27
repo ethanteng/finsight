@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import PlaidLinkButton from '../../components/PlaidLinkButton';
 import DataSyncButtons from '../../components/DataSyncButtons';
 
@@ -19,7 +19,7 @@ export default function ProfilePage() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
   // Load connected accounts
-  const loadConnectedAccounts = async () => {
+  const loadConnectedAccounts = useCallback(async () => {
     setLoading(true);
     setError('');
     
@@ -50,16 +50,16 @@ export default function ProfilePage() {
           setError('Failed to load accounts');
         }
       }
-    } catch (err) {
-      setError('Error loading accounts');
-    } finally {
+                } catch {
+              setError('Error loading accounts');
+            } finally {
       setLoading(false);
     }
-  };
+  }, [API_URL]);
 
-  useEffect(() => {
-    loadConnectedAccounts();
-  }, []);
+            useEffect(() => {
+            loadConnectedAccounts();
+          }, [loadConnectedAccounts]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -148,13 +148,13 @@ export default function ProfilePage() {
               <h3 className="text-lg font-medium mb-2">Data Privacy</h3>
               <p className="text-gray-400 text-sm">
                 Your financial data is read-only and never stored permanently. 
-                We use Plaid's secure API to access your accounts.
+                We use Plaid&apos;s secure API to access your accounts.
               </p>
             </div>
             <div>
               <h3 className="text-lg font-medium mb-2">Disconnect Accounts</h3>
               <p className="text-gray-400 text-sm">
-                To disconnect an account, you'll need to revoke access through your bank's website 
+                To disconnect an account, you&apos;ll need to revoke access through your bank&apos;s website 
                 or contact your financial institution directly.
               </p>
             </div>
