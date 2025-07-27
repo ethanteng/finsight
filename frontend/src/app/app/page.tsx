@@ -29,6 +29,27 @@ export default function AppPage() {
         console.error('Failed to load prompt history:', error);
       }
     }
+    
+    // Check if backend has any conversations - if not, clear localStorage
+    const checkBackendData = async () => {
+      try {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL;
+        const res = await fetch(`${API_URL}/privacy/data`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.conversations === 0 && saved) {
+            // Backend has no conversations but localStorage has data - clear it
+            localStorage.removeItem('linc_prompt_history');
+            setPromptHistory([]);
+            setSelectedPrompt(null);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to check backend data:', error);
+      }
+    };
+    
+    checkBackendData();
   }, []);
 
   // Save prompt history to localStorage whenever it changes

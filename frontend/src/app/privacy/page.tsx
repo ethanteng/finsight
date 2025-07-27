@@ -51,7 +51,7 @@ export default function PrivacyPage() {
 
       if (res.ok) {
         // Clear localStorage prompt history since accounts are disconnected
-        localStorage.removeItem('promptHistory');
+        localStorage.removeItem('linc_prompt_history');
         
         setMessage({ text: 'All accounts disconnected and data cleared successfully.', type: 'success' });
         await loadPrivacyData(); // Refresh data
@@ -78,7 +78,7 @@ export default function PrivacyPage() {
 
       if (res.ok) {
         // Clear localStorage prompt history
-        localStorage.removeItem('promptHistory');
+        localStorage.removeItem('linc_prompt_history');
         
         setMessage({ text: 'All data deleted successfully. Redirecting to app...', type: 'success' });
         await loadPrivacyData(); // Refresh data
