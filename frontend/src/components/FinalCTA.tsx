@@ -8,9 +8,6 @@ export const FinalCTA = () => {
           <h2 className="text-4xl md:text-6xl font-bold">
             Your financial questions deserve real answers.
           </h2>
-          <h3 className="text-2xl md:text-4xl text-green-light font-light">
-            Try Linc free — no credit card required.
-          </h3>
           
           <div className="pt-8">
             <Button size="lg" className="bg-green hover:bg-green-light text-white px-12 py-6 text-xl font-semibold rounded-lg transition-all hover:scale-105">
