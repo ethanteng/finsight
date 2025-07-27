@@ -55,7 +55,7 @@ export const WhatYouCanAsk = () => {
                 <p className="text-sm text-green-700 font-semibold mb-3">You get:</p>
                 <div className="text-sm text-green-600 space-y-2">
                   <p>Clear answers about your own account data</p>
-                  <p>No guesswork — see what's really happening</p>
+                  <p>No guesswork — see what&apos;s really happening</p>
                   <p>Great for users just beyond spreadsheets</p>
                 </div>
               </div>
@@ -86,7 +86,7 @@ export const WhatYouCanAsk = () => {
                 <div className="text-sm text-blue-600 space-y-2">
                   <p>Trusted public benchmarks like CPI and Fed rates</p>
                   <p>Economic framing without the noise</p>
-                  <p>Helps answer "should we adjust?"</p>
+                  <p>Helps answer &quot;should we adjust?&quot;</p>
                 </div>
               </div>
             </div>
@@ -115,7 +115,7 @@ export const WhatYouCanAsk = () => {
                 <p className="text-sm text-purple-700 font-semibold mb-3">You unlock:</p>
                 <div className="text-sm text-purple-600 space-y-2">
                   <p>Real-time market feeds: CD rates, Treasury yields</p>
-                  <p>Smart "what-if" scenario planning</p>
+                  <p>Smart &quot;what-if&quot; scenario planning</p>
                   <p>GPT answers enriched with live data</p>
                 </div>
               </div>
