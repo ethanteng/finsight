@@ -20,6 +20,7 @@ export default function ProfilePage() {
   const [connectedAccounts, setConnectedAccounts] = useState<Account[]>([]);
   const [syncInfo, setSyncInfo] = useState<SyncInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -46,6 +47,9 @@ export default function ProfilePage() {
 
   // Manual refresh function - handles both data sync and connection refresh
   const handleManualRefresh = async () => {
+    setRefreshing(true);
+    setNotification(null); // Clear any existing notifications
+    
     try {
       // For now, just sync the data since we're managing tokens in the database
       // In the future, we could add a bulk token refresh endpoint
@@ -70,6 +74,8 @@ export default function ProfilePage() {
     } catch (err) {
       console.error('Error during manual refresh:', err);
       setNotification({ message: 'Failed to refresh data. Please try again.', type: 'error' });
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -126,16 +132,6 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      {/* Notification */}
-      {notification && (
-        <div className={`fixed top-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg transition-all duration-300 ${
-          notification.type === 'success' 
-            ? 'bg-green-600 text-white' 
-            : 'bg-red-600 text-white'
-        }`}>
-          {notification.message}
-        </div>
-      )}
       
       {/* Header */}
       <div className="bg-gray-800 border-b border-gray-700 p-4">
@@ -166,9 +162,14 @@ export default function ProfilePage() {
               <h3 className="text-lg font-medium">Sync Status</h3>
               <button
                 onClick={handleManualRefresh}
-                className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm transition-colors"
+                disabled={refreshing}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  refreshing 
+                    ? 'bg-gray-500 cursor-not-allowed' 
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
               >
-                Refresh Data
+                {refreshing ? 'Refreshing...' : 'Refresh Data'}
               </button>
             </div>
             {syncInfo ? (
@@ -180,6 +181,20 @@ export default function ProfilePage() {
             ) : (
               <div className="text-sm text-gray-400">
                 No sync data available yet. Connect an account and click Refresh Data to sync.
+              </div>
+            )}
+            {refreshing && (
+              <div className="text-sm mt-2 text-blue-400">
+                Refreshing data...
+              </div>
+            )}
+            {notification && (
+              <div className={`text-sm mt-2 ${
+                notification.type === 'success' 
+                  ? 'text-green-400' 
+                  : 'text-red-400'
+              }`}>
+                {notification.message}
               </div>
             )}
           </div>
