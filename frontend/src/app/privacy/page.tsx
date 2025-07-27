@@ -50,6 +50,9 @@ export default function PrivacyPage() {
       });
 
       if (res.ok) {
+        // Clear localStorage prompt history since accounts are disconnected
+        localStorage.removeItem('promptHistory');
+        
         setMessage({ text: 'All accounts disconnected and data cleared successfully.', type: 'success' });
         await loadPrivacyData(); // Refresh data
       } else {
@@ -74,8 +77,16 @@ export default function PrivacyPage() {
       });
 
       if (res.ok) {
-        setMessage({ text: 'All data deleted successfully.', type: 'success' });
+        // Clear localStorage prompt history
+        localStorage.removeItem('promptHistory');
+        
+        setMessage({ text: 'All data deleted successfully. Redirecting to app...', type: 'success' });
         await loadPrivacyData(); // Refresh data
+        
+        // Redirect to app after a short delay
+        setTimeout(() => {
+          window.location.href = '/app';
+        }, 2000);
       } else {
         setMessage({ text: 'Failed to delete data. Please try again.', type: 'error' });
       }
