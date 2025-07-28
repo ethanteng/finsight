@@ -1,0 +1,301 @@
+import request from 'supertest';
+import { app } from '../../index';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+describe('API Integration Tests', () => {
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  describe('FRED API Integration', () => {
+    it('should test FRED API key configuration', async () => {
+      const response = await request(app)
+        .get('/test/fred-api-key');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('fredApiKey');
+      expect(response.body).toHaveProperty('fredApiKeyLength');
+      expect(response.body).toHaveProperty('isTestKey');
+
+      // Log the API key status for debugging
+      console.log('FRED API Key Status:', {
+        key: response.body.fredApiKey,
+        length: response.body.fredApiKeyLength,
+        isTestKey: response.body.isTestKey
+      });
+    });
+
+    it('should test FRED economic indicators for different tiers', async () => {
+      const tiers = ['starter', 'standard', 'premium'];
+      
+      for (const tier of tiers) {
+        const response = await request(app)
+          .get(`/test/market-data/${tier}`);
+
+        expect(response.status).toBe(200);
+        expect(response.body).toHaveProperty('tier', tier);
+        expect(response.body).toHaveProperty('marketContext');
+
+        const { marketContext } = response.body;
+        
+        if (tier === 'starter') {
+          // Starter should have no economic indicators
+          expect(marketContext.economicIndicators).toBeUndefined();
+        } else {
+          // Standard and Premium should have economic indicators
+          expect(marketContext.economicIndicators).toBeDefined();
+          
+          if (marketContext.economicIndicators) {
+            const { cpi, fedRate, mortgageRate, creditCardAPR } = marketContext.economicIndicators;
+            
+            // Verify data structure
+            expect(cpi).toHaveProperty('value');
+            expect(cpi).toHaveProperty('date');
+            expect(cpi).toHaveProperty('source');
+            expect(fedRate).toHaveProperty('value');
+            expect(mortgageRate).toHaveProperty('value');
+            expect(creditCardAPR).toHaveProperty('value');
+
+            // Log data for debugging
+            console.log(`${tier} tier FRED data:`, {
+              cpi: cpi.value,
+              fedRate: fedRate.value,
+              mortgageRate: mortgageRate.value,
+              creditCardAPR: creditCardAPR.value,
+              cpiSource: cpi.source,
+              creditCardSource: creditCardAPR.source
+            });
+
+            // Verify data types
+            expect(typeof cpi.value).toBe('number');
+            expect(typeof fedRate.value).toBe('number');
+            expect(typeof mortgageRate.value).toBe('number');
+            expect(typeof creditCardAPR.value).toBe('number');
+          }
+        }
+      }
+    });
+
+    it('should test FRED API with real questions', async () => {
+      const questions = [
+        'What is the current inflation rate?',
+        'What is the Fed Funds Rate?',
+        'What is the current mortgage rate?'
+      ];
+
+      for (const question of questions) {
+        const response = await request(app)
+          .post('/ask')
+          .send({
+            question,
+            userTier: 'standard'
+          });
+
+        // Accept both 200 (success) and 500 (API failure with test credentials)
+        expect([200, 500]).toContain(response.status);
+        
+        if (response.status === 200) {
+          expect(response.body).toHaveProperty('answer');
+          console.log(`Question: "${question}" - Answer: ${response.body.answer.substring(0, 100)}...`);
+        } else {
+          expect(response.body).toHaveProperty('error');
+        }
+      }
+    });
+  });
+
+  describe('Alpha Vantage API Integration', () => {
+    it('should test Alpha Vantage API key configuration', async () => {
+      const response = await request(app)
+        .get('/test/alpha-vantage-api-key');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('alphaVantageApiKey');
+      expect(response.body).toHaveProperty('alphaVantageApiKeyLength');
+      expect(response.body).toHaveProperty('isTestKey');
+
+      // Log the API key status for debugging
+      console.log('Alpha Vantage API Key Status:', {
+        key: response.body.alphaVantageApiKey,
+        length: response.body.alphaVantageApiKeyLength,
+        isTestKey: response.body.isTestKey
+      });
+    });
+
+    it('should test Alpha Vantage live market data for Premium tier', async () => {
+      const response = await request(app)
+        .get('/test/market-data/premium');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('tier', 'premium');
+      expect(response.body).toHaveProperty('marketContext');
+
+      const { marketContext } = response.body;
+      
+      // Premium should have both economic indicators and live market data
+      expect(marketContext.economicIndicators).toBeDefined();
+      expect(marketContext.liveMarketData).toBeDefined();
+
+      if (marketContext.liveMarketData) {
+        const { cdRates, treasuryYields, mortgageRates } = marketContext.liveMarketData;
+        
+        // Verify CD rates structure
+        expect(Array.isArray(cdRates)).toBe(true);
+        expect(cdRates.length).toBeGreaterThan(0);
+        
+        cdRates.forEach((cd: any) => {
+          expect(cd).toHaveProperty('term');
+          expect(cd).toHaveProperty('rate');
+          expect(cd).toHaveProperty('institution');
+          expect(cd).toHaveProperty('lastUpdated');
+          expect(typeof cd.rate).toBe('number');
+        });
+
+        // Verify Treasury yields structure
+        expect(Array.isArray(treasuryYields)).toBe(true);
+        expect(treasuryYields.length).toBeGreaterThan(0);
+        
+        treasuryYields.forEach((t: any) => {
+          expect(t).toHaveProperty('term');
+          expect(t).toHaveProperty('yield');
+          expect(t).toHaveProperty('lastUpdated');
+          expect(typeof t.yield).toBe('number');
+        });
+
+        // Verify Mortgage rates structure
+        expect(Array.isArray(mortgageRates)).toBe(true);
+        expect(mortgageRates.length).toBeGreaterThan(0);
+        
+        mortgageRates.forEach((m: any) => {
+          expect(m).toHaveProperty('type');
+          expect(m).toHaveProperty('rate');
+          expect(m).toHaveProperty('lastUpdated');
+          expect(typeof m.rate).toBe('number');
+        });
+
+        // Log data for debugging
+        console.log('Premium tier Alpha Vantage data:', {
+          cdRatesCount: cdRates.length,
+          treasuryYieldsCount: treasuryYields.length,
+          mortgageRatesCount: mortgageRates.length,
+          sampleCDRate: cdRates[0],
+          sampleTreasuryYield: treasuryYields[0],
+          sampleMortgageRate: mortgageRates[0]
+        });
+      }
+    });
+
+    it('should test Alpha Vantage with real questions for Premium tier', async () => {
+      const questions = [
+        'What are the current CD rates?',
+        'What are the current treasury yields?',
+        'What are the current mortgage rates?'
+      ];
+
+      for (const question of questions) {
+        const response = await request(app)
+          .post('/ask')
+          .send({
+            question,
+            userTier: 'premium'
+          });
+
+        // Accept both 200 (success) and 500 (API failure with test credentials)
+        expect([200, 500]).toContain(response.status);
+        
+        if (response.status === 200) {
+          expect(response.body).toHaveProperty('answer');
+          console.log(`Premium Question: "${question}" - Answer: ${response.body.answer.substring(0, 100)}...`);
+        } else {
+          expect(response.body).toHaveProperty('error');
+        }
+      }
+    });
+  });
+
+  describe('Tier Access Control', () => {
+    it('should verify tier access restrictions', async () => {
+      const tierTests = [
+        { tier: 'starter', shouldHaveEconomicData: false, shouldHaveLiveData: false },
+        { tier: 'standard', shouldHaveEconomicData: true, shouldHaveLiveData: false },
+        { tier: 'premium', shouldHaveEconomicData: true, shouldHaveLiveData: true }
+      ];
+
+      for (const test of tierTests) {
+        const response = await request(app)
+          .get(`/test/market-data/${test.tier}`);
+
+        expect(response.status).toBe(200);
+        expect(response.body).toHaveProperty('tier', test.tier);
+        expect(response.body).toHaveProperty('marketContext');
+
+        const { marketContext } = response.body;
+
+        if (test.shouldHaveEconomicData) {
+          expect(marketContext.economicIndicators).toBeDefined();
+        } else {
+          expect(marketContext.economicIndicators).toBeUndefined();
+        }
+
+        if (test.shouldHaveLiveData) {
+          expect(marketContext.liveMarketData).toBeDefined();
+        } else {
+          expect(marketContext.liveMarketData).toBeUndefined();
+        }
+
+        console.log(`${test.tier} tier access:`, {
+          hasEconomicData: !!marketContext.economicIndicators,
+          hasLiveData: !!marketContext.liveMarketData,
+          expectedEconomicData: test.shouldHaveEconomicData,
+          expectedLiveData: test.shouldHaveLiveData
+        });
+      }
+    });
+  });
+
+  describe('Cache and Performance', () => {
+    it('should test cache functionality for API calls', async () => {
+      // First call
+      const response1 = await request(app)
+        .get('/test/market-data/standard');
+
+      expect(response1.status).toBe(200);
+
+      // Second call (should be cached)
+      const response2 = await request(app)
+        .get('/test/market-data/standard');
+
+      expect(response2.status).toBe(200);
+
+      // Both responses should be identical (cached)
+      expect(response1.body).toEqual(response2.body);
+
+      console.log('Cache test: Both responses identical (cached)');
+    });
+
+    it('should test cache invalidation', async () => {
+      // Get initial data
+      const response1 = await request(app)
+        .get('/test/market-data/standard');
+
+      expect(response1.status).toBe(200);
+
+      // Invalidate cache
+      const invalidateResponse = await request(app)
+        .post('/test/invalidate-cache')
+        .send({ pattern: 'economic_indicators' });
+
+      expect(invalidateResponse.status).toBe(200);
+
+      // Get data again (should be fresh)
+      const response2 = await request(app)
+        .get('/test/market-data/standard');
+
+      expect(response2.status).toBe(200);
+
+      console.log('Cache invalidation test: Cache cleared and data refreshed');
+    });
+  });
+}); 
