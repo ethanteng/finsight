@@ -2,8 +2,8 @@ services:
   - type: web
     name: finsight-backend
     env: node
-    buildCommand: npm install && npx prisma generate && npx prisma migrate deploy && npx tsc --outDir ./dist
-    startCommand: pwd && ls -la && ls -la dist/ && node dist/index.js
+    buildCommand: npm install && npx prisma generate && npx prisma migrate deploy && npx tsc --outDir dist && ls -la dist/
+    startCommand: node dist/index.js
     envVars:
       - key: NODE_ENV
         value: production
