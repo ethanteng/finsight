@@ -32,4 +32,5 @@ echo "Build completed successfully!"
 echo "Checking dist directory contents:"
 ls -la dist/
 echo "Checking if index.js exists:"
-ls -la dist/index.js || echo "index.js not found!" 
+ls -la dist/index.js || echo "index.js not found!"
+echo "Build script completed." 
