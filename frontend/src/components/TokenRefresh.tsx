@@ -1,67 +1,81 @@
 "use client";
+
 import { useState, useEffect } from 'react';
 
-interface TokenRefreshProps {
-  accessToken: string;
-  onRefresh?: (newToken: string) => void;
-  onError?: (error: string) => void;
+interface TierInfo {
+  testTier: string;
+  backendTier: string;
+  message: string;
 }
 
-export default function TokenRefresh({ accessToken, onRefresh, onError }: TokenRefreshProps) {
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+export default function TokenRefresh() {
+  const [tierInfo, setTierInfo] = useState<TierInfo | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-  const refreshToken = async () => {
-    if (!accessToken) return;
-
-    setIsRefreshing(true);
+  const checkCurrentTier = async () => {
+    setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/plaid/refresh_token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ access_token: accessToken }),
-      });
-
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        setLastRefresh(new Date());
-        onRefresh?.(data.access_token);
-      } else {
-        // Token is invalid, needs reconnection
-        onError?.('Your account connection has expired. Please reconnect your account.');
+      const response = await fetch(`${API_URL}/test/current-tier`);
+      if (response.ok) {
+        const data = await response.json();
+        setTierInfo(data);
       }
     } catch (error) {
-      console.error('Error refreshing token:', error);
-      onError?.('Failed to refresh account connection. Please reconnect your account.');
+      console.error('Error checking tier:', error);
     } finally {
-      setIsRefreshing(false);
+      setLoading(false);
     }
   };
 
-  // Auto-refresh token every 25 minutes (before the 30-minute expiration)
   useEffect(() => {
-    if (!accessToken) return;
+    checkCurrentTier();
+  }, []);
 
-    const interval = setInterval(() => {
-      refreshToken();
-    }, 25 * 60 * 1000); // 25 minutes
-
-    return () => clearInterval(interval);
-  }, [accessToken]);
+  const getTierColor = (tier: string) => {
+    switch (tier.toLowerCase()) {
+      case 'starter':
+        return 'text-green-500';
+      case 'standard':
+        return 'text-blue-500';
+      case 'premium':
+        return 'text-purple-500';
+      default:
+        return 'text-gray-500';
+    }
+  };
 
   return (
-    <div className="text-xs text-gray-400">
-      {lastRefresh && (
-        <span>Last refreshed: {lastRefresh.toLocaleTimeString()}</span>
-      )}
-      {isRefreshing && (
-        <span className="ml-2">Refreshing...</span>
-      )}
+    <div className="bg-gray-800 rounded-lg p-4 mb-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-white mb-2">Tier Testing</h3>
+          {tierInfo && (
+            <div className="text-sm text-gray-300">
+              <p>Current Test Tier: <span className={getTierColor(tierInfo.testTier)}>{tierInfo.testTier}</span></p>
+              <p>Backend Tier: <span className={getTierColor(tierInfo.backendTier)}>{tierInfo.backendTier}</span></p>
+              <p className="text-xs text-gray-400 mt-1">{tierInfo.message}</p>
+            </div>
+          )}
+        </div>
+        <button
+          onClick={checkCurrentTier}
+          disabled={loading}
+          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white text-sm rounded transition-colors"
+        >
+          {loading ? 'Checking...' : 'Refresh'}
+        </button>
+      </div>
+      
+      <div className="mt-3 text-xs text-gray-400">
+        <p>To test different tiers, set <code className="bg-gray-700 px-1 rounded">TEST_USER_TIER</code> in your environment:</p>
+        <ul className="list-disc list-inside mt-1 space-y-1">
+          <li><code className="bg-gray-700 px-1 rounded">TEST_USER_TIER=starter</code> - Basic features only</li>
+          <li><code className="bg-gray-700 px-1 rounded">TEST_USER_TIER=standard</code> - With market context</li>
+          <li><code className="bg-gray-700 px-1 rounded">TEST_USER_TIER=premium</code> - Full market data & simulations</li>
+        </ul>
+      </div>
     </div>
   );
 } 

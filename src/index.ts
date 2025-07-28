@@ -62,7 +62,11 @@ app.post('/ask', async (req: Request, res: Response) => {
       'premium': 'PREMIUM'
     };
     
-    const backendTier = tierMap[userTier] || 'STARTER';
+    // Allow environment variable override for testing
+    const testTier = process.env.TEST_USER_TIER;
+    const effectiveTier = testTier || userTier;
+    
+    const backendTier = tierMap[effectiveTier] || 'STARTER';
     const answer = await askOpenAI(question, recentConversations, backendTier as any);
     
     // Store the new Q&A pair
@@ -100,6 +104,32 @@ app.get('/test/market-data/:tier', async (req: Request, res: Response) => {
       tier: backendTier,
       marketContext,
       cacheStats: await dataOrchestrator.getCacheStats()
+    });
+  } catch (err) {
+    if (err instanceof Error) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+});
+
+// Test endpoint to check current tier setting
+app.get('/test/current-tier', async (req: Request, res: Response) => {
+  try {
+    const testTier = process.env.TEST_USER_TIER;
+    const tierMap: Record<string, string> = {
+      'starter': 'STARTER',
+      'standard': 'STANDARD', 
+      'premium': 'PREMIUM'
+    };
+    
+    const backendTier = testTier ? tierMap[testTier] || 'STARTER' : 'NONE (using request tier)';
+    
+    res.json({ 
+      testTier: testTier || 'none',
+      backendTier,
+      message: testTier ? `Testing with ${testTier} tier` : 'Using tier from request'
     });
   } catch (err) {
     if (err instanceof Error) {

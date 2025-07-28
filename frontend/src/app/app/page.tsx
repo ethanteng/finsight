@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import FinanceQA from '../../components/FinanceQA';
+import TokenRefresh from '../../components/TokenRefresh';
 
 interface PromptHistory {
   id: string;
@@ -167,6 +168,7 @@ export default function AppPage() {
                 selectedPrompt={selectedPrompt}
                 onNewQuestion={handleNewQuestion}
               />
+              <TokenRefresh />
             </div>
           </div>
         </div>
