@@ -74,7 +74,7 @@ jobs:
       - name: Setup test database
         run: |
           npx prisma generate
-          npx prisma db push --preview-feature
+          npx prisma db push
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
 
