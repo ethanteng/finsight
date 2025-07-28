@@ -26,7 +26,7 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
-  res.json({ status: 'ok' });
+  res.json({ status: 'OK' });
 });
 
 // Setup Plaid routes
@@ -237,25 +237,32 @@ app.get('/sync/status', async (req: Request, res: Response) => {
     });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  
-  // Set up cron job to sync accounts and transactions daily at 2 AM
-  cron.schedule('0 2 * * *', async () => {
-    console.log('Starting daily sync job...');
-    try {
-      const result = await syncAllAccounts();
-      if (result.success) {
-        console.log(`Daily sync completed: ${result.accountsSynced} accounts, ${result.transactionsSynced} transactions synced`);
-      } else {
-        console.error('Daily sync failed:', result.error);
+
+// Only start the server if this file is run directly
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    
+    // Set up cron job to sync accounts and transactions daily at 2 AM
+    cron.schedule('0 2 * * *', async () => {
+      console.log('Starting daily sync job...');
+      try {
+        const result = await syncAllAccounts();
+        if (result.success) {
+          console.log(`Daily sync completed: ${result.accountsSynced} accounts, ${result.transactionsSynced} transactions synced`);
+        } else {
+          console.error('Daily sync failed:', result.error);
+        }
+      } catch (error) {
+        console.error('Error in daily sync job:', error);
       }
-    } catch (error) {
-      console.error('Error in daily sync job:', error);
-    }
-  }, {
-    timezone: 'America/New_York'
+    }, {
+      timezone: 'America/New_York'
+    });
+    
+    console.log('Cron job scheduled: daily sync at 2 AM EST');
   });
-  
-  console.log('Cron job scheduled: daily sync at 2 AM EST');
-});
+}
+
+// Export app for testing
+export { app };
