@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: finsight-backend
+    env: node
+    buildCommand: |
+      npm install
+      npm run build:prisma
+      npm run build:backend
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=2048"
+    healthCheckPath: /health
+    autoDeploy: true 
