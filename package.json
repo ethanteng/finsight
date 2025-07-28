@@ -14,8 +14,8 @@
     "build:backend": "NODE_OPTIONS='--max-old-space-size=4096' npx tsc --outDir ./dist && echo 'TypeScript compilation completed' && ls -la dist/",
     "build:prisma": "prisma generate",
     "build": "./build.sh",
-    "build:render": "NODE_OPTIONS='--max-old-space-size=2048' npm run build:prisma && npm run build:backend",
-    "start": "NODE_OPTIONS='--max-old-space-size=2048' prisma generate && prisma migrate deploy && npm run build:backend && node dist/index.js",
+    "build:render": "NODE_OPTIONS='--max-old-space-size=2048' prisma generate && prisma migrate deploy && npm run build:backend",
+    "start": "node dist/index.js",
     "dev:backend": "ts-node src/index.ts",
     "dev:frontend": "npm run dev --prefix frontend",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\""

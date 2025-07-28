@@ -2,8 +2,8 @@ services:
   - type: web
     name: finsight-backend
     env: node
-    buildCommand: npm install
-    startCommand: npm start
+    buildCommand: npm install && npm run build:render
+    startCommand: node dist/index.js
     envVars:
       - key: NODE_ENV
         value: production
