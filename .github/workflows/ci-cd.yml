@@ -203,9 +203,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Deploy to Vercel
-        run: |
-          echo "Vercel deployment skipped - secrets not configured"
-          echo "To enable Vercel deployment, add VERCEL_TOKEN, VERCEL_ORG_ID, and VERCEL_PROJECT_ID secrets"
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: '--prod'
 
       - name: Deploy to Render
         run: |
