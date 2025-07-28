@@ -3,15 +3,7 @@ services:
     name: finsight-backend
     env: node
     buildCommand: npm install
-    startCommand: |
-      echo "Starting build process..."
-      npm run build:prisma
-      npm run build:backend
-      echo "Build completed. Checking dist directory:"
-      ls -la dist/
-      echo "Checking if index.js exists:"
-      ls -la dist/index.js
-      npm start
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
