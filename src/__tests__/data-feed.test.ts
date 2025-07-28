@@ -53,10 +53,10 @@ describe('Data Feed Architecture', () => {
 
     it('should get market context for STANDARD tier', async () => {
       const mockEconomicIndicators = {
-        cpi: { value: 3.2, date: '2024-01-01' },
-        fedRate: { value: 5.5, date: '2024-01-01' },
-        mortgageRate: { value: 7.2, date: '2024-01-01' },
-        creditCardAPR: { value: 24.5, date: '2024-01-01' },
+        cpi: { value: 3.2, date: '2024-01-01', source: 'FRED', lastUpdated: '2024-01-01T00:00:00Z' },
+        fedRate: { value: 5.5, date: '2024-01-01', source: 'FRED', lastUpdated: '2024-01-01T00:00:00Z' },
+        mortgageRate: { value: 7.2, date: '2024-01-01', source: 'FRED', lastUpdated: '2024-01-01T00:00:00Z' },
+        creditCardAPR: { value: 24.5, date: '2024-01-01', source: 'FRED', lastUpdated: '2024-01-01T00:00:00Z' },
       };
 
       mockFREDProvider.getEconomicIndicators.mockResolvedValue(mockEconomicIndicators);
@@ -80,16 +80,16 @@ describe('Data Feed Architecture', () => {
 
       const mockLiveMarketData = {
         cdRates: [
-          { term: '1-year', rate: 5.0 },
-          { term: '2-year', rate: 5.2 },
+          { term: '1-year', rate: 5.0, institution: 'Test Bank', lastUpdated: '2024-01-01T00:00:00Z' },
+          { term: '2-year', rate: 5.2, institution: 'Test Bank', lastUpdated: '2024-01-01T00:00:00Z' },
         ],
         treasuryYields: [
-          { term: '1-month', yield: 5.1 },
-          { term: '3-month', yield: 5.2 },
+          { term: '1-month', yield: 5.1, lastUpdated: '2024-01-01T00:00:00Z' },
+          { term: '3-month', yield: 5.2, lastUpdated: '2024-01-01T00:00:00Z' },
         ],
         mortgageRates: [
-          { type: '30-year-fixed', rate: 7.2 },
-          { type: '15-year-fixed', rate: 6.8 },
+          { type: '30-year-fixed', rate: 7.2, lastUpdated: '2024-01-01T00:00:00Z' },
+          { type: '15-year-fixed', rate: 6.8, lastUpdated: '2024-01-01T00:00:00Z' },
         ],
       };
 

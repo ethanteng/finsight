@@ -1,6 +1,6 @@
 import { CacheService, CacheEntry } from './types';
 
-class InMemoryCacheService implements CacheService {
+export class InMemoryCacheService implements CacheService {
   private cache = new Map<string, CacheEntry<any>>();
 
   async get<T>(key: string): Promise<T | null> {

@@ -3,16 +3,15 @@ import { PrismaClient } from '@prisma/client';
 import { UserTier } from '../data/types';
 
 // Mock OpenAI
-jest.mock('openai', () => {
-  const mockOpenAI = jest.fn().mockImplementation(() => ({
+jest.mock('openai', () => ({
+  default: jest.fn().mockImplementation(() => ({
     chat: {
       completions: {
         create: jest.fn(),
       },
     },
-  }));
-  return { default: mockOpenAI };
-});
+  })),
+}));
 
 // Mock Prisma
 jest.mock('@prisma/client');
