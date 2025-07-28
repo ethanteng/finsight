@@ -13,9 +13,10 @@ interface FinanceQAProps {
   onNewAnswer?: (question: string, answer: string) => void;
   selectedPrompt?: PromptHistory | null;
   onNewQuestion?: () => void;
+  isDemo?: boolean;
 }
 
-export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion }: FinanceQAProps) {
+export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion, isDemo = false }: FinanceQAProps) {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(false);
@@ -54,7 +55,10 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion }
       const res = await fetch(`${API_URL}/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ 
+          question,
+          isDemo: isDemo // Pass demo flag to backend
+        }),
       });
       const data = await res.json();
       if (data.answer) {
@@ -85,7 +89,10 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion }
               onChange={e => setQuestion(e.target.value)}
               className="w-full h-32 p-4 bg-gray-600 border border-gray-500 rounded-lg text-white placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={loading}
-              placeholder="How much did I spend on dining last month? What's my current asset allocation? Which accounts have the highest fees?"
+              placeholder={isDemo 
+                ? "How much am I saving each month? What's my emergency fund status? Should I move my savings to a higher-yield account?"
+                : "How much did I spend on dining last month? What's my current asset allocation? Which accounts have the highest fees?"
+              }
               required
             />
           </div>

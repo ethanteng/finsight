@@ -48,7 +48,7 @@ setupPlaidRoutes(app);
 // OpenAI Q&A endpoint
 app.post('/ask', async (req: Request, res: Response) => {
   try {
-    const { question, userTier = 'starter' } = req.body;
+    const { question, userTier = 'starter', isDemo = false } = req.body;
     if (!question) {
       return res.status(400).json({ error: 'Question is required' });
     }
@@ -71,9 +71,18 @@ app.post('/ask', async (req: Request, res: Response) => {
     const effectiveTier = testTier || userTier;
     
     const backendTier = tierMap[effectiveTier] || 'starter';
-    const answer = await askOpenAI(question, recentConversations, backendTier as any);
     
-    // Store the new Q&A pair
+    // If in demo mode, use demo data context
+    let marketContext = null;
+    if (isDemo) {
+      // For demo mode, we'll use the data orchestrator with demo flag
+      // The orchestrator will need to be updated to handle demo data
+      marketContext = await dataOrchestrator.getMarketContext(backendTier as any, true); // true = demo mode
+    }
+    
+    const answer = await askOpenAI(question, recentConversations, backendTier as any, isDemo);
+    
+    // Store the new Q&A pair (even in demo mode for consistency)
     await getPrismaClient().conversation.create({
       data: {
         question,

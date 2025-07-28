@@ -15,20 +15,44 @@ interface Conversation {
   createdAt: Date;
 }
 
-export async function askOpenAI(question: string, conversationHistory: Conversation[] = [], userTier: UserTier = UserTier.STARTER): Promise<string> {
-  // Fetch accounts and transactions from DB
-  const accounts = await prisma.account.findMany();
-  const transactions = await prisma.transaction.findMany({
-    orderBy: { date: 'desc' },
-    take: 200, // increased limit for context
-  });
+export async function askOpenAI(question: string, conversationHistory: Conversation[] = [], userTier: UserTier = UserTier.STARTER, isDemo: boolean = false): Promise<string> {
+  // Fetch accounts and transactions from DB (or use demo data)
+  let accounts, transactions;
+  
+  if (isDemo) {
+    // Use demo data instead of real database data
+    const { demoData } = await import('../frontend/src/data/demo-data');
+    accounts = demoData.accounts.map((account: any) => ({
+      id: account.id,
+      name: account.name,
+      balance: account.balance,
+      type: account.type,
+      institution: account.institution,
+      lastUpdated: new Date(account.lastUpdated)
+    }));
+    transactions = demoData.transactions.map((transaction: any) => ({
+      id: transaction.id,
+      accountId: transaction.accountId,
+      amount: transaction.amount,
+      category: transaction.category,
+      date: new Date(transaction.date),
+      description: transaction.description
+    }));
+  } else {
+    // Use real database data
+    accounts = await prisma.account.findMany();
+    transactions = await prisma.transaction.findMany({
+      orderBy: { date: 'desc' },
+      take: 200, // increased limit for context
+    });
+  }
 
   // Anonymize data before sending to OpenAI
   const accountSummary = anonymizeAccountData(accounts);
   const transactionSummary = anonymizeTransactionData(transactions);
   
   // Get market context based on user tier
-  const marketContext = await dataOrchestrator.getMarketContext(userTier);
+  const marketContext = await dataOrchestrator.getMarketContext(userTier, isDemo);
   
   let systemPrompt = `You are a financial assistant. Here is the user's account summary:\n${accountSummary}\n\nRecent transactions:\n${transactionSummary}`;
 

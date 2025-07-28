@@ -58,11 +58,11 @@ export class DataOrchestrator {
     }
   }
 
-  async getMarketContext(tier: UserTier): Promise<{
+  async getMarketContext(tier: UserTier, isDemo: boolean = false): Promise<{
     economicIndicators?: EconomicIndicator;
     liveMarketData?: LiveMarketData;
   }> {
-    console.log('DataOrchestrator: getMarketContext called with tier:', tier);
+    console.log('DataOrchestrator: getMarketContext called with tier:', tier, 'isDemo:', isDemo);
     const access = this.getTierAccess(tier);
     console.log('DataOrchestrator: Tier access:', access);
     const context: any = {};

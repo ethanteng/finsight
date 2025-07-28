@@ -59,7 +59,9 @@ const NewHomepage = () => {
                 Join the Waitlist
                 <ArrowRight className="h-5 w-5 ml-2 group-hover:translate-x-1 transition-transform" />
               </Button>
-              <Button variant="outline" size="xl">Try Our Demo</Button>
+              <a href="/demo">
+                <Button variant="outline" size="xl">Try Our Demo</Button>
+              </a>
             </div>
             
             <div className="flex items-center justify-center space-x-6 pt-8 text-sm text-muted-foreground">
@@ -611,10 +613,21 @@ const NewHomepage = () => {
           <p className="text-xl text-muted-foreground">
             Join thousands of people who&apos;ve stopped guessing and started getting clear, honest financial advice
           </p>
-          <Button variant="hero" size="xl" className="group">
-            Let&apos;s Talk About Your Money
-            <ArrowRight className="h-5 w-5 ml-2 group-hover:translate-x-1 transition-transform" />
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <a href="/demo" className="w-full sm:w-auto">
+              <Button variant="glass" size="xl" className="group w-full sm:w-auto">
+                Try Demo First
+                <ArrowRight className="h-5 w-5 ml-2 group-hover:translate-x-1 transition-transform" />
+              </Button>
+            </a>
+            <Button variant="hero" size="xl" className="group w-full sm:w-auto">
+              Let&apos;s Talk About Your Money
+              <ArrowRight className="h-5 w-5 ml-2 group-hover:translate-x-1 transition-transform" />
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Try the demo with realistic financial data • No account required • See how it works
+          </p>
         </div>
       </section>
 
