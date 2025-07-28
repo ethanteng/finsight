@@ -17,7 +17,9 @@ npx prisma generate
 
 # Build TypeScript with memory optimization
 echo "Building TypeScript..."
-npx tsc --noEmit
-npx tsc --outDir dist
+# Ensure we're in the project root and compile to dist directory
+npx tsc --outDir ./dist
 
-echo "Build completed successfully!" 
+echo "Build completed successfully!"
+echo "Checking dist directory contents:"
+ls -la dist/ 
