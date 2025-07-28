@@ -195,24 +195,24 @@ jobs:
           cd frontend
           npm run build
 
-  # Deployment (only on main branch)
-  deploy:
-    runs-on: ubuntu-latest
-    needs: [build-verification]
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  # Deployment (only on main branch) - DISABLED
+  # deploy:
+  #   runs-on: ubuntu-latest
+  #   needs: [build-verification]
+  #   if: github.ref == 'refs/heads/main'
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
 
-      - name: Deploy to Vercel
-        uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: '--prod'
+  #     - name: Deploy to Vercel
+  #       uses: amondnet/vercel-action@v25
+  #       with:
+  #         vercel-token: ${{ secrets.VERCEL_TOKEN }}
+  #         vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+  #         vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+  #         vercel-args: '--prod'
 
-      - name: Deploy to Render
-        run: |
-          echo "Render deployment is handled automatically via GitHub integration"
-          echo "Deployment status will be available in Render dashboard" 
+  #     - name: Deploy to Render
+  #       run: |
+  #         echo "Render deployment is handled automatically via GitHub integration"
+  #         echo "Deployment status will be available in Render dashboard" 
