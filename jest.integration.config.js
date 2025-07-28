@@ -1,16 +1,14 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/src'],
-  testMatch: [
-    '**/__tests__/integration/**/*.ts',
-    '**/integration/**/*.ts'
-  ],
-  transform: {
-    '^.+\\.ts$': 'ts-jest',
+  testMatch: ['**/__tests__/integration/**/*.test.ts'],
+  setupFilesAfterEnv: ['<rootDir>/src/__tests__/integration/setup.ts'],
+  testTimeout: 30000, // 30 seconds for integration tests
+  verbose: true,
+  collectCoverage: false, // Disable coverage for integration tests
+  globals: {
+    'ts-jest': {
+      tsconfig: 'tsconfig.json',
+    },
   },
-  setupFilesAfterEnv: [],
-  testTimeout: 30000,
-  // Integration tests can be slower
-  maxWorkers: 1,
 }; 

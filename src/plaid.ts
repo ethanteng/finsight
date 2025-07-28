@@ -355,4 +355,115 @@ export const setupPlaidRoutes = (app: any) => {
       res.status(500).json(errorInfo);
     }
   });
+
+  // Refresh data endpoint
+  app.post('/plaid/refresh_data', async (req: any, res: any) => {
+    try {
+      const { access_token } = req.body;
+      
+      // Refresh accounts
+      const accountsResponse = await plaidClient.accountsGet({
+        access_token: access_token,
+      });
+
+      const accounts = accountsResponse.data.accounts;
+      let accountCount = 0;
+
+      for (const account of accounts) {
+        await getPrismaClient().account.upsert({
+          where: { plaidAccountId: account.account_id },
+          update: {
+            name: account.name,
+            mask: account.mask,
+            type: account.type,
+            subtype: account.subtype,
+            currentBalance: account.balances.current,
+            availableBalance: account.balances.available,
+            currency: account.balances.iso_currency_code,
+          },
+          create: {
+            plaidAccountId: account.account_id,
+            name: account.name,
+            mask: account.mask,
+            type: account.type,
+            subtype: account.subtype,
+            currentBalance: account.balances.current,
+            availableBalance: account.balances.available,
+            currency: account.balances.iso_currency_code,
+          },
+        });
+        accountCount++;
+      }
+
+      // Refresh transactions
+      const now = new Date();
+      const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      
+      const transactionsResponse = await plaidClient.transactionsGet({
+        access_token: access_token,
+        start_date: startDate.toISOString().split('T')[0],
+        end_date: now.toISOString().split('T')[0],
+      });
+
+      const transactions = transactionsResponse.data.transactions;
+      let transactionCount = 0;
+
+      for (const transaction of transactions) {
+        // Check if account exists before upserting transaction
+        const account = await getPrismaClient().account.findUnique({
+          where: { plaidAccountId: transaction.account_id },
+        });
+        if (!account) {
+          console.warn(`Skipping transaction for unknown accountId: ${transaction.account_id}`);
+          continue;
+        }
+        
+        await getPrismaClient().transaction.upsert({
+          where: { plaidTransactionId: transaction.transaction_id },
+          update: {
+            accountId: account.id,
+            amount: transaction.amount,
+            date: new Date(transaction.date),
+            name: transaction.name,
+            category: transaction.category?.join(', ') || '',
+            pending: transaction.pending,
+          },
+          create: {
+            plaidTransactionId: transaction.transaction_id,
+            accountId: account.id,
+            amount: transaction.amount,
+            date: new Date(transaction.date),
+            name: transaction.name,
+            category: transaction.category?.join(', ') || '',
+            pending: transaction.pending,
+          },
+        });
+        transactionCount++;
+      }
+
+      res.json({ 
+        success: true, 
+        accountsRefreshed: accountCount,
+        transactionsRefreshed: transactionCount
+      });
+    } catch (error) {
+      const errorInfo = handlePlaidError(error, 'refreshing data');
+      res.status(500).json(errorInfo);
+    }
+  });
+
+  // Disconnect accounts endpoint
+  app.delete('/plaid/disconnect_accounts', async (req: any, res: any) => {
+    try {
+      const { user_id } = req.body;
+      
+      // Delete all access tokens (this effectively disconnects all accounts)
+      await getPrismaClient().accessToken.deleteMany();
+      
+      res.json({ success: true, message: 'All accounts disconnected' });
+    } catch (error) {
+      const errorInfo = handlePlaidError(error, 'disconnecting accounts');
+      res.status(500).json(errorInfo);
+    }
+  });
 };

@@ -229,6 +229,23 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
+    app.delete('/privacy/delete-all-data', async (req: Request, res: Response) => {
+      try {
+        const { user_id } = req.body;
+        
+        // Delete all user data
+        await getPrismaClient().conversation.deleteMany();
+        await getPrismaClient().transaction.deleteMany();
+        await getPrismaClient().account.deleteMany();
+        await getPrismaClient().accessToken.deleteMany();
+        await getPrismaClient().syncStatus.deleteMany();
+
+        res.json({ success: true, message: 'All data deleted successfully' });
+      } catch (err) {
+        res.status(500).json({ error: 'Failed to delete data' });
+      }
+    });
+
     app.post('/privacy/disconnect-accounts', async (req: Request, res: Response) => {
       try {
         // Remove all Plaid access tokens
