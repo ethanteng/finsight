@@ -71,6 +71,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Wait for database
+        run: |
+          echo "Waiting for database to be ready..."
+          sleep 10
+          echo "Database should be ready now"
+
       - name: Setup test database
         run: |
           npx prisma generate
@@ -141,6 +147,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Wait for database
+        run: |
+          echo "Waiting for database to be ready..."
+          sleep 10
+          echo "Database should be ready now"
 
       - name: Setup test database
         run: |
