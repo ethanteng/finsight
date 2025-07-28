@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { config } from 'dotenv';
 import express, { Application, Request, Response } from 'express';
 import { setupPlaidRoutes } from './plaid';
 import { askOpenAI } from './openai';
@@ -7,6 +8,9 @@ import cron from 'node-cron';
 import { syncAllAccounts, getLastSyncInfo } from './sync';
 import { PrismaClient } from '@prisma/client';
 import { dataOrchestrator } from './data/orchestrator';
+
+// Load environment variables from .env.local
+config({ path: '.env.local' });
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
