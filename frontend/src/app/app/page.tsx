@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import FinanceQA from '../../components/FinanceQA';
-import TokenRefresh from '../../components/TokenRefresh';
+import TierBanner from '../../components/TierBanner';
 
 interface PromptHistory {
   id: string;
@@ -100,7 +100,10 @@ export default function AppPage() {
       {/* Header */}
       <div className="bg-gray-800 border-b border-gray-700 p-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-white">Ask Linc</h1>
+          <div className="flex items-center space-x-3">
+            <h1 className="text-2xl font-bold text-white">Ask Linc</h1>
+            <TierBanner />
+          </div>
           <div className="flex items-center space-x-3">
             <a 
               href="/privacy" 
@@ -168,7 +171,6 @@ export default function AppPage() {
                 selectedPrompt={selectedPrompt}
                 onNewQuestion={handleNewQuestion}
               />
-              <TokenRefresh />
             </div>
           </div>
         </div>
