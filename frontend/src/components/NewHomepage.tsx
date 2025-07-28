@@ -2,7 +2,7 @@
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
-import { Brain, Shield, Zap, TrendingUp, CheckCircle, Star, Users, Lock, Eye, Database, Smartphone, CreditCard, PiggyBank, BarChart3, MessageCircle, ArrowRight, Sparkles, X, Target, PlayCircle } from 'lucide-react';
+import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, Database, BarChart3, MessageCircle, ArrowRight, Sparkles, X, Target } from 'lucide-react';
 
 const NewHomepage = () => {
   const scrollToSection = (id: string) => {
@@ -44,14 +44,14 @@ const NewHomepage = () => {
             </Badge>
             
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold leading-tight">
-              Hey, I'm Linc{" "}
+              Hey, I&apos;m Linc{" "}
               <span className="gradient-text">Your Financial</span>{" "}
               Guide
             </h1>
             
             <p className="text-xl md:text-2xl text-muted-foreground max-w-4xl mx-auto leading-relaxed">
-              I'm here to answer your real money questions — zero judgment or financial jargon. 
-              Just honest advice based on your actual accounts and what's happening in the world right now.
+              I&apos;m here to answer your real money questions — zero judgment or financial jargon. 
+              Just honest advice based on your actual accounts and what&apos;s happening in the world right now.
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-8">
@@ -95,9 +95,9 @@ const NewHomepage = () => {
                   <div className="flex items-start space-x-4">
                     <MessageCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
                     <div>
-                      <p className="font-medium mb-2">"How much am I actually saving each month?"</p>
+                      <p className="font-medium mb-2">&quot;How much am I actually saving each month?&quot;</p>
                       <p className="text-sm text-muted-foreground">
-                        Based on your last 6 months of transactions, you're averaging $1,247 in savings per month. 
+                        Based on your last 6 months of transactions, you&apos;re averaging $1,247 in savings per month. 
                         Your highest saving month was March at $1,890.
                       </p>
                     </div>
@@ -108,7 +108,7 @@ const NewHomepage = () => {
                   <div className="flex items-start space-x-4">
                     <MessageCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
                     <div>
-                      <p className="font-medium mb-2">"Should I move my emergency fund to a higher-yield account?"</p>
+                      <p className="font-medium mb-2">&quot;Should I move my emergency fund to a higher-yield account?&quot;</p>
                       <p className="text-sm text-muted-foreground">
                         Yes! Your current savings account yields 0.5%, but top high-yield accounts offer 4.8%. 
                         Moving your $12,000 emergency fund could earn an extra $516 annually.
@@ -155,7 +155,7 @@ const NewHomepage = () => {
                           <Brain className="w-3 h-3 text-white" />
                         </div>
                         <div className="bg-gray-800 rounded-lg p-3 max-w-xs">
-                          <p className="text-white text-sm">Hi! I'm here to help with your financial questions. What would you like to know?</p>
+                          <p className="text-white text-sm">Hi! I&apos;m here to help with your financial questions. What would you like to know?</p>
                         </div>
                       </div>
                       
@@ -175,7 +175,7 @@ const NewHomepage = () => {
                           <Brain className="w-3 h-3 text-white" />
                         </div>
                         <div className="bg-gray-800 rounded-lg p-3 max-w-xs">
-                          <p className="text-white text-sm">Based on your last 6 months, you're averaging $1,247/month in savings. Your highest month was March at $1,890.</p>
+                          <p className="text-white text-sm">Based on your last 6 months, you&apos;re averaging $1,247/month in savings. Your highest month was March at $1,890.</p>
                         </div>
                       </div>
                       
@@ -225,7 +225,7 @@ const NewHomepage = () => {
               What You Can <span className="gradient-text">Ask Me</span>
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              I'm here for wherever you are in your financial journey. Here's what people ask me about:
+              I&apos;m here for wherever you are in your financial journey. Here&apos;s what people ask me about:
             </p>
           </div>
           
@@ -234,14 +234,14 @@ const NewHomepage = () => {
               tier: "Starter Questions",
               color: "from-emerald-500/20 to-green-500/20",
               borderColor: "border-emerald-500/30",
-              description: "For people with checking, savings, and maybe a 401(k). You're focused on saving more and getting clarity.",
-              questions: ["What's my actual asset allocation across all accounts?", "Are we overpaying in fees?", "How much cash is just sitting in low-yield savings?", "How much do I save each month on average?", "Where is most of my money sitting right now?"]
+              description: "For people with checking, savings, and maybe a 401(k). You&apos;re focused on saving more and getting clarity.",
+              questions: ["What&apos;s my actual asset allocation across all accounts?", "Are we overpaying in fees?", "How much cash is just sitting in low-yield savings?", "How much do I save each month on average?", "Where is most of my money sitting right now?"]
             }, {
               tier: "Standard Questions",
               color: "from-blue-500/20 to-indigo-500/20",
               borderColor: "border-blue-500/30",
-              description: "You've leveled up. You want smarter context to grow your money with real-world market awareness.",
-              questions: ["Which of our CDs mature next month?", "How does inflation affect our savings goals?", "What's the average credit card APR vs. ours?", "Should we move excess cash into something higher-yield?", "How far are we from our house down payment target?"]
+              description: "You&apos;ve leveled up. You want smarter context to grow your money with real-world market awareness.",
+              questions: ["Which of our CDs mature next month?", "How does inflation affect our savings goals?", "What&apos;s the average credit card APR vs. ours?", "Should we move excess cash into something higher-yield?", "How far are we from our house down payment target?"]
             }, {
               tier: "Premium Questions",
               color: "from-purple-500/20 to-pink-500/20",
@@ -260,7 +260,7 @@ const NewHomepage = () => {
                   <div className="space-y-4">
                     {tier.questions.map((question, qIndex) => (
                       <div key={qIndex} className="glass-card p-4 rounded-lg bg-background/50">
-                        <p className="text-sm font-medium">"{question}"</p>
+                        <p className="text-sm font-medium">&quot;{question}&quot;</p>
                       </div>
                     ))}
                   </div>
@@ -327,7 +327,7 @@ const NewHomepage = () => {
               What <span className="gradient-text">ChatGPT Knows</span>
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Most people don't realize this, but ChatGPT doesn't come with live market knowledge. That's where I make a real difference.
+              Most people don&apos;t realize this, but ChatGPT doesn&apos;t come with live market knowledge. That&apos;s where I make a real difference.
             </p>
           </div>
           
@@ -351,11 +351,11 @@ const NewHomepage = () => {
             <div className="space-y-6">
               <div className="flex items-center space-x-3 mb-6">
                 <X className="h-6 w-6 text-red-500" />
-                <h3 className="text-2xl font-bold text-red-500">It Doesn't Know:</h3>
+                <h3 className="text-2xl font-bold text-red-500">It Doesn&apos;t Know:</h3>
               </div>
               
               <div className="space-y-4">
-                {["Today's CD or Treasury rates", "Current economic headlines or Fed moves", "Anything that's happened since late 2023"].map((item, index) => (
+                {["Today&apos;s CD or Treasury rates", "Current economic headlines or Fed moves", "Anything that&apos;s happened since late 2023"].map((item, index) => (
                   <div key={index} className="flex items-start space-x-3">
                     <X className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
                     <p className="text-muted-foreground">{item}</p>
@@ -368,12 +368,12 @@ const NewHomepage = () => {
           <div className="mt-16 max-w-4xl mx-auto">
             <Card className="glass-card border-primary/20 bg-gradient-to-r from-primary/5 to-secondary/5">
               <CardContent className="p-8 text-center space-y-4">
-                <h3 className="text-2xl font-bold">That's where I make a real difference.</h3>
+                <h3 className="text-2xl font-bold">That&apos;s where I make a real difference.</h3>
                 <p className="text-lg text-muted-foreground leading-relaxed">
                   I feed trusted real-time data into ChatGPT behind the scenes — so when you ask,{" "}
-                  <span className="font-semibold text-foreground">"Should I roll over this CD?"</span>{" "}
+                  <span className="font-semibold text-foreground">&quot;Should I roll over this CD?&quot;</span>{" "}
                   you get an answer based on{" "}
-                  <span className="font-semibold text-foreground">today's best rates</span>{" "}
+                  <span className="font-semibold text-foreground">today&apos;s best rates</span>{" "}
                   and{" "}
                   <span className="font-semibold text-foreground">your actual accounts.</span>
                 </p>
@@ -388,10 +388,10 @@ const NewHomepage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-16">
             <h2 className="text-3xl md:text-4xl font-bold">
-              Why I'm <span className="gradient-text">different</span>
+              Why I&apos;m <span className="gradient-text">different</span>
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              I'm not a budget tracker, robo-advisor, or complicated dashboard. I'm your on-demand financial analyst, powered by ChatGPT + real-time market awareness.
+              I&apos;m not a budget tracker, robo-advisor, or complicated dashboard. I&apos;m your on-demand financial analyst, powered by ChatGPT + real-time market awareness.
             </p>
           </div>
           
@@ -452,7 +452,7 @@ const NewHomepage = () => {
               name: "Starter",
               price: "$3",
               period: "/month",
-              description: "For people with checking, savings, and maybe a 401(k). You're focused on saving more and getting clarity.",
+              description: "For people with checking, savings, and maybe a 401(k). You&apos;re focused on saving more and getting clarity.",
               features: ["Unlimited questions", "Link up to 3 accounts", "Spending & savings analysis", "Basic financial insights"],
               cta: "Join Waitlist",
               popular: false
@@ -460,7 +460,7 @@ const NewHomepage = () => {
               name: "Standard",
               price: "$9",
               period: "/month",
-              description: "You've leveled up. You want smarter context to grow your money with real-world market awareness.",
+              description: "You&apos;ve leveled up. You want smarter context to grow your money with real-world market awareness.",
               features: ["Unlimited accounts & questions", "Market context (CPI, Fed rates)", "Investment analysis", "Goal tracking & progress"],
               cta: "Join Waitlist",
               popular: true
@@ -517,7 +517,7 @@ const NewHomepage = () => {
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
               We never store sensitive information, never train on your data, and give you full control 
-              over what's connected or deleted.
+              over what&apos;s connected or deleted.
             </p>
           </div>
           
@@ -529,7 +529,7 @@ const NewHomepage = () => {
             }, {
               icon: Eye,
               title: "Read-only access",
-              description: "We can't move your money — ever"
+              description: "We can&apos;t move your money — ever"
             }, {
               icon: Lock,
               title: "Data anonymization",
@@ -573,14 +573,14 @@ const NewHomepage = () => {
           
           <div className="space-y-6">
             {[{
-              question: "I don't want to give ChatGPT all my financial data...",
-              answer: "Totally fair. That's why I use Plaid, not your login info — and your data is read-only, never stored, and never used to train models."
+              question: "I don&apos;t want to give ChatGPT all my financial data...",
+              answer: "Totally fair. That&apos;s why I use Plaid, not your login info — and your data is read-only, never stored, and never used to train models."
             }, {
-              question: "How do you know what's going on in the market?",
-              answer: "On its own, ChatGPT doesn't. That's why I pull in real-time data — like CD rates, bond yields, and current news — and feed it into ChatGPT as context for your questions."
+              question: "How do you know what&apos;s going on in the market?",
+              answer: "On its own, ChatGPT doesn&apos;t. That&apos;s why I pull in real-time data — like CD rates, bond yields, and current news — and feed it into ChatGPT as context for your questions."
             }, {
               question: "Is this just another budgeting app?",
-              answer: "Nope! I don't track your spending or categorize transactions. I answer your questions using your actual account data + live market context. Think of me as your financial advisor, not your accountant."
+              answer: "Nope! I don&apos;t track your spending or categorize transactions. I answer your questions using your actual account data + live market context. Think of me as your financial advisor, not your accountant."
             }, {
               question: "What if I want to delete everything?",
               answer: "Easy. You can view, export, or delete all your data anytime with a single click. Full transparency, full control."
@@ -609,10 +609,10 @@ const NewHomepage = () => {
             Ready to get <span className="gradient-text">real answers</span> about your money?
           </h2>
           <p className="text-xl text-muted-foreground">
-            Join thousands of people who've stopped guessing and started getting clear, honest financial advice
+            Join thousands of people who&apos;ve stopped guessing and started getting clear, honest financial advice
           </p>
           <Button variant="hero" size="xl" className="group">
-            Let's Talk About Your Money
+            Let&apos;s Talk About Your Money
             <ArrowRight className="h-5 w-5 ml-2 group-hover:translate-x-1 transition-transform" />
           </Button>
         </div>
