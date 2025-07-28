@@ -92,8 +92,8 @@ jobs:
           PLAID_SECRET: test_secret
           OPENAI_API_KEY: test_openai_key
 
-  # Frontend Tests
-  frontend-tests:
+  # Frontend Build
+  frontend-build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -167,7 +167,7 @@ jobs:
   # Build Verification
   build-verification:
     runs-on: ubuntu-latest
-    needs: [lint-and-test, backend-tests, frontend-tests]
+    needs: [lint-and-test, backend-tests, frontend-build]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
