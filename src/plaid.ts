@@ -1,7 +1,15 @@
 import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode } from 'plaid';
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+// Initialize Prisma client lazily to avoid import issues during ts-node startup
+let prisma: PrismaClient | null = null;
+
+const getPrismaClient = () => {
+  if (!prisma) {
+    prisma = new PrismaClient();
+  }
+  return prisma;
+};
 
 const configuration = new Configuration({
   basePath: PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
@@ -97,14 +105,14 @@ export const setupPlaidRoutes = (app: any) => {
       
       // Store the access token and item_id in the database
       // Check if we already have an access token for this itemId
-      const existingToken = await prisma.accessToken.findFirst({
+      const existingToken = await getPrismaClient().accessToken.findFirst({
         where: { itemId: item_id }
       });
 
       if (existingToken) {
         // Update the existing token with the new access token
         console.log(`Updating existing token for item ${item_id}`);
-        await prisma.accessToken.update({
+        await getPrismaClient().accessToken.update({
           where: { id: existingToken.id },
           data: { 
             token: access_token,
@@ -114,7 +122,7 @@ export const setupPlaidRoutes = (app: any) => {
       } else {
         // Create a new access token
         console.log(`Creating new token for item ${item_id}`);
-        await prisma.accessToken.create({
+        await getPrismaClient().accessToken.create({
           data: { 
             token: access_token,
             itemId: item_id,
@@ -142,7 +150,7 @@ export const setupPlaidRoutes = (app: any) => {
 
       // If we get here, the token is still valid
       // Update the last refreshed timestamp
-      await prisma.accessToken.update({
+      await getPrismaClient().accessToken.update({
         where: { token: access_token },
         data: { lastRefreshed: new Date() }
       });
@@ -194,7 +202,7 @@ export const setupPlaidRoutes = (app: any) => {
   app.get('/plaid/all-accounts', async (req: any, res: any) => {
     try {
       // Get all access tokens from the database
-      const accessTokens = await prisma.accessToken.findMany({
+      const accessTokens = await getPrismaClient().accessToken.findMany({
         select: { token: true, itemId: true }
       });
 
@@ -260,7 +268,7 @@ export const setupPlaidRoutes = (app: any) => {
       let count = 0;
 
       for (const account of accounts) {
-        await prisma.account.upsert({
+        await getPrismaClient().account.upsert({
           where: { plaidAccountId: account.account_id },
           update: {
             name: account.name,
@@ -310,7 +318,7 @@ export const setupPlaidRoutes = (app: any) => {
 
       for (const transaction of transactions) {
         // Check if account exists before upserting transaction
-        const account = await prisma.account.findUnique({
+        const account = await getPrismaClient().account.findUnique({
           where: { plaidAccountId: transaction.account_id },
         });
         if (!account) {
@@ -318,7 +326,7 @@ export const setupPlaidRoutes = (app: any) => {
           continue;
         }
         // Force deployment - account check is active
-        await prisma.transaction.upsert({
+        await getPrismaClient().transaction.upsert({
           where: { plaidTransactionId: transaction.transaction_id },
           update: {
             accountId: account.id, // Use Account.id, not Plaid account_id
