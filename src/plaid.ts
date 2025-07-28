@@ -199,7 +199,7 @@ export const setupPlaidRoutes = (app: any) => {
       });
 
       console.log(`Found ${accessTokens.length} access tokens in database`);
-      console.log('Item IDs:', accessTokens.map(t => t.itemId).filter(Boolean));
+      console.log('Item IDs:', accessTokens.map((t: any) => t.itemId).filter(Boolean));
 
       if (accessTokens.length === 0) {
         return res.json({ accounts: [] });
