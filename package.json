@@ -11,7 +11,7 @@
     "lint": "eslint src/ --ext .ts",
     "lint:fix": "eslint src/ --ext .ts --fix",
     "type-check": "tsc --noEmit",
-    "build:backend": "NODE_OPTIONS='--max-old-space-size=4096' ./node_modules/.bin/tsc",
+    "build:backend": "NODE_OPTIONS='--max-old-space-size=4096' ./node_modules/.bin/tsc && echo 'TypeScript compilation completed' && ls -la dist/",
     "build:prisma": "prisma generate",
     "build": "./build.sh",
     "build:render": "NODE_OPTIONS='--max-old-space-size=2048' npm run build:prisma && npm run build:backend",
