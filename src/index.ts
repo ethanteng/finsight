@@ -7,7 +7,15 @@ import { syncAllAccounts, getLastSyncInfo } from './sync';
 import { PrismaClient } from '@prisma/client';
 import { dataOrchestrator } from './data/orchestrator';
 
-const prisma = new PrismaClient();
+// Initialize Prisma client lazily to avoid import issues during ts-node startup
+let prisma: PrismaClient | null = null;
+
+const getPrismaClient = () => {
+  if (!prisma) {
+    prisma = new PrismaClient();
+  }
+  return prisma;
+};
 
 const app: Application = express();
 app.use(express.json({ limit: '10mb' }));
@@ -41,7 +49,7 @@ app.post('/ask', async (req: Request, res: Response) => {
     }
     
     // Get recent conversation history (last 5 Q&A pairs)
-    const recentConversations = await prisma.conversation.findMany({
+    const recentConversations = await getPrismaClient().conversation.findMany({
       orderBy: { createdAt: 'desc' },
       take: 5,
     });
@@ -57,7 +65,7 @@ app.post('/ask', async (req: Request, res: Response) => {
     const answer = await askOpenAI(question, recentConversations, backendTier as any);
     
     // Store the new Q&A pair
-    await prisma.conversation.create({
+    await getPrismaClient().conversation.create({
       data: {
         question,
         answer,
@@ -133,7 +141,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         app.post('/sync/fix-transaction-accounts', async (req: Request, res: Response) => {
           try {
             // Get all transactions with their account details
-            const allTransactions = await prisma.transaction.findMany({
+            const allTransactions = await getPrismaClient().transaction.findMany({
               include: { account: true },
               orderBy: { date: 'desc' }
             });
@@ -163,7 +171,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
 
             // Delete duplicate transactions
             if (duplicatesToDelete.length > 0) {
-              await prisma.transaction.deleteMany({
+              await getPrismaClient().transaction.deleteMany({
                 where: { id: { in: duplicatesToDelete } }
               });
             }
@@ -187,9 +195,9 @@ app.get('/sync/status', async (req: Request, res: Response) => {
     app.get('/privacy/data', async (req: Request, res: Response) => {
       try {
         // Return what data we have about the user (anonymized)
-        const accounts = await prisma.account.findMany();
-        const transactions = await prisma.transaction.findMany();
-        const conversations = await prisma.conversation.findMany({
+        const accounts = await getPrismaClient().account.findMany();
+        const transactions = await getPrismaClient().transaction.findMany();
+        const conversations = await getPrismaClient().conversation.findMany({
           orderBy: { createdAt: 'desc' },
           take: 10
         });
@@ -208,11 +216,11 @@ app.get('/sync/status', async (req: Request, res: Response) => {
     app.delete('/privacy/delete-all', async (req: Request, res: Response) => {
       try {
         // Delete all user data
-        await prisma.conversation.deleteMany();
-        await prisma.transaction.deleteMany();
-        await prisma.account.deleteMany();
-        await prisma.accessToken.deleteMany();
-        await prisma.syncStatus.deleteMany();
+        await getPrismaClient().conversation.deleteMany();
+        await getPrismaClient().transaction.deleteMany();
+        await getPrismaClient().account.deleteMany();
+        await getPrismaClient().accessToken.deleteMany();
+        await getPrismaClient().syncStatus.deleteMany();
 
         res.json({ success: true, message: 'All data deleted successfully' });
       } catch (err) {
@@ -223,12 +231,12 @@ app.get('/sync/status', async (req: Request, res: Response) => {
     app.post('/privacy/disconnect-accounts', async (req: Request, res: Response) => {
       try {
         // Remove all Plaid access tokens
-        await prisma.accessToken.deleteMany();
+        await getPrismaClient().accessToken.deleteMany();
         
         // Clear account and transaction data
-        await prisma.transaction.deleteMany();
-        await prisma.account.deleteMany();
-        await prisma.syncStatus.deleteMany();
+        await getPrismaClient().transaction.deleteMany();
+        await getPrismaClient().account.deleteMany();
+        await getPrismaClient().syncStatus.deleteMany();
 
         res.json({ success: true, message: 'All accounts disconnected and data cleared' });
       } catch (err) {
