@@ -62,44 +62,24 @@ export class DataOrchestrator {
     economicIndicators?: EconomicIndicator;
     liveMarketData?: LiveMarketData;
   }> {
+    console.log('DataOrchestrator: getMarketContext called with tier:', tier);
     const access = this.getTierAccess(tier);
+    console.log('DataOrchestrator: Tier access:', access);
     const context: any = {};
 
-    try {
-      if (access.hasEconomicContext) {
-        context.economicIndicators = await this.getEconomicIndicators();
-      }
-
-      if (access.hasLiveData) {
-        context.liveMarketData = await this.getLiveMarketData();
-      }
-    } catch (error) {
-      console.error('Error fetching market context:', error);
-      // Return empty context on error, don't fail the entire request
+    if (access.hasEconomicContext) {
+      console.log('DataOrchestrator: Fetching economic indicators...');
+      context.economicIndicators = await this.fredProvider.getEconomicIndicators();
+      console.log('DataOrchestrator: Economic indicators fetched:', context.economicIndicators);
     }
 
+    if (access.hasLiveData) {
+      console.log('DataOrchestrator: Fetching live market data...');
+      context.liveMarketData = await this.alphaVantageProvider.getLiveMarketData();
+    }
+
+    console.log('DataOrchestrator: Returning context:', context);
     return context;
-  }
-
-  private async getEconomicIndicators(): Promise<EconomicIndicator> {
-    const cacheKey = 'economic_indicators';
-    const cached = await cacheService.get<EconomicIndicator>(cacheKey);
-    if (cached) return cached;
-
-    try {
-      const indicators = await this.fredProvider.getEconomicIndicators();
-      await cacheService.set(cacheKey, indicators, 24 * 60 * 60 * 1000); // 24 hours
-      return indicators;
-    } catch (error) {
-      console.error('Error fetching economic indicators:', error);
-      // Return mock data as fallback
-      return {
-        cpi: { value: 3.1, date: '2024-01', source: 'FRED (fallback)', lastUpdated: new Date().toISOString() },
-        fedRate: { value: 5.25, date: '2024-01', source: 'FRED (fallback)', lastUpdated: new Date().toISOString() },
-        mortgageRate: { value: 6.85, date: '2024-01', source: 'FRED (fallback)', lastUpdated: new Date().toISOString() },
-        creditCardAPR: { value: 24.59, date: '2024-01', source: 'FRED (fallback)', lastUpdated: new Date().toISOString() }
-      };
-    }
   }
 
   private async getLiveMarketData(): Promise<LiveMarketData> {

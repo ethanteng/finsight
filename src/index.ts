@@ -61,16 +61,16 @@ app.post('/ask', async (req: Request, res: Response) => {
     
     // Map frontend tier to backend enum
     const tierMap: Record<string, string> = {
-      'starter': 'STARTER',
-      'standard': 'STANDARD', 
-      'premium': 'PREMIUM'
+      'starter': 'starter',
+      'standard': 'standard', 
+      'premium': 'premium'
     };
     
     // Allow environment variable override for testing
     const testTier = process.env.TEST_USER_TIER;
     const effectiveTier = testTier || userTier;
     
-    const backendTier = tierMap[effectiveTier] || 'STARTER';
+    const backendTier = tierMap[effectiveTier] || 'starter';
     const answer = await askOpenAI(question, recentConversations, backendTier as any);
     
     // Store the new Q&A pair
@@ -96,12 +96,12 @@ app.get('/test/market-data/:tier', async (req: Request, res: Response) => {
   try {
     const { tier } = req.params;
     const tierMap: Record<string, string> = {
-      'starter': 'STARTER',
-      'standard': 'STANDARD', 
-      'premium': 'PREMIUM'
+      'starter': 'starter',
+      'standard': 'standard', 
+      'premium': 'premium'
     };
     
-    const backendTier = tierMap[tier] || 'STARTER';
+    const backendTier = tierMap[tier] || 'starter';
     const marketContext = await dataOrchestrator.getMarketContext(backendTier as any);
     
     res.json({ 
@@ -123,17 +123,68 @@ app.get('/test/current-tier', async (req: Request, res: Response) => {
   try {
     const testTier = process.env.TEST_USER_TIER;
     const tierMap: Record<string, string> = {
-      'starter': 'STARTER',
-      'standard': 'STANDARD', 
-      'premium': 'PREMIUM'
+      'starter': 'starter',
+      'standard': 'standard', 
+      'premium': 'premium'
     };
     
-    const backendTier = testTier ? tierMap[testTier] || 'STARTER' : 'NONE (using request tier)';
+    const backendTier = testTier ? tierMap[testTier] || 'starter' : 'none (using request tier)';
     
     res.json({ 
       testTier: testTier || 'none',
       backendTier,
       message: testTier ? `Testing with ${testTier} tier` : 'Using tier from request'
+    });
+  } catch (err) {
+    if (err instanceof Error) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+});
+
+// Test endpoint to invalidate cache
+app.post('/test/invalidate-cache', async (req: Request, res: Response) => {
+  try {
+    const { pattern } = req.body;
+    await dataOrchestrator.invalidateCache(pattern || 'economic_indicators');
+    res.json({ message: `Cache invalidated for pattern: ${pattern || 'economic_indicators'}` });
+  } catch (err) {
+    if (err instanceof Error) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+});
+
+// Test endpoint to check FRED API key
+app.get('/test/fred-api-key', async (req: Request, res: Response) => {
+  try {
+    const fredApiKey = process.env.FRED_API_KEY;
+    res.json({ 
+      fredApiKey: fredApiKey ? `${fredApiKey.substring(0, 8)}...` : 'not set',
+      fredApiKeyLength: fredApiKey ? fredApiKey.length : 0,
+      isTestKey: fredApiKey === 'test_fred_key'
+    });
+  } catch (err) {
+    if (err instanceof Error) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+});
+
+// Test endpoint to check Alpha Vantage API key
+app.get('/test/alpha-vantage-api-key', async (req: Request, res: Response) => {
+  try {
+    const alphaVantageApiKey = process.env.ALPHA_VANTAGE_API_KEY;
+    res.json({ 
+      alphaVantageApiKey: alphaVantageApiKey ? `${alphaVantageApiKey.substring(0, 8)}...` : 'not set',
+      alphaVantageApiKeyLength: alphaVantageApiKey ? alphaVantageApiKey.length : 0,
+      isTestKey: alphaVantageApiKey === 'your_alpha_vantage_api_key'
     });
   } catch (err) {
     if (err instanceof Error) {

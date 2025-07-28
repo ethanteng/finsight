@@ -27,8 +27,6 @@ export async function askOpenAI(question: string, conversationHistory: Conversat
   const accountSummary = anonymizeAccountData(accounts);
   const transactionSummary = anonymizeTransactionData(transactions);
   
-  console.log(`AI context: ${transactions.length} transactions, ${accounts.length} accounts, ${conversationHistory.length} conversation pairs, tier: ${userTier}`);
-
   // Get market context based on user tier
   const marketContext = await dataOrchestrator.getMarketContext(userTier);
   
@@ -37,7 +35,7 @@ export async function askOpenAI(question: string, conversationHistory: Conversat
   // Add market context based on tier
   if (marketContext.economicIndicators) {
     const { cpi, fedRate, mortgageRate, creditCardAPR } = marketContext.economicIndicators;
-    systemPrompt += `\n\nCurrent economic indicators:\n- CPI: ${cpi.value}% (${cpi.date})\n- Fed Funds Rate: ${fedRate.value}%\n- Average 30-year Mortgage Rate: ${mortgageRate.value}%\n- Average Credit Card APR: ${creditCardAPR.value}%`;
+    systemPrompt += `\n\nCurrent economic indicators:\n- CPI Index: ${cpi.value} (${cpi.date}) - This is the Consumer Price Index value, not a percentage. To calculate inflation rate, compare to previous periods.\n- Fed Funds Rate: ${fedRate.value}%\n- Average 30-year Mortgage Rate: ${mortgageRate.value}%\n- Average Credit Card APR: ${creditCardAPR.value}%`;
   }
 
   if (marketContext.liveMarketData) {
@@ -46,6 +44,14 @@ export async function askOpenAI(question: string, conversationHistory: Conversat
   }
 
   systemPrompt += `\n\nAnswer the user's question using this data. If the user asks to "show all transactions" or "list all transactions", provide a numbered list of individual transactions rather than summarizing them.`;
+
+  // Add specific instructions for economic data interpretation
+  systemPrompt += `\n\nIMPORTANT: When asked about inflation rates or CPI:
+- The CPI value provided is the raw Consumer Price Index (base period 1982-84 = 100), not a percentage
+- Do not interpret the CPI value as a percentage
+- If asked for current inflation rate, explain that you need year-over-year comparison data
+- For CPI questions, provide the index value and explain what it represents
+- For inflation rate questions, explain that you need historical data to calculate the percentage change`;
 
   // Anonymize conversation history
   const conversationContext = anonymizeConversationHistory(conversationHistory);
