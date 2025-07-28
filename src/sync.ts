@@ -1,7 +1,15 @@
 import { PrismaClient } from '@prisma/client';
 import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid';
 
-const prisma = new PrismaClient();
+// Initialize Prisma client lazily to avoid import issues during ts-node startup
+let prisma: PrismaClient | null = null;
+
+const getPrismaClient = () => {
+  if (!prisma) {
+    prisma = new PrismaClient();
+  }
+  return prisma;
+};
 
 const configuration = new Configuration({
   basePath: PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
@@ -28,7 +36,7 @@ export async function syncAllAccounts(): Promise<SyncResult> {
   
   try {
     // Get all access tokens from the database
-    const accessTokens = await prisma.accessToken.findMany({
+    const accessTokens = await getPrismaClient().accessToken.findMany({
       select: { token: true }
     });
 
@@ -88,7 +96,7 @@ export async function syncAllAccounts(): Promise<SyncResult> {
     console.log(`Found ${allAccounts.size} unique accounts across all tokens`);
     let totalAccountsSynced = 0;
     for (const [accountKey, account] of allAccounts) {
-      await prisma.account.upsert({
+      await getPrismaClient().account.upsert({
         where: { plaidAccountId: account.account_id },
         update: {
           name: account.name,
@@ -132,12 +140,12 @@ export async function syncAllAccounts(): Promise<SyncResult> {
     let totalTransactionsSynced = 0;
     for (const [transactionKey, transaction] of allTransactions) {
       // Find the account for this transaction
-      const account = await prisma.account.findUnique({
+      const account = await getPrismaClient().account.findUnique({
         where: { plaidAccountId: transaction.account_id },
       });
 
       if (account) {
-        await prisma.transaction.upsert({
+        await getPrismaClient().transaction.upsert({
           where: { plaidTransactionId: transaction.transaction_id },
           update: {
             amount: transaction.amount,
@@ -186,7 +194,7 @@ export async function syncAllAccounts(): Promise<SyncResult> {
     console.log(`Synced ${totalTransactionsSynced} unique transactions`);
 
     // Update the global sync timestamp
-    await prisma.syncStatus.upsert({
+    await getPrismaClient().syncStatus.upsert({
       where: { id: '1' },
       update: {
         lastSync: startTime,
@@ -220,7 +228,7 @@ export async function syncAllAccounts(): Promise<SyncResult> {
 
 export async function getLastSyncInfo() {
   try {
-    const syncStatus = await prisma.syncStatus.findUnique({
+    const syncStatus = await getPrismaClient().syncStatus.findUnique({
       where: { id: '1' },
     });
     
