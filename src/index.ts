@@ -66,9 +66,8 @@ app.post('/ask', async (req: Request, res: Response) => {
       'premium': 'premium'
     };
     
-    // Allow environment variable override for testing
-    const testTier = process.env.TEST_USER_TIER;
-    const effectiveTier = testTier || userTier;
+    // Use request tier if provided, otherwise fall back to environment variable
+    const effectiveTier = userTier || process.env.TEST_USER_TIER || 'starter';
     
     const backendTier = tierMap[effectiveTier] || 'starter';
     
