@@ -108,9 +108,32 @@ UPGRADE GUIDANCE:
     systemPrompt += `\n\nIMPORTANT: Live market data (CD rates, treasury yields, mortgage rates) is NOT available for your current tier. If the user asks for this data, respond with: "I can provide live market data like CD rates and treasury yields! This is available on our Premium plan. Would you like to upgrade to access real-time market data?"`;
   }
 
+  // Add clear instructions about when to provide data vs suggest upgrades
+  if (tierAccess.hasLiveData && marketContext.liveMarketData) {
+    systemPrompt += `\n\nIMPORTANT: You HAVE access to live market data (CD rates, treasury yields, mortgage rates). When users ask for this data, provide it using the data above. Do NOT suggest upgrades for market data requests.`;
+  }
 
 
-  systemPrompt += `\n\nAnswer the user's question using this data. If the user asks to "show all transactions" or "list all transactions", provide a numbered list of individual transactions rather than summarizing them.`;
+
+  systemPrompt += `\n\nAnswer the user's question using this data. If the user asks to "show all transactions" or "list all transactions", provide a numbered list of individual transactions rather than summarizing them.
+
+SOURCE ATTRIBUTION: Always include a brief annotation at the end of your response indicating the source of any external data used:
+- If you used FRED data (economic indicators like Fed rate, CPI, mortgage rate): "Source: Federal Reserve Economic Data (FRED)"
+- If you used Alpha Vantage data (market data like CD rates, treasury yields): "Source: Alpha Vantage"
+- If you used both FRED and Alpha Vantage data: "Sources: Federal Reserve Economic Data (FRED), Alpha Vantage"
+- If you only used user's personal financial data: No source annotation needed
+- If you suggested an upgrade instead of providing data: No source annotation needed
+
+IMPORTANT: When you provide market data (CD rates, treasury yields, mortgage rates, economic indicators), you MUST include the source attribution at the end of your response.
+
+CRITICAL: Be precise about which data source you used:
+- Fed rate, CPI, mortgage rate = FRED
+- CD rates, treasury yields = Alpha Vantage
+- If you mention both types of data, use "Sources: Federal Reserve Economic Data (FRED), Alpha Vantage"`;
+
+  // Debug: Log the final system prompt
+  console.log('OpenAI: Final system prompt length:', systemPrompt.length);
+  console.log('OpenAI: System prompt contains market data:', systemPrompt.includes('CD Rates:') || systemPrompt.includes('Treasury Yields:'));
 
   // Add specific instructions for economic data interpretation
   systemPrompt += `\n\nIMPORTANT: When asked about inflation rates or CPI:
