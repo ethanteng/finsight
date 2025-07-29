@@ -23,6 +23,7 @@ export default function ProfilePage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [isDemo, setIsDemo] = useState(false);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -108,7 +109,13 @@ export default function ProfilePage() {
     }
   }, [API_URL]);
 
-              useEffect(() => {
+  useEffect(() => {
+    // Check if user came from demo page
+    const referrer = document.referrer;
+    const urlParams = new URLSearchParams(window.location.search);
+    const isFromDemo = referrer.includes('/demo') || window.location.pathname.includes('demo') || urlParams.get('demo') === 'true';
+    setIsDemo(isFromDemo);
+    
     loadConnectedAccounts();
     loadSyncStatus();
   }, [loadConnectedAccounts, loadSyncStatus]);
@@ -137,12 +144,20 @@ export default function ProfilePage() {
       <div className="bg-gray-800 border-b border-gray-700 p-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-white">Profile</h1>
-          <a 
-            href="/app" 
-            className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm transition-colors"
-          >
-            Back to App
-          </a>
+          <div className="flex items-center space-x-3">
+            <a 
+              href={isDemo ? "/privacy?demo=true" : "/privacy"}
+              className="text-gray-300 hover:text-white text-sm transition-colors"
+            >
+              Privacy
+            </a>
+            <a 
+              href={isDemo ? "/demo" : "/app"}
+              className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm transition-colors"
+            >
+              Back to App
+            </a>
+          </div>
         </div>
       </div>
 

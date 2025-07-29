@@ -17,10 +17,17 @@ export default function PrivacyPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [isDemo, setIsDemo] = useState(false);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
   useEffect(() => {
+    // Check if user came from demo page
+    const referrer = document.referrer;
+    const urlParams = new URLSearchParams(window.location.search);
+    const isFromDemo = referrer.includes('/demo') || window.location.pathname.includes('demo') || urlParams.get('demo') === 'true';
+    setIsDemo(isFromDemo);
+    
     loadPrivacyData();
   }, []);
 
@@ -80,12 +87,12 @@ export default function PrivacyPage() {
         // Clear localStorage prompt history
         localStorage.removeItem('linc_prompt_history');
         
-        setMessage({ text: 'All data deleted successfully. Redirecting to app...', type: 'success' });
+        setMessage({ text: 'All data deleted successfully. Redirecting...', type: 'success' });
         await loadPrivacyData(); // Refresh data
         
-        // Redirect to app after a short delay
+        // Redirect based on context
         setTimeout(() => {
-          window.location.href = '/app';
+          window.location.href = isDemo ? '/demo' : '/app';
         }, 2000);
       } else {
         setMessage({ text: 'Failed to delete data. Please try again.', type: 'error' });
@@ -109,13 +116,13 @@ export default function PrivacyPage() {
           <h1 className="text-2xl font-bold text-white">Privacy & Data Control</h1>
           <div className="flex items-center space-x-3">
             <a 
-              href="/app" 
+              href={isDemo ? "/demo" : "/app"}
               className="text-gray-300 hover:text-white text-sm transition-colors"
             >
               Back to App
             </a>
             <a 
-              href="/profile" 
+              href={isDemo ? "/profile?demo=true" : "/profile"}
               className="text-gray-300 hover:text-white text-sm transition-colors"
             >
               Profile

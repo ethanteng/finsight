@@ -89,13 +89,13 @@ export default function DemoPage() {
           </div>
           <div className="flex items-center space-x-3">
             <a 
-              href="/privacy" 
+              href="/privacy?demo=true" 
               className="text-gray-300 hover:text-white text-sm transition-colors"
             >
               Privacy
             </a>
             <a 
-              href="/profile" 
+              href="/profile?demo=true" 
               className="text-gray-300 hover:text-white text-sm transition-colors"
             >
               Profile
@@ -165,7 +165,7 @@ export default function DemoPage() {
                 <h3 className="text-lg font-semibold text-blue-100">Demo Mode Active</h3>
               </div>
               <p className="text-blue-200 text-sm mb-3">
-                You're exploring Linc with realistic demo data for Sarah & Michael Chen. 
+                You're exploring Linc with realistic demo data. 
                 All features work normally, but no real data is stored.
               </p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
