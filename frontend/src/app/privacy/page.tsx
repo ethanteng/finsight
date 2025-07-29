@@ -21,16 +21,6 @@ export default function PrivacyPage() {
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-  useEffect(() => {
-    // Check if user came from demo page
-    const referrer = document.referrer;
-    const urlParams = new URLSearchParams(window.location.search);
-    const isFromDemo = referrer.includes('/demo') || window.location.pathname.includes('demo') || urlParams.get('demo') === 'true';
-    setIsDemo(isFromDemo);
-    
-    loadPrivacyData();
-  }, []);
-
   const loadPrivacyData = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/privacy/data`);
@@ -44,6 +34,16 @@ export default function PrivacyPage() {
       setLoading(false);
     }
   }, [API_URL]);
+
+  useEffect(() => {
+    // Check if user came from demo page
+    const referrer = document.referrer;
+    const urlParams = new URLSearchParams(window.location.search);
+    const isFromDemo = referrer.includes('/demo') || window.location.pathname.includes('demo') || urlParams.get('demo') === 'true';
+    setIsDemo(isFromDemo);
+    
+    loadPrivacyData();
+  }, [loadPrivacyData]);
 
   const handleDisconnectAccounts = async () => {
     if (!confirm('This will disconnect all your linked accounts and clear all financial data. This action cannot be undone. Are you sure?')) {
@@ -132,10 +132,12 @@ export default function PrivacyPage() {
       </div>
 
       <div className="max-w-4xl mx-auto p-6">
-        {/* Message */}
+        {/* Notification */}
         {message && (
           <div className={`mb-6 p-4 rounded-lg ${
-            message.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+            message.type === 'success' 
+              ? 'bg-green-600 text-white' 
+              : 'bg-red-600 text-white'
           }`}>
             {message.text}
           </div>
@@ -144,39 +146,21 @@ export default function PrivacyPage() {
         {/* Data Summary */}
         <div className="bg-gray-800 rounded-lg p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">Your Data Summary</h2>
-          
           {loading ? (
             <div className="text-gray-400">Loading...</div>
           ) : privacyData ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-gray-700 rounded-lg p-4">
-                <h3 className="text-lg font-medium mb-2">Connected Accounts</h3>
-                <p className="text-3xl font-bold text-blue-400">{privacyData.accounts}</p>
-                <p className="text-sm text-gray-400">Linked financial accounts</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-gray-700 p-4 rounded">
+                <div className="text-2xl font-bold text-blue-400">{privacyData.accounts}</div>
+                <div className="text-sm text-gray-400">Connected Accounts</div>
               </div>
-              
-              <div className="bg-gray-700 rounded-lg p-4">
-                <h3 className="text-lg font-medium mb-2">Transactions</h3>
-                <p className="text-3xl font-bold text-green-400">{privacyData.transactions}</p>
-                <p className="text-sm text-gray-400">Recent financial transactions</p>
+              <div className="bg-gray-700 p-4 rounded">
+                <div className="text-2xl font-bold text-green-400">{privacyData.transactions}</div>
+                <div className="text-sm text-gray-400">Transactions</div>
               </div>
-              
-              <div className="bg-gray-700 rounded-lg p-4">
-                <h3 className="text-lg font-medium mb-2">Conversations</h3>
-                <p className="text-3xl font-bold text-purple-400">{privacyData.conversations}</p>
-                <p className="text-sm text-gray-400">AI conversation history</p>
-              </div>
-              
-              <div className="bg-gray-700 rounded-lg p-4">
-                <h3 className="text-lg font-medium mb-2">Last Sync</h3>
-                <p className="text-sm text-gray-400">
-                  {privacyData.lastSync ? formatDate(privacyData.lastSync.lastSync) : 'Never'}
-                </p>
-                {privacyData.lastSync && (
-                  <p className="text-xs text-gray-500">
-                    {privacyData.lastSync.accountsSynced} accounts, {privacyData.lastSync.transactionsSynced} transactions
-                  </p>
-                )}
+              <div className="bg-gray-700 p-4 rounded">
+                <div className="text-2xl font-bold text-purple-400">{privacyData.conversations}</div>
+                <div className="text-sm text-gray-400">Conversations</div>
               </div>
             </div>
           ) : (
@@ -184,127 +168,70 @@ export default function PrivacyPage() {
           )}
         </div>
 
-        {/* Privacy Controls */}
-        <div className="bg-gray-800 rounded-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Data Controls</h2>
-          
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
-              <div>
-                <h3 className="font-medium">Disconnect All Accounts</h3>
-                <p className="text-sm text-gray-400">
-                  Remove all Plaid connections and clear financial data
-                </p>
-              </div>
-              <button
-                onClick={handleDisconnectAccounts}
-                disabled={actionLoading}
-                className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 px-4 py-2 rounded text-sm transition-colors"
-              >
-                {actionLoading ? 'Disconnecting...' : 'Disconnect'}
-              </button>
+        {/* Last Sync Info */}
+        {privacyData?.lastSync && (
+          <div className="bg-gray-800 rounded-lg p-6 mb-6">
+            <h3 className="text-lg font-semibold mb-3">Last Data Sync</h3>
+            <div className="text-sm text-gray-300">
+              <p>Last updated: {formatDate(privacyData.lastSync.lastSync)}</p>
+              <p>Accounts synced: {privacyData.lastSync.accountsSynced}</p>
+              <p>Transactions synced: {privacyData.lastSync.transactionsSynced}</p>
             </div>
+          </div>
+        )}
 
-            <div className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
-              <div>
-                <h3 className="font-medium">Delete All Data</h3>
-                <p className="text-sm text-gray-400">
-                  Permanently delete all your data including conversations
-                </p>
-              </div>
-              <button
-                onClick={handleDeleteAllData}
-                disabled={actionLoading}
-                className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 px-4 py-2 rounded text-sm transition-colors"
-              >
-                {actionLoading ? 'Deleting...' : 'Delete All'}
-              </button>
-            </div>
+        {/* Actions */}
+        <div className="space-y-4">
+          <div className="bg-gray-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold mb-3 text-red-400">Disconnect All Accounts</h3>
+            <p className="text-gray-300 mb-4">
+              This will disconnect all your linked bank accounts and clear all financial data. 
+              You can always reconnect accounts later.
+            </p>
+            <button
+              onClick={handleDisconnectAccounts}
+              disabled={actionLoading}
+              className="bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white px-4 py-2 rounded transition-colors"
+            >
+              {actionLoading ? 'Disconnecting...' : 'Disconnect All Accounts'}
+            </button>
+          </div>
+
+          <div className="bg-gray-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold mb-3 text-red-600">Delete All Data</h3>
+            <p className="text-gray-300 mb-4">
+              This will permanently delete ALL your data including conversations, accounts, and transactions. 
+              This action cannot be undone.
+            </p>
+            <button
+              onClick={handleDeleteAllData}
+              disabled={actionLoading}
+              className="bg-red-800 hover:bg-red-900 disabled:bg-gray-600 text-white px-4 py-2 rounded transition-colors"
+            >
+              {actionLoading ? 'Deleting...' : 'Delete All Data'}
+            </button>
           </div>
         </div>
 
-        {/* Privacy Information */}
-        <div className="bg-gray-800 rounded-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">How We Protect Your Privacy</h2>
-          
-          <div className="space-y-4 text-sm">
-            <div className="flex items-start space-x-3">
-              <div className="w-2 h-2 bg-green-400 rounded-full mt-2 flex-shrink-0"></div>
-              <div>
-                <h3 className="font-medium">Data Anonymization</h3>
-                <p className="text-gray-400">
-                  All sensitive data (account names, institutions, merchant names) is anonymized before being sent to AI for analysis.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start space-x-3">
-              <div className="w-2 h-2 bg-green-400 rounded-full mt-2 flex-shrink-0"></div>
-              <div>
-                <h3 className="font-medium">Read-Only Access</h3>
-                <p className="text-gray-400">
-                  We only have read-only access to your financial data. We cannot move your money or make any transactions.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start space-x-3">
-              <div className="w-2 h-2 bg-green-400 rounded-full mt-2 flex-shrink-0"></div>
-              <div>
-                <h3 className="font-medium">Secure Plaid Integration</h3>
-                <p className="text-gray-400">
-                  We use Plaid&apos;s secure API, the same technology used by major banks and financial institutions.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start space-x-3">
-              <div className="w-2 h-2 bg-green-400 rounded-full mt-2 flex-shrink-0"></div>
-              <div>
-                <h3 className="font-medium">No AI Training</h3>
-                <p className="text-gray-400">
-                  Your data is not used to train AI models. We use OpenAI&apos;s API which does not train on your data.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start space-x-3">
-              <div className="w-2 h-2 bg-green-400 rounded-full mt-2 flex-shrink-0"></div>
-              <div>
-                <h3 className="font-medium">Complete Control</h3>
-                <p className="text-gray-400">
-                  You can delete all your data or disconnect accounts at any time with one click.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* What We Can See */}
-        <div className="bg-gray-800 rounded-lg p-6">
-          <h2 className="text-xl font-semibold mb-4">What We Can and Cannot See</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <h3 className="font-medium text-green-400 mb-3">✅ We Can See</h3>
-              <ul className="space-y-2 text-sm text-gray-300">
-                <li>• Account balances and types</li>
-                <li>• Transaction amounts and dates</li>
-                <li>• Transaction categories</li>
-                <li>• Your questions and our answers</li>
-              </ul>
-            </div>
-            
-            <div>
-              <h3 className="font-medium text-red-400 mb-3">❌ We Cannot See</h3>
-              <ul className="space-y-2 text-sm text-gray-300">
-                <li>• Your login credentials</li>
-                <li>• Account numbers or routing numbers</li>
-                <li>• Your personal information</li>
-                <li>• Make any transactions</li>
-                <li>• Access your money</li>
-              </ul>
-            </div>
+        {/* Privacy Notice */}
+        <div className="mt-8 p-6 bg-gray-800 rounded-lg">
+          <h3 className="text-lg font-semibold mb-3">Privacy Notice</h3>
+          <div className="text-sm text-gray-300 space-y-2">
+            <p>
+              • Your financial data is encrypted and stored securely
+            </p>
+            <p>
+              • We never share your personal information with third parties
+            </p>
+            <p>
+              • You can export or delete your data at any time
+            </p>
+            <p>
+              • We use Plaid to securely connect to your bank accounts
+            </p>
+            <p>
+              • Your data is used only to provide personalized financial insights
+            </p>
           </div>
         </div>
       </div>

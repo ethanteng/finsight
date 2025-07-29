@@ -625,7 +625,7 @@ const NewHomepage = () => {
             Be among the first to experience Linc when we launch. Get early access and exclusive updates.
           </p>
           <div className="max-w-md mx-auto">
-            <MailerLiteForm className="w-full" />
+            <MailerLiteForm />
           </div>
           <p className="text-sm text-muted-foreground">
             No spam • Unsubscribe anytime • Early access to features

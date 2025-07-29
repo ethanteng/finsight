@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 interface TierInfo {
   testTier: string;
@@ -14,7 +14,7 @@ export default function TokenRefresh() {
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-  const checkCurrentTier = async () => {
+  const checkCurrentTier = useCallback(async () => {
     setLoading(true);
     try {
       const response = await fetch(`${API_URL}/test/current-tier`);
@@ -27,7 +27,7 @@ export default function TokenRefresh() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_URL]);
 
   useEffect(() => {
     checkCurrentTier();
