@@ -4,6 +4,7 @@ import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import MailerLiteForm from './MailerLiteForm';
 import MailerLiteScript from './MailerLiteScript';
+import AnimatedPrompt from './AnimatedPrompt';
 import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, Database, BarChart3, MessageCircle, ArrowRight, Sparkles, X, Target } from 'lucide-react';
 
 const NewHomepage = () => {
@@ -64,6 +65,11 @@ const NewHomepage = () => {
             {" "}and{" "}
             <span className="gradient-text">today’s market conditions.</span>
             </p>
+            
+            {/* Animated Prompt Demo */}
+            <div className="max-w-2xl mx-auto pt-8">
+              <AnimatedPrompt />
+            </div>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-8">
               <Button 
