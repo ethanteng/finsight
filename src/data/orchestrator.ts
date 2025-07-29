@@ -65,7 +65,10 @@ export class DataOrchestrator {
     console.log('DataOrchestrator: getMarketContext called with tier:', tier, 'isDemo:', isDemo);
     const access = this.getTierAccess(tier);
     console.log('DataOrchestrator: Tier access:', access);
-    const context: any = {};
+    const context: {
+      economicIndicators?: EconomicIndicator;
+      liveMarketData?: LiveMarketData;
+    } = {};
 
     if (access.hasEconomicContext) {
       console.log('DataOrchestrator: Fetching economic indicators...');
@@ -75,21 +78,26 @@ export class DataOrchestrator {
 
     if (access.hasLiveData) {
       console.log('DataOrchestrator: Fetching live market data...');
-      context.liveMarketData = await this.alphaVantageProvider.getLiveMarketData();
+      const liveMarketData = await this.alphaVantageProvider.getLiveMarketData(tier);
+      if (liveMarketData) {
+        context.liveMarketData = liveMarketData as LiveMarketData;
+      }
     }
 
     console.log('DataOrchestrator: Returning context:', context);
     return context;
   }
 
-  private async getLiveMarketData(): Promise<LiveMarketData> {
+  private async getLiveMarketData(tier: UserTier): Promise<LiveMarketData | null> {
     const cacheKey = 'live_market_data';
     const cached = await cacheService.get<LiveMarketData>(cacheKey);
     if (cached) return cached;
 
     try {
-      const liveData = await this.alphaVantageProvider.getLiveMarketData();
-      await cacheService.set(cacheKey, liveData, 5 * 60 * 1000); // 5 minutes
+      const liveData = await this.alphaVantageProvider.getLiveMarketData(tier);
+      if (liveData) {
+        await cacheService.set(cacheKey, liveData, 5 * 60 * 1000); // 5 minutes
+      }
       return liveData;
     } catch (error) {
       console.error('Error fetching live market data:', error);

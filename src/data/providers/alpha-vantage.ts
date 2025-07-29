@@ -1,4 +1,4 @@
-import { DataProvider, LiveMarketData, CDRate, TreasuryYield, MortgageRate } from '../types';
+import { DataProvider, LiveMarketData, CDRate, TreasuryYield, MortgageRate, UserTier } from '../types';
 import { cacheService } from '../cache';
 
 interface AlphaVantageResponse {
@@ -19,10 +19,17 @@ export class AlphaVantageProvider implements DataProvider {
     throw new Error('Alpha Vantage does not provide economic indicators');
   }
 
-  async getLiveMarketData(): Promise<LiveMarketData> {
+  async getLiveMarketData(tier?: UserTier): Promise<LiveMarketData | null> {
     console.log('Alpha Vantage Provider: getLiveMarketData called with API key:', this.apiKey);
     console.log('Alpha Vantage Provider: API key length:', this.apiKey.length);
     console.log('Alpha Vantage Provider: Is test key?', this.apiKey === 'your_alpha_vantage_api_key');
+    console.log('Alpha Vantage Provider: Tier:', tier);
+    
+    // Don't return live market data for starter tier
+    if (tier === UserTier.STARTER) {
+      console.log('Alpha Vantage Provider: Skipping live market data for starter tier');
+      return null;
+    }
     
     const cacheKey = 'live_market_data';
     const cached = await cacheService.get<LiveMarketData>(cacheKey);

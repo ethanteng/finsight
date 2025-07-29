@@ -63,7 +63,7 @@ export interface DataSource {
 
 export interface DataProvider {
   getEconomicIndicators(): Promise<EconomicIndicator>;
-  getLiveMarketData(): Promise<LiveMarketData>;
+  getLiveMarketData(tier?: UserTier): Promise<LiveMarketData | null>;
   getDataPoint(key: string): Promise<MarketDataPoint>;
 }
 
