@@ -12,12 +12,15 @@ const AnimatedPrompt = () => {
   }, []);
 
   const questions = [
-    "Should we refinance based on current mortgage rates?",
-    "What's the average credit card APR vs ours?",
-    "How much cash is just sitting in low-yield savings?",
-    "Are Treasuries a better option than CDs right now?",
-    "What asset mix gives us the right balance of safety and growth?",
-    "How long can we last without touching our emergency fund?"
+    "Is now a good time to refinance our mortgage?",
+    "Are we paying too much in credit card interest?",
+    "Do we have money sitting in savings that could be earning more?",
+    "Should we go with a Treasury or a CD right now?",
+    "Is our money invested the right way — not too risky, not too safe?",
+    "If we lost income, how long could we cover our expenses?",
+    "How much am I really saving each month?",
+    "Are we doing the right things to hit our goals?",
+    "What happens if interest rates go up again?"
   ];
 
   if (!isVisible) {
