@@ -53,14 +53,16 @@ const NewHomepage = () => {
             </Badge>
             
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold leading-tight">
-              Hey, I'm Linc{" "}
-              <span className="gradient-text">Your Financial</span>{" "}
-              Guide
+              Hey, I'm Linc{" — "}Your{" "}
+              <span className="gradient-text">AI Powered</span>{" "}
+              Financial Analyst
             </h1>
             
             <p className="text-xl md:text-2xl text-muted-foreground max-w-4xl mx-auto leading-relaxed">
-              I'm here to answer your real money questions — zero judgment or financial jargon. 
-              Just honest advice based on your actual accounts and what's happening in the world right now.
+            I’ll give you clear, judgment-free answers based on{" "}
+            <span className="gradient-text">your actual accounts</span>
+            {" "}and{" "}
+            <span className="gradient-text">today’s market conditions.</span>
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-8">
