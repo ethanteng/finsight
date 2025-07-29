@@ -479,7 +479,7 @@ const NewHomepage = () => {
               popular: false
             }, {
               name: "Standard",
-              price: "$9",
+              price: "$12",
               period: "/month",
               description: "You've leveled up. You want smarter context to grow your money with real-world market awareness.",
               features: ["Unlimited accounts & questions", "Market context (CPI, Fed rates)", "Investment analysis", "Goal tracking & progress"],
@@ -679,7 +679,16 @@ const NewHomepage = () => {
             <div className="flex items-center space-x-6 text-sm text-muted-foreground">
               <button className="hover:text-primary transition-colors">Privacy Policy</button>
               <button className="hover:text-primary transition-colors">Terms of Service</button>
-              <button className="hover:text-primary transition-colors">Contact</button>
+              <button 
+                className="hover:text-primary transition-colors"
+                onClick={() => {
+                  if (typeof window !== 'undefined' && window.hj) {
+                    window.hj('event', 'contact_button_clicked');
+                  }
+                }}
+              >
+                Contact
+              </button>
             </div>
           </div>
           <div className="mt-8 pt-8 border-t border-border text-center text-sm text-muted-foreground">
