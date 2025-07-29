@@ -152,6 +152,22 @@ app.get('/test/current-tier', async (req: Request, res: Response) => {
   }
 });
 
+// Test endpoint for demo data
+app.get('/test/demo-data', async (req: Request, res: Response) => {
+  try {
+    const { demoData } = await import('./demo-data');
+    res.json({ 
+      accounts: demoData.accounts.length,
+      transactions: demoData.transactions.length,
+      sampleAccount: demoData.accounts[0],
+      sampleTransaction: demoData.transactions[0]
+    });
+  } catch (error) {
+    console.error('Error in /test/demo-data endpoint:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Test endpoint to invalidate cache
 app.post('/test/invalidate-cache', async (req: Request, res: Response) => {
   try {

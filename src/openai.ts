@@ -26,27 +26,44 @@ export async function askOpenAI(question: string, conversationHistory: Conversat
   const tier = typeof userTier === 'string' ? (userTier as UserTier) : userTier;
   
   // Fetch accounts and transactions from DB (or use demo data)
-  let accounts, transactions;
+  let accounts: any[] = [];
+  let transactions: any[] = [];
   
   if (isDemo) {
     // Use demo data instead of real database data
-    const { demoData } = await import('../frontend/src/data/demo-data');
-    accounts = demoData.accounts.map((account: any) => ({
-      id: account.id,
-      name: account.name,
-      balance: account.balance,
-      type: account.type,
-      institution: account.institution,
-      lastUpdated: new Date(account.lastUpdated)
-    }));
-    transactions = demoData.transactions.map((transaction: any) => ({
-      id: transaction.id,
-      accountId: transaction.accountId,
-      amount: transaction.amount,
-      category: transaction.category,
-      date: new Date(transaction.date),
-      description: transaction.description
-    }));
+    console.log('OpenAI: Demo mode detected, importing demo data...');
+    try {
+      const { demoData } = await import('./demo-data');
+      console.log('OpenAI: Demo data imported successfully');
+      console.log('OpenAI: Demo data structure:', Object.keys(demoData));
+      console.log('OpenAI: Demo accounts count:', demoData.accounts?.length || 0);
+      console.log('OpenAI: Demo transactions count:', demoData.transactions?.length || 0);
+      
+      accounts = demoData.accounts.map((account: any) => ({
+        id: account.id,
+        name: account.name,
+        balance: account.balance,
+        type: account.type,
+        institution: account.institution,
+        lastUpdated: new Date(account.lastUpdated)
+      }));
+      transactions = demoData.transactions.map((transaction: any) => ({
+        id: transaction.id,
+        accountId: transaction.accountId,
+        amount: transaction.amount,
+        category: transaction.category,
+        date: new Date(transaction.date),
+        description: transaction.description
+      }));
+      
+      console.log('OpenAI: Processed accounts:', accounts.length);
+      console.log('OpenAI: Processed transactions:', transactions.length);
+    } catch (error) {
+      console.error('OpenAI: Error importing demo data:', error);
+      // Fallback to empty arrays
+      accounts = [];
+      transactions = [];
+    }
   } else {
     // Use real database data
     accounts = await prisma.account.findMany();
@@ -56,9 +73,23 @@ export async function askOpenAI(question: string, conversationHistory: Conversat
     });
   }
 
-  // Anonymize data before sending to OpenAI
-  const accountSummary = anonymizeAccountData(accounts);
-  const transactionSummary = anonymizeTransactionData(transactions);
+  // Anonymize data before sending to OpenAI (skip for demo mode)
+  const accountSummary = isDemo ? 
+    `DEMO ACCOUNTS:\n${accounts.map(acc => `- ${acc.name} (${acc.institution}): $${acc.balance.toLocaleString()}`).join('\n')}` : 
+    anonymizeAccountData(accounts);
+  const transactionSummary = isDemo ? 
+    `DEMO TRANSACTIONS:\n${transactions.slice(0, 10).map(t => `- ${t.date}: ${t.description} (${t.category}): $${t.amount}`).join('\n')}` : 
+    anonymizeTransactionData(transactions);
+  
+  // Debug: Log demo data for troubleshooting
+  if (isDemo) {
+    console.log('OpenAI: Demo accounts:', accounts.length);
+    console.log('OpenAI: Demo transactions:', transactions.length);
+    console.log('OpenAI: Account summary preview:', accountSummary.substring(0, 500));
+    console.log('OpenAI: Transaction summary preview:', transactionSummary.substring(0, 500));
+    console.log('OpenAI: Full account summary:', accountSummary);
+    console.log('OpenAI: Full transaction summary:', transactionSummary);
+  }
   
   // Get market context based on user tier
   const marketContext = await dataOrchestrator.getMarketContext(tier, isDemo);
@@ -72,7 +103,11 @@ IMPORTANT: You have access to the following data in this system prompt:
 
 Please provide the data when available and include source attribution.
 
-Here is the user's account summary:\n${accountSummary}\n\nRecent transactions:\n${transactionSummary}`;
+  ${isDemo ? 'DEMO MODE: You are in demo mode with realistic financial data. Use the account and transaction data provided below to answer questions.' : ''}
+
+Here is the user's account summary:\n${accountSummary}\n\nRecent transactions:\n${transactionSummary}
+
+${isDemo ? 'IMPORTANT: The data above is DEMO DATA. When users ask about their balance, accounts, or transactions, use this demo data to provide realistic answers. Do NOT say the data is not available - it IS available in the demo data above.' : ''}`;
 
   // Add tier information and upgrade suggestions
   const tierAccess = dataOrchestrator.getTierAccess(tier);
