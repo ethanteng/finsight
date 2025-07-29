@@ -125,6 +125,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion, 
                 : "How much did I spend on dining last month? What's my current asset allocation? Which accounts have the highest fees?"
               }
               required
+              data-hj-allow
             />
           </div>
           <button
