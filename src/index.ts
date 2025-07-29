@@ -89,6 +89,25 @@ app.post('/ask', async (req: Request, res: Response) => {
       },
     });
     
+    // Log demo interactions for analytics
+    if (isDemo) {
+      try {
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/log-demo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question,
+            answer,
+            timestamp: new Date().toISOString(),
+            sessionId: req.headers['x-session-id'] || 'unknown',
+            userAgent: req.headers['user-agent'] || 'unknown'
+          })
+        });
+      } catch (logError) {
+        console.error('Failed to log demo interaction:', logError);
+      }
+    }
+    
     res.json({ answer });
   } catch (err) {
     if (err instanceof Error) {
@@ -96,6 +115,41 @@ app.post('/ask', async (req: Request, res: Response) => {
     } else {
       res.status(500).json({ error: 'Unknown error' });
     }
+  }
+});
+
+// Demo logging endpoint
+app.post('/log-demo', async (req: Request, res: Response) => {
+  try {
+    const { question, answer, timestamp, sessionId, userAgent } = req.body;
+    
+    // Log to console for immediate visibility
+    console.log('📊 DEMO INTERACTION:', {
+      timestamp,
+      sessionId,
+      question: question.substring(0, 100) + (question.length > 100 ? '...' : ''),
+      answerLength: answer.length,
+      userAgent: userAgent?.substring(0, 50) + (userAgent?.length > 50 ? '...' : '')
+    });
+    
+    // Store in database for persistence
+    await getPrismaClient().conversation.create({
+      data: {
+        question,
+        answer,
+        metadata: JSON.stringify({
+          isDemo: true,
+          sessionId,
+          userAgent,
+          timestamp
+        })
+      },
+    });
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error logging demo interaction:', err);
+    res.status(500).json({ error: 'Failed to log demo interaction' });
   }
 });
 

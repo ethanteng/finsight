@@ -30,6 +30,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion, 
   const [error, setError] = useState('');
   const [userTier, setUserTier] = useState<string>('starter');
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [sessionId] = useState(() => isDemo ? `demo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` : null);
 
   // Demo placeholder questions that rotate
   const demoPlaceholders = [
@@ -96,9 +97,14 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion, 
     }
     
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (sessionId) {
+        headers['x-session-id'] = sessionId;
+      }
+      
       const res = await fetch(`${API_URL}/ask`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ 
           question,
           isDemo: isDemo, // Pass demo flag to backend
