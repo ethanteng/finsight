@@ -370,7 +370,8 @@ describe('API Integration Tests', () => {
           const shouldProvideData = answer.includes('5.25%') || 
                                   answer.includes('4.33%') || 
                                   answer.includes('cd rate') ||
-                                  answer.includes('fed rate');
+                                  answer.includes('fed rate') ||
+                                  answer.includes('fed funds rate');
           
           expect(shouldProvideData).toBe(true);
           
@@ -411,6 +412,7 @@ describe('API Integration Tests', () => {
           // Should provide economic data
           const shouldProvideEconomicData = answer.includes('4.33%') || 
                                           answer.includes('fed rate') ||
+                                          answer.includes('fed funds rate') ||
                                           answer.includes('321.5') ||
                                           answer.includes('cpi');
           

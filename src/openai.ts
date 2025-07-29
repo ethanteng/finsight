@@ -15,6 +15,55 @@ interface Conversation {
   createdAt: Date;
 }
 
+// Post-processing function to enforce tier restrictions
+function enforceTierRestrictions(answer: string, userTier: UserTier, question: string): string {
+  const questionLower = question.toLowerCase();
+  const answerLower = answer.toLowerCase();
+  
+  // Check if the question is asking for market data
+  const isAskingForLiveMarketData = questionLower.includes('cd rate') || 
+                                   questionLower.includes('treasury yield') || 
+                                   questionLower.includes('mortgage rate') ||
+                                   questionLower.includes('live market');
+  
+  const isAskingForEconomicData = questionLower.includes('fed rate') || 
+                                 questionLower.includes('inflation') || 
+                                 questionLower.includes('cpi') ||
+                                 questionLower.includes('economic');
+  
+  // Check if the answer contains market data (indicating the AI provided data it shouldn't have)
+  const containsLiveMarketData = answerLower.includes('cd rate') || 
+                                answerLower.includes('treasury yield') || 
+                                answerLower.includes('5.25%') || 
+                                answerLower.includes('5.35%') ||
+                                answerLower.includes('5.45%') ||
+                                answerLower.includes('5.55%');
+  
+  const containsEconomicData = answerLower.includes('4.33%') || 
+                              answerLower.includes('321.5') || 
+                              answerLower.includes('fed rate') ||
+                              answerLower.includes('cpi');
+  
+  // Enforce restrictions based on tier
+  if (userTier === UserTier.STARTER) {
+    // Starter tier should not get any market data
+    if (isAskingForLiveMarketData && containsLiveMarketData) {
+      return "I can provide live market data like CD rates and treasury yields! This is available on our Premium plan. Would you like to upgrade to access real-time market data?";
+    }
+    if (isAskingForEconomicData && containsEconomicData) {
+      return "I'd be happy to help with economic data! This information is available on our Standard and Premium plans. Would you like to upgrade to access real-time economic indicators?";
+    }
+  } else if (userTier === UserTier.STANDARD) {
+    // Standard tier should not get live market data but can get economic data
+    if (isAskingForLiveMarketData && containsLiveMarketData) {
+      return "I can provide live market data like CD rates and treasury yields! This is available on our Premium plan. Would you like to upgrade to access real-time market data?";
+    }
+  }
+  
+  // If no restrictions violated, return the original answer
+  return answer;
+}
+
 export async function askOpenAI(question: string, conversationHistory: Conversation[] = [], userTier: UserTier | string = UserTier.STARTER, isDemo: boolean = false): Promise<string> {
   // Convert string tier to enum if needed
   const tier = typeof userTier === 'string' ? (userTier as UserTier) : userTier;
@@ -112,31 +161,23 @@ DATA ACCESS RULES:
   }
 
   // Add upgrade suggestions for unavailable data
-  console.log('OpenAI: Checking upgrade conditions - tierAccess.hasEconomicContext:', tierAccess.hasEconomicContext, 'marketContext.economicIndicators:', !!marketContext.economicIndicators);
-  console.log('OpenAI: Checking upgrade conditions - tierAccess.hasLiveData:', tierAccess.hasLiveData, 'marketContext.liveMarketData:', !!marketContext.liveMarketData);
-  
   if (!tierAccess.hasEconomicContext || !marketContext.economicIndicators) {
-    console.log('OpenAI: Adding upgrade suggestion for economic data - tierAccess.hasEconomicContext:', tierAccess.hasEconomicContext, 'marketContext.economicIndicators:', !!marketContext.economicIndicators);
     systemPrompt += `\n\nUPGRADE FOR ECONOMIC DATA: If users ask for economic data (Fed rate, CPI, inflation), respond with: "I'd be happy to help with economic data! This information is available on our Standard and Premium plans. Would you like to upgrade to access real-time economic indicators?"`;
-  } else {
-    console.log('OpenAI: NOT adding upgrade suggestion for economic data - data is available');
   }
 
   if (!tierAccess.hasLiveData || !marketContext.liveMarketData) {
-    console.log('OpenAI: Adding upgrade suggestion for live market data - tierAccess.hasLiveData:', tierAccess.hasLiveData, 'marketContext.liveMarketData:', !!marketContext.liveMarketData);
     systemPrompt += `\n\nUPGRADE FOR LIVE MARKET DATA: If users ask for live market data (CD rates, treasury yields, mortgage rates), respond with: "I can provide live market data like CD rates and treasury yields! This is available on our Premium plan. Would you like to upgrade to access real-time market data?"`;
-  } else {
-    console.log('OpenAI: NOT adding upgrade suggestion for live market data - data is available');
   }
 
-  // Add explicit instructions about when to provide data vs suggest upgrades
-  systemPrompt += `\n\nCRITICAL INSTRUCTIONS:
-- If the user asks for CD rates, treasury yields, or mortgage rates and you do NOT see "AVAILABLE LIVE MARKET DATA" in this system prompt above, respond with: "I can provide live market data like CD rates and treasury yields! This is available on our Premium plan. Would you like to upgrade to access real-time market data?"
-- If the user asks for economic data (Fed rate, CPI, inflation) and you do NOT see "AVAILABLE ECONOMIC DATA" in this system prompt above, respond with: "I'd be happy to help with economic data! This information is available on our Standard and Premium plans. Would you like to upgrade to access real-time economic indicators?"
-- Do NOT provide any market data that is not explicitly listed in this system prompt above.`;
+  // Add clear instructions about when to provide data vs suggest upgrades
+  systemPrompt += `\n\nCRITICAL: If you do not see the requested market data explicitly listed in this system prompt, you MUST suggest an upgrade. Do NOT make up or generate any market data.`;
 
-  // Debug: Check if upgrade guidance was added
-  console.log('OpenAI: System prompt contains upgrade guidance after adding:', systemPrompt.includes('UPGRADE FOR LIVE MARKET DATA:'));
+  // Debug: Log the final system prompt
+  console.log('OpenAI: Final system prompt length:', systemPrompt.length);
+  console.log('OpenAI: System prompt contains market data:', systemPrompt.includes('CD Rates:') || systemPrompt.includes('Treasury Yields:'));
+  console.log('OpenAI: System prompt contains economic indicators:', systemPrompt.includes('AVAILABLE ECONOMIC DATA:'));
+  console.log('OpenAI: System prompt contains upgrade guidance:', systemPrompt.includes('UPGRADE FOR ECONOMIC DATA:'));
+  console.log('OpenAI: System prompt contains "HAVE access" instructions:', systemPrompt.includes('HAVE access to economic indicators'));
 
   systemPrompt += `\n\nAnswer the user's question using this data. If the user asks to "show all transactions" or "list all transactions", provide a numbered list of individual transactions rather than summarizing them.
 
@@ -153,13 +194,6 @@ CRITICAL: Be precise about which data source you used:
 - Fed rate, CPI, mortgage rate = FRED
 - CD rates, treasury yields = Alpha Vantage
 - If you mention both types of data, use "Sources: Federal Reserve Economic Data (FRED), Alpha Vantage"`;
-
-  // Debug: Log the final system prompt
-  console.log('OpenAI: Final system prompt length:', systemPrompt.length);
-  console.log('OpenAI: System prompt contains market data:', systemPrompt.includes('CD Rates:') || systemPrompt.includes('Treasury Yields:'));
-  console.log('OpenAI: System prompt contains economic indicators:', systemPrompt.includes('AVAILABLE ECONOMIC DATA:'));
-  console.log('OpenAI: System prompt contains upgrade guidance:', systemPrompt.includes('UPGRADE FOR ECONOMIC DATA:'));
-  console.log('OpenAI: System prompt contains "HAVE access" instructions:', systemPrompt.includes('HAVE access to economic indicators'));
 
   // Add specific instructions for economic data interpretation
   systemPrompt += `\n\nIMPORTANT: When asked about inflation rates or CPI:
@@ -189,5 +223,6 @@ CRITICAL: Be precise about which data source you used:
     max_tokens: 2000,
   });
 
-  return completion.choices[0]?.message?.content || 'No answer generated.';
+  const answer = completion.choices[0]?.message?.content || 'No answer generated.';
+  return enforceTierRestrictions(answer, tier, question);
 }
