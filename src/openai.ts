@@ -112,6 +112,9 @@ DATA ACCESS RULES:
     console.log('OpenAI: Adding live market data to system prompt');
     const { cdRates, treasuryYields, mortgageRates } = marketContext.liveMarketData;
     systemPrompt += `\n\nAVAILABLE LIVE MARKET DATA:\nCD Rates (APY): ${cdRates.map(cd => `${cd.term}: ${cd.rate}%`).join(', ')}\nTreasury Yields: ${treasuryYields.slice(0, 4).map(t => `${t.term}: ${t.yield}%`).join(', ')}\nCurrent Mortgage Rates: ${mortgageRates.map(m => `${m.type}: ${m.rate}%`).join(', ')}`;
+    
+    // Add explicit instructions for CD rates
+    systemPrompt += `\n\nIMPORTANT: When users ask about "CD rates", "certificate of deposit rates", "APY", or "annual percentage yield", use the CD Rates (APY) data provided above.`;
   } else {
     console.log('OpenAI: NOT adding live market data (tier access or no data)');
   }
