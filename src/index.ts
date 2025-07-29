@@ -135,14 +135,17 @@ app.post('/log-demo', async (req: Request, res: Response) => {
     // Store in database for persistence
     await getPrismaClient().conversation.create({
       data: {
-        question,
-        answer,
-        metadata: JSON.stringify({
+        question: `[DEMO-${sessionId}] ${question}`,
+        answer: answer,
+        // Store demo info in anonymized fields for tracking
+        anonymizedQuestion: JSON.stringify({
           isDemo: true,
           sessionId,
           userAgent,
-          timestamp
-        })
+          timestamp,
+          originalQuestion: question
+        }),
+        anonymizedAnswer: answer
       },
     });
     
