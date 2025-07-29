@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import FinanceQA from '../../components/FinanceQA';
 import TierBanner from '../../components/TierBanner';
 // import { demoData, getDemoDataAnalysis } from '../../data/demo-data';
@@ -88,12 +89,12 @@ export default function DemoPage() {
             </div>
           </div>
           <div className="flex items-center space-x-3">
-            <a 
+            <Link 
               href="/#waitlist" 
               className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
             >
               Join the Waitlist
-            </a>
+            </Link>
             <a 
               href="/privacy?demo=true" 
               className="text-gray-300 hover:text-white text-sm transition-colors"
