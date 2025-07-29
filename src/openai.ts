@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { PrismaClient } from '../generated/prisma';
+import { PrismaClient } from '@prisma/client';
 import { anonymizeAccountData, anonymizeTransactionData, anonymizeConversationHistory } from './privacy';
 import { dataOrchestrator } from './data/orchestrator';
 import { UserTier } from './data/types';
