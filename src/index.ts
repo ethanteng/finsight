@@ -385,3 +385,4 @@ if (require.main === module) {
 
 // Export app for testing
 export { app };
+// Force rebuild Mon Jul 28 20:28:57 PDT 2025
