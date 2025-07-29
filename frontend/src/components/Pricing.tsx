@@ -1,6 +1,12 @@
 import { Button } from "@/components/ui/button";
 
 export const Pricing = () => {
+  const scrollToSection = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({
+      behavior: 'smooth'
+    });
+  };
+
   const plans = [
     {
       name: "Starter",
@@ -94,6 +100,7 @@ export const Pricing = () => {
                   <Button 
                     className={`w-full ${plan.popular ? 'bg-green hover:bg-green-light' : 'bg-navy hover:bg-navy-light'} text-white`}
                     size="lg"
+                    onClick={() => scrollToSection('waitlist')}
                   >
                     {plan.price === "$0" ? "Get Started" : "Join Waitlist"}
                   </Button>

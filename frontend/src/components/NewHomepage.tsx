@@ -511,7 +511,12 @@ const NewHomepage = () => {
                     ))}
                   </ul>
                   
-                  <Button variant={plan.popular ? "hero" : "outline"} className="w-full" size="lg">
+                  <Button 
+                    variant={plan.popular ? "hero" : "outline"} 
+                    className="w-full" 
+                    size="lg"
+                    onClick={() => scrollToSection('waitlist')}
+                  >
                     {plan.cta}
                   </Button>
                 </CardContent>
