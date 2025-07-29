@@ -29,6 +29,25 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion, 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [userTier, setUserTier] = useState<string>('starter');
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+
+  // Demo placeholder questions that rotate
+  const demoPlaceholders = [
+    "How much am I saving each month? What's my emergency fund status? Should I move my savings to a higher-yield account?",
+    "What's my current asset allocation? Am I on track for retirement? Should I rebalance my 401k?",
+    "What's my debt-to-income ratio? How much am I spending on housing vs other expenses? Should I pay off my credit card first?"
+  ];
+
+  // Rotate placeholder every 4 seconds for demo mode
+  useEffect(() => {
+    if (!isDemo) return;
+    
+    const interval = setInterval(() => {
+      setPlaceholderIndex((prev) => (prev + 1) % demoPlaceholders.length);
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [isDemo, demoPlaceholders.length]);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -121,7 +140,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion, 
               className="w-full h-32 p-4 bg-gray-600 border border-gray-500 rounded-lg text-white placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={loading}
               placeholder={isDemo 
-                ? "How much am I saving each month? What's my emergency fund status? Should I move my savings to a higher-yield account?"
+                ? demoPlaceholders[placeholderIndex]
                 : "How much did I spend on dining last month? What's my current asset allocation? Which accounts have the highest fees?"
               }
               required
