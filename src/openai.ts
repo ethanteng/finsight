@@ -17,65 +17,7 @@ interface Conversation {
 
 // Post-processing function to enforce tier restrictions
 function enforceTierRestrictions(answer: string, userTier: UserTier, question: string): string {
-  const questionLower = question.toLowerCase();
-  const answerLower = answer.toLowerCase();
-  
-  // Check if the question is asking for market data
-  const isAskingForLiveMarketData = questionLower.includes('cd rate') || 
-                                   questionLower.includes('treasury yield') || 
-                                   questionLower.includes('mortgage rate') ||
-                                   questionLower.includes('live market') ||
-                                   questionLower.includes('apy') ||
-                                   questionLower.includes('annual percentage yield');
-  
-  const isAskingForEconomicData = questionLower.includes('fed rate') || 
-                                 questionLower.includes('inflation') || 
-                                 questionLower.includes('cpi') ||
-                                 questionLower.includes('economic');
-  
-  // Check if the answer contains market data (indicating the AI provided data it shouldn't have)
-  const containsLiveMarketData = answerLower.includes('cd rate') || 
-                                answerLower.includes('treasury yield') || 
-                                answerLower.includes('5.25%') || 
-                                answerLower.includes('5.35%') ||
-                                answerLower.includes('5.45%') ||
-                                answerLower.includes('5.55%') ||
-                                answerLower.includes('apy') ||
-                                answerLower.includes('annual percentage yield');
-  
-  const containsEconomicData = answerLower.includes('4.33%') || 
-                              answerLower.includes('321.5') || 
-                              answerLower.includes('fed rate') ||
-                              answerLower.includes('cpi');
-  
-  // NEW SIMPLE LOGIC:
-  // If economic data is present in the answer:
-  // - Starter tier: Always show upgrade message
-  // - Standard tier: Only show message if Alpha Vantage data is present
-  // - Premium tier: Never show message
-  
-  if (containsEconomicData) {
-    if (userTier === UserTier.STARTER) {
-      return "I'd be happy to help with economic data! This information is available on our Standard and Premium plans. Would you like to upgrade to access real-time economic indicators?";
-    } else if (userTier === UserTier.STANDARD) {
-      // For Standard tier, only show upgrade if Alpha Vantage data is present
-      // Since this is economic data (FRED), Standard tier should have access
-      return answer; // Allow the economic data
-    } else if (userTier === UserTier.PREMIUM) {
-      return answer; // Premium tier always gets the data
-    }
-  }
-  
-  // For live market data (Alpha Vantage):
-  if (containsLiveMarketData) {
-    if (userTier === UserTier.STARTER || userTier === UserTier.STANDARD) {
-      return "I can provide live market data like CD rates and treasury yields! This is available on our Premium plan. Would you like to upgrade to access real-time market data?";
-    } else if (userTier === UserTier.PREMIUM) {
-      return answer; // Premium tier always gets the data
-    }
-  }
-  
-  // If no restrictions violated, return the original answer
+  // TIER ENFORCEMENT DISABLED - Return original answer without restrictions
   return answer;
 }
 
@@ -175,16 +117,18 @@ DATA ACCESS RULES:
   }
 
   // Add upgrade suggestions for unavailable data
-  if (!tierAccess.hasEconomicContext || !marketContext.economicIndicators) {
-    systemPrompt += `\n\nUPGRADE FOR ECONOMIC DATA: If users ask for economic data (Fed rate, CPI, inflation), respond with: "I'd be happy to help with economic data! This information is available on our Standard and Premium plans. Would you like to upgrade to access real-time economic indicators?"`;
-  }
+  // TIER ENFORCEMENT DISABLED - No upgrade suggestions needed
+  // if (!tierAccess.hasEconomicContext || !marketContext.economicIndicators) {
+  //   systemPrompt += `\n\nUPGRADE FOR ECONOMIC DATA: If users ask for economic data (Fed rate, CPI, inflation), respond with: "I'd be happy to help with economic data! This information is available on our Standard and Premium plans. Would you like to upgrade to access real-time economic indicators?"`;
+  // }
 
-  if (!tierAccess.hasLiveData || !marketContext.liveMarketData) {
-    systemPrompt += `\n\nUPGRADE FOR LIVE MARKET DATA: If users ask for live market data (CD rates, treasury yields, mortgage rates), respond with: "I can provide live market data like CD rates and treasury yields! This is available on our Premium plan. Would you like to upgrade to access real-time market data?"`;
-  }
+  // if (!tierAccess.hasLiveData || !marketContext.liveMarketData) {
+  //   systemPrompt += `\n\nUPGRADE FOR LIVE MARKET DATA: If users ask for live market data (CD rates, treasury yields, mortgage rates), respond with: "I can provide live market data like CD rates and treasury yields! This is available on our Premium plan. Would you like to upgrade to access real-time market data?"`;
+  // }
 
   // Add clear instructions about when to provide data vs suggest upgrades
-  systemPrompt += `\n\nCRITICAL: If you do not see the requested market data explicitly listed in this system prompt, you MUST suggest an upgrade. Do NOT make up or generate any market data.`;
+  // TIER ENFORCEMENT DISABLED - No restrictions needed
+  // systemPrompt += `\n\nCRITICAL: If you do not see the requested market data explicitly listed in this system prompt, you MUST suggest an upgrade. Do NOT make up or generate any market data.`;
 
   // Debug: Log the final system prompt
   console.log('OpenAI: Final system prompt length:', systemPrompt.length);

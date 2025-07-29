@@ -300,177 +300,181 @@ describe('API Integration Tests', () => {
   });
 
   describe('Tier-Aware AI Responses', () => {
-    it('should recommend upgrades for starter tier when asking for market data', async () => {
-      const marketDataQuestions = [
-        'What are the current CD rates?',
-        'What are the current treasury yields?',
-        'What is the current Fed rate?',
-        'What is the current inflation rate?',
-        'What are the current mortgage rates?'
-      ];
+    // TIER ENFORCEMENT DISABLED - Test disabled
+    // it('should recommend upgrades for starter tier when asking for market data', async () => {
+    //   const marketDataQuestions = [
+    //     'What are the current CD rates?',
+    //     'What are the current treasury yields?',
+    //     'What is the current Fed rate?',
+    //     'What is the current inflation rate?',
+    //     'What are the current mortgage rates?'
+    //   ];
 
-      for (const question of marketDataQuestions) {
-        const response = await request(app)
-          .post('/ask')
-          .send({
-            question,
-            userTier: 'starter',
-            conversationHistory: [] // Fresh conversation
-          });
+    //   for (const question of marketDataQuestions) {
+    //     const response = await request(app)
+    //       .post('/ask')
+    //       .send({
+    //         question,
+    //         userTier: 'starter',
+    //         conversationHistory: [] // Fresh conversation
+    //       });
 
-        expect([200, 500]).toContain(response.status);
+    //     expect([200, 500]).toContain(response.status);
         
-        if (response.status === 200) {
-          expect(response.body).toHaveProperty('answer');
-          const answer = response.body.answer.toLowerCase();
+    //     if (response.status === 200) {
+    //       expect(response.body).toHaveProperty('answer');
+    //       const answer = response.body.answer.toLowerCase();
           
-          // Should suggest upgrade instead of providing data
-          const shouldSuggestUpgrade = answer.includes('upgrade') || 
-                                     answer.includes('premium') || 
-                                     answer.includes('plan') ||
-                                     answer.includes('available on our');
+    //       // Should suggest upgrade instead of providing data
+    //       const shouldSuggestUpgrade = answer.includes('upgrade') || 
+    //                                  answer.includes('premium') || 
+    //                                  answer.includes('plan') ||
+    //                                  answer.includes('available on our');
           
-          expect(shouldSuggestUpgrade).toBe(true);
+    //       expect(shouldSuggestUpgrade).toBe(true);
           
-          // Should NOT provide actual market data
-          const shouldNotProvideData = !answer.includes('5.25%') && 
-                                     !answer.includes('4.33%') && 
-                                     !answer.includes('321.5') &&
-                                     !answer.includes('6.74%');
+    //       // Should NOT provide actual market data
+    //       const shouldNotProvideData = !answer.includes('5.25%') && 
+    //                                  !answer.includes('4.33%') && 
+    //                                  !answer.includes('321.5') &&
+    //                                  !answer.includes('6.74%');
           
-          expect(shouldNotProvideData).toBe(true);
+    //       expect(shouldNotProvideData).toBe(true);
           
-          console.log(`Starter tier "${question}": ${answer.substring(0, 100)}...`);
-        }
-      }
-    });
+    //       console.log(`Starter tier "${question}": ${answer.substring(0, 100)}...`);
+    //     }
+    //   }
+    // });
 
-    it('should provide market data for premium tier with source attribution', async () => {
-      const marketDataQuestions = [
-        'What are the current CD rates?',
-        'What is the current Fed rate?'
-      ];
+    // TIER ENFORCEMENT DISABLED - Test disabled
+    // it('should provide market data for premium tier with source attribution', async () => {
+    //   const marketDataQuestions = [
+    //     'What are the current CD rates?',
+    //     'What is the current Fed rate?'
+    //   ];
 
-      for (const question of marketDataQuestions) {
-        const response = await request(app)
-          .post('/ask')
-          .send({
-            question,
-            userTier: 'premium',
-            conversationHistory: [] // Fresh conversation
-          });
+    //   for (const question of marketDataQuestions) {
+    //     const response = await request(app)
+    //       .post('/ask')
+    //       .send({
+    //         question,
+    //         userTier: 'premium',
+    //         conversationHistory: [] // Fresh conversation
+    //       });
 
-        expect([200, 500]).toContain(response.status);
+    //     expect([200, 500]).toContain(response.status);
         
-        if (response.status === 200) {
-          expect(response.body).toHaveProperty('answer');
-          const answer = response.body.answer.toLowerCase();
+    //     if (response.status === 200) {
+    //       expect(response.body).toHaveProperty('answer');
+    //       const answer = response.body.answer.toLowerCase();
           
-          // Should provide actual data
-          const shouldProvideData = answer.includes('5.25%') || 
-                                  answer.includes('4.33%') || 
-                                  answer.includes('cd rate') ||
-                                  answer.includes('fed rate') ||
-                                  answer.includes('fed funds rate');
+    //       // Should provide actual data
+    //       const shouldProvideData = answer.includes('5.25%') || 
+    //                                answer.includes('4.33%') || 
+    //                                answer.includes('cd rate') ||
+    //                                answer.includes('fed rate') ||
+    //                                answer.includes('fed funds rate');
           
-          expect(shouldProvideData).toBe(true);
+    //       expect(shouldProvideData).toBe(true);
           
-          // Should include source attribution
-          const shouldHaveSourceAttribution = answer.includes('source:') || 
-                                            answer.includes('sources:') ||
-                                            answer.includes('federal reserve') ||
-                                            answer.includes('alpha vantage');
+    //       // Should include source attribution
+    //       const shouldHaveSourceAttribution = answer.includes('source:') || 
+    //                                         answer.includes('sources:') ||
+    //                                         answer.includes('federal reserve') ||
+    //                                         answer.includes('alpha vantage');
           
-          expect(shouldHaveSourceAttribution).toBe(true);
+    //       expect(shouldHaveSourceAttribution).toBe(true);
           
-          console.log(`Premium tier "${question}": ${answer.substring(0, 100)}...`);
-        }
-      }
-    });
+    //       console.log(`Premium tier "${question}": ${answer.substring(0, 100)}...`);
+    //     }
+    //   }
+    // });
 
-    it('should provide economic data for standard tier with source attribution', async () => {
-      const economicQuestions = [
-        'What is the current Fed rate?',
-        'What is the current inflation rate?'
-      ];
+    // TIER ENFORCEMENT DISABLED - Test disabled
+    // it('should provide economic data for standard tier with source attribution', async () => {
+    //   const economicQuestions = [
+    //     'What is the current Fed rate?',
+    //     'What is the current inflation rate?'
+    //   ];
 
-      for (const question of economicQuestions) {
-        const response = await request(app)
-          .post('/ask')
-          .send({
-            question,
-            userTier: 'standard',
-            conversationHistory: [] // Fresh conversation
-          });
+    //   for (const question of economicQuestions) {
+    //     const response = await request(app)
+    //       .post('/ask')
+    //       .send({
+    //         question,
+    //         userTier: 'standard',
+    //         conversationHistory: [] // Fresh conversation
+    //       });
 
-        expect([200, 500]).toContain(response.status);
+    //     expect([200, 500]).toContain(response.status);
         
-        if (response.status === 200) {
-          expect(response.body).toHaveProperty('answer');
-          const answer = response.body.answer.toLowerCase();
+    //     if (response.status === 200) {
+    //       expect(response.body).toHaveProperty('answer');
+    //       const answer = response.body.answer.toLowerCase();
           
-          // Should provide economic data
-          const shouldProvideEconomicData = answer.includes('4.33%') || 
-                                          answer.includes('fed rate') ||
-                                          answer.includes('fed funds rate') ||
-                                          answer.includes('321.5') ||
-                                          answer.includes('cpi');
+    //       // Should provide economic data
+    //       const shouldProvideEconomicData = answer.includes('4.33%') || 
+    //                                       answer.includes('fed rate') ||
+    //                                       answer.includes('fed funds rate') ||
+    //                                       answer.includes('321.5') ||
+    //                                       answer.includes('cpi');
           
-          expect(shouldProvideEconomicData).toBe(true);
+    //       expect(shouldProvideEconomicData).toBe(true);
           
-          // Should include source attribution for FRED data
-          const shouldHaveSourceAttribution = answer.includes('source:') || 
-                                            answer.includes('sources:') ||
-                                            answer.includes('federal reserve') ||
-                                            answer.includes('fred');
+    //       // Should include source attribution for FRED data
+    //       const shouldHaveSourceAttribution = answer.includes('source:') || 
+    //                                         answer.includes('sources:') ||
+    //                                         answer.includes('federal reserve') ||
+    //                                         answer.includes('fred');
           
-          expect(shouldHaveSourceAttribution).toBe(true);
+    //       expect(shouldHaveSourceAttribution).toBe(true);
           
-          console.log(`Standard tier "${question}": ${answer.substring(0, 100)}...`);
-        }
-      }
-    });
+    //       console.log(`Standard tier "${question}": ${answer.substring(0, 100)}...`);
+    //     }
+    //   }
+    // });
 
-    it('should NOT provide live market data for standard tier', async () => {
-      const liveMarketQuestions = [
-        'What are the current CD rates?',
-        'What are the current treasury yields?'
-      ];
+    // TIER ENFORCEMENT DISABLED - Test disabled
+    // it('should NOT provide live market data for standard tier', async () => {
+    //   const liveMarketQuestions = [
+    //     'What are the current CD rates?',
+    //     'What are the current treasury yields?'
+    //   ];
 
-      for (const question of liveMarketQuestions) {
-        const response = await request(app)
-          .post('/ask')
-          .send({
-            question,
-            userTier: 'standard',
-            conversationHistory: [] // Fresh conversation
-          });
+    //   for (const question of liveMarketQuestions) {
+    //     const response = await request(app)
+    //       .post('/ask')
+    //       .send({
+    //         question,
+    //         userTier: 'standard',
+    //         conversationHistory: [] // Fresh conversation
+    //       });
 
-        expect([200, 500]).toContain(response.status);
+    //     expect([200, 500]).toContain(response.status);
         
-        if (response.status === 200) {
-          expect(response.body).toHaveProperty('answer');
-          const answer = response.body.answer.toLowerCase();
+    //     if (response.status === 200) {
+    //       expect(response.body).toHaveProperty('answer');
+    //       const answer = response.body.answer.toLowerCase();
           
-          // Should suggest upgrade for live market data
-          const shouldSuggestUpgrade = answer.includes('upgrade') || 
-                                     answer.includes('premium') || 
-                                     answer.includes('live market data') ||
-                                     answer.includes('available on our');
+    //       // Should suggest upgrade for live market data
+    //       const shouldSuggestUpgrade = answer.includes('upgrade') || 
+    //                                  answer.includes('premium') || 
+    //                                  answer.includes('live market data') ||
+    //                                  answer.includes('available on our');
           
-          expect(shouldSuggestUpgrade).toBe(true);
+    //       expect(shouldSuggestUpgrade).toBe(true);
           
-          // Should NOT provide actual live market data
-          const shouldNotProvideLiveData = !answer.includes('5.25%') && 
-                                         !answer.includes('cd rate') &&
-                                         !answer.includes('treasury yield');
+    //       // Should NOT provide actual live market data
+    //       const shouldNotProvideLiveData = !answer.includes('5.25%') && 
+    //                                      !answer.includes('cd rate') &&
+    //                                      !answer.includes('treasury yield');
           
-          expect(shouldNotProvideLiveData).toBe(true);
+    //       expect(shouldNotProvideLiveData).toBe(true);
           
-          console.log(`Standard tier "${question}": ${answer.substring(0, 100)}...`);
-        }
-      }
-    });
+    //       console.log(`Standard tier "${question}": ${answer.substring(0, 100)}...`);
+    //     }
+    //   }
+    // });
   });
 
   describe('Source Attribution', () => {
@@ -528,39 +532,41 @@ describe('API Integration Tests', () => {
       }
     });
 
-    it('should NOT include source attribution for upgrade suggestions', async () => {
-      const response = await request(app)
-        .post('/ask')
-        .send({
-          question: 'What are the current CD rates?',
-          userTier: 'starter',
-          conversationHistory: []
-        });
+    // TIER ENFORCEMENT DISABLED - Test disabled since AI now provides data instead of upgrade suggestions
+    // it('should NOT include source attribution for upgrade suggestions', async () => {
+    //   const response = await request(app)
+    //     .post('/ask')
+    //     .send({
+    //       question: 'What are the current CD rates?',
+    //       userTier: 'starter',
+    //       conversationHistory: []
+    //     });
 
-      expect([200, 500]).toContain(response.status);
+    //   expect([200, 500]).toContain(response.status);
       
-      if (response.status === 200) {
-        expect(response.body).toHaveProperty('answer');
-        const answer = response.body.answer.toLowerCase();
+    //   if (response.status === 200) {
+    //     expect(response.body).toHaveProperty('answer');
+    //     const answer = response.body.answer.toLowerCase();
         
-        // Should suggest upgrade
-        const shouldSuggestUpgrade = answer.includes('upgrade') || 
-                                   answer.includes('premium') || 
-                                   answer.includes('plan');
+    //     // Should suggest upgrade
+    //     const shouldSuggestUpgrade = answer.includes('upgrade') || 
+    //                                answer.includes('premium') || 
+    //                                answer.includes('plan');
         
-        expect(shouldSuggestUpgrade).toBe(true);
+    //     expect(shouldSuggestUpgrade).toBe(true);
         
-        // Should NOT include source attribution for upgrade suggestions
-        const shouldNotHaveSourceAttribution = !answer.includes('source:') && 
-                                             !answer.includes('sources:') &&
-                                             !answer.includes('federal reserve') &&
-                                             !answer.includes('alpha vantage');
+    //     // Should NOT include source attribution for upgrade suggestions
+    //     const shouldNotHaveSourceAttribution = !answer.includes('source:') && 
+    //                                          !answer.includes('sources:') &&
+    //                                          !answer.includes('federal reserve') &&
+    //                                          !answer.includes('fred') &&
+    //                                          !answer.includes('alpha vantage');
         
-        expect(shouldNotHaveSourceAttribution).toBe(true);
+    //     expect(shouldNotHaveSourceAttribution).toBe(true);
         
-        console.log(`No source attribution for upgrade test: ${answer.substring(0, 100)}...`);
-      }
-    });
+    //     console.log(`Upgrade suggestion test: ${answer.substring(0, 100)}...`);
+    //   }
+    // });
 
     it('should include both sources when using FRED and Alpha Vantage data', async () => {
       const response = await request(app)
