@@ -44,19 +44,30 @@ function enforceTierRestrictions(answer: string, userTier: UserTier, question: s
                               answerLower.includes('fed rate') ||
                               answerLower.includes('cpi');
   
-  // Enforce restrictions based on tier
-  if (userTier === UserTier.STARTER) {
-    // Starter tier should not get any market data
-    if (isAskingForLiveMarketData && containsLiveMarketData) {
-      return "I can provide live market data like CD rates and treasury yields! This is available on our Premium plan. Would you like to upgrade to access real-time market data?";
-    }
-    if (isAskingForEconomicData && containsEconomicData) {
+  // NEW SIMPLE LOGIC:
+  // If economic data is present in the answer:
+  // - Starter tier: Always show upgrade message
+  // - Standard tier: Only show message if Alpha Vantage data is present
+  // - Premium tier: Never show message
+  
+  if (containsEconomicData) {
+    if (userTier === UserTier.STARTER) {
       return "I'd be happy to help with economic data! This information is available on our Standard and Premium plans. Would you like to upgrade to access real-time economic indicators?";
+    } else if (userTier === UserTier.STANDARD) {
+      // For Standard tier, only show upgrade if Alpha Vantage data is present
+      // Since this is economic data (FRED), Standard tier should have access
+      return answer; // Allow the economic data
+    } else if (userTier === UserTier.PREMIUM) {
+      return answer; // Premium tier always gets the data
     }
-  } else if (userTier === UserTier.STANDARD) {
-    // Standard tier should not get live market data but can get economic data
-    if (isAskingForLiveMarketData && containsLiveMarketData) {
+  }
+  
+  // For live market data (Alpha Vantage):
+  if (containsLiveMarketData) {
+    if (userTier === UserTier.STARTER || userTier === UserTier.STANDARD) {
       return "I can provide live market data like CD rates and treasury yields! This is available on our Premium plan. Would you like to upgrade to access real-time market data?";
+    } else if (userTier === UserTier.PREMIUM) {
+      return answer; // Premium tier always gets the data
     }
   }
   
@@ -108,6 +119,12 @@ export async function askOpenAI(question: string, conversationHistory: Conversat
   
   // Create tier-aware system prompt
   let systemPrompt = `You are a financial assistant. 
+
+IMPORTANT: You have access to the following data in this system prompt:
+- Economic indicators (Fed rate, CPI, mortgage rate) if listed below
+- Live market data (CD rates, treasury yields) if listed below
+
+Please provide the data when available and include source attribution.
 
 Here is the user's account summary:\n${accountSummary}\n\nRecent transactions:\n${transactionSummary}`;
 
@@ -171,8 +188,6 @@ DATA ACCESS RULES:
   console.log('OpenAI: System prompt contains economic indicators:', systemPrompt.includes('AVAILABLE ECONOMIC DATA:'));
   console.log('OpenAI: System prompt contains upgrade guidance:', systemPrompt.includes('UPGRADE FOR ECONOMIC DATA:'));
   console.log('OpenAI: System prompt contains "HAVE access" instructions:', systemPrompt.includes('HAVE access to economic indicators'));
-  console.log('OpenAI: System prompt preview (first 500 chars):', systemPrompt.substring(0, 500));
-  console.log('OpenAI: Full system prompt:', systemPrompt);
 
   systemPrompt += `\n\nAnswer the user's question using this data. If the user asks to "show all transactions" or "list all transactions", provide a numbered list of individual transactions rather than summarizing them.
 
