@@ -34,7 +34,7 @@ export async function askOpenAI(question: string, conversationHistory: Conversat
     console.log('OpenAI: Demo mode detected, importing demo data...');
     try {
       // Use require for production compatibility
-      const demoDataModule = require('./demo-data');
+      const demoDataModule = require('./demo-data.js');
       const { demoData } = demoDataModule;
       console.log('OpenAI: Demo data imported successfully');
       console.log('OpenAI: Demo data structure:', Object.keys(demoData));

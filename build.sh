@@ -31,6 +31,14 @@ npx tsc --outDir ./dist
 echo "Build completed successfully!"
 echo "Checking dist directory contents:"
 ls -la dist/
-echo "Checking if index.js exists:"
-ls -la dist/index.js || echo "index.js not found!"
+echo "Checking if index.js exists in dist:"
+ls -la dist/index.js || echo "index.js not found in dist!"
+echo "Full path verification:"
+echo "Current directory: $(pwd)"
+echo "Expected file: $(pwd)/dist/index.js"
+if [ -f "$(pwd)/dist/index.js" ]; then
+    echo "✅ File exists at expected location"
+else
+    echo "❌ File not found at expected location"
+fi
 echo "Build script completed." 
