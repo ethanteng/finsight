@@ -24,7 +24,9 @@ function enforceTierRestrictions(answer: string, userTier: UserTier, question: s
   const isAskingForLiveMarketData = questionLower.includes('cd rate') || 
                                    questionLower.includes('treasury yield') || 
                                    questionLower.includes('mortgage rate') ||
-                                   questionLower.includes('live market');
+                                   questionLower.includes('live market') ||
+                                   questionLower.includes('apy') ||
+                                   questionLower.includes('annual percentage yield');
   
   const isAskingForEconomicData = questionLower.includes('fed rate') || 
                                  questionLower.includes('inflation') || 
@@ -37,7 +39,9 @@ function enforceTierRestrictions(answer: string, userTier: UserTier, question: s
                                 answerLower.includes('5.25%') || 
                                 answerLower.includes('5.35%') ||
                                 answerLower.includes('5.45%') ||
-                                answerLower.includes('5.55%');
+                                answerLower.includes('5.55%') ||
+                                answerLower.includes('apy') ||
+                                answerLower.includes('annual percentage yield');
   
   const containsEconomicData = answerLower.includes('4.33%') || 
                               answerLower.includes('321.5') || 
@@ -165,7 +169,7 @@ DATA ACCESS RULES:
   if (marketContext.liveMarketData && tierAccess.hasLiveData) {
     console.log('OpenAI: Adding live market data to system prompt');
     const { cdRates, treasuryYields, mortgageRates } = marketContext.liveMarketData;
-    systemPrompt += `\n\nAVAILABLE LIVE MARKET DATA:\nCD Rates: ${cdRates.map(cd => `${cd.term}: ${cd.rate}%`).join(', ')}\nTreasury Yields: ${treasuryYields.slice(0, 4).map(t => `${t.term}: ${t.yield}%`).join(', ')}\nCurrent Mortgage Rates: ${mortgageRates.map(m => `${m.type}: ${m.rate}%`).join(', ')}`;
+    systemPrompt += `\n\nAVAILABLE LIVE MARKET DATA:\nCD Rates (APY): ${cdRates.map(cd => `${cd.term}: ${cd.rate}%`).join(', ')}\nTreasury Yields: ${treasuryYields.slice(0, 4).map(t => `${t.term}: ${t.yield}%`).join(', ')}\nCurrent Mortgage Rates: ${mortgageRates.map(m => `${m.type}: ${m.rate}%`).join(', ')}`;
   } else {
     console.log('OpenAI: NOT adding live market data (tier access or no data)');
   }
@@ -211,7 +215,12 @@ CRITICAL: Be precise about which data source you used:
 - Do not interpret the CPI value as a percentage
 - If asked for current inflation rate, provide the CPI index value and explain what it represents
 - For CPI questions, provide the index value and explain what it represents
-- For inflation rate questions, provide the CPI index value and explain that it represents the current price level relative to the base period (1982-84 = 100)`;
+- For inflation rate questions, provide the CPI index value and explain that it represents the current price level relative to the base period (1982-84 = 100)
+
+IMPORTANT: When asked about APY (Annual Percentage Yield):
+- APY is essentially the same as CD rates
+- Use the CD rate data provided to answer APY questions
+- CD rates represent the yield/return on certificates of deposit, which is the same as APY`;
 
   // Anonymize conversation history
   const conversationContext = anonymizeConversationHistory(conversationHistory);

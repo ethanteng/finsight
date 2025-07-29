@@ -21,8 +21,26 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion, 
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [userTier, setUserTier] = useState<string>('starter');
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+  // Fetch current user tier on component mount
+  useEffect(() => {
+    const fetchUserTier = async () => {
+      try {
+        const response = await fetch(`${API_URL}/test/current-tier`);
+        if (response.ok) {
+          const data = await response.json();
+          setUserTier(data.backendTier);
+        }
+      } catch (error) {
+        console.error('Error fetching user tier:', error);
+      }
+    };
+    
+    fetchUserTier();
+  }, [API_URL]);
 
   // Update question and answer when selectedPrompt changes
   useEffect(() => {
@@ -57,7 +75,8 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion, 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           question,
-          isDemo: isDemo // Pass demo flag to backend
+          isDemo: isDemo, // Pass demo flag to backend
+          userTier: userTier // Pass user tier to backend
         }),
       });
       const data = await res.json();
