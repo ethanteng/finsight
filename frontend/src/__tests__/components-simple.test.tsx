@@ -232,7 +232,7 @@ describe('Frontend Components (Simple)', () => {
 
   describe('API Integration', () => {
     it('should handle API calls', () => {
-      const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
+      // const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
       
       const MockApiComponent = () => {
         const [data, setData] = React.useState(null);

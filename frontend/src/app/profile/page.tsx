@@ -99,7 +99,7 @@ export default function ProfilePage() {
         const data = await res.json();
         setConnectedAccounts(data.accounts || []);
       } else {
-        const errorData = await res.json();
+        // const errorData = await res.json();
         setError('Failed to load accounts');
       }
                 } catch {

@@ -1,6 +1,13 @@
 "use client";
 import { useEffect } from 'react';
 
+// Declare the MailerLite global type
+declare global {
+  interface Window {
+    ml?: (command: string, ...args: unknown[]) => void;
+  }
+}
+
 export default function MailerLiteScript() {
   useEffect(() => {
     // Load MailerLite script
@@ -9,8 +16,8 @@ export default function MailerLiteScript() {
     script.async = true;
     script.onload = () => {
       console.log('MailerLite script loaded successfully');
-      if (typeof window !== 'undefined' && (window as any).ml) {
-        (window as any).ml('account', '1687893');
+      if (typeof window !== 'undefined' && window.ml) {
+        window.ml('account', '1687893');
         console.log('MailerLite account initialized');
       }
     };

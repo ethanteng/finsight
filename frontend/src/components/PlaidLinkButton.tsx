@@ -57,7 +57,7 @@ export default function PlaidLinkButton({ onAccountLinked }: PlaidLinkButtonProp
     } catch {
       setStatus('Network error. Please try again.');
     }
-  }, []);
+  }, [onAccountLinked]);
 
   // Always call the hook, but only use it when linkToken is set
   const plaid = usePlaidLink(

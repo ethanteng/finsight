@@ -1,6 +1,13 @@
 "use client";
 import { useEffect } from "react";
 
+// Declare the MailerLite global type
+declare global {
+  interface Window {
+    ml?: (command: string, ...args: unknown[]) => void;
+  }
+}
+
 export default function MailerLiteForm() {
   useEffect(() => {
     if (!document.getElementById("mailerlite-universal")) {

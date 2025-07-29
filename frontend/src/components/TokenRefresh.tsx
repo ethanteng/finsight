@@ -31,7 +31,7 @@ export default function TokenRefresh() {
 
   useEffect(() => {
     checkCurrentTier();
-  }, []);
+  }, [checkCurrentTier]);
 
   const getTierColor = (tier: string) => {
     switch (tier.toLowerCase()) {

@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import FinanceQA from '../../components/FinanceQA';
 import TierBanner from '../../components/TierBanner';
-import { demoData, getDemoDataAnalysis } from '../../data/demo-data';
+// import { demoData, getDemoDataAnalysis } from '../../data/demo-data';
 
 interface PromptHistory {
   id: string;
