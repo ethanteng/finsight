@@ -624,10 +624,10 @@ const NewHomepage = () => {
       <section id="waitlist" className="py-20 bg-gradient-to-r from-primary/10 via-secondary/10 to-primary/10">
         <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8">
           <h2 className="text-3xl md:text-4xl font-bold">
-            Join the <span className="gradient-text">Waitlist</span>
+            Ready to get <span className="gradient-text">real answers</span> about your money?
           </h2>
           <p className="text-xl text-muted-foreground">
-            Be among the first to experience Linc when we launch. Get early access and exclusive updates.
+            Join thousands of people who've stopped guessing and started getting clear, honest financial advice
           </p>
           <div className="max-w-md mx-auto">
             <MailerLiteForm />
@@ -638,14 +638,14 @@ const NewHomepage = () => {
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-20 bg-gradient-to-r from-primary/10 via-secondary/10 to-primary/10">
+      {/* Demo CTA Section */}
+      {/*<section className="py-20 bg-gradient-to-r from-primary/10 via-secondary/10 to-primary/10">
         <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8">
           <h2 className="text-3xl md:text-4xl font-bold">
-            Ready to get <span className="gradient-text">real answers</span> about your money?
+            Join the <span className="gradient-text">Waitlist</span>
           </h2>
           <p className="text-xl text-muted-foreground">
-            Join thousands of people who've stopped guessing and started getting clear, honest financial advice
+            Be among the first to experience Linc when we launch. Get early access and exclusive updates.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <a href="/demo" className="w-full sm:w-auto">
@@ -653,15 +653,12 @@ const NewHomepage = () => {
                 Try Demo First
               </Button>
             </a>
-            <Button variant="hero" size="xl" className="group w-full sm:w-auto">
-              Let's Talk About Your Money
-            </Button>
           </div>
           <p className="text-sm text-muted-foreground">
             Try the demo with realistic financial data • No account required • See how it works
           </p>
         </div>
-      </section>
+      </section>*/}
 
       {/* Footer */}
       <footer className="bg-muted/50 py-12">
@@ -678,7 +675,7 @@ const NewHomepage = () => {
             </div>
           </div>
           <div className="mt-8 pt-8 border-t border-border text-center text-sm text-muted-foreground">
-            <p>&copy; 2025 Ask Linc. Built with privacy in mind. Your financial co-pilot.</p>
+            <p>&copy; 2025 Ask Linc. Your financial co-pilot. Built with privacy in mind.</p>
           </div>
         </div>
       </footer>

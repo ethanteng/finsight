@@ -221,7 +221,7 @@ IMPORTANT: When asked about APY (Annual Percentage Yield):
   messages.push({ role: 'user', content: question });
 
   const completion = await openai.chat.completions.create({
-    model: 'gpt-3.5-turbo',
+    model: 'gpt-4o',
     messages,
     max_tokens: 2000,
   });
