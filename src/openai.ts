@@ -33,7 +33,9 @@ export async function askOpenAI(question: string, conversationHistory: Conversat
     // Use demo data instead of real database data
     console.log('OpenAI: Demo mode detected, importing demo data...');
     try {
-      const { demoData } = await import('./demo-data');
+      // Use require for production compatibility
+      const demoDataModule = require('./demo-data');
+      const { demoData } = demoDataModule;
       console.log('OpenAI: Demo data imported successfully');
       console.log('OpenAI: Demo data structure:', Object.keys(demoData));
       console.log('OpenAI: Demo accounts count:', demoData.accounts?.length || 0);
