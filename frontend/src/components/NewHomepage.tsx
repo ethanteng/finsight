@@ -2,6 +2,8 @@
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
+import MailerLiteForm from './MailerLiteForm';
+import MailerLiteScript from './MailerLiteScript';
 import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, Database, BarChart3, MessageCircle, ArrowRight, Sparkles, X, Target } from 'lucide-react';
 
 const NewHomepage = () => {
@@ -13,6 +15,7 @@ const NewHomepage = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <MailerLiteScript />
       {/* Navigation */}
       <nav className="fixed top-0 w-full z-50 backdrop-blur-lg bg-background/80 border-b border-border/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -25,7 +28,13 @@ const NewHomepage = () => {
               <button onClick={() => scrollToSection('features')} className="text-muted-foreground hover:text-primary transition-colors">Features</button>
               <button onClick={() => scrollToSection('pricing')} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
               <button onClick={() => scrollToSection('security')} className="text-muted-foreground hover:text-primary transition-colors">Security</button>
-              <Button variant="hero" size="sm">Join Waitlist</Button>
+              <Button 
+                variant="hero" 
+                size="sm"
+                onClick={() => scrollToSection('waitlist')}
+              >
+                Join Waitlist
+              </Button>
             </div>
           </div>
         </div>
@@ -55,7 +64,12 @@ const NewHomepage = () => {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-8">
-              <Button variant="hero" size="xl" className="group">
+              <Button 
+                variant="hero" 
+                size="xl" 
+                className="group"
+                onClick={() => scrollToSection('waitlist')}
+              >
                 Join the Waitlist
               </Button>
               <a href="/demo">
@@ -601,6 +615,24 @@ const NewHomepage = () => {
         </div>
       </section>
 
+      {/* Waitlist Section */}
+      <section id="waitlist" className="py-20 bg-gradient-to-r from-primary/10 via-secondary/10 to-primary/10">
+        <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8">
+          <h2 className="text-3xl md:text-4xl font-bold">
+            Join the <span className="gradient-text">Waitlist</span>
+          </h2>
+          <p className="text-xl text-muted-foreground">
+            Be among the first to experience Linc when we launch. Get early access and exclusive updates.
+          </p>
+          <div className="max-w-md mx-auto">
+            <MailerLiteForm className="w-full" />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            No spam • Unsubscribe anytime • Early access to features
+          </p>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="py-20 bg-gradient-to-r from-primary/10 via-secondary/10 to-primary/10">
         <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8">
@@ -641,7 +673,7 @@ const NewHomepage = () => {
             </div>
           </div>
           <div className="mt-8 pt-8 border-t border-border text-center text-sm text-muted-foreground">
-            <p>&copy; 2024 Linc. Built with privacy in mind. Your financial co-pilot.</p>
+            <p>&copy; 2025 Ask Linc. Built with privacy in mind. Your financial co-pilot.</p>
           </div>
         </div>
       </footer>
