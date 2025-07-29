@@ -299,7 +299,7 @@ const NewHomepage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-16">
             <h2 className="text-3xl md:text-4xl font-bold">
-              How <span className="gradient-text">We Work Together</span>
+              How <span className="gradient-text">This Works</span>
             </h2>
             <p className="text-xl text-muted-foreground">
               No dashboards. No spreadsheets. No setup required.
@@ -409,7 +409,7 @@ const NewHomepage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-16">
             <h2 className="text-3xl md:text-4xl font-bold">
-              Why I'm <span className="gradient-text">different</span>
+              Why Ask Linc is <span className="gradient-text">different</span>
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
               I'm not a budget tracker, robo-advisor, or complicated dashboard. I'm your on-demand financial analyst, powered by ChatGPT + real-time market awareness.
@@ -471,7 +471,7 @@ const NewHomepage = () => {
           <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
             {[{
               name: "Starter",
-              price: "$3",
+              price: "$5",
               period: "/month",
               description: "For people with checking, savings, and maybe a 401(k). You're focused on saving more and getting clarity.",
               features: ["Unlimited questions", "Link up to 3 accounts", "Spending & savings analysis", "Basic financial insights"],
@@ -487,7 +487,7 @@ const NewHomepage = () => {
               popular: true
             }, {
               name: "Premium",
-              price: "$29",
+              price: "$25",
               period: "/month",
               description: "Complex finances with long-term goals. Get advisor-level insights without the fees.",
               features: ["Everything in Standard", "Live market data & rates", "What-if scenario planning", "Advanced portfolio analysis"],
