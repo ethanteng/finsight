@@ -2,6 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 
+// Declare Hotjar global type
+declare global {
+  interface Window {
+    hj?: (command: string, ...args: unknown[]) => void;
+  }
+}
+
 interface PromptHistory {
   id: string;
   question: string;
@@ -85,6 +92,11 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion, 
         // Call onNewAnswer callback if provided
         if (onNewAnswer) {
           onNewAnswer(question, data.answer);
+        }
+        
+        // Trigger Hotjar event for demo feedback survey
+        if (isDemo && typeof window !== 'undefined' && window.hj) {
+          window.hj('event', 'gpt_response_completed');
         }
       } else {
         setError('No answer returned.');
