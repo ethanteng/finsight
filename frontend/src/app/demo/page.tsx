@@ -89,6 +89,12 @@ export default function DemoPage() {
           </div>
           <div className="flex items-center space-x-3">
             <a 
+              href="/#waitlist" 
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+            >
+              Join the Waitlist
+            </a>
+            <a 
               href="/privacy?demo=true" 
               className="text-gray-300 hover:text-white text-sm transition-colors"
             >
