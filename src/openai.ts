@@ -109,14 +109,6 @@ export async function askOpenAI(question: string, conversationHistory: Conversat
   // Create tier-aware system prompt
   let systemPrompt = `You are a financial assistant. 
 
-CRITICAL: You can ONLY provide market data (CD rates, treasury yields, mortgage rates, economic indicators) if it is explicitly provided in this system prompt. If the user asks for market data and it's not provided above, you MUST suggest an upgrade instead of providing any market data.
-
-CRITICAL: If you do not see the requested market data explicitly listed in this system prompt, you MUST suggest an upgrade. Do NOT make up or generate any market data.
-
-CRITICAL: If the user asks for CD rates, treasury yields, or mortgage rates and you do NOT see "AVAILABLE LIVE MARKET DATA" in this system prompt above, respond with: "I can provide live market data like CD rates and treasury yields! This is available on our Premium plan. Would you like to upgrade to access real-time market data?"
-
-CRITICAL: If the user asks for economic data (Fed rate, CPI, inflation) and you do NOT see "AVAILABLE ECONOMIC DATA" in this system prompt above, respond with: "I'd be happy to help with economic data! This information is available on our Standard and Premium plans. Would you like to upgrade to access real-time economic indicators?"
-
 Here is the user's account summary:\n${accountSummary}\n\nRecent transactions:\n${transactionSummary}`;
 
   // Add tier information and upgrade suggestions
@@ -127,6 +119,7 @@ Here is the user's account summary:\n${accountSummary}\n\nRecent transactions:\n
     hasLiveMarketData: !!marketContext.liveMarketData
   });
   
+  // Add tier information
   systemPrompt += `\n\nTIER INFORMATION:
 - Current tier: ${tier.toUpperCase()}
 - Economic indicators: ${tierAccess.hasEconomicContext ? 'Available' : 'Not available'}
@@ -178,6 +171,8 @@ DATA ACCESS RULES:
   console.log('OpenAI: System prompt contains economic indicators:', systemPrompt.includes('AVAILABLE ECONOMIC DATA:'));
   console.log('OpenAI: System prompt contains upgrade guidance:', systemPrompt.includes('UPGRADE FOR ECONOMIC DATA:'));
   console.log('OpenAI: System prompt contains "HAVE access" instructions:', systemPrompt.includes('HAVE access to economic indicators'));
+  console.log('OpenAI: System prompt preview (first 500 chars):', systemPrompt.substring(0, 500));
+  console.log('OpenAI: Full system prompt:', systemPrompt);
 
   systemPrompt += `\n\nAnswer the user's question using this data. If the user asks to "show all transactions" or "list all transactions", provide a numbered list of individual transactions rather than summarizing them.
 
