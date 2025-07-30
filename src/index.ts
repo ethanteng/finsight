@@ -8,6 +8,19 @@ import cron from 'node-cron';
 import { syncAllAccounts, getLastSyncInfo } from './sync';
 import { PrismaClient } from '@prisma/client';
 import { dataOrchestrator } from './data/orchestrator';
+import { FEATURES, isFeatureEnabled } from './config/features';
+
+// Extend Express Request type to include user
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        id: string;
+        tier: string;
+      };
+    }
+  }
+}
 
 // Load environment variables from .env.local
 config({ path: '.env.local' });
@@ -53,6 +66,31 @@ app.post('/ask', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Question is required' });
     }
     
+    // Demo mode always works (no auth required)
+    if (isDemo) {
+      return handleDemoRequest(req, res);
+    }
+    
+    // User mode requires auth when enabled
+    if (isFeatureEnabled('USER_AUTH') && !req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    return handleUserRequest(req, res);
+  } catch (err) {
+    if (err instanceof Error) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+});
+
+// Demo request handler (always available)
+const handleDemoRequest = async (req: Request, res: Response) => {
+  try {
+    const { question, userTier = 'starter' } = req.body;
+    
     // Get recent conversation history (last 5 Q&A pairs)
     const recentConversations = await getPrismaClient().conversation.findMany({
       orderBy: { createdAt: 'desc' },
@@ -73,13 +111,13 @@ app.post('/ask', async (req: Request, res: Response) => {
     
     // If in demo mode, use demo data context
     let marketContext = null;
-    if (isDemo) {
+    if (true) { // Always demo mode in this handler
       // For demo mode, we'll use the data orchestrator with demo flag
       // The orchestrator will need to be updated to handle demo data
       marketContext = await dataOrchestrator.getMarketContext(backendTier as any, true); // true = demo mode
     }
     
-    const answer = await askOpenAI(question, recentConversations, backendTier as any, isDemo);
+    const answer = await askOpenAI(question, recentConversations, backendTier as any, true);
     
     // Store the new Q&A pair (even in demo mode for consistency)
     await getPrismaClient().conversation.create({
@@ -90,22 +128,20 @@ app.post('/ask', async (req: Request, res: Response) => {
     });
     
     // Log demo interactions for analytics
-    if (isDemo) {
-      try {
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/log-demo`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            question,
-            answer,
-            timestamp: new Date().toISOString(),
-            sessionId: req.headers['x-session-id'] || 'unknown',
-            userAgent: req.headers['user-agent'] || 'unknown'
-          })
-        });
-      } catch (logError) {
-        console.error('Failed to log demo interaction:', logError);
-      }
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/log-demo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question,
+          answer,
+          timestamp: new Date().toISOString(),
+          sessionId: req.headers['x-session-id'] || 'unknown',
+          userAgent: req.headers['user-agent'] || 'unknown'
+        })
+      });
+    } catch (logError) {
+      console.error('Failed to log demo interaction:', logError);
     }
     
     res.json({ answer });
@@ -116,7 +152,56 @@ app.post('/ask', async (req: Request, res: Response) => {
       res.status(500).json({ error: 'Unknown error' });
     }
   }
-});
+};
+
+// User request handler (feature flagged)
+const handleUserRequest = async (req: Request, res: Response) => {
+  try {
+    const { question, userTier = 'starter' } = req.body;
+    
+    // For now, fallback to current single-user logic
+    // This will be enhanced in Step 2 when we build the user system
+    
+    // Get recent conversation history (last 5 Q&A pairs)
+    const recentConversations = await getPrismaClient().conversation.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
+    
+    // Map frontend tier to backend enum
+    const tierMap: Record<string, string> = {
+      'starter': 'starter',
+      'standard': 'standard', 
+      'premium': 'premium'
+    };
+    
+    // Use request tier if provided, otherwise fall back to environment variable
+    const effectiveTier = userTier || process.env.TEST_USER_TIER || 'starter';
+    
+    const backendTier = tierMap[effectiveTier] || 'starter';
+    
+    // Get market context (will be tier-aware in Step 4)
+    const marketContext = await dataOrchestrator.getMarketContext(backendTier as any, false);
+    
+    const answer = await askOpenAI(question, recentConversations, backendTier as any, false);
+    
+    // Store the new Q&A pair
+    await getPrismaClient().conversation.create({
+      data: {
+        question,
+        answer,
+      },
+    });
+    
+    res.json({ answer });
+  } catch (err) {
+    if (err instanceof Error) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+};
 
 // Demo logging endpoint
 app.post('/log-demo', async (req: Request, res: Response) => {
