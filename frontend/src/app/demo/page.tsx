@@ -106,7 +106,7 @@ export default function DemoPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <h1 className="text-2xl font-bold text-white">Ask Linc</h1>
-            <TierBanner />
+            <TierBanner isDemoPage={true} />
             <div className="px-3 py-1 bg-yellow-500 text-yellow-900 rounded-full text-xs font-medium">
               DEMO MODE
             </div>

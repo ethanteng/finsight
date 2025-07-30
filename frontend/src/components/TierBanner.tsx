@@ -7,7 +7,11 @@ interface TierInfo {
   message: string;
 }
 
-export default function TierBanner() {
+interface TierBannerProps {
+  isDemoPage?: boolean;
+}
+
+export default function TierBanner({ isDemoPage = false }: TierBannerProps) {
   const [tierInfo, setTierInfo] = useState<TierInfo | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -16,7 +20,23 @@ export default function TierBanner() {
   const checkCurrentTier = useCallback(async () => {
     setLoading(true);
     try {
-      // Get the user's actual tier from the backend
+      // If we're on the demo page, always use the test tier
+      if (isDemoPage) {
+        console.log('TierBanner: Demo page detected, fetching test tier');
+        const testTierResponse = await fetch(`${API_URL}/test/current-tier`);
+        console.log('TierBanner: /test/current-tier response status:', testTierResponse.status);
+        if (testTierResponse.ok) {
+          const testTierData = await testTierResponse.json();
+          console.log('TierBanner: /test/current-tier data:', testTierData);
+          setTierInfo({ tier: testTierData.backendTier, message: testTierData.message });
+        } else {
+          console.log('TierBanner: /test/current-tier failed');
+          setTierInfo(null);
+        }
+        return;
+      }
+
+      // For non-demo pages, get the user's actual tier from the backend
       const response = await fetch(`${API_URL}/user/tier`, {
         credentials: 'include',
         headers: {
@@ -51,7 +71,7 @@ export default function TierBanner() {
     } finally {
       setLoading(false);
     }
-  }, [API_URL]);
+  }, [API_URL, isDemoPage]);
 
   useEffect(() => {
     checkCurrentTier();
