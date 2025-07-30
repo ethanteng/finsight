@@ -71,7 +71,7 @@ const NewHomepage = () => {
               <AnimatedPrompt />
             </div>
             
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-start pt-8">
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center sm:items-start pt-8">
               <Button 
                 variant="hero" 
                 size="xl" 
