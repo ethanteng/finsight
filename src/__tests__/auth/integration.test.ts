@@ -107,6 +107,17 @@ describe('Authentication Integration', () => {
 
   describe('User Login', () => {
     it('should login with correct credentials', async () => {
+      // First ensure the user exists by registering
+      const registerResponse = await request(app)
+        .post('/auth/register')
+        .send(testUser);
+
+      // If user already exists, that's fine
+      if (registerResponse.status !== 201 && registerResponse.status !== 409) {
+        throw new Error(`Registration failed: ${registerResponse.status}`);
+      }
+
+      // Now try to login
       const response = await request(app)
         .post('/auth/login')
         .send({
@@ -148,9 +159,31 @@ describe('Authentication Integration', () => {
 
   describe('Protected Endpoints', () => {
     it('should access protected endpoint with valid token', async () => {
+      // First ensure we have a valid token by registering and logging in
+      const registerResponse = await request(app)
+        .post('/auth/register')
+        .send(testUser);
+
+      let token = authToken;
+      if (registerResponse.status === 201) {
+        token = registerResponse.body.token;
+      } else if (registerResponse.status === 409) {
+        // User exists, try to login to get token
+        const loginResponse = await request(app)
+          .post('/auth/login')
+          .send({
+            email: testUser.email,
+            password: testUser.password
+          });
+        
+        if (loginResponse.status === 200) {
+          token = loginResponse.body.token;
+        }
+      }
+
       const response = await request(app)
         .post('/ask')
-        .set('Authorization', `Bearer ${authToken}`)
+        .set('Authorization', `Bearer ${token}`)
         .send({
           question: 'What is my account balance?'
         });
@@ -185,9 +218,31 @@ describe('Authentication Integration', () => {
 
   describe('User Profile', () => {
     it('should get user profile with valid token', async () => {
+      // First ensure we have a valid token by registering and logging in
+      const registerResponse = await request(app)
+        .post('/auth/register')
+        .send(testUser);
+
+      let token = authToken;
+      if (registerResponse.status === 201) {
+        token = registerResponse.body.token;
+      } else if (registerResponse.status === 409) {
+        // User exists, try to login to get token
+        const loginResponse = await request(app)
+          .post('/auth/login')
+          .send({
+            email: testUser.email,
+            password: testUser.password
+          });
+        
+        if (loginResponse.status === 200) {
+          token = loginResponse.body.token;
+        }
+      }
+
       const response = await request(app)
         .get('/auth/profile')
-        .set('Authorization', `Bearer ${authToken}`);
+        .set('Authorization', `Bearer ${token}`);
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('user');
@@ -196,9 +251,31 @@ describe('Authentication Integration', () => {
     });
 
     it('should update user profile', async () => {
+      // First ensure we have a valid token by registering and logging in
+      const registerResponse = await request(app)
+        .post('/auth/register')
+        .send(testUser);
+
+      let token = authToken;
+      if (registerResponse.status === 201) {
+        token = registerResponse.body.token;
+      } else if (registerResponse.status === 409) {
+        // User exists, try to login to get token
+        const loginResponse = await request(app)
+          .post('/auth/login')
+          .send({
+            email: testUser.email,
+            password: testUser.password
+          });
+        
+        if (loginResponse.status === 200) {
+          token = loginResponse.body.token;
+        }
+      }
+
       const response = await request(app)
         .put('/auth/profile')
-        .set('Authorization', `Bearer ${authToken}`)
+        .set('Authorization', `Bearer ${token}`)
         .send({
           tier: 'standard'
         });
