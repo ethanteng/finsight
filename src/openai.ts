@@ -32,47 +32,49 @@ export async function askOpenAI(
   // Convert string tier to enum if needed
   const tier = typeof userTier === 'string' ? (userTier as UserTier) : userTier;
 
-  // For demo mode, import demo data
-  if (isDemo) {
-    console.log('OpenAI: Demo mode detected, importing demo data...');
-    try {
-      const { demoData } = await import('./demo-data');
-      console.log('OpenAI: Demo data imported successfully');
-      console.log('OpenAI: Demo data structure:', Object.keys(demoData));
-      console.log('OpenAI: Demo accounts count:', demoData.accounts?.length || 0);
-      console.log('OpenAI: Demo transactions count:', demoData.transactions?.length || 0);
-    } catch (error) {
-      console.error('OpenAI: Error importing demo data:', error);
-    }
-  }
+
 
   // Get user-specific data
   let accounts: any[] = [];
   let transactions: any[] = [];
 
-  try {
-    if (userId) {
-      console.log('OpenAI: Fetching user-specific data for userId:', userId);
-      const { getPrismaClient } = await import('./index');
-      const prisma = getPrismaClient();
-      
-      accounts = await prisma.account.findMany({
-        where: { userId },
-        include: { transactions: true }
-      });
-      
-      transactions = await prisma.transaction.findMany({
-        where: { account: { userId } },
-        orderBy: { date: 'desc' },
-        take: 50
-      });
-      
-      console.log('OpenAI: Found', accounts.length, 'accounts and', transactions.length, 'transactions for user', userId);
-    } else {
-      console.log('OpenAI: No userId provided, fetching all data (this should not happen for authenticated users)');
+  // For demo mode, use demo data instead of database data
+  if (isDemo) {
+    console.log('OpenAI: Using demo data for accounts and transactions');
+    try {
+      const { demoData } = await import('./demo-data');
+      accounts = demoData.accounts || [];
+      transactions = demoData.transactions || [];
+      console.log('OpenAI: Demo data loaded - accounts:', accounts.length, 'transactions:', transactions.length);
+    } catch (error) {
+      console.error('OpenAI: Error loading demo data:', error);
     }
-  } catch (error) {
-    console.error('OpenAI: Error fetching user data:', error);
+  } else {
+    // For authenticated users, fetch from database
+    try {
+      if (userId) {
+        console.log('OpenAI: Fetching user-specific data for userId:', userId);
+        const { getPrismaClient } = await import('./index');
+        const prisma = getPrismaClient();
+        
+        accounts = await prisma.account.findMany({
+          where: { userId },
+          include: { transactions: true }
+        });
+        
+        transactions = await prisma.transaction.findMany({
+          where: { account: { userId } },
+          orderBy: { date: 'desc' },
+          take: 50
+        });
+        
+        console.log('OpenAI: Found', accounts.length, 'accounts and', transactions.length, 'transactions for user', userId);
+      } else {
+        console.log('OpenAI: No userId provided, fetching all data (this should not happen for authenticated users)');
+      }
+    } catch (error) {
+      console.error('OpenAI: Error fetching user data:', error);
+    }
   }
 
   // Anonymize data before sending to OpenAI (skip for demo mode)
