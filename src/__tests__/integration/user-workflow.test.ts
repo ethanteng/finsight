@@ -173,6 +173,7 @@ describe('User Workflow Integration Tests', () => {
       const initialQuestion = 'What is my current balance?';
       const initialResponse = await request(app)
         .post('/ask')
+        .set('x-session-id', 'test-session-id')
         .send({
           question: initialQuestion,
           isDemo: true // Use demo mode to bypass authentication
@@ -190,6 +191,7 @@ describe('User Workflow Integration Tests', () => {
       const followUpQuestion = 'How much did I spend on food this month?';
       const followUpResponse = await request(app)
         .post('/ask')
+        .set('x-session-id', 'test-session-id')
         .send({
           question: followUpQuestion,
           isDemo: true // Use demo mode to bypass authentication
@@ -207,6 +209,7 @@ describe('User Workflow Integration Tests', () => {
       const secondFollowUp = 'Based on our conversation, what is my net worth?';
       const secondFollowUpResponse = await request(app)
         .post('/ask')
+        .set('x-session-id', 'test-session-id')
         .send({
           question: secondFollowUp,
           isDemo: true // Use demo mode to bypass authentication
@@ -224,6 +227,7 @@ describe('User Workflow Integration Tests', () => {
       const transactionQuery = 'Show me all my transactions separated by account';
       const transactionResponse = await request(app)
         .post('/ask')
+        .set('x-session-id', 'test-session-id')
         .send({
           question: transactionQuery,
           isDemo: true // Use demo mode to bypass authentication
@@ -355,6 +359,7 @@ describe('User Workflow Integration Tests', () => {
       const question1 = 'What is my current balance?';
       const response1 = await request(app)
         .post('/ask')
+        .set('x-session-id', 'test-session-id')
         .send({
           question: question1,
           isDemo: true // Use demo mode to bypass authentication
@@ -367,6 +372,7 @@ describe('User Workflow Integration Tests', () => {
       const question2 = 'How does that compare to last month?';
       const response2 = await request(app)
         .post('/ask')
+        .set('x-session-id', 'test-session-id')
         .send({
           question: question2,
           isDemo: true // Use demo mode to bypass authentication
@@ -379,6 +385,7 @@ describe('User Workflow Integration Tests', () => {
       const question3 = 'What is my net worth based on our conversation?';
       const response3 = await request(app)
         .post('/ask')
+        .set('x-session-id', 'test-session-id')
         .send({
           question: question3,
           isDemo: true // Use demo mode to bypass authentication
@@ -450,6 +457,7 @@ describe('User Workflow Integration Tests', () => {
       const transactionQuery = 'Show me all my transactions separated by account';
       const transactionResponse = await request(app)
         .post('/ask')
+        .set('x-session-id', 'test-session-id')
         .send({
           question: transactionQuery,
           isDemo: true // Use demo mode to bypass authentication

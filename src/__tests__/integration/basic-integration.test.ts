@@ -25,6 +25,7 @@ describe('Basic Integration Tests', () => {
   it('should handle basic API requests', async () => {
     const response = await request(app)
       .post('/ask')
+      .set('x-session-id', 'test-session-id')
       .send({
         question: 'What is my balance?',
         isDemo: true // Use demo mode to bypass authentication

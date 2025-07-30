@@ -88,6 +88,7 @@ describe('API Integration Tests', () => {
       for (const question of questions) {
         const response = await request(app)
           .post('/ask')
+          .set('x-session-id', 'test-session-id')
           .send({
             question,
             isDemo: true // Use demo mode to bypass authentication
@@ -197,6 +198,7 @@ describe('API Integration Tests', () => {
       for (const question of questions) {
         const response = await request(app)
           .post('/ask')
+          .set('x-session-id', 'test-session-id')
           .send({
             question,
             isDemo: true // Use demo mode to bypass authentication
@@ -481,6 +483,7 @@ describe('API Integration Tests', () => {
     it('should include FRED source attribution for economic indicators', async () => {
       const response = await request(app)
         .post('/ask')
+        .set('x-session-id', 'test-session-id')
         .send({
           question: 'What is the current Fed rate?',
           isDemo: true // Use demo mode to bypass authentication
@@ -508,6 +511,7 @@ describe('API Integration Tests', () => {
     it('should include Alpha Vantage source attribution for market data', async () => {
       const response = await request(app)
         .post('/ask')
+        .set('x-session-id', 'test-session-id')
         .send({
           question: 'What are the current CD rates?',
           isDemo: true // Use demo mode to bypass authentication
@@ -569,6 +573,7 @@ describe('API Integration Tests', () => {
     it('should include both sources when using FRED and Alpha Vantage data', async () => {
       const response = await request(app)
         .post('/ask')
+        .set('x-session-id', 'test-session-id')
         .send({
           question: 'What is the Fed rate and CD rates?',
           isDemo: true // Use demo mode to bypass authentication

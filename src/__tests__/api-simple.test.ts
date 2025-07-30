@@ -68,6 +68,7 @@ describe('API Endpoints (Simple)', () => {
     it('should validate question field is string', async () => {
       const response = await request(app)
         .post('/ask')
+        .set('x-session-id', 'test-session-id')
         .send({
           question: 123, // Should be string
           isDemo: true, // Use demo mode to avoid auth requirement
@@ -115,6 +116,7 @@ describe('API Endpoints (Simple)', () => {
       
       const response = await request(app)
         .post('/ask')
+        .set('x-session-id', 'test-session-id')
         .send({
           question: largeQuestion,
           isDemo: true, // Use demo mode to avoid auth requirement

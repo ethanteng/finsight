@@ -213,6 +213,7 @@ describe('Authentication Integration', () => {
     it('should allow demo requests without authentication', async () => {
       const response = await request(app)
         .post('/ask')
+        .set('x-session-id', 'test-session-id')
         .send({
           question: 'What is my account balance?',
           isDemo: true
