@@ -93,14 +93,18 @@ export async function askOpenAI(
   }
 
   // Create account summary
-  const accountSummary = accounts.map(account => 
-    `- ${account.name} (${account.type}/${account.subtype}): $${account.currentBalance?.toFixed(2) || '0.00'}`
-  ).join('\n');
+  const accountSummary = accounts.map(account => {
+    const balance = isDemo ? account.balance : account.currentBalance;
+    const subtype = isDemo ? account.type : account.subtype;
+    return `- ${account.name} (${account.type}/${subtype}): $${balance?.toFixed(2) || '0.00'}`;
+  }).join('\n');
 
   // Create transaction summary
-  const transactionSummary = transactions.map(transaction => 
-    `- ${transaction.name} (${transaction.category?.[0] || 'Unknown'}): $${transaction.amount?.toFixed(2) || '0.00'} on ${transaction.date}`
-  ).join('\n');
+  const transactionSummary = transactions.map(transaction => {
+    const name = isDemo ? transaction.description : transaction.name;
+    const category = isDemo ? transaction.category : transaction.category?.[0];
+    return `- ${name} (${category || 'Unknown'}): $${transaction.amount?.toFixed(2) || '0.00'} on ${transaction.date}`;
+  }).join('\n');
 
   console.log('OpenAI: Account summary for AI:', accountSummary);
   console.log('OpenAI: Transaction summary for AI:', transactionSummary);
