@@ -428,6 +428,29 @@ app.get('/test/market-data/:tier', async (req: Request, res: Response) => {
   }
 });
 
+// Get current user's tier information
+app.get('/user/tier', async (req: Request, res: Response) => {
+  try {
+    // Check if user is authenticated
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const user = req.user;
+    
+    res.json({ 
+      tier: user.tier,
+      message: `Current user tier: ${user.tier}`
+    });
+  } catch (err) {
+    if (err instanceof Error) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+});
+
 // Test endpoint to check current tier setting
 app.get('/test/current-tier', async (req: Request, res: Response) => {
   try {

@@ -3,8 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 
 interface TierInfo {
-  testTier: string;
-  backendTier: string;
+  tier: string;
   message: string;
 }
 
@@ -17,13 +16,24 @@ export default function TierBanner() {
   const checkCurrentTier = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/test/current-tier`);
+      // Get the user's actual tier from the backend
+      const response = await fetch(`${API_URL}/user/tier`, {
+        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
       if (response.ok) {
         const data = await response.json();
         setTierInfo(data);
+      } else if (response.status === 401) {
+        // User not authenticated, don't show tier banner
+        setTierInfo(null);
       }
     } catch (error) {
       console.error('Error checking tier:', error);
+      setTierInfo(null);
     } finally {
       setLoading(false);
     }
@@ -64,8 +74,8 @@ export default function TierBanner() {
   }
 
   return (
-    <div className={`px-3 py-1 rounded-full text-xs font-medium ${getTierColor(tierInfo.backendTier)}`}>
-      {loading ? 'Loading...' : `${getTierDisplayName(tierInfo.backendTier)} Plan`}
+    <div className={`px-3 py-1 rounded-full text-xs font-medium ${getTierColor(tierInfo.tier)}`}>
+      {loading ? 'Loading...' : `${getTierDisplayName(tierInfo.tier)} Plan`}
     </div>
   );
 } 
