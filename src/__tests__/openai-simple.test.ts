@@ -1,6 +1,14 @@
 import { askOpenAI, askOpenAIForTests } from '../openai';
 import { UserTier } from '../data/types';
 
+// Define the Conversation interface for tests
+interface Conversation {
+  id: string;
+  question: string;
+  answer: string;
+  createdAt: Date;
+}
+
 // Mock the entire openai module
 jest.mock('../openai', () => ({
   askOpenAI: jest.fn(),
@@ -22,7 +30,7 @@ describe('OpenAI Integration (Simple)', () => {
       mockAskOpenAI.mockResolvedValue('Your current balance is $1,500');
       
       const question = 'What is my current balance?';
-      const conversationHistory = [];
+      const conversationHistory: Conversation[] = [];
       
       const response = await mockAskOpenAI(question, conversationHistory);
       
@@ -34,7 +42,7 @@ describe('OpenAI Integration (Simple)', () => {
       mockAskOpenAI.mockResolvedValue('Based on our previous conversation, your net worth is $5,000');
       
       const question = 'What is my net worth?';
-      const conversationHistory = [
+      const conversationHistory: Conversation[] = [
         {
           id: '1',
           question: 'What is my current balance?',
@@ -53,7 +61,7 @@ describe('OpenAI Integration (Simple)', () => {
       mockAskOpenAI.mockResolvedValue('Response based on tier');
       
       const question = 'What is my balance?';
-      const conversationHistory = [];
+      const conversationHistory: Conversation[] = [];
       
       await mockAskOpenAI(question, conversationHistory, UserTier.STARTER);
       expect(mockAskOpenAI).toHaveBeenCalledWith(question, conversationHistory, UserTier.STARTER);
@@ -69,7 +77,7 @@ describe('OpenAI Integration (Simple)', () => {
       mockAskOpenAI.mockResolvedValue('Your balance is $1,000');
       
       const question = 'What is my balance?';
-      const conversationHistory = [];
+      const conversationHistory: Conversation[] = [];
       
       const response = await mockAskOpenAI(question, conversationHistory);
       
@@ -81,7 +89,7 @@ describe('OpenAI Integration (Simple)', () => {
       mockAskOpenAI.mockRejectedValue(new Error('OpenAI API error'));
       
       const question = 'What is my balance?';
-      const conversationHistory = [];
+      const conversationHistory: Conversation[] = [];
       
       await expect(mockAskOpenAI(question, conversationHistory)).rejects.toThrow('OpenAI API error');
     });
@@ -92,7 +100,7 @@ describe('OpenAI Integration (Simple)', () => {
       mockAskOpenAIForTests.mockResolvedValue('Your balance is $1,000 (using cheaper model)');
       
       const question = 'What is my balance?';
-      const conversationHistory = [];
+      const conversationHistory: Conversation[] = [];
       
       const response = await mockAskOpenAIForTests(question, conversationHistory);
       
@@ -104,7 +112,7 @@ describe('OpenAI Integration (Simple)', () => {
       mockAskOpenAIForTests.mockResolvedValue('Here are your recent transactions');
       
       const question = 'Show me my recent transactions';
-      const conversationHistory = [];
+      const conversationHistory: Conversation[] = [];
       
       const response = await mockAskOpenAIForTests(question, []);
       
@@ -116,7 +124,7 @@ describe('OpenAI Integration (Simple)', () => {
       mockAskOpenAIForTests.mockResolvedValue('Here is your financial analysis');
       
       const question = 'Analyze my spending patterns';
-      const conversationHistory = [];
+      const conversationHistory: Conversation[] = [];
       
       const response = await mockAskOpenAIForTests(question, []);
       
@@ -128,7 +136,7 @@ describe('OpenAI Integration (Simple)', () => {
       mockAskOpenAIForTests.mockResolvedValue('Here is your spending analysis');
       
       const question = 'How much did I spend on groceries?';
-      const conversationHistory = [];
+      const conversationHistory: Conversation[] = [];
       
       const response = await mockAskOpenAIForTests(question, []);
       
@@ -140,7 +148,7 @@ describe('OpenAI Integration (Simple)', () => {
       mockAskOpenAIForTests.mockResolvedValue('Based on our conversation, here is your analysis');
       
       const question = 'What about my investments?';
-      const conversationHistory = [
+      const conversationHistory: Conversation[] = [
         {
           id: '1',
           question: 'What is my current balance?',
@@ -159,7 +167,7 @@ describe('OpenAI Integration (Simple)', () => {
       mockAskOpenAIForTests.mockResolvedValue('Here is the follow-up analysis');
       
       const question = 'Can you break that down further?';
-      const conversationHistory = [
+      const conversationHistory: Conversation[] = [
         {
           id: '1',
           question: 'What is my spending breakdown?',
@@ -178,7 +186,7 @@ describe('OpenAI Integration (Simple)', () => {
       mockAskOpenAIForTests.mockResolvedValue('Response based on tier (cheaper model)');
       
       const question = 'What is my balance?';
-      const conversationHistory = [];
+      const conversationHistory: Conversation[] = [];
       
       const starterResponse = await mockAskOpenAIForTests(question, conversationHistory, UserTier.STARTER);
       expect(starterResponse).toBe('Response based on tier (cheaper model)');
