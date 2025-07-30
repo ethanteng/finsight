@@ -1,4 +1,4 @@
-import { DataProvider, LiveMarketData, CDRate, TreasuryYield, MortgageRate, UserTier } from '../types';
+import { DataProvider, LiveMarketData, UserTier } from '../types';
 import { cacheService } from '../cache';
 
 interface AlphaVantageResponse {

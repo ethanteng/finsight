@@ -8,7 +8,7 @@ import cron from 'node-cron';
 import { syncAllAccounts, getLastSyncInfo } from './sync';
 import { PrismaClient } from '@prisma/client';
 import { dataOrchestrator } from './data/orchestrator';
-import { FEATURES, isFeatureEnabled } from './config/features';
+import { isFeatureEnabled } from './config/features';
 
 // Extend Express Request type to include user
 declare global {
@@ -89,7 +89,7 @@ app.post('/ask', async (req: Request, res: Response) => {
 // Demo request handler (always available)
 const handleDemoRequest = async (req: Request, res: Response) => {
   try {
-    const { question, userTier = 'starter' } = req.body;
+    const { question } = req.body;
     
     // Get recent conversation history (last 5 Q&A pairs)
     const recentConversations = await getPrismaClient().conversation.findMany({
@@ -97,25 +97,11 @@ const handleDemoRequest = async (req: Request, res: Response) => {
       take: 5,
     });
     
-    // Map frontend tier to backend enum
-    const tierMap: Record<string, string> = {
-      'starter': 'starter',
-      'standard': 'standard', 
-      'premium': 'premium'
-    };
+    // Use environment variable for tier in demo mode
+    const backendTier = process.env.TEST_USER_TIER || 'starter';
     
-    // Use request tier if provided, otherwise fall back to environment variable
-    const effectiveTier = userTier || process.env.TEST_USER_TIER || 'starter';
-    
-    const backendTier = tierMap[effectiveTier] || 'starter';
-    
-    // If in demo mode, use demo data context
-    let marketContext = null;
-    if (true) { // Always demo mode in this handler
-      // For demo mode, we'll use the data orchestrator with demo flag
-      // The orchestrator will need to be updated to handle demo data
-      marketContext = await dataOrchestrator.getMarketContext(backendTier as any, true); // true = demo mode
-    }
+    // Always demo mode in this handler
+    const marketContext = await dataOrchestrator.getMarketContext(backendTier as any, true); // true = demo mode
     
     const answer = await askOpenAI(question, recentConversations, backendTier as any, true);
     
@@ -157,7 +143,7 @@ const handleDemoRequest = async (req: Request, res: Response) => {
 // User request handler (feature flagged)
 const handleUserRequest = async (req: Request, res: Response) => {
   try {
-    const { question, userTier = 'starter' } = req.body;
+    const { question } = req.body;
     
     // For now, fallback to current single-user logic
     // This will be enhanced in Step 2 when we build the user system
@@ -168,17 +154,8 @@ const handleUserRequest = async (req: Request, res: Response) => {
       take: 5,
     });
     
-    // Map frontend tier to backend enum
-    const tierMap: Record<string, string> = {
-      'starter': 'starter',
-      'standard': 'standard', 
-      'premium': 'premium'
-    };
-    
-    // Use request tier if provided, otherwise fall back to environment variable
-    const effectiveTier = userTier || process.env.TEST_USER_TIER || 'starter';
-    
-    const backendTier = tierMap[effectiveTier] || 'starter';
+    // Use environment variable for tier
+    const backendTier = process.env.TEST_USER_TIER || 'starter';
     
     // Get market context (will be tier-aware in Step 4)
     const marketContext = await dataOrchestrator.getMarketContext(backendTier as any, false);
@@ -482,7 +459,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
 
     app.delete('/privacy/delete-all-data', async (req: Request, res: Response) => {
       try {
-        const { user_id } = req.body;
+        // user_id will be used when user system is implemented
         
         // Delete all user data
         await getPrismaClient().conversation.deleteMany();

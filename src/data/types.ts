@@ -38,15 +38,16 @@ export interface MortgageRate {
   lastUpdated: string;
 }
 
-// User Tier Types
+// User Tier Types - will be used in Step 4
 export enum UserTier {
   STARTER = 'starter',
   STANDARD = 'standard',
   PREMIUM = 'premium'
 }
 
+// Tier access configuration - will be used in Step 4
 export interface TierAccess {
-  tier: UserTier;
+  tier: UserTier; // Will be used in Step 4
   hasEconomicContext: boolean;
   hasLiveData: boolean;
   hasScenarioPlanning: boolean;
@@ -64,10 +65,10 @@ export interface DataSource {
 export interface DataProvider {
   getEconomicIndicators(): Promise<EconomicIndicator>;
   getLiveMarketData(tier?: UserTier): Promise<LiveMarketData | null>;
-  getDataPoint(key: string): Promise<MarketDataPoint>;
+  getDataPoint(key: string): Promise<MarketDataPoint>; // Will be used in Step 4
 }
 
-// Cache Types
+// Cache Types - will be implemented in Step 4
 export interface CacheEntry<T> {
   data: T;
   timestamp: number;
@@ -76,6 +77,6 @@ export interface CacheEntry<T> {
 
 export interface CacheService {
   get<T>(key: string): Promise<T | null>;
-  set<T>(key: string, data: T, ttl?: number): Promise<void>;
-  invalidate(pattern: string): Promise<void>;
+  set<T>(key: string, data: T, ttl?: number): Promise<void>; // Will be used in Step 4
+  invalidate(pattern: string): Promise<void>; // Will be used in Step 4
 } 

@@ -15,8 +15,8 @@ interface Conversation {
   createdAt: Date;
 }
 
-// Post-processing function to enforce tier restrictions
-function enforceTierRestrictions(answer: string, userTier: UserTier, question: string): string {
+// Post-processing function to enforce tier restrictions - will be used in Step 4
+function enforceTierRestrictions(answer: string): string {
   // TIER ENFORCEMENT DISABLED - Return original answer without restrictions
   return answer;
 }

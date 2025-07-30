@@ -144,7 +144,7 @@ export const setupPlaidRoutes = (app: any) => {
       const { access_token } = req.body;
       
       // Test if the token is still valid by making a simple API call
-      const accountsResponse = await plaidClient.accountsGet({
+      await plaidClient.accountsGet({
         access_token: access_token,
       });
 
@@ -213,7 +213,7 @@ export const setupPlaidRoutes = (app: any) => {
         return res.json({ accounts: [] });
       }
 
-      let allAccounts: any[] = [];
+      const allAccounts: any[] = [];
       const seenAccountKeys = new Set(); // Track unique account combinations
 
       // Fetch accounts from each access token
@@ -455,8 +455,6 @@ export const setupPlaidRoutes = (app: any) => {
   // Disconnect accounts endpoint
   app.delete('/plaid/disconnect_accounts', async (req: any, res: any) => {
     try {
-      const { user_id } = req.body;
-      
       // Delete all access tokens (this effectively disconnects all accounts)
       await getPrismaClient().accessToken.deleteMany();
       

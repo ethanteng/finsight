@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 
+// Will be used when user system is implemented
 const prisma = new PrismaClient();
 
 // Tokenization maps to maintain consistency within a session

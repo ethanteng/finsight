@@ -95,7 +95,7 @@ export async function syncAllAccounts(): Promise<SyncResult> {
     // Now sync the unique accounts
     console.log(`Found ${allAccounts.size} unique accounts across all tokens`);
     let totalAccountsSynced = 0;
-    for (const [accountKey, account] of allAccounts) {
+    for (const [, account] of allAccounts) {
       await getPrismaClient().account.upsert({
         where: { plaidAccountId: account.account_id },
         update: {
@@ -138,7 +138,7 @@ export async function syncAllAccounts(): Promise<SyncResult> {
     // Now sync the unique transactions
     console.log(`Found ${allTransactions.size} unique transactions across all tokens`);
     let totalTransactionsSynced = 0;
-    for (const [transactionKey, transaction] of allTransactions) {
+    for (const [, transaction] of allTransactions) {
       // Find the account for this transaction
       const account = await getPrismaClient().account.findUnique({
         where: { plaidAccountId: transaction.account_id },
