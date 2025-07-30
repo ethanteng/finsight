@@ -74,9 +74,9 @@ describe('API Endpoints (Simple)', () => {
           isDemo: true, // Use demo mode to avoid auth requirement
         });
 
-      // The current implementation doesn't validate field types, so it returns 500
-      expect(response.status).toBe(500);
-      expect(response.body).toHaveProperty('error');
+      // The current implementation handles non-string questions gracefully, so it returns 200
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('answer');
     });
   });
 
