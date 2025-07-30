@@ -231,6 +231,13 @@ describe('Complete User Workflow Tests', () => {
       });
 
       // Should have at least the questions we asked
+      console.log('Demo conversations check:', { 
+        expected: questions.length, 
+        actual: demoConversations.length,
+        questions: questions,
+        conversations: demoConversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
+      });
+      
       expect(demoConversations.length).toBeGreaterThanOrEqual(questions.length);
 
       // Step 6: Verify demo data doesn't affect real users
@@ -288,12 +295,24 @@ describe('Complete User Workflow Tests', () => {
         where: { sessionId: sessionId }
       });
       
+      console.log('Demo session lookup result:', { 
+        found: !!demoSession, 
+        sessionId: sessionId,
+        demoSessionId: demoSession?.id 
+      });
+      
       expect(demoSession).toBeTruthy();
       
       // Then find conversations for this session
       const conversations = await prisma.demoConversation.findMany({
         where: { sessionId: demoSession!.id },
         orderBy: { createdAt: 'asc' }
+      });
+
+      console.log('Demo conversations lookup result:', { 
+        count: conversations.length, 
+        sessionId: demoSession!.id,
+        conversations: conversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
       });
 
       expect(conversations.length).toBeGreaterThanOrEqual(2);
@@ -369,6 +388,13 @@ describe('Complete User Workflow Tests', () => {
       });
 
       // Demo and user conversations should be separate
+      console.log('Mixed mode demo conversations check:', { 
+        demoConversationsCount: demoConversations.length,
+        userConversationsCount: userConversations.length,
+        demoSessionId: demoSession?.id,
+        userId: (await prisma.user.findFirst({ where: { email: 'mixed-test@example.com' } }))?.id
+      });
+      
       expect(demoConversations.length).toBeGreaterThan(0);
       // User conversations might be 0 if no real data, but that's okay
     });

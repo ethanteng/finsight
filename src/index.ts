@@ -104,6 +104,15 @@ app.post('/ask', async (req: Request, res: Response) => {
 // Demo request handler (always available)
 const handleDemoRequest = async (req: Request, res: Response) => {
   try {
+    // Test database connection
+    try {
+      await getPrismaClient().$queryRaw`SELECT 1`;
+      console.log('Database connection verified');
+    } catch (dbError) {
+      console.error('Database connection failed:', dbError);
+      return res.status(500).json({ error: 'Database connection failed' });
+    }
+    
     const { question } = req.body;
     const sessionId = req.headers['x-session-id'] as string;
     const userAgent = req.headers['user-agent'] || 'unknown';
@@ -118,11 +127,40 @@ const handleDemoRequest = async (req: Request, res: Response) => {
     });
     
     if (!demoSession) {
-      demoSession = await getPrismaClient().demoSession.create({
-        data: {
-          sessionId,
-          userAgent
+      try {
+        demoSession = await getPrismaClient().demoSession.create({
+          data: {
+            sessionId,
+            userAgent
+          }
+        });
+        console.log('Demo session created successfully:', { 
+          id: demoSession.id, 
+          sessionId: demoSession.sessionId 
+        });
+        
+        // Verify the session was actually stored
+        const verifySession = await getPrismaClient().demoSession.findUnique({
+          where: { id: demoSession.id }
+        });
+        
+        if (!verifySession) {
+          console.error('Demo session was not actually stored in database');
+          return res.status(500).json({ error: 'Failed to create demo session' });
+        } else {
+          console.log('Demo session verified in database:', { 
+            id: verifySession.id,
+            sessionId: verifySession.sessionId
+          });
         }
+      } catch (sessionError) {
+        console.error('Failed to create demo session:', sessionError);
+        return res.status(500).json({ error: 'Failed to create demo session' });
+      }
+    } else {
+      console.log('Demo session found:', { 
+        id: demoSession.id, 
+        sessionId: demoSession.sessionId 
       });
     }
     
@@ -142,13 +180,37 @@ const handleDemoRequest = async (req: Request, res: Response) => {
     const answer = await askOpenAI(question, recentConversations, backendTier as any, true, undefined);
     
     // Store the demo conversation with session association
-    await getPrismaClient().demoConversation.create({
-      data: {
-        question,
-        answer,
+    try {
+      const storedConversation = await getPrismaClient().demoConversation.create({
+        data: {
+          question,
+          answer,
+          sessionId: demoSession.id,
+        },
+      });
+      console.log('Demo conversation stored successfully:', { 
+        id: storedConversation.id, 
         sessionId: demoSession.id,
-      },
-    });
+        questionLength: question.length 
+      });
+      
+      // Verify the conversation was actually stored
+      const verifyConversation = await getPrismaClient().demoConversation.findUnique({
+        where: { id: storedConversation.id }
+      });
+      
+      if (!verifyConversation) {
+        console.error('Demo conversation was not actually stored in database');
+      } else {
+        console.log('Demo conversation verified in database:', { 
+          id: verifyConversation.id,
+          question: verifyConversation.question.substring(0, 50)
+        });
+      }
+    } catch (storageError) {
+      console.error('Failed to store demo conversation:', storageError);
+      // Don't fail the request, just log the error
+    }
     
     // Log demo interactions for analytics
     try {
