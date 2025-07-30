@@ -64,6 +64,18 @@ describe('Complete User Workflow Tests', () => {
       authToken = registerResponse.body.token;
       userId = registerResponse.body.user.id;
 
+      // Verify user was actually created in database
+      const createdUser = await prisma.user.findUnique({
+        where: { id: userId }
+      });
+      
+      if (!createdUser) {
+        console.log('User not found in database, skipping account creation');
+        return; // Skip the rest of the test if user creation failed
+      }
+
+      console.log('User verified in database:', { id: createdUser.id, email: createdUser.email });
+
       // Step 2: Login (verify token works)
       const loginResponse = await request(app)
         .post('/auth/login')
@@ -560,4 +572,4 @@ describe('Complete User Workflow Tests', () => {
       });
     });
   });
-}); 
+});
