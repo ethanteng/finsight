@@ -14,6 +14,15 @@ describe('Complete User Workflow Tests', () => {
   });
 
   beforeEach(async () => {
+    // Test database connection
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      console.log('Test database connection verified');
+    } catch (dbError) {
+      console.error('Test database connection failed:', dbError);
+      throw dbError;
+    }
+    
     // Clean up test data - delete related records first
     await prisma.privacySettings.deleteMany({
       where: {
@@ -238,7 +247,29 @@ describe('Complete User Workflow Tests', () => {
         conversations: demoConversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
       });
       
-      expect(demoConversations.length).toBeGreaterThanOrEqual(questions.length);
+      // Add retry mechanism for CI environment
+      let retryCount = 0;
+      let finalDemoConversations = demoConversations;
+      
+      while (finalDemoConversations.length === 0 && retryCount < 3) {
+        console.log(`Retry ${retryCount + 1}: Waiting for demo conversations to be available...`);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+        
+        // Re-query the demo conversations
+        finalDemoConversations = await prisma.demoConversation.findMany({
+          where: { sessionId: demoSession.id },
+          orderBy: { createdAt: 'asc' }
+        });
+        
+        console.log(`Retry ${retryCount + 1} result:`, { 
+          count: finalDemoConversations.length,
+          conversations: finalDemoConversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
+        });
+        
+        retryCount++;
+      }
+      
+      expect(finalDemoConversations.length).toBeGreaterThanOrEqual(questions.length);
 
       // Step 6: Verify demo data doesn't affect real users
       const realUser = await prisma.user.create({
@@ -315,7 +346,29 @@ describe('Complete User Workflow Tests', () => {
         conversations: conversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
       });
 
-      expect(conversations.length).toBeGreaterThanOrEqual(2);
+      // Add retry mechanism for CI environment
+      let retryCount = 0;
+      let finalConversations = conversations;
+      
+      while (finalConversations.length === 0 && retryCount < 3) {
+        console.log(`Retry ${retryCount + 1}: Waiting for demo conversations to be available...`);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+        
+        // Re-query the demo conversations
+        finalConversations = await prisma.demoConversation.findMany({
+          where: { sessionId: demoSession!.id },
+          orderBy: { createdAt: 'asc' }
+        });
+        
+        console.log(`Retry ${retryCount + 1} result:`, { 
+          count: finalConversations.length,
+          conversations: finalConversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
+        });
+        
+        retryCount++;
+      }
+
+      expect(finalConversations.length).toBeGreaterThanOrEqual(2);
     });
   });
 
@@ -395,7 +448,28 @@ describe('Complete User Workflow Tests', () => {
         userId: (await prisma.user.findFirst({ where: { email: 'mixed-test@example.com' } }))?.id
       });
       
-      expect(demoConversations.length).toBeGreaterThan(0);
+      // Add retry mechanism for CI environment
+      let retryCount = 0;
+      let finalDemoConversations = demoConversations;
+      
+      while (finalDemoConversations.length === 0 && retryCount < 3) {
+        console.log(`Retry ${retryCount + 1}: Waiting for demo conversations to be available...`);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+        
+        // Re-query the demo conversations
+        finalDemoConversations = await prisma.demoConversation.findMany({
+          where: { sessionId: demoSession!.id }
+        });
+        
+        console.log(`Retry ${retryCount + 1} result:`, { 
+          count: finalDemoConversations.length,
+          conversations: finalDemoConversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
+        });
+        
+        retryCount++;
+      }
+      
+      expect(finalDemoConversations.length).toBeGreaterThan(0);
       // User conversations might be 0 if no real data, but that's okay
     });
 
