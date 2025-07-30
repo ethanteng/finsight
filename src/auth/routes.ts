@@ -5,12 +5,57 @@ import {
   generateToken, 
   validateUserCredentials,
   validateEmail,
-  validatePassword
+  validatePassword,
+  verifyToken
 } from './utils';
 import { authenticateUser, AuthenticatedRequest } from './middleware';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// Verify token endpoint
+router.get('/verify', async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const token = authHeader.substring(7);
+    const payload = verifyToken(token);
+    
+    if (!payload) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    // Verify user still exists and is active
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        id: true,
+        email: true,
+        tier: true,
+        isActive: true
+      }
+    });
+
+    if (!user || !user.isActive) {
+      return res.status(401).json({ error: 'User not found or account deactivated' });
+    }
+
+    res.json({
+      valid: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        tier: user.tier
+      }
+    });
+  } catch (error) {
+    console.error('Token verification error:', error);
+    res.status(500).json({ error: 'Token verification failed' });
+  }
+});
 
 // Register new user
 router.post('/register', async (req: Request, res: Response) => {

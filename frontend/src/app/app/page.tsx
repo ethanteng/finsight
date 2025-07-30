@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import FinanceQA from '../../components/FinanceQA';
 import TierBanner from '../../components/TierBanner';
 
@@ -14,9 +15,52 @@ export default function AppPage() {
   const [promptHistory, setPromptHistory] = useState<PromptHistory[]>([]);
   const [selectedPrompt, setSelectedPrompt] = useState<PromptHistory | null>(null);
   const [showSidebar, setShowSidebar] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const router = useRouter();
+
+  // Check authentication on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL;
+        const token = localStorage.getItem('auth_token');
+        
+        if (!token) {
+          // No token, redirect to login
+          router.push('/login');
+          return;
+        }
+
+        // Verify token with backend
+        const res = await fetch(`${API_URL}/auth/verify`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (res.ok) {
+          setIsAuthenticated(true);
+          setIsLoading(false);
+        } else {
+          // Token invalid, redirect to login
+          localStorage.removeItem('auth_token');
+          router.push('/login');
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        localStorage.removeItem('auth_token');
+        router.push('/login');
+      }
+    };
+
+    checkAuth();
+  }, [router]);
 
   // Load prompt history from localStorage on mount
   useEffect(() => {
+    if (!isAuthenticated) return;
+    
     const saved = localStorage.getItem('linc_prompt_history');
     if (saved) {
       try {
@@ -35,7 +79,12 @@ export default function AppPage() {
     const checkBackendData = async () => {
       try {
         const API_URL = process.env.NEXT_PUBLIC_API_URL;
-        const res = await fetch(`${API_URL}/privacy/data`);
+        const token = localStorage.getItem('auth_token');
+        const res = await fetch(`${API_URL}/privacy/data`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
         if (res.ok) {
           const data = await res.json();
           if (data.conversations === 0 && saved) {
@@ -51,12 +100,13 @@ export default function AppPage() {
     };
     
     checkBackendData();
-  }, []);
+  }, [isAuthenticated]);
 
   // Save prompt history to localStorage whenever it changes
   useEffect(() => {
+    if (!isAuthenticated) return;
     localStorage.setItem('linc_prompt_history', JSON.stringify(promptHistory));
-  }, [promptHistory]);
+  }, [promptHistory, isAuthenticated]);
 
   const addToHistory = (question: string, answer: string) => {
     const newPrompt: PromptHistory = {
@@ -95,6 +145,29 @@ export default function AppPage() {
     setSelectedPrompt(null);
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('linc_prompt_history');
+    router.push('/');
+  };
+
+  // Show loading state while checking authentication
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render the app if not authenticated
+  if (!isAuthenticated) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       {/* Header */}
@@ -117,11 +190,11 @@ export default function AppPage() {
             >
               Profile
             </a>
-            <button
-              onClick={() => setShowSidebar(!showSidebar)}
-              className="lg:hidden bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm"
+            <button 
+              onClick={handleLogout}
+              className="text-gray-300 hover:text-white text-sm transition-colors"
             >
-              {showSidebar ? 'Hide' : 'Show'} History
+              Logout
             </button>
           </div>
         </div>
