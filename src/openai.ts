@@ -227,5 +227,5 @@ IMPORTANT: When asked about APY (Annual Percentage Yield):
   });
 
   const answer = completion.choices[0]?.message?.content || 'No answer generated.';
-  return enforceTierRestrictions(answer, tier, question);
+  return enforceTierRestrictions(answer);
 }
