@@ -585,10 +585,14 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         if (isDemo) {
           // Return demo data for demo mode
           const { demoData } = await import('./demo-data');
+          
+          // Count demo conversations from all demo sessions
+          const demoConversations = await getPrismaClient().demoConversation.count();
+          
           res.json({
             accounts: demoData.accounts.length,
             transactions: demoData.transactions.length,
-            conversations: 0, // Demo conversations are handled separately
+            conversations: demoConversations,
             lastSync: await getLastSyncInfo() // Demo mode uses global sync status
           });
           return;
