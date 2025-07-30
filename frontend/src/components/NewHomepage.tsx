@@ -71,7 +71,7 @@ const NewHomepage = () => {
               <AnimatedPrompt />
             </div>
             
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-8">
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-start pt-8">
               <Button 
                 variant="hero" 
                 size="xl" 
@@ -80,9 +80,12 @@ const NewHomepage = () => {
               >
                 Get Early Access
               </Button>
-              <a href="/demo">
-                <Button variant="outline" size="xl">See It In Action</Button>
-              </a>
+              <div className="flex flex-col items-center">
+                <a href="/demo">
+                  <Button variant="outline" size="xl">See It In Action</Button>
+                </a>
+                <p className="mt-2 text-sm text-muted-foreground">No login needed</p>
+              </div>
             </div>
             
             <div className="flex items-center justify-center space-x-6 pt-8 text-sm text-muted-foreground">
