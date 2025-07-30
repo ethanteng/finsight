@@ -10,6 +10,7 @@ interface TierInfo {
 export default function TierBanner() {
   const [tierInfo, setTierInfo] = useState<TierInfo | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isDemo, setIsDemo] = useState(false);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -27,13 +28,16 @@ export default function TierBanner() {
       if (response.ok) {
         const data = await response.json();
         setTierInfo(data);
+        setIsDemo(false);
       } else if (response.status === 401) {
-        // User not authenticated, don't show tier banner
+        // User not authenticated, show demo tier banner
         setTierInfo(null);
+        setIsDemo(true);
       }
     } catch (error) {
       console.error('Error checking tier:', error);
       setTierInfo(null);
+      setIsDemo(true);
     } finally {
       setLoading(false);
     }
@@ -51,6 +55,8 @@ export default function TierBanner() {
         return 'bg-blue-500 text-blue-900';
       case 'premium':
         return 'bg-purple-500 text-purple-900';
+      case 'demo':
+        return 'bg-yellow-500 text-yellow-900';
       default:
         return 'bg-gray-500 text-gray-900';
     }
@@ -64,18 +70,31 @@ export default function TierBanner() {
         return 'Standard';
       case 'premium':
         return 'Premium';
+      case 'demo':
+        return 'Demo';
       default:
         return tier;
     }
   };
 
-  if (!tierInfo) {
-    return null;
+  // Show demo banner if in demo mode
+  if (isDemo) {
+    return (
+      <div className={`px-3 py-1 rounded-full text-xs font-medium ${getTierColor('demo')}`}>
+        {loading ? 'Loading...' : `${getTierDisplayName('demo')} Plan`}
+      </div>
+    );
   }
 
-  return (
-    <div className={`px-3 py-1 rounded-full text-xs font-medium ${getTierColor(tierInfo.tier)}`}>
-      {loading ? 'Loading...' : `${getTierDisplayName(tierInfo.tier)} Plan`}
-    </div>
-  );
+  // Show user's tier if authenticated
+  if (tierInfo) {
+    return (
+      <div className={`px-3 py-1 rounded-full text-xs font-medium ${getTierColor(tierInfo.tier)}`}>
+        {loading ? 'Loading...' : `${getTierDisplayName(tierInfo.tier)} Plan`}
+      </div>
+    );
+  }
+
+  // Don't show anything while loading or if there's an error
+  return null;
 } 
