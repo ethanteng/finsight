@@ -17,6 +17,14 @@ jest.mock('../data/orchestrator', () => ({
   },
 }));
 
+// Mock feature flags to disable USER_AUTH for these tests
+jest.mock('../config/features', () => ({
+  isFeatureEnabled: jest.fn((feature: string) => {
+    if (feature === 'USER_AUTH') return false;
+    return true;
+  }),
+}));
+
 import request from 'supertest';
 import { app } from '../index';
 
@@ -62,7 +70,7 @@ describe('API Endpoints (Simple)', () => {
         .post('/ask')
         .send({
           question: 123, // Should be string
-          userId: 'test-user',
+          isDemo: true, // Use demo mode to avoid auth requirement
         });
 
       // The current implementation doesn't validate field types, so it returns 500
@@ -109,7 +117,7 @@ describe('API Endpoints (Simple)', () => {
         .post('/ask')
         .send({
           question: largeQuestion,
-          userId: 'test-user',
+          isDemo: true, // Use demo mode to avoid auth requirement
         });
 
       // Debug: Log the actual response

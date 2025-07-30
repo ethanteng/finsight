@@ -14,6 +14,25 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  passwordHash    String
+  tier            String   @default("starter") // starter, standard, premium
+  isActive        Boolean  @default(true)
+  emailVerified   Boolean  @default(false)
+  lastLoginAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relationships
+  accounts        Account[]
+  conversations   Conversation[]
+  privacySettings PrivacySettings?
+  
+  @@map("users")
+}
+
 model Account {
   id            String   @id @default(cuid())
   plaidAccountId String  @unique
@@ -30,6 +49,11 @@ model Account {
   verificationStatus String?
   persistentAccountId String?
   lastSynced    DateTime?
+  
+  // User relationship
+  userId        String?
+  user          User?   @relation(fields: [userId], references: [id])
+  
   transactions  Transaction[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -85,6 +109,11 @@ model Conversation {
   // Privacy: Store anonymized versions for AI context
   anonymizedQuestion String?
   anonymizedAnswer   String?
+  
+  // User relationship
+  userId    String?
+  user      User?   @relation(fields: [userId], references: [id])
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -96,6 +125,11 @@ model PrivacySettings {
   allowAITraining       Boolean  @default(false)
   anonymizeData         Boolean  @default(true)
   dataRetentionDays     Int      @default(30)
+  
+  // User relationship
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id])
+  
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }

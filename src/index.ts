@@ -9,6 +9,8 @@ import { syncAllAccounts, getLastSyncInfo } from './sync';
 import { PrismaClient } from '@prisma/client';
 import { dataOrchestrator } from './data/orchestrator';
 import { isFeatureEnabled } from './config/features';
+import authRoutes from './auth/routes';
+import { optionalAuth } from './auth/middleware';
 
 // Extend Express Request type to include user
 declare global {
@@ -16,6 +18,7 @@ declare global {
     interface Request {
       user?: {
         id: string;
+        email: string;
         tier: string;
       };
     }
@@ -28,7 +31,7 @@ config({ path: '.env.local' });
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
 
-const getPrismaClient = () => {
+export const getPrismaClient = () => {
   if (!prisma) {
     prisma = new PrismaClient();
   }
@@ -57,6 +60,12 @@ app.get('/health', (req: Request, res: Response) => {
 
 // Setup Plaid routes
 setupPlaidRoutes(app);
+
+// Setup Auth routes
+app.use('/auth', authRoutes);
+
+// Apply optional auth middleware to all routes
+app.use(optionalAuth);
 
 // OpenAI Q&A endpoint
 app.post('/ask', async (req: Request, res: Response) => {
@@ -145,28 +154,34 @@ const handleUserRequest = async (req: Request, res: Response) => {
   try {
     const { question } = req.body;
     
-    // For now, fallback to current single-user logic
-    // This will be enhanced in Step 2 when we build the user system
+    // Get user from request (set by optionalAuth middleware)
+    const user = req.user;
     
-    // Get recent conversation history (last 5 Q&A pairs)
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    // Get recent conversation history for this user (last 5 Q&A pairs)
     const recentConversations = await getPrismaClient().conversation.findMany({
+      where: { userId: user.id },
       orderBy: { createdAt: 'desc' },
       take: 5,
     });
     
-    // Use environment variable for tier
-    const backendTier = process.env.TEST_USER_TIER || 'starter';
+    // Use user's tier
+    const userTier = user.tier;
     
     // Get market context (will be tier-aware in Step 4)
-    const marketContext = await dataOrchestrator.getMarketContext(backendTier as any, false);
+    const marketContext = await dataOrchestrator.getMarketContext(userTier as any, false);
     
-    const answer = await askOpenAI(question, recentConversations, backendTier as any, false);
+    const answer = await askOpenAI(question, recentConversations, userTier as any, false);
     
-    // Store the new Q&A pair
+    // Store the new Q&A pair with user association
     await getPrismaClient().conversation.create({
       data: {
         question,
         answer,
+        userId: user.id,
       },
     });
     
