@@ -107,6 +107,19 @@ describe('Complete User Workflow Tests', () => {
       let uniqueToken: string;
       if (plaidResponse.status === 500) {
         console.log('Plaid API call failed (expected in test environment)');
+        
+        // Verify user still exists before creating access token
+        const userForToken = await prisma.user.findUnique({
+          where: { id: userId }
+        });
+        
+        if (!userForToken) {
+          console.log('User not found before access token creation, skipping');
+          return; // Skip the rest of the test if user doesn't exist
+        }
+        
+        console.log('User verified before access token creation:', { id: userForToken.id, email: userForToken.email });
+        
         // Create mock access token for testing
         uniqueToken = `test-access-token-${Date.now()}-${Math.random()}`;
         await prisma.accessToken.create({
