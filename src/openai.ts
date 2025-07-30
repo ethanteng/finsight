@@ -21,7 +21,7 @@ function enforceTierRestrictions(answer: string): string {
   return answer;
 }
 
-export async function askOpenAI(question: string, conversationHistory: Conversation[] = [], userTier: UserTier | string = UserTier.STARTER, isDemo: boolean = false): Promise<string> {
+export async function askOpenAI(question: string, conversationHistory: Conversation[] = [], userTier: UserTier | string = UserTier.STARTER, isDemo: boolean = false, userId?: string): Promise<string> {
   // Convert string tier to enum if needed
   const tier = typeof userTier === 'string' ? (userTier as UserTier) : userTier;
   
@@ -67,12 +67,30 @@ export async function askOpenAI(question: string, conversationHistory: Conversat
       transactions = [];
     }
   } else {
-    // Use real database data
-    accounts = await prisma.account.findMany();
-    transactions = await prisma.transaction.findMany({
-      orderBy: { date: 'desc' },
-      take: 200, // increased limit for context
-    });
+    // Use real database data - filter by user if userId is provided
+    if (userId) {
+      console.log('OpenAI: Fetching user-specific data for userId:', userId);
+      accounts = await prisma.account.findMany({
+        where: { userId: userId }
+      });
+      transactions = await prisma.transaction.findMany({
+        where: { 
+          account: {
+            userId: userId
+          }
+        },
+        orderBy: { date: 'desc' },
+        take: 200, // increased limit for context
+      });
+      console.log('OpenAI: Found', accounts.length, 'accounts and', transactions.length, 'transactions for user', userId);
+    } else {
+      console.log('OpenAI: No userId provided, fetching all data (this should not happen for authenticated users)');
+      accounts = await prisma.account.findMany();
+      transactions = await prisma.transaction.findMany({
+        orderBy: { date: 'desc' },
+        take: 200, // increased limit for context
+      });
+    }
   }
 
   // Anonymize data before sending to OpenAI (skip for demo mode)
@@ -82,6 +100,19 @@ export async function askOpenAI(question: string, conversationHistory: Conversat
   const transactionSummary = isDemo ? 
     `DEMO TRANSACTIONS:\n${transactions.slice(0, 10).map(t => `- ${t.date}: ${t.description} (${t.category}): $${t.amount}`).join('\n')}` : 
     anonymizeTransactionData(transactions);
+  
+  // Debug: Log what data the AI will see
+  console.log('OpenAI: Account summary for AI:', accountSummary);
+  console.log('OpenAI: Transaction summary for AI:', transactionSummary);
+  console.log('OpenAI: Number of accounts found:', accounts.length);
+  console.log('OpenAI: Number of transactions found:', transactions.length);
+  console.log('OpenAI: User ID being used:', userId);
+  
+  // Debug: Log conversation history
+  console.log('OpenAI: Conversation history length:', conversationHistory.length);
+  if (conversationHistory.length > 0) {
+    console.log('OpenAI: Recent conversation questions:', conversationHistory.slice(0, 3).map(c => c.question));
+  }
   
   // Debug: Log demo data for troubleshooting
   if (isDemo) {

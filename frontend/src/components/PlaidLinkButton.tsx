@@ -36,9 +36,22 @@ export default function PlaidLinkButton({ onAccountLinked }: PlaidLinkButtonProp
     setStatus('Exchanging public token...');
     const API_URL = process.env.NEXT_PUBLIC_API_URL;
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      
+      // Add authentication header
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        console.log('Sending auth token for Plaid exchange:', token.substring(0, 20) + '...');
+      } else {
+        console.log('No auth token found for Plaid exchange');
+      }
+      
       const res = await fetch(`${API_URL}/plaid/exchange_public_token`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ public_token }),
       });
       const data = await res.json();

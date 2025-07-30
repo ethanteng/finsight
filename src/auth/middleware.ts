@@ -81,15 +81,24 @@ export function optionalAuth(
   // It just populates req.user if a valid token is provided
   const token = extractTokenFromHeader(req.headers.authorization);
   
+  console.log('OptionalAuth middleware - headers:', req.headers);
+  console.log('OptionalAuth middleware - token:', token ? token.substring(0, 20) + '...' : 'none');
+  
   if (token) {
     const payload = verifyToken(token);
+    console.log('OptionalAuth middleware - payload:', payload);
     if (payload) {
       (req as AuthenticatedRequest).user = {
         id: payload.userId,
         email: payload.email,
         tier: payload.tier
       };
+      console.log('OptionalAuth middleware - user set:', (req as AuthenticatedRequest).user);
+    } else {
+      console.log('OptionalAuth middleware - token verification failed');
     }
+  } else {
+    console.log('OptionalAuth middleware - no token found');
   }
   
   next();

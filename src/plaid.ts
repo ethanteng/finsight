@@ -23,6 +23,24 @@ const configuration = new Configuration({
 
 const plaidClient = new PlaidApi(configuration);
 
+// Helper function to get subtype for demo accounts
+const getSubtypeForType = (type: string): string => {
+  switch (type) {
+    case 'checking':
+      return 'checking';
+    case 'savings':
+      return 'savings';
+    case 'investment':
+      return 'ira'; // Default to IRA for investment accounts
+    case 'credit':
+      return 'credit card';
+    case 'loan':
+      return 'mortgage';
+    default:
+      return 'other';
+  }
+};
+
 // Helper function to handle Plaid errors
 const handlePlaidError = (error: any, operation: string) => {
   console.error(`Error in ${operation}:`, error);
@@ -93,6 +111,10 @@ export const setupPlaidRoutes = (app: any) => {
       const { public_token } = req.body;
       console.log('Exchanging public token for access token...');
       
+      // Debug authentication
+      console.log('Exchange token - headers:', req.headers);
+      console.log('Exchange token - user:', req.user);
+      
       const exchangeResponse = await plaidClient.itemPublicTokenExchange({
         public_token: public_token,
       });
@@ -116,7 +138,8 @@ export const setupPlaidRoutes = (app: any) => {
           where: { id: existingToken.id },
           data: { 
             token: access_token,
-            lastRefreshed: new Date()
+            lastRefreshed: new Date(),
+            userId: req.user?.id // Associate with user if available
           }
         });
       } else {
@@ -126,11 +149,13 @@ export const setupPlaidRoutes = (app: any) => {
           data: { 
             token: access_token,
             itemId: item_id,
-            lastRefreshed: new Date()
+            lastRefreshed: new Date(),
+            userId: req.user?.id // Associate with user if available
           }
         });
       }
       
+      console.log(`Token stored with userId: ${req.user?.id || 'NO USER'}`);
       res.json({ access_token });
     } catch (error) {
       const errorInfo = handlePlaidError(error, 'exchanging public token');
@@ -198,15 +223,62 @@ export const setupPlaidRoutes = (app: any) => {
     }
   });
 
-  // Get accounts from ALL connected access tokens
+  // Get accounts from user's connected access tokens
   app.get('/plaid/all-accounts', async (req: any, res: any) => {
     try {
-      // Get all access tokens from the database
+      // Check if this is a demo request
+      const isDemo = req.headers['x-demo-mode'] === 'true';
+      console.log('Request headers:', req.headers);
+      console.log('Demo mode:', isDemo);
+      console.log('User object:', req.user);
+      
+      if (isDemo) {
+        // Return demo data for demo mode
+        const { demoData } = await import('./demo-data');
+        const demoAccounts = demoData.accounts.map((account: any) => ({
+          id: account.id,
+          name: account.name,
+          type: account.type,
+          subtype: getSubtypeForType(account.type),
+          currentBalance: account.balance,
+        }));
+        return res.json({ accounts: demoAccounts });
+      }
+
+      // Manual authentication check for this route
+      const token = req.headers.authorization?.replace('Bearer ', '');
+      console.log('Manual auth check - token:', token ? token.substring(0, 20) + '...' : 'none');
+      
+      if (!token) {
+        console.log('No token provided');
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      // Verify token manually
+      const { verifyToken } = await import('./auth/utils');
+      const payload = verifyToken(token);
+      console.log('Manual auth check - payload:', payload);
+      
+      if (!payload) {
+        console.log('Token verification failed');
+        return res.status(401).json({ error: 'Invalid or expired token' });
+      }
+
+      // Set user object manually
+      const user = {
+        id: payload.userId,
+        email: payload.email,
+        tier: payload.tier
+      };
+      console.log('Manual auth check - user set:', user);
+
+      // Get user's access tokens from the database
       const accessTokens = await getPrismaClient().accessToken.findMany({
+        where: { userId: user.id },
         select: { token: true, itemId: true }
       });
 
-      console.log(`Found ${accessTokens.length} access tokens in database`);
+      console.log(`Found ${accessTokens.length} access tokens for user ${user.id}`);
       console.log('Item IDs:', accessTokens.map((t: any) => t.itemId).filter(Boolean));
 
       if (accessTokens.length === 0) {
@@ -237,6 +309,33 @@ export const setupPlaidRoutes = (app: any) => {
             if (!seenAccountKeys.has(accountKey)) {
               seenAccountKeys.add(accountKey);
               allAccounts.push(account);
+              
+              // Store account in database for privacy page
+              try {
+                await getPrismaClient().account.upsert({
+                  where: { plaidAccountId: account.id },
+                  update: {
+                    name: account.name,
+                    type: account.type,
+                    subtype: account.subtype,
+                    currentBalance: account.currentBalance,
+                    userId: user.id, // Associate with user
+                    lastSynced: new Date(),
+                  },
+                  create: {
+                    plaidAccountId: account.id,
+                    name: account.name,
+                    type: account.type,
+                    subtype: account.subtype,
+                    currentBalance: account.currentBalance,
+                    userId: user.id, // Associate with user
+                    lastSynced: new Date(),
+                  },
+                });
+                console.log(`Stored account ${account.name} in database for user ${user.id}`);
+              } catch (dbError) {
+                console.error(`Error storing account ${account.name}:`, dbError);
+              }
             }
           }
           
@@ -249,7 +348,7 @@ export const setupPlaidRoutes = (app: any) => {
 
       res.json({ accounts: allAccounts });
     } catch (error) {
-      const errorInfo = handlePlaidError(error, 'fetching all accounts');
+      const errorInfo = handlePlaidError(error, 'fetching user accounts');
       res.status(500).json(errorInfo);
     }
   });
@@ -259,6 +358,12 @@ export const setupPlaidRoutes = (app: any) => {
   // Sync accounts
   app.post('/plaid/sync_accounts', async (req: any, res: any) => {
     try {
+      // Require user authentication
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
       const { access_token } = req.body;
       const accountsResponse = await plaidClient.accountsGet({
         access_token: access_token,
@@ -278,6 +383,7 @@ export const setupPlaidRoutes = (app: any) => {
             currentBalance: account.balances.current,
             availableBalance: account.balances.available,
             currency: account.balances.iso_currency_code,
+            userId: user.id, // Associate with authenticated user
           },
           create: {
             plaidAccountId: account.account_id,
@@ -288,6 +394,7 @@ export const setupPlaidRoutes = (app: any) => {
             currentBalance: account.balances.current,
             availableBalance: account.balances.available,
             currency: account.balances.iso_currency_code,
+            userId: user.id, // Associate with authenticated user
           },
         });
         count++;

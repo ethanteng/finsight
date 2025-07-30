@@ -29,6 +29,8 @@ model User {
   accounts        Account[]
   conversations   Conversation[]
   privacySettings PrivacySettings?
+  accessTokens    AccessToken[]
+  syncStatuses     SyncStatus[]
   
   @@map("users")
 }
@@ -64,6 +66,11 @@ model AccessToken {
   token         String    @unique
   itemId        String?
   lastRefreshed DateTime?
+  
+  // User relationship
+  userId        String?
+  user          User?   @relation(fields: [userId], references: [id])
+  
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -73,6 +80,11 @@ model SyncStatus {
   lastSync         DateTime?
   accountsSynced   Int      @default(0)
   transactionsSynced Int    @default(0)
+  
+  // User relationship
+  userId           String?
+  user             User?    @relation(fields: [userId], references: [id])
+  
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }
@@ -132,4 +144,28 @@ model PrivacySettings {
   
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+}
+
+model DemoSession {
+  id        String   @id @default(cuid())
+  sessionId String   @unique
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Demo conversations for this session
+  conversations DemoConversation[]
+}
+
+model DemoConversation {
+  id        String   @id @default(cuid())
+  question  String
+  answer    String
+  
+  // Session relationship
+  sessionId String
+  session   DemoSession @relation(fields: [sessionId], references: [id])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

@@ -31,12 +31,14 @@ interface SyncResult {
   timestamp: Date;
 }
 
-export async function syncAllAccounts(): Promise<SyncResult> {
+export async function syncAllAccounts(userId?: string): Promise<SyncResult> {
   const startTime = new Date();
   
   try {
-    // Get all access tokens from the database
+    // Get access tokens for the specific user or all tokens if no user specified
+    const whereClause = userId ? { userId } : {};
     const accessTokens = await getPrismaClient().accessToken.findMany({
+      where: whereClause,
       select: { token: true }
     });
 
@@ -193,21 +195,51 @@ export async function syncAllAccounts(): Promise<SyncResult> {
     
     console.log(`Synced ${totalTransactionsSynced} unique transactions`);
 
-    // Update the global sync timestamp
-    await getPrismaClient().syncStatus.upsert({
-      where: { id: '1' },
-      update: {
-        lastSync: startTime,
-        accountsSynced: totalAccountsSynced,
-        transactionsSynced: totalTransactionsSynced,
-      },
-      create: {
-        id: '1',
-        lastSync: startTime,
-        accountsSynced: totalAccountsSynced,
-        transactionsSynced: totalTransactionsSynced,
-      },
-    });
+    // Update the user-specific sync timestamp
+    if (userId) {
+      // Find existing sync status for this user
+      const existingSyncStatus = await getPrismaClient().syncStatus.findFirst({
+        where: { userId: userId }
+      });
+      
+      if (existingSyncStatus) {
+        // Update existing sync status
+        await getPrismaClient().syncStatus.update({
+          where: { id: existingSyncStatus.id },
+          data: {
+            lastSync: startTime,
+            accountsSynced: totalAccountsSynced,
+            transactionsSynced: totalTransactionsSynced,
+          }
+        });
+      } else {
+        // Create new sync status for this user
+        await getPrismaClient().syncStatus.create({
+          data: {
+            userId: userId,
+            lastSync: startTime,
+            accountsSynced: totalAccountsSynced,
+            transactionsSynced: totalTransactionsSynced,
+          }
+        });
+      }
+    } else {
+      // Fallback to global sync status for backward compatibility
+      await getPrismaClient().syncStatus.upsert({
+        where: { id: '1' },
+        update: {
+          lastSync: startTime,
+          accountsSynced: totalAccountsSynced,
+          transactionsSynced: totalTransactionsSynced,
+        },
+        create: {
+          id: '1',
+          lastSync: startTime,
+          accountsSynced: totalAccountsSynced,
+          transactionsSynced: totalTransactionsSynced,
+        },
+      });
+    }
 
     return {
       success: true,
@@ -226,13 +258,21 @@ export async function syncAllAccounts(): Promise<SyncResult> {
   }
 }
 
-export async function getLastSyncInfo() {
+export async function getLastSyncInfo(userId?: string) {
   try {
-    const syncStatus = await getPrismaClient().syncStatus.findUnique({
-      where: { id: '1' },
-    });
-    
-    return syncStatus;
+    if (userId) {
+      // Get user-specific sync status
+      const syncStatus = await getPrismaClient().syncStatus.findFirst({
+        where: { userId: userId },
+      });
+      return syncStatus;
+    } else {
+      // Fallback to global sync status for backward compatibility
+      const syncStatus = await getPrismaClient().syncStatus.findUnique({
+        where: { id: '1' },
+      });
+      return syncStatus;
+    }
   } catch (error) {
     console.error('Error getting sync status:', error);
     return null;

@@ -21,16 +21,16 @@ interface FinanceQAProps {
   selectedPrompt?: PromptHistory | null;
   onNewQuestion?: () => void;
   isDemo?: boolean;
+  sessionId?: string;
 }
 
-export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion, isDemo = false }: FinanceQAProps) {
+export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion, isDemo = false, sessionId: propSessionId }: FinanceQAProps) {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [userTier, setUserTier] = useState<string>('starter');
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
-  const [sessionId] = useState(() => isDemo ? `demo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` : null);
 
   // Demo placeholder questions that rotate
   const demoPlaceholders = [
@@ -98,8 +98,21 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion, 
     
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (sessionId) {
-        headers['x-session-id'] = sessionId;
+      
+      // Add authentication header for non-demo users
+      if (!isDemo) {
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+          console.log('Sending auth token for ask:', token.substring(0, 20) + '...');
+        } else {
+          console.log('No auth token found for ask request');
+        }
+      }
+      
+      // Add session ID for demo mode
+      if (propSessionId) {
+        headers['x-session-id'] = propSessionId;
       }
       
       const res = await fetch(`${API_URL}/ask`, {

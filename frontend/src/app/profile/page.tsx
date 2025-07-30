@@ -30,11 +30,27 @@ export default function ProfilePage() {
   // Load sync status
   const loadSyncStatus = useCallback(async () => {
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      // Add demo mode header or authentication header
+      if (isDemo) {
+        headers['x-demo-mode'] = 'true';
+        console.log('Demo mode detected, sending x-demo-mode header');
+      } else {
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+          console.log('Sending auth token for sync status:', token.substring(0, 20) + '...');
+        } else {
+          console.log('No auth token found in localStorage for sync status');
+        }
+      }
+
       const res = await fetch(`${API_URL}/sync/status`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
       });
 
       if (res.ok) {
@@ -44,7 +60,7 @@ export default function ProfilePage() {
     } catch (err) {
       console.error('Error loading sync status:', err);
     }
-  }, [API_URL]);
+  }, [API_URL, isDemo]);
 
   // Manual refresh function - handles both data sync and connection refresh
   const handleManualRefresh = async () => {
@@ -52,23 +68,36 @@ export default function ProfilePage() {
     setNotification(null); // Clear any existing notifications
     
     try {
-      // For now, just sync the data since we're managing tokens in the database
-      // In the future, we could add a bulk token refresh endpoint
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      // Add demo mode header or authentication header
+      if (isDemo) {
+        headers['x-demo-mode'] = 'true';
+        console.log('Demo mode detected, sending x-demo-mode header');
+      } else {
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+          console.log('Sending auth token:', token.substring(0, 20) + '...');
+        } else {
+          console.log('No auth token found in localStorage');
+        }
+      }
 
       // Now sync the data
       const res = await fetch(`${API_URL}/sync/manual`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
       });
 
       if (res.ok) {
         const result = await res.json();
         if (result.success) {
           // Reload both sync status and accounts after successful refresh
-          await loadSyncStatus();
-          await loadConnectedAccounts();
+          loadSyncStatusWithDemoMode(isDemo || false);
+          loadConnectedAccountsWithDemoMode(isDemo || false);
           setNotification({ message: 'Data refreshed successfully!', type: 'success' });
         }
       }
@@ -80,45 +109,117 @@ export default function ProfilePage() {
     }
   };
 
-  // Load connected accounts
-  const loadConnectedAccounts = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    
-    try {
-      // No need to check for access token since we're fetching from all tokens in DB
-
-      const res = await fetch(`${API_URL}/plaid/all-accounts`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setConnectedAccounts(data.accounts || []);
-      } else {
-        // const errorData = await res.json();
-        setError('Failed to load accounts');
-      }
-                } catch {
-              setError('Error loading accounts');
-            } finally {
-      setLoading(false);
-    }
-  }, [API_URL]);
-
   useEffect(() => {
     // Check if user came from demo page
     const referrer = document.referrer;
     const urlParams = new URLSearchParams(window.location.search);
-    const isFromDemo = referrer.includes('/demo') || window.location.pathname.includes('demo') || urlParams.get('demo') === 'true';
+    const isFromDemo = referrer.includes('/demo') || urlParams.get('demo') === 'true';
+    
+    console.log('Demo detection debug:', {
+      referrer,
+      urlParams: urlParams.get('demo'),
+      isFromDemo,
+      currentUrl: window.location.href
+    });
+    
     setIsDemo(isFromDemo);
     
-    loadConnectedAccounts();
-    loadSyncStatus();
-  }, [loadConnectedAccounts, loadSyncStatus]);
+    // Only call API functions after we've determined demo mode
+    if (isFromDemo) {
+      console.log('Demo mode detected, calling API functions');
+      // Call the functions directly with the correct demo mode
+      loadConnectedAccountsWithDemoMode(true);
+      loadSyncStatusWithDemoMode(true);
+    } else {
+      console.log('Not demo mode, calling API functions');
+      loadConnectedAccountsWithDemoMode(false);
+      loadSyncStatusWithDemoMode(false);
+    }
+  }, []);
+
+  // Helper functions that take demo mode as parameter
+  const loadConnectedAccountsWithDemoMode = useCallback(async (demoMode: boolean) => {
+    console.log('loadConnectedAccountsWithDemoMode called with demoMode:', demoMode);
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      // Add demo mode header or authentication header
+      if (demoMode) {
+        headers['x-demo-mode'] = 'true';
+        console.log('Demo mode detected, sending x-demo-mode header');
+      } else {
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+          console.log('Sending auth token:', token.substring(0, 20) + '...');
+        } else {
+          console.log('No auth token found in localStorage');
+        }
+      }
+
+      console.log('Making request to /plaid/all-accounts with headers:', headers);
+      const res = await fetch(`${API_URL}/plaid/all-accounts`, {
+        method: 'GET',
+        headers,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        console.log('Received accounts data:', data);
+        setConnectedAccounts(data.accounts || []);
+      } else {
+        if (res.status === 401) {
+          setError('Authentication required. Please log in.');
+        } else {
+          setError('Failed to load accounts');
+        }
+      }
+    } catch {
+      setError('Error loading accounts');
+    } finally {
+      setLoading(false);
+    }
+  }, [API_URL]);
+
+  const loadSyncStatusWithDemoMode = useCallback(async (demoMode: boolean) => {
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      // Add demo mode header or authentication header
+      if (demoMode) {
+        headers['x-demo-mode'] = 'true';
+        console.log('Demo mode detected, sending x-demo-mode header');
+      } else {
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+          console.log('Sending auth token for sync status:', token.substring(0, 20) + '...');
+        } else {
+          console.log('No auth token found in localStorage for sync status');
+        }
+      }
+
+      const res = await fetch(`${API_URL}/sync/status`, {
+        method: 'GET',
+        headers,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setSyncInfo(data.syncInfo);
+      }
+    } catch (err) {
+      console.error('Error loading sync status:', err);
+    }
+  }, [API_URL]);
 
   // Auto-hide notifications after 3 seconds
   useEffect(() => {
@@ -168,7 +269,11 @@ export default function ProfilePage() {
           
                             {/* Connect New Account */}
                   <div className="mb-6">
-                    <PlaidLinkButton onAccountLinked={loadConnectedAccounts} />
+                    <PlaidLinkButton onAccountLinked={() => {
+                      // Only reload accounts when an account is actually linked
+                      console.log('Account linked, reloading accounts');
+                      loadConnectedAccountsWithDemoMode(isDemo || false);
+                    }} />
                   </div>
 
           {/* Sync Status */}

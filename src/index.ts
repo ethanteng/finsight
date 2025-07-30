@@ -58,14 +58,14 @@ app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'OK' });
 });
 
+// Apply optional auth middleware to all routes
+app.use(optionalAuth);
+
 // Setup Plaid routes
 setupPlaidRoutes(app);
 
 // Setup Auth routes
 app.use('/auth', authRoutes);
-
-// Apply optional auth middleware to all routes
-app.use(optionalAuth);
 
 // OpenAI Q&A endpoint
 app.post('/ask', async (req: Request, res: Response) => {
@@ -75,6 +75,11 @@ app.post('/ask', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Question is required' });
     }
     
+    // Debug authentication
+    console.log('Ask endpoint - headers:', req.headers);
+    console.log('Ask endpoint - user:', req.user);
+    console.log('Ask endpoint - isDemo:', isDemo);
+    
     // Demo mode always works (no auth required)
     if (isDemo) {
       return handleDemoRequest(req, res);
@@ -82,6 +87,7 @@ app.post('/ask', async (req: Request, res: Response) => {
     
     // User mode requires auth when enabled
     if (isFeatureEnabled('USER_AUTH') && !req.user) {
+      console.log('Ask endpoint - Authentication required, user not found');
       return res.status(401).json({ error: 'Authentication required' });
     }
     
@@ -99,9 +105,30 @@ app.post('/ask', async (req: Request, res: Response) => {
 const handleDemoRequest = async (req: Request, res: Response) => {
   try {
     const { question } = req.body;
+    const sessionId = req.headers['x-session-id'] as string;
+    const userAgent = req.headers['user-agent'] || 'unknown';
     
-    // Get recent conversation history (last 5 Q&A pairs)
-    const recentConversations = await getPrismaClient().conversation.findMany({
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Session ID required for demo mode' });
+    }
+    
+    // Get or create demo session
+    let demoSession = await getPrismaClient().demoSession.findUnique({
+      where: { sessionId }
+    });
+    
+    if (!demoSession) {
+      demoSession = await getPrismaClient().demoSession.create({
+        data: {
+          sessionId,
+          userAgent
+        }
+      });
+    }
+    
+    // Get recent conversation history for this demo session (last 5 Q&A pairs)
+    const recentConversations = await getPrismaClient().demoConversation.findMany({
+      where: { sessionId: demoSession.id },
       orderBy: { createdAt: 'desc' },
       take: 5,
     });
@@ -112,13 +139,14 @@ const handleDemoRequest = async (req: Request, res: Response) => {
     // Always demo mode in this handler
     const marketContext = await dataOrchestrator.getMarketContext(backendTier as any, true); // true = demo mode
     
-    const answer = await askOpenAI(question, recentConversations, backendTier as any, true);
+    const answer = await askOpenAI(question, recentConversations, backendTier as any, true, undefined);
     
-    // Store the new Q&A pair (even in demo mode for consistency)
-    await getPrismaClient().conversation.create({
+    // Store the demo conversation with session association
+    await getPrismaClient().demoConversation.create({
       data: {
         question,
         answer,
+        sessionId: demoSession.id,
       },
     });
     
@@ -131,8 +159,8 @@ const handleDemoRequest = async (req: Request, res: Response) => {
           question,
           answer,
           timestamp: new Date().toISOString(),
-          sessionId: req.headers['x-session-id'] || 'unknown',
-          userAgent: req.headers['user-agent'] || 'unknown'
+          sessionId,
+          userAgent
         })
       });
     } catch (logError) {
@@ -174,7 +202,9 @@ const handleUserRequest = async (req: Request, res: Response) => {
     // Get market context (will be tier-aware in Step 4)
     const marketContext = await dataOrchestrator.getMarketContext(userTier as any, false);
     
-    const answer = await askOpenAI(question, recentConversations, userTier as any, false);
+    console.log('Ask endpoint - calling askOpenAI with userId:', user.id);
+    const answer = await askOpenAI(question, recentConversations, userTier as any, false, user.id);
+    console.log('Ask endpoint - received answer from OpenAI');
     
     // Store the new Q&A pair with user association
     await getPrismaClient().conversation.create({
@@ -194,6 +224,82 @@ const handleUserRequest = async (req: Request, res: Response) => {
     }
   }
 };
+
+// Get demo conversation history
+app.get('/demo/conversations', async (req: Request, res: Response) => {
+  try {
+    const sessionId = req.headers['x-session-id'] as string;
+    
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Session ID required' });
+    }
+    
+    const demoSession = await getPrismaClient().demoSession.findUnique({
+      where: { sessionId },
+      include: {
+        conversations: {
+          orderBy: { createdAt: 'desc' },
+          take: 20 // Get last 20 conversations
+        }
+      }
+    });
+    
+    if (!demoSession) {
+      return res.json({ conversations: [] });
+    }
+    
+    res.json({ 
+      conversations: demoSession.conversations.map(conv => ({
+        id: conv.id,
+        question: conv.question,
+        answer: conv.answer,
+        timestamp: conv.createdAt.getTime()
+      }))
+    });
+  } catch (err) {
+    if (err instanceof Error) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+});
+
+// Get user conversation history
+app.get('/conversations', async (req: Request, res: Response) => {
+  try {
+    // Require user authentication
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    // Get user's conversations from the database
+    const conversations = await getPrismaClient().conversation.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      take: 50, // Get last 50 conversations
+    });
+
+    console.log(`Found ${conversations.length} conversations for user ${user.id}`);
+    console.log('Conversations:', conversations.map(c => ({ id: c.id, question: c.question.substring(0, 50) })));
+
+    res.json({ 
+      conversations: conversations.map(conv => ({
+        id: conv.id,
+        question: conv.question,
+        answer: conv.answer,
+        timestamp: conv.createdAt.getTime()
+      }))
+    });
+  } catch (err) {
+    if (err instanceof Error) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+});
 
 // Demo logging endpoint
 app.post('/log-demo', async (req: Request, res: Response) => {
@@ -356,7 +462,25 @@ app.get('/test/alpha-vantage-api-key', async (req: Request, res: Response) => {
 // Get sync status endpoint
 app.get('/sync/status', async (req: Request, res: Response) => {
   try {
-    const syncInfo = await getLastSyncInfo();
+    // Check if this is a demo request
+    const isDemo = req.headers['x-demo-mode'] === 'true';
+    
+    if (isDemo) {
+      // Return demo sync data for demo mode
+      const { demoData } = await import('./demo-data');
+      res.json({ 
+        syncInfo: {
+          lastSync: new Date().toISOString(),
+          accountsSynced: demoData.accounts.length,
+          transactionsSynced: demoData.transactions.length
+        }
+      });
+      return;
+    }
+
+    const user = (req as any).user;
+    const userId = user?.id;
+    const syncInfo = await getLastSyncInfo(userId);
     res.json({ syncInfo });
   } catch (err) {
     if (err instanceof Error) {
@@ -370,7 +494,24 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         // Manual sync endpoint for testing
         app.post('/sync/manual', async (req: Request, res: Response) => {
           try {
-            const result = await syncAllAccounts();
+            // Check if this is a demo request
+            const isDemo = req.headers['x-demo-mode'] === 'true';
+            
+            if (isDemo) {
+              // Return demo sync data for demo mode
+              const { demoData } = await import('./demo-data');
+              res.json({ 
+                success: true,
+                accountsSynced: demoData.accounts.length,
+                transactionsSynced: demoData.transactions.length,
+                message: 'Demo data refreshed successfully'
+              });
+              return;
+            }
+
+            const user = (req as any).user;
+            const userId = user?.id;
+            const result = await syncAllAccounts(userId);
             res.json(result);
           } catch (err) {
             if (err instanceof Error) {
@@ -438,10 +579,36 @@ app.get('/sync/status', async (req: Request, res: Response) => {
     // Privacy and data control endpoints
     app.get('/privacy/data', async (req: Request, res: Response) => {
       try {
-        // Return what data we have about the user (anonymized)
-        const accounts = await getPrismaClient().account.findMany();
-        const transactions = await getPrismaClient().transaction.findMany();
+        // Check if this is a demo request
+        const isDemo = req.headers['x-demo-mode'] === 'true';
+        
+        if (isDemo) {
+          // Return demo data for demo mode
+          const { demoData } = await import('./demo-data');
+          res.json({
+            accounts: demoData.accounts.length,
+            transactions: demoData.transactions.length,
+            conversations: 0, // Demo conversations are handled separately
+            lastSync: await getLastSyncInfo() // Demo mode uses global sync status
+          });
+          return;
+        }
+
+        // Require user authentication for real users
+        const user = req.user;
+        if (!user) {
+          return res.status(401).json({ error: 'Authentication required' });
+        }
+
+        // Return user-specific data only
+        const accounts = await getPrismaClient().account.findMany({
+          where: { userId: user.id }
+        });
+        const transactions = await getPrismaClient().transaction.findMany({
+          where: { account: { userId: user.id } }
+        });
         const conversations = await getPrismaClient().conversation.findMany({
+          where: { userId: user.id },
           orderBy: { createdAt: 'desc' },
           take: 10
         });
@@ -450,7 +617,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
           accounts: accounts.length,
           transactions: transactions.length,
           conversations: conversations.length,
-          lastSync: await getLastSyncInfo()
+          lastSync: await getLastSyncInfo(user.id)
         });
       } catch (err) {
         res.status(500).json({ error: 'Failed to retrieve data summary' });

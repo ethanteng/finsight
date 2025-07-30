@@ -16,28 +16,50 @@ export default function DemoPage() {
   const [promptHistory, setPromptHistory] = useState<PromptHistory[]>([]);
   const [selectedPrompt, setSelectedPrompt] = useState<PromptHistory | null>(null);
   const [showSidebar, setShowSidebar] = useState(true);
+  const [sessionId, setSessionId] = useState<string>('');
 
-  // Load demo prompt history from localStorage on mount
+  // Generate or retrieve session ID for demo mode from localStorage (client-side only)
   useEffect(() => {
-    const saved = localStorage.getItem('linc_demo_prompt_history');
-    if (saved) {
+    // Check if we already have a session ID in localStorage
+    const existingSessionId = localStorage.getItem('demo_session_id');
+    if (existingSessionId) {
+      setSessionId(existingSessionId);
+    } else {
+      // Generate new session ID if none exists
+      const newSessionId = `demo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      localStorage.setItem('demo_session_id', newSessionId);
+      setSessionId(newSessionId);
+    }
+  }, []);
+
+  // Load demo prompt history from backend on mount
+  useEffect(() => {
+    if (!sessionId) return; // Don't load until we have a session ID
+    
+    const loadDemoHistory = async () => {
       try {
-        const history = JSON.parse(saved);
-        setPromptHistory(history);
-        // Set the most recent prompt as selected if there are any
-        if (history.length > 0) {
-          setSelectedPrompt(history[0]);
+        const API_URL = process.env.NEXT_PUBLIC_API_URL;
+        const res = await fetch(`${API_URL}/demo/conversations`, {
+          headers: {
+            'x-session-id': sessionId
+          }
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          setPromptHistory(data.conversations);
+          // Set the most recent prompt as selected if there are any
+          if (data.conversations.length > 0) {
+            setSelectedPrompt(data.conversations[0]);
+          }
         }
       } catch (error) {
         console.error('Failed to load demo prompt history:', error);
       }
-    }
-  }, []);
-
-  // Save demo prompt history to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('linc_demo_prompt_history', JSON.stringify(promptHistory));
-  }, [promptHistory]);
+    };
+    
+    loadDemoHistory();
+  }, [sessionId]);
 
   const addToHistory = (question: string, answer: string) => {
     const newPrompt: PromptHistory = {
@@ -48,6 +70,7 @@ export default function DemoPage() {
     };
     setPromptHistory(prev => [newPrompt, ...prev.slice(0, 49)]); // Keep last 50 prompts
     setSelectedPrompt(newPrompt);
+    // Note: Backend handles persistence via the /ask endpoint
   };
 
   const formatTimestamp = (timestamp: number) => {
@@ -202,6 +225,7 @@ export default function DemoPage() {
                 selectedPrompt={selectedPrompt}
                 onNewQuestion={handleNewQuestion}
                 isDemo={true}
+                sessionId={sessionId}
               />
             </div>
           </div>

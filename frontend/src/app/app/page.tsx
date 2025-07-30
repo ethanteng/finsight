@@ -57,66 +57,88 @@ export default function AppPage() {
     checkAuth();
   }, [router]);
 
-  // Load prompt history from localStorage on mount
+  // Load prompt history from backend on mount
   useEffect(() => {
     if (!isAuthenticated) return;
     
-    const saved = localStorage.getItem('linc_prompt_history');
-    if (saved) {
-      try {
-        const history = JSON.parse(saved);
-        setPromptHistory(history);
-        // Set the most recent prompt as selected if there are any
-        if (history.length > 0) {
-          setSelectedPrompt(history[0]);
-        }
-      } catch (error) {
-        console.error('Failed to load prompt history:', error);
-      }
-    }
-    
-    // Check if backend has any conversations - if not, clear localStorage
-    const checkBackendData = async () => {
+    const loadConversationHistory = async () => {
       try {
         const API_URL = process.env.NEXT_PUBLIC_API_URL;
         const token = localStorage.getItem('auth_token');
-        const res = await fetch(`${API_URL}/privacy/data`, {
+        const res = await fetch(`${API_URL}/conversations`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
         });
+        
         if (res.ok) {
           const data = await res.json();
-          if (data.conversations === 0 && saved) {
-            // Backend has no conversations but localStorage has data - clear it
-            localStorage.removeItem('linc_prompt_history');
-            setPromptHistory([]);
-            setSelectedPrompt(null);
+          console.log('Backend response:', data);
+          const history: PromptHistory[] = data.conversations.map((conv: any) => ({
+            id: conv.id,
+            question: conv.question,
+            answer: conv.answer,
+            timestamp: conv.timestamp
+          }));
+          
+          setPromptHistory(history);
+          if (history.length > 0) {
+            setSelectedPrompt(history[0]);
           }
+          
+          console.log(`Loaded ${history.length} conversations from backend`);
+        } else {
+          console.error('Failed to load conversation history:', res.status);
         }
       } catch (error) {
-        console.error('Failed to check backend data:', error);
+        console.error('Failed to load conversation history:', error);
       }
     };
     
-    checkBackendData();
+    loadConversationHistory();
   }, [isAuthenticated]);
 
-  // Save prompt history to localStorage whenever it changes
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    localStorage.setItem('linc_prompt_history', JSON.stringify(promptHistory));
-  }, [promptHistory, isAuthenticated]);
+  // Note: Conversation history is now stored in the backend, not localStorage
 
   const addToHistory = (question: string, answer: string) => {
-    const newPrompt: PromptHistory = {
-      id: Date.now().toString(),
-      question,
-      answer,
-      timestamp: Date.now(),
+    // Note: Conversations are now stored in the backend via the /ask endpoint
+    // Reload conversation history from backend to show the new conversation
+    console.log('Conversation saved to backend via /ask endpoint, reloading history...');
+    
+    const loadConversationHistory = async () => {
+      try {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL;
+        const token = localStorage.getItem('auth_token');
+        const res = await fetch(`${API_URL}/conversations`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          const history: PromptHistory[] = data.conversations.map((conv: any) => ({
+            id: conv.id,
+            question: conv.question,
+            answer: conv.answer,
+            timestamp: conv.timestamp
+          }));
+          
+          setPromptHistory(history);
+          if (history.length > 0) {
+            setSelectedPrompt(history[0]);
+          }
+          
+          console.log(`Reloaded ${history.length} conversations from backend`);
+        } else {
+          console.error('Failed to reload conversation history:', res.status);
+        }
+      } catch (error) {
+        console.error('Failed to reload conversation history:', error);
+      }
     };
-    setPromptHistory(prev => [newPrompt, ...prev.slice(0, 49)]); // Keep last 50 prompts
-    setSelectedPrompt(newPrompt);
+    
+    loadConversationHistory();
   };
 
   const formatTimestamp = (timestamp: number) => {
@@ -147,7 +169,6 @@ export default function AppPage() {
 
   const handleLogout = () => {
     localStorage.removeItem('auth_token');
-    localStorage.removeItem('linc_prompt_history');
     router.push('/');
   };
 

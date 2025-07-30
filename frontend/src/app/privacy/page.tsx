@@ -23,7 +23,23 @@ export default function PrivacyPage() {
 
   const loadPrivacyData = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/privacy/data`);
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      // Add demo mode header or authentication header
+      if (isDemo) {
+        headers['x-demo-mode'] = 'true';
+      } else {
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+      }
+
+      const res = await fetch(`${API_URL}/privacy/data`, {
+        headers,
+      });
       if (res.ok) {
         const data = await res.json();
         setPrivacyData(data);
@@ -33,13 +49,13 @@ export default function PrivacyPage() {
     } finally {
       setLoading(false);
     }
-  }, [API_URL]);
+  }, [API_URL, isDemo]);
 
   useEffect(() => {
     // Check if user came from demo page
     const referrer = document.referrer;
     const urlParams = new URLSearchParams(window.location.search);
-    const isFromDemo = referrer.includes('/demo') || window.location.pathname.includes('demo') || urlParams.get('demo') === 'true';
+    const isFromDemo = referrer.includes('/demo') || urlParams.get('demo') === 'true';
     setIsDemo(isFromDemo);
     
     loadPrivacyData();
