@@ -202,7 +202,7 @@ describe('Complete User Workflow Tests', () => {
       // Step 1: Ask questions in demo mode
 
       // Step 4: Ask questions in demo mode
-      const sessionId = 'demo-workflow-session';
+      const sessionId = `demo-workflow-session-${Date.now()}`;
       const questions = [
         'What is my current balance?',
         'How much did I spend this month?',
@@ -296,7 +296,7 @@ describe('Complete User Workflow Tests', () => {
     });
 
     it('should maintain demo session persistence', async () => {
-      const sessionId = 'persistent-demo-session';
+      const sessionId = `persistent-demo-session-${Date.now()}`;
 
       // Ask first question
       const response1 = await request(app)
@@ -391,10 +391,11 @@ describe('Complete User Workflow Tests', () => {
     });
 
     it('should allow switching between demo and logged-in modes', async () => {
+      const sessionId = `mixed-session-${Date.now()}`;
       // Demo request
       const demoResponse = await request(app)
         .post('/ask')
-        .set('x-session-id', 'mixed-session')
+        .set('x-session-id', sessionId)
         .send({
           question: 'What is my balance?',
           isDemo: true
@@ -415,7 +416,7 @@ describe('Complete User Workflow Tests', () => {
       // Demo request again
       const demoResponse2 = await request(app)
         .post('/ask')
-        .set('x-session-id', 'mixed-session')
+        .set('x-session-id', sessionId)
         .send({
           question: 'How much did I spend?',
           isDemo: true
@@ -426,7 +427,7 @@ describe('Complete User Workflow Tests', () => {
       // Verify data isolation
       // First find the demo session
       const demoSession = await prisma.demoSession.findUnique({
-        where: { sessionId: 'mixed-session' }
+        where: { sessionId: sessionId }
       });
       
       expect(demoSession).toBeTruthy();
@@ -474,13 +475,14 @@ describe('Complete User Workflow Tests', () => {
     });
 
     it('should handle concurrent demo and logged-in requests', async () => {
+      const sessionId = `concurrent-demo-${Date.now()}`;
       const requests = [
         // Demo requests
-        request(app).post('/ask').set('x-session-id', 'concurrent-demo').send({
+        request(app).post('/ask').set('x-session-id', sessionId).send({
           question: 'Demo question 1',
           isDemo: true
         }),
-        request(app).post('/ask').set('x-session-id', 'concurrent-demo').send({
+        request(app).post('/ask').set('x-session-id', sessionId).send({
           question: 'Demo question 2',
           isDemo: true
         }),
@@ -533,11 +535,12 @@ describe('Complete User Workflow Tests', () => {
     });
 
     it('should handle rate limiting gracefully', async () => {
+      const sessionId = `rate-limit-test-${Date.now()}`;
       // Make multiple rapid requests
       const requests = Array(10).fill(null).map(() =>
         request(app)
           .post('/ask')
-          .set('x-session-id', 'rate-limit-test')
+          .set('x-session-id', sessionId)
           .send({
             question: 'Test question',
             isDemo: true
