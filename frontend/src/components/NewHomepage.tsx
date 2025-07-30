@@ -34,7 +34,7 @@ const NewHomepage = () => {
                 size="sm"
                 onClick={() => scrollToSection('waitlist')}
               >
-                Join Waitlist
+                Get Early Access
               </Button>
             </div>
           </div>
@@ -78,10 +78,10 @@ const NewHomepage = () => {
                 className="group"
                 onClick={() => scrollToSection('waitlist')}
               >
-                Join the Waitlist
+                Get Early Access
               </Button>
               <a href="/demo">
-                <Button variant="outline" size="xl">Try Our Demo</Button>
+                <Button variant="outline" size="xl">See It In Action</Button>
               </a>
             </div>
             
@@ -245,10 +245,10 @@ const NewHomepage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-16">
             <h2 className="text-3xl md:text-4xl font-bold">
-              What You Can <span className="gradient-text">Ask Me</span>
+              What You Can <span className="gradient-text">Ask Linc</span>
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              I'm here for wherever you are in your financial journey. Here's what people ask me about:
+              Linc is here for wherever you are in your financial journey. Here are common things people ask about:
             </p>
           </div>
           
@@ -348,7 +348,7 @@ const NewHomepage = () => {
               What <span className="gradient-text">ChatGPT Knows</span>
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Most people don't realize this, but ChatGPT doesn't come with live market knowledge. That's where I make a real difference.
+              Most people don't realize this, but ChatGPT doesn't come with live market knowledge. That's where Linc makes a real difference.
             </p>
           </div>
           
@@ -389,9 +389,9 @@ const NewHomepage = () => {
           <div className="mt-16 max-w-4xl mx-auto">
             <Card className="glass-card border-primary/20 bg-gradient-to-r from-primary/5 to-secondary/5">
               <CardContent className="p-8 text-center space-y-4">
-                <h3 className="text-2xl font-bold">That's where I make a real difference.</h3>
+                <h3 className="text-2xl font-bold">That's where Linc makes a real difference.</h3>
                 <p className="text-lg text-muted-foreground leading-relaxed">
-                  I feed trusted real-time data into ChatGPT behind the scenes — so when you ask,{" "}
+                  Linc feeds trusted real-time data into ChatGPT behind the scenes — so when you ask,{" "}
                   <span className="font-semibold text-foreground">&quot;Should I roll over this CD?&quot;</span>{" "}
                   you get an answer based on{" "}
                   <span className="font-semibold text-foreground">today's best rates</span>{" "}
@@ -409,10 +409,10 @@ const NewHomepage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-16">
             <h2 className="text-3xl md:text-4xl font-bold">
-              Why Ask Linc is <span className="gradient-text">different</span>
+              Why Linc is <span className="gradient-text">different</span>
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              I'm not a budget tracker, robo-advisor, or complicated dashboard. I'm your on-demand financial analyst, powered by ChatGPT + real-time market awareness.
+              Linc is not a budget tracker, robo-advisor, or complicated dashboard. It's your on-demand financial analyst, powered by ChatGPT + real-time market awareness.
             </p>
           </div>
           
@@ -475,7 +475,7 @@ const NewHomepage = () => {
               period: "/month",
               description: "For people with checking, savings, and maybe a 401(k). You're focused on saving more and getting clarity.",
               features: ["Unlimited questions", "Link up to 3 accounts", "Spending & savings analysis", "Basic financial insights"],
-              cta: "Join Waitlist",
+              cta: "Get Early Access",
               popular: false
             }, {
               name: "Standard",
@@ -483,7 +483,7 @@ const NewHomepage = () => {
               period: "/month",
               description: "You've leveled up. You want smarter context to grow your money with real-world market awareness.",
               features: ["Unlimited accounts & questions", "Market context (CPI, Fed rates)", "Investment analysis", "Goal tracking & progress"],
-              cta: "Join Waitlist",
+              cta: "Get Early Access",
               popular: true
             }, {
               name: "Premium",
@@ -491,7 +491,7 @@ const NewHomepage = () => {
               period: "/month",
               description: "Complex finances with long-term goals. Get advisor-level insights without the fees.",
               features: ["Everything in Standard", "Live market data & rates", "What-if scenario planning", "Advanced portfolio analysis"],
-              cta: "Join Waitlist",
+              cta: "Get Early Access",
               popular: false
             }].map((plan, index) => (
               <Card key={index} className={`relative overflow-hidden hover:shadow-2xl transition-all duration-300 hover:scale-105 ${plan.popular ? 'ring-2 ring-primary shadow-xl' : ''}`}>
@@ -590,10 +590,10 @@ const NewHomepage = () => {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-16">
             <h2 className="text-3xl md:text-4xl font-bold">
-              Questions I Get <span className="gradient-text">A Lot</span>
+              Questions We Get <span className="gradient-text">A Lot</span>
             </h2>
             <p className="text-xl text-muted-foreground">
-              Let me clear up some common concerns
+              Let's clear up some common concerns
             </p>
           </div>
           
@@ -635,7 +635,7 @@ const NewHomepage = () => {
             Ready to get <span className="gradient-text">real answers</span> about your money?
           </h2>
           <p className="text-xl text-muted-foreground">
-            Join thousands of people who've stopped guessing and started getting clear, honest financial advice
+            Stop guessing and started getting clear, honest financial advice
           </p>
           <div className="max-w-md mx-auto">
             <MailerLiteForm />
