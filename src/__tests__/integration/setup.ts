@@ -5,11 +5,15 @@ const prisma = new PrismaClient();
 // Global setup for integration tests
 beforeAll(async () => {
   // Ensure database is clean before running integration tests
+  await prisma.demoConversation.deleteMany();
+  await prisma.demoSession.deleteMany();
   await prisma.conversation.deleteMany();
   await prisma.transaction.deleteMany();
   await prisma.account.deleteMany();
   await prisma.accessToken.deleteMany();
   await prisma.syncStatus.deleteMany();
+  await prisma.privacySettings.deleteMany();
+  await prisma.user.deleteMany();
   
   console.log('Integration test database cleaned');
 });
