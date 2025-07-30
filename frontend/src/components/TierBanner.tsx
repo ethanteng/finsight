@@ -21,7 +21,7 @@ export default function TierBanner() {
       const response = await fetch(`${API_URL}/user/tier`, {
         credentials: 'include',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       });
       
@@ -71,7 +71,7 @@ export default function TierBanner() {
       case 'premium':
         return 'Premium';
       case 'demo':
-        return 'Demo';
+        return 'Demo Mode';
       default:
         return tier;
     }
@@ -81,7 +81,7 @@ export default function TierBanner() {
   if (isDemo) {
     return (
       <div className={`px-3 py-1 rounded-full text-xs font-medium ${getTierColor('demo')}`}>
-        {loading ? 'Loading...' : `${getTierDisplayName('demo')} Plan`}
+        {loading ? 'Loading...' : getTierDisplayName('demo')}
       </div>
     );
   }
