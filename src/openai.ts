@@ -21,100 +21,98 @@ function enforceTierRestrictions(answer: string): string {
   return answer;
 }
 
-export async function askOpenAI(question: string, conversationHistory: Conversation[] = [], userTier: UserTier | string = UserTier.STARTER, isDemo: boolean = false, userId?: string): Promise<string> {
+export async function askOpenAI(
+  question: string, 
+  conversationHistory: Conversation[] = [], 
+  userTier: UserTier | string = UserTier.STARTER, 
+  isDemo: boolean = false, 
+  userId?: string,
+  model?: string
+): Promise<string> {
   // Convert string tier to enum if needed
   const tier = typeof userTier === 'string' ? (userTier as UserTier) : userTier;
-  
-  // Fetch accounts and transactions from DB (or use demo data)
-  let accounts: any[] = [];
-  let transactions: any[] = [];
-  
+
+  // For demo mode, import demo data
   if (isDemo) {
-    // Use demo data instead of real database data
     console.log('OpenAI: Demo mode detected, importing demo data...');
     try {
-      // Use require for production compatibility
-      const demoDataModule = require('./demo-data');
-      const { demoData } = demoDataModule;
+      const { demoData } = await import('./demo-data');
       console.log('OpenAI: Demo data imported successfully');
       console.log('OpenAI: Demo data structure:', Object.keys(demoData));
       console.log('OpenAI: Demo accounts count:', demoData.accounts?.length || 0);
       console.log('OpenAI: Demo transactions count:', demoData.transactions?.length || 0);
-      
-      accounts = demoData.accounts.map((account: any) => ({
-        id: account.id,
-        name: account.name,
-        balance: account.balance,
-        type: account.type,
-        institution: account.institution,
-        lastUpdated: new Date(account.lastUpdated)
-      }));
-      transactions = demoData.transactions.map((transaction: any) => ({
-        id: transaction.id,
-        accountId: transaction.accountId,
-        amount: transaction.amount,
-        category: transaction.category,
-        date: new Date(transaction.date),
-        description: transaction.description
-      }));
-      
-      console.log('OpenAI: Processed accounts:', accounts.length);
-      console.log('OpenAI: Processed transactions:', transactions.length);
     } catch (error) {
       console.error('OpenAI: Error importing demo data:', error);
-      // Fallback to empty arrays
-      accounts = [];
-      transactions = [];
-    }
-  } else {
-    // Use real database data - filter by user if userId is provided
-    if (userId) {
-      console.log('OpenAI: Fetching user-specific data for userId:', userId);
-      accounts = await prisma.account.findMany({
-        where: { userId: userId }
-      });
-      transactions = await prisma.transaction.findMany({
-        where: { 
-          account: {
-            userId: userId
-          }
-        },
-        orderBy: { date: 'desc' },
-        take: 200, // increased limit for context
-      });
-      console.log('OpenAI: Found', accounts.length, 'accounts and', transactions.length, 'transactions for user', userId);
-    } else {
-      console.log('OpenAI: No userId provided, fetching all data (this should not happen for authenticated users)');
-      accounts = await prisma.account.findMany();
-      transactions = await prisma.transaction.findMany({
-        orderBy: { date: 'desc' },
-        take: 200, // increased limit for context
-      });
     }
   }
 
+  // Get user-specific data
+  let accounts: any[] = [];
+  let transactions: any[] = [];
+
+  try {
+    if (userId) {
+      console.log('OpenAI: Fetching user-specific data for userId:', userId);
+      const { getPrismaClient } = await import('./index');
+      const prisma = getPrismaClient();
+      
+      accounts = await prisma.account.findMany({
+        where: { userId },
+        include: { transactions: true }
+      });
+      
+      transactions = await prisma.transaction.findMany({
+        where: { account: { userId } },
+        orderBy: { date: 'desc' },
+        take: 50
+      });
+      
+      console.log('OpenAI: Found', accounts.length, 'accounts and', transactions.length, 'transactions for user', userId);
+    } else {
+      console.log('OpenAI: No userId provided, fetching all data (this should not happen for authenticated users)');
+    }
+  } catch (error) {
+    console.error('OpenAI: Error fetching user data:', error);
+  }
+
   // Anonymize data before sending to OpenAI (skip for demo mode)
-  const accountSummary = isDemo ? 
-    `DEMO ACCOUNTS:\n${accounts.map(acc => `- ${acc.name} (${acc.institution}): $${acc.balance.toLocaleString()}`).join('\n')}` : 
-    anonymizeAccountData(accounts);
-  const transactionSummary = isDemo ? 
-    `DEMO TRANSACTIONS:\n${transactions.slice(0, 10).map(t => `- ${t.date}: ${t.description} (${t.category}): $${t.amount}`).join('\n')}` : 
-    anonymizeTransactionData(transactions);
-  
-  // Debug: Log what data the AI will see
+  if (!isDemo) {
+    accounts = accounts.map(account => ({
+      ...account,
+      name: `Account_${account.id.slice(-4)}`,
+      plaidAccountId: `plaid_${account.id.slice(-8)}`
+    }));
+    
+    transactions = transactions.map(transaction => ({
+      ...transaction,
+      name: transaction.name ? `Transaction_${transaction.id.slice(-4)}` : 'Unknown',
+      merchantName: transaction.merchantName ? `Merchant_${transaction.id.slice(-4)}` : 'Unknown'
+    }));
+  }
+
+  // Create account summary
+  const accountSummary = accounts.map(account => 
+    `- ${account.name} (${account.type}/${account.subtype}): $${account.currentBalance?.toFixed(2) || '0.00'}`
+  ).join('\n');
+
+  // Create transaction summary
+  const transactionSummary = transactions.map(transaction => 
+    `- ${transaction.name} (${transaction.category?.[0] || 'Unknown'}): $${transaction.amount?.toFixed(2) || '0.00'} on ${transaction.date}`
+  ).join('\n');
+
   console.log('OpenAI: Account summary for AI:', accountSummary);
   console.log('OpenAI: Transaction summary for AI:', transactionSummary);
   console.log('OpenAI: Number of accounts found:', accounts.length);
   console.log('OpenAI: Number of transactions found:', transactions.length);
   console.log('OpenAI: User ID being used:', userId);
-  
-  // Debug: Log conversation history
+
+  // Get conversation history
   console.log('OpenAI: Conversation history length:', conversationHistory.length);
   if (conversationHistory.length > 0) {
     console.log('OpenAI: Recent conversation questions:', conversationHistory.slice(0, 3).map(c => c.question));
   }
-  
-  // Debug: Log demo data for troubleshooting
+
+  // For demo mode, use demo data
   if (isDemo) {
     console.log('OpenAI: Demo accounts:', accounts.length);
     console.log('OpenAI: Demo transactions:', transactions.length);
@@ -123,44 +121,49 @@ export async function askOpenAI(question: string, conversationHistory: Conversat
     console.log('OpenAI: Full account summary:', accountSummary);
     console.log('OpenAI: Full transaction summary:', transactionSummary);
   }
-  
-  // Get market context based on user tier
-  const marketContext = await dataOrchestrator.getMarketContext(tier, isDemo);
-  
-  // Create tier-aware system prompt
-  let systemPrompt = `You are a financial assistant. 
 
-IMPORTANT: You have access to the following data in this system prompt:
-- Economic indicators (Fed rate, CPI, mortgage rate) if listed below
-- Live market data (CD rates, treasury yields) if listed below
+  // Get market context based on tier
+  const { DataOrchestrator } = await import('./data/orchestrator');
+  const orchestrator = new DataOrchestrator();
+  const marketContext = await orchestrator.getMarketContext(tier, isDemo);
+  const tierAccess = orchestrator.getTierAccess(tier);
 
-Please provide the data when available and include source attribution.
-
-  ${isDemo ? 'DEMO MODE: You are in demo mode with realistic financial data. Use the account and transaction data provided below to answer questions.' : ''}
-
-Here is the user's account summary:\n${accountSummary}\n\nRecent transactions:\n${transactionSummary}
-
-${isDemo ? 'IMPORTANT: The data above is DEMO DATA. When users ask about their balance, accounts, or transactions, use this demo data to provide realistic answers. Do NOT say the data is not available - it IS available in the demo data above.' : ''}`;
-
-  // Add tier information and upgrade suggestions
-  const tierAccess = dataOrchestrator.getTierAccess(tier);
   console.log('OpenAI: Tier access for', tier, ':', tierAccess);
   console.log('OpenAI: Market context available:', {
     hasEconomicIndicators: !!marketContext.economicIndicators,
     hasLiveMarketData: !!marketContext.liveMarketData
   });
-  
-  // Add tier information
-  systemPrompt += `\n\nTIER INFORMATION:
-- Current tier: ${tier.toUpperCase()}
-- Economic indicators: ${tierAccess.hasEconomicContext ? 'Available' : 'Not available'}
-- Live market data: ${tierAccess.hasLiveData ? 'Available' : 'Not available'}
-- Scenario planning: ${tierAccess.hasScenarioPlanning ? 'Available' : 'Not available'}
 
-DATA ACCESS RULES:
-- If economic indicators are provided below, you CAN provide economic data (Fed rate, CPI, mortgage rate)
-- If live market data is provided below, you CAN provide live market data (CD rates, treasury yields, mortgage rates)
-- If data is NOT provided below, suggest an upgrade instead of providing any market data
+  // Build system prompt
+  let systemPrompt = `You are Linc, an AI-powered financial analyst. You help users understand their finances by analyzing their account data and providing clear, actionable insights.
+
+IMPORTANT: You have access to the user's financial data and current market conditions. Use this data to provide personalized, accurate financial advice.
+
+USER'S FINANCIAL DATA:
+Accounts:
+${accountSummary || 'No accounts found'}
+
+Recent Transactions:
+${transactionSummary || 'No transactions found'}
+
+MARKET CONTEXT:
+${marketContext.economicIndicators ? `Economic Indicators:
+- CPI Index: ${marketContext.economicIndicators.cpi.value} (${marketContext.economicIndicators.cpi.date})
+- Fed Funds Rate: ${marketContext.economicIndicators.fedRate.value}%
+- Average 30-year Mortgage Rate: ${marketContext.economicIndicators.mortgageRate.value}%
+- Average Credit Card APR: ${marketContext.economicIndicators.creditCardAPR.value}%` : 'No economic indicators available'}
+
+${marketContext.liveMarketData ? `Live Market Data:
+CD Rates (APY): ${marketContext.liveMarketData.cdRates.map(cd => `${cd.term}: ${cd.rate}%`).join(', ')}
+Treasury Yields: ${marketContext.liveMarketData.treasuryYields.slice(0, 4).map(t => `${t.term}: ${t.yield}%`).join(', ')}
+Current Mortgage Rates: ${marketContext.liveMarketData.mortgageRates.map(m => `${m.type}: ${m.rate}%`).join(', ')}` : 'No live market data available'}
+
+INSTRUCTIONS:
+- Provide clear, actionable financial advice
+- Use specific numbers from the user's data
+- Reference current market conditions when relevant
+- Be conversational but professional
+- If you don't have enough data, ask for more information
 - Always provide source attribution when using external data`;
 
   // Add market context based on tier
@@ -252,11 +255,23 @@ IMPORTANT: When asked about APY (Annual Percentage Yield):
   messages.push({ role: 'user', content: question });
 
   const completion = await openai.chat.completions.create({
-    model: 'gpt-4o',
+    model: model || process.env.OPENAI_MODEL || 'gpt-4o',
     messages,
     max_tokens: 2000,
   });
 
   const answer = completion.choices[0]?.message?.content || 'No answer generated.';
   return enforceTierRestrictions(answer);
+}
+
+// Function specifically for tests that uses a cheaper model
+export async function askOpenAIForTests(
+  question: string, 
+  conversationHistory: Conversation[] = [], 
+  userTier: UserTier | string = UserTier.STARTER, 
+  isDemo: boolean = false, 
+  userId?: string
+): Promise<string> {
+  // Use a cheaper model for tests
+  return askOpenAI(question, conversationHistory, userTier, isDemo, userId, 'gpt-3.5-turbo');
 }
