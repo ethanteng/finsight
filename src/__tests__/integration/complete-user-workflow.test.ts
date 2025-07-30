@@ -75,7 +75,7 @@ describe('Complete User Workflow Tests', () => {
 
       // Step 4: Connect Plaid account (simulate)
       const plaidResponse = await request(app)
-        .post('/plaid/exchange_token')
+        .post('/plaid/exchange_public_token')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           public_token: 'test-public-token',
@@ -83,18 +83,21 @@ describe('Complete User Workflow Tests', () => {
         });
 
       // Handle Plaid API failure gracefully in test environment
+      let uniqueToken: string;
       if (plaidResponse.status === 500) {
         console.log('Plaid API call failed (expected in test environment)');
         // Create mock access token for testing
+        uniqueToken = `test-access-token-${Date.now()}-${Math.random()}`;
         await prisma.accessToken.create({
           data: {
-            token: 'test-access-token',
+            token: uniqueToken,
             itemId: 'test-item-id',
             userId: userId
           }
         });
       } else {
         expect(plaidResponse.status).toBe(200);
+        uniqueToken = 'test-access-token'; // Use default for successful response
       }
 
       // Step 5: Sync accounts
@@ -102,16 +105,17 @@ describe('Complete User Workflow Tests', () => {
         .post('/plaid/sync_accounts')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
-          access_token: 'test-access-token'
+          access_token: uniqueToken
         });
 
       // Handle authentication or API failure gracefully
       if (syncAccountsResponse.status === 401 || syncAccountsResponse.status === 500) {
         console.log('Sync accounts failed (expected in test environment)');
         // Create mock account data
+        const uniqueAccountId = `test-account-${Date.now()}-${Math.random()}`;
         await prisma.account.create({
           data: {
-            plaidAccountId: 'test-account-1',
+            plaidAccountId: uniqueAccountId,
             name: 'Test Checking Account',
             type: 'depository',
             subtype: 'checking',
@@ -141,8 +145,12 @@ describe('Complete User Workflow Tests', () => {
       const userData = await prisma.user.findUnique({
         where: { id: userId },
         include: {
-          accounts: true,
-          transactions: true
+          accounts: {
+            include: {
+              transactions: true
+            }
+          },
+          conversations: true
         }
       });
 
@@ -156,7 +164,7 @@ describe('Complete User Workflow Tests', () => {
         .post('/auth/register')
         .send({
           email: 'workflow-test@example.com',
-          password: 'TestPassword123',
+          password: 'TestPassword123!',
           tier: 'starter'
         });
 
@@ -208,9 +216,17 @@ describe('Complete User Workflow Tests', () => {
       }
 
       // Step 5: Verify demo conversations are stored
+      // First find the demo session
+      const demoSession = await prisma.demoSession.findUnique({
+        where: { sessionId: sessionId }
+      });
+      
+      expect(demoSession).toBeTruthy();
+      
+      // Then find conversations for this session
       const demoConversations = await prisma.demoConversation.findMany({
         where: {
-          sessionId: sessionId
+          sessionId: demoSession!.id
         }
       });
 
@@ -221,8 +237,8 @@ describe('Complete User Workflow Tests', () => {
       const realUser = await prisma.user.create({
         data: {
           email: 'demo-test@example.com',
-          password: 'hashedpassword',
-          name: 'Demo Test User'
+          passwordHash: 'hashedpassword', // This should be properly hashed in a real scenario
+          tier: 'starter'
         }
       });
 
@@ -267,8 +283,16 @@ describe('Complete User Workflow Tests', () => {
       expect([200, 500]).toContain(response2.status);
 
       // Verify both conversations are stored
+      // First find the demo session
+      const demoSession = await prisma.demoSession.findUnique({
+        where: { sessionId: sessionId }
+      });
+      
+      expect(demoSession).toBeTruthy();
+      
+      // Then find conversations for this session
       const conversations = await prisma.demoConversation.findMany({
-        where: { sessionId: sessionId },
+        where: { sessionId: demoSession!.id },
         orderBy: { createdAt: 'asc' }
       });
 
@@ -285,10 +309,12 @@ describe('Complete User Workflow Tests', () => {
         .post('/auth/register')
         .send({
           email: 'mixed-test@example.com',
-          password: 'testpassword123',
-          name: 'Mixed Test User'
+          password: 'TestPassword123',
+          tier: 'starter'
         });
 
+      expect(registerResponse.status).toBe(201);
+      expect(registerResponse.body).toHaveProperty('token');
       authToken = registerResponse.body.token;
     });
 
@@ -326,8 +352,16 @@ describe('Complete User Workflow Tests', () => {
       expect([200, 500]).toContain(demoResponse2.status);
 
       // Verify data isolation
-      const demoConversations = await prisma.demoConversation.findMany({
+      // First find the demo session
+      const demoSession = await prisma.demoSession.findUnique({
         where: { sessionId: 'mixed-session' }
+      });
+      
+      expect(demoSession).toBeTruthy();
+      
+      // Then find conversations for this session
+      const demoConversations = await prisma.demoConversation.findMany({
+        where: { sessionId: demoSession!.id }
       });
 
       const userConversations = await prisma.conversation.findMany({
