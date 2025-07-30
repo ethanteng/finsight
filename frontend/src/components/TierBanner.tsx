@@ -24,17 +24,24 @@ export default function TierBanner() {
         }
       });
       
+      console.log('TierBanner: /user/tier response status:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log('TierBanner: /user/tier data:', data);
         setTierInfo(data);
       } else if (response.status === 401) {
         // User not authenticated, get the test tier from backend
+        console.log('TierBanner: User not authenticated, fetching test tier');
         const testTierResponse = await fetch(`${API_URL}/test/current-tier`);
+        console.log('TierBanner: /test/current-tier response status:', testTierResponse.status);
         if (testTierResponse.ok) {
           const testTierData = await testTierResponse.json();
+          console.log('TierBanner: /test/current-tier data:', testTierData);
           setTierInfo({ tier: testTierData.backendTier, message: testTierData.message });
         } else {
           // Fallback if test tier endpoint fails
+          console.log('TierBanner: /test/current-tier failed');
           setTierInfo(null);
         }
       }
