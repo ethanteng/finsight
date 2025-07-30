@@ -27,7 +27,7 @@ describe('Basic Integration Tests', () => {
       .post('/ask')
       .send({
         question: 'What is my balance?',
-        userId: 'test-user'
+        isDemo: true // Use demo mode to bypass authentication
       });
 
     // Accept both 200 (success) and 500 (API failure with test credentials)

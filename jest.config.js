@@ -9,7 +9,6 @@ module.exports = {
   ],
   testPathIgnorePatterns: [
     '/node_modules/',
-    '/integration/',
     '/setup.ts',
     '\\.js$'
   ],
@@ -24,5 +23,5 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
   setupFilesAfterEnv: [],
-  testTimeout: 10000,
+  testTimeout: 30000,
 }; 

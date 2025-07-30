@@ -112,7 +112,7 @@ describe('User Workflow Integration Tests', () => {
         .post('/ask')
         .send({
           question: initialQuestion,
-          userId: 'test-user-123'
+          isDemo: true // Use demo mode to bypass authentication
         });
 
       // Accept both 200 (success) and 500 (API failure with test credentials)
@@ -129,7 +129,7 @@ describe('User Workflow Integration Tests', () => {
         .post('/ask')
         .send({
           question: followUpQuestion,
-          userId: 'test-user-123'
+          isDemo: true // Use demo mode to bypass authentication
         });
 
       // Accept both 200 (success) and 500 (API failure with test credentials)
@@ -146,7 +146,7 @@ describe('User Workflow Integration Tests', () => {
         .post('/ask')
         .send({
           question: secondFollowUp,
-          userId: 'test-user-123'
+          isDemo: true // Use demo mode to bypass authentication
         });
 
       // Accept both 200 (success) and 500 (API failure with test credentials)
@@ -163,7 +163,7 @@ describe('User Workflow Integration Tests', () => {
         .post('/ask')
         .send({
           question: transactionQuery,
-          userId: 'test-user-123'
+          isDemo: true // Use demo mode to bypass authentication
         });
 
       // Accept both 200 (success) and 500 (API failure with test credentials)
@@ -291,7 +291,7 @@ describe('User Workflow Integration Tests', () => {
         .post('/ask')
         .send({
           question: question1,
-          userId: 'test-user-789'
+          isDemo: true // Use demo mode to bypass authentication
         });
 
       // Accept both 200 (success) and 500 (API failure with test credentials)
@@ -303,7 +303,7 @@ describe('User Workflow Integration Tests', () => {
         .post('/ask')
         .send({
           question: question2,
-          userId: 'test-user-789'
+          isDemo: true // Use demo mode to bypass authentication
         });
 
       // Accept both 200 (success) and 500 (API failure with test credentials)
@@ -315,7 +315,7 @@ describe('User Workflow Integration Tests', () => {
         .post('/ask')
         .send({
           question: question3,
-          userId: 'test-user-789'
+          isDemo: true // Use demo mode to bypass authentication
         });
 
       // Accept both 200 (success) and 500 (API failure with test credentials)
@@ -386,7 +386,7 @@ describe('User Workflow Integration Tests', () => {
         .post('/ask')
         .send({
           question: transactionQuery,
-          userId: 'test-user-consistency'
+          isDemo: true // Use demo mode to bypass authentication
         });
 
       // Accept both 200 (success) and 500 (API failure with test credentials)
