@@ -14,7 +14,7 @@ interface PromptHistory {
 export default function AppPage() {
   const [promptHistory, setPromptHistory] = useState<PromptHistory[]>([]);
   const [selectedPrompt, setSelectedPrompt] = useState<PromptHistory | null>(null);
-  const [showSidebar, setShowSidebar] = useState(true);
+  const [showSidebar, _setShowSidebar] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const router = useRouter();
@@ -74,7 +74,7 @@ export default function AppPage() {
         if (res.ok) {
           const data = await res.json();
           console.log('Backend response:', data);
-          const history: PromptHistory[] = data.conversations.map((conv: any) => ({
+          const history: PromptHistory[] = data.conversations.map((conv: { id: string; question: string; answer: string; timestamp: number }) => ({
             id: conv.id,
             question: conv.question,
             answer: conv.answer,
@@ -100,7 +100,7 @@ export default function AppPage() {
 
   // Note: Conversation history is now stored in the backend, not localStorage
 
-  const addToHistory = (question: string, answer: string) => {
+  const addToHistory = (_question: string, _answer: string) => {
     // Note: Conversations are now stored in the backend via the /ask endpoint
     // Reload conversation history from backend to show the new conversation
     console.log('Conversation saved to backend via /ask endpoint, reloading history...');
@@ -117,7 +117,7 @@ export default function AppPage() {
         
         if (res.ok) {
           const data = await res.json();
-          const history: PromptHistory[] = data.conversations.map((conv: any) => ({
+          const history: PromptHistory[] = data.conversations.map((conv: { id: string; question: string; answer: string; timestamp: number }) => ({
             id: conv.id,
             question: conv.question,
             answer: conv.answer,

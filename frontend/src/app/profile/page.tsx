@@ -27,116 +27,6 @@ export default function ProfilePage() {
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-  // Load sync status
-  const loadSyncStatus = useCallback(async () => {
-    try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-
-      // Add demo mode header or authentication header
-      if (isDemo) {
-        headers['x-demo-mode'] = 'true';
-        console.log('Demo mode detected, sending x-demo-mode header');
-      } else {
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-          console.log('Sending auth token for sync status:', token.substring(0, 20) + '...');
-        } else {
-          console.log('No auth token found in localStorage for sync status');
-        }
-      }
-
-      const res = await fetch(`${API_URL}/sync/status`, {
-        method: 'GET',
-        headers,
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setSyncInfo(data.syncInfo);
-      }
-    } catch (err) {
-      console.error('Error loading sync status:', err);
-    }
-  }, [API_URL, isDemo]);
-
-  // Manual refresh function - handles both data sync and connection refresh
-  const handleManualRefresh = async () => {
-    setRefreshing(true);
-    setNotification(null); // Clear any existing notifications
-    
-    try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-
-      // Add demo mode header or authentication header
-      if (isDemo) {
-        headers['x-demo-mode'] = 'true';
-        console.log('Demo mode detected, sending x-demo-mode header');
-      } else {
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-          console.log('Sending auth token:', token.substring(0, 20) + '...');
-        } else {
-          console.log('No auth token found in localStorage');
-        }
-      }
-
-      // Now sync the data
-      const res = await fetch(`${API_URL}/sync/manual`, {
-        method: 'POST',
-        headers,
-      });
-
-      if (res.ok) {
-        const result = await res.json();
-        if (result.success) {
-          // Reload both sync status and accounts after successful refresh
-          loadSyncStatusWithDemoMode(isDemo || false);
-          loadConnectedAccountsWithDemoMode(isDemo || false);
-          setNotification({ message: 'Data refreshed successfully!', type: 'success' });
-        }
-      }
-    } catch (err) {
-      console.error('Error during manual refresh:', err);
-      setNotification({ message: 'Failed to refresh data. Please try again.', type: 'error' });
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    // Check if user came from demo page
-    const referrer = document.referrer;
-    const urlParams = new URLSearchParams(window.location.search);
-    const isFromDemo = referrer.includes('/demo') || urlParams.get('demo') === 'true';
-    
-    console.log('Demo detection debug:', {
-      referrer,
-      urlParams: urlParams.get('demo'),
-      isFromDemo,
-      currentUrl: window.location.href
-    });
-    
-    setIsDemo(isFromDemo);
-    
-    // Only call API functions after we've determined demo mode
-    if (isFromDemo) {
-      console.log('Demo mode detected, calling API functions');
-      // Call the functions directly with the correct demo mode
-      loadConnectedAccountsWithDemoMode(true);
-      loadSyncStatusWithDemoMode(true);
-    } else {
-      console.log('Not demo mode, calling API functions');
-      loadConnectedAccountsWithDemoMode(false);
-      loadSyncStatusWithDemoMode(false);
-    }
-  }, []);
-
   // Helper functions that take demo mode as parameter
   const loadConnectedAccountsWithDemoMode = useCallback(async (demoMode: boolean) => {
     console.log('loadConnectedAccountsWithDemoMode called with demoMode:', demoMode);
@@ -220,6 +110,81 @@ export default function ProfilePage() {
       console.error('Error loading sync status:', err);
     }
   }, [API_URL]);
+
+  // Manual refresh function - handles both data sync and connection refresh
+  const handleManualRefresh = async () => {
+    setRefreshing(true);
+    setNotification(null); // Clear any existing notifications
+    
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      // Add demo mode header or authentication header
+      if (isDemo) {
+        headers['x-demo-mode'] = 'true';
+        console.log('Demo mode detected, sending x-demo-mode header');
+      } else {
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+          console.log('Sending auth token:', token.substring(0, 20) + '...');
+        } else {
+          console.log('No auth token found in localStorage');
+        }
+      }
+
+      // Now sync the data
+      const res = await fetch(`${API_URL}/sync/manual`, {
+        method: 'POST',
+        headers,
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        if (result.success) {
+          // Reload both sync status and accounts after successful refresh
+          loadSyncStatusWithDemoMode(isDemo || false);
+          loadConnectedAccountsWithDemoMode(isDemo || false);
+          setNotification({ message: 'Data refreshed successfully!', type: 'success' });
+        }
+      }
+    } catch (err) {
+      console.error('Error during manual refresh:', err);
+      setNotification({ message: 'Failed to refresh data. Please try again.', type: 'error' });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    // Check if user came from demo page
+    const referrer = document.referrer;
+    const urlParams = new URLSearchParams(window.location.search);
+    const isFromDemo = referrer.includes('/demo') || urlParams.get('demo') === 'true';
+    
+    console.log('Demo detection debug:', {
+      referrer,
+      urlParams: urlParams.get('demo'),
+      isFromDemo,
+      currentUrl: window.location.href
+    });
+    
+    setIsDemo(isFromDemo);
+    
+    // Only call API functions after we've determined demo mode
+    if (isFromDemo) {
+      console.log('Demo mode detected, calling API functions');
+      // Call the functions directly with the correct demo mode
+      loadConnectedAccountsWithDemoMode(true);
+      loadSyncStatusWithDemoMode(true);
+    } else {
+      console.log('Not demo mode, calling API functions');
+      loadConnectedAccountsWithDemoMode(false);
+      loadSyncStatusWithDemoMode(false);
+    }
+  }, [loadConnectedAccountsWithDemoMode, loadSyncStatusWithDemoMode]);
 
   // Auto-hide notifications after 3 seconds
   useEffect(() => {
