@@ -23,13 +23,14 @@ const PrivacyPage = () => {
               <span className="text-xl font-bold gradient-text">Ask Linc</span>
             </Link>
             <div className="hidden md:flex items-center space-x-8">
-              <Button 
-                variant="hero" 
-                size="sm"
-                onClick={() => scrollToSection('waitlist')}
-              >
-                Get Early Access
-              </Button>
+              <a href="/#waitlist">
+                <Button 
+                  variant="hero" 
+                  size="sm"
+                >
+                  Get Early Access
+                </Button>
+              </a>
             </div>
           </div>
         </div>
@@ -43,10 +44,6 @@ const PrivacyPage = () => {
           
           <div className="relative z-20 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center space-y-8">
-              <Badge variant="secondary" className="animate-pulse-glow">
-                <Shield className="h-4 w-4 mr-2" />
-                Built with OpenAI • Powered by your data
-              </Badge>
               
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight">
                 How we protect <span className="gradient-text">your data</span>

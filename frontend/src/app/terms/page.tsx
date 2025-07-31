@@ -31,13 +31,14 @@ const TermsPage = () => {
               >
                 How We Protect Your Data
               </a>
-              <Button 
-                variant="hero" 
-                size="sm"
-                onClick={() => scrollToSection('waitlist')}
-              >
-                Get Early Access
-              </Button>
+              <a href="/#waitlist">
+                <Button 
+                  variant="hero" 
+                  size="sm"
+                >
+                  Get Early Access
+                </Button>
+              </a>
             </div>
           </div>
         </div>
@@ -51,10 +52,6 @@ const TermsPage = () => {
           
           <div className="relative z-20 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center space-y-8">
-              <Badge variant="secondary" className="animate-pulse-glow">
-                <Scale className="h-4 w-4 mr-2" />
-                Terms of Service
-              </Badge>
               
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight">
                 <span className="gradient-text">Terms of Service</span>
