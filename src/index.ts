@@ -67,7 +67,7 @@ app.get('/health', (req: Request, res: Response) => {
 app.get('/health/cron', (req: Request, res: Response) => {
   // Check if cron jobs are running
   const cronJobs = cron.getTasks();
-  const syncJob = cronJobs.find(job => job.name === 'daily-sync');
+  const syncJob = Array.from(cronJobs.values()).find((job: any) => job.name === 'daily-sync');
   
   res.json({
     status: 'OK',
@@ -209,7 +209,7 @@ const handleDemoRequest = async (req: Request, res: Response) => {
             sessionId: verifySession.sessionId
           });
         }
-      } catch (sessionError) {
+      } catch (sessionError: any) {
         // Handle unique constraint violation gracefully
         if (sessionError.code === 'P2002') {
           console.log('Demo session already exists, fetching existing session');
@@ -226,6 +226,11 @@ const handleDemoRequest = async (req: Request, res: Response) => {
         id: demoSession.id, 
         sessionId: demoSession.sessionId 
       });
+    }
+    
+    // Ensure demoSession exists
+    if (!demoSession) {
+      return res.status(500).json({ error: 'Failed to create or find demo session' });
     }
     
     // Get recent conversation history for this demo session (last 5 Q&A pairs)
@@ -450,7 +455,7 @@ const handleTierAwareDemoRequest = async (req: Request, res: Response) => {
             sessionId: verifySession.sessionId
           });
         }
-      } catch (sessionError) {
+      } catch (sessionError: any) {
         // Handle unique constraint violation gracefully
         if (sessionError.code === 'P2002') {
           console.log('Demo session already exists, fetching existing session');
@@ -467,6 +472,11 @@ const handleTierAwareDemoRequest = async (req: Request, res: Response) => {
         id: demoSession.id, 
         sessionId: demoSession.sessionId 
       });
+    }
+    
+    // Ensure demoSession exists
+    if (!demoSession) {
+      return res.status(500).json({ error: 'Failed to create or find demo session' });
     }
     
     // Get recent conversation history for this demo session (last 5 Q&A pairs)
