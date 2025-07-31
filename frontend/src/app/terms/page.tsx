@@ -2,10 +2,10 @@
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
-import { Shield, Eye, Lock, Database, FileText, MessageCircle, Brain, Users, Zap, TrendingUp, CheckCircle } from 'lucide-react';
+import { Shield, Eye, Lock, Database, FileText, MessageCircle, Brain, Users, Zap, TrendingUp, CheckCircle, Scale } from 'lucide-react';
 import Link from 'next/link';
 
-const PrivacyPage = () => {
+const TermsPage = () => {
   const scrollToSection = (id: string) => {
     document.getElementById(id)?.scrollIntoView({
       behavior: 'smooth'
@@ -52,12 +52,12 @@ const PrivacyPage = () => {
           <div className="relative z-20 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center space-y-8">
               <Badge variant="secondary" className="animate-pulse-glow">
-                <Shield className="h-4 w-4 mr-2" />
-                Privacy Policy
+                <Scale className="h-4 w-4 mr-2" />
+                Terms of Service
               </Badge>
               
               <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight">
-                <span className="gradient-text">Privacy Policy</span>
+                <span className="gradient-text">Terms of Service</span>
               </h1>
               
               <div className="text-center space-y-4">
@@ -65,200 +65,152 @@ const PrivacyPage = () => {
                   <strong className="text-foreground">Effective Date:</strong> July 29, 2025
                 </p>
                 <p className="text-lg text-muted-foreground">
-                  <strong className="text-foreground">Operated by:</strong> Ethan Teng Consulting LLC
+                  These terms apply to your use of Ask Linc, a product operated by Ethan Teng Consulting LLC.
                 </p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Privacy Policy Content */}
+        {/* Terms Content */}
         <section className="py-20">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
             
-            {/* What We Collect */}
+            {/* What Ask Linc Does */}
             <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="text-2xl flex items-center gap-3">
-                  <Database className="h-6 w-6 text-primary" />
-                  1. What We Collect
+                  <Brain className="h-6 w-6 text-primary" />
+                  1. What Ask Linc Does
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent>
                 <p className="text-muted-foreground">
-                  We collect the minimum necessary to deliver Ask Linc:
+                  Ask Linc connects to your accounts and helps you make sense of your finances by answering plain-language questions with context from your actual data and today's market.
                 </p>
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                    <p className="text-muted-foreground">
-                      <strong className="text-foreground">Financial account data</strong> (via Plaid): balances, transactions, account names — read-only
-                    </p>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                    <p className="text-muted-foreground">
-                      <strong className="text-foreground">Questions you ask</strong> and Linc's responses
-                    </p>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                    <p className="text-muted-foreground">
-                      <strong className="text-foreground">Basic usage data</strong>: browser type, device info, session duration, error logs
-                    </p>
-                  </div>
-                </div>
-                <div className="bg-muted p-4 rounded-lg">
-                  <p className="text-sm font-medium text-foreground">
-                    We do <strong className="text-primary">not</strong> collect or store banking credentials.
-                  </p>
-                </div>
               </CardContent>
             </Card>
 
-            {/* How We Use It */}
-            <Card className="glass-card">
-              <CardHeader>
-                <CardTitle className="text-2xl flex items-center gap-3">
-                  <MessageCircle className="h-6 w-6 text-primary" />
-                  2. How We Use It
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                    <p className="text-muted-foreground">To provide answers and insights tailored to your accounts</p>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                    <p className="text-muted-foreground">To improve the quality and performance of Ask Linc</p>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                    <p className="text-muted-foreground">To understand aggregate usage trends (anonymized)</p>
-                  </div>
-                </div>
-                <div className="bg-muted p-4 rounded-lg">
-                  <p className="text-sm font-medium text-foreground mb-2">We <strong className="text-primary">do not</strong>:</p>
-                  <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">• Sell your data</p>
-                    <p className="text-sm text-muted-foreground">• Share your data with advertisers</p>
-                    <p className="text-sm text-muted-foreground">• Use your data to train AI models</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Your Rights Under GDPR and CCPA */}
+            {/* Your Responsibilities */}
             <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="text-2xl flex items-center gap-3">
                   <Shield className="h-6 w-6 text-primary" />
-                  3. Your Rights Under GDPR and CCPA
+                  2. Your Responsibilities
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-muted-foreground">You agree to:</p>
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
+                    <p className="text-muted-foreground">Use Ask Linc only for personal, lawful purposes</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
+                    <p className="text-muted-foreground">Not resell or misuse the service</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
+                    <p className="text-muted-foreground">Keep your login credentials secure</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
+                    <p className="text-muted-foreground">Understand that Linc provides <strong className="text-foreground">informational insights</strong>, not investment, tax, or legal advice</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Subscription & Billing */}
+            <Card className="glass-card">
+              <CardHeader>
+                <CardTitle className="text-2xl flex items-center gap-3">
+                  <FileText className="h-6 w-6 text-primary" />
+                  3. Subscription & Billing
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Some features require a paid subscription. You'll always see clear pricing and can cancel anytime. We don't do surprise charges or hidden fees.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Data & Privacy */}
+            <Card className="glass-card">
+              <CardHeader>
+                <CardTitle className="text-2xl flex items-center gap-3">
+                  <Lock className="h-6 w-6 text-primary" />
+                  4. Data & Privacy
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-muted-foreground">
-                  If you're located in the <strong className="text-foreground">European Union (GDPR)</strong> or <strong className="text-foreground">California (CCPA)</strong>, you have specific rights:
+                  We handle your data according to our <a href="/privacy" className="text-primary hover:underline font-medium">Privacy Policy</a>. You can:
                 </p>
                 <div className="space-y-3">
-                  <h4 className="font-semibold text-foreground">You can:</h4>
-                  <div className="space-y-2">
-                    <div className="flex items-start gap-3">
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                      <p className="text-muted-foreground"><strong className="text-foreground">Access</strong> the data we've collected about you</p>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                      <p className="text-muted-foreground"><strong className="text-foreground">Correct</strong> or update that data</p>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                      <p className="text-muted-foreground"><strong className="text-foreground">Request deletion</strong> of all personal data we store</p>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                      <p className="text-muted-foreground"><strong className="text-foreground">Opt out</strong> of data collection (except what's required to operate the service)</p>
-                    </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
+                    <p className="text-muted-foreground">View, export, or delete your data</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
+                    <p className="text-muted-foreground">Opt out of tracking and personalized services (except where essential)</p>
                   </div>
                 </div>
-                <p className="text-muted-foreground">
-                  You can do this via your in-app Privacy Dashboard or by emailing us at <a href="mailto:hello@asklinc.com" className="text-primary hover:underline font-medium">hello@asklinc.com</a>.
-                </p>
                 <div className="bg-muted p-4 rounded-lg">
                   <p className="text-sm font-medium text-foreground">
-                    We will never discriminate against you for exercising your privacy rights.
+                    If you're a resident of California or the EU, you have enhanced rights under <strong className="text-primary">CCPA</strong> and <strong className="text-primary">GDPR</strong>, which we fully honor.
                   </p>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Data Storage and Transfers */}
-            <Card className="glass-card">
-              <CardHeader>
-                <CardTitle className="text-2xl flex items-center gap-3">
-                  <Lock className="h-6 w-6 text-primary" />
-                  4. Data Storage and Transfers
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">
-                  All data is stored securely in the United States. If you are outside the U.S., your data may be transferred and processed here. We take appropriate safeguards to protect it.
-                </p>
-              </CardContent>
-            </Card>
-
-            {/* Deletion & Control */}
+            {/* No Guarantees */}
             <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="text-2xl flex items-center gap-3">
                   <Eye className="h-6 w-6 text-primary" />
-                  5. Deletion & Control
+                  5. No Guarantees
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                <p className="text-muted-foreground">We do our best, but we can't guarantee:</p>
                 <div className="space-y-3">
                   <div className="flex items-start gap-3">
                     <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                    <p className="text-muted-foreground">You can disconnect your accounts and delete all data at any time.</p>
+                    <p className="text-muted-foreground">100% uptime</p>
                   </div>
                   <div className="flex items-start gap-3">
                     <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                    <p className="text-muted-foreground">Deleted data is permanently removed from our systems within 30 days.</p>
+                    <p className="text-muted-foreground">Financial accuracy in all responses</p>
                   </div>
                   <div className="flex items-start gap-3">
                     <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                    <p className="text-muted-foreground">We retain only the minimum necessary logs for service security and fraud prevention.</p>
+                    <p className="text-muted-foreground">That our AI will always interpret your question perfectly</p>
                   </div>
+                </div>
+                <div className="bg-muted p-4 rounded-lg">
+                  <p className="text-sm font-medium text-foreground">
+                    You should double-check any major decisions with a financial advisor.
+                  </p>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Third-Party Services */}
+            {/* Changes to These Terms */}
             <Card className="glass-card">
               <CardHeader>
                 <CardTitle className="text-2xl flex items-center gap-3">
-                  <Users className="h-6 w-6 text-primary" />
-                  6. Third-Party Services
+                  <MessageCircle className="h-6 w-6 text-primary" />
+                  6. Changes to These Terms
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground mb-3">We use:</p>
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                    <p className="text-muted-foreground"><strong className="text-foreground">Plaid</strong> for account linking (SOC 2 certified)</p>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                    <p className="text-muted-foreground"><strong className="text-foreground">OpenAI</strong> for GPT-powered responses (with anonymized input)</p>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                    <p className="text-muted-foreground"><strong className="text-foreground">Hosting and analytics services</strong> that follow industry-standard security protocols</p>
-                  </div>
-                </div>
+                <p className="text-muted-foreground">
+                  If we update these Terms, we'll let you know in-app or via email. Continued use means you agree to the new terms.
+                </p>
               </CardContent>
             </Card>
 
@@ -267,12 +219,12 @@ const PrivacyPage = () => {
               <CardHeader>
                 <CardTitle className="text-2xl flex items-center gap-3">
                   <FileText className="h-6 w-6 text-primary" />
-                  7. Contact
+                  7. Contact Info
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground mb-4">
-                  For privacy-related questions or to exercise your rights, contact:
+                  Questions, complaints, or requests? We're reachable at:
                 </p>
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">📧</span>
@@ -328,4 +280,4 @@ const PrivacyPage = () => {
   );
 };
 
-export default PrivacyPage; 
+export default TermsPage; 

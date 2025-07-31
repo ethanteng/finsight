@@ -23,8 +23,6 @@ const PrivacyPage = () => {
               <span className="text-xl font-bold gradient-text">Ask Linc</span>
             </Link>
             <div className="hidden md:flex items-center space-x-8">
-              <button onClick={() => scrollToSection('features')} className="text-muted-foreground hover:text-primary transition-colors">Features</button>
-              <button onClick={() => scrollToSection('pricing')} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
               <Button 
                 variant="hero" 
                 size="sm"
@@ -335,17 +333,13 @@ const PrivacyPage = () => {
             </div>
             <div className="flex items-center space-x-6 text-sm text-muted-foreground">
               <a 
-                href="https://consulting.ethanteng.com/ask-linc-privacy-policy" 
-                target="_blank" 
-                rel="noopener noreferrer"
+                href="/privacy" 
                 className="hover:text-primary transition-colors"
               >
                 Privacy Policy
               </a>
               <a 
-                href="https://consulting.ethanteng.com/ask-linc-terms-of-service" 
-                target="_blank" 
-                rel="noopener noreferrer"
+                href="/terms" 
                 className="hover:text-primary transition-colors"
               >
                 Terms of Service

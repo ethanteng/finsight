@@ -688,17 +688,13 @@ const NewHomepage = () => {
             </div>
             <div className="flex items-center space-x-6 text-sm text-muted-foreground">
               <a 
-                href="https://consulting.ethanteng.com/ask-linc-privacy-policy" 
-                target="_blank" 
-                rel="noopener noreferrer"
+                href="/privacy" 
                 className="hover:text-primary transition-colors"
               >
                 Privacy Policy
               </a>
               <a 
-                href="https://consulting.ethanteng.com/ask-linc-terms-of-service" 
-                target="_blank" 
-                rel="noopener noreferrer"
+                href="/terms" 
                 className="hover:text-primary transition-colors"
               >
                 Terms of Service
