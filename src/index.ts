@@ -67,7 +67,7 @@ setupPlaidRoutes(app);
 // Setup Auth routes
 app.use('/auth', authRoutes);
 
-// OpenAI Q&A endpoint
+// OpenAI Q&A endpoint with tier-aware system
 app.post('/ask', async (req: Request, res: Response) => {
   try {
     const { question, userTier = 'starter', isDemo = false } = req.body;
@@ -92,6 +92,38 @@ app.post('/ask', async (req: Request, res: Response) => {
     }
     
     return handleUserRequest(req, res);
+  } catch (err) {
+    if (err instanceof Error) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+});
+
+// New tier-aware endpoint for enhanced context
+app.post('/ask/tier-aware', async (req: Request, res: Response) => {
+  try {
+    const { question, isDemo = false } = req.body;
+    if (!question) {
+      return res.status(400).json({ error: 'Question is required' });
+    }
+    
+    console.log('Tier-aware ask endpoint - user:', req.user);
+    console.log('Tier-aware ask endpoint - isDemo:', isDemo);
+    
+    // Demo mode always works (no auth required)
+    if (isDemo) {
+      return handleTierAwareDemoRequest(req, res);
+    }
+    
+    // User mode requires auth when enabled
+    if (isFeatureEnabled('USER_AUTH') && !req.user) {
+      console.log('Tier-aware ask endpoint - Authentication required, user not found');
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    return handleTierAwareUserRequest(req, res);
   } catch (err) {
     if (err instanceof Error) {
       res.status(500).json({ error: err.message });
@@ -287,6 +319,171 @@ const handleUserRequest = async (req: Request, res: Response) => {
   }
 };
 
+// Tier-aware user request handler
+const handleTierAwareUserRequest = async (req: Request, res: Response) => {
+  try {
+    const { question } = req.body;
+    
+    // Get user from request (set by optionalAuth middleware)
+    const user = req.user;
+    
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
+    // Get recent conversation history for this user (last 5 Q&A pairs)
+    const recentConversations = await getPrismaClient().conversation.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
+    
+    // Use user's tier
+    const userTier = user.tier;
+    
+    console.log('Tier-aware ask endpoint - calling askOpenAI with userId:', user.id, 'tier:', userTier);
+    const answer = await askOpenAI(question, recentConversations, userTier as any, false, user.id);
+    console.log('Tier-aware ask endpoint - received answer from OpenAI');
+    
+    // Store the new Q&A pair with user association
+    await getPrismaClient().conversation.create({
+      data: {
+        question,
+        answer,
+        userId: user.id,
+      },
+    });
+    
+    res.json({ answer });
+  } catch (err) {
+    if (err instanceof Error) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+};
+
+// Tier-aware demo request handler
+const handleTierAwareDemoRequest = async (req: Request, res: Response) => {
+  try {
+    // Test database connection
+    try {
+      await getPrismaClient().$queryRaw`SELECT 1`;
+      console.log('Database connection verified');
+    } catch (dbError) {
+      console.error('Database connection failed:', dbError);
+      return res.status(500).json({ error: 'Database connection failed' });
+    }
+    
+    const { question } = req.body;
+    const sessionId = req.headers['x-session-id'] as string;
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Session ID required for demo mode' });
+    }
+    
+    // Get or create demo session
+    let demoSession = await getPrismaClient().demoSession.findUnique({
+      where: { sessionId }
+    });
+    
+    if (!demoSession) {
+      try {
+        demoSession = await getPrismaClient().demoSession.create({
+          data: {
+            sessionId,
+            userAgent
+          }
+        });
+        console.log('Demo session created successfully:', { 
+          id: demoSession.id, 
+          sessionId: demoSession.sessionId 
+        });
+        
+        // Verify the session was actually stored
+        const verifySession = await getPrismaClient().demoSession.findUnique({
+          where: { id: demoSession.id }
+        });
+        
+        if (!verifySession) {
+          console.error('Demo session was not actually stored in database');
+          return res.status(500).json({ error: 'Failed to create demo session' });
+        } else {
+          console.log('Demo session verified in database:', { 
+            id: verifySession.id,
+            sessionId: verifySession.sessionId
+          });
+        }
+      } catch (sessionError) {
+        console.error('Failed to create demo session:', sessionError);
+        return res.status(500).json({ error: 'Failed to create demo session' });
+      }
+    } else {
+      console.log('Demo session found:', { 
+        id: demoSession.id, 
+        sessionId: demoSession.sessionId 
+      });
+    }
+    
+    // Get recent conversation history for this demo session (last 5 Q&A pairs)
+    const recentConversations = await getPrismaClient().demoConversation.findMany({
+      where: { sessionId: demoSession.id },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
+    
+    // Use environment variable for tier in demo mode
+    const backendTier = process.env.TEST_USER_TIER || 'starter';
+    
+    console.log('Tier-aware demo - calling askOpenAI with tier:', backendTier);
+    const answer = await askOpenAI(question, recentConversations, backendTier as any, true, undefined);
+    
+    // Store the demo conversation with session association
+    try {
+      const storedConversation = await getPrismaClient().demoConversation.create({
+        data: {
+          question,
+          answer,
+          sessionId: demoSession.id,
+        },
+      });
+      console.log('Demo conversation stored successfully:', { 
+        id: storedConversation.id, 
+        sessionId: demoSession.id,
+        questionLength: question.length 
+      });
+      
+      // Verify the conversation was actually stored
+      const verifyConversation = await getPrismaClient().demoConversation.findUnique({
+        where: { id: storedConversation.id }
+      });
+      
+      if (!verifyConversation) {
+        console.error('Demo conversation was not actually stored in database');
+        return res.status(500).json({ error: 'Failed to store demo conversation' });
+      } else {
+        console.log('Demo conversation verified in database:', { 
+          id: verifyConversation.id,
+          question: verifyConversation.question.substring(0, 50)
+        });
+      }
+    } catch (conversationError) {
+      console.error('Failed to store demo conversation:', conversationError);
+      return res.status(500).json({ error: 'Failed to store demo conversation' });
+    }
+    
+    res.json({ answer });
+  } catch (err) {
+    if (err instanceof Error) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+};
+
 // Get demo conversation history
 app.get('/demo/conversations', async (req: Request, res: Response) => {
   try {
@@ -318,6 +515,47 @@ app.get('/demo/conversations', async (req: Request, res: Response) => {
         timestamp: conv.createdAt.getTime()
       }))
     });
+  } catch (err) {
+    if (err instanceof Error) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+});
+
+// Get tier information and upgrade suggestions
+app.get('/tier-info', async (req: Request, res: Response) => {
+  try {
+    // Require user authentication
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { DataSourceManager } = await import('./data/sources');
+    const userTier = user.tier as any;
+    
+    const tierInfo = {
+      currentTier: userTier,
+      availableSources: DataSourceManager.getSourcesForTier(userTier).map(s => ({
+        name: s.name,
+        description: s.description,
+        category: s.category
+      })),
+      unavailableSources: DataSourceManager.getUnavailableSourcesForTier(userTier).map(s => ({
+        name: s.name,
+        description: s.description,
+        category: s.category,
+        upgradeBenefit: s.upgradeBenefit,
+        requiredTier: s.tiers[0]
+      })),
+      upgradeSuggestions: DataSourceManager.getUpgradeSuggestions(userTier),
+      limitations: DataSourceManager.getTierLimitations(userTier),
+      nextTier: DataSourceManager.getNextTier(userTier)
+    };
+
+    res.json(tierInfo);
   } catch (err) {
     if (err instanceof Error) {
       res.status(500).json({ error: err.message });
