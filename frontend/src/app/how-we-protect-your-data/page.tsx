@@ -2,7 +2,8 @@
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
-import { Shield, Eye, Lock, Database, FileText, MessageCircle, Brain, Users, Zap, TrendingUp, CheckCircle } from 'lucide-react';
+import { Shield, Eye, Lock, Database, FileText, MessageCircle, Brain } from 'lucide-react';
+import Link from 'next/link';
 
 const PrivacyPage = () => {
   const scrollToSection = (id: string) => {
@@ -17,10 +18,10 @@ const PrivacyPage = () => {
       <nav className="fixed top-0 w-full z-50 backdrop-blur-lg bg-background/80 border-b border-border/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <a href="/" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
+            <Link href="/" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
               <Brain className="h-8 w-8 text-primary" />
               <span className="text-xl font-bold gradient-text">Ask Linc</span>
-            </a>
+            </Link>
             <div className="hidden md:flex items-center space-x-8">
               <button onClick={() => scrollToSection('features')} className="text-muted-foreground hover:text-primary transition-colors">Features</button>
               <button onClick={() => scrollToSection('pricing')} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
