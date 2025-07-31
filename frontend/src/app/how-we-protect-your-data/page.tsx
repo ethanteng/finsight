@@ -17,14 +17,14 @@ const PrivacyPage = () => {
               <span className="text-xl font-bold gradient-text">Ask Linc</span>
             </Link>
             <div className="hidden md:flex items-center space-x-8">
-              <a href="/#waitlist">
+              <Link href="/#waitlist">
                 <Button 
                   variant="hero" 
                   size="sm"
                 >
                   Get Early Access
                 </Button>
-              </a>
+              </Link>
             </div>
           </div>
         </div>

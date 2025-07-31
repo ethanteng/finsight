@@ -1,7 +1,7 @@
 "use client";
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Shield, Eye, Lock, FileText, MessageCircle, Brain, Scale } from 'lucide-react';
+import { Shield, Eye, Lock, FileText, MessageCircle, Brain } from 'lucide-react';
 import Link from 'next/link';
 
 const TermsPage = () => {
@@ -25,14 +25,14 @@ const TermsPage = () => {
               >
                 How We Protect Your Data
               </a>
-              <a href="/#waitlist">
+              <Link href="/#waitlist">
                 <Button 
                   variant="hero" 
                   size="sm"
                 >
                   Get Early Access
                 </Button>
-              </a>
+              </Link>
             </div>
           </div>
         </div>

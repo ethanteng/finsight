@@ -25,14 +25,14 @@ const PrivacyPage = () => {
               >
                 How We Protect Your Data
               </a>
-              <a href="/#waitlist">
+              <Link href="/#waitlist">
                 <Button 
                   variant="hero" 
                   size="sm"
                 >
                   Get Early Access
                 </Button>
-              </a>
+              </Link>
             </div>
           </div>
         </div>
