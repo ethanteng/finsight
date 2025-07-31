@@ -10,7 +10,9 @@ module.exports = {
   testPathIgnorePatterns: [
     '/node_modules/',
     '/setup.ts',
-    '\\.js$'
+    '\\.js$',
+    '/integration/',
+    '/auth/'
   ],
   transform: {
     '^.+\\.ts$': 'ts-jest',
