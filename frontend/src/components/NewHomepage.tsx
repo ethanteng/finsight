@@ -29,10 +29,8 @@ const NewHomepage = () => {
               <button onClick={() => scrollToSection('features')} className="text-muted-foreground hover:text-primary transition-colors">Features</button>
               <button onClick={() => scrollToSection('pricing')} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
               <a 
-                href="https://consulting.ethanteng.com/privacy-security-at-ask-linc" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                href="/how-we-protect-your-data" 
+                className="text-primary hover:text-primary/80 transition-colors cursor-pointer"
               >
                 How We Protect Your Data
               </a>
@@ -360,8 +358,8 @@ const NewHomepage = () => {
             </p>
           </div>
           
-          <div className="grid lg:grid-cols-2 gap-12 max-w-5xl mx-auto">
-            <div className="space-y-6">
+          <div className="grid lg:grid-cols-2 gap-12 max-w-5xl mx-auto justify-items-center">
+            <div className="space-y-6 max-w-md">
               <div className="flex items-center space-x-3 mb-6">
                 <CheckCircle className="h-6 w-6 text-emerald-500" />
                 <h3 className="text-2xl font-bold text-emerald-500">ChatGPT Knows:</h3>
@@ -377,7 +375,7 @@ const NewHomepage = () => {
               </div>
             </div>
             
-            <div className="space-y-6">
+            <div className="space-y-6 max-w-md">
               <div className="flex items-center space-x-3 mb-6">
                 <X className="h-6 w-6 text-red-500" />
                 <h3 className="text-2xl font-bold text-red-500">It Doesn't Know:</h3>
@@ -397,14 +395,14 @@ const NewHomepage = () => {
           <div className="mt-16 max-w-4xl mx-auto">
             <Card className="glass-card border-primary/20 bg-gradient-to-r from-primary/5 to-secondary/5">
               <CardContent className="p-8 text-center space-y-4">
-                <h3 className="text-2xl font-bold">That's where Linc makes a real difference.</h3>
+                <h3 className="text-2xl font-bold">That's where Linc <span className="gradient-text">makes a real difference.</span></h3>
                 <p className="text-lg text-muted-foreground leading-relaxed">
                   Linc feeds trusted real-time data into OpenAI behind the scenes — so when you ask,{" "}
                   <span className="font-semibold text-foreground">&quot;Should I roll over this CD?&quot;</span>{" "}
                   you get an answer based on{" "}
-                  <span className="font-semibold text-foreground">today's best rates</span>{" "}
+                  <span className="gradient-text font-semibold">today's best rates</span>{" "}
                   and{" "}
-                  <span className="font-semibold text-foreground">your actual accounts.</span>
+                  <span className="gradient-text font-semibold">your actual accounts.</span>
                 </p>
               </CardContent>
             </Card>
