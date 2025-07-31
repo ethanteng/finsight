@@ -34,17 +34,10 @@ describe('Basic Integration Tests', () => {
         isDemo: true // Use demo mode to bypass authentication
       });
 
-    // Accept various status codes depending on environment
-    // 200: Success with valid API key
-    // 500: API failure or missing API key
-    // 401: Authentication error
-    expect([200, 500, 401]).toContain(response.status);
-    
-    if (response.status === 200) {
-      expect(response.body).toHaveProperty('answer');
-    } else {
-      // Any error status should have an error property
-      expect(response.body).toHaveProperty('error');
-    }
+    // Integration tests should have real API keys and return 200
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveProperty('answer');
+    expect(typeof response.body.answer).toBe('string');
+    expect(response.body.answer.length).toBeGreaterThan(0);
   });
 }); 

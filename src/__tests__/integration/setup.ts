@@ -16,8 +16,10 @@ beforeAll(async () => {
   const missingKeys = requiredKeys.filter(key => !process.env[key]);
   
   if (missingKeys.length > 0) {
-    console.warn(`⚠️  Missing API keys for integration tests: ${missingKeys.join(', ')}`);
-    console.warn('Integration tests may fail or use mock data');
+    console.error(`❌ Missing API keys for integration tests: ${missingKeys.join(', ')}`);
+    console.error('Integration tests require real API keys to test full system integration');
+    console.error('Please add the missing API keys to GitHub repository secrets');
+    throw new Error(`Missing required API keys for integration tests: ${missingKeys.join(', ')}`);
   } else {
     console.log('✅ All required API keys available for integration tests');
   }
