@@ -28,7 +28,14 @@ const NewHomepage = () => {
             <div className="hidden md:flex items-center space-x-8">
               <button onClick={() => scrollToSection('features')} className="text-muted-foreground hover:text-primary transition-colors">Features</button>
               <button onClick={() => scrollToSection('pricing')} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
-              <button onClick={() => scrollToSection('security')} className="text-muted-foreground hover:text-primary transition-colors">Security</button>
+              <a 
+                href="https://consulting.ethanteng.com/privacy-security-at-ask-linc" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+              >
+                Security
+              </a>
               <Button 
                 variant="hero" 
                 size="sm"
@@ -50,20 +57,18 @@ const NewHomepage = () => {
           <div className="text-center space-y-8">
             <Badge variant="secondary" className="animate-pulse-glow">
               <Sparkles className="h-4 w-4 mr-2" />
-              Built with ChatGPT • Powered by your data
+              Built with OpenAI • Powered by your data
             </Badge>
             
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold leading-tight">
-              Hey, I'm Linc{" — "}Your{" "}
-              <span className="gradient-text">AI Powered</span>{" "}
-              Financial Analyst
+              Hey, I'm Linc{" — "}A{" "}
+              <span className="gradient-text">Privacy-First</span>{" "}
+              AI built for your finances
             </h1>
             
             <p className="text-xl md:text-2xl text-muted-foreground max-w-4xl mx-auto leading-relaxed">
-            I’ll give you clear, judgment-free answers based on{" "}
-            <span className="gradient-text">your actual accounts</span>
-            {" "}and{" "}
-            <span className="gradient-text">today’s market conditions.</span>
+            I combine OpenAI's smarts with your real account data and live market insights{" — "}
+            <span className="gradient-text">without compromising your privacy.</span>
             </p>
             
             {/* Animated Prompt Demo */}
@@ -394,7 +399,7 @@ const NewHomepage = () => {
               <CardContent className="p-8 text-center space-y-4">
                 <h3 className="text-2xl font-bold">That's where Linc makes a real difference.</h3>
                 <p className="text-lg text-muted-foreground leading-relaxed">
-                  Linc feeds trusted real-time data into ChatGPT behind the scenes — so when you ask,{" "}
+                  Linc feeds trusted real-time data into OpenAI behind the scenes — so when you ask,{" "}
                   <span className="font-semibold text-foreground">&quot;Should I roll over this CD?&quot;</span>{" "}
                   you get an answer based on{" "}
                   <span className="font-semibold text-foreground">today's best rates</span>{" "}
@@ -415,7 +420,7 @@ const NewHomepage = () => {
               Why Linc is <span className="gradient-text">different</span>
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Linc is not a budget tracker, robo-advisor, or complicated dashboard. It's your on-demand financial analyst, powered by ChatGPT + real-time market awareness.
+              Linc is not a budget tracker, robo-advisor, or complicated dashboard. It's your on-demand financial analyst, powered by OpenAI + real-time market awareness.
             </p>
           </div>
           
@@ -423,7 +428,7 @@ const NewHomepage = () => {
             {[{
               icon: Brain,
               title: "AI-Powered Insights",
-              description: "ChatGPT analyzes your financial data to provide personalized, intelligent answers to your money questions."
+              description: "OpenAI analyzes your financial data to provide personalized, intelligent answers to your money questions."
             }, {
               icon: TrendingUp,
               title: "Real-Time Market Data",
@@ -602,14 +607,18 @@ const NewHomepage = () => {
           
           <div className="space-y-6">
             {[{
-                          question: "I don't want to give ChatGPT all my financial data...",
-            answer: "Totally fair. That's why I use Plaid, not your login info — and your data is read-only, never stored, and never used to train models."
+              question: "What's the difference between ChatGPT and OpenAI? And which do you use?",
+              answer: "OpenAI is the company that developed the GPT models, including the one behind ChatGPT. Ask Linc uses OpenAI’s most advanced model, GPT-4o — but through a private, secure API that’s very different from using the public ChatGPT app."
+            },
+               {
+              question: "I don't want to give OpenAI all my financial data...",
+              answer: "Totally fair. That's why we use Plaid, not your login info — and your data is read-only, never stored, and never used to train models."
             }, {
               question: "How do you know what's going on in the market?",
-              answer: "On its own, ChatGPT doesn't. That's why I pull in real-time data — like CD rates, bond yields, and current news — and feed it into ChatGPT as context for your questions."
+              answer: "On its own, ChatGPT doesn't. That's why Linc pulls in real-time data — like CD rates, bond yields, and current news — and feeds it into OpenAI as context for your questions."
             }, {
               question: "Is this just another budgeting app?",
-              answer: "Nope! I don't track your spending or categorize transactions. I answer your questions using your actual account data + live market context. Think of me as your financial advisor, not your accountant."
+              answer: "Nope! Linc does not track your spending or categorize transactions. It answers your questions using your actual account data + live market context. Think of Linc as your financial advisor, not your accountant."
             }, {
               question: "What if I want to delete everything?",
               answer: "Easy. You can view, export, or delete all your data anytime with a single click. Full transparency, full control."
