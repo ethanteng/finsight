@@ -55,7 +55,31 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
-  res.json({ status: 'OK' });
+  res.json({ 
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage()
+  });
+});
+
+// Cron job health check endpoint
+app.get('/health/cron', (req: Request, res: Response) => {
+  // Check if cron jobs are running
+  const cronJobs = cron.getTasks();
+  const syncJob = cronJobs.find(job => job.name === 'daily-sync');
+  
+  res.json({
+    status: 'OK',
+    cronJobs: {
+      dailySync: {
+        running: !!syncJob,
+        lastRun: syncJob?.lastExecution || null,
+        nextRun: syncJob?.nextExecution || null
+      }
+    },
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Apply optional auth middleware to all routes
@@ -186,8 +210,16 @@ const handleDemoRequest = async (req: Request, res: Response) => {
           });
         }
       } catch (sessionError) {
-        console.error('Failed to create demo session:', sessionError);
-        return res.status(500).json({ error: 'Failed to create demo session' });
+        // Handle unique constraint violation gracefully
+        if (sessionError.code === 'P2002') {
+          console.log('Demo session already exists, fetching existing session');
+          demoSession = await getPrismaClient().demoSession.findUnique({
+            where: { sessionId }
+          });
+        } else {
+          console.error('Failed to create demo session:', sessionError);
+          return res.status(500).json({ error: 'Failed to create demo session' });
+        }
       }
     } else {
       console.log('Demo session found:', { 
@@ -244,21 +276,23 @@ const handleDemoRequest = async (req: Request, res: Response) => {
       // Don't fail the request, just log the error
     }
     
-    // Log demo interactions for analytics
-    try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/log-demo`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question,
-          answer,
-          timestamp: new Date().toISOString(),
-          sessionId,
-          userAgent
-        })
-      });
-    } catch (logError) {
-      console.error('Failed to log demo interaction:', logError);
+    // Log demo interactions for analytics (disabled in test environment)
+    if (process.env.NODE_ENV !== 'test') {
+      try {
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/log-demo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question,
+            answer,
+            timestamp: new Date().toISOString(),
+            sessionId,
+            userAgent
+          })
+        });
+      } catch (logError) {
+        console.error('Failed to log demo interaction:', logError);
+      }
     }
     
     res.json({ answer });
@@ -417,8 +451,16 @@ const handleTierAwareDemoRequest = async (req: Request, res: Response) => {
           });
         }
       } catch (sessionError) {
-        console.error('Failed to create demo session:', sessionError);
-        return res.status(500).json({ error: 'Failed to create demo session' });
+        // Handle unique constraint violation gracefully
+        if (sessionError.code === 'P2002') {
+          console.log('Demo session already exists, fetching existing session');
+          demoSession = await getPrismaClient().demoSession.findUnique({
+            where: { sessionId }
+          });
+        } else {
+          console.error('Failed to create demo session:', sessionError);
+          return res.status(500).json({ error: 'Failed to create demo session' });
+        }
       }
     } else {
       console.log('Demo session found:', { 
@@ -1009,18 +1051,39 @@ if (require.main === module) {
     // Set up cron job to sync accounts and transactions daily at 2 AM
     cron.schedule('0 2 * * *', async () => {
       console.log('Starting daily sync job...');
+      const startTime = Date.now();
+      
       try {
         const result = await syncAllAccounts();
+        const duration = Date.now() - startTime;
+        
         if (result.success) {
-          console.log(`Daily sync completed: ${result.accountsSynced} accounts, ${result.transactionsSynced} transactions synced`);
+          console.log(`✅ Daily sync completed successfully in ${duration}ms: ${result.accountsSynced} accounts, ${result.transactionsSynced} transactions synced`);
+          
+          // Log success metrics for monitoring
+          console.log(`📊 Sync Metrics: duration=${duration}ms, accounts=${result.accountsSynced}, transactions=${result.transactionsSynced}`);
         } else {
-          console.error('Daily sync failed:', result.error);
+          console.error(`❌ Daily sync failed after ${duration}ms:`, result.error);
+          
+          // Log failure for monitoring
+          console.error(`📊 Sync Failure: duration=${duration}ms, error=${result.error}`);
+          
+          // TODO: Send alert to monitoring service (e.g., Sentry, LogRocket)
+          // await sendAlert('Daily sync failed', { error: result.error, duration });
         }
       } catch (error) {
-        console.error('Error in daily sync job:', error);
+        const duration = Date.now() - startTime;
+        console.error(`❌ Error in daily sync job after ${duration}ms:`, error);
+        
+        // Log failure for monitoring
+        console.error(`📊 Sync Error: duration=${duration}ms, error=${error}`);
+        
+        // TODO: Send alert to monitoring service
+        // await sendAlert('Daily sync error', { error, duration });
       }
     }, {
-      timezone: 'America/New_York'
+      timezone: 'America/New_York',
+      name: 'daily-sync'
     });
     
     console.log('Cron job scheduled: daily sync at 2 AM EST');

@@ -52,6 +52,18 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  // ✅ Clean up after each test to prevent session conflicts
+  try {
+    await prisma.demoConversation.deleteMany();
+    await prisma.demoSession.deleteMany();
+    await prisma.privacySettings?.deleteMany();
+    await prisma.user.deleteMany();
+  } catch (error) {
+    console.warn('⚠️  Test cleanup failed:', error);
+  }
+});
+
+afterEach(async () => {
   // ✅ Verify cleanup
   try {
     const sessionCount = await prisma.demoSession.count();
