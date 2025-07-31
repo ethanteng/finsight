@@ -1,16 +1,10 @@
 "use client";
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Badge } from '../../components/ui/badge';
-import { Shield, Eye, Lock, Database, FileText, MessageCircle, Brain, Users, Zap, TrendingUp, CheckCircle } from 'lucide-react';
+import { Shield, Eye, Lock, Database, FileText, MessageCircle, Brain, Users } from 'lucide-react';
 import Link from 'next/link';
 
 const PrivacyPage = () => {
-  const scrollToSection = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({
-      behavior: 'smooth'
-    });
-  };
 
   return (
     <div className="min-h-screen bg-background">
