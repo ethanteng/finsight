@@ -1,4 +1,4 @@
-import { getFeatures, isFeatureEnabled, requireFeature } from '../config/features';
+import { getFeatures, isFeatureEnabled, requireFeature } from '../../config/features';
 
 describe('Feature Flags', () => {
   const originalEnv = process.env;

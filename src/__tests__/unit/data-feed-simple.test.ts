@@ -1,7 +1,7 @@
-import { UserTier } from '../data/types';
+import { UserTier } from '../../data/types';
 
 // Mock the data orchestrator
-jest.mock('../data/orchestrator', () => ({
+jest.mock('../../data/orchestrator', () => ({
   dataOrchestrator: {
     getMarketContext: jest.fn(),
   },
@@ -12,7 +12,7 @@ describe('Data Feed Architecture (Simple)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockDataOrchestrator = require('../data/orchestrator').dataOrchestrator;
+    mockDataOrchestrator = require('../../data/orchestrator').dataOrchestrator;
   });
 
   describe('Tier-Based Access Control', () => {

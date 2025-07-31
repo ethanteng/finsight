@@ -1,5 +1,5 @@
-import { askOpenAI, askOpenAIForTests } from '../openai';
-import { UserTier } from '../data/types';
+import { askOpenAI, askOpenAIForTests } from '../../openai';
+import { UserTier } from '../../data/types';
 
 // Define the Conversation interface for tests
 interface Conversation {
@@ -10,7 +10,7 @@ interface Conversation {
 }
 
 // Mock the entire openai module
-jest.mock('../openai', () => ({
+jest.mock('../../openai', () => ({
   askOpenAI: jest.fn(),
   askOpenAIForTests: jest.fn(),
 }));
@@ -21,8 +21,8 @@ describe('OpenAI Integration (Simple)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockAskOpenAI = require('../openai').askOpenAI;
-    mockAskOpenAIForTests = require('../openai').askOpenAIForTests;
+    mockAskOpenAI = require('../../openai').askOpenAI;
+    mockAskOpenAIForTests = require('../../openai').askOpenAIForTests;
   });
 
   describe('askOpenAI function', () => {

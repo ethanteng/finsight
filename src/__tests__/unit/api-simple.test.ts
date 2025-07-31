@@ -1,9 +1,9 @@
 // Mock external dependencies before importing the app
-jest.mock('../openai', () => ({
+jest.mock('../../openai', () => ({
   askOpenAI: jest.fn().mockResolvedValue('Mocked response'),
 }));
 
-jest.mock('../plaid', () => ({
+jest.mock('../../plaid', () => ({
   setupPlaidRoutes: jest.fn(),
   plaidClient: {
     accountsGet: jest.fn(),
@@ -11,22 +11,26 @@ jest.mock('../plaid', () => ({
   },
 }));
 
-jest.mock('../data/orchestrator', () => ({
+jest.mock('../../data/orchestrator', () => ({
   dataOrchestrator: {
     getMarketContext: jest.fn().mockResolvedValue({}),
   },
 }));
 
 // Mock feature flags to disable USER_AUTH for these tests
-jest.mock('../config/features', () => ({
+jest.mock('../../config/features', () => ({
   isFeatureEnabled: jest.fn((feature: string) => {
     if (feature === 'USER_AUTH') return false;
     return true;
   }),
+  getFeatures: jest.fn(() => ({
+    USER_AUTH: false,
+    DEMO_MODE: true,
+  })),
 }));
 
 import request from 'supertest';
-import { app } from '../index';
+import { app } from '../../index';
 
 describe('API Endpoints (Simple)', () => {
   describe('Health Check', () => {

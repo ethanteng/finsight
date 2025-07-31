@@ -2,32 +2,104 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// Global setup for integration tests
 beforeAll(async () => {
-  // Ensure database is clean before running integration tests
-  await prisma.demoConversation.deleteMany();
-  await prisma.demoSession.deleteMany();
-  await prisma.conversation.deleteMany();
-  await prisma.transaction.deleteMany();
-  await prisma.account.deleteMany();
-  await prisma.accessToken.deleteMany();
-  await prisma.syncStatus.deleteMany();
-  await prisma.privacySettings.deleteMany();
-  await prisma.user.deleteMany();
+  // ✅ Setup test environment
+  process.env.NODE_ENV = 'test';
   
-  console.log('Integration test database cleaned');
+  // ✅ Verify API keys are available for integration tests
+  const requiredKeys = [
+    'OPENAI_API_KEY',
+    'FRED_API_KEY', 
+    'ALPHA_VANTAGE_API_KEY'
+  ];
+  
+  const missingKeys = requiredKeys.filter(key => !process.env[key]);
+  
+  if (missingKeys.length > 0) {
+    console.warn(`⚠️  Missing API keys for integration tests: ${missingKeys.join(', ')}`);
+    console.warn('Integration tests may fail or use mock data');
+  } else {
+    console.log('✅ All required API keys available for integration tests');
+  }
+
+  // ✅ Verify database connection
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    console.log('✅ Database connection verified for integration tests');
+  } catch (error) {
+    console.error('❌ Database connection failed for integration tests:', error);
+    throw new Error('Database connection required for integration tests');
+  }
 });
 
-// Global teardown for integration tests
 afterAll(async () => {
+  // ✅ Cleanup
   await prisma.$disconnect();
 });
 
-// Set up test environment variables
-process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/test_db';
-process.env.PLAID_CLIENT_ID = process.env.PLAID_CLIENT_ID || 'test_client_id';
-process.env.PLAID_SECRET = process.env.PLAID_SECRET || 'test_secret';
-process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || 'test_openai_key';
-process.env.FRED_API_KEY = process.env.FRED_API_KEY || 'test_fred_key';
-process.env.ALPHA_VANTAGE_API_KEY = process.env.ALPHA_VANTAGE_API_KEY || 'test_alpha_vantage_key'; 
+beforeEach(async () => {
+  // ✅ Reset test data
+  try {
+    await prisma.demoSession.deleteMany();
+    await prisma.demoConversation.deleteMany();
+    await prisma.user.deleteMany();
+    console.log('✅ Test data cleaned up');
+  } catch (error) {
+    console.warn('⚠️  Test data cleanup failed:', error);
+  }
+});
+
+afterEach(async () => {
+  // ✅ Verify cleanup
+  try {
+    const sessionCount = await prisma.demoSession.count();
+    const conversationCount = await prisma.demoConversation.count();
+    
+    if (sessionCount > 0 || conversationCount > 0) {
+      console.warn(`⚠️  Test data not fully cleaned up: ${sessionCount} sessions, ${conversationCount} conversations`);
+    }
+  } catch (error) {
+    console.warn('⚠️  Could not verify test data cleanup:', error);
+  }
+});
+
+// Integration test utilities
+export const waitForDatabase = async (timeout = 5000) => {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      return;
+    } catch (error) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+  throw new Error('Database not ready within timeout');
+};
+
+export const createTestSession = async (sessionId = 'test-session-id') => {
+  return await prisma.demoSession.create({
+    data: {
+      sessionId,
+      userAgent: 'test-agent'
+    }
+  });
+};
+
+export const createTestConversation = async (sessionId: string, question: string, answer: string) => {
+  const session = await prisma.demoSession.findUnique({
+    where: { sessionId }
+  });
+  
+  if (!session) {
+    throw new Error(`Session not found: ${sessionId}`);
+  }
+  
+  return await prisma.demoConversation.create({
+    data: {
+      question,
+      answer,
+      sessionId: session.id
+    }
+  });
+}; 

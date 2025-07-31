@@ -1,6 +1,6 @@
-import { DataSourceManager, dataSourceRegistry } from '../data/sources';
-import { UserTier } from '../data/types';
-import { DataOrchestrator } from '../data/orchestrator';
+import { DataSourceManager, dataSourceRegistry } from '../../data/sources';
+import { UserTier } from '../../data/types';
+import { DataOrchestrator } from '../../data/orchestrator';
 
 describe('Tier System', () => {
   describe('DataSourceManager', () => {
