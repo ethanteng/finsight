@@ -252,6 +252,16 @@ const handleDemoRequest = async (req: Request, res: Response) => {
     
     // Store the demo conversation with session association
     try {
+      // Double-check that the demo session still exists before creating conversation
+      const verifySession = await getPrismaClient().demoSession.findUnique({
+        where: { id: demoSession.id }
+      });
+      
+      if (!verifySession) {
+        console.error('Demo session no longer exists, cannot store conversation');
+        return res.status(500).json({ error: 'Demo session not found' });
+      }
+      
       const storedConversation = await getPrismaClient().demoConversation.create({
         data: {
           question: questionString,

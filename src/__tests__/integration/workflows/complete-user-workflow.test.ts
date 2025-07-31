@@ -542,6 +542,7 @@ describe('Complete User Workflow Tests', () => {
         .get('/auth/profile')
         .set('Authorization', 'Bearer invalid-token');
 
+      // Auth endpoints should return 401 for invalid tokens
       expect(response.status).toBe(401);
     });
 
