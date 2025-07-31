@@ -170,6 +170,8 @@ const handleDemoRequest = async (req: Request, res: Response) => {
     }
     
     const { question } = req.body;
+    // Ensure question is a string
+    const questionString = String(question);
     const sessionId = req.headers['x-session-id'] as string;
     const userAgent = req.headers['user-agent'] || 'unknown';
     
@@ -246,13 +248,13 @@ const handleDemoRequest = async (req: Request, res: Response) => {
     // Always demo mode in this handler
     const marketContext = await dataOrchestrator.getMarketContext(backendTier as any, true); // true = demo mode
     
-    const answer = await askOpenAI(question, recentConversations, backendTier as any, true, undefined);
+    const answer = await askOpenAI(questionString, recentConversations, backendTier as any, true, undefined);
     
     // Store the demo conversation with session association
     try {
       const storedConversation = await getPrismaClient().demoConversation.create({
         data: {
-          question,
+          question: questionString,
           answer,
           sessionId: demoSession.id,
         },
@@ -260,7 +262,7 @@ const handleDemoRequest = async (req: Request, res: Response) => {
       console.log('Demo conversation stored successfully:', { 
         id: storedConversation.id, 
         sessionId: demoSession.id,
-        questionLength: question.length 
+        questionLength: questionString.length 
       });
       
       // Verify the conversation was actually stored
@@ -288,7 +290,7 @@ const handleDemoRequest = async (req: Request, res: Response) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            question,
+            question: questionString,
             answer,
             timestamp: new Date().toISOString(),
             sessionId,
@@ -416,6 +418,8 @@ const handleTierAwareDemoRequest = async (req: Request, res: Response) => {
     }
     
     const { question } = req.body;
+    // Ensure question is a string
+    const questionString = String(question);
     const sessionId = req.headers['x-session-id'] as string;
     const userAgent = req.headers['user-agent'] || 'unknown';
     
@@ -490,13 +494,13 @@ const handleTierAwareDemoRequest = async (req: Request, res: Response) => {
     const backendTier = process.env.TEST_USER_TIER || 'starter';
     
     console.log('Tier-aware demo - calling askOpenAI with tier:', backendTier);
-    const answer = await askOpenAI(question, recentConversations, backendTier as any, true, undefined);
+    const answer = await askOpenAI(questionString, recentConversations, backendTier as any, true, undefined);
     
     // Store the demo conversation with session association
     try {
       const storedConversation = await getPrismaClient().demoConversation.create({
         data: {
-          question,
+          question: questionString,
           answer,
           sessionId: demoSession.id,
         },
@@ -504,7 +508,7 @@ const handleTierAwareDemoRequest = async (req: Request, res: Response) => {
       console.log('Demo conversation stored successfully:', { 
         id: storedConversation.id, 
         sessionId: demoSession.id,
-        questionLength: question.length 
+        questionLength: questionString.length 
       });
       
       // Verify the conversation was actually stored
