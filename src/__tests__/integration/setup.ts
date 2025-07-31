@@ -13,6 +13,17 @@ beforeAll(async () => {
     'ALPHA_VANTAGE_API_KEY'
   ];
   
+  // For integration tests, we can also check for real API key alternatives
+  const realFredKey = process.env.FRED_API_KEY_REAL;
+  const realAlphaKey = process.env.ALPHA_VANTAGE_API_KEY_REAL;
+  
+  if (realFredKey) {
+    process.env.FRED_API_KEY = realFredKey;
+  }
+  if (realAlphaKey) {
+    process.env.ALPHA_VANTAGE_API_KEY = realAlphaKey;
+  }
+  
   const missingKeys = requiredKeys.filter(key => !process.env[key]);
   
   if (missingKeys.length > 0) {
