@@ -34,7 +34,7 @@ const NewHomepage = () => {
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-primary transition-colors cursor-pointer"
               >
-                Security
+                Privacy
               </a>
               <Button 
                 variant="hero" 
@@ -100,11 +100,11 @@ const NewHomepage = () => {
               </div>
               <div className="flex items-center space-x-2">
                 <Lock className="h-4 w-4 text-primary" />
-                <span>Privacy protected</span>
+                <span>Privacy-first by design</span>
               </div>
               <div className="flex items-center space-x-2">
                 <Users className="h-4 w-4 text-primary" />
-                <span>Trusted by thousands</span>
+                <span>Built with your trust in mind</span>
               </div>
             </div>
           </div>
@@ -718,7 +718,7 @@ const NewHomepage = () => {
             </div>
           </div>
           <div className="mt-8 pt-8 border-t border-border text-center text-sm text-muted-foreground">
-            <p>&copy; 2025 Ask Linc. Your financial co-pilot. Built with privacy in mind.</p>
+            <p>&copy; 2025 Ask Linc. Your AI financial analyst. Built with privacy in mind.</p>
           </div>
         </div>
       </footer>

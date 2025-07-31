@@ -25,7 +25,7 @@ const AnimatedPrompt = () => {
 
   if (!isVisible) {
     return (
-      <div className="w-full h-12 bg-gray-700 rounded-lg animate-pulse"></div>
+      <div className="w-full h-20 bg-gray-700 rounded-lg animate-pulse"></div>
     );
   }
 
@@ -38,7 +38,7 @@ const AnimatedPrompt = () => {
         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
         <span className="text-sm text-gray-400 group-hover:text-gray-300 transition-colors">Ask Linc</span>
       </div>
-      <div className="text-white text-lg min-h-[1.5rem] group-hover:text-gray-100 transition-colors">
+      <div className="text-white text-lg h-16 flex items-center justify-center group-hover:text-gray-100 transition-colors">
         <Typewriter
           options={{
             strings: questions,
@@ -47,7 +47,7 @@ const AnimatedPrompt = () => {
             delay: 15,
             deleteSpeed: 1,
             cursor: '|',
-            wrapperClassName: 'text-white text-lg group-hover:text-gray-100 transition-colors',
+            wrapperClassName: 'text-white text-lg group-hover:text-gray-100 transition-colors text-center',
             cursorClassName: 'text-green-500'
           }}
         />
