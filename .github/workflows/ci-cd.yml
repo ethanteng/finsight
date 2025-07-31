@@ -91,9 +91,9 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
           PLAID_CLIENT_ID: test_client_id
           PLAID_SECRET: test_secret
-          OPENAI_API_KEY: test_openai_key
-          FRED_API_KEY: test_fred_key
-          ALPHA_VANTAGE_API_KEY: your_alpha_vantage_api_key
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
 
   # Frontend Build
   frontend-build:
@@ -165,9 +165,9 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
           PLAID_CLIENT_ID: test_client_id
           PLAID_SECRET: test_secret
-          OPENAI_API_KEY: test_openai_key
-          FRED_API_KEY: test_fred_key
-          ALPHA_VANTAGE_API_KEY: test_alpha_vantage_key
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
 
   # Build Verification
   build-verification:

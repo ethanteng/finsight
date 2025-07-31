@@ -1,13 +1,13 @@
 import request from 'supertest';
-import { app } from '../../index';
+import { app } from '../../../index';
 import { PrismaClient } from '@prisma/client';
 
 // Mock external dependencies before importing the app
-jest.mock('../../openai', () => ({
+jest.mock('../../../openai', () => ({
   askOpenAI: jest.fn().mockResolvedValue('Mocked AI response'),
 }));
 
-jest.mock('../../data/orchestrator', () => ({
+jest.mock('../../../data/orchestrator', () => ({
   dataOrchestrator: {
     getMarketContext: jest.fn().mockResolvedValue({}),
   },
@@ -43,7 +43,7 @@ jest.mock('plaid', () => ({
 }));
 
 // Mock FRED API calls
-jest.mock('../../data/providers/fred', () => ({
+jest.mock('../../../data/providers/fred', () => ({
   FREDProvider: jest.fn().mockImplementation(() => ({
     getEconomicIndicators: jest.fn().mockResolvedValue({
       cpi: { value: 321.5, date: '2025-06-01', source: 'FRED' },
@@ -55,7 +55,7 @@ jest.mock('../../data/providers/fred', () => ({
 }));
 
 // Mock Alpha Vantage API calls
-jest.mock('../../data/providers/alpha-vantage', () => ({
+jest.mock('../../../data/providers/alpha-vantage', () => ({
   AlphaVantageProvider: jest.fn().mockImplementation(() => ({
     getLiveMarketData: jest.fn().mockResolvedValue({
       cdRates: [],

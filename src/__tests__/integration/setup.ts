@@ -40,8 +40,10 @@ afterAll(async () => {
 beforeEach(async () => {
   // ✅ Reset test data
   try {
-    await prisma.demoSession.deleteMany();
+    // Delete in correct order to avoid foreign key constraints
     await prisma.demoConversation.deleteMany();
+    await prisma.demoSession.deleteMany();
+    await prisma.privacySettings?.deleteMany();
     await prisma.user.deleteMany();
     console.log('✅ Test data cleaned up');
   } catch (error) {
