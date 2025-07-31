@@ -92,6 +92,8 @@ jobs:
           PLAID_CLIENT_ID: test_client_id
           PLAID_SECRET: test_secret
           OPENAI_API_KEY: test_openai_key
+          FRED_API_KEY: test_fred_key
+          ALPHA_VANTAGE_API_KEY: your_alpha_vantage_api_key
 
   # Frontend Build
   frontend-build:

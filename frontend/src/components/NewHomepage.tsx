@@ -34,7 +34,7 @@ const NewHomepage = () => {
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-primary transition-colors cursor-pointer"
               >
-                Privacy
+                How We Protect Your Data
               </a>
               <Button 
                 variant="hero" 
@@ -67,7 +67,7 @@ const NewHomepage = () => {
             </h1>
             
             <p className="text-xl md:text-2xl text-muted-foreground max-w-4xl mx-auto leading-relaxed">
-            I combine OpenAI's smarts with your real account data and live market insights{" — "}
+            Combines OpenAI's intelligence with real financial data and live market insights{" — "}
             <span className="gradient-text">without compromising your privacy.</span>
             </p>
             
@@ -328,7 +328,7 @@ const NewHomepage = () => {
             }, {
               step: "3",
               title: "Get actionable answers",
-              description: "I use your data + live market info to provide smart insights",
+              description: "Linc uses your data + live market info to provide smart insights",
               icon: Brain
             }].map((step, index) => (
               <div key={index} className="text-center space-y-6 group">
@@ -364,7 +364,7 @@ const NewHomepage = () => {
             <div className="space-y-6">
               <div className="flex items-center space-x-3 mb-6">
                 <CheckCircle className="h-6 w-6 text-emerald-500" />
-                <h3 className="text-2xl font-bold text-emerald-500">It Knows:</h3>
+                <h3 className="text-2xl font-bold text-emerald-500">ChatGPT Knows:</h3>
               </div>
               
               <div className="space-y-4">
