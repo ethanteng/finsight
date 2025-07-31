@@ -74,8 +74,8 @@ app.get('/health/cron', (req: Request, res: Response) => {
     cronJobs: {
       dailySync: {
         running: !!syncJob,
-        lastRun: syncJob?.lastExecution || null,
-        nextRun: syncJob?.nextExecution || null
+        // Note: ScheduledTask doesn't expose last/next execution times
+        // These would need to be tracked separately if needed
       }
     },
     timestamp: new Date().toISOString()
