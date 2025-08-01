@@ -157,6 +157,10 @@ export const setupPlaidRoutes = (app: any) => {
         // Start with just Transactions to test
         products = [Products.Transactions];
         console.log('Using limited production configuration with Transactions only');
+        
+        // If we're getting institution errors, suggest using sandbox for testing
+        console.log('Note: Limited production access may not work with OAuth institutions like Bank of America');
+        console.log('Consider using sandbox mode for testing or request full production access');
       }
       
       // For full production, add more products
@@ -181,6 +185,21 @@ export const setupPlaidRoutes = (app: any) => {
         language: 'en',
         // Add webhook for production
         webhook: isProduction ? process.env.PLAID_WEBHOOK_URL : undefined,
+        // Add required Data Transparency Messaging configuration
+        link_customization_name: isProduction ? 'default' : undefined,
+        // Configure data transparency messaging for production
+        ...(isProduction && {
+          link_customization: {
+            data_transparency_messaging: {
+              use_cases: [
+                {
+                  use_case: 'FINANCIAL_MANAGEMENT',
+                  description: 'We use your financial data to provide personalized financial insights and advice through our AI assistant.'
+                }
+              ]
+            }
+          }
+        })
       };
 
       console.log(`Creating link token with products: ${products.join(', ')}`);
