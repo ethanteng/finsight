@@ -48,8 +48,9 @@ export class DataOrchestrator {
   private readonly CONTEXT_REFRESH_INTERVAL = 60 * 60 * 1000; // 1 hour
 
   constructor() {
-    const fredApiKey = process.env.FRED_API_KEY;
-    const alphaVantageApiKey = process.env.ALPHA_VANTAGE_API_KEY;
+    // For integration tests, use test API keys to avoid hitting live APIs
+    const fredApiKey = process.env.NODE_ENV === 'test' ? 'test_fred_key' : process.env.FRED_API_KEY;
+    const alphaVantageApiKey = process.env.NODE_ENV === 'test' ? 'test_alpha_vantage_key' : process.env.ALPHA_VANTAGE_API_KEY;
 
     if (!fredApiKey) {
       console.warn('FRED_API_KEY not set, economic indicators will be unavailable');

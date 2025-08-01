@@ -6,6 +6,10 @@ beforeAll(async () => {
   // ✅ Setup test environment
   process.env.NODE_ENV = 'test';
   
+  // ✅ Force test API keys for integration tests to avoid hitting live APIs
+  process.env.FRED_API_KEY = 'test_fred_key';
+  process.env.ALPHA_VANTAGE_API_KEY = 'test_alpha_vantage_key';
+  
   // ✅ Verify API keys are available for integration tests
   const requiredKeys = [
     'OPENAI_API_KEY',
@@ -13,23 +17,11 @@ beforeAll(async () => {
     'ALPHA_VANTAGE_API_KEY'
   ];
   
-  // For integration tests, we can also check for real API key alternatives
-  const realFredKey = process.env.FRED_API_KEY_REAL;
-  const realAlphaKey = process.env.ALPHA_VANTAGE_API_KEY_REAL;
-  
-  if (realFredKey) {
-    process.env.FRED_API_KEY = realFredKey;
-  }
-  if (realAlphaKey) {
-    process.env.ALPHA_VANTAGE_API_KEY = realAlphaKey;
-  }
-  
   const missingKeys = requiredKeys.filter(key => !process.env[key]);
   
   if (missingKeys.length > 0) {
     console.error(`❌ Missing API keys for integration tests: ${missingKeys.join(', ')}`);
-    console.error('Integration tests require real API keys to test full system integration');
-    console.error('Please add the missing API keys to GitHub repository secrets');
+    console.error('Integration tests require API keys to be set (even test keys)');
     throw new Error(`Missing required API keys for integration tests: ${missingKeys.join(', ')}`);
   } else {
     console.log('✅ All required API keys available for integration tests');

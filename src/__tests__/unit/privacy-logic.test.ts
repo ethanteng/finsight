@@ -19,15 +19,18 @@ describe('Privacy Logic Tests', () => {
 
   describe('Data Deletion Logic', () => {
     it('should delete all user data correctly', async () => {
-      // Create test user
+      // Create a test user first
       const user = await prisma.user.create({
         data: {
-          id: 'test-user-123',
           email: 'test@example.com',
           tier: 'starter',
           passwordHash: 'test-hash',
         },
       });
+
+      // Verify user was created
+      expect(user.id).toBeDefined();
+      expect(user.email).toBe('test@example.com');
 
       // Create test data for the user
       await prisma.accessToken.create({
@@ -49,7 +52,11 @@ describe('Privacy Logic Tests', () => {
         },
       });
 
-      const account = await prisma.account.findFirst();
+      const account = await prisma.account.findFirst({
+        where: { userId: user.id }
+      });
+      expect(account).toBeTruthy();
+      
       if (account) {
         await prisma.transaction.create({
           data: {
@@ -72,10 +79,18 @@ describe('Privacy Logic Tests', () => {
       });
 
       // Verify data exists
-      const initialTokens = await prisma.accessToken.findMany();
-      const initialAccounts = await prisma.account.findMany();
-      const initialTransactions = await prisma.transaction.findMany();
-      const initialConversations = await prisma.conversation.findMany();
+      const initialTokens = await prisma.accessToken.findMany({
+        where: { userId: user.id }
+      });
+      const initialAccounts = await prisma.account.findMany({
+        where: { userId: user.id }
+      });
+      const initialTransactions = await prisma.transaction.findMany({
+        where: { account: { userId: user.id } }
+      });
+      const initialConversations = await prisma.conversation.findMany({
+        where: { userId: user.id }
+      });
 
       expect(initialTokens.length).toBe(1);
       expect(initialAccounts.length).toBe(1);
@@ -97,10 +112,18 @@ describe('Privacy Logic Tests', () => {
       });
 
       // Verify all data is deleted
-      const remainingTokens = await prisma.accessToken.findMany();
-      const remainingAccounts = await prisma.account.findMany();
-      const remainingTransactions = await prisma.transaction.findMany();
-      const remainingConversations = await prisma.conversation.findMany();
+      const remainingTokens = await prisma.accessToken.findMany({
+        where: { userId: user.id }
+      });
+      const remainingAccounts = await prisma.account.findMany({
+        where: { userId: user.id }
+      });
+      const remainingTransactions = await prisma.transaction.findMany({
+        where: { account: { userId: user.id } }
+      });
+      const remainingConversations = await prisma.conversation.findMany({
+        where: { userId: user.id }
+      });
 
       expect(remainingTokens.length).toBe(0);
       expect(remainingAccounts.length).toBe(0);
@@ -112,7 +135,6 @@ describe('Privacy Logic Tests', () => {
       // Create two users
       const user1 = await prisma.user.create({
         data: {
-          id: 'test-user-1',
           email: 'user1@example.com',
           tier: 'starter',
           passwordHash: 'test-hash-1',
@@ -121,12 +143,17 @@ describe('Privacy Logic Tests', () => {
 
       const user2 = await prisma.user.create({
         data: {
-          id: 'test-user-2',
           email: 'user2@example.com',
           tier: 'starter',
           passwordHash: 'test-hash-2',
         },
       });
+
+      // Verify users were created
+      expect(user1.id).toBeDefined();
+      expect(user2.id).toBeDefined();
+      expect(user1.email).toBe('user1@example.com');
+      expect(user2.email).toBe('user2@example.com');
 
       // Create data for both users
       await prisma.accessToken.createMany({
@@ -158,35 +185,113 @@ describe('Privacy Logic Tests', () => {
             plaidAccountId: 'test-account-2',
             name: 'User 2 Account',
             type: 'depository',
-            subtype: 'checking',
+            subtype: 'savings',
             currentBalance: 2000,
             userId: user2.id,
           },
         ],
       });
 
+      // Create transactions for both users
+      const user1Account = await prisma.account.findFirst({
+        where: { userId: user1.id }
+      });
+      const user2Account = await prisma.account.findFirst({
+        where: { userId: user2.id }
+      });
+
+      expect(user1Account).toBeTruthy();
+      expect(user2Account).toBeTruthy();
+
+      if (user1Account && user2Account) {
+        await prisma.transaction.createMany({
+          data: [
+            {
+              plaidTransactionId: 'test-transaction-1',
+              accountId: user1Account.id,
+              amount: 50,
+              date: new Date(),
+              name: 'User 1 Transaction',
+              pending: false,
+            },
+            {
+              plaidTransactionId: 'test-transaction-2',
+              accountId: user2Account.id,
+              amount: 100,
+              date: new Date(),
+              name: 'User 2 Transaction',
+              pending: false,
+            },
+          ],
+        });
+      }
+
+      await prisma.conversation.createMany({
+        data: [
+          {
+            question: 'User 1 question',
+            answer: 'User 1 answer',
+            userId: user1.id,
+          },
+          {
+            question: 'User 2 question',
+            answer: 'User 2 answer',
+            userId: user2.id,
+          },
+        ],
+      });
+
       // Verify both users have data
-      const initialTokens = await prisma.accessToken.findMany();
-      const initialAccounts = await prisma.account.findMany();
-      expect(initialTokens.length).toBe(2);
-      expect(initialAccounts.length).toBe(2);
+      const user1Tokens = await prisma.accessToken.findMany({
+        where: { userId: user1.id }
+      });
+      const user2Tokens = await prisma.accessToken.findMany({
+        where: { userId: user2.id }
+      });
+      const user1Accounts = await prisma.account.findMany({
+        where: { userId: user1.id }
+      });
+      const user2Accounts = await prisma.account.findMany({
+        where: { userId: user2.id }
+      });
+
+      expect(user1Tokens.length).toBe(1);
+      expect(user2Tokens.length).toBe(1);
+      expect(user1Accounts.length).toBe(1);
+      expect(user2Accounts.length).toBe(1);
 
       // Delete only user1's data
       await prisma.accessToken.deleteMany({
         where: { userId: user1.id },
       });
+      await prisma.transaction.deleteMany({
+        where: { account: { userId: user1.id } },
+      });
       await prisma.account.deleteMany({
         where: { userId: user1.id },
       });
+      await prisma.conversation.deleteMany({
+        where: { userId: user1.id },
+      });
 
-      // Verify only user1's data is deleted
-      const remainingTokens = await prisma.accessToken.findMany();
-      const remainingAccounts = await prisma.account.findMany();
+      // Verify user1's data is deleted but user2's data remains
+      const remainingUser1Tokens = await prisma.accessToken.findMany({
+        where: { userId: user1.id }
+      });
+      const remainingUser2Tokens = await prisma.accessToken.findMany({
+        where: { userId: user2.id }
+      });
+      const remainingUser1Accounts = await prisma.account.findMany({
+        where: { userId: user1.id }
+      });
+      const remainingUser2Accounts = await prisma.account.findMany({
+        where: { userId: user2.id }
+      });
 
-      expect(remainingTokens.length).toBe(1);
-      expect(remainingAccounts.length).toBe(1);
-      expect(remainingTokens[0].userId).toBe(user2.id);
-      expect(remainingAccounts[0].userId).toBe(user2.id);
+      expect(remainingUser1Tokens.length).toBe(0);
+      expect(remainingUser2Tokens.length).toBe(1);
+      expect(remainingUser1Accounts.length).toBe(0);
+      expect(remainingUser2Accounts.length).toBe(1);
     });
   });
 
@@ -195,12 +300,15 @@ describe('Privacy Logic Tests', () => {
       // Create test user
       const user = await prisma.user.create({
         data: {
-          id: 'test-user-123',
           email: 'test@example.com',
           tier: 'starter',
           passwordHash: 'test-hash',
         },
       });
+
+      // Verify user was created
+      expect(user.id).toBeDefined();
+      expect(user.email).toBe('test@example.com');
 
       // Create multiple access tokens
       await prisma.accessToken.createMany({
@@ -240,8 +348,12 @@ describe('Privacy Logic Tests', () => {
       });
 
       // Verify data exists
-      const initialTokens = await prisma.accessToken.findMany();
-      const initialAccounts = await prisma.account.findMany();
+      const initialTokens = await prisma.accessToken.findMany({
+        where: { userId: user.id }
+      });
+      const initialAccounts = await prisma.account.findMany({
+        where: { userId: user.id }
+      });
       expect(initialTokens.length).toBe(2);
       expect(initialAccounts.length).toBe(2);
 
@@ -254,8 +366,12 @@ describe('Privacy Logic Tests', () => {
       });
 
       // Verify accounts are disconnected
-      const remainingTokens = await prisma.accessToken.findMany();
-      const remainingAccounts = await prisma.account.findMany();
+      const remainingTokens = await prisma.accessToken.findMany({
+        where: { userId: user.id }
+      });
+      const remainingAccounts = await prisma.account.findMany({
+        where: { userId: user.id }
+      });
       expect(remainingTokens.length).toBe(0);
       expect(remainingAccounts.length).toBe(0);
     });
@@ -330,12 +446,15 @@ describe('Privacy Logic Tests', () => {
       // Create user with accounts and transactions
       const user = await prisma.user.create({
         data: {
-          id: 'test-user-123',
           email: 'test@example.com',
           tier: 'starter',
           passwordHash: 'test-hash',
         },
       });
+
+      // Verify user was created
+      expect(user.id).toBeDefined();
+      expect(user.email).toBe('test@example.com');
 
       await prisma.account.create({
         data: {
@@ -348,7 +467,11 @@ describe('Privacy Logic Tests', () => {
         },
       });
 
-      const account = await prisma.account.findFirst();
+      const account = await prisma.account.findFirst({
+        where: { userId: user.id }
+      });
+      expect(account).toBeTruthy();
+      
       if (account) {
         await prisma.transaction.create({
           data: {
@@ -362,6 +485,16 @@ describe('Privacy Logic Tests', () => {
         });
       }
 
+      // Verify data exists before deletion
+      const initialAccounts = await prisma.account.findMany({
+        where: { userId: user.id }
+      });
+      const initialTransactions = await prisma.transaction.findMany({
+        where: { account: { userId: user.id } }
+      });
+      expect(initialAccounts.length).toBe(1);
+      expect(initialTransactions.length).toBe(1);
+
       // Delete transactions first due to foreign key constraints
       await prisma.transaction.deleteMany({
         where: { account: { userId: user.id } },
@@ -373,11 +506,15 @@ describe('Privacy Logic Tests', () => {
       });
 
       // Verify account is deleted
-      const remainingAccounts = await prisma.account.findMany();
+      const remainingAccounts = await prisma.account.findMany({
+        where: { userId: user.id }
+      });
       expect(remainingAccounts.length).toBe(0);
 
       // Transactions should also be deleted
-      const remainingTransactions = await prisma.transaction.findMany();
+      const remainingTransactions = await prisma.transaction.findMany({
+        where: { account: { userId: user.id } }
+      });
       expect(remainingTransactions.length).toBe(0);
     });
   });

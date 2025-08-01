@@ -39,7 +39,7 @@ export class AlphaVantageProvider implements DataProvider {
     }
 
     // Use mock data for test environment
-    if (this.apiKey === 'your_alpha_vantage_api_key') {
+    if (this.apiKey === 'your_alpha_vantage_api_key' || this.apiKey.startsWith('test_')) {
       console.log('Alpha Vantage Provider: Using mock data for test environment');
       const mockData: LiveMarketData = {
         cdRates: [

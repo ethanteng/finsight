@@ -33,7 +33,7 @@ export class FREDProvider implements DataProvider {
     }
 
     // Use mock data for test environment
-    if (this.apiKey === 'test_fred_key') {
+    if (this.apiKey === 'test_fred_key' || this.apiKey.startsWith('test_')) {
       console.log('FRED Provider: Using mock data for test environment');
       const mockIndicators: EconomicIndicator = {
         cpi: { value: 3.1, date: '2024-01', source: 'FRED (mock)', lastUpdated: new Date().toISOString() },
@@ -84,7 +84,7 @@ export class FREDProvider implements DataProvider {
     if (cached) return cached;
 
     // Use mock data for test environment
-    if (this.apiKey === 'test_fred_key') {
+    if (this.apiKey === 'test_fred_key' || this.apiKey.startsWith('test_')) {
       console.log('FRED Provider: Using mock data for test environment');
       const mockData: MarketDataPoint = {
         value: 3.1, // Default mock value

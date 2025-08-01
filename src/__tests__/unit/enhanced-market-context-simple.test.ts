@@ -103,11 +103,14 @@ describe('Enhanced Market Context System - Core Functionality', () => {
         creditCardAPR: { value: 24.59, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' }
       });
 
+      // Clear any existing cache first
+      await dataOrchestrator.invalidateCache('market');
+
       // First call should fetch data
       await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD, true);
       expect(mockFredProvider.getEconomicIndicators).toHaveBeenCalledTimes(1);
 
-      // Second call should use cache
+      // Second call should use cache (same instance)
       await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD, true);
       expect(mockFredProvider.getEconomicIndicators).toHaveBeenCalledTimes(1); // Still 1, not 2
     });
