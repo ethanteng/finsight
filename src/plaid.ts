@@ -148,8 +148,8 @@ export const setupPlaidRoutes = (app: any) => {
       const isProduction = process.env.PLAID_ENV === 'production';
       const isLimitedProduction = process.env.PLAID_ENV === 'production' && process.env.PLAID_ACCESS_LEVEL === 'limited';
       
-      // Base products available in all environments
-      let products = [Products.Auth, Products.Transactions];
+      // Use Transactions as the primary product (includes Auth capabilities)
+      let products = [Products.Transactions];
       
       // Add additional products for limited production access
       if (isLimitedProduction) {
