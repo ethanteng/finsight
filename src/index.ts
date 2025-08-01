@@ -781,6 +781,20 @@ app.get('/test/current-tier', async (req: Request, res: Response) => {
   }
 });
 
+// Test endpoint to get cache statistics
+app.get('/test/cache-stats', async (req: Request, res: Response) => {
+  try {
+    const cacheStats = await dataOrchestrator.getCacheStats();
+    res.json(cacheStats);
+  } catch (err) {
+    if (err instanceof Error) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+});
+
 // Test endpoint for demo data
 app.get('/test/demo-data', async (req: Request, res: Response) => {
   try {
