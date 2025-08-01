@@ -322,6 +322,69 @@ export const setupPlaidRoutes = (app: any) => {
   // Get all accounts with enhanced data
   app.get('/plaid/all-accounts', async (req: any, res: any) => {
     try {
+      // Check for demo mode
+      const isDemo = req.headers['x-demo-mode'] === 'true';
+      
+      if (isDemo) {
+        // Return demo account data
+        const demoAccounts = [
+          {
+            id: "checking_1",
+            name: "Chase Checking",
+            type: "depository",
+            subtype: "checking",
+            mask: "1234",
+            balance: {
+              available: 12450.67,
+              current: 12450.67,
+              limit: null,
+              iso_currency_code: "USD",
+              unofficial_currency_code: null
+            },
+            securities: [],
+            holdings: [],
+            income_verification: null
+          },
+          {
+            id: "savings_1",
+            name: "Ally High-Yield Savings",
+            type: "depository",
+            subtype: "savings",
+            mask: "5678",
+            balance: {
+              available: 28450.00,
+              current: 28450.00,
+              limit: null,
+              iso_currency_code: "USD",
+              unofficial_currency_code: null
+            },
+            securities: [],
+            holdings: [],
+            income_verification: null
+          },
+          {
+            id: "401k_1",
+            name: "Fidelity 401(k)",
+            type: "investment",
+            subtype: "401k",
+            mask: "9012",
+            balance: {
+              available: 156780.45,
+              current: 156780.45,
+              limit: null,
+              iso_currency_code: "USD",
+              unofficial_currency_code: null
+            },
+            securities: [],
+            holdings: [],
+            income_verification: null
+          }
+        ];
+
+        return res.json({ accounts: demoAccounts });
+      }
+
+      // Real Plaid integration
       const accessTokens = await getPrismaClient().accessToken.findMany();
       const allAccounts: any[] = [];
 
