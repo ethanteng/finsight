@@ -53,36 +53,62 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// Health check endpoint
+// Root endpoint for basic connectivity test
+app.get('/', (req: Request, res: Response) => {
+  res.json({ 
+    message: 'Finsight API is running',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// Health check endpoints (accessible without auth)
 app.get('/health', (req: Request, res: Response) => {
+  console.log('Health check requested:', {
+    timestamp: new Date().toISOString(),
+    userAgent: req.headers['user-agent'],
+    ip: req.ip
+  });
+  
   res.json({ 
     status: 'OK',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    memory: process.memoryUsage()
+    memory: process.memoryUsage(),
+    environment: process.env.NODE_ENV || 'development'
   });
 });
 
 // Cron job health check endpoint
 app.get('/health/cron', (req: Request, res: Response) => {
+  console.log('Cron health check requested:', {
+    timestamp: new Date().toISOString(),
+    userAgent: req.headers['user-agent']
+  });
+  
   // Check if cron jobs are running
   const cronJobs = cron.getTasks();
   const syncJob = Array.from(cronJobs.values()).find((job: any) => job.name === 'daily-sync');
+  const marketContextJob = Array.from(cronJobs.values()).find((job: any) => job.name === 'market-context-refresh');
   
   res.json({
     status: 'OK',
     cronJobs: {
       dailySync: {
         running: !!syncJob,
-        // Note: ScheduledTask doesn't expose last/next execution times
-        // These would need to be tracked separately if needed
+        name: 'daily-sync'
+      },
+      marketContextRefresh: {
+        running: !!marketContextJob,
+        name: 'market-context-refresh'
       }
     },
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
   });
 });
 
-// Apply optional auth middleware to all routes
+// Apply optional auth middleware to all routes AFTER health endpoints
 app.use(optionalAuth);
 
 // Setup Plaid routes
