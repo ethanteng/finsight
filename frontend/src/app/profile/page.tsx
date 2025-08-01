@@ -29,6 +29,9 @@ export default function ProfilePage() {
   const [error, setError] = useState('');
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isDemo, setIsDemo] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteMessage, setDeleteMessage] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -208,6 +211,87 @@ export default function ProfilePage() {
     }).format(amount);
   };
 
+  const handleDisconnectAccounts = async () => {
+    if (isDemo) {
+      setDeleteMessage('This is a demo only. In the real app, your accounts would have been disconnected.');
+      return;
+    }
+
+    setIsDeleting(true);
+    setDeleteMessage('');
+    
+    try {
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${API_URL}/privacy/disconnect-accounts`, {
+        method: 'POST',
+        headers,
+      });
+
+      if (response.ok) {
+        setDeleteMessage('Your accounts have been successfully disconnected.');
+        // Reload accounts to show they're disconnected
+        loadConnectedAccountsWithDemoMode(false);
+      } else {
+        setDeleteMessage('Failed to disconnect accounts. Please try again.');
+      }
+    } catch (error) {
+      setDeleteMessage('An error occurred while disconnecting your accounts. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteAllData = async () => {
+    if (isDemo) {
+      setDeleteMessage('This is a demo only. In the real app, your account data would have been deleted.');
+      setShowDeleteConfirm(false);
+      return;
+    }
+
+    setIsDeleting(true);
+    setDeleteMessage('');
+    
+    try {
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${API_URL}/privacy/delete-all-data`, {
+        method: 'DELETE',
+        headers,
+      });
+
+      if (response.ok) {
+        setDeleteMessage('All your data has been successfully deleted.');
+        localStorage.removeItem('auth_token');
+        // Redirect to home page after successful deletion
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 2000);
+      } else {
+        setDeleteMessage('Failed to delete data. Please try again or contact support.');
+      }
+    } catch (error) {
+      setDeleteMessage('An error occurred while deleting your data. Please try again.');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       
@@ -341,22 +425,96 @@ export default function ProfilePage() {
         {/* Account Settings */}
         <div className="bg-gray-800 rounded-lg p-6">
           <h2 className="text-xl font-semibold mb-4">Account Settings</h2>
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div>
               <h3 className="text-lg font-medium mb-2">Data Privacy</h3>
-              <p className="text-gray-400 text-sm">
+              <p className="text-gray-400 text-sm mb-4">
                 Your financial data is read-only and never stored permanently. 
                 We use Plaid&apos;s secure API to access your accounts.
               </p>
-            </div>
-            <div>
-              <h3 className="text-lg font-medium mb-2">Disconnect Accounts</h3>
-              <p className="text-gray-400 text-sm">
-                To disconnect an account, you&apos;ll need to revoke access through your bank&apos;s website 
-                or contact your financial institution directly.
-              </p>
+              
+              <div className="space-y-4">
+                <div className="border border-gray-600 rounded-lg p-4">
+                  <h4 className="font-medium mb-2">Disconnect Your Accounts</h4>
+                  <p className="text-gray-400 text-sm mb-3">
+                    Remove all Plaid connections and clear your financial data. 
+                    This will disconnect all linked bank accounts but keep your conversation history.
+                  </p>
+                  <button
+                    onClick={handleDisconnectAccounts}
+                    disabled={isDeleting}
+                    className="bg-orange-600 hover:bg-orange-700 disabled:bg-orange-800 px-4 py-2 rounded text-sm transition-colors"
+                  >
+                    {isDeleting ? 'Disconnecting...' : 'Disconnect All Accounts'}
+                  </button>
+                </div>
+
+                <div className="border border-gray-600 rounded-lg p-4">
+                  <h4 className="font-medium mb-2">Delete All Your Data</h4>
+                  <p className="text-gray-400 text-sm mb-3">
+                    Permanently delete all your data including accounts, transactions, 
+                    conversations, and Plaid connections. This action cannot be undone.
+                  </p>
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    disabled={isDeleting}
+                    className="bg-red-600 hover:bg-red-700 disabled:bg-red-800 px-4 py-2 rounded text-sm transition-colors"
+                  >
+                    Delete All Data
+                  </button>
+                </div>
+              </div>
+
+              {deleteMessage && (
+                <div className={`mt-4 p-3 rounded-lg ${
+                  deleteMessage.includes('successfully') 
+                    ? 'bg-green-900 border border-green-700 text-green-200' 
+                    : 'bg-red-900 border border-red-700 text-red-200'
+                }`}>
+                  {deleteMessage}
+                </div>
+              )}
             </div>
           </div>
+
+          {/* Delete Confirmation Modal */}
+          {showDeleteConfirm && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-gray-800 border border-gray-600 rounded-lg p-6 max-w-md mx-4">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="h-6 w-6 text-red-400">⚠️</div>
+                  <h3 className="text-lg font-semibold">Confirm Data Deletion</h3>
+                </div>
+                <p className="text-gray-300 mb-4">
+                  This action will permanently delete all your data including:
+                </p>
+                <ul className="text-sm text-gray-400 mb-4 space-y-1">
+                  <li>• All connected bank accounts</li>
+                  <li>• Transaction history</li>
+                  <li>• Conversation history</li>
+                  <li>• Account balances and sync data</li>
+                </ul>
+                <p className="text-sm text-red-400 mb-4 font-medium">
+                  This action cannot be undone.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleDeleteAllData}
+                    disabled={isDeleting}
+                    className="bg-red-600 hover:bg-red-700 disabled:bg-red-800 px-4 py-2 rounded text-sm transition-colors flex-1"
+                  >
+                    {isDeleting ? 'Deleting...' : 'Yes, Delete Everything'}
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded text-sm transition-colors flex-1"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
