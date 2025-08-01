@@ -148,28 +148,25 @@ export const setupPlaidRoutes = (app: any) => {
       const isProduction = process.env.PLAID_ENV === 'production';
       const isLimitedProduction = process.env.PLAID_ENV === 'production' && process.env.PLAID_ACCESS_LEVEL === 'limited';
       
-      // Use Transactions as the primary product (includes Auth capabilities)
+      // Start with basic products that work in all environments
       let products = [Products.Transactions];
       
-      // Add additional products for limited production access
+      // For limited production, only add Balance (most compatible)
       if (isLimitedProduction) {
-        products.push(
-          Products.Balance,  // Real-time account balances
-          Products.Investments // Investment account data
-          // Note: Identity and Income require additional approval
-        );
+        products = [Products.Transactions, Products.Balance];
       }
       
-      // Add products for full production access
+      // For full production, add more products
       if (isProduction && !isLimitedProduction) {
-        products.push(
+        products = [
+          Products.Transactions,
           Products.Balance,
-          Products.Investments, 
-          Products.Identity,  // Requires additional approval
-          Products.Income,    // Requires additional approval
-          Products.Liabilities, // Debt information
-          Products.Statements  // PDF financial statements
-        );
+          Products.Investments,
+          Products.Identity,
+          Products.Income,
+          Products.Liabilities,
+          Products.Statements
+        ];
       }
 
       const request = {
