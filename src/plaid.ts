@@ -155,9 +155,8 @@ export const setupPlaidRoutes = (app: any) => {
       if (isLimitedProduction) {
         products.push(
           Products.Balance,  // Real-time account balances
-          Products.Investments, // Investment account data
-          Products.Identity,  // Bank account ownership verification
-          Products.Income     // Income and employment verification
+          Products.Investments // Investment account data
+          // Note: Identity and Income require additional approval
         );
       }
       
@@ -166,8 +165,8 @@ export const setupPlaidRoutes = (app: any) => {
         products.push(
           Products.Balance,
           Products.Investments, 
-          Products.Identity,
-          Products.Income,
+          Products.Identity,  // Requires additional approval
+          Products.Income,    // Requires additional approval
           Products.Liabilities, // Debt information
           Products.Statements  // PDF financial statements
         );
