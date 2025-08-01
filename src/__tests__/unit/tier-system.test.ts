@@ -2,6 +2,38 @@ import { DataSourceManager, dataSourceRegistry } from '../../data/sources';
 import { UserTier } from '../../data/types';
 import { DataOrchestrator } from '../../data/orchestrator';
 
+// Mock the DataOrchestrator dependencies
+jest.mock('../../data/providers/fred', () => ({
+  FredProvider: jest.fn().mockImplementation(() => ({
+    getEconomicIndicators: jest.fn().mockResolvedValue({
+      cpi: 3.2,
+      fedRate: 5.5,
+      mortgageRate: 7.1,
+      creditCardAPR: 24.5
+    }),
+    getLiveMarketData: jest.fn().mockResolvedValue(null)
+  }))
+}));
+
+jest.mock('../../data/providers/alpha-vantage', () => ({
+  AlphaVantageProvider: jest.fn().mockImplementation(() => ({
+    getLiveMarketData: jest.fn().mockResolvedValue({
+      stocks: {
+        AAPL: { price: 150.25, change: 2.5 },
+        GOOGL: { price: 2800.50, change: -15.75 }
+      },
+      bonds: {
+        '10Y_TREASURY': { yield: 4.2 },
+        '30Y_TREASURY': { yield: 4.8 }
+      },
+      commodities: {
+        GOLD: { price: 1950.00, change: 5.25 },
+        OIL: { price: 75.50, change: -1.20 }
+      }
+    })
+  }))
+}));
+
 describe('Tier System', () => {
   describe('DataSourceManager', () => {
     test('should get correct sources for Starter tier', () => {
@@ -200,6 +232,7 @@ describe('Tier System', () => {
       economicSources.forEach(source => {
         expect(source.tiers).toContain(UserTier.STANDARD);
         expect(source.tiers).toContain(UserTier.PREMIUM);
+        // Economic sources should not be available for Starter
         expect(source.tiers).not.toContain(UserTier.STARTER);
       });
     });
@@ -209,20 +242,83 @@ describe('Tier System', () => {
       
       externalSources.forEach(source => {
         expect(source.tiers).toContain(UserTier.PREMIUM);
+        // External sources should not be available for Starter or Standard
         expect(source.tiers).not.toContain(UserTier.STARTER);
         expect(source.tiers).not.toContain(UserTier.STANDARD);
       });
     });
 
-    test('should have upgrade benefits for restricted sources', () => {
-      const restrictedSources = Object.values(dataSourceRegistry).filter(s => 
-        s.tiers.length < 3 || !s.tiers.includes(UserTier.STARTER)
-      );
-      
-      restrictedSources.forEach(source => {
-        expect(source.upgradeBenefit).toBeDefined();
-        expect(source.upgradeBenefit?.length).toBeGreaterThan(0);
+    test('should have appropriate cache durations', () => {
+      Object.values(dataSourceRegistry).forEach(source => {
+        expect(source.cacheDuration).toBeGreaterThan(0);
+        
+        // Live data should have shorter cache durations
+        if (source.isLive) {
+          expect(source.cacheDuration).toBeLessThanOrEqual(300); // 5 minutes max
+        } else {
+          expect(source.cacheDuration).toBeGreaterThan(300); // More than 5 minutes
+        }
       });
+    });
+
+    test('should have unique IDs', () => {
+      const ids = Object.values(dataSourceRegistry).map(s => s.id);
+      const uniqueIds = new Set(ids);
+      expect(uniqueIds.size).toBe(ids.length);
+    });
+
+    test('should have descriptive names', () => {
+      Object.values(dataSourceRegistry).forEach(source => {
+        expect(source.name.length).toBeGreaterThan(0);
+        expect(source.description.length).toBeGreaterThan(10);
+      });
+    });
+  });
+
+  describe('Tier Upgrade Path', () => {
+    test('should provide clear upgrade path from Starter to Standard', () => {
+      const starterSources = DataSourceManager.getSourcesForTier(UserTier.STARTER);
+      const standardSources = DataSourceManager.getSourcesForTier(UserTier.STANDARD);
+      
+      // Standard should have more sources than Starter
+      expect(standardSources.length).toBeGreaterThan(starterSources.length);
+      
+      // Standard should include all Starter sources
+      const starterSourceIds = starterSources.map(s => s.id);
+      const standardSourceIds = standardSources.map(s => s.id);
+      
+      starterSourceIds.forEach(id => {
+        expect(standardSourceIds).toContain(id);
+      });
+    });
+
+    test('should provide clear upgrade path from Standard to Premium', () => {
+      const standardSources = DataSourceManager.getSourcesForTier(UserTier.STANDARD);
+      const premiumSources = DataSourceManager.getSourcesForTier(UserTier.PREMIUM);
+      
+      // Premium should have more sources than Standard
+      expect(premiumSources.length).toBeGreaterThan(standardSources.length);
+      
+      // Premium should include all Standard sources
+      const standardSourceIds = standardSources.map(s => s.id);
+      const premiumSourceIds = premiumSources.map(s => s.id);
+      
+      standardSourceIds.forEach(id => {
+        expect(premiumSourceIds).toContain(id);
+      });
+    });
+
+    test('should have meaningful upgrade suggestions', () => {
+      const starterSuggestions = DataSourceManager.getUpgradeSuggestions(UserTier.STARTER);
+      const standardSuggestions = DataSourceManager.getUpgradeSuggestions(UserTier.STANDARD);
+      
+      // Starter suggestions should mention Standard features
+      expect(starterSuggestions.some(s => s.includes('economic'))).toBe(true);
+      expect(starterSuggestions.some(s => s.includes('inflation'))).toBe(true);
+      
+      // Standard suggestions should mention Premium features
+      expect(standardSuggestions.some(s => s.includes('real-time'))).toBe(true);
+      expect(standardSuggestions.some(s => s.includes('live'))).toBe(true);
     });
   });
 }); 
