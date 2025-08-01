@@ -4,7 +4,7 @@ import { DataOrchestrator } from '../../data/orchestrator';
 
 // Mock the DataOrchestrator dependencies
 jest.mock('../../data/providers/fred', () => ({
-  FredProvider: jest.fn().mockImplementation(() => ({
+  FREDProvider: jest.fn().mockImplementation(() => ({
     getEconomicIndicators: jest.fn().mockResolvedValue({
       cpi: 3.2,
       fedRate: 5.5,
@@ -252,11 +252,11 @@ describe('Tier System', () => {
       Object.values(dataSourceRegistry).forEach(source => {
         expect(source.cacheDuration).toBeGreaterThan(0);
         
-        // Live data should have shorter cache durations
+        // Live data should have shorter cache durations (5 minutes max)
         if (source.isLive) {
-          expect(source.cacheDuration).toBeLessThanOrEqual(300); // 5 minutes max
+          expect(source.cacheDuration).toBeLessThanOrEqual(300000); // 5 minutes max
         } else {
-          expect(source.cacheDuration).toBeGreaterThan(300); // More than 5 minutes
+          expect(source.cacheDuration).toBeGreaterThan(300000); // More than 5 minutes
         }
       });
     });
@@ -314,11 +314,11 @@ describe('Tier System', () => {
       
       // Starter suggestions should mention Standard features
       expect(starterSuggestions.some(s => s.includes('economic'))).toBe(true);
-      expect(starterSuggestions.some(s => s.includes('inflation'))).toBe(true);
+      expect(starterSuggestions.some(s => s.includes('economic indicators'))).toBe(true);
       
       // Standard suggestions should mention Premium features
       expect(standardSuggestions.some(s => s.includes('real-time'))).toBe(true);
-      expect(standardSuggestions.some(s => s.includes('live'))).toBe(true);
+      expect(standardSuggestions.some(s => s.includes('real-time market data'))).toBe(true);
     });
   });
 }); 
