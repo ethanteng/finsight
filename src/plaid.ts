@@ -21,6 +21,14 @@ const configuration = new Configuration({
   },
 });
 
+// Log Plaid environment configuration
+console.log('Plaid Configuration:', {
+  environment: process.env.PLAID_ENV || 'sandbox',
+  accessLevel: process.env.PLAID_ACCESS_LEVEL || 'sandbox',
+  hasClientId: !!process.env.PLAID_CLIENT_ID,
+  hasSecret: !!process.env.PLAID_SECRET
+});
+
 const plaidClient = new PlaidApi(configuration);
 
 // Helper function to get subtype for demo accounts
@@ -39,6 +47,53 @@ const getSubtypeForType = (type: string): string => {
     default:
       return 'other';
   }
+};
+
+// Enhanced data processing for production Plaid data
+const processAccountData = (account: any) => {
+  return {
+    id: account.account_id,
+    name: account.name,
+    type: account.type,
+    subtype: account.subtype,
+    mask: account.mask,
+    balance: {
+      available: account.balances.available,
+      current: account.balances.current,
+      limit: account.balances.limit,
+      iso_currency_code: account.balances.iso_currency_code,
+      unofficial_currency_code: account.balances.unofficial_currency_code
+    },
+    // Enhanced metadata for production
+    verification_status: account.verification_status,
+    last_updated_datetime: account.last_updated_datetime,
+    // Investment-specific data
+    securities: account.securities || [],
+    holdings: account.holdings || [],
+    // Income-specific data
+    income_verification: account.income_verification || null
+  };
+};
+
+const processTransactionData = (transaction: any) => {
+  return {
+    id: transaction.transaction_id,
+    account_id: transaction.account_id,
+    amount: transaction.amount,
+    date: transaction.date,
+    name: transaction.name,
+    merchant_name: transaction.merchant_name,
+    category: transaction.category,
+    category_id: transaction.category_id,
+    pending: transaction.pending,
+    payment_channel: transaction.payment_channel,
+    // Enhanced metadata
+    location: transaction.location,
+    payment_meta: transaction.payment_meta,
+    pending_transaction_id: transaction.pending_transaction_id,
+    account_owner: transaction.account_owner,
+    transaction_code: transaction.transaction_code
+  };
 };
 
 // Helper function to handle Plaid errors
@@ -89,14 +144,46 @@ export const setupPlaidRoutes = (app: any) => {
   // Create link token
   app.post('/plaid/create_link_token', async (req: any, res: any) => {
     try {
+      // Determine available products based on environment
+      const isProduction = process.env.PLAID_ENV === 'production';
+      const isLimitedProduction = process.env.PLAID_ENV === 'production' && process.env.PLAID_ACCESS_LEVEL === 'limited';
+      
+      // Base products available in all environments
+      let products = [Products.Auth, Products.Transactions];
+      
+      // Add additional products for limited production access
+      if (isLimitedProduction) {
+        products.push(
+          Products.Balance,  // Real-time account balances
+          Products.Investments, // Investment account data
+          Products.Identity,  // Bank account ownership verification
+          Products.Income     // Income and employment verification
+        );
+      }
+      
+      // Add products for full production access
+      if (isProduction && !isLimitedProduction) {
+        products.push(
+          Products.Balance,
+          Products.Investments, 
+          Products.Identity,
+          Products.Income,
+          Products.Liabilities, // Debt information
+          Products.Statements  // PDF financial statements
+        );
+      }
+
       const request = {
         user: { client_user_id: 'user-id' },
-        client_name: 'Linc',
-        products: [Products.Auth, Products.Transactions],
+        client_name: 'Ask Linc',
+        products: products,
         country_codes: [CountryCode.Us],
         language: 'en',
+        // Add webhook for production
+        webhook: isProduction ? process.env.PLAID_WEBHOOK_URL : undefined,
       };
 
+      console.log(`Creating link token with products: ${products.join(', ')}`);
       const createTokenResponse = await plaidClient.linkTokenCreate(request);
       res.json({ link_token: createTokenResponse.data.link_token });
     } catch (error) {
@@ -223,136 +310,115 @@ export const setupPlaidRoutes = (app: any) => {
     }
   });
 
-  // Get accounts from user's connected access tokens
+  // Get all accounts with enhanced data
   app.get('/plaid/all-accounts', async (req: any, res: any) => {
     try {
-      // Check if this is a demo request
-      const isDemo = req.headers['x-demo-mode'] === 'true';
-      console.log('Request headers:', req.headers);
-      console.log('Demo mode:', isDemo);
-      console.log('User object:', req.user);
-      
-      if (isDemo) {
-        // Return demo data for demo mode
-        const { demoData } = await import('./demo-data');
-        const demoAccounts = demoData.accounts.map((account: any) => ({
-          id: account.id,
-          name: account.name,
-          type: account.type,
-          subtype: getSubtypeForType(account.type),
-          currentBalance: account.balance,
-        }));
-        return res.json({ accounts: demoAccounts });
-      }
-
-      // Manual authentication check for this route
-      const token = req.headers.authorization?.replace('Bearer ', '');
-      console.log('Manual auth check - token:', token ? token.substring(0, 20) + '...' : 'none');
-      
-      if (!token) {
-        console.log('No token provided');
-        return res.status(401).json({ error: 'Authentication required' });
-      }
-
-      // Verify token manually
-      const { verifyToken } = await import('./auth/utils');
-      const payload = verifyToken(token);
-      console.log('Manual auth check - payload:', payload);
-      
-      if (!payload) {
-        console.log('Token verification failed');
-        return res.status(401).json({ error: 'Invalid or expired token' });
-      }
-
-      // Set user object manually
-      const user = {
-        id: payload.userId,
-        email: payload.email,
-        tier: payload.tier
-      };
-      console.log('Manual auth check - user set:', user);
-
-      // Get user's access tokens from the database
-      const accessTokens = await getPrismaClient().accessToken.findMany({
-        where: { userId: user.id },
-        select: { token: true, itemId: true }
-      });
-
-      console.log(`Found ${accessTokens.length} access tokens for user ${user.id}`);
-      console.log('Item IDs:', accessTokens.map((t: any) => t.itemId).filter(Boolean));
-
-      if (accessTokens.length === 0) {
-        return res.json({ accounts: [] });
-      }
-
+      const accessTokens = await getPrismaClient().accessToken.findMany();
       const allAccounts: any[] = [];
-      const seenAccountKeys = new Set(); // Track unique account combinations
 
-      // Fetch accounts from each access token
-      for (const { token } of accessTokens) {
+      for (const tokenRecord of accessTokens) {
         try {
+          // Get accounts
           const accountsResponse = await plaidClient.accountsGet({
-            access_token: token,
+            access_token: tokenRecord.token,
           });
 
-          const accounts = accountsResponse.data.accounts.map(account => ({
-            id: account.account_id,
-            name: account.name,
-            type: account.type,
-            subtype: account.subtype,
-            currentBalance: account.balances.current,
-          }));
+          // Get balances for each account
+          const balancesResponse = await plaidClient.accountsBalanceGet({
+            access_token: tokenRecord.token,
+          });
 
-          // Only add accounts we haven't seen before (deduplicate by name + type + subtype)
-          for (const account of accounts) {
-            const accountKey = `${account.name}-${account.type}-${account.subtype}`;
-            if (!seenAccountKeys.has(accountKey)) {
-              seenAccountKeys.add(accountKey);
-              allAccounts.push(account);
-              
-              // Store account in database for privacy page
-              try {
-                await getPrismaClient().account.upsert({
-                  where: { plaidAccountId: account.id },
-                  update: {
-                    name: account.name,
-                    type: account.type,
-                    subtype: account.subtype,
-                    currentBalance: account.currentBalance,
-                    userId: user.id, // Associate with user
-                    lastSynced: new Date(),
-                  },
-                  create: {
-                    plaidAccountId: account.id,
-                    name: account.name,
-                    type: account.type,
-                    subtype: account.subtype,
-                    currentBalance: account.currentBalance,
-                    userId: user.id, // Associate with user
-                    lastSynced: new Date(),
-                  },
-                });
-                console.log(`Stored account ${account.name} in database for user ${user.id}`);
-              } catch (dbError) {
-                console.error(`Error storing account ${account.name}:`, dbError);
-              }
-            }
-          }
-          
-          console.log(`Token ${token.substring(0, 8)}... returned ${accounts.length} accounts`);
+          // Merge account and balance data
+          const accountsWithBalances = accountsResponse.data.accounts.map((account: any) => {
+            const balance = balancesResponse.data.accounts.find((b: any) => b.account_id === account.account_id);
+            return processAccountData({
+              ...account,
+              balances: balance?.balances || account.balances
+            });
+          });
+
+          allAccounts.push(...accountsWithBalances);
         } catch (error) {
-          console.error(`Error fetching accounts for token: ${error}`);
-          // Continue with other tokens even if one fails
+          console.error(`Error fetching accounts for token ${tokenRecord.id}:`, error);
         }
       }
 
       res.json({ accounts: allAccounts });
     } catch (error) {
-      const errorInfo = handlePlaidError(error, 'fetching user accounts');
-      res.status(500).json(errorInfo);
+      const errorResponse = handlePlaidError(error, 'get all accounts');
+      res.status(500).json(errorResponse);
     }
   });
 
+  // Get investment data (if available)
+  app.get('/plaid/investments', async (req: any, res: any) => {
+    try {
+      const accessTokens = await getPrismaClient().accessToken.findMany();
+      const allInvestments: any[] = [];
+
+      for (const tokenRecord of accessTokens) {
+        try {
+          // Get investment holdings
+          const holdingsResponse = await plaidClient.investmentsHoldingsGet({
+            access_token: tokenRecord.token,
+          });
+
+          // Get investment transactions
+          const transactionsResponse = await plaidClient.investmentsTransactionsGet({
+            access_token: tokenRecord.token,
+            start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Last 30 days
+            end_date: new Date().toISOString().split('T')[0],
+          });
+
+          allInvestments.push({
+            holdings: holdingsResponse.data.holdings,
+            securities: holdingsResponse.data.securities,
+            accounts: holdingsResponse.data.accounts,
+            investment_transactions: transactionsResponse.data.investment_transactions,
+            total_investment_transactions: transactionsResponse.data.total_investment_transactions
+          });
+        } catch (error) {
+          console.error(`Error fetching investments for token ${tokenRecord.id}:`, error);
+        }
+      }
+
+      res.json({ investments: allInvestments });
+    } catch (error) {
+      const errorResponse = handlePlaidError(error, 'get investments');
+      res.status(500).json(errorResponse);
+    }
+  });
+
+  // Note: Income API might not be available in all Plaid environments
+  // This endpoint is commented out until we verify availability
+  /*
+  app.get('/plaid/income', async (req: any, res: any) => {
+    try {
+      const accessTokens = await getPrismaClient().accessToken.findMany();
+      const allIncome: any[] = [];
+
+      for (const tokenRecord of accessTokens) {
+        try {
+          const incomeResponse = await plaidClient.incomeGet({
+            access_token: tokenRecord.token,
+          });
+
+          allIncome.push({
+            income: incomeResponse.data.income,
+            request_id: incomeResponse.data.request_id
+          });
+        } catch (error) {
+          console.error(`Error fetching income for token ${tokenRecord.id}:`, error);
+        }
+      }
+
+      res.json({ income: allIncome });
+    } catch (error) {
+      const errorResponse = handlePlaidError(error, 'get income');
+      res.status(500).json(errorResponse);
+    }
+  });
+  */
 
 
   // Sync accounts
