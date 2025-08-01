@@ -179,7 +179,7 @@ export default function TransactionHistory({ isDemo = false }: TransactionHistor
               className={`bg-gray-700 rounded-lg p-4 border-l-4 ${
                 transaction.pending 
                   ? 'border-yellow-500 bg-gray-700/50' 
-                  : transaction.amount < 0 
+                  : transaction.amount > 0 
                     ? 'border-red-500' 
                     : 'border-green-500'
               }`}
@@ -213,9 +213,9 @@ export default function TransactionHistory({ isDemo = false }: TransactionHistor
                 
                 <div className="text-right">
                   <div className={`font-semibold ${
-                    transaction.amount < 0 ? 'text-red-400' : 'text-green-400'
+                    transaction.amount > 0 ? 'text-red-400' : 'text-green-400'
                   }`}>
-                    {transaction.amount < 0 ? '-' : '+'}{formatCurrency(transaction.amount)}
+                    {transaction.amount > 0 ? '-' : '+'}{formatCurrency(transaction.amount)}
                   </div>
                 </div>
               </div>
