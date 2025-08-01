@@ -13,7 +13,7 @@ const getPrismaClient = () => {
 
 // For testing, use sandbox environment to avoid Data Transparency Messaging requirements
 // TODO: Switch back to production once Data Transparency Messaging is properly configured
-const useSandbox = false; // Reverting to production mode
+const useSandbox = false; // Back to production mode
 
 const configuration = new Configuration({
   basePath: useSandbox ? PlaidEnvironments.sandbox : PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
@@ -187,9 +187,9 @@ export const setupPlaidRoutes = (app: any) => {
         country_codes: [CountryCode.Us],
         language: 'en',
         // Add webhook for production
-        webhook: isProduction ? process.env.PLAID_WEBHOOK_URL : undefined
-        // Note: Data Transparency Messaging needs to be configured in Plaid Dashboard
-        // We'll add link_customization_name once it's properly set up
+        webhook: isProduction ? process.env.PLAID_WEBHOOK_URL : undefined,
+        // Add Link customization name for production (Data Transparency Messaging configured in Dashboard)
+        link_customization_name: isProduction ? 'default' : undefined
       };
 
       console.log(`Creating link token with products: ${products.join(', ')}`);
