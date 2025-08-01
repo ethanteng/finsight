@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from 'react';
 import PlaidLinkButton from '../../components/PlaidLinkButton';
+import TransactionHistory from '../../components/TransactionHistory';
 
 interface Account {
   id: string;
@@ -330,6 +331,11 @@ export default function ProfilePage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Transaction History */}
+        <div className="mb-6">
+          <TransactionHistory isDemo={isDemo} />
         </div>
 
         {/* Account Settings */}

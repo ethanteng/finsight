@@ -359,6 +359,263 @@ export const setupPlaidRoutes = (app: any) => {
     }
   });
 
+  // Get all transactions with enhanced data
+  app.get('/plaid/transactions', async (req: any, res: any) => {
+    try {
+      // Check for demo mode
+      const isDemo = req.headers['x-demo-mode'] === 'true';
+      
+      if (isDemo) {
+        // Return demo transaction data
+        const demoTransactions = [
+          {
+            id: "t1",
+            account_id: "checking_1",
+            amount: 4250.00,
+            date: "2024-07-15",
+            name: "Salary - Tech Corp",
+            merchant_name: "Tech Corp",
+            category: ["income", "salary"],
+            category_id: "20000000",
+            pending: false,
+            payment_channel: "online",
+            location: {
+              city: "Austin",
+              state: "TX",
+              country: "US"
+            }
+          },
+          {
+            id: "t2",
+            account_id: "checking_1",
+            amount: -850.00,
+            date: "2024-07-01",
+            name: "Mortgage Payment",
+            merchant_name: "Wells Fargo",
+            category: ["housing", "mortgage"],
+            category_id: "16000000",
+            pending: false,
+            payment_channel: "online",
+            location: {
+              city: "San Francisco",
+              state: "CA",
+              country: "US"
+            }
+          },
+          {
+            id: "t3",
+            account_id: "checking_1",
+            amount: -120.00,
+            date: "2024-07-05",
+            name: "Electric Bill",
+            merchant_name: "Austin Energy",
+            category: ["utilities", "electric"],
+            category_id: "18000000",
+            pending: false,
+            payment_channel: "online",
+            location: {
+              city: "Austin",
+              state: "TX",
+              country: "US"
+            }
+          },
+          {
+            id: "t4",
+            account_id: "checking_1",
+            amount: -85.00,
+            date: "2024-07-10",
+            name: "Car Insurance",
+            merchant_name: "State Farm",
+            category: ["insurance", "auto"],
+            category_id: "22000000",
+            pending: false,
+            payment_channel: "online",
+            location: {
+              city: "Bloomington",
+              state: "IL",
+              country: "US"
+            }
+          },
+          {
+            id: "t5",
+            account_id: "checking_1",
+            amount: -450.00,
+            date: "2024-07-12",
+            name: "Whole Foods",
+            merchant_name: "Whole Foods Market",
+            category: ["food", "groceries"],
+            category_id: "13000000",
+            pending: false,
+            payment_channel: "in store",
+            location: {
+              city: "Austin",
+              state: "TX",
+              country: "US"
+            }
+          },
+          {
+            id: "t6",
+            account_id: "checking_1",
+            amount: -200.00,
+            date: "2024-07-14",
+            name: "Shell Gas Station",
+            merchant_name: "Shell",
+            category: ["transportation", "gas"],
+            category_id: "14000000",
+            pending: false,
+            payment_channel: "in store",
+            location: {
+              city: "Austin",
+              state: "TX",
+              country: "US"
+            }
+          },
+          {
+            id: "t7",
+            account_id: "checking_1",
+            amount: -150.00,
+            date: "2024-07-16",
+            name: "Netflix & Spotify",
+            merchant_name: "Netflix",
+            category: ["entertainment", "streaming"],
+            category_id: "17000000",
+            pending: false,
+            payment_channel: "online",
+            location: {
+              city: "Los Gatos",
+              state: "CA",
+              country: "US"
+            }
+          },
+          {
+            id: "t8",
+            account_id: "checking_1",
+            amount: -300.00,
+            date: "2024-07-18",
+            name: "Restaurant Expenses",
+            merchant_name: "Various Restaurants",
+            category: ["food", "dining"],
+            category_id: "13000000",
+            pending: false,
+            payment_channel: "in store",
+            location: {
+              city: "Austin",
+              state: "TX",
+              country: "US"
+            }
+          },
+          {
+            id: "t9",
+            account_id: "checking_1",
+            amount: -1000.00,
+            date: "2024-07-20",
+            name: "Transfer to Savings",
+            merchant_name: "Ally Bank",
+            category: ["transfer", "savings"],
+            category_id: "21000000",
+            pending: false,
+            payment_channel: "online",
+            location: {
+              city: "Sandy",
+              state: "UT",
+              country: "US"
+            }
+          },
+          {
+            id: "t10",
+            account_id: "credit_1",
+            amount: -150.00,
+            date: "2024-07-22",
+            name: "Amazon Purchase",
+            merchant_name: "Amazon",
+            category: ["shopping", "online"],
+            category_id: "19000000",
+            pending: false,
+            payment_channel: "online",
+            location: {
+              city: "Seattle",
+              state: "WA",
+              country: "US"
+            }
+          }
+        ];
+
+        // Filter by date range if provided
+        const endDate = req.query.end_date || new Date().toISOString().split('T')[0];
+        const startDate = req.query.start_date || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        
+        const filteredTransactions = demoTransactions.filter(t => 
+          t.date >= startDate && t.date <= endDate
+        );
+
+        // Sort by date (newest first)
+        filteredTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        // Limit to requested count
+        const count = parseInt(req.query.count as string) || 100;
+        const limitedTransactions = filteredTransactions.slice(0, count);
+
+        return res.json({
+          transactions: limitedTransactions,
+          total: filteredTransactions.length,
+          requested: count,
+          dateRange: { start_date: startDate, end_date: endDate }
+        });
+      }
+
+      // Real Plaid integration
+      const accessTokens = await getPrismaClient().accessToken.findMany();
+      const allTransactions: any[] = [];
+      const { start_date, end_date, count = 100 } = req.query;
+
+      // Default to last 30 days if no dates provided
+      const endDate = end_date || new Date().toISOString().split('T')[0];
+      const startDate = start_date || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      console.log(`Fetching transactions from ${startDate} to ${endDate}, limit: ${count}`);
+
+      for (const tokenRecord of accessTokens) {
+        try {
+          // Get transactions for this token
+          const transactionsResponse = await plaidClient.transactionsGet({
+            access_token: tokenRecord.token,
+            start_date: startDate,
+            end_date: endDate,
+            options: {
+              count: parseInt(count as string),
+              include_personal_finance_category: true
+            }
+          });
+
+          // Process and add transactions
+          const processedTransactions = transactionsResponse.data.transactions.map((transaction: any) => {
+            return processTransactionData(transaction);
+          });
+
+          allTransactions.push(...processedTransactions);
+        } catch (error) {
+          console.error(`Error fetching transactions for token ${tokenRecord.id}:`, error);
+        }
+      }
+
+      // Sort transactions by date (newest first)
+      allTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      // Limit to requested count
+      const limitedTransactions = allTransactions.slice(0, parseInt(count as string));
+
+      res.json({ 
+        transactions: limitedTransactions,
+        total: allTransactions.length,
+        requested: parseInt(count as string),
+        dateRange: { start_date: startDate, end_date: endDate }
+      });
+    } catch (error) {
+      const errorResponse = handlePlaidError(error, 'get transactions');
+      res.status(500).json(errorResponse);
+    }
+  });
+
   // Get investment data (if available)
   app.get('/plaid/investments', async (req: any, res: any) => {
     try {
