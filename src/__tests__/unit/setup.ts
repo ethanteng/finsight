@@ -85,13 +85,20 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  // Clean up test data
+  // Clean up test data in correct order to respect foreign key constraints
   try {
-    await prisma.demoSession.deleteMany();
+    // Delete in order: child tables first, then parent tables
     await prisma.demoConversation.deleteMany();
+    await prisma.demoSession.deleteMany();
+    await prisma.conversation.deleteMany();
+    await prisma.transaction.deleteMany();
+    await prisma.account.deleteMany();
+    await prisma.accessToken.deleteMany();
+    await prisma.privacySettings.deleteMany();
     await prisma.user.deleteMany();
   } catch (error) {
     // Ignore cleanup errors in unit tests
+    console.log('Test cleanup error (ignored):', error);
   }
 });
 

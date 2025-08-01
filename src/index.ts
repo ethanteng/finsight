@@ -463,7 +463,7 @@ const handleTierAwareDemoRequest = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Session ID required for demo mode' });
     }
     
-    // Get or create demo session
+    // Get or create demo session with better error handling
     let demoSession = await getPrismaClient().demoSession.findUnique({
       where: { sessionId }
     });
@@ -480,21 +480,6 @@ const handleTierAwareDemoRequest = async (req: Request, res: Response) => {
           id: demoSession.id, 
           sessionId: demoSession.sessionId 
         });
-        
-        // Verify the session was actually stored
-        const verifySession = await getPrismaClient().demoSession.findUnique({
-          where: { id: demoSession.id }
-        });
-        
-        if (!verifySession) {
-          console.error('Demo session was not actually stored in database');
-          return res.status(500).json({ error: 'Failed to create demo session' });
-        } else {
-          console.log('Demo session verified in database:', { 
-            id: verifySession.id,
-            sessionId: verifySession.sessionId
-          });
-        }
       } catch (sessionError: any) {
         // Handle unique constraint violation gracefully
         if (sessionError.code === 'P2002') {
@@ -502,6 +487,11 @@ const handleTierAwareDemoRequest = async (req: Request, res: Response) => {
           demoSession = await getPrismaClient().demoSession.findUnique({
             where: { sessionId }
           });
+          
+          if (!demoSession) {
+            console.error('Failed to find demo session after unique constraint violation');
+            return res.status(500).json({ error: 'Failed to create or find demo session' });
+          }
         } else {
           console.error('Failed to create demo session:', sessionError);
           return res.status(500).json({ error: 'Failed to create demo session' });
@@ -534,6 +524,16 @@ const handleTierAwareDemoRequest = async (req: Request, res: Response) => {
     
     // Store the demo conversation with session association
     try {
+      // Double-check that the session exists before creating conversation
+      const verifySession = await getPrismaClient().demoSession.findUnique({
+        where: { id: demoSession.id }
+      });
+      
+      if (!verifySession) {
+        console.error('Demo session not found when trying to create conversation');
+        return res.status(500).json({ error: 'Demo session not found' });
+      }
+      
       const storedConversation = await getPrismaClient().demoConversation.create({
         data: {
           question: questionString,
@@ -546,23 +546,15 @@ const handleTierAwareDemoRequest = async (req: Request, res: Response) => {
         sessionId: demoSession.id,
         questionLength: questionString.length 
       });
-      
-      // Verify the conversation was actually stored
-      const verifyConversation = await getPrismaClient().demoConversation.findUnique({
-        where: { id: storedConversation.id }
-      });
-      
-      if (!verifyConversation) {
-        console.error('Demo conversation was not actually stored in database');
-        return res.status(500).json({ error: 'Failed to store demo conversation' });
-      } else {
-        console.log('Demo conversation verified in database:', { 
-          id: verifyConversation.id,
-          question: verifyConversation.question.substring(0, 50)
-        });
-      }
-    } catch (conversationError) {
+    } catch (conversationError: any) {
       console.error('Failed to store demo conversation:', conversationError);
+      
+      // Handle foreign key constraint violation
+      if (conversationError.code === 'P2003') {
+        console.error('Foreign key constraint violation - session may not exist');
+        return res.status(500).json({ error: 'Demo session not found' });
+      }
+      
       return res.status(500).json({ error: 'Failed to store demo conversation' });
     }
     
