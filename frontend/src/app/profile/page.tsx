@@ -7,7 +7,11 @@ interface Account {
   name: string;
   type: string;
   subtype: string;
-  currentBalance: number;
+  balance: {
+    current: number;
+    available: number;
+    iso_currency_code: string;
+  };
 }
 
 interface SyncInfo {
@@ -317,7 +321,7 @@ export default function ProfilePage() {
                       </div>
                       <div className="text-right">
                         <div className="font-semibold text-white">
-                          {formatCurrency(account.currentBalance)}
+                          {formatCurrency(account.balance.current)}
                         </div>
                       </div>
                     </div>
