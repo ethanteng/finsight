@@ -187,9 +187,9 @@ export const setupPlaidRoutes = (app: any) => {
         country_codes: [CountryCode.Us],
         language: 'en',
         // Add webhook for production
-        webhook: isProduction ? process.env.PLAID_WEBHOOK_URL : undefined,
-        // Add Link customization name for production (Data Transparency Messaging configured in Dashboard)
-        link_customization_name: isProduction ? 'default' : undefined
+        webhook: isProduction ? process.env.PLAID_WEBHOOK_URL : undefined
+        // Note: Data Transparency Messaging needs to be configured in Plaid Dashboard
+        // We'll add link_customization_name once it's properly set up
       };
 
       console.log(`Creating link token with products: ${products.join(', ')}`);
