@@ -848,6 +848,67 @@ app.get('/test/alpha-vantage-api-key', async (req: Request, res: Response) => {
   }
 });
 
+// Test endpoint for enhanced market context
+app.get('/test/enhanced-market-context', async (req: Request, res: Response) => {
+  try {
+    const { tier = 'starter', isDemo = false } = req.query;
+    const userTier = tier as string;
+    
+    console.log('Testing enhanced market context for tier:', userTier, 'isDemo:', isDemo);
+    
+    // Get enhanced market context
+    const marketContextSummary = await dataOrchestrator.getMarketContextSummary(userTier as any, isDemo === 'true');
+    
+    // Get cache stats
+    const cacheStats = await dataOrchestrator.getCacheStats();
+    
+    res.json({
+      tier: userTier,
+      isDemo: isDemo === 'true',
+      marketContextSummary: marketContextSummary.substring(0, 1000) + (marketContextSummary.length > 1000 ? '...' : ''),
+      contextLength: marketContextSummary.length,
+      cacheStats,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    if (err instanceof Error) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+});
+
+// Test endpoint to force refresh market context
+app.post('/test/refresh-market-context', async (req: Request, res: Response) => {
+  try {
+    const { tier = 'starter', isDemo = false } = req.body;
+    const userTier = tier as string;
+    
+    console.log('Force refreshing market context for tier:', userTier, 'isDemo:', isDemo);
+    
+    // Force refresh market context
+    await dataOrchestrator.refreshMarketContext(userTier as any, isDemo);
+    
+    // Get updated cache stats
+    const cacheStats = await dataOrchestrator.getCacheStats();
+    
+    res.json({
+      success: true,
+      tier: userTier,
+      isDemo,
+      cacheStats,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    if (err instanceof Error) {
+      res.status(500).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+});
+
 // Get sync status endpoint
 app.get('/sync/status', async (req: Request, res: Response) => {
   try {
@@ -1111,6 +1172,34 @@ if (require.main === module) {
     });
     
     console.log('Cron job scheduled: daily sync at 2 AM EST');
+
+    // Set up cron job to refresh market context every hour
+    cron.schedule('0 * * * *', async () => {
+      console.log('🔄 Starting hourly market context refresh...');
+      const startTime = Date.now();
+      
+      try {
+        await dataOrchestrator.forceRefreshAllContext();
+        const duration = Date.now() - startTime;
+        
+        console.log(`✅ Market context refresh completed successfully in ${duration}ms`);
+        console.log(`📊 Market Context Metrics: duration=${duration}ms`);
+        
+        // Log cache stats for monitoring
+        const cacheStats = await dataOrchestrator.getCacheStats();
+        console.log(`📊 Cache Stats: marketContextCache.size=${cacheStats.marketContextCache.size}`);
+        
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        console.error(`❌ Error in market context refresh after ${duration}ms:`, error);
+        console.error(`📊 Market Context Error: duration=${duration}ms, error=${error}`);
+      }
+    }, {
+      timezone: 'America/New_York',
+      name: 'market-context-refresh'
+    });
+    
+    console.log('Cron job scheduled: market context refresh every hour');
   });
 }
 

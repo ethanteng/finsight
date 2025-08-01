@@ -32,6 +32,229 @@ ${tierContext.upgradeHints.map(hint => `• **${hint.feature}**: ${hint.benefit}
   return answer + upgradeSection;
 }
 
+/**
+ * Enhanced OpenAI function with proactive market context caching
+ * This version uses pre-processed market context for faster responses
+ */
+export async function askOpenAIWithEnhancedContext(
+  question: string, 
+  conversationHistory: Conversation[] = [], 
+  userTier: UserTier | string = UserTier.STARTER, 
+  isDemo: boolean = false, 
+  userId?: string,
+  model?: string
+): Promise<string> {
+  // Convert string tier to enum if needed
+  const tier = typeof userTier === 'string' ? (userTier as UserTier) : userTier;
+
+  console.log('OpenAI Enhanced: Starting enhanced context request for tier:', tier, 'isDemo:', isDemo);
+
+  // Get user-specific data
+  let accounts: any[] = [];
+  let transactions: any[] = [];
+
+  // For demo mode, use demo data instead of database data
+  if (isDemo) {
+    console.log('OpenAI Enhanced: Using demo data for accounts and transactions');
+    try {
+      const { demoData } = await import('./demo-data');
+      accounts = demoData.accounts || [];
+      transactions = demoData.transactions || [];
+      console.log('OpenAI Enhanced: Demo data loaded - accounts:', accounts.length, 'transactions:', transactions.length);
+    } catch (error) {
+      console.error('OpenAI Enhanced: Error loading demo data:', error);
+    }
+  } else {
+    // For authenticated users, fetch from database
+    try {
+      if (userId) {
+        console.log('OpenAI Enhanced: Fetching user-specific data for userId:', userId);
+        const { getPrismaClient } = await import('./index');
+        const prisma = getPrismaClient();
+        
+        accounts = await prisma.account.findMany({
+          where: { userId },
+          include: { transactions: true }
+        });
+        
+        transactions = await prisma.transaction.findMany({
+          where: { account: { userId } },
+          orderBy: { date: 'desc' },
+          take: 50
+        });
+        
+        console.log('OpenAI Enhanced: Found', accounts.length, 'accounts and', transactions.length, 'transactions for user', userId);
+      } else {
+        console.log('OpenAI Enhanced: No userId provided, fetching all data (this should not happen for authenticated users)');
+      }
+    } catch (error) {
+      console.error('OpenAI Enhanced: Error fetching user data:', error);
+    }
+  }
+
+  // Anonymize data before sending to OpenAI (skip for demo mode)
+  if (!isDemo) {
+    accounts = accounts.map(account => ({
+      ...account,
+      name: `Account_${account.id.slice(-4)}`,
+      plaidAccountId: `plaid_${account.id.slice(-8)}`
+    }));
+    
+    transactions = transactions.map(transaction => ({
+      ...transaction,
+      name: transaction.name ? `Transaction_${transaction.id.slice(-4)}` : 'Unknown',
+      merchantName: transaction.merchantName ? `Merchant_${transaction.id.slice(-4)}` : 'Unknown'
+    }));
+  }
+
+  // Get enhanced market context (proactively cached)
+  console.log('OpenAI Enhanced: Getting enhanced market context for tier:', tier);
+  const marketContextSummary = await dataOrchestrator.getMarketContextSummary(tier, isDemo);
+  console.log('OpenAI Enhanced: Market context summary length:', marketContextSummary.length);
+
+  // Build tier-aware context using the new orchestrator
+  console.log('OpenAI Enhanced: Building tier-aware context for tier:', tier);
+  const tierContext = await dataOrchestrator.buildTierAwareContext(tier, accounts, transactions, isDemo);
+  
+  console.log('OpenAI Enhanced: Tier context built:', {
+    tier: tierContext.tierInfo.currentTier,
+    availableSources: tierContext.tierInfo.availableSources.length,
+    unavailableSources: tierContext.tierInfo.unavailableSources.length,
+    upgradeHints: tierContext.upgradeHints.length
+  });
+
+  // Create account summary
+  const accountSummary = tierContext.accounts.map(account => {
+    const balance = isDemo ? account.balance : account.currentBalance;
+    const subtype = isDemo ? account.type : account.subtype;
+    return `- ${account.name} (${account.type}/${subtype}): $${balance?.toFixed(2) || '0.00'}`;
+  }).join('\n');
+
+  // Create transaction summary
+  const transactionSummary = tierContext.transactions.map(transaction => {
+    const name = isDemo ? transaction.description : transaction.name;
+    const category = isDemo ? transaction.category : transaction.category?.[0];
+    return `- ${name} (${category || 'Unknown'}): $${transaction.amount?.toFixed(2) || '0.00'} on ${transaction.date}`;
+  }).join('\n');
+
+  console.log('OpenAI Enhanced: Account summary for AI:', accountSummary);
+  console.log('OpenAI Enhanced: Transaction summary for AI:', transactionSummary);
+  console.log('OpenAI Enhanced: Number of accounts found:', tierContext.accounts.length);
+  console.log('OpenAI Enhanced: Number of transactions found:', tierContext.transactions.length);
+  console.log('OpenAI Enhanced: User ID being used:', userId);
+
+  // Get conversation history
+  console.log('OpenAI Enhanced: Conversation history length:', conversationHistory.length);
+  if (conversationHistory.length > 0) {
+    console.log('OpenAI Enhanced: Recent conversation questions:', conversationHistory.slice(0, 3).map(c => c.question));
+  }
+
+  // For demo mode, use demo data
+  if (isDemo) {
+    console.log('OpenAI Enhanced: Demo accounts:', tierContext.accounts.length);
+    console.log('OpenAI Enhanced: Demo transactions:', tierContext.transactions.length);
+    console.log('OpenAI Enhanced: Account summary preview:', accountSummary.substring(0, 500));
+    console.log('OpenAI Enhanced: Transaction summary preview:', transactionSummary.substring(0, 500));
+    console.log('OpenAI Enhanced: Full account summary:', accountSummary);
+    console.log('OpenAI Enhanced: Full transaction summary:', transactionSummary);
+  }
+
+  // Build enhanced system prompt with proactive market context
+  const systemPrompt = buildEnhancedSystemPrompt(tierContext, accountSummary, transactionSummary, marketContextSummary);
+
+  console.log('OpenAI Enhanced: System prompt length:', systemPrompt.length);
+  console.log('OpenAI Enhanced: System prompt preview:', systemPrompt.substring(0, 500));
+
+  // Prepare conversation history for OpenAI
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    { role: 'system', content: systemPrompt }
+  ];
+
+  // Add conversation history (last 5 exchanges to stay within token limits)
+  const recentHistory = conversationHistory.slice(-10);
+  for (const conv of recentHistory) {
+    messages.push({ role: 'user', content: conv.question });
+    messages.push({ role: 'assistant', content: conv.answer });
+  }
+
+  // Add current question
+  messages.push({ role: 'user', content: question });
+
+  console.log('OpenAI Enhanced: Sending request to OpenAI with', messages.length, 'messages');
+  console.log('OpenAI Enhanced: Using model:', model || 'gpt-4o');
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: model || 'gpt-4o',
+      messages,
+      temperature: 0.7,
+      max_tokens: 1000
+    });
+
+    let answer = completion.choices[0]?.message?.content || 'I apologize, but I was unable to generate a response.';
+
+    // Enhance response with upgrade suggestions
+    answer = enhanceResponseWithUpgrades(answer, tierContext);
+
+    console.log('OpenAI Enhanced: Response generated successfully');
+    return answer;
+  } catch (error) {
+    console.error('OpenAI Enhanced: Error calling OpenAI API:', error);
+    throw new Error('Failed to get AI response');
+  }
+}
+
+/**
+ * Enhanced system prompt builder with proactive market context
+ */
+function buildEnhancedSystemPrompt(
+  tierContext: TierAwareContext, 
+  accountSummary: string, 
+  transactionSummary: string,
+  marketContextSummary: string
+): string {
+  const { tierInfo, upgradeHints } = tierContext;
+
+  let systemPrompt = `You are Linc, an AI-powered financial analyst. You help users understand their finances by analyzing their account data and providing clear, actionable insights.
+
+IMPORTANT: You have access to the user's financial data and current market conditions based on their subscription tier. Use this data to provide personalized, accurate financial advice.
+
+USER'S FINANCIAL DATA:
+Accounts:
+${accountSummary || 'No accounts found'}
+
+Recent Transactions:
+${transactionSummary || 'No transactions found'}
+
+USER TIER: ${tierInfo.currentTier.toUpperCase()}
+
+AVAILABLE DATA SOURCES:
+${tierInfo.availableSources.length > 0 ? tierInfo.availableSources.map(source => `• ${source}`).join('\n') : '• Account data only'}
+
+${tierInfo.unavailableSources.length > 0 ? `UNAVAILABLE DATA SOURCES (upgrade to access):
+${tierInfo.unavailableSources.map(source => `• ${source}`).join('\n')}` : ''}
+
+${marketContextSummary ? `ENHANCED MARKET CONTEXT:
+${marketContextSummary}` : 'No market context available (upgrade to Standard tier)'}
+
+TIER LIMITATIONS:
+${tierInfo.limitations.map(limitation => `• ${limitation}`).join('\n')}
+
+INSTRUCTIONS:
+- Provide clear, actionable financial advice based on available data
+- Use specific numbers from the user's data when possible
+- Reference current market conditions when relevant and available
+- Be conversational but professional
+- If you don't have enough data, ask for more information
+- Always provide source attribution when using external data
+- Be helpful with current tier limitations
+- When relevant, mention upgrade benefits for unavailable features
+- Focus on the user's specific financial situation and goals
+- Use the enhanced market context to provide more informed recommendations`;
+
+  return systemPrompt;
+}
+
 export async function askOpenAI(
   question: string, 
   conversationHistory: Conversation[] = [], 

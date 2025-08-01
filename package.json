@@ -10,6 +10,8 @@
     "test:integration": "jest --config jest.integration.config.js",
     "test:all": "npm run test:unit && npm run test:integration",
     "test:integration:watch": "jest --config jest.integration.config.js --watch",
+    "test:enhanced-market-context": "jest --testPathPattern='enhanced-market-context|scheduled-updates' --verbose",
+    "test:enhanced-market-context:watch": "jest --testPathPattern='enhanced-market-context|scheduled-updates' --watch",
     "test:lint": "eslint src/ --ext .ts",
     "lint:fix": "eslint src/ --ext .ts --fix",
     "type-check": "tsc --noEmit",
