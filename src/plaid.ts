@@ -148,12 +148,15 @@ export const setupPlaidRoutes = (app: any) => {
       const isProduction = process.env.PLAID_ENV === 'production';
       const isLimitedProduction = process.env.PLAID_ENV === 'production' && process.env.PLAID_ACCESS_LEVEL === 'limited';
       
-      // Start with basic products that work in all environments
+      // For limited production, use only Transactions (most compatible)
+      // This should work with your limited production access
       let products = [Products.Transactions];
       
-      // For limited production, only add Balance (most compatible)
+      // Only add Balance if we're sure it's available
       if (isLimitedProduction) {
-        products = [Products.Transactions, Products.Balance];
+        // Start with just Transactions to test
+        products = [Products.Transactions];
+        console.log('Using limited production configuration with Transactions only');
       }
       
       // For full production, add more products
@@ -167,6 +170,7 @@ export const setupPlaidRoutes = (app: any) => {
           Products.Liabilities,
           Products.Statements
         ];
+        console.log('Using full production configuration');
       }
 
       const request = {
