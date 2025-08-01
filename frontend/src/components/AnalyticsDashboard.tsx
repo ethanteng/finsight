@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAnalytics } from './Analytics';
 
 interface AnalyticsEvent {
   event: string;
-  properties: Record<string, any>;
+  properties: Record<string, unknown>;
   timestamp: Date;
 }
 
@@ -27,7 +27,7 @@ export default function AnalyticsDashboard() {
     ]
   };
 
-  const addEvent = (eventName: string, properties: Record<string, any> = {}) => {
+  const addEvent = (eventName: string, properties: Record<string, unknown> = {}) => {
     const newEvent: AnalyticsEvent = {
       event: eventName,
       properties,

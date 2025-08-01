@@ -234,11 +234,14 @@ export default function ProfilePage() {
           
                             {/* Connect New Account */}
                   <div className="mb-6">
-                    <PlaidLinkButton onAccountLinked={() => {
-                      // Only reload accounts when an account is actually linked
-                      console.log('Account linked, reloading accounts');
-                      loadConnectedAccountsWithDemoMode(isDemo || false);
-                    }} />
+                    <PlaidLinkButton 
+                      onSuccess={() => {
+                        // Only reload accounts when an account is actually linked
+                        console.log('Account linked, reloading accounts');
+                        loadConnectedAccountsWithDemoMode(isDemo || false);
+                      }}
+                      isDemo={isDemo}
+                    />
                   </div>
 
           {/* Sync Status */}

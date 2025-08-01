@@ -1,18 +1,17 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { usePlaidLink } from 'react-plaid-link';
+import React, { useState, useCallback } from 'react';
+import { usePlaidLink, PlaidLinkOnSuccess, PlaidLinkOnExit, PlaidLinkOnSuccessMetadata } from 'react-plaid-link';
 import { useAnalytics } from './Analytics';
 
 interface PlaidLinkButtonProps {
-  onSuccess?: (publicToken: string, metadata: any) => void;
+  onSuccess?: (publicToken: string, metadata: PlaidLinkOnSuccessMetadata) => void;
   onExit?: () => void;
   isDemo?: boolean;
 }
 
 export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: PlaidLinkButtonProps) {
   const [linkToken, setLinkToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string>('');
   const { trackEvent, trackConversion } = useAnalytics();
 
@@ -37,10 +36,8 @@ export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: P
   }, []);
 
   // Exchange public_token for access_token
-  const handleSuccess = useCallback(async (publicToken: string, metadata: any) => {
+  const handleSuccess: PlaidLinkOnSuccess = useCallback(async (publicToken, metadata) => {
     try {
-      setLoading(true);
-      
       // Track successful account linking
       trackEvent('plaid_account_linked', {
         institution_count: metadata.institution?.institution_id ? 1 : 0,
@@ -84,12 +81,10 @@ export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: P
         error: error instanceof Error ? error.message : 'Unknown error',
         is_demo: isDemo
       });
-    } finally {
-      setLoading(false);
     }
   }, [trackEvent, trackConversion, isDemo, onSuccess]);
 
-  const handleExit = useCallback((err: any, metadata: any) => {
+  const handleExit: PlaidLinkOnExit = useCallback((err, metadata) => {
     console.log('Plaid Link exit:', err, metadata);
     
     // Track exit event

@@ -25,14 +25,14 @@ interface FinanceQAProps {
   sessionId?: string;
 }
 
-export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion, isDemo = false, sessionId: propSessionId }: FinanceQAProps) {
+export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: _onNewQuestion, isDemo = false, sessionId: propSessionId }: FinanceQAProps) {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [userTier, setUserTier] = useState<string>('starter');
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
-  const { trackEvent, trackConversion } = useAnalytics();
+  const { trackEvent } = useAnalytics();
 
   // Demo placeholder questions that rotate
   const demoPlaceholders = [

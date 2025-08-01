@@ -8,6 +8,21 @@ interface AnalyticsProps {
   gaId?: string;
 }
 
+interface PlausibleEvent {
+  (eventName: string, options?: { props?: Record<string, unknown> }): void;
+}
+
+interface GtagEvent {
+  (command: 'event', eventName: string, parameters?: Record<string, unknown>): void;
+}
+
+declare global {
+  interface Window {
+    plausible?: PlausibleEvent;
+    gtag?: GtagEvent;
+  }
+}
+
 export default function Analytics({ type, domain = 'asklinc.com', gaId }: AnalyticsProps) {
   useEffect(() => {
     if (type === 'plausible') {
@@ -39,15 +54,15 @@ export default function Analytics({ type, domain = 'asklinc.com', gaId }: Analyt
 
 // Custom hook for tracking events
 export const useAnalytics = () => {
-  const trackEvent = (eventName: string, properties?: Record<string, any>) => {
+  const trackEvent = (eventName: string, properties?: Record<string, unknown>) => {
     // Track with Plausible
-    if (typeof window !== 'undefined' && (window as any).plausible) {
-      (window as any).plausible(eventName, { props: properties });
+    if (typeof window !== 'undefined' && window.plausible) {
+      window.plausible(eventName, { props: properties });
     }
     
     // Track with Google Analytics
-    if (typeof window !== 'undefined' && (window as any).gtag) {
-      (window as any).gtag('event', eventName, properties);
+    if (typeof window !== 'undefined' && window.gtag) {
+      window.gtag('event', eventName, properties);
     }
   };
 
