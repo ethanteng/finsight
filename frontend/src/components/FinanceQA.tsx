@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { useAnalytics } from './Analytics';
 
 // Declare Hotjar global type
 declare global {
@@ -31,6 +32,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion, 
   const [error, setError] = useState('');
   const [userTier, setUserTier] = useState<string>('starter');
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const { trackEvent, trackConversion } = useAnalytics();
 
   // Demo placeholder questions that rotate
   const demoPlaceholders = [
@@ -87,14 +89,17 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion, 
 
   const askQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!question.trim()) return;
+
     setLoading(true);
     setError('');
-    setAnswer('');
     
-    // Clear selected prompt when asking a new question
-    if (onNewQuestion) {
-      onNewQuestion();
-    }
+    // Track question submission
+    trackEvent('question_asked', {
+      question_length: question.length,
+      user_tier: userTier,
+      is_demo: isDemo
+    });
     
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -132,15 +137,36 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion, 
           onNewAnswer(question, data.answer);
         }
         
+        // Track successful answer
+        trackEvent('answer_received', {
+          answer_length: data.answer.length,
+          user_tier: userTier,
+          is_demo: isDemo
+        });
+        
         // Trigger Hotjar event for demo feedback survey
         if (isDemo && typeof window !== 'undefined' && window.hj) {
           window.hj('event', 'gpt_response_completed');
         }
       } else {
         setError('No answer returned.');
+        // Track error
+        trackEvent('question_error', {
+          error: 'No answer returned',
+          user_tier: userTier,
+          is_demo: isDemo
+        });
       }
-    } catch {
+    } catch (error) {
       setError('Error contacting backend.');
+      console.error('Error:', error);
+      
+      // Track error
+      trackEvent('question_error', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        user_tier: userTier,
+        is_demo: isDemo
+      });
     } finally {
       setLoading(false);
     }

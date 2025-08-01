@@ -1,15 +1,20 @@
 "use client";
 
-import React, { useCallback, useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { usePlaidLink } from 'react-plaid-link';
+import { useAnalytics } from './Analytics';
 
 interface PlaidLinkButtonProps {
-  onAccountLinked?: () => void;
+  onSuccess?: (publicToken: string, metadata: any) => void;
+  onExit?: () => void;
+  isDemo?: boolean;
 }
 
-export default function PlaidLinkButton({ onAccountLinked }: PlaidLinkButtonProps) {
+export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: PlaidLinkButtonProps) {
   const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<string>('');
+  const { trackEvent, trackConversion } = useAnalytics();
 
   // Fetch link_token from backend
   const createLinkToken = useCallback(async () => {
@@ -32,51 +37,79 @@ export default function PlaidLinkButton({ onAccountLinked }: PlaidLinkButtonProp
   }, []);
 
   // Exchange public_token for access_token
-  const onSuccess = useCallback(async (public_token: string) => {
-    setStatus('Exchanging public token...');
-    const API_URL = process.env.NEXT_PUBLIC_API_URL;
+  const handleSuccess = useCallback(async (publicToken: string, metadata: any) => {
     try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json'
-      };
+      setLoading(true);
       
-      // Add authentication header
-      const token = localStorage.getItem('auth_token');
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-        console.log('Sending auth token for Plaid exchange:', token.substring(0, 20) + '...');
-      } else {
-        console.log('No auth token found for Plaid exchange');
-      }
+      // Track successful account linking
+      trackEvent('plaid_account_linked', {
+        institution_count: metadata.institution?.institution_id ? 1 : 0,
+        account_count: metadata.accounts?.length || 0,
+        is_demo: isDemo
+      });
       
+      // Track conversion
+      trackConversion('account_connection', 1);
+      
+      const API_URL = process.env.NEXT_PUBLIC_API_URL;
       const res = await fetch(`${API_URL}/plaid/exchange_public_token`, {
         method: 'POST',
-        headers,
-        body: JSON.stringify({ public_token }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          public_token: publicToken,
+          metadata: metadata,
+        }),
       });
-      const data = await res.json();
-      if (data.access_token) {
-        setStatus('Account linked!');
-        // Access token is now stored in the database, no need for localStorage
-        // Clear link token so user can link more accounts
-        setLinkToken(null);
-        // Notify parent component that account was linked
-        onAccountLinked?.();
-      } else if (data.error) {
-        setStatus(`${data.error}: ${data.details || 'Failed to link account'}`);
+
+      if (res.ok) {
+        console.log('Successfully exchanged public token');
+        // Call the onSuccess callback if provided
+        if (onSuccess) {
+          onSuccess(publicToken, metadata);
+        }
       } else {
-        setStatus('Failed to link account.');
+        console.error('Failed to exchange public token');
+        // Track error
+        trackEvent('plaid_exchange_error', {
+          error: 'Failed to exchange public token',
+          is_demo: isDemo
+        });
       }
-    } catch {
-      setStatus('Network error. Please try again.');
+    } catch (error) {
+      console.error('Error exchanging public token:', error);
+      // Track error
+      trackEvent('plaid_exchange_error', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        is_demo: isDemo
+      });
+    } finally {
+      setLoading(false);
     }
-  }, [onAccountLinked]);
+  }, [trackEvent, trackConversion, isDemo, onSuccess]);
+
+  const handleExit = useCallback((err: any, metadata: any) => {
+    console.log('Plaid Link exit:', err, metadata);
+    
+    // Track exit event
+    trackEvent('plaid_link_exit', {
+      error: err?.error_message || 'User exited',
+      institution: metadata.institution?.name,
+      is_demo: isDemo
+    });
+    
+    // Call the onExit callback if provided
+    if (onExit) {
+      onExit();
+    }
+  }, [trackEvent, isDemo, onExit]);
 
   // Always call the hook, but only use it when linkToken is set
   const plaid = usePlaidLink(
     linkToken
-      ? { token: linkToken, onSuccess }
-      : { token: 'dummy-token', onSuccess: () => {} }
+      ? { token: linkToken, onSuccess: handleSuccess, onExit: handleExit }
+      : { token: 'dummy-token', onSuccess: () => {}, onExit: () => {} }
   );
 
   return (
