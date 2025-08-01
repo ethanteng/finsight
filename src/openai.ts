@@ -65,13 +65,14 @@ export async function askOpenAIWithEnhancedContext(
       console.error('OpenAI Enhanced: Error loading demo data:', error);
     }
   } else {
-    // For authenticated users, fetch from database
+    // For authenticated users, fetch from database first, then Plaid if needed
     try {
       if (userId) {
         console.log('OpenAI Enhanced: Fetching user-specific data for userId:', userId);
         const { getPrismaClient } = await import('./index');
         const prisma = getPrismaClient();
         
+        // First try to get data from database
         accounts = await prisma.account.findMany({
           where: { userId },
           include: { transactions: true }
@@ -83,7 +84,118 @@ export async function askOpenAIWithEnhancedContext(
           take: 50
         });
         
-        console.log('OpenAI Enhanced: Found', accounts.length, 'accounts and', transactions.length, 'transactions for user', userId);
+        console.log('OpenAI Enhanced: Found', accounts.length, 'accounts and', transactions.length, 'transactions in database for user', userId);
+        
+        // If no data in database, try to fetch from Plaid directly
+        if (accounts.length === 0 || transactions.length === 0) {
+          console.log('OpenAI Enhanced: No data in database, fetching from Plaid directly');
+          
+          try {
+            // Import Plaid functions directly
+            const { Configuration, PlaidApi, PlaidEnvironments } = await import('plaid');
+            
+            const configuration = new Configuration({
+              basePath: PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
+              baseOptions: {
+                headers: {
+                  'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID,
+                  'PLAID-SECRET': process.env.PLAID_SECRET,
+                },
+              },
+            });
+            
+            const plaidClient = new PlaidApi(configuration);
+            
+            // Get all access tokens
+            const accessTokens = await prisma.accessToken.findMany();
+            
+            if (accessTokens.length > 0) {
+              console.log('OpenAI Enhanced: Found', accessTokens.length, 'access tokens');
+              
+              // Fetch accounts from all tokens
+              for (const tokenRecord of accessTokens) {
+                try {
+                  const accountsResponse = await plaidClient.accountsGet({
+                    access_token: tokenRecord.token,
+                  });
+                  
+                  const balancesResponse = await plaidClient.accountsBalanceGet({
+                    access_token: tokenRecord.token,
+                  });
+                  
+                  // Merge account and balance data
+                  const accountsWithBalances = accountsResponse.data.accounts.map((account: any) => {
+                    const balance = balancesResponse.data.accounts.find((b: any) => b.account_id === account.account_id);
+                    return {
+                      id: account.account_id,
+                      name: account.name,
+                      type: account.type,
+                      subtype: account.subtype,
+                      mask: account.mask,
+                      balance: {
+                        available: balance?.balances?.available || account.balances?.available,
+                        current: balance?.balances?.current || account.balances?.current,
+                        limit: balance?.balances?.limit || account.balances?.limit,
+                        iso_currency_code: balance?.balances?.iso_currency_code || account.balances?.iso_currency_code,
+                        unofficial_currency_code: balance?.balances?.unofficial_currency_code || account.balances?.unofficial_currency_code
+                      }
+                    };
+                  });
+                  
+                  accounts.push(...accountsWithBalances);
+                  console.log('OpenAI Enhanced: Fetched', accountsWithBalances.length, 'accounts from Plaid');
+                } catch (error) {
+                  console.error('OpenAI Enhanced: Error fetching accounts from token:', error);
+                }
+              }
+              
+              // Fetch transactions from all tokens
+              for (const tokenRecord of accessTokens) {
+                try {
+                  const endDate = new Date().toISOString().split('T')[0];
+                  const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                  
+                  const transactionsResponse = await plaidClient.transactionsGet({
+                    access_token: tokenRecord.token,
+                    start_date: startDate,
+                    end_date: endDate,
+                    options: {
+                      count: 50,
+                      include_personal_finance_category: true
+                    }
+                  });
+                  
+                  const processedTransactions = transactionsResponse.data.transactions.map((transaction: any) => ({
+                    id: transaction.transaction_id,
+                    account_id: transaction.account_id,
+                    amount: transaction.amount,
+                    date: transaction.date,
+                    name: transaction.name,
+                    merchant_name: transaction.merchant_name,
+                    category: transaction.category,
+                    category_id: transaction.category_id,
+                    pending: transaction.pending,
+                    payment_channel: transaction.payment_channel,
+                    location: transaction.location,
+                    payment_meta: transaction.payment_meta,
+                    pending_transaction_id: transaction.pending_transaction_id,
+                    account_owner: transaction.account_owner,
+                    transaction_code: transaction.transaction_code
+                  }));
+                  
+                  transactions.push(...processedTransactions);
+                  console.log('OpenAI Enhanced: Fetched', processedTransactions.length, 'transactions from Plaid');
+                } catch (error) {
+                  console.error('OpenAI Enhanced: Error fetching transactions from token:', error);
+                }
+              }
+            }
+          } catch (plaidError) {
+            console.error('OpenAI Enhanced: Error fetching from Plaid directly:', plaidError);
+          }
+        }
+        
+        console.log('OpenAI Enhanced: Final count -', accounts.length, 'accounts and', transactions.length, 'transactions for user', userId);
       } else {
         console.log('OpenAI Enhanced: No userId provided, fetching all data (this should not happen for authenticated users)');
       }
@@ -125,8 +237,20 @@ export async function askOpenAIWithEnhancedContext(
 
   // Create account summary
   const accountSummary = tierContext.accounts.map(account => {
-    const balance = isDemo ? account.balance : account.currentBalance;
-    const subtype = isDemo ? account.type : account.subtype;
+    let balance;
+    if (isDemo) {
+      balance = account.balance;
+    } else if (account.balance && account.balance.current) {
+      // Plaid API structure
+      balance = account.balance.current;
+    } else if (account.currentBalance) {
+      // Database structure
+      balance = account.currentBalance;
+    } else {
+      balance = 0;
+    }
+    
+    const subtype = isDemo ? account.type : (account.subtype || account.type);
     return `- ${account.name} (${account.type}/${subtype}): $${balance?.toFixed(2) || '0.00'}`;
   }).join('\n');
 
@@ -282,13 +406,14 @@ export async function askOpenAI(
       console.error('OpenAI: Error loading demo data:', error);
     }
   } else {
-    // For authenticated users, fetch from database
+    // For authenticated users, fetch from database first, then Plaid if needed
     try {
       if (userId) {
         console.log('OpenAI: Fetching user-specific data for userId:', userId);
         const { getPrismaClient } = await import('./index');
         const prisma = getPrismaClient();
         
+        // First try to get data from database
         accounts = await prisma.account.findMany({
           where: { userId },
           include: { transactions: true }
@@ -300,7 +425,118 @@ export async function askOpenAI(
           take: 50
         });
         
-        console.log('OpenAI: Found', accounts.length, 'accounts and', transactions.length, 'transactions for user', userId);
+        console.log('OpenAI: Found', accounts.length, 'accounts and', transactions.length, 'transactions in database for user', userId);
+        
+        // If no data in database, try to fetch from Plaid directly
+        if (accounts.length === 0 || transactions.length === 0) {
+          console.log('OpenAI: No data in database, fetching from Plaid directly');
+          
+          try {
+            // Import Plaid functions directly
+            const { Configuration, PlaidApi, PlaidEnvironments } = await import('plaid');
+            
+            const configuration = new Configuration({
+              basePath: PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
+              baseOptions: {
+                headers: {
+                  'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID,
+                  'PLAID-SECRET': process.env.PLAID_SECRET,
+                },
+              },
+            });
+            
+            const plaidClient = new PlaidApi(configuration);
+            
+            // Get all access tokens
+            const accessTokens = await prisma.accessToken.findMany();
+            
+            if (accessTokens.length > 0) {
+              console.log('OpenAI: Found', accessTokens.length, 'access tokens');
+              
+              // Fetch accounts from all tokens
+              for (const tokenRecord of accessTokens) {
+                try {
+                  const accountsResponse = await plaidClient.accountsGet({
+                    access_token: tokenRecord.token,
+                  });
+                  
+                  const balancesResponse = await plaidClient.accountsBalanceGet({
+                    access_token: tokenRecord.token,
+                  });
+                  
+                  // Merge account and balance data
+                  const accountsWithBalances = accountsResponse.data.accounts.map((account: any) => {
+                    const balance = balancesResponse.data.accounts.find((b: any) => b.account_id === account.account_id);
+                    return {
+                      id: account.account_id,
+                      name: account.name,
+                      type: account.type,
+                      subtype: account.subtype,
+                      mask: account.mask,
+                      balance: {
+                        available: balance?.balances?.available || account.balances?.available,
+                        current: balance?.balances?.current || account.balances?.current,
+                        limit: balance?.balances?.limit || account.balances?.limit,
+                        iso_currency_code: balance?.balances?.iso_currency_code || account.balances?.iso_currency_code,
+                        unofficial_currency_code: balance?.balances?.unofficial_currency_code || account.balances?.unofficial_currency_code
+                      }
+                    };
+                  });
+                  
+                  accounts.push(...accountsWithBalances);
+                  console.log('OpenAI: Fetched', accountsWithBalances.length, 'accounts from Plaid');
+                } catch (error) {
+                  console.error('OpenAI: Error fetching accounts from token:', error);
+                }
+              }
+              
+              // Fetch transactions from all tokens
+              for (const tokenRecord of accessTokens) {
+                try {
+                  const endDate = new Date().toISOString().split('T')[0];
+                  const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                  
+                  const transactionsResponse = await plaidClient.transactionsGet({
+                    access_token: tokenRecord.token,
+                    start_date: startDate,
+                    end_date: endDate,
+                    options: {
+                      count: 50,
+                      include_personal_finance_category: true
+                    }
+                  });
+                  
+                  const processedTransactions = transactionsResponse.data.transactions.map((transaction: any) => ({
+                    id: transaction.transaction_id,
+                    account_id: transaction.account_id,
+                    amount: transaction.amount,
+                    date: transaction.date,
+                    name: transaction.name,
+                    merchant_name: transaction.merchant_name,
+                    category: transaction.category,
+                    category_id: transaction.category_id,
+                    pending: transaction.pending,
+                    payment_channel: transaction.payment_channel,
+                    location: transaction.location,
+                    payment_meta: transaction.payment_meta,
+                    pending_transaction_id: transaction.pending_transaction_id,
+                    account_owner: transaction.account_owner,
+                    transaction_code: transaction.transaction_code
+                  }));
+                  
+                  transactions.push(...processedTransactions);
+                  console.log('OpenAI: Fetched', processedTransactions.length, 'transactions from Plaid');
+                } catch (error) {
+                  console.error('OpenAI: Error fetching transactions from token:', error);
+                }
+              }
+            }
+          } catch (plaidError) {
+            console.error('OpenAI: Error fetching from Plaid directly:', plaidError);
+          }
+        }
+        
+        console.log('OpenAI: Final count -', accounts.length, 'accounts and', transactions.length, 'transactions for user', userId);
       } else {
         console.log('OpenAI: No userId provided, fetching all data (this should not happen for authenticated users)');
       }
@@ -337,8 +573,20 @@ export async function askOpenAI(
 
   // Create account summary
   const accountSummary = tierContext.accounts.map(account => {
-    const balance = isDemo ? account.balance : account.currentBalance;
-    const subtype = isDemo ? account.type : account.subtype;
+    let balance;
+    if (isDemo) {
+      balance = account.balance;
+    } else if (account.balance && account.balance.current) {
+      // Plaid API structure
+      balance = account.balance.current;
+    } else if (account.currentBalance) {
+      // Database structure
+      balance = account.currentBalance;
+    } else {
+      balance = 0;
+    }
+    
+    const subtype = isDemo ? account.type : (account.subtype || account.type);
     return `- ${account.name} (${account.type}/${subtype}): $${balance?.toFixed(2) || '0.00'}`;
   }).join('\n');
 
