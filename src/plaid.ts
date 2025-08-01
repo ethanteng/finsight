@@ -185,21 +185,8 @@ export const setupPlaidRoutes = (app: any) => {
         language: 'en',
         // Add webhook for production
         webhook: isProduction ? process.env.PLAID_WEBHOOK_URL : undefined,
-        // Add required Data Transparency Messaging configuration
-        link_customization_name: isProduction ? 'default' : undefined,
-        // Configure data transparency messaging for production
-        ...(isProduction && {
-          link_customization: {
-            data_transparency_messaging: {
-              use_cases: [
-                {
-                  use_case: 'FINANCIAL_MANAGEMENT',
-                  description: 'We use your financial data to provide personalized financial insights and advice through our AI assistant.'
-                }
-              ]
-            }
-          }
-        })
+        // Note: Data Transparency Messaging may not be available in current SDK
+        // We'll handle this requirement separately if needed
       };
 
       console.log(`Creating link token with products: ${products.join(', ')}`);
