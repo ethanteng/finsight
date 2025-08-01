@@ -11,8 +11,12 @@ const getPrismaClient = () => {
   return prisma;
 };
 
+// For testing, use sandbox environment to avoid Data Transparency Messaging requirements
+// TODO: Switch back to production once Data Transparency Messaging is properly configured
+const useSandbox = false; // Reverting to production mode
+
 const configuration = new Configuration({
-  basePath: PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
+  basePath: useSandbox ? PlaidEnvironments.sandbox : PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
   baseOptions: {
     headers: {
       'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID,
@@ -23,10 +27,11 @@ const configuration = new Configuration({
 
 // Log Plaid environment configuration
 console.log('Plaid Configuration:', {
-  environment: process.env.PLAID_ENV || 'sandbox',
-  accessLevel: process.env.PLAID_ACCESS_LEVEL || 'sandbox',
+  environment: useSandbox ? 'sandbox' : (process.env.PLAID_ENV || 'sandbox'),
+  accessLevel: useSandbox ? 'sandbox' : (process.env.PLAID_ACCESS_LEVEL || 'sandbox'),
   hasClientId: !!process.env.PLAID_CLIENT_ID,
-  hasSecret: !!process.env.PLAID_SECRET
+  hasSecret: !!process.env.PLAID_SECRET,
+  useSandbox: useSandbox
 });
 
 const plaidClient = new PlaidApi(configuration);
@@ -157,8 +162,6 @@ export const setupPlaidRoutes = (app: any) => {
         // Start with just Transactions to test
         products = [Products.Transactions];
         console.log('Using limited production configuration with Transactions only');
-        
-        // If we're getting institution errors, suggest using sandbox for testing
         console.log('Note: Limited production access may not work with OAuth institutions like Bank of America');
         console.log('Consider using sandbox mode for testing or request full production access');
       }
@@ -185,8 +188,8 @@ export const setupPlaidRoutes = (app: any) => {
         language: 'en',
         // Add webhook for production
         webhook: isProduction ? process.env.PLAID_WEBHOOK_URL : undefined,
-        // Note: Data Transparency Messaging may not be available in current SDK
-        // We'll handle this requirement separately if needed
+        // Add Link customization name for production (Data Transparency Messaging configured in Dashboard)
+        link_customization_name: isProduction ? 'default' : undefined
       };
 
       console.log(`Creating link token with products: ${products.join(', ')}`);
