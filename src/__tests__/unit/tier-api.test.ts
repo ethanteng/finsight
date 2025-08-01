@@ -1,6 +1,38 @@
-import request from 'supertest';
-import { app } from '../../index';
-import { PrismaClient } from '@prisma/client';
+// Mock OpenAI first, before any other imports
+jest.mock('../../openai', () => ({
+  askOpenAI: jest.fn().mockImplementation((question: string, conversationHistory: any[], userTier: string, isDemo: boolean) => {
+    // Return different responses based on the question content
+    if (question.includes('account balance') || question.includes('account balances')) {
+      return Promise.resolve('Based on your account data, you have $2,450.00 in your Chase checking account and $15,200.00 in your Ally savings account. Your total balance across all accounts is $17,650.00.');
+    }
+    if (question.includes('financial data') || question.includes('access to')) {
+      return Promise.resolve('I have access to your Market Data, Economic indicators, and account information. I can provide insights on your financial situation and market context.');
+    }
+    if (question.includes('stock prices') || question.includes('real-time')) {
+      return Promise.resolve('I can see you\'re asking about real-time stock data. While I have access to market information, real-time stock prices require a premium subscription for live data feeds.');
+    }
+    if (question.includes('account data')) {
+      return Promise.resolve('I can see your Chase account with $2,450.00 and your Ally account with $15,200.00. Your total balance is $17,650.00 across all accounts.');
+    }
+    return Promise.resolve('Mocked AI response for your question about financial data and account information.');
+  }),
+  askOpenAIForTests: jest.fn().mockImplementation((question: string, conversationHistory: any[], userTier: string, isDemo: boolean) => {
+    // Return different responses based on the question content
+    if (question.includes('account balance') || question.includes('account balances')) {
+      return Promise.resolve('Based on your account data, you have $2,450.00 in your Chase checking account and $15,200.00 in your Ally savings account. Your total balance across all accounts is $17,650.00.');
+    }
+    if (question.includes('financial data') || question.includes('access to')) {
+      return Promise.resolve('I have access to your Market Data, Economic indicators, and account information. I can provide insights on your financial situation and market context.');
+    }
+    if (question.includes('stock prices') || question.includes('real-time')) {
+      return Promise.resolve('I can see you\'re asking about real-time stock data. While I have access to market information, real-time stock prices require a premium subscription for live data feeds.');
+    }
+    if (question.includes('account data')) {
+      return Promise.resolve('I can see your Chase account with $2,450.00 and your Ally account with $15,200.00. Your total balance is $17,650.00 across all accounts.');
+    }
+    return Promise.resolve('Mocked AI response for your question about financial data and account information.');
+  }),
+}));
 
 // Mock the plaid module before importing the app
 jest.mock('../../plaid', () => ({
@@ -40,41 +72,10 @@ jest.mock('../../data/orchestrator', () => ({
   },
 }));
 
-// Mock OpenAI with more realistic responses
-jest.mock('../../openai', () => ({
-  askOpenAI: jest.fn().mockImplementation((question: string, conversationHistory: any[], userTier: string, isDemo: boolean) => {
-    // Return different responses based on the question content
-    if (question.includes('account balance') || question.includes('account balances')) {
-      return Promise.resolve('Based on your account data, you have $2,450.00 in your Chase checking account and $15,200.00 in your Ally savings account. Your total balance across all accounts is $17,650.00.');
-    }
-    if (question.includes('financial data') || question.includes('access to')) {
-      return Promise.resolve('I have access to your Market Data, Economic indicators, and account information. I can provide insights on your financial situation and market context.');
-    }
-    if (question.includes('stock prices') || question.includes('real-time')) {
-      return Promise.resolve('I can see you\'re asking about real-time stock data. While I have access to market information, real-time stock prices require a premium subscription for live data feeds.');
-    }
-    if (question.includes('account data')) {
-      return Promise.resolve('I can see your Chase account with $2,450.00 and your Ally account with $15,200.00. Your total balance is $17,650.00 across all accounts.');
-    }
-    return Promise.resolve('Mocked AI response for your question about financial data and account information.');
-  }),
-  askOpenAIForTests: jest.fn().mockImplementation((question: string, conversationHistory: any[], userTier: string, isDemo: boolean) => {
-    // Return different responses based on the question content
-    if (question.includes('account balance') || question.includes('account balances')) {
-      return Promise.resolve('Based on your account data, you have $2,450.00 in your Chase checking account and $15,200.00 in your Ally savings account. Your total balance across all accounts is $17,650.00.');
-    }
-    if (question.includes('financial data') || question.includes('access to')) {
-      return Promise.resolve('I have access to your Market Data, Economic indicators, and account information. I can provide insights on your financial situation and market context.');
-    }
-    if (question.includes('stock prices') || question.includes('real-time')) {
-      return Promise.resolve('I can see you\'re asking about real-time stock data. While I have access to market information, real-time stock prices require a premium subscription for live data feeds.');
-    }
-    if (question.includes('account data')) {
-      return Promise.resolve('I can see your Chase account with $2,450.00 and your Ally account with $15,200.00. Your total balance is $17,650.00 across all accounts.');
-    }
-    return Promise.resolve('Mocked AI response for your question about financial data and account information.');
-  }),
-}));
+// Now import the app after all mocks are set up
+import request from 'supertest';
+import { app } from '../../index';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
