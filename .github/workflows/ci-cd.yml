@@ -23,8 +23,32 @@ jobs:
 
       - name: Install dependencies
         run: |
-          npm ci
-          cd frontend && npm ci
+          # Retry npm ci with exponential backoff for network issues
+          for i in 1 2 3; do
+            echo "Attempt $i of 3: Installing dependencies..."
+            npm ci --prefer-offline --no-audit || {
+              if [ $i -eq 3 ]; then
+                echo "Failed to install dependencies after 3 attempts"
+                exit 1
+              fi
+              echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
+              sleep $((i * 10))
+            } && break
+          done
+          
+          # Install frontend dependencies
+          cd frontend
+          for i in 1 2 3; do
+            echo "Attempt $i of 3: Installing frontend dependencies..."
+            npm ci --prefer-offline --no-audit || {
+              if [ $i -eq 3 ]; then
+                echo "Failed to install frontend dependencies after 3 attempts"
+                exit 1
+              fi
+              echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
+              sleep $((i * 10))
+            } && break
+          done
 
       - name: Lint backend
         run: |
@@ -70,7 +94,19 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # Retry npm ci with exponential backoff for network issues
+          for i in 1 2 3; do
+            echo "Attempt $i of 3: Installing dependencies..."
+            npm ci --prefer-offline --no-audit || {
+              if [ $i -eq 3 ]; then
+                echo "Failed to install dependencies after 3 attempts"
+                exit 1
+              fi
+              echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
+              sleep $((i * 10))
+            } && break
+          done
 
       - name: Wait for database
         run: |
@@ -109,7 +145,20 @@ jobs:
           cache: 'npm'
 
       - name: Install frontend dependencies
-        run: cd frontend && npm ci
+        run: |
+          cd frontend
+          # Retry npm ci with exponential backoff for network issues
+          for i in 1 2 3; do
+            echo "Attempt $i of 3: Installing frontend dependencies..."
+            npm ci --prefer-offline --no-audit || {
+              if [ $i -eq 3 ]; then
+                echo "Failed to install frontend dependencies after 3 attempts"
+                exit 1
+              fi
+              echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
+              sleep $((i * 10))
+            } && break
+          done
 
       - name: Build frontend
         run: |
@@ -144,7 +193,19 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          # Retry npm ci with exponential backoff for network issues
+          for i in 1 2 3; do
+            echo "Attempt $i of 3: Installing dependencies..."
+            npm ci --prefer-offline --no-audit || {
+              if [ $i -eq 3 ]; then
+                echo "Failed to install dependencies after 3 attempts"
+                exit 1
+              fi
+              echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
+              sleep $((i * 10))
+            } && break
+          done
 
       - name: Wait for database
         run: |
@@ -185,8 +246,32 @@ jobs:
 
       - name: Install dependencies
         run: |
-          npm ci
-          cd frontend && npm ci
+          # Retry npm ci with exponential backoff for network issues
+          for i in 1 2 3; do
+            echo "Attempt $i of 3: Installing dependencies..."
+            npm ci --prefer-offline --no-audit || {
+              if [ $i -eq 3 ]; then
+                echo "Failed to install dependencies after 3 attempts"
+                exit 1
+              fi
+              echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
+              sleep $((i * 10))
+            } && break
+          done
+          
+          # Install frontend dependencies
+          cd frontend
+          for i in 1 2 3; do
+            echo "Attempt $i of 3: Installing frontend dependencies..."
+            npm ci --prefer-offline --no-audit || {
+              if [ $i -eq 3 ]; then
+                echo "Failed to install frontend dependencies after 3 attempts"
+                exit 1
+              fi
+              echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
+              sleep $((i * 10))
+            } && break
+          done
 
       - name: Verify backend build
         run: |
