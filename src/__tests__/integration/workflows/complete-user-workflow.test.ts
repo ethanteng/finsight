@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { app } from '../../../index';
-import { getPrismaClient } from '../../../index';
+import { getPrismaClient } from '../../../prisma-client';
 
 describe('Complete User Workflow Tests', () => {
   let prisma: any;
