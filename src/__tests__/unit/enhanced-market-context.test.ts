@@ -15,23 +15,34 @@ const MockSearchProvider = SearchProvider as jest.MockedClass<typeof SearchProvi
 
 describe('Enhanced Market Context System', () => {
   let dataOrchestrator: DataOrchestrator;
-  let mockFredProvider: jest.Mocked<FREDProvider>;
-  let mockAlphaVantageProvider: jest.Mocked<AlphaVantageProvider>;
-  let mockSearchProvider: jest.Mocked<SearchProvider>;
 
   beforeEach(() => {
     // Clear all mocks
     jest.clearAllMocks();
     
     // Create mock instances
-    mockFredProvider = new MockFREDProvider('test_key') as jest.Mocked<FREDProvider>;
-    mockAlphaVantageProvider = new MockAlphaVantageProvider('test_key') as jest.Mocked<AlphaVantageProvider>;
-    mockSearchProvider = new MockSearchProvider('test_key') as jest.Mocked<SearchProvider>;
+    const mockFredInstance = {
+      getEconomicIndicators: jest.fn(),
+      getLiveMarketData: jest.fn(),
+      getDataPoint: jest.fn()
+    };
+
+    const mockAlphaVantageInstance = {
+      getEconomicIndicators: jest.fn(),
+      getLiveMarketData: jest.fn(),
+      getDataPoint: jest.fn()
+    };
+
+    const mockSearchInstance = {
+      search: jest.fn(),
+      enhanceFinancialQuery: jest.fn(),
+      filterFinancialResults: jest.fn()
+    };
     
-    // Mock the constructor calls
-    MockFREDProvider.mockImplementation(() => mockFredProvider);
-    MockAlphaVantageProvider.mockImplementation(() => mockAlphaVantageProvider);
-    MockSearchProvider.mockImplementation(() => mockSearchProvider);
+    // Mock the constructor calls to return our mock instances
+    MockFREDProvider.mockImplementation(() => mockFredInstance as any);
+    MockAlphaVantageProvider.mockImplementation(() => mockAlphaVantageInstance as any);
+    MockSearchProvider.mockImplementation(() => mockSearchInstance as any);
     
     // Create the orchestrator
     dataOrchestrator = new DataOrchestrator();
@@ -56,7 +67,7 @@ describe('Enhanced Market Context System', () => {
         }
       ];
 
-      mockSearchProvider.search.mockResolvedValue(mockSearchResults);
+      MockSearchProvider.mock.results[0].value.search.mockResolvedValue(mockSearchResults);
 
       const searchContext = await dataOrchestrator.getSearchContext(
         'What are current mortgage rates?',
@@ -92,7 +103,7 @@ describe('Enhanced Market Context System', () => {
         }
       ];
 
-      mockSearchProvider.search.mockResolvedValue(mockSearchResults);
+      MockSearchProvider.mock.results[0].value.search.mockResolvedValue(mockSearchResults);
 
       // First call
       const firstResult = await dataOrchestrator.getSearchContext(
@@ -101,7 +112,7 @@ describe('Enhanced Market Context System', () => {
         false
       );
 
-      // Second call (should use cache)
+      // Second call with same query
       const secondResult = await dataOrchestrator.getSearchContext(
         'investment advice',
         UserTier.PREMIUM,
@@ -113,14 +124,14 @@ describe('Enhanced Market Context System', () => {
       expect(firstResult?.results).toEqual(secondResult?.results);
       
       // Should only call search once due to caching
-      expect(mockSearchProvider.search).toHaveBeenCalledTimes(1);
+      expect(MockSearchProvider.mock.results[0].value.search).toHaveBeenCalledTimes(1);
     });
 
     test('should handle search errors gracefully', async () => {
-      mockSearchProvider.search.mockRejectedValue(new Error('Search API error'));
+      MockSearchProvider.mock.results[0].value.search.mockRejectedValue(new Error('Search API error'));
 
       const searchContext = await dataOrchestrator.getSearchContext(
-        'mortgage rates',
+        'What are current mortgage rates?',
         UserTier.STANDARD,
         false
       );
@@ -146,28 +157,30 @@ describe('Enhanced Market Context System', () => {
         }
       ];
 
-      mockSearchProvider.search.mockResolvedValue(mockSearchResults);
+      MockSearchProvider.mock.results[0].value.search.mockResolvedValue(mockSearchResults);
 
       const searchContext = await dataOrchestrator.getSearchContext(
         'savings rates',
-        UserTier.PREMIUM,
+        UserTier.STANDARD,
         false
       );
 
-      expect(searchContext?.summary).toContain('Latest information for "savings rates"');
+      expect(searchContext?.summary).toContain('Latest real-time information for "savings rates"');
       expect(searchContext?.summary).toContain('CD Rates Comparison');
       expect(searchContext?.summary).toContain('High-Yield Savings Accounts');
     });
 
     test('should handle empty search results', async () => {
-      mockSearchProvider.search.mockResolvedValue([]);
+      MockSearchProvider.mock.results[0].value.search.mockResolvedValue([]);
 
       const searchContext = await dataOrchestrator.getSearchContext(
-        'obscure financial term',
+        'nonexistent query',
         UserTier.STANDARD,
         false
       );
 
+      expect(searchContext).toBeDefined();
+      expect(searchContext?.results).toHaveLength(0);
       expect(searchContext?.summary).toContain('No recent information found');
     });
   });
@@ -186,7 +199,7 @@ describe('Enhanced Market Context System', () => {
 
   describe('Search Provider Integration', () => {
     test('should use correct search provider configuration', () => {
-      expect(MockSearchProvider).toHaveBeenCalledWith('test_key', 'brave');
+      expect(MockSearchProvider).toHaveBeenCalledWith('test_search_key', 'brave');
     });
 
     test('should handle different search providers', () => {
@@ -199,7 +212,7 @@ describe('Enhanced Market Context System', () => {
   describe('Market Context Caching', () => {
     it('should cache market context for different tiers', async () => {
       // Mock economic indicators
-      mockFredProvider.getEconomicIndicators.mockResolvedValue({
+      MockFREDProvider.mock.results[0].value.getEconomicIndicators.mockResolvedValue({
         cpi: { value: 3.1, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         fedRate: { value: 5.25, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         mortgageRate: { value: 6.72, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
@@ -225,7 +238,7 @@ describe('Enhanced Market Context System', () => {
 
     it('should use cached context when fresh', async () => {
       // Mock economic indicators
-      mockFredProvider.getEconomicIndicators.mockResolvedValue({
+      MockFREDProvider.mock.results[0].value.getEconomicIndicators.mockResolvedValue({
         cpi: { value: 3.1, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         fedRate: { value: 5.25, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         mortgageRate: { value: 6.72, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
@@ -234,16 +247,16 @@ describe('Enhanced Market Context System', () => {
 
       // First call should fetch data
       await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD, true);
-      expect(mockFredProvider.getEconomicIndicators).toHaveBeenCalledTimes(1);
+      expect(MockFREDProvider.mock.results[0].value.getEconomicIndicators).toHaveBeenCalledTimes(1);
 
       // Second call should use cache
       await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD, true);
-      expect(mockFredProvider.getEconomicIndicators).toHaveBeenCalledTimes(1); // Still 1, not 2
+      expect(MockFREDProvider.mock.results[0].value.getEconomicIndicators).toHaveBeenCalledTimes(1); // Still 1, not 2
     });
 
     it('should refresh context when cache is stale', async () => {
       // Mock economic indicators
-      mockFredProvider.getEconomicIndicators.mockResolvedValue({
+      MockFREDProvider.mock.results[0].value.getEconomicIndicators.mockResolvedValue({
         cpi: { value: 3.1, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         fedRate: { value: 5.25, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         mortgageRate: { value: 6.72, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
@@ -252,14 +265,14 @@ describe('Enhanced Market Context System', () => {
 
       // First call
       await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD, true);
-      expect(mockFredProvider.getEconomicIndicators).toHaveBeenCalledTimes(1);
+      expect(MockFREDProvider.mock.results[0].value.getEconomicIndicators).toHaveBeenCalledTimes(1);
 
       // Manually invalidate cache to simulate stale data
       await dataOrchestrator.invalidateCache('market');
 
       // Second call should refresh
       await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD, true);
-      expect(mockFredProvider.getEconomicIndicators).toHaveBeenCalledTimes(2);
+      expect(MockFREDProvider.mock.results[0].value.getEconomicIndicators).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -274,7 +287,7 @@ describe('Enhanced Market Context System', () => {
     });
 
     it('should provide economic indicators for standard tier', async () => {
-      mockFredProvider.getEconomicIndicators.mockResolvedValue({
+      MockFREDProvider.mock.results[0].value.getEconomicIndicators.mockResolvedValue({
         cpi: { value: 3.1, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         fedRate: { value: 5.25, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         mortgageRate: { value: 6.72, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
@@ -290,14 +303,14 @@ describe('Enhanced Market Context System', () => {
     });
 
     it('should provide full market data for premium tier', async () => {
-      mockFredProvider.getEconomicIndicators.mockResolvedValue({
+      MockFREDProvider.mock.results[0].value.getEconomicIndicators.mockResolvedValue({
         cpi: { value: 3.1, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         fedRate: { value: 5.25, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         mortgageRate: { value: 6.72, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         creditCardAPR: { value: 24.59, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' }
       });
 
-      mockAlphaVantageProvider.getLiveMarketData.mockResolvedValue({
+      MockAlphaVantageProvider.mock.results[0].value.getLiveMarketData.mockResolvedValue({
         cdRates: [
           { term: '3-month', rate: 5.25, institution: 'Test Bank', lastUpdated: '2025-08-01T05:57:37.801Z' },
           { term: '6-month', rate: 5.35, institution: 'Test Bank', lastUpdated: '2025-08-01T05:57:37.801Z' }
@@ -324,7 +337,7 @@ describe('Enhanced Market Context System', () => {
 
   describe('Market Insights Generation', () => {
     it('should generate insights for high interest rates', async () => {
-      mockFredProvider.getEconomicIndicators.mockResolvedValue({
+      MockFREDProvider.mock.results[0].value.getEconomicIndicators.mockResolvedValue({
         cpi: { value: 3.1, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         fedRate: { value: 5.5, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         mortgageRate: { value: 6.72, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
@@ -338,7 +351,7 @@ describe('Enhanced Market Context System', () => {
     });
 
     it('should generate insights for high inflation', async () => {
-      mockFredProvider.getEconomicIndicators.mockResolvedValue({
+      MockFREDProvider.mock.results[0].value.getEconomicIndicators.mockResolvedValue({
         cpi: { value: 3.5, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         fedRate: { value: 5.25, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         mortgageRate: { value: 6.72, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
@@ -352,7 +365,7 @@ describe('Enhanced Market Context System', () => {
     });
 
     it('should generate insights for high mortgage rates', async () => {
-      mockFredProvider.getEconomicIndicators.mockResolvedValue({
+      MockFREDProvider.mock.results[0].value.getEconomicIndicators.mockResolvedValue({
         cpi: { value: 3.1, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         fedRate: { value: 5.25, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         mortgageRate: { value: 7.2, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
@@ -366,14 +379,14 @@ describe('Enhanced Market Context System', () => {
     });
 
     it('should generate insights for high-yield CDs', async () => {
-      mockFredProvider.getEconomicIndicators.mockResolvedValue({
+      MockFREDProvider.mock.results[0].value.getEconomicIndicators.mockResolvedValue({
         cpi: { value: 3.1, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         fedRate: { value: 5.25, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         mortgageRate: { value: 6.72, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         creditCardAPR: { value: 24.59, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' }
       });
 
-      mockAlphaVantageProvider.getLiveMarketData.mockResolvedValue({
+      MockAlphaVantageProvider.mock.results[0].value.getLiveMarketData.mockResolvedValue({
         cdRates: [
           { term: '3-month', rate: 5.25, institution: 'Test Bank', lastUpdated: '2025-08-01T05:57:37.801Z' },
           { term: '6-month', rate: 5.35, institution: 'Test Bank', lastUpdated: '2025-08-01T05:57:37.801Z' }
@@ -392,7 +405,7 @@ describe('Enhanced Market Context System', () => {
   describe('Cache Management', () => {
     it('should clear market context cache when invalidating', async () => {
       // First, populate cache
-      mockFredProvider.getEconomicIndicators.mockResolvedValue({
+      MockFREDProvider.mock.results[0].value.getEconomicIndicators.mockResolvedValue({
         cpi: { value: 3.1, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         fedRate: { value: 5.25, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         mortgageRate: { value: 6.72, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
@@ -414,14 +427,14 @@ describe('Enhanced Market Context System', () => {
     });
 
     it('should force refresh all contexts', async () => {
-      mockFredProvider.getEconomicIndicators.mockResolvedValue({
+      MockFREDProvider.mock.results[0].value.getEconomicIndicators.mockResolvedValue({
         cpi: { value: 3.1, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         fedRate: { value: 5.25, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         mortgageRate: { value: 6.72, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         creditCardAPR: { value: 24.59, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' }
       });
 
-      mockAlphaVantageProvider.getLiveMarketData.mockResolvedValue({
+      MockAlphaVantageProvider.mock.results[0].value.getLiveMarketData.mockResolvedValue({
         cdRates: [],
         treasuryYields: [],
         mortgageRates: []
@@ -430,16 +443,16 @@ describe('Enhanced Market Context System', () => {
       await dataOrchestrator.forceRefreshAllContext();
 
       // Should have called getEconomicIndicators for each tier (4 calls: 2 tiers × 2 modes, since starter doesn't need economic data)
-      expect(mockFredProvider.getEconomicIndicators).toHaveBeenCalledTimes(4);
+      expect(MockFREDProvider.mock.results[0].value.getEconomicIndicators).toHaveBeenCalledTimes(4);
       
       // Should have called getLiveMarketData for premium tier (2 calls: 2 modes)
-      expect(mockAlphaVantageProvider.getLiveMarketData).toHaveBeenCalledTimes(2);
+      expect(MockAlphaVantageProvider.mock.results[0].value.getLiveMarketData).toHaveBeenCalledTimes(2);
     });
   });
 
   describe('Error Handling', () => {
     it('should handle FRED API errors gracefully', async () => {
-      mockFredProvider.getEconomicIndicators.mockRejectedValue(new Error('FRED API error'));
+      MockFREDProvider.mock.results[0].value.getEconomicIndicators.mockRejectedValue(new Error('FRED API error'));
 
       const context = await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD, true);
       
@@ -449,14 +462,14 @@ describe('Enhanced Market Context System', () => {
     });
 
     it('should handle Alpha Vantage API errors gracefully', async () => {
-      mockFredProvider.getEconomicIndicators.mockResolvedValue({
+      MockFREDProvider.mock.results[0].value.getEconomicIndicators.mockResolvedValue({
         cpi: { value: 3.1, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         fedRate: { value: 5.25, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         mortgageRate: { value: 6.72, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         creditCardAPR: { value: 24.59, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' }
       });
 
-      mockAlphaVantageProvider.getLiveMarketData.mockRejectedValue(new Error('Alpha Vantage API error'));
+      MockAlphaVantageProvider.mock.results[0].value.getLiveMarketData.mockRejectedValue(new Error('Alpha Vantage API error'));
 
       const context = await dataOrchestrator.getMarketContextSummary(UserTier.PREMIUM, true);
       
@@ -468,7 +481,7 @@ describe('Enhanced Market Context System', () => {
 
   describe('Context Formatting', () => {
     it('should format context with proper structure', async () => {
-      mockFredProvider.getEconomicIndicators.mockResolvedValue({
+      MockFREDProvider.mock.results[0].value.getEconomicIndicators.mockResolvedValue({
         cpi: { value: 3.1, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         fedRate: { value: 5.25, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
         mortgageRate: { value: 6.72, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
