@@ -224,6 +224,66 @@ export async function askOpenAIWithEnhancedContext(
   const marketContextSummary = await dataOrchestrator.getMarketContextSummary(tier, isDemo);
   console.log('OpenAI Enhanced: Market context summary length:', marketContextSummary.length);
 
+  // Get search context for real-time financial information
+  let searchContext: string | undefined;
+  if (tier === UserTier.STANDARD || tier === UserTier.PREMIUM) {
+    try {
+      // Enhance search query for better results
+      let enhancedQuery = question;
+      
+      // Detect financial institutions and enhance search queries
+      const financialInstitutions = [
+        'wells fargo', 'chase', 'bank of america', 'citibank', 'us bank', 'pnc', 'capital one',
+        'ally bank', 'marcus', 'fidelity', 'vanguard', 'schwab', 'td ameritrade', 'robinhood'
+      ];
+      
+      const rateRelatedTerms = [
+        'mortgage rate', 'refinance', 'interest rate', 'apr', 'cd rate', 'savings rate',
+        'credit card rate', 'loan rate', 'investment return', 'yield'
+      ];
+      
+      // Check if question mentions a specific financial institution
+      const mentionedInstitution = financialInstitutions.find(institution => 
+        question.toLowerCase().includes(institution)
+      );
+      
+      // Check if question is about rates/returns
+      const isRateQuestion = rateRelatedTerms.some(term => 
+        question.toLowerCase().includes(term)
+      );
+      
+      if (mentionedInstitution && isRateQuestion) {
+        // Specific institution + rate question
+        enhancedQuery = `${mentionedInstitution} current rates today 2025 ${question.split(' ').slice(-3).join(' ')}`;
+      } else if (mentionedInstitution) {
+        // Specific institution question
+        enhancedQuery = `${mentionedInstitution} ${question} current information 2025`;
+      } else if (isRateQuestion) {
+        // General rate question
+        enhancedQuery = `${question} current rates today 2025`;
+      } else if (question.toLowerCase().includes('investment') || question.toLowerCase().includes('stock') || question.toLowerCase().includes('market')) {
+        // Investment/market question
+        enhancedQuery = `${question} current market data 2025`;
+      } else if (question.toLowerCase().includes('savings') || question.toLowerCase().includes('budget') || question.toLowerCase().includes('spending')) {
+        // Personal finance question
+        enhancedQuery = `${question} financial advice current 2025`;
+      }
+      
+      console.log('OpenAI Enhanced: Getting search context for question:', question);
+      console.log('OpenAI Enhanced: Enhanced search query:', enhancedQuery);
+      const searchResults = await dataOrchestrator.getSearchContext(enhancedQuery, tier, isDemo);
+      
+      if (searchResults && searchResults.results.length > 0) {
+        searchContext = searchResults.summary;
+        console.log('OpenAI Enhanced: Search context found with', searchResults.results.length, 'results');
+      } else {
+        console.log('OpenAI Enhanced: No search context found for question');
+      }
+    } catch (error) {
+      console.error('OpenAI Enhanced: Error getting search context:', error);
+    }
+  }
+
   // Build tier-aware context using the new orchestrator
   console.log('OpenAI Enhanced: Building tier-aware context for tier:', tier);
   const tierContext = await dataOrchestrator.buildTierAwareContext(tier, accounts, transactions, isDemo);
@@ -251,7 +311,24 @@ export async function askOpenAIWithEnhancedContext(
     }
     
     const subtype = isDemo ? account.type : (account.subtype || account.type);
-    return `- ${account.name} (${account.type}/${subtype}): $${balance?.toFixed(2) || '0.00'}`;
+    let summary = `- ${account.name} (${account.type}/${subtype}): $${balance?.toFixed(2) || '0.00'}`;
+    
+    // Add interest rate for loans in demo mode
+    if (isDemo && account.type === 'loan' && (account as any).interestRate) {
+      summary += ` (Rate: ${(account as any).interestRate}%)`;
+    }
+    
+    // Add interest rate for credit cards in demo mode
+    if (isDemo && account.type === 'credit' && (account as any).interestRate) {
+      summary += ` (APR: ${(account as any).interestRate}%)`;
+    }
+    
+    // Add interest rate for savings/CDs in demo mode
+    if (isDemo && (account.type === 'savings') && (account as any).interestRate) {
+      summary += ` (Rate: ${(account as any).interestRate}%)`;
+    }
+    
+    return summary;
   }).join('\n');
 
   // Create transaction summary
@@ -287,7 +364,7 @@ export async function askOpenAIWithEnhancedContext(
   }
 
   // Build enhanced system prompt with proactive market context
-  const systemPrompt = buildEnhancedSystemPrompt(tierContext, accountSummary, transactionSummary, marketContextSummary);
+  const systemPrompt = buildEnhancedSystemPrompt(tierContext, accountSummary, transactionSummary, marketContextSummary, searchContext);
 
   console.log('OpenAI Enhanced: System prompt length:', systemPrompt.length);
   console.log('OpenAI Enhanced: System prompt preview:', systemPrompt.substring(0, 500));
@@ -338,7 +415,8 @@ function buildEnhancedSystemPrompt(
   tierContext: TierAwareContext, 
   accountSummary: string, 
   transactionSummary: string,
-  marketContextSummary: string
+  marketContextSummary: string,
+  searchContext?: string
 ): string {
   const { tierInfo, upgradeHints } = tierContext;
 
@@ -364,6 +442,34 @@ ${tierInfo.unavailableSources.map(source => `• ${source}`).join('\n')}` : ''}
 ${marketContextSummary ? `ENHANCED MARKET CONTEXT:
 ${marketContextSummary}` : 'No market context available (upgrade to Standard tier)'}
 
+${searchContext ? `REAL-TIME FINANCIAL INFORMATION:
+${searchContext}
+
+IMPORTANT: Use this real-time information to provide current, accurate financial advice. Always cite sources when referencing external information. Prioritize the most recent and relevant information from these sources.
+
+When providing financial advice, be specific about:
+- Current rates, prices, or market conditions relevant to the question
+- Comparison with user's current financial situation when applicable
+- Specific next steps or actions the user can take
+- Any special programs, discounts, or opportunities mentioned in the search results
+- Time-sensitive information or market trends that affect the advice
+
+For rate comparisons (mortgage, credit card, savings, etc.):
+- Compare user's current rate vs. market averages when available
+- Assess whether refinancing/switching makes financial sense
+- Consider fees, closing costs, and other factors
+- Recommend specific institutions or products when relevant
+
+For investment questions:
+- Use current market data and trends
+- Consider user's risk tolerance and financial goals
+- Reference specific investment vehicles or strategies mentioned
+
+For personal finance questions:
+- Provide actionable budgeting or savings advice
+- Reference current financial products or services
+- Consider user's income, expenses, and financial situation` : ''}
+
 TIER LIMITATIONS:
 ${tierInfo.limitations.map(limitation => `• ${limitation}`).join('\n')}
 
@@ -371,13 +477,15 @@ INSTRUCTIONS:
 - Provide clear, actionable financial advice based on available data
 - Use specific numbers from the user's data when possible
 - Reference current market conditions when relevant and available
+- Use real-time financial information when available to provide the most current advice
 - Be conversational but professional
 - If you don't have enough data, ask for more information
 - Always provide source attribution when using external data
 - Be helpful with current tier limitations
 - When relevant, mention upgrade benefits for unavailable features
 - Focus on the user's specific financial situation and goals
-- Use the enhanced market context to provide more informed recommendations`;
+- Use the enhanced market context to provide more informed recommendations
+- When using search results, prioritize the most recent and relevant information`;
 
   return systemPrompt;
 }

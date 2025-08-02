@@ -1,6 +1,7 @@
 import { UserTier, TierAccess, EconomicIndicator, LiveMarketData } from './types';
 import { FREDProvider } from './providers/fred';
 import { AlphaVantageProvider } from './providers/alpha-vantage';
+import { SearchProvider } from './providers/search';
 import { cacheService } from './cache';
 import { DataSourceManager, dataSourceRegistry } from './sources';
 
@@ -10,6 +11,7 @@ export interface TierAwareContext {
   marketContext: {
     economicIndicators?: EconomicIndicator;
     liveMarketData?: LiveMarketData;
+    searchContext?: SearchContext;
   };
   tierInfo: {
     currentTier: UserTier;
@@ -25,10 +27,26 @@ export interface TierAwareContext {
   }[];
 }
 
+export interface SearchContext {
+  query: string;
+  results: SearchResult[];
+  summary: string;
+  lastUpdate: Date;
+}
+
+export interface SearchResult {
+  title: string;
+  snippet: string;
+  url: string;
+  source: string;
+  relevance: number;
+}
+
 export interface MarketContextSummary {
   lastUpdate: Date;
   economicSummary: string;
   marketSummary: string;
+  searchSummary?: string;
   keyMetrics: {
     fedRate: string;
     treasury10Y: string;
@@ -43,14 +61,18 @@ export interface MarketContextSummary {
 export class DataOrchestrator {
   private fredProvider: FREDProvider;
   private alphaVantageProvider: AlphaVantageProvider;
+  private searchProvider: SearchProvider;
   private marketContextCache: Map<string, MarketContextSummary> = new Map();
+  private searchCache: Map<string, SearchContext> = new Map();
   private lastContextRefresh: Date = new Date(0);
   private readonly CONTEXT_REFRESH_INTERVAL = 60 * 60 * 1000; // 1 hour
+  private readonly SEARCH_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
   constructor() {
     // For integration tests, use test API keys to avoid hitting live APIs
     const fredApiKey = process.env.NODE_ENV === 'test' ? 'test_fred_key' : process.env.FRED_API_KEY;
     const alphaVantageApiKey = process.env.NODE_ENV === 'test' ? 'test_alpha_vantage_key' : process.env.ALPHA_VANTAGE_API_KEY;
+    const searchApiKey = process.env.NODE_ENV === 'test' ? 'test_search_key' : process.env.SEARCH_API_KEY;
 
     if (!fredApiKey) {
       console.warn('FRED_API_KEY not set, economic indicators will be unavailable');
@@ -58,9 +80,13 @@ export class DataOrchestrator {
     if (!alphaVantageApiKey) {
       console.warn('ALPHA_VANTAGE_API_KEY not set, live market data will be unavailable');
     }
+    if (!searchApiKey) {
+      console.warn('SEARCH_API_KEY not set, search context will be unavailable');
+    }
 
     this.fredProvider = new FREDProvider(fredApiKey || '');
     this.alphaVantageProvider = new AlphaVantageProvider(alphaVantageApiKey || '');
+    this.searchProvider = new SearchProvider(searchApiKey || '', 'brave');
   }
 
   getTierAccess(tier: UserTier): TierAccess {
@@ -70,7 +96,8 @@ export class DataOrchestrator {
           tier: UserTier.STARTER,
           hasEconomicContext: false,
           hasLiveData: false,
-          hasScenarioPlanning: false
+          hasScenarioPlanning: false,
+          hasSearchContext: false
         };
       
       case UserTier.STANDARD:
@@ -78,7 +105,8 @@ export class DataOrchestrator {
           tier: UserTier.STANDARD,
           hasEconomicContext: true,
           hasLiveData: false,
-          hasScenarioPlanning: false
+          hasScenarioPlanning: false,
+          hasSearchContext: true
         };
       
       case UserTier.PREMIUM:
@@ -86,7 +114,8 @@ export class DataOrchestrator {
           tier: UserTier.PREMIUM,
           hasEconomicContext: true,
           hasLiveData: true,
-          hasScenarioPlanning: true
+          hasScenarioPlanning: true,
+          hasSearchContext: true
         };
       
       default:
@@ -94,7 +123,8 @@ export class DataOrchestrator {
           tier: UserTier.STARTER,
           hasEconomicContext: false,
           hasLiveData: false,
-          hasScenarioPlanning: false
+          hasScenarioPlanning: false,
+          hasSearchContext: false
         };
     }
   }
@@ -452,6 +482,63 @@ export class DataOrchestrator {
       console.error('Error fetching live market data:', error);
       throw error; // Live data is critical for Premium tier
     }
+  }
+
+  async getSearchContext(query: string, tier: UserTier, isDemo: boolean = false): Promise<SearchContext | null> {
+    const tierAccess = this.getTierAccess(tier);
+    
+    if (!tierAccess.hasSearchContext) {
+      return null;
+    }
+
+    const cacheKey = `search_${tier}_${isDemo}_${this.hashQuery(query)}`;
+    const cached = this.searchCache.get(cacheKey);
+    
+    if (cached && this.isSearchFresh(cached.lastUpdate)) {
+      return cached;
+    }
+
+    try {
+      const results = await this.searchProvider.search(query);
+      const summary = await this.generateSearchSummary(results, query);
+      
+      const searchContext: SearchContext = {
+        query,
+        results,
+        summary,
+        lastUpdate: new Date()
+      };
+
+      this.searchCache.set(cacheKey, searchContext);
+      return searchContext;
+    } catch (error) {
+      console.error('Failed to get search context:', error);
+      return null;
+    }
+  }
+
+  private hashQuery(query: string): string {
+    // Simple hash for cache key
+    return query.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 20);
+  }
+
+  private isSearchFresh(lastUpdate: Date): boolean {
+    return Date.now() - lastUpdate.getTime() < this.SEARCH_CACHE_TTL;
+  }
+
+  private async generateSearchSummary(results: SearchResult[], query: string): Promise<string> {
+    if (results.length === 0) {
+      return `No recent information found for "${query}".`;
+    }
+
+    const topResults = results.slice(0, 5);
+    const summary = topResults.map(result => {
+      // Clean HTML tags from snippet
+      const cleanSnippet = result.snippet.replace(/<[^>]*>/g, '');
+      return `• ${result.title}: ${cleanSnippet} (Source: ${result.source})`;
+    }).join('\n');
+
+    return `Latest real-time information for "${query}":\n${summary}`;
   }
 
   // Helper method for debugging

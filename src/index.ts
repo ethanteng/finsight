@@ -218,11 +218,16 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
           console.log('Authenticated user:', { userId, userTier });
         }
       }
+    } else {
+      // For demo mode, use environment variable for tier
+      const demoTier = process.env.TEST_USER_TIER || 'premium';
+      userTier = demoTier as UserTier;
+      console.log('Demo mode - using tier from environment:', { demoTier, userTier });
     }
 
-    // Get AI response using tokenized data
-    const { askOpenAI } = await import('./openai');
-    const aiResponse = await askOpenAI(question, [], userTier, isDemo, userId);
+    // Get AI response using enhanced context with RAG
+    const { askOpenAIWithEnhancedContext } = await import('./openai');
+    const aiResponse = await askOpenAIWithEnhancedContext(question, [], userTier, isDemo, userId);
 
     // For demo mode, use the AI response directly (no tokenization needed for fake data)
     if (isDemo) {
@@ -658,8 +663,14 @@ const handleTierAwareDemoRequest = async (req: Request, res: Response) => {
       take: 5,
     });
     
-    // Use environment variable for tier in demo mode
-    const backendTier = process.env.TEST_USER_TIER || 'starter';
+    // Use environment variable for tier in demo mode, default to premium to showcase full capabilities
+    const backendTier = process.env.TEST_USER_TIER || 'premium';
+    
+    console.log('Tier-aware demo - Environment check:', {
+      TEST_USER_TIER: process.env.TEST_USER_TIER,
+      backendTier,
+      nodeEnv: process.env.NODE_ENV
+    });
     
     console.log('Tier-aware demo - calling askOpenAI with tier:', backendTier);
     const answer = await askOpenAI(questionString, recentConversations, backendTier as any, true, undefined);
@@ -1339,6 +1350,35 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         });
       }
     });
+
+// Test endpoint for RAG search functionality
+app.get('/test/search-context', async (req: Request, res: Response) => {
+  try {
+    const { query, tier = 'standard', isDemo = 'false' } = req.query;
+    
+    if (!query || typeof query !== 'string') {
+      return res.status(400).json({ error: 'Query parameter is required' });
+    }
+
+    const userTier = tier as UserTier;
+    const isDemoMode = isDemo === 'true';
+
+    console.log('Search Context Test:', { query, tier: userTier, isDemo: isDemoMode });
+
+    const searchContext = await dataOrchestrator.getSearchContext(query, userTier, isDemoMode);
+
+    res.json({
+      query,
+      tier: userTier,
+      isDemo: isDemoMode,
+      searchContext,
+      cacheStats: await dataOrchestrator.getCacheStats()
+    });
+  } catch (error) {
+    console.error('Search context test error:', error);
+    res.status(500).json({ error: 'Failed to get search context' });
+  }
+});
 
 const PORT = process.env.PORT || 3000;
 

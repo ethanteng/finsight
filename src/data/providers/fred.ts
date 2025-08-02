@@ -60,7 +60,8 @@ export class FREDProvider implements DataProvider {
       this.getDataPoint('CPIAUCSL').catch(e => { console.error('CPI error:', e); return fallback.cpi; }),
       this.getDataPoint('FEDFUNDS').catch(e => { console.error('FedFunds error:', e); return fallback.fedRate; }),
       this.getDataPoint('MORTGAGE30US').catch(e => { console.error('Mortgage error:', e); return fallback.mortgageRate; }),
-      this.getDataPoint('CCRSA').catch(e => { console.error('CreditCardAPR error:', e); return fallback.creditCardAPR; })
+      // Temporarily use fallback for credit card APR due to FRED API issues
+      Promise.resolve(fallback.creditCardAPR).catch(e => { console.error('CreditCardAPR error:', e); return fallback.creditCardAPR; })
     ]);
 
     const indicators: EconomicIndicator = {

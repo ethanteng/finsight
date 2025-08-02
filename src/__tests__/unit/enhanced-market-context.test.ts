@@ -2,37 +2,198 @@ import { DataOrchestrator, MarketContextSummary } from '../../data/orchestrator'
 import { UserTier } from '../../data/types';
 import { FREDProvider } from '../../data/providers/fred';
 import { AlphaVantageProvider } from '../../data/providers/alpha-vantage';
+import { SearchProvider } from '../../data/providers/search';
 
 // Mock the providers
 jest.mock('../../data/providers/fred');
 jest.mock('../../data/providers/alpha-vantage');
+jest.mock('../../data/providers/search');
 
 const MockFREDProvider = FREDProvider as jest.MockedClass<typeof FREDProvider>;
 const MockAlphaVantageProvider = AlphaVantageProvider as jest.MockedClass<typeof AlphaVantageProvider>;
+const MockSearchProvider = SearchProvider as jest.MockedClass<typeof SearchProvider>;
 
 describe('Enhanced Market Context System', () => {
   let dataOrchestrator: DataOrchestrator;
   let mockFredProvider: jest.Mocked<FREDProvider>;
   let mockAlphaVantageProvider: jest.Mocked<AlphaVantageProvider>;
+  let mockSearchProvider: jest.Mocked<SearchProvider>;
 
   beforeEach(() => {
     // Clear all mocks
     jest.clearAllMocks();
     
-    // Setup mock providers
-    mockFredProvider = {
-      getEconomicIndicators: jest.fn(),
-    } as any;
+    // Create mock instances
+    mockFredProvider = new MockFREDProvider('test_key') as jest.Mocked<FREDProvider>;
+    mockAlphaVantageProvider = new MockAlphaVantageProvider('test_key') as jest.Mocked<AlphaVantageProvider>;
+    mockSearchProvider = new MockSearchProvider('test_key') as jest.Mocked<SearchProvider>;
     
-    mockAlphaVantageProvider = {
-      getLiveMarketData: jest.fn(),
-    } as any;
-    
+    // Mock the constructor calls
     MockFREDProvider.mockImplementation(() => mockFredProvider);
     MockAlphaVantageProvider.mockImplementation(() => mockAlphaVantageProvider);
+    MockSearchProvider.mockImplementation(() => mockSearchProvider);
     
-    // Create orchestrator instance
+    // Create the orchestrator
     dataOrchestrator = new DataOrchestrator();
+  });
+
+  describe('Search Context Integration', () => {
+    test('should get search context for Standard tier', async () => {
+      const mockSearchResults = [
+        {
+          title: 'Current Mortgage Rates 2024',
+          snippet: 'Average 30-year fixed mortgage rate is 6.85%',
+          url: 'https://bankrate.com/mortgage-rates',
+          source: 'Bing',
+          relevance: 0.9
+        },
+        {
+          title: 'Best CD Rates This Week',
+          snippet: 'Top CD rates reaching 5.5% APY for 12-month terms',
+          url: 'https://nerdwallet.com/cd-rates',
+          source: 'Bing',
+          relevance: 0.8
+        }
+      ];
+
+      mockSearchProvider.search.mockResolvedValue(mockSearchResults);
+
+      const searchContext = await dataOrchestrator.getSearchContext(
+        'What are current mortgage rates?',
+        UserTier.STANDARD,
+        false
+      );
+
+      expect(searchContext).toBeDefined();
+      expect(searchContext?.query).toBe('What are current mortgage rates?');
+      expect(searchContext?.results).toHaveLength(2);
+      expect(searchContext?.summary).toContain('Current Mortgage Rates 2024');
+      expect(searchContext?.summary).toContain('6.85%');
+    });
+
+    test('should not get search context for Starter tier', async () => {
+      const searchContext = await dataOrchestrator.getSearchContext(
+        'What are current mortgage rates?',
+        UserTier.STARTER,
+        false
+      );
+
+      expect(searchContext).toBeNull();
+    });
+
+    test('should cache search results', async () => {
+      const mockSearchResults = [
+        {
+          title: 'Investment Advice 2024',
+          snippet: 'Best investment strategies for current market',
+          url: 'https://investopedia.com/investment-advice',
+          source: 'Bing',
+          relevance: 0.9
+        }
+      ];
+
+      mockSearchProvider.search.mockResolvedValue(mockSearchResults);
+
+      // First call
+      const firstResult = await dataOrchestrator.getSearchContext(
+        'investment advice',
+        UserTier.PREMIUM,
+        false
+      );
+
+      // Second call (should use cache)
+      const secondResult = await dataOrchestrator.getSearchContext(
+        'investment advice',
+        UserTier.PREMIUM,
+        false
+      );
+
+      expect(firstResult).toBeDefined();
+      expect(secondResult).toBeDefined();
+      expect(firstResult?.results).toEqual(secondResult?.results);
+      
+      // Should only call search once due to caching
+      expect(mockSearchProvider.search).toHaveBeenCalledTimes(1);
+    });
+
+    test('should handle search errors gracefully', async () => {
+      mockSearchProvider.search.mockRejectedValue(new Error('Search API error'));
+
+      const searchContext = await dataOrchestrator.getSearchContext(
+        'mortgage rates',
+        UserTier.STANDARD,
+        false
+      );
+
+      expect(searchContext).toBeNull();
+    });
+
+    test('should generate appropriate search summary', async () => {
+      const mockSearchResults = [
+        {
+          title: 'CD Rates Comparison',
+          snippet: 'Compare CD rates from top banks',
+          url: 'https://bankrate.com/cd-rates',
+          source: 'Bing',
+          relevance: 0.9
+        },
+        {
+          title: 'High-Yield Savings Accounts',
+          snippet: 'Best savings account rates for 2024',
+          url: 'https://nerdwallet.com/savings-rates',
+          source: 'Bing',
+          relevance: 0.8
+        }
+      ];
+
+      mockSearchProvider.search.mockResolvedValue(mockSearchResults);
+
+      const searchContext = await dataOrchestrator.getSearchContext(
+        'savings rates',
+        UserTier.PREMIUM,
+        false
+      );
+
+      expect(searchContext?.summary).toContain('Latest information for "savings rates"');
+      expect(searchContext?.summary).toContain('CD Rates Comparison');
+      expect(searchContext?.summary).toContain('High-Yield Savings Accounts');
+    });
+
+    test('should handle empty search results', async () => {
+      mockSearchProvider.search.mockResolvedValue([]);
+
+      const searchContext = await dataOrchestrator.getSearchContext(
+        'obscure financial term',
+        UserTier.STANDARD,
+        false
+      );
+
+      expect(searchContext?.summary).toContain('No recent information found');
+    });
+  });
+
+  describe('Tier Access with Search Context', () => {
+    test('should include search context in tier access', () => {
+      const starterAccess = dataOrchestrator.getTierAccess(UserTier.STARTER);
+      const standardAccess = dataOrchestrator.getTierAccess(UserTier.STANDARD);
+      const premiumAccess = dataOrchestrator.getTierAccess(UserTier.PREMIUM);
+
+      expect(starterAccess.hasSearchContext).toBe(false);
+      expect(standardAccess.hasSearchContext).toBe(true);
+      expect(premiumAccess.hasSearchContext).toBe(true);
+    });
+  });
+
+  describe('Search Provider Integration', () => {
+    test('should use correct search provider configuration', () => {
+      expect(MockSearchProvider).toHaveBeenCalledWith('test_key', 'brave');
+    });
+
+    test('should handle different search providers', () => {
+      // Test with different provider
+      const searchProvider = new SearchProvider('test_key', 'google');
+      expect(searchProvider).toBeDefined();
+    });
   });
 
   describe('Market Context Caching', () => {

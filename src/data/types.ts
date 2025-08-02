@@ -51,6 +51,7 @@ export interface TierAccess {
   hasEconomicContext: boolean;
   hasLiveData: boolean;
   hasScenarioPlanning: boolean;
+  hasSearchContext: boolean;
 }
 
 // Data Source Types

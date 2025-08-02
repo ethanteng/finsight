@@ -75,7 +75,8 @@ export const demoData = {
       balance: 28450.00,
       type: "savings" as const,
       institution: "Ally Bank",
-      lastUpdated: "2024-07-28T10:30:00Z"
+      lastUpdated: "2024-07-28T10:30:00Z",
+      interestRate: 4.25 // Savings account rate
     },
     {
       id: "401k_1",
@@ -99,7 +100,8 @@ export const demoData = {
       balance: -3240.50,
       type: "credit" as const,
       institution: "Chase Bank",
-      lastUpdated: "2024-07-28T10:30:00Z"
+      lastUpdated: "2024-07-28T10:30:00Z",
+      interestRate: 18.99 // Credit card APR
     },
     {
       id: "mortgage_1",
@@ -107,7 +109,8 @@ export const demoData = {
       balance: 485000.00,
       type: "loan" as const,
       institution: "Wells Fargo",
-      lastUpdated: "2024-07-28T10:30:00Z"
+      lastUpdated: "2024-07-28T10:30:00Z",
+      interestRate: 6.72 // Mock interest rate for demo purposes
     },
     {
       id: "cd_1",
@@ -115,7 +118,8 @@ export const demoData = {
       balance: 25000.00,
       type: "savings" as const,
       institution: "Marcus by Goldman Sachs",
-      lastUpdated: "2024-07-28T10:30:00Z"
+      lastUpdated: "2024-07-28T10:30:00Z",
+      interestRate: 4.85 // CD rate
     }
   ],
 
