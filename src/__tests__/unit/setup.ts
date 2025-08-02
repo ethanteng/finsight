@@ -67,6 +67,11 @@ export * from './factories/transaction.factory';
 const prisma = new PrismaClient();
 
 beforeAll(async () => {
+  // Only run in test environment
+  if (process.env.NODE_ENV !== 'test') {
+    return;
+  }
+  
   // Setup test environment
   process.env.NODE_ENV = 'test';
   
@@ -80,11 +85,21 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Only run in test environment
+  if (process.env.NODE_ENV !== 'test') {
+    return;
+  }
+  
   // Cleanup
   await prisma.$disconnect();
 });
 
 beforeEach(async () => {
+  // Only run cleanup in test environment
+  if (process.env.NODE_ENV !== 'test') {
+    return;
+  }
+  
   // Clean up test data in correct order to respect foreign key constraints
   try {
     // Delete in order: child tables first, then parent tables

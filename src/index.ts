@@ -224,10 +224,65 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
     const { askOpenAI } = await import('./openai');
     const aiResponse = await askOpenAI(question, [], userTier, isDemo, userId);
 
-    // For demo mode, return the response as-is (no tokenization needed for fake data)
+    // For demo mode, use the AI response directly (no tokenization needed for fake data)
     if (isDemo) {
-      console.log('Demo mode: returning AI response as-is (no tokenization needed for fake data)');
-      return res.json({ answer: aiResponse });
+      console.log('Demo mode: using AI response directly (no tokenization needed for fake data)');
+      const displayResponse = aiResponse;
+      
+      // Save conversation for demo mode
+      if (isDemo && sessionId) {
+        console.log('Attempting to save demo conversation for sessionId:', sessionId);
+        console.log('isDemo:', isDemo, 'sessionId:', sessionId);
+        try {
+          const { getPrismaClient } = await import('./index');
+          const prisma = getPrismaClient();
+          
+          // Get or create demo session
+          let demoSession = await prisma.demoSession.findUnique({
+            where: { sessionId }
+          });
+          
+          if (!demoSession) {
+            console.log('Creating new demo session for sessionId:', sessionId);
+            demoSession = await prisma.demoSession.create({
+              data: {
+                sessionId,
+                userAgent: req.headers['user-agent'] || 'unknown'
+              }
+            });
+            console.log('Demo session created:', demoSession.id);
+          } else {
+            console.log('Found existing demo session:', demoSession.id);
+          }
+          
+          // Store the demo conversation with session association
+          const conversation = await prisma.demoConversation.create({
+            data: {
+              question,
+              answer: displayResponse,
+              sessionId: demoSession.id,
+            }
+          });
+          console.log('Demo conversation saved successfully:', conversation.id);
+          
+          // Verify the conversation was actually stored
+          const verifyConversation = await prisma.demoConversation.findUnique({
+            where: { id: conversation.id }
+          });
+          
+          if (verifyConversation) {
+            console.log('Demo conversation verified in database:', verifyConversation.id);
+          } else {
+            console.error('Demo conversation was not actually stored in database');
+          }
+        } catch (error) {
+          console.error('Error saving demo conversation:', error);
+        }
+      } else {
+        console.log('Not saving demo conversation - isDemo:', isDemo, 'sessionId:', sessionId);
+      }
+      
+      return res.json({ answer: displayResponse });
     }
 
     // For production, convert AI response back to user-friendly format
@@ -237,24 +292,7 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
     
     console.log('Dual-data system: AI received tokenized data, user sees real data');
 
-    // Save conversation for demo mode
-    if (isDemo && sessionId) {
-      try {
-        const { getPrismaClient } = await import('./index');
-        const prisma = getPrismaClient();
-        
-        await prisma.demoConversation.create({
-          data: {
-            sessionId,
-            question,
-            answer: displayResponse
-          }
-        });
-        console.log('Demo conversation saved for session:', sessionId);
-      } catch (error) {
-        console.error('Error saving demo conversation:', error);
-      }
-    }
+
 
     // Save conversation for authenticated users
     if (!isDemo && userId) {
@@ -1182,6 +1220,123 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         res.json({ success: true, message: 'All accounts disconnected and data cleared' });
       } catch (err) {
         res.status(500).json({ error: 'Failed to disconnect accounts' });
+      }
+    });
+
+    // Admin endpoints for demo data analysis
+    app.get('/admin/demo-sessions', async (req, res) => {
+      try {
+        const { getPrismaClient } = await import('./index');
+        const prisma = getPrismaClient();
+        
+        console.log('Admin: Fetching demo sessions...');
+        
+        // Get all demo sessions with conversation counts and stats
+        const sessions = await prisma.demoSession.findMany({
+          include: {
+            conversations: {
+              orderBy: { createdAt: 'asc' }
+            },
+            _count: {
+              select: { conversations: true }
+            }
+          },
+          orderBy: { createdAt: 'desc' }
+        });
+
+        console.log('Admin: Found sessions:', sessions.length);
+
+        const sessionStats = sessions.map(session => {
+          const conversations = session.conversations;
+          const firstConversation = conversations[0];
+          const lastConversation = conversations[conversations.length - 1];
+          
+          return {
+            sessionId: session.sessionId,
+            conversationCount: session._count.conversations,
+            firstQuestion: firstConversation?.question || 'No questions yet',
+            lastActivity: lastConversation?.createdAt || session.createdAt,
+            userAgent: session.userAgent
+          };
+        });
+
+        console.log('Admin: Returning session stats:', sessionStats.length);
+        res.json({ sessions: sessionStats });
+      } catch (error) {
+        console.error('Error fetching demo sessions:', error);
+        res.status(500).json({ error: 'Failed to fetch demo sessions' });
+      }
+    });
+
+    app.get('/admin/demo-conversations', async (req, res) => {
+      try {
+        const { getPrismaClient } = await import('./index');
+        const prisma = getPrismaClient();
+        
+        console.log('Admin: Fetching demo conversations...');
+        
+        // Get all demo conversations with session info
+        const conversations = await prisma.demoConversation.findMany({
+          include: {
+            session: true
+          },
+          orderBy: { createdAt: 'desc' }
+        });
+
+        console.log('Admin: Found conversations:', conversations.length);
+        res.json({ conversations });
+      } catch (error) {
+        console.error('Error fetching demo conversations:', error);
+        res.status(500).json({ error: 'Failed to fetch demo conversations' });
+      }
+    });
+
+    // Test database connection
+    app.get('/test-db', async (req, res) => {
+      try {
+        const { getPrismaClient } = await import('./index');
+        const prisma = getPrismaClient();
+        
+        // Test basic database connection
+        await prisma.$queryRaw`SELECT 1`;
+        
+        // Test demo session creation
+        const testSession = await prisma.demoSession.create({
+          data: {
+            sessionId: 'test-db-session',
+            userAgent: 'test'
+          }
+        });
+        
+        // Test demo conversation creation
+        const testConversation = await prisma.demoConversation.create({
+          data: {
+            question: 'Test question',
+            answer: 'Test answer',
+            sessionId: testSession.id
+          }
+        });
+        
+        // Clean up test data
+        await prisma.demoConversation.delete({
+          where: { id: testConversation.id }
+        });
+        await prisma.demoSession.delete({
+          where: { id: testSession.id }
+        });
+        
+        res.json({ 
+          status: 'OK', 
+          message: 'Database connection and demo storage working correctly',
+          sessionId: testSession.id,
+          conversationId: testConversation.id
+        });
+      } catch (error) {
+        console.error('Database test failed:', error);
+        res.status(500).json({ 
+          error: 'Database test failed', 
+          details: error instanceof Error ? error.message : 'Unknown error'
+        });
       }
     });
 

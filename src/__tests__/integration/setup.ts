@@ -43,6 +43,11 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
+  // Only run cleanup in test environment
+  if (process.env.NODE_ENV !== 'test') {
+    return;
+  }
+  
   // ✅ Reset test data
   try {
     // Delete in correct order to avoid foreign key constraints
@@ -62,6 +67,11 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  // Only run cleanup in test environment
+  if (process.env.NODE_ENV !== 'test') {
+    return;
+  }
+  
   // ✅ Clean up after each test to prevent session conflicts
   try {
     // Small delay to ensure all database operations complete
