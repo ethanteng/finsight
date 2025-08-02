@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { config } from 'dotenv';
 import express, { Application, Request, Response } from 'express';
 import { setupPlaidRoutes } from './plaid';
-import { askOpenAI, askOpenAIWithEnhancedContext } from './openai';
+import { askOpenAI } from './openai';
 import cors from 'cors';
 import cron from 'node-cron';
 // Removed syncAllAccounts import - keeping transactions real-time only
