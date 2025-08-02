@@ -15,19 +15,12 @@ interface Account {
   };
 }
 
-interface SyncInfo {
-  lastSync: string;
-  accountsSynced: number;
-  transactionsSynced: number;
-}
+
 
 export default function ProfilePage() {
   const [connectedAccounts, setConnectedAccounts] = useState<Account[]>([]);
-  const [syncInfo, setSyncInfo] = useState<SyncInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
-  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isDemo, setIsDemo] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState('');
@@ -85,94 +78,7 @@ export default function ProfilePage() {
     }
   }, [API_URL]);
 
-  const loadSyncStatusWithDemoMode = useCallback(async (demoMode: boolean) => {
-    try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
 
-      // Add demo mode header or authentication header
-      if (demoMode) {
-        headers['x-demo-mode'] = 'true';
-        console.log('Demo mode detected, sending x-demo-mode header');
-      } else {
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-          console.log('Sending auth token for sync status:', token.substring(0, 20) + '...');
-        } else {
-          console.log('No auth token found in localStorage for sync status');
-        }
-      }
-
-      const res = await fetch(`${API_URL}/sync/status`, {
-        method: 'GET',
-        headers,
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setSyncInfo(data.syncInfo);
-      }
-    } catch (err) {
-      console.error('Error loading sync status:', err);
-    }
-  }, [API_URL]);
-
-  // Manual refresh function - handles both data sync and connection refresh
-  const handleManualRefresh = async () => {
-    setRefreshing(true);
-    setNotification(null); // Clear any existing notifications
-    
-    try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-
-      // Add demo mode header or authentication header
-      if (isDemo) {
-        headers['x-demo-mode'] = 'true';
-        console.log('Demo mode detected, sending x-demo-mode header');
-      } else {
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-          console.log('Sending auth token:', token.substring(0, 20) + '...');
-        } else {
-          console.log('No auth token found in localStorage');
-        }
-      }
-
-      // Now sync the data
-      const res = await fetch(`${API_URL}/sync/manual`, {
-        method: 'POST',
-        headers,
-      });
-
-      if (res.ok) {
-        const result = await res.json();
-        if (result.success) {
-          // Reload both sync status and accounts after successful refresh
-          loadSyncStatusWithDemoMode(isDemo || false);
-          loadConnectedAccountsWithDemoMode(isDemo || false);
-          setNotification({ message: 'Data refreshed successfully!', type: 'success' });
-        } else {
-          // Handle sync errors
-          const errorMessage = result.error || 'Failed to refresh data';
-          setNotification({ message: errorMessage, type: 'error' });
-        }
-      } else {
-        const errorData = await res.json().catch(() => ({}));
-        const errorMessage = errorData.error || 'Failed to refresh data';
-        setNotification({ message: errorMessage, type: 'error' });
-      }
-    } catch (err) {
-      console.error('Error during manual refresh:', err);
-      setNotification({ message: 'Failed to refresh data. Please try again.', type: 'error' });
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   useEffect(() => {
     // Check if user came from demo page
@@ -194,23 +100,11 @@ export default function ProfilePage() {
       console.log('Demo mode detected, calling API functions');
       // Call the functions directly with the correct demo mode
       loadConnectedAccountsWithDemoMode(true);
-      loadSyncStatusWithDemoMode(true);
     } else {
       console.log('Not demo mode, calling API functions');
       loadConnectedAccountsWithDemoMode(false);
-      loadSyncStatusWithDemoMode(false);
     }
-  }, [loadConnectedAccountsWithDemoMode, loadSyncStatusWithDemoMode]);
-
-  // Auto-hide notifications after 3 seconds
-  useEffect(() => {
-    if (notification) {
-      const timer = setTimeout(() => {
-        setNotification(null);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [notification]);
+  }, [loadConnectedAccountsWithDemoMode]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -341,47 +235,16 @@ export default function ProfilePage() {
                     />
                   </div>
 
-          {/* Sync Status */}
+          {/* Real-time Data Status */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-medium">Sync Status</h3>
-              <button
-                onClick={handleManualRefresh}
-                disabled={refreshing}
-                className={`px-3 py-1 rounded text-sm transition-colors ${
-                  refreshing 
-                    ? 'bg-gray-500 cursor-not-allowed' 
-                    : 'bg-blue-600 hover:bg-blue-700'
-                }`}
-              >
-                {refreshing ? 'Refreshing...' : 'Refresh Data'}
-              </button>
+              <h3 className="text-lg font-medium">Data Status</h3>
             </div>
-            {syncInfo ? (
-              <div className="text-sm text-gray-400">
-                Last updated: {new Date(syncInfo.lastSync).toLocaleString()}
-                <br />
-                Accounts synced: {syncInfo.accountsSynced} | Transactions synced: {syncInfo.transactionsSynced}
-              </div>
-            ) : (
-              <div className="text-sm text-gray-400">
-                No sync data available yet. Connect an account and click Refresh Data to sync.
-              </div>
-            )}
-            {refreshing && (
-              <div className="text-sm mt-2 text-blue-400">
-                Refreshing data...
-              </div>
-            )}
-            {notification && (
-              <div className={`text-sm mt-2 ${
-                notification.type === 'success' 
-                  ? 'text-green-400' 
-                  : 'text-red-400'
-              }`}>
-                {notification.message}
-              </div>
-            )}
+            <div className="text-sm text-gray-400">
+              Your financial data is fetched in real-time from Plaid. No data is stored permanently for privacy.
+              <br />
+              Ask questions in the chat to see your latest transactions and insights.
+            </div>
           </div>
 
           {/* Connected Accounts List */}
