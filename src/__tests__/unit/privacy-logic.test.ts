@@ -192,7 +192,7 @@ describe('Privacy Logic Tests', () => {
         ],
       });
 
-      // Create transactions for both users
+      // Get the created accounts
       const user1Account = await prisma.account.findFirst({
         where: { userId: user1.id }
       });
@@ -260,17 +260,24 @@ describe('Privacy Logic Tests', () => {
       expect(user1Accounts.length).toBe(1);
       expect(user2Accounts.length).toBe(1);
 
-      // Delete only user1's data
-      await prisma.accessToken.deleteMany({
-        where: { userId: user1.id },
-      });
+      // Delete only user1's data in the correct order
+      // First delete transactions for user1
       await prisma.transaction.deleteMany({
         where: { account: { userId: user1.id } },
       });
-      await prisma.account.deleteMany({
+
+      // Then delete conversations for user1
+      await prisma.conversation.deleteMany({
         where: { userId: user1.id },
       });
-      await prisma.conversation.deleteMany({
+
+      // Then delete access tokens for user1
+      await prisma.accessToken.deleteMany({
+        where: { userId: user1.id },
+      });
+
+      // Finally delete accounts for user1
+      await prisma.account.deleteMany({
         where: { userId: user1.id },
       });
 
@@ -456,7 +463,8 @@ describe('Privacy Logic Tests', () => {
       expect(user.id).toBeDefined();
       expect(user.email).toBe('test@example.com');
 
-      await prisma.account.create({
+      // Create account first
+      const account = await prisma.account.create({
         data: {
           plaidAccountId: 'test-account-1',
           name: 'Test Account',
@@ -467,23 +475,26 @@ describe('Privacy Logic Tests', () => {
         },
       });
 
-      const account = await prisma.account.findFirst({
-        where: { userId: user.id }
-      });
+      // Verify account was created
       expect(account).toBeTruthy();
-      
-      if (account) {
-        await prisma.transaction.create({
-          data: {
-            plaidTransactionId: 'test-transaction-1',
-            accountId: account.id,
-            amount: 50,
-            date: new Date(),
-            name: 'Test Transaction',
-            pending: false,
-          },
-        });
-      }
+      expect(account.id).toBeDefined();
+      expect(account.userId).toBe(user.id);
+
+      // Create transaction for the account
+      const transaction = await prisma.transaction.create({
+        data: {
+          plaidTransactionId: 'test-transaction-1',
+          accountId: account.id,
+          amount: 50,
+          date: new Date(),
+          name: 'Test Transaction',
+          pending: false,
+        },
+      });
+
+      // Verify transaction was created
+      expect(transaction).toBeTruthy();
+      expect(transaction.accountId).toBe(account.id);
 
       // Verify data exists before deletion
       const initialAccounts = await prisma.account.findMany({
