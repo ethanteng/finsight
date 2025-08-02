@@ -5,9 +5,26 @@ import '@testing-library/jest-dom';
 // Mock the AdminPage component since it's a client component
 const MockAdminPage = () => {
   const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState('');
-  const [sessions, setSessions] = React.useState([]);
-  const [conversations, setConversations] = React.useState([]);
+  const [error, _setError] = React.useState('');
+  const [sessions, setSessions] = React.useState<Array<{
+    sessionId: string;
+    conversationCount: number;
+    firstQuestion: string;
+    lastActivity: string;
+    userAgent: string;
+  }>>([]);
+  const [conversations, setConversations] = React.useState<Array<{
+    id: string;
+    question: string;
+    answer: string;
+    sessionId: string;
+    createdAt: string;
+    session: {
+      sessionId: string;
+      userAgent: string;
+      createdAt: string;
+    };
+  }>>([]);
   const [viewMode, setViewMode] = React.useState('sessions');
 
   React.useEffect(() => {
@@ -85,7 +102,7 @@ const MockAdminPage = () => {
         
         {viewMode === 'sessions' && (
           <div>
-            {sessions.map((session: any) => (
+            {sessions.map((session) => (
               <div key={session.sessionId} className="bg-gray-800 rounded-lg p-4 mb-4">
                 <div className="text-sm font-medium text-blue-300 mb-1">Session: {session.sessionId}</div>
                 <div className="text-white">{session.firstQuestion}</div>
@@ -96,7 +113,7 @@ const MockAdminPage = () => {
         
         {viewMode === 'conversations' && (
           <div>
-            {conversations.map((conv: any) => (
+            {conversations.map((conv) => (
               <div key={conv.id} className="bg-gray-700 rounded-lg p-4 mb-4">
                 <div className="text-sm font-medium text-blue-300 mb-1">Question:</div>
                 <div className="text-white">{conv.question}</div>
