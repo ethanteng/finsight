@@ -242,7 +242,7 @@ export default function ProfilePage() {
       } else {
         setDeleteMessage('Failed to disconnect accounts. Please try again.');
       }
-    } catch (error) {
+    } catch (_error) {
       setDeleteMessage('An error occurred while disconnecting your accounts. Please try again.');
     } finally {
       setIsDeleting(false);
@@ -284,7 +284,7 @@ export default function ProfilePage() {
       } else {
         setDeleteMessage('Failed to delete data. Please try again or contact support.');
       }
-    } catch (error) {
+    } catch (_error) {
       setDeleteMessage('An error occurred while deleting your data. Please try again.');
     } finally {
       setIsDeleting(false);

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 interface Transaction {
   id: string;
@@ -35,7 +35,7 @@ export default function TransactionHistory({ isDemo = false }: TransactionHistor
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-  const loadTransactions = async () => {
+  const loadTransactions = useCallback(async () => {
     setLoading(true);
     setError('');
     
@@ -79,11 +79,11 @@ export default function TransactionHistory({ isDemo = false }: TransactionHistor
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateRange, isDemo, API_URL]);
 
   useEffect(() => {
     loadTransactions();
-  }, [dateRange, isDemo]);
+  }, [loadTransactions]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {

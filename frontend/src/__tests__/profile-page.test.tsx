@@ -17,14 +17,19 @@ const localStorageMock = {
 };
 global.localStorage = localStorageMock as Storage;
 
-let lastDisconnectOptions: any = null;
-let lastDeleteOptions: any = null;
+interface MockOptions {
+  headers?: Record<string, string>;
+  method?: string;
+}
+
+let lastDisconnectOptions: MockOptions | null = null;
+let lastDeleteOptions: MockOptions | null = null;
 
 function mockFetchForDisconnect({ ok = true, status = 200 } = {}) {
   lastDisconnectOptions = null;
   (global.fetch as jest.Mock).mockImplementation((url, options) => {
     if (url && typeof url === 'string' && url.endsWith('/privacy/disconnect-accounts') && options?.method === 'POST') {
-      lastDisconnectOptions = options;
+      lastDisconnectOptions = options as MockOptions;
       return Promise.resolve({ ok, status, json: async () => ({ success: ok }) });
     }
     return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
@@ -35,7 +40,7 @@ function mockFetchForDelete({ ok = true, status = 200 } = {}) {
   lastDeleteOptions = null;
   (global.fetch as jest.Mock).mockImplementation((url, options) => {
     if (url && typeof url === 'string' && url.endsWith('/privacy/delete-all-data') && options?.method === 'DELETE') {
-      lastDeleteOptions = options;
+      lastDeleteOptions = options as MockOptions;
       return Promise.resolve({ ok, status, json: async () => ({ success: ok }) });
     }
     return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
@@ -47,8 +52,8 @@ const originalLocation = window.location;
 
 beforeAll(() => {
   process.env.NEXT_PUBLIC_API_URL = 'http://localhost:3000';
-  delete (window as any).location;
-  (window as any).location = { href: '', search: '' } as any;
+  delete (window as unknown as Record<string, unknown>).location;
+  (window as unknown as Record<string, unknown>).location = { href: '', search: '' } as Location;
   // Set up localStorage mock globally
   localStorageMock.getItem.mockImplementation((key) => {
     console.log('localStorage.getItem called with key:', key);
@@ -66,7 +71,7 @@ beforeAll(() => {
   });
 });
 afterAll(() => {
-  (window as any).location = originalLocation;
+  (window as unknown as Record<string, unknown>).location = originalLocation;
 });
 
 describe('ProfilePage', () => {
@@ -104,7 +109,7 @@ describe('ProfilePage', () => {
   describe('Demo Mode Handling', () => {
     it('should show demo message when disconnecting accounts in demo mode', async () => {
       // Mock demo mode by setting URL search params and referrer
-      (window.location as any).search = '?demo=true';
+      (window.location as unknown as Record<string, unknown>).search = '?demo=true';
       Object.defineProperty(document, 'referrer', {
         value: 'http://localhost:3001/demo',
         writable: true,
@@ -121,7 +126,7 @@ describe('ProfilePage', () => {
 
     it('should show demo message when deleting data in demo mode', async () => {
       // Mock demo mode by setting URL search params and referrer
-      (window.location as any).search = '?demo=true';
+      (window.location as unknown as Record<string, unknown>).search = '?demo=true';
       Object.defineProperty(document, 'referrer', {
         value: 'http://localhost:3001/demo',
         writable: true,
@@ -144,7 +149,7 @@ describe('ProfilePage', () => {
 
     it('should make API calls with demo headers in demo mode', async () => {
       // Mock demo mode by setting URL search params and referrer
-      (window.location as any).search = '?demo=true';
+      (window.location as unknown as Record<string, unknown>).search = '?demo=true';
       Object.defineProperty(document, 'referrer', {
         value: 'http://localhost:3001/demo',
         writable: true,
@@ -155,9 +160,9 @@ describe('ProfilePage', () => {
       // Verify API calls were made with demo headers
       await waitFor(() => {
         const calls = (global.fetch as jest.Mock).mock.calls;
-        const demoCalls = calls.filter(([url, options]) => 
+        const demoCalls = calls.filter(([url, options]: [string, MockOptions]) => 
           url.includes('/plaid/all-accounts') && 
-          options.headers['x-demo-mode'] === 'true'
+          options.headers?.['x-demo-mode'] === 'true'
         );
         expect(demoCalls.length).toBeGreaterThan(0);
       });
@@ -178,7 +183,7 @@ describe('ProfilePage', () => {
 
     it('should call disconnect API when not in demo mode', async () => {
       // Ensure not in demo mode
-      (window.location as any).search = '';
+      (window.location as unknown as Record<string, unknown>).search = '';
       Object.defineProperty(document, 'referrer', {
         value: '',
         writable: true,
@@ -190,11 +195,11 @@ describe('ProfilePage', () => {
       await waitFor(() => {
         expect(lastDisconnectOptions).not.toBeNull();
       });
-      expect(lastDisconnectOptions.headers['Authorization']).toBe('Bearer mock-auth-token');
+      expect(lastDisconnectOptions?.headers?.['Authorization']).toBe('Bearer mock-auth-token');
     });
     it('should call delete API when not in demo mode', async () => {
       // Ensure not in demo mode
-      (window.location as any).search = '';
+      (window.location as unknown as Record<string, unknown>).search = '';
       Object.defineProperty(document, 'referrer', {
         value: '',
         writable: true,
@@ -208,11 +213,11 @@ describe('ProfilePage', () => {
       await waitFor(() => {
         expect(lastDeleteOptions).not.toBeNull();
       });
-      expect(lastDeleteOptions.headers['Authorization']).toBe('Bearer mock-auth-token');
+      expect(lastDeleteOptions?.headers?.['Authorization']).toBe('Bearer mock-auth-token');
     });
     it('should show success message after successful deletion', async () => {
       // Ensure not in demo mode
-      (window.location as any).search = '';
+      (window.location as unknown as Record<string, unknown>).search = '';
       Object.defineProperty(document, 'referrer', {
         value: '',
         writable: true,
@@ -241,7 +246,7 @@ describe('ProfilePage', () => {
 
     it('should handle missing auth token gracefully', async () => {
       // Ensure not in demo mode
-      (window.location as any).search = '';
+      (window.location as unknown as Record<string, unknown>).search = '';
       Object.defineProperty(document, 'referrer', {
         value: '',
         writable: true,
@@ -258,12 +263,12 @@ describe('ProfilePage', () => {
       await waitFor(() => {
         expect(lastDisconnectOptions).not.toBeNull();
       });
-      expect(lastDisconnectOptions.headers['Authorization']).toBeUndefined();
+      expect(lastDisconnectOptions?.headers?.['Authorization']).toBeUndefined();
     });
 
     it('should include auth token in API calls when available', async () => {
       // Ensure not in demo mode
-      (window.location as any).search = '';
+      (window.location as unknown as Record<string, unknown>).search = '';
       Object.defineProperty(document, 'referrer', {
         value: '',
         writable: true,
@@ -280,19 +285,22 @@ describe('ProfilePage', () => {
       await waitFor(() => {
         expect(lastDisconnectOptions).not.toBeNull();
       });
-      expect(lastDisconnectOptions.headers['Authorization']).toBe('Bearer mock-auth-token');
+      expect(lastDisconnectOptions?.headers?.['Authorization']).toBe('Bearer mock-auth-token');
     });
   });
 
   describe('Error Message Display', () => {
     it('should show success messages in green', async () => {
       // Ensure not in demo mode
-      (window.location as any).search = '';
+      (window.location as unknown as Record<string, unknown>).search = '';
       Object.defineProperty(document, 'referrer', {
         value: '',
         writable: true,
       });
-      localStorageMock.getItem.mockReturnValue('mock-auth-token');
+      localStorageMock.getItem.mockImplementation((key) => {
+        if (key === 'auth_token') return 'mock-auth-token';
+        return null;
+      });
       mockFetchForDisconnect({ ok: true, status: 200 });
       render(<ProfilePage />);
       const disconnectButton = screen.getByText('Disconnect All Accounts');
@@ -304,12 +312,15 @@ describe('ProfilePage', () => {
     });
     it('should show error messages in red', async () => {
       // Ensure not in demo mode
-      (window.location as any).search = '';
+      (window.location as unknown as Record<string, unknown>).search = '';
       Object.defineProperty(document, 'referrer', {
         value: '',
         writable: true,
       });
-      localStorageMock.getItem.mockReturnValue('mock-auth-token');
+      localStorageMock.getItem.mockImplementation((key) => {
+        if (key === 'auth_token') return 'mock-auth-token';
+        return null;
+      });
       mockFetchForDisconnect({ ok: false, status: 500 });
       render(<ProfilePage />);
       const disconnectButton = screen.getByText('Disconnect All Accounts');
