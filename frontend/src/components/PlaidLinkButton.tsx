@@ -116,17 +116,33 @@ export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: P
 
   return (
     <div className="space-y-3">
-      <button 
-        onClick={createLinkToken} 
-        disabled={!!linkToken}
-        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200"
-      >
-        Connect More Accounts
-      </button>
-      {status && (
-        <div className="text-sm text-gray-300 bg-gray-700 px-3 py-2 rounded">
-          {status}
+      {isDemo ? (
+        <div className="text-center">
+          <button 
+            disabled
+            className="bg-gray-600 cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200"
+          >
+            Connect More Accounts
+          </button>
+          <div className="text-sm text-gray-400 mt-2">
+            This is a demo. In the real app, you would see Plaid open to let you connect your bank account.
+          </div>
         </div>
+      ) : (
+        <>
+          <button 
+            onClick={createLinkToken} 
+            disabled={!!linkToken}
+            className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200"
+          >
+            Connect More Accounts
+          </button>
+          {status && (
+            <div className="text-sm text-gray-300 bg-gray-700 px-3 py-2 rounded">
+              {status}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
