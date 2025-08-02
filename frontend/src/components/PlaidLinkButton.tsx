@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { usePlaidLink, PlaidLinkOnSuccess, PlaidLinkOnExit, PlaidLinkOnSuccessMetadata } from 'react-plaid-link';
 import { useAnalytics } from './Analytics';
 
@@ -24,7 +24,7 @@ export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: P
       const data = await res.json();
       if (data.link_token) {
         setLinkToken(data.link_token);
-        setStatus('Ready to link your account.');
+        setStatus('Opening Plaid Link...');
       } else if (data.error) {
         setStatus(`${data.error}: ${data.details || 'Failed to create link token'}`);
       } else {
@@ -107,26 +107,22 @@ export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: P
       : { token: 'dummy-token', onSuccess: () => {}, onExit: () => {} }
   );
 
+  // Automatically open Plaid Link when token is ready
+  useEffect(() => {
+    if (linkToken && plaid.ready) {
+      plaid.open();
+    }
+  }, [linkToken, plaid.ready, plaid]);
+
   return (
     <div className="space-y-3">
-      <div className="flex space-x-3">
-        <button 
-          onClick={createLinkToken} 
-          disabled={!!linkToken}
-          className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200"
-        >
-          Connect More Accounts
-        </button>
-        {linkToken && (
-          <button 
-            onClick={() => plaid.open()} 
-            disabled={!plaid.ready}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200"
-          >
-            Open Plaid Link
-          </button>
-        )}
-      </div>
+      <button 
+        onClick={createLinkToken} 
+        disabled={!!linkToken}
+        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200"
+      >
+        Connect More Accounts
+      </button>
       {status && (
         <div className="text-sm text-gray-300 bg-gray-700 px-3 py-2 rounded">
           {status}
