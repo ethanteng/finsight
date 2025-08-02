@@ -67,6 +67,7 @@ afterEach(async () => {
     // Small delay to ensure all database operations complete
     await new Promise(resolve => setTimeout(resolve, 100));
     
+    // Delete in correct order to avoid foreign key constraints
     await prisma.demoConversation.deleteMany();
     await prisma.demoSession.deleteMany();
     await prisma.conversation.deleteMany();
@@ -76,14 +77,8 @@ afterEach(async () => {
     await prisma.syncStatus.deleteMany();
     await prisma.privacySettings?.deleteMany();
     await prisma.user.deleteMany();
-  } catch (error) {
-    console.warn('⚠️  Test cleanup failed:', error);
-  }
-});
-
-afterEach(async () => {
-  // ✅ Verify cleanup
-  try {
+    
+    // ✅ Verify cleanup
     const sessionCount = await prisma.demoSession.count();
     const conversationCount = await prisma.demoConversation.count();
     
@@ -91,7 +86,7 @@ afterEach(async () => {
       console.warn(`⚠️  Test data not fully cleaned up: ${sessionCount} sessions, ${conversationCount} conversations`);
     }
   } catch (error) {
-    console.warn('⚠️  Could not verify test data cleanup:', error);
+    console.warn('⚠️  Test cleanup failed:', error);
   }
 });
 
