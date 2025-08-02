@@ -326,7 +326,12 @@ export const setupPlaidRoutes = (app: any) => {
       const isDemo = req.headers['x-demo-mode'] === 'true';
       
       if (isDemo) {
-        // Return demo account data
+        // NOTE: Demo data is hardcoded in arrays for performance and Plaid API compatibility
+        // This ensures the backend returns exactly the data structure that the frontend expects
+        // with all necessary fields that Plaid would normally provide (merchant_name, category_id, location, etc.)
+        // 
+        // Alternative approach would be to import from demo-data.ts and transform, but hardcoded arrays
+        // are faster and avoid data structure mismatches between frontend and backend demo data.
         const demoAccounts = [
           {
             id: "checking_1",
@@ -371,6 +376,74 @@ export const setupPlaidRoutes = (app: any) => {
             balance: {
               available: 156780.45,
               current: 156780.45,
+              limit: null,
+              iso_currency_code: "USD",
+              unofficial_currency_code: null
+            },
+            securities: [],
+            holdings: [],
+            income_verification: null
+          },
+          {
+            id: "ira_1",
+            name: "Vanguard Roth IRA",
+            type: "investment",
+            subtype: "ira",
+            mask: "3456",
+            balance: {
+              available: 89420.30,
+              current: 89420.30,
+              limit: null,
+              iso_currency_code: "USD",
+              unofficial_currency_code: null
+            },
+            securities: [],
+            holdings: [],
+            income_verification: null
+          },
+          {
+            id: "credit_1",
+            name: "Chase Sapphire Reserve",
+            type: "credit",
+            subtype: "credit card",
+            mask: "7890",
+            balance: {
+              available: 6759.50,
+              current: -3240.50,
+              limit: 10000,
+              iso_currency_code: "USD",
+              unofficial_currency_code: null
+            },
+            securities: [],
+            holdings: [],
+            income_verification: null
+          },
+          {
+            id: "mortgage_1",
+            name: "Wells Fargo Mortgage",
+            type: "loan",
+            subtype: "mortgage",
+            mask: "1111",
+            balance: {
+              available: 0,
+              current: 485000.00,
+              limit: 500000,
+              iso_currency_code: "USD",
+              unofficial_currency_code: null
+            },
+            securities: [],
+            holdings: [],
+            income_verification: null
+          },
+          {
+            id: "cd_1",
+            name: "Marcus 12-Month CD",
+            type: "depository",
+            subtype: "cd",
+            mask: "2222",
+            balance: {
+              available: 25000.00,
+              current: 25000.00,
               limit: null,
               iso_currency_code: "USD",
               unofficial_currency_code: null
@@ -429,13 +502,15 @@ export const setupPlaidRoutes = (app: any) => {
       const isDemo = req.headers['x-demo-mode'] === 'true';
       
       if (isDemo) {
-        // Return demo transaction data
+        // NOTE: Demo transaction data is hardcoded for the same reasons as accounts above
+        // All dates are set to 2025 to ensure they appear in current date ranges
+        // This array contains 10 transactions with various categories and amounts
         const demoTransactions = [
           {
             id: "t1",
             account_id: "checking_1",
             amount: 4250.00,
-            date: "2024-07-15",
+            date: "2025-07-15",
             name: "Salary - Tech Corp",
             merchant_name: "Tech Corp",
             category: ["income", "salary"],
@@ -452,7 +527,7 @@ export const setupPlaidRoutes = (app: any) => {
             id: "t2",
             account_id: "checking_1",
             amount: -850.00,
-            date: "2024-07-01",
+            date: "2025-07-01",
             name: "Mortgage Payment",
             merchant_name: "Wells Fargo",
             category: ["housing", "mortgage"],
@@ -469,7 +544,7 @@ export const setupPlaidRoutes = (app: any) => {
             id: "t3",
             account_id: "checking_1",
             amount: -120.00,
-            date: "2024-07-05",
+            date: "2025-07-05",
             name: "Electric Bill",
             merchant_name: "Austin Energy",
             category: ["utilities", "electric"],
@@ -486,7 +561,7 @@ export const setupPlaidRoutes = (app: any) => {
             id: "t4",
             account_id: "checking_1",
             amount: -85.00,
-            date: "2024-07-10",
+            date: "2025-07-10",
             name: "Car Insurance",
             merchant_name: "State Farm",
             category: ["insurance", "auto"],
@@ -503,7 +578,7 @@ export const setupPlaidRoutes = (app: any) => {
             id: "t5",
             account_id: "checking_1",
             amount: -450.00,
-            date: "2024-07-12",
+            date: "2025-07-12",
             name: "Whole Foods",
             merchant_name: "Whole Foods Market",
             category: ["food", "groceries"],
@@ -520,7 +595,7 @@ export const setupPlaidRoutes = (app: any) => {
             id: "t6",
             account_id: "checking_1",
             amount: -200.00,
-            date: "2024-07-14",
+            date: "2025-07-14",
             name: "Shell Gas Station",
             merchant_name: "Shell",
             category: ["transportation", "gas"],
@@ -537,7 +612,7 @@ export const setupPlaidRoutes = (app: any) => {
             id: "t7",
             account_id: "checking_1",
             amount: -150.00,
-            date: "2024-07-16",
+            date: "2025-07-16",
             name: "Netflix & Spotify",
             merchant_name: "Netflix",
             category: ["entertainment", "streaming"],
@@ -554,7 +629,7 @@ export const setupPlaidRoutes = (app: any) => {
             id: "t8",
             account_id: "checking_1",
             amount: -300.00,
-            date: "2024-07-18",
+            date: "2025-07-18",
             name: "Restaurant Expenses",
             merchant_name: "Various Restaurants",
             category: ["food", "dining"],
@@ -571,7 +646,7 @@ export const setupPlaidRoutes = (app: any) => {
             id: "t9",
             account_id: "checking_1",
             amount: -1000.00,
-            date: "2024-07-20",
+            date: "2025-07-20",
             name: "Transfer to Savings",
             merchant_name: "Ally Bank",
             category: ["transfer", "savings"],
@@ -588,7 +663,7 @@ export const setupPlaidRoutes = (app: any) => {
             id: "t10",
             account_id: "credit_1",
             amount: -150.00,
-            date: "2024-07-22",
+            date: "2025-07-22",
             name: "Amazon Purchase",
             merchant_name: "Amazon",
             category: ["shopping", "online"],

@@ -126,7 +126,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: 4250.00,
       category: "salary",
-      date: "2024-07-15",
+      date: "2025-07-15",
       description: "Salary - Tech Corp"
     },
     {
@@ -134,7 +134,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: -850.00,
       category: "mortgage",
-      date: "2024-07-01",
+      date: "2025-07-01",
       description: "Mortgage Payment"
     },
     {
@@ -142,7 +142,7 @@ export const demoData = {
       accountId: "checking_1", 
       amount: -120.00,
       category: "utilities",
-      date: "2024-07-05",
+      date: "2025-07-05",
       description: "Electric Bill"
     },
     {
@@ -150,7 +150,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: -85.00,
       category: "insurance",
-      date: "2024-07-10",
+      date: "2025-07-10",
       description: "Car Insurance"
     },
     {
@@ -158,7 +158,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: -450.00,
       category: "groceries",
-      date: "2024-07-12",
+      date: "2025-07-12",
       description: "Whole Foods"
     },
     {
@@ -166,7 +166,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: -200.00,
       category: "gas",
-      date: "2024-07-14",
+      date: "2025-07-14",
       description: "Shell Gas Station"
     },
     {
@@ -174,7 +174,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: -150.00,
       category: "entertainment",
-      date: "2024-07-16",
+      date: "2025-07-16",
       description: "Netflix & Spotify"
     },
     {
@@ -182,7 +182,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: -300.00,
       category: "dining",
-      date: "2024-07-18",
+      date: "2025-07-18",
       description: "Restaurant Expenses"
     },
     {
@@ -190,7 +190,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: -1000.00,
       category: "transfer",
-      date: "2024-07-20",
+      date: "2025-07-20",
       description: "Transfer to Savings"
     },
     {
@@ -198,7 +198,7 @@ export const demoData = {
       accountId: "credit_1",
       amount: -150.00,
       category: "shopping",
-      date: "2024-07-22",
+      date: "2025-07-22",
       description: "Amazon Purchase"
     },
     {
@@ -206,7 +206,7 @@ export const demoData = {
       accountId: "credit_1",
       amount: -75.00,
       category: "gas",
-      date: "2024-07-24",
+      date: "2025-07-24",
       description: "Exxon Gas Station"
     },
     {
@@ -214,7 +214,7 @@ export const demoData = {
       accountId: "credit_1",
       amount: -200.00,
       category: "dining",
-      date: "2024-07-26",
+      date: "2025-07-26",
       description: "Date Night Restaurant"
     },
 
