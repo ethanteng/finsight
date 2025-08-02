@@ -226,7 +226,7 @@ export default function ProfilePage() {
       <div className="max-w-4xl mx-auto p-6">
         {/* Account Management Section */}
         <div className="bg-gray-800 rounded-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Connected Accounts</h2>
+          <h2 className="text-xl font-semibold mb-4">Your Connected Accounts</h2>
           
                             {/* Connect New Account */}
                   <div className="mb-6">
@@ -244,7 +244,6 @@ export default function ProfilePage() {
 
           {/* Connected Accounts List */}
           <div>
-            <h3 className="text-lg font-medium mb-3">Your Connected Accounts</h3>
             
             {loading ? (
               <div className="text-gray-400">Loading accounts...</div>
@@ -308,7 +307,7 @@ export default function ProfilePage() {
                   <button
                     onClick={handleDisconnectAccounts}
                     disabled={isDeleting}
-                    className="bg-orange-600 hover:bg-orange-700 disabled:bg-orange-800 px-4 py-2 rounded text-sm transition-colors"
+                    className="bg-slate-600 hover:bg-slate-700 disabled:bg-slate-800 px-4 py-2 rounded text-sm transition-colors"
                   >
                     {isDeleting ? 'Disconnecting...' : 'Disconnect All Accounts'}
                   </button>
@@ -323,7 +322,7 @@ export default function ProfilePage() {
                   <button
                     onClick={() => setShowDeleteConfirm(true)}
                     disabled={isDeleting}
-                    className="bg-red-600 hover:bg-red-700 disabled:bg-red-800 px-4 py-2 rounded text-sm transition-colors"
+                    className="bg-rose-600 hover:bg-rose-700 disabled:bg-rose-800 px-4 py-2 rounded text-sm transition-colors"
                   >
                     Delete All Data
                   </button>
@@ -332,7 +331,7 @@ export default function ProfilePage() {
 
               {deleteMessage && (
                 <div className={`mt-4 p-3 rounded-lg ${
-                  deleteMessage.includes('successfully') 
+                  deleteMessage.includes('successfully') || deleteMessage.includes('This is a demo only')
                     ? 'bg-green-900 border border-green-700 text-green-200' 
                     : 'bg-red-900 border border-red-700 text-red-200'
                 }`}>
@@ -366,7 +365,7 @@ export default function ProfilePage() {
                   <button
                     onClick={handleDeleteAllData}
                     disabled={isDeleting}
-                    className="bg-red-600 hover:bg-red-700 disabled:bg-red-800 px-4 py-2 rounded text-sm transition-colors flex-1"
+                    className="bg-rose-600 hover:bg-rose-700 disabled:bg-rose-800 px-4 py-2 rounded text-sm transition-colors flex-1"
                   >
                     {isDeleting ? 'Deleting...' : 'Yes, Delete Everything'}
                   </button>
