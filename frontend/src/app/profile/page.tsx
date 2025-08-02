@@ -240,17 +240,7 @@ export default function ProfilePage() {
                     />
                   </div>
 
-          {/* Real-time Data Status */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-medium">Data Status</h3>
-            </div>
-            <div className="text-sm text-gray-400">
-              Your financial data is fetched in real-time from Plaid. No data is stored permanently for privacy.
-              <br />
-              Ask questions in the chat to see your latest transactions and insights.
-            </div>
-          </div>
+
 
           {/* Connected Accounts List */}
           <div>
@@ -303,7 +293,6 @@ export default function ProfilePage() {
           <h2 className="text-xl font-semibold mb-4">Account Settings</h2>
           <div className="space-y-6">
             <div>
-              <h3 className="text-lg font-medium mb-2">Data Privacy</h3>
               <p className="text-gray-400 text-sm mb-4">
                 Your financial data is read-only and never stored permanently. 
                 We use Plaid&apos;s secure API to access your accounts.
