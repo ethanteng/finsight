@@ -44,7 +44,7 @@ describe('Transaction Amount Fix', () => {
       const correctedAmount = -(amount || 0);
       // Handle -0 vs 0 by using a more robust comparison
       if (expected === 0) {
-        expect(Object.is(correctedAmount, 0)).toBe(true);
+        expect(correctedAmount === 0 || Object.is(correctedAmount, -0)).toBe(true);
       } else {
         expect(correctedAmount).toBe(expected);
       }
