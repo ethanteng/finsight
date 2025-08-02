@@ -305,7 +305,7 @@ describe('User Workflow Integration Tests', () => {
       });
 
       // Create initial mock data
-      await prisma.account.create({
+      const createdAccount = await prisma.account.create({
         data: {
           plaidAccountId: 'test-account-1',
           name: 'Test Account',
@@ -315,19 +315,25 @@ describe('User Workflow Integration Tests', () => {
         }
       });
 
-      const account = await prisma.account.findFirst();
-      if (account) {
-        await prisma.transaction.create({
-          data: {
-            plaidTransactionId: 'test-transaction-1',
-            accountId: account.id,
-            amount: 50,
-            date: new Date(),
-            name: 'Test Transaction',
-            pending: false
-          }
-        });
-      }
+      // Verify account was created successfully
+      expect(createdAccount).toBeDefined();
+      expect(createdAccount.id).toBeDefined();
+
+      // Create transaction using the created account
+      const createdTransaction = await prisma.transaction.create({
+        data: {
+          plaidTransactionId: 'test-transaction-1',
+          accountId: createdAccount.id,
+          amount: 50,
+          date: new Date(),
+          name: 'Test Transaction',
+          pending: false
+        }
+      });
+
+      // Verify transaction was created successfully
+      expect(createdTransaction).toBeDefined();
+      expect(createdTransaction.id).toBeDefined();
 
       // Get initial data counts
       const initialAccounts = await prisma.account.findMany();
