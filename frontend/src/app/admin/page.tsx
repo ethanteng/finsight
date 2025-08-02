@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import MarkdownRenderer from '../../components/MarkdownRenderer';
 
 interface DemoConversation {
@@ -33,11 +33,7 @@ export default function AdminPage() {
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-  useEffect(() => {
-    loadAdminData();
-  }, []);
-
-  const loadAdminData = async () => {
+  const loadAdminData = useCallback(async () => {
     setLoading(true);
     setError('');
     
@@ -61,7 +57,11 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_URL]);
+
+  useEffect(() => {
+    loadAdminData();
+  }, [loadAdminData]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
