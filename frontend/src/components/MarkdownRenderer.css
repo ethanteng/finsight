@@ -1,0 +1,41 @@
+/* Custom styles for KaTeX math expressions in dark theme */
+
+/* Make math expressions more readable in dark theme */
+.katex {
+  color: #e5e7eb !important; /* text-gray-200 */
+}
+
+.katex-display {
+  margin: 1rem 0;
+}
+
+/* Style the math container */
+.katex-display > .katex {
+  display: block;
+  text-align: center;
+  margin: 1rem 0;
+}
+
+/* Make inline math blend better with text */
+.katex-inline {
+  color: inherit;
+}
+
+/* Ensure proper spacing around math blocks */
+.katex-display {
+  background-color: #374151; /* bg-gray-700 */
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin: 1rem 0;
+  overflow-x: auto;
+}
+
+/* Style for the math container we created */
+.math-block {
+  background-color: #374151;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin: 1rem 0;
+  overflow-x: auto;
+  border: 1px solid #4b5563; /* border-gray-600 */
+} 

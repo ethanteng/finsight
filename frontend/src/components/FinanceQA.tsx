@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import ReactMarkdown from 'react-markdown';
+import MarkdownRenderer from './MarkdownRenderer';
 import { useAnalytics } from './Analytics';
 
 // Declare Hotjar global type
@@ -207,28 +207,8 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       {answer && (
         <div className="bg-gray-700 rounded-lg p-6">
           <div className="bg-gray-800 rounded-lg p-4">
-            <div className="prose prose-invert max-w-none">
-              <div className="text-gray-200 leading-relaxed">
-                <ReactMarkdown 
-                  components={{
-                    // Custom styling for different markdown elements
-                    h1: ({children}) => <h1 className="text-2xl font-bold text-white mb-4">{children}</h1>,
-                    h2: ({children}) => <h2 className="text-xl font-semibold text-white mb-3">{children}</h2>,
-                    h3: ({children}) => <h3 className="text-lg font-medium text-white mb-2">{children}</h3>,
-                    p: ({children}) => <p className="mb-3">{children}</p>,
-                    ul: ({children}) => <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>,
-                    ol: ({children}) => <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>,
-                    li: ({children}) => <li className="text-gray-200">{children}</li>,
-                    strong: ({children}) => <strong className="font-semibold text-white">{children}</strong>,
-                    em: ({children}) => <em className="italic">{children}</em>,
-                    code: ({children}) => <code className="bg-gray-700 px-1 py-0.5 rounded text-sm font-mono">{children}</code>,
-                    pre: ({children}) => <pre className="bg-gray-700 p-3 rounded mb-3 overflow-x-auto">{children}</pre>,
-                    blockquote: ({children}) => <blockquote className="border-l-4 border-gray-600 pl-4 italic text-gray-300 mb-3">{children}</blockquote>,
-                  }}
-                >
-                  {answer}
-                </ReactMarkdown>
-              </div>
+            <div className="text-gray-200 leading-relaxed">
+              <MarkdownRenderer>{answer}</MarkdownRenderer>
             </div>
           </div>
         </div>

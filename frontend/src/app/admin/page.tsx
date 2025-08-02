@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from 'react';
+import MarkdownRenderer from '../../components/MarkdownRenderer';
 
 interface DemoConversation {
   id: string;
@@ -242,7 +243,9 @@ export default function AdminPage() {
                             <div className="text-sm font-medium text-blue-300 mb-1">Q:</div>
                             <div className="text-sm text-gray-300 mb-2">{conv.question}</div>
                             <div className="text-sm font-medium text-green-300 mb-1">A:</div>
-                            <div className="text-sm text-gray-300">{truncateText(conv.answer, 200)}</div>
+                            <div className="text-sm text-gray-300">
+                              <MarkdownRenderer>{truncateText(conv.answer, 200)}</MarkdownRenderer>
+                            </div>
                             <div className="text-xs text-gray-500 mt-1">
                               {formatDate(conv.createdAt)}
                             </div>
@@ -282,7 +285,9 @@ export default function AdminPage() {
                       
                       <div>
                         <div className="text-sm font-medium text-green-300 mb-1">Answer:</div>
-                        <div className="text-gray-300 whitespace-pre-wrap">{conv.answer}</div>
+                        <div className="text-gray-300">
+                          <MarkdownRenderer>{conv.answer}</MarkdownRenderer>
+                        </div>
                       </div>
                     </div>
                   </div>
