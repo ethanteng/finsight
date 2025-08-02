@@ -117,7 +117,7 @@ export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: P
   return (
     <div className="space-y-3">
       {isDemo ? (
-        <div className="text-center">
+        <div>
           <button 
             disabled
             className="bg-gray-600 cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200"
