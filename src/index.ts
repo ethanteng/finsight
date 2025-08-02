@@ -108,25 +108,7 @@ app.get('/health/cron', (req: Request, res: Response) => {
   });
 });
 
-// TEMPORARY: Clear old sandbox access tokens
-app.post('/admin/clear-tokens', async (req: Request, res: Response) => {
-  try {
-    console.log('Clearing old access tokens...');
-    const result = await getPrismaClient().accessToken.deleteMany();
-    console.log(`Deleted ${result.count} access tokens`);
-    res.json({ 
-      success: true, 
-      message: `Cleared ${result.count} old access tokens`,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('Error clearing tokens:', error);
-    res.status(500).json({ 
-      error: 'Failed to clear tokens',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
+
 
 // Apply optional auth middleware to all routes AFTER health endpoints
 app.use(optionalAuth);
