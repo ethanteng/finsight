@@ -156,7 +156,15 @@ export default function ProfilePage() {
           loadSyncStatusWithDemoMode(isDemo || false);
           loadConnectedAccountsWithDemoMode(isDemo || false);
           setNotification({ message: 'Data refreshed successfully!', type: 'success' });
+        } else {
+          // Handle sync errors
+          const errorMessage = result.error || 'Failed to refresh data';
+          setNotification({ message: errorMessage, type: 'error' });
         }
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        const errorMessage = errorData.error || 'Failed to refresh data';
+        setNotification({ message: errorMessage, type: 'error' });
       }
     } catch (err) {
       console.error('Error during manual refresh:', err);

@@ -43,8 +43,10 @@ export async function syncAllAccounts(userId?: string): Promise<SyncResult> {
     });
 
     if (accessTokens.length === 0) {
+      console.log('No access tokens found for sync');
       return {
-        success: true,
+        success: false,
+        error: 'No access tokens found. Please reconnect your bank account.',
         accountsSynced: 0,
         transactionsSynced: 0,
         timestamp: startTime
