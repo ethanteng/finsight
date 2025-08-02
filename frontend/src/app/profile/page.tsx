@@ -203,17 +203,22 @@ export default function ProfilePage() {
           <h1 className="text-2xl font-bold text-white">Profile</h1>
           <div className="flex items-center space-x-3">
             <a 
-              href={isDemo ? "/privacy?demo=true" : "/privacy"}
-              className="text-gray-300 hover:text-white text-sm transition-colors"
-            >
-              Privacy
-            </a>
-            <a 
               href={isDemo ? "/demo" : "/app"}
               className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm transition-colors"
             >
               Back to App
             </a>
+            {!isDemo && (
+              <button 
+                onClick={() => {
+                  localStorage.removeItem('auth_token');
+                  window.location.href = '/login';
+                }}
+                className="text-gray-300 hover:text-white text-sm transition-colors"
+              >
+                Logout
+              </button>
+            )}
           </div>
         </div>
       </div>

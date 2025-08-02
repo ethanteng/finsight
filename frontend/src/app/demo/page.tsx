@@ -119,12 +119,6 @@ export default function DemoPage() {
               Join the Waitlist
             </Link>
             <a 
-              href="/privacy?demo=true" 
-              className="text-gray-300 hover:text-white text-sm transition-colors"
-            >
-              Privacy
-            </a>
-            <a 
               href="/profile?demo=true" 
               className="text-gray-300 hover:text-white text-sm transition-colors"
             >
