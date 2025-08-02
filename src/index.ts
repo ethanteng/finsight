@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { config } from 'dotenv';
 import express, { Application, Request, Response } from 'express';
 import { setupPlaidRoutes } from './plaid';
-import { askOpenAI } from './openai';
+import { askOpenAI, askOpenAIWithEnhancedContext } from './openai';
 import cors from 'cors';
 import cron from 'node-cron';
 // Removed syncAllAccounts import - keeping transactions real-time only
@@ -29,15 +29,7 @@ declare global {
 // Load environment variables from .env.local
 config({ path: '.env.local' });
 
-// Initialize Prisma client lazily to avoid import issues during ts-node startup
-let prisma: PrismaClient | null = null;
-
-export const getPrismaClient = () => {
-  if (!prisma) {
-    prisma = new PrismaClient();
-  }
-  return prisma;
-};
+import { getPrismaClient } from './prisma-client';
 
 const app: Application = express();
 app.use(express.json({ limit: '10mb' }));
@@ -226,8 +218,7 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
     }
 
     // Get AI response using enhanced context with RAG
-    const { askOpenAIWithEnhancedContext } = await import('./openai');
-    const aiResponse = await askOpenAIWithEnhancedContext(question, [], userTier, isDemo, userId);
+    const aiResponse = await askOpenAI(question, [], userTier, isDemo, userId);
 
     // For demo mode, use the AI response directly (no tokenization needed for fake data)
     if (isDemo) {
@@ -239,7 +230,7 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
         console.log('Attempting to save demo conversation for sessionId:', sessionId);
         console.log('isDemo:', isDemo, 'sessionId:', sessionId);
         try {
-          const { getPrismaClient } = await import('./index');
+          const { getPrismaClient } = await import('./prisma-client');
           const prisma = getPrismaClient();
           
           // Get or create demo session
@@ -302,7 +293,7 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
     // Save conversation for authenticated users
     if (!isDemo && userId) {
       try {
-        const { getPrismaClient } = await import('./index');
+        const { getPrismaClient } = await import('./prisma-client');
         const prisma = getPrismaClient();
         
         await prisma.conversation.create({
@@ -1237,7 +1228,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
     // Admin endpoints for demo data analysis
     app.get('/admin/demo-sessions', async (req, res) => {
       try {
-        const { getPrismaClient } = await import('./index');
+        const { getPrismaClient } = await import('./prisma-client');
         const prisma = getPrismaClient();
         
         console.log('Admin: Fetching demo sessions...');
@@ -1281,7 +1272,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
 
     app.get('/admin/demo-conversations', async (req, res) => {
       try {
-        const { getPrismaClient } = await import('./index');
+        const { getPrismaClient } = await import('./prisma-client');
         const prisma = getPrismaClient();
         
         console.log('Admin: Fetching demo conversations...');
@@ -1305,7 +1296,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
     // Test database connection
     app.get('/test-db', async (req, res) => {
       try {
-        const { getPrismaClient } = await import('./index');
+        const { getPrismaClient } = await import('./prisma-client');
         const prisma = getPrismaClient();
         
         // Test basic database connection

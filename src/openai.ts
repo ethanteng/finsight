@@ -69,7 +69,7 @@ export async function askOpenAIWithEnhancedContext(
     try {
       if (userId) {
         console.log('OpenAI Enhanced: Fetching user-specific data for userId:', userId);
-        const { getPrismaClient } = await import('./index');
+        const { getPrismaClient } = await import('./prisma-client');
         const prisma = getPrismaClient();
         
         // First try to get data from database
@@ -521,7 +521,7 @@ export async function askOpenAI(
     try {
       if (userId) {
         console.log('OpenAI: Fetching user-specific data for userId:', userId);
-        const { getPrismaClient } = await import('./index');
+        const { getPrismaClient } = await import('./prisma-client');
         const prisma = getPrismaClient();
         
         // First try to get data from database
