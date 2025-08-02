@@ -1,6 +1,5 @@
 import request from 'supertest';
-import express from 'express';
-import { setupPlaidRoutes } from '../../plaid';
+import { app } from '../../index';
 import { askOpenAI } from '../../openai';
 import { convertResponseToUserFriendly, clearTokenizationMaps } from '../../privacy';
 
@@ -16,7 +15,6 @@ jest.mock('../../privacy', () => ({
 }));
 
 describe('Dual-Data System Integration Tests', () => {
-  let app: express.Application;
   const mockAskOpenAI = askOpenAI as jest.MockedFunction<typeof askOpenAI>;
   const mockConvertResponse = convertResponseToUserFriendly as jest.MockedFunction<typeof convertResponseToUserFriendly>;
 
@@ -34,10 +32,6 @@ describe('Dual-Data System Integration Tests', () => {
   beforeEach(async () => {
     // ✅ Reset mocks and setup fresh app instance
     jest.clearAllMocks();
-    
-    app = express();
-    app.use(express.json());
-    setupPlaidRoutes(app);
     
     // ✅ Default mock implementations
     mockAskOpenAI.mockResolvedValue('Mock AI response');
