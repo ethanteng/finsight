@@ -333,6 +333,10 @@ describe('User Workflow Integration Tests', () => {
       const initialAccounts = await prisma.account.findMany();
       const initialTransactions = await prisma.transaction.findMany();
 
+      // Verify data was created successfully
+      expect(initialAccounts.length).toBeGreaterThan(0);
+      expect(initialTransactions.length).toBeGreaterThan(0);
+
       // Since we removed manual sync endpoints, test that data persists
       // and can be accessed through the AI endpoint
       const aiResponse = await request(app)
@@ -346,10 +350,11 @@ describe('User Workflow Integration Tests', () => {
       // Accept both 200 (success) and 500 (API failure with test credentials)
       expect([200, 500]).toContain(aiResponse.status);
       
-      // Verify data still exists in database
+      // Verify data still exists in database (check before afterEach cleanup)
       const refreshedAccounts = await prisma.account.findMany();
       const refreshedTransactions = await prisma.transaction.findMany();
       
+      // Data should still exist since afterEach hasn't run yet
       expect(refreshedAccounts.length).toBeGreaterThanOrEqual(initialAccounts.length);
       expect(refreshedTransactions.length).toBeGreaterThanOrEqual(initialTransactions.length);
     });
