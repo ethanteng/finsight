@@ -11,6 +11,7 @@ import { dataOrchestrator } from './data/orchestrator';
 import { isFeatureEnabled } from './config/features';
 import authRoutes from './auth/routes';
 import { optionalAuth } from './auth/middleware';
+import { UserTier } from './data/types';
 
 // Extend Express Request type to include user
 declare global {
@@ -182,6 +183,103 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
     } else {
       res.status(500).json({ error: 'Unknown error' });
     }
+  }
+});
+
+// New endpoint for AI responses with real data display
+// This implements a dual-data system:
+// 1. AI receives tokenized/anonymized data for privacy
+// 2. User sees real data for usability
+// 3. Responses are converted back to user-friendly format
+app.post('/ask/display-real', async (req: Request, res: Response) => {
+  try {
+    const { question, isDemo = false, sessionId } = req.body;
+    
+    if (!question) {
+      return res.status(400).json({ error: 'Question is required' });
+    }
+
+    console.log('Ask endpoint called with:', { question, isDemo, sessionId });
+
+    // Get user info for tier-aware responses
+    let userTier = UserTier.STARTER;
+    let userId: string | undefined;
+
+    if (!isDemo) {
+      // Extract user from token for authenticated requests
+      const authHeader = req.headers.authorization;
+      if (authHeader) {
+        const { verifyToken } = await import('./auth/utils');
+        const token = authHeader.replace('Bearer ', '');
+        const payload = verifyToken(token);
+        if (payload) {
+          userId = payload.userId;
+          userTier = payload.tier as UserTier || UserTier.STARTER;
+          console.log('Authenticated user:', { userId, userTier });
+        }
+      }
+    }
+
+    // Get AI response using tokenized data
+    const { askOpenAI } = await import('./openai');
+    const aiResponse = await askOpenAI(question, [], userTier, isDemo, userId);
+
+    // For demo mode, return the response as-is (no tokenization needed for fake data)
+    if (isDemo) {
+      console.log('Demo mode: returning AI response as-is (no tokenization needed for fake data)');
+      return res.json({ answer: aiResponse });
+    }
+
+    // For production, convert AI response back to user-friendly format
+    console.log('Production mode: converting AI response to user-friendly format');
+    const { convertResponseToUserFriendly } = await import('./privacy');
+    const displayResponse = convertResponseToUserFriendly(aiResponse);
+    
+    console.log('Dual-data system: AI received tokenized data, user sees real data');
+
+    // Save conversation for demo mode
+    if (isDemo && sessionId) {
+      try {
+        const { getPrismaClient } = await import('./index');
+        const prisma = getPrismaClient();
+        
+        await prisma.demoConversation.create({
+          data: {
+            sessionId,
+            question,
+            answer: displayResponse
+          }
+        });
+        console.log('Demo conversation saved for session:', sessionId);
+      } catch (error) {
+        console.error('Error saving demo conversation:', error);
+      }
+    }
+
+    // Save conversation for authenticated users
+    if (!isDemo && userId) {
+      try {
+        const { getPrismaClient } = await import('./index');
+        const prisma = getPrismaClient();
+        
+        await prisma.conversation.create({
+          data: {
+            userId,
+            question,
+            answer: displayResponse,
+            createdAt: new Date()
+          }
+        });
+        console.log('Conversation saved for user:', userId);
+      } catch (error) {
+        console.error('Error saving conversation:', error);
+      }
+    }
+
+    res.json({ answer: displayResponse });
+  } catch (error) {
+    console.error('Error in ask endpoint:', error);
+    res.status(500).json({ error: 'Failed to process question' });
   }
 });
 

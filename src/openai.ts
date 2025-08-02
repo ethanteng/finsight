@@ -477,9 +477,11 @@ export async function askOpenAI(
                         available: balance?.balances?.available || account.balances?.available,
                         current: balance?.balances?.current || account.balances?.current,
                         limit: balance?.balances?.limit || account.balances?.limit,
-                        iso_currency_code: balance?.balances?.iso_currency_code || account.balances?.iso_currency_code,
-                        unofficial_currency_code: balance?.balances?.unofficial_currency_code || account.balances?.unofficial_currency_code
-                      }
+                      },
+                      institution: account.institution_name,
+                      officialName: account.official_name,
+                      verificationStatus: account.verification_status,
+                      currency: account.currency
                     };
                   });
                   
@@ -491,11 +493,11 @@ export async function askOpenAI(
               }
               
               // Fetch transactions from all tokens
+              const endDate = new Date().toISOString().split('T')[0];
+              const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+              
               for (const tokenRecord of accessTokens) {
                 try {
-                  const endDate = new Date().toISOString().split('T')[0];
-                  const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-                  
                   const transactionsResponse = await plaidClient.transactionsGet({
                     access_token: tokenRecord.token,
                     start_date: startDate,
@@ -545,24 +547,30 @@ export async function askOpenAI(
     }
   }
 
-  // Anonymize data before sending to OpenAI (skip for demo mode)
+  // Create dual data structures: real data for display, tokenized data for AI
+  let displayAccounts = [...accounts];
+  let displayTransactions = [...transactions];
+  let aiAccounts = [...accounts];
+  let aiTransactions = [...transactions];
+
+  // Tokenize data for AI processing (skip for demo mode since it uses fake data)
   if (!isDemo) {
-    accounts = accounts.map(account => ({
+    aiAccounts = accounts.map(account => ({
       ...account,
       name: `Account_${account.id.slice(-4)}`,
       plaidAccountId: `plaid_${account.id.slice(-8)}`
     }));
     
-    transactions = transactions.map(transaction => ({
+    aiTransactions = transactions.map(transaction => ({
       ...transaction,
       name: transaction.name ? `Transaction_${transaction.id.slice(-4)}` : 'Unknown',
       merchantName: transaction.merchantName ? `Merchant_${transaction.id.slice(-4)}` : 'Unknown'
     }));
   }
 
-  // Build tier-aware context using the new orchestrator
-  console.log('OpenAI: Building tier-aware context for tier:', tier);
-  const tierContext = await dataOrchestrator.buildTierAwareContext(tier, accounts, transactions, isDemo);
+  // Build tier-aware context using AI data (tokenized for production, real for demo)
+  console.log('OpenAI: Building tier-aware context for tier:', tier, 'isDemo:', isDemo);
+  const tierContext = await dataOrchestrator.buildTierAwareContext(tier, aiAccounts, aiTransactions, isDemo);
   
   console.log('OpenAI: Tier context built:', {
     tier: tierContext.tierInfo.currentTier,
@@ -571,8 +579,8 @@ export async function askOpenAI(
     upgradeHints: tierContext.upgradeHints.length
   });
 
-  // Create account summary
-  const accountSummary = tierContext.accounts.map(account => {
+  // Create account summary using display data (real names for user)
+  const accountSummary = displayAccounts.map(account => {
     let balance;
     if (isDemo) {
       balance = account.balance;
@@ -590,8 +598,8 @@ export async function askOpenAI(
     return `- ${account.name} (${account.type}/${subtype}): $${balance?.toFixed(2) || '0.00'}`;
   }).join('\n');
 
-  // Create transaction summary
-  const transactionSummary = tierContext.transactions.map(transaction => {
+  // Create transaction summary using display data (real names for user)
+  const transactionSummary = displayTransactions.map(transaction => {
     const name = isDemo ? transaction.description : transaction.name;
     const category = isDemo ? transaction.category : transaction.category?.[0];
     return `- ${name} (${category || 'Unknown'}): $${transaction.amount?.toFixed(2) || '0.00'} on ${transaction.date}`;

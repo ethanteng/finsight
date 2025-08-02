@@ -8,30 +8,64 @@ const accountTokenMap = new Map<string, string>();
 const institutionTokenMap = new Map<string, string>();
 const merchantTokenMap = new Map<string, string>();
 
+// Reverse mappings for converting tokens back to real data
+const accountRealDataMap = new Map<string, { name: string; institution?: string }>();
+const institutionRealDataMap = new Map<string, string>();
+const merchantRealDataMap = new Map<string, string>();
+
 let accountCounter = 1;
 let institutionCounter = 1;
 let merchantCounter = 1;
 
 export function tokenizeAccount(accountName: string, institutionName?: string): string {
-  const key = `${accountName}-${institutionName || 'unknown'}`;
+  // ✅ Input validation
+  const safeAccountName = String(accountName || '');
+  const safeInstitutionName = String(institutionName || '');
+  
+  const key = `${safeAccountName}-${safeInstitutionName || 'unknown'}`;
   if (!accountTokenMap.has(key)) {
-    accountTokenMap.set(key, `Account_${accountCounter++}`);
+    const token = `Account_${accountCounter++}`;
+    accountTokenMap.set(key, token);
+    accountRealDataMap.set(token, { name: safeAccountName, institution: safeInstitutionName });
   }
   return accountTokenMap.get(key)!;
 }
 
 export function tokenizeInstitution(institutionName: string): string {
-  if (!institutionTokenMap.has(institutionName)) {
-    institutionTokenMap.set(institutionName, `Institution_${institutionCounter++}`);
+  // ✅ Input validation
+  const safeInstitutionName = String(institutionName || '');
+  
+  if (!institutionTokenMap.has(safeInstitutionName)) {
+    const token = `Institution_${institutionCounter++}`;
+    institutionTokenMap.set(safeInstitutionName, token);
+    institutionRealDataMap.set(token, safeInstitutionName);
   }
-  return institutionTokenMap.get(institutionName)!;
+  return institutionTokenMap.get(safeInstitutionName)!;
 }
 
 export function tokenizeMerchant(merchantName: string): string {
-  if (!merchantTokenMap.has(merchantName)) {
-    merchantTokenMap.set(merchantName, `Merchant_${merchantCounter++}`);
+  // ✅ Input validation
+  const safeMerchantName = String(merchantName || '');
+  
+  if (!merchantTokenMap.has(safeMerchantName)) {
+    const token = `Merchant_${merchantCounter++}`;
+    merchantTokenMap.set(safeMerchantName, token);
+    merchantRealDataMap.set(token, safeMerchantName);
   }
-  return merchantTokenMap.get(merchantName)!;
+  return merchantTokenMap.get(safeMerchantName)!;
+}
+
+export function getRealAccountName(token: string): string {
+  const realData = accountRealDataMap.get(token);
+  return realData ? realData.name : token;
+}
+
+export function getRealInstitutionName(token: string): string {
+  return institutionRealDataMap.get(token) || token;
+}
+
+export function getRealMerchantName(token: string): string {
+  return merchantRealDataMap.get(token) || token;
 }
 
 export function anonymizeAccountData(accounts: any[]): string {
@@ -75,11 +109,44 @@ export function anonymizeConversationHistory(conversations: any[]): string {
     .join('\n\n');
 }
 
+// Convert AI response back to user-friendly format
+export function convertResponseToUserFriendly(response: string): string {
+  // ✅ Input validation
+  if (typeof response !== 'string') {
+    return String(response);
+  }
+  
+  let userFriendlyResponse = response;
+  
+  // Replace account tokens with real names
+  accountRealDataMap.forEach((realData, token) => {
+    const replacement = realData.institution 
+      ? `${realData.name} at ${realData.institution}`
+      : realData.name;
+    userFriendlyResponse = userFriendlyResponse.replace(new RegExp(token, 'g'), replacement);
+  });
+  
+  // Replace institution tokens with real names
+  institutionRealDataMap.forEach((realName, token) => {
+    userFriendlyResponse = userFriendlyResponse.replace(new RegExp(token, 'g'), realName);
+  });
+  
+  // Replace merchant tokens with real names
+  merchantRealDataMap.forEach((realName, token) => {
+    userFriendlyResponse = userFriendlyResponse.replace(new RegExp(token, 'g'), realName);
+  });
+  
+  return userFriendlyResponse;
+}
+
 // Clear tokenization maps (call this when user logs out or session ends)
 export function clearTokenizationMaps(): void {
   accountTokenMap.clear();
   institutionTokenMap.clear();
   merchantTokenMap.clear();
+  accountRealDataMap.clear();
+  institutionRealDataMap.clear();
+  merchantRealDataMap.clear();
   accountCounter = 1;
   institutionCounter = 1;
   merchantCounter = 1;

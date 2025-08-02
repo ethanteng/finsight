@@ -12,6 +12,8 @@
     "test:integration:watch": "jest --config jest.integration.config.js --watch",
     "test:enhanced-market-context": "jest --testPathPattern='enhanced-market-context|scheduled-updates' --verbose",
     "test:enhanced-market-context:watch": "jest --testPathPattern='enhanced-market-context|scheduled-updates' --watch",
+    "test:dual-data": "jest --testPathPattern='dual-data' --verbose",
+    "test:dual-data:watch": "jest --testPathPattern='dual-data' --watch",
     "test:lint": "eslint src/ --ext .ts",
     "lint:fix": "eslint src/ --ext .ts --fix",
     "type-check": "tsc --noEmit",

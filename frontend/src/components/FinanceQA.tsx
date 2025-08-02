@@ -121,13 +121,13 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
         headers['x-session-id'] = propSessionId;
       }
       
-      const res = await fetch(`${API_URL}/ask`, {
+      const res = await fetch(`${API_URL}/ask/display-real`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ 
           question,
           isDemo: isDemo, // Pass demo flag to backend
-          userTier: userTier // Pass user tier to backend
+          sessionId: propSessionId // Pass session ID for demo mode
         }),
       });
       const data = await res.json();
