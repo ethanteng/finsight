@@ -5,7 +5,7 @@ import { setupPlaidRoutes } from './plaid';
 import { askOpenAI } from './openai';
 import cors from 'cors';
 import cron from 'node-cron';
-import { syncAllAccounts, getLastSyncInfo } from './sync';
+// Removed syncAllAccounts import - keeping transactions real-time only
 import { PrismaClient } from '@prisma/client';
 import { dataOrchestrator } from './data/orchestrator';
 import { isFeatureEnabled } from './config/features';
@@ -962,10 +962,14 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       return;
     }
 
-    const user = (req as any).user;
-    const userId = user?.id;
-    const syncInfo = await getLastSyncInfo(userId);
-    res.json({ syncInfo });
+    // Sync info endpoint removed - transactions are now real-time only
+    res.json({ 
+      syncInfo: {
+        lastSync: null,
+        accountsSynced: 0,
+        transactionsSynced: 0
+      }
+    });
   } catch (err) {
     if (err instanceof Error) {
       res.status(500).json({ error: err.message });
@@ -975,90 +979,9 @@ app.get('/sync/status', async (req: Request, res: Response) => {
   }
 });
 
-        // Manual sync endpoint for testing
-        app.post('/sync/manual', async (req: Request, res: Response) => {
-          try {
-            // Check if this is a demo request
-            const isDemo = req.headers['x-demo-mode'] === 'true';
-            
-            if (isDemo) {
-              // Return demo sync data for demo mode
-              const { demoData } = await import('./demo-data');
-              res.json({ 
-                success: true,
-                accountsSynced: demoData.accounts.length,
-                transactionsSynced: demoData.transactions.length,
-                message: 'Demo data refreshed successfully'
-              });
-              return;
-            }
 
-            const user = (req as any).user;
-            const userId = user?.id;
-            const result = await syncAllAccounts(userId);
-            res.json(result);
-          } catch (err) {
-            if (err instanceof Error) {
-              res.status(500).json({ error: err.message });
-            } else {
-              res.status(500).json({ error: 'Unknown error' });
-            }
-          }
-        });
 
-        // Fix transactions appearing under multiple accounts
-        app.post('/sync/fix-transaction-accounts', async (req: Request, res: Response) => {
-          try {
-            // Get all transactions with their account details
-            const allTransactions = await getPrismaClient().transaction.findMany({
-              include: { account: true },
-              orderBy: { date: 'desc' }
-            });
 
-            console.log(`Found ${allTransactions.length} total transactions in database`);
-
-            // Group transactions by unique key
-            const uniqueTransactions = new Map();
-            const duplicatesToDelete: string[] = [];
-
-            for (const transaction of allTransactions) {
-              // Use a comprehensive key that includes all relevant fields
-              const key = `${transaction.name}-${transaction.amount}-${transaction.date.toISOString().slice(0, 10)}`;
-              
-              if (uniqueTransactions.has(key)) {
-                // This is a duplicate, mark for deletion
-                console.log(`Duplicate found: ${transaction.name} ${transaction.amount} on ${transaction.date.toISOString().slice(0, 10)} from ${transaction.account.name}`);
-                duplicatesToDelete.push(transaction.id);
-              } else {
-                uniqueTransactions.set(key, transaction);
-                console.log(`Unique: ${transaction.name} ${transaction.amount} on ${transaction.date.toISOString().slice(0, 10)} from ${transaction.account.name}`);
-              }
-            }
-
-            console.log(`Unique transactions: ${uniqueTransactions.size}`);
-            console.log(`Duplicates to remove: ${duplicatesToDelete.length}`);
-
-            // Delete duplicate transactions
-            if (duplicatesToDelete.length > 0) {
-              await getPrismaClient().transaction.deleteMany({
-                where: { id: { in: duplicatesToDelete } }
-              });
-            }
-
-            res.json({ 
-              success: true, 
-              duplicatesRemoved: duplicatesToDelete.length,
-              uniqueTransactionsRemaining: uniqueTransactions.size,
-              totalBefore: allTransactions.length
-            });
-          } catch (err) {
-            if (err instanceof Error) {
-              res.status(500).json({ error: err.message });
-            } else {
-              res.status(500).json({ error: 'Unknown error' });
-            }
-          }
-        });
 
     // Privacy and data control endpoints
     app.get('/privacy/data', async (req: Request, res: Response) => {
@@ -1077,7 +1000,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
             accounts: demoData.accounts.length,
             transactions: demoData.transactions.length,
             conversations: demoConversations,
-            lastSync: await getLastSyncInfo() // Demo mode uses global sync status
+            lastSync: null // Sync info removed - transactions are now real-time only
           });
           return;
         }
@@ -1105,7 +1028,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
           accounts: accounts.length,
           transactions: transactions.length,
           conversations: conversations.length,
-          lastSync: await getLastSyncInfo(user.id)
+          lastSync: null // Sync info removed - transactions are now real-time only
         });
       } catch (err) {
         res.status(500).json({ error: 'Failed to retrieve data summary' });
@@ -1167,45 +1090,8 @@ if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     
-    // Set up cron job to sync accounts and transactions daily at 2 AM
-    cron.schedule('0 2 * * *', async () => {
-      console.log('Starting daily sync job...');
-      const startTime = Date.now();
-      
-      try {
-        const result = await syncAllAccounts();
-        const duration = Date.now() - startTime;
-        
-        if (result.success) {
-          console.log(`✅ Daily sync completed successfully in ${duration}ms: ${result.accountsSynced} accounts, ${result.transactionsSynced} transactions synced`);
-          
-          // Log success metrics for monitoring
-          console.log(`📊 Sync Metrics: duration=${duration}ms, accounts=${result.accountsSynced}, transactions=${result.transactionsSynced}`);
-        } else {
-          console.error(`❌ Daily sync failed after ${duration}ms:`, result.error);
-          
-          // Log failure for monitoring
-          console.error(`📊 Sync Failure: duration=${duration}ms, error=${result.error}`);
-          
-          // TODO: Send alert to monitoring service (e.g., Sentry, LogRocket)
-          // await sendAlert('Daily sync failed', { error: result.error, duration });
-        }
-      } catch (error) {
-        const duration = Date.now() - startTime;
-        console.error(`❌ Error in daily sync job after ${duration}ms:`, error);
-        
-        // Log failure for monitoring
-        console.error(`📊 Sync Error: duration=${duration}ms, error=${error}`);
-        
-        // TODO: Send alert to monitoring service
-        // await sendAlert('Daily sync error', { error, duration });
-      }
-    }, {
-      timezone: 'America/New_York',
-      name: 'daily-sync'
-    });
-    
-    console.log('Cron job scheduled: daily sync at 2 AM EST');
+    // Note: Removed daily sync cron job - keeping transactions real-time only for privacy
+    console.log('ℹ️  Daily sync job removed - transactions are now real-time only');
 
     // Set up cron job to refresh market context every hour
     cron.schedule('0 * * * *', async () => {
