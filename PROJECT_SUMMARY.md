@@ -349,6 +349,101 @@ const demoAccounts = [
 - **Tier Management**: Comprehensive access control system
 - **AI Enhancement**: RAG system for superior financial advice
 
+## 🔧 **System Customization & Maintenance**
+
+### **Enhanced Context Configuration**
+
+The platform's enhanced context system can be easily customized to support additional financial institutions and products.
+
+#### **Adding More Banks & Financial Institutions**
+
+**Primary File:** `src/openai.ts` (Lines 235-237)
+
+**Current Supported Institutions:**
+```typescript
+const financialInstitutions = [
+  'wells fargo', 'chase', 'bank of america', 'citibank', 'us bank', 'pnc', 'capital one',
+  'ally bank', 'marcus', 'fidelity', 'vanguard', 'schwab', 'td ameritrade', 'robinhood'
+];
+```
+
+**To Add More Banks:**
+1. **Edit the array** in `src/openai.ts` around line 235
+2. **Add institution names** in lowercase format
+3. **Test the changes** with integration tests
+
+**Example Expansion:**
+```typescript
+const financialInstitutions = [
+  // Major Banks
+  'wells fargo', 'chase', 'bank of america', 'citibank', 'us bank', 'pnc', 'capital one',
+  'goldman sachs', 'morgan stanley', 'jpmorgan',
+  
+  // Regional Banks
+  'bb&t', 'suntrust', 'regions bank', 'keybank', 'fifth third', 'huntington',
+  'comerica', 'citizens bank', 'm&t bank', 'bmo harris',
+  
+  // Credit Unions
+  'navy federal', 'penfed', 'alliant', 'state employees',
+  
+  // Fintech & Digital Banks
+  'ally bank', 'marcus', 'sofi', 'chime', 'current', 'varo', 'upstart',
+  'fidelity', 'vanguard', 'schwab', 'td ameritrade', 'robinhood',
+  'betterment', 'wealthfront', 'acorns', 'stash'
+];
+```
+
+#### **Adding More Financial Products**
+
+**Secondary File:** `src/data/providers/search.ts` (Lines 249-260)
+
+**Current Financial Keywords:**
+```typescript
+const financialKeywords = [
+  'mortgage rates', 'CD rates', 'savings rates', 'investment advice',
+  'retirement planning', 'tax strategies', 'budgeting tips',
+  'credit card rates', 'loan rates', 'financial planning'
+];
+```
+
+**To Add More Products:**
+1. **Edit the array** in `src/data/providers/search.ts` around line 249
+2. **Add product keywords** that should trigger enhanced search
+3. **Test with integration tests**
+
+**Example Expansion:**
+```typescript
+const financialKeywords = [
+  'mortgage rates', 'CD rates', 'savings rates', 'investment advice',
+  'retirement planning', 'tax strategies', 'budgeting tips',
+  'credit card rates', 'loan rates', 'financial planning',
+  'auto loan rate', 'personal loan rate', 'student loan rate',
+  'home equity rate', 'heloc rate', 'money market rate',
+  'investment account rate', 'ira rate', '401k rate', 'annuity rate'
+];
+```
+
+#### **How Enhanced Context Works**
+
+When users ask questions mentioning supported institutions or products:
+
+1. **Institution Detection**: System identifies mentioned financial institutions
+2. **Query Enhancement**: Automatically adds "current rates today 2025" for rate questions
+3. **Search Optimization**: Enhances search queries for better results
+4. **Real-Time Data**: Provides current information from multiple sources
+5. **Source Attribution**: Transparently cites information sources
+
+#### **Testing Changes**
+
+After making changes:
+```bash
+# Run integration tests to ensure stability
+npm run test:integration
+
+# Test specific enhanced context functionality
+npm run test:integration -- src/__tests__/integration/enhanced-market-context-api.test.ts
+```
+
 ---
 
 **This summary provides a comprehensive overview of the Ask Linc platform, including the sophisticated RAG system implementation that sets it apart from traditional financial apps. The platform now offers real-time financial intelligence with privacy protection, comprehensive demo capabilities, and holistic coverage of all financial institutions and products.** 
