@@ -48,6 +48,11 @@ beforeEach(async () => {
     // Delete in correct order to avoid foreign key constraints
     await prisma.demoConversation.deleteMany();
     await prisma.demoSession.deleteMany();
+    await prisma.conversation.deleteMany();
+    await prisma.transaction.deleteMany();
+    await prisma.account.deleteMany();
+    await prisma.accessToken.deleteMany();
+    await prisma.syncStatus.deleteMany();
     await prisma.privacySettings?.deleteMany();
     await prisma.user.deleteMany();
     console.log('✅ Test data cleaned up');
@@ -59,8 +64,16 @@ beforeEach(async () => {
 afterEach(async () => {
   // ✅ Clean up after each test to prevent session conflicts
   try {
+    // Small delay to ensure all database operations complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     await prisma.demoConversation.deleteMany();
     await prisma.demoSession.deleteMany();
+    await prisma.conversation.deleteMany();
+    await prisma.transaction.deleteMany();
+    await prisma.account.deleteMany();
+    await prisma.accessToken.deleteMany();
+    await prisma.syncStatus.deleteMany();
     await prisma.privacySettings?.deleteMany();
     await prisma.user.deleteMany();
   } catch (error) {

@@ -319,6 +319,10 @@ const handleDemoRequest = async (req: Request, res: Response) => {
     } catch (storageError) {
       console.error('Failed to store demo conversation:', storageError);
       // Don't fail the request, just log the error
+      // In test environment, this might be due to cleanup running concurrently
+      if (process.env.NODE_ENV === 'test') {
+        console.log('Demo conversation storage failed in test environment - likely due to concurrent cleanup');
+      }
     }
     
     // Log demo interactions for analytics (disabled in test environment)

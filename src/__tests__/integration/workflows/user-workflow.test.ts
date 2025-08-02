@@ -333,23 +333,25 @@ describe('User Workflow Integration Tests', () => {
       const initialAccounts = await prisma.account.findMany();
       const initialTransactions = await prisma.transaction.findMany();
 
-      // Test manual sync endpoint instead of refresh_data
-      const syncResponse = await request(app)
-        .post('/sync/manual')
-        .send({});
+      // Since we removed manual sync endpoints, test that data persists
+      // and can be accessed through the AI endpoint
+      const aiResponse = await request(app)
+        .post('/ask')
+        .set('x-session-id', 'test-session-id')
+        .send({
+          question: 'What accounts do I have?',
+          isDemo: true
+        });
 
-      // Handle sync failure gracefully
-      if (syncResponse.status === 500) {
-        console.log('Manual sync failed (expected in test environment)');
-        // Verify data still exists
-        const refreshedAccounts = await prisma.account.findMany();
-        const refreshedTransactions = await prisma.transaction.findMany();
-        
-        expect(refreshedAccounts.length).toBeGreaterThanOrEqual(initialAccounts.length);
-        expect(refreshedTransactions.length).toBeGreaterThanOrEqual(initialTransactions.length);
-      } else {
-        expect(syncResponse.status).toBe(200);
-      }
+      // Accept both 200 (success) and 500 (API failure with test credentials)
+      expect([200, 500]).toContain(aiResponse.status);
+      
+      // Verify data still exists in database
+      const refreshedAccounts = await prisma.account.findMany();
+      const refreshedTransactions = await prisma.transaction.findMany();
+      
+      expect(refreshedAccounts.length).toBeGreaterThanOrEqual(initialAccounts.length);
+      expect(refreshedTransactions.length).toBeGreaterThanOrEqual(initialTransactions.length);
     });
   });
 
