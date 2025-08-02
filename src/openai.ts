@@ -258,7 +258,10 @@ export async function askOpenAIWithEnhancedContext(
   const transactionSummary = tierContext.transactions.map(transaction => {
     const name = isDemo ? transaction.description : transaction.name;
     const category = isDemo ? transaction.category : transaction.category?.[0];
-    return `- ${name} (${category || 'Unknown'}): $${transaction.amount?.toFixed(2) || '0.00'} on ${transaction.date}`;
+    // Fix: Invert the transaction amount sign to match expected behavior
+    // Positive amounts should be negative (money leaving account) and vice versa
+    const correctedAmount = -(transaction.amount || 0);
+    return `- ${name} (${category || 'Unknown'}): $${correctedAmount?.toFixed(2) || '0.00'} on ${transaction.date}`;
   }).join('\n');
 
   console.log('OpenAI Enhanced: Account summary for AI:', accountSummary);
@@ -602,7 +605,10 @@ export async function askOpenAI(
   const transactionSummary = displayTransactions.map(transaction => {
     const name = isDemo ? transaction.description : transaction.name;
     const category = isDemo ? transaction.category : transaction.category?.[0];
-    return `- ${name} (${category || 'Unknown'}): $${transaction.amount?.toFixed(2) || '0.00'} on ${transaction.date}`;
+    // Fix: Invert the transaction amount sign to match expected behavior
+    // Positive amounts should be negative (money leaving account) and vice versa
+    const correctedAmount = -(transaction.amount || 0);
+    return `- ${name} (${category || 'Unknown'}): $${correctedAmount?.toFixed(2) || '0.00'} on ${transaction.date}`;
   }).join('\n');
 
   console.log('OpenAI: Account summary for AI:', accountSummary);

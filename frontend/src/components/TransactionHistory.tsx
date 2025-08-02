@@ -179,7 +179,8 @@ export default function TransactionHistory({ isDemo = false }: TransactionHistor
               className={`bg-gray-700 rounded-lg p-4 border-l-4 ${
                 transaction.pending 
                   ? 'border-yellow-500 bg-gray-700/50' 
-                  : transaction.amount > 0 
+                  : // Fix: Invert the transaction amount sign to match expected behavior
+                  -(transaction.amount || 0) > 0 
                     ? 'border-green-500' 
                     : 'border-red-500'
               }`}
@@ -213,9 +214,12 @@ export default function TransactionHistory({ isDemo = false }: TransactionHistor
                 
                 <div className="text-right">
                   <div className={`font-semibold ${
-                    transaction.amount > 0 ? 'text-green-400' : 'text-red-400'
+                    // Fix: Invert the transaction amount sign to match expected behavior
+                    // Positive amounts should be negative (money leaving account) and vice versa
+                    -(transaction.amount || 0) > 0 ? 'text-green-400' : 'text-red-400'
                   }`}>
-                    {transaction.amount > 0 ? '+' : '-'}{formatCurrency(transaction.amount)}
+                    {/* Fix: Invert the transaction amount sign */}
+                    {-(transaction.amount || 0) > 0 ? '+' : '-'}{formatCurrency(transaction.amount)}
                   </div>
                 </div>
               </div>
