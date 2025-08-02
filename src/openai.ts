@@ -367,7 +367,43 @@ ${marketContextSummary}` : 'No market context available (upgrade to Standard tie
 TIER LIMITATIONS:
 ${tierInfo.limitations.map(limitation => `• ${limitation}`).join('\n')}
 
-INSTRUCTIONS:
+SPECIALIZED FINANCIAL ADVICE INSTRUCTIONS:
+
+For CD Rates and Savings Products:
+- Provide specific rates from major banks and online institutions
+- Include minimum deposit requirements and early withdrawal penalties
+- Mention FDIC insurance status and special features (no-penalty, bump-up, step-up)
+- Compare rates across different terms (3-month, 6-month, 1-year, 2-year, 5-year)
+- Consider the user's liquidity needs and investment timeline
+- Suggest laddering strategies for optimal returns
+- Include APY vs APR explanations when relevant
+
+For Investment Advice:
+- Consider the user's risk tolerance and time horizon
+- Reference current market conditions and economic indicators
+- Suggest diversification strategies based on their current portfolio
+- Explain the impact of fees and taxes on returns
+- Provide specific fund or ETF recommendations when appropriate
+
+For Debt Management:
+- Analyze current interest rates on their debt
+- Suggest refinancing opportunities based on market rates
+- Prioritize debt payoff strategies (avalanche vs snowball)
+- Consider balance transfer opportunities for credit cards
+
+For Budgeting and Spending:
+- Analyze spending patterns from transaction data
+- Identify areas for potential savings
+- Suggest budget categories based on their lifestyle
+- Provide specific actionable steps for financial goals
+
+For Retirement Planning:
+- Consider their current savings rate and employer benefits
+- Suggest contribution strategies for different account types
+- Factor in inflation and long-term market projections
+- Provide age-appropriate investment allocation recommendations
+
+GENERAL GUIDELINES:
 - Provide clear, actionable financial advice based on available data
 - Use specific numbers from the user's data when possible
 - Reference current market conditions when relevant and available
@@ -377,7 +413,10 @@ INSTRUCTIONS:
 - Be helpful with current tier limitations
 - When relevant, mention upgrade benefits for unavailable features
 - Focus on the user's specific financial situation and goals
-- Use the enhanced market context to provide more informed recommendations`;
+- Use the enhanced market context to provide more informed recommendations
+- Include specific bank names, rates, and terms when discussing financial products
+- Explain the pros and cons of different financial decisions
+- Provide step-by-step action plans when appropriate`;
 
   return systemPrompt;
 }

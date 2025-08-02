@@ -155,9 +155,10 @@ describe('Enhanced Market Context System', () => {
       
       expect(context).toContain('ECONOMIC INDICATORS');
       expect(context).toContain('LIVE MARKET DATA');
-      expect(context).toContain('CD Rates: 3-month: 5.25%, 6-month: 5.35%');
-      expect(context).toContain('Treasury Yields: 1-month: 5.12%, 3-month: 5.18%');
-      expect(context).toContain('Mortgage Rates: 30-year-fixed: 6.85%, 15-year-fixed: 6.25%');
+      expect(context).toContain('CD RATES:');
+      expect(context).toContain('Test Bank');
+      expect(context).toContain('TREASURY YIELDS:');
+      expect(context).toContain('MORTGAGE RATES:');
     });
   });
 
@@ -174,6 +175,8 @@ describe('Enhanced Market Context System', () => {
       
       expect(context).toContain('High interest rates favor savers');
       expect(context).toContain('consider high-yield savings accounts and CDs');
+      expect(context).toContain('Best 3-month CD:');
+      expect(context).toContain('Best 6-month CD:');
     });
 
     it('should generate insights for high inflation', async () => {
@@ -329,5 +332,152 @@ describe('Enhanced Market Context System', () => {
       // Should include a timestamp
       expect(context).toMatch(/Updated: \d{1,2}\/\d{1,2}\/\d{4}, \d{1,2}:\d{2}:\d{2} [AP]M/);
     });
+  });
+}); 
+
+describe('Enhanced CD Rate Analysis', () => {
+  it('should provide detailed CD rate information with specific banks and features', async () => {
+    // Setup mock providers for this test
+    const mockFredProvider = {
+      getEconomicIndicators: jest.fn(),
+    } as any;
+    
+    const mockAlphaVantageProvider = {
+      getLiveMarketData: jest.fn(),
+    } as any;
+    
+    MockFREDProvider.mockImplementation(() => mockFredProvider);
+    MockAlphaVantageProvider.mockImplementation(() => mockAlphaVantageProvider);
+    
+    // Mock successful API responses
+    mockFredProvider.getEconomicIndicators.mockResolvedValue({
+      cpi: { value: 3.1, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
+      fedRate: { value: 5.25, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
+      mortgageRate: { value: 6.72, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' },
+      creditCardAPR: { value: 24.59, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' }
+    });
+
+    mockAlphaVantageProvider.getLiveMarketData.mockResolvedValue({
+      cdRates: [
+        { 
+          term: '3-month', 
+          rate: 5.25, 
+          institution: 'Marcus by Goldman Sachs', 
+          lastUpdated: new Date().toISOString(),
+          minimumDeposit: 500,
+          maximumDeposit: 1000000,
+          earlyWithdrawalPenalty: '3 months of interest',
+          apy: 5.25,
+          compoundingFrequency: 'daily',
+          fdicInsured: true,
+          specialFeatures: ['no penalty'],
+          bankType: 'online',
+          state: 'NY'
+        },
+        { 
+          term: '6-month', 
+          rate: 5.35, 
+          institution: 'Ally Bank', 
+          lastUpdated: new Date().toISOString(),
+          minimumDeposit: 2500,
+          maximumDeposit: 1000000,
+          earlyWithdrawalPenalty: '6 months of interest',
+          apy: 5.35,
+          compoundingFrequency: 'daily',
+          fdicInsured: true,
+          specialFeatures: ['bump-up'],
+          bankType: 'online',
+          state: 'MI'
+        }
+      ],
+      treasuryYields: [
+        { term: '1-month', yield: 5.12, lastUpdated: new Date().toISOString() },
+        { term: '3-month', yield: 5.18, lastUpdated: new Date().toISOString() }
+      ],
+      mortgageRates: [
+        { type: '30-year-fixed', rate: 6.85, lastUpdated: new Date().toISOString() },
+        { type: '15-year-fixed', rate: 6.25, lastUpdated: new Date().toISOString() }
+      ]
+    });
+
+    const dataOrchestrator = new DataOrchestrator();
+    
+    // Get market context for premium tier
+    const marketContext = await dataOrchestrator.getMarketContext(UserTier.PREMIUM, true);
+    
+    expect(marketContext.liveMarketData).toBeDefined();
+    expect(marketContext.liveMarketData?.cdRates).toBeDefined();
+    expect(marketContext.liveMarketData?.cdRates?.length).toBeGreaterThan(0);
+    
+    const cdRates = marketContext.liveMarketData!.cdRates!;
+    
+    // Verify detailed CD information
+    cdRates.forEach(cd => {
+      expect(cd.institution).toBeDefined();
+      expect(cd.rate).toBeGreaterThan(0);
+      expect(cd.term).toBeDefined();
+      expect(cd.lastUpdated).toBeDefined();
+      
+      // Check for enhanced fields
+      expect(cd.minimumDeposit).toBeDefined();
+      expect(cd.maximumDeposit).toBeDefined();
+      expect(cd.earlyWithdrawalPenalty).toBeDefined();
+      expect(cd.apy).toBeDefined();
+      expect(cd.compoundingFrequency).toBeDefined();
+      expect(cd.fdicInsured).toBeDefined();
+      expect(cd.specialFeatures).toBeDefined();
+      expect(cd.bankType).toBeDefined();
+      expect(cd.state).toBeDefined();
+    });
+    
+    // Verify specific banks are included
+    const bankNames = cdRates.map(cd => cd.institution);
+    expect(bankNames).toContain('Marcus by Goldman Sachs');
+    expect(bankNames).toContain('Ally Bank');
+    
+    // Verify special features
+    const noPenaltyCDs = cdRates.filter(cd => cd.specialFeatures?.includes('no penalty'));
+    const bumpUpCDs = cdRates.filter(cd => cd.specialFeatures?.includes('bump-up'));
+    
+    expect(noPenaltyCDs.length).toBeGreaterThan(0);
+    expect(bumpUpCDs.length).toBeGreaterThan(0);
+    
+    // Verify rate ranges
+    const rates = cdRates.map(cd => cd.rate);
+    expect(Math.max(...rates)).toBeGreaterThan(5.0);
+    expect(Math.min(...rates)).toBeGreaterThan(5.0);
+  });
+  
+  it('should generate actionable CD recommendations', async () => {
+    const dataOrchestrator = new DataOrchestrator();
+    
+    // Get market context
+    const marketContext = await dataOrchestrator.getMarketContext(UserTier.PREMIUM, true);
+    const cdRates = marketContext.liveMarketData?.cdRates || [];
+    
+    // Import the function from index.ts
+    const { generateCDRecommendations } = await import('../../index');
+    
+    // Test recommendation generation
+    const recommendations = generateCDRecommendations(cdRates);
+    
+    expect(recommendations.length).toBeGreaterThan(0);
+    
+    // Check for best rates recommendation
+    const bestRatesRec = recommendations.find((r: any) => r.type === 'best_rates') as any;
+    expect(bestRatesRec).toBeDefined();
+    expect(bestRatesRec?.rates?.length).toBeGreaterThan(0);
+    
+    // Check for laddering recommendation
+    const ladderingRec = recommendations.find((r: any) => r.type === 'laddering') as any;
+    if (ladderingRec) {
+      expect(ladderingRec.strategy?.length).toBe(4);
+    }
+    
+    // Check for no-penalty recommendation
+    const noPenaltyRec = recommendations.find((r: any) => r.type === 'no_penalty') as any;
+    if (noPenaltyRec) {
+      expect(noPenaltyRec.options?.length).toBeGreaterThan(0);
+    }
   });
 }); 

@@ -1383,3 +1383,115 @@ if (require.main === module) {
 // Export app for testing
 export { app };
 // Force rebuild Mon Jul 28 20:28:57 PDT 2025
+
+// Specialized CD Rate Analysis Endpoint
+app.post('/analyze/cd-rates', async (req: Request, res: Response) => {
+  try {
+    const { userTier = UserTier.STARTER, isDemo = false } = req.body;
+    
+    // Get enhanced market context
+    const dataOrchestrator = new DataOrchestrator();
+    const marketContext = await dataOrchestrator.getMarketContext(userTier, isDemo);
+    
+    if (!marketContext.liveMarketData?.cdRates) {
+      return res.status(400).json({ 
+        error: 'CD rate data not available for your tier. Upgrade to Standard or Premium for access.' 
+      });
+    }
+    
+    const cdRates = marketContext.liveMarketData.cdRates;
+    
+    // Analyze CD rates and provide detailed insights
+    const analysis = {
+      summary: {
+        totalRates: cdRates.length,
+        averageRate: cdRates.reduce((sum, cd) => sum + cd.rate, 0) / cdRates.length,
+        bestRate: Math.max(...cdRates.map(cd => cd.rate)),
+        bestInstitution: cdRates.reduce((best, cd) => cd.rate > best.rate ? cd : best, cdRates[0])
+      },
+      ratesByTerm: cdRates.reduce((acc, cd) => {
+        if (!acc[cd.term]) acc[cd.term] = [];
+        acc[cd.term].push(cd);
+        return acc;
+      }, {} as Record<string, any[]>),
+      specialFeatures: {
+        noPenalty: cdRates.filter(cd => cd.specialFeatures?.includes('no penalty')),
+        bumpUp: cdRates.filter(cd => cd.specialFeatures?.includes('bump-up')),
+        stepUp: cdRates.filter(cd => cd.specialFeatures?.includes('step-up'))
+      },
+      recommendations: generateCDRecommendations(cdRates),
+      lastUpdated: new Date().toISOString()
+    };
+    
+    res.json(analysis);
+  } catch (error) {
+    console.error('CD Rate Analysis Error:', error);
+    res.status(500).json({ error: 'Failed to analyze CD rates' });
+  }
+});
+
+// Helper function to generate CD recommendations
+export function generateCDRecommendations(cdRates: any[]) {
+  const recommendations = [];
+  
+  // Best rates by term
+  const bestRates = cdRates.reduce((acc, cd) => {
+    if (!acc[cd.term] || cd.rate > acc[cd.term].rate) {
+      acc[cd.term] = cd;
+    }
+    return acc;
+  }, {} as Record<string, any>);
+  
+  recommendations.push({
+    type: 'best_rates',
+    title: 'Best CD Rates by Term',
+    rates: Object.entries(bestRates).map(([term, cd]) => ({
+      term,
+      rate: cd.rate,
+      institution: cd.institution,
+      minimumDeposit: cd.minimumDeposit,
+      features: cd.specialFeatures
+    }))
+  });
+  
+  // Laddering strategy
+  const shortTerm = cdRates.filter(cd => cd.term.includes('3-month') || cd.term.includes('6-month'));
+  const longTerm = cdRates.filter(cd => cd.term.includes('1-year') || cd.term.includes('2-year') || cd.term.includes('5-year'));
+  
+  if (shortTerm.length > 0 && longTerm.length > 0) {
+    const avgShortTerm = shortTerm.reduce((sum, cd) => sum + cd.rate, 0) / shortTerm.length;
+    const avgLongTerm = longTerm.reduce((sum, cd) => sum + cd.rate, 0) / longTerm.length;
+    
+    if (avgLongTerm > avgShortTerm + 0.5) {
+      recommendations.push({
+        type: 'laddering',
+        title: 'CD Laddering Strategy Recommended',
+        description: 'The yield curve is steep, making CD laddering an attractive strategy.',
+        strategy: [
+          'Invest 25% in 3-month CDs',
+          'Invest 25% in 6-month CDs', 
+          'Invest 25% in 1-year CDs',
+          'Invest 25% in 2-year CDs'
+        ]
+      });
+    }
+  }
+  
+  // Special features
+  const noPenaltyCDs = cdRates.filter(cd => cd.specialFeatures?.includes('no penalty'));
+  if (noPenaltyCDs.length > 0) {
+    recommendations.push({
+      type: 'no_penalty',
+      title: 'No-Penalty CD Options',
+      description: 'These CDs allow early withdrawal without penalties, offering flexibility.',
+      options: noPenaltyCDs.map(cd => ({
+        institution: cd.institution,
+        rate: cd.rate,
+        term: cd.term,
+        minimumDeposit: cd.minimumDeposit
+      }))
+    });
+  }
+  
+  return recommendations;
+}

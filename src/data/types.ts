@@ -24,6 +24,16 @@ export interface CDRate {
   rate: number;
   institution: string;
   lastUpdated: string;
+  // Enhanced fields for detailed CD information
+  minimumDeposit?: number;
+  maximumDeposit?: number;
+  earlyWithdrawalPenalty?: string;
+  apy?: number; // Annual Percentage Yield
+  compoundingFrequency?: string; // "daily", "monthly", "quarterly"
+  fdicInsured?: boolean;
+  specialFeatures?: string[]; // ["no penalty", "bump-up", "step-up"]
+  bankType?: string; // "online", "traditional", "credit union"
+  state?: string; // For state-specific rates
 }
 
 export interface TreasuryYield {

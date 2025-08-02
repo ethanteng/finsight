@@ -88,9 +88,10 @@ describe('Enhanced Market Context System - Core Functionality', () => {
       
       expect(context).toContain('ECONOMIC INDICATORS');
       expect(context).toContain('LIVE MARKET DATA');
-      expect(context).toContain('CD Rates: 3-month: 5.25%, 6-month: 5.35%');
-      expect(context).toContain('Treasury Yields: 1-month: 5.12%, 3-month: 5.18%');
-      expect(context).toContain('Mortgage Rates: 30-year-fixed: 6.85%, 15-year-fixed: 6.25%');
+      expect(context).toContain('CD RATES:');
+      expect(context).toContain('Test Bank');
+      expect(context).toContain('TREASURY YIELDS:');
+      expect(context).toContain('MORTGAGE RATES:');
     });
   });
 

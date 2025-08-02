@@ -242,16 +242,37 @@ export class DataOrchestrator {
     const summary = [];
     
     if (data.cdRates && data.cdRates.length > 0) {
-      summary.push(`• CD Rates: ${data.cdRates.slice(0, 3).map(cd => `${cd.term}: ${cd.rate}%`).join(', ')}`);
-    }
-    if (data.treasuryYields && data.treasuryYields.length > 0) {
-      summary.push(`• Treasury Yields: ${data.treasuryYields.slice(0, 3).map(t => `${t.term}: ${t.yield}%`).join(', ')}`);
-    }
-    if (data.mortgageRates && data.mortgageRates.length > 0) {
-      summary.push(`• Mortgage Rates: ${data.mortgageRates.slice(0, 2).map(m => `${m.type}: ${m.rate}%`).join(', ')}`);
+      const cdDetails = data.cdRates.map(cd => {
+        let detail = `${cd.term}: ${cd.rate}% (${cd.institution})`;
+        if (cd.minimumDeposit) {
+          detail += ` - Min: $${cd.minimumDeposit.toLocaleString()}`;
+        }
+        if (cd.specialFeatures && cd.specialFeatures.length > 0) {
+          detail += ` - Features: ${cd.specialFeatures.join(', ')}`;
+        }
+        if (cd.fdicInsured) {
+          detail += ' - FDIC Insured';
+        }
+        return detail;
+      });
+      summary.push(`CD RATES:\n${cdDetails.join('\n')}`);
     }
     
-    return summary.join('\n');
+    if (data.treasuryYields && data.treasuryYields.length > 0) {
+      const treasuryDetails = data.treasuryYields.map(t => 
+        `${t.term}: ${t.yield}%`
+      );
+      summary.push(`TREASURY YIELDS:\n${treasuryDetails.join('\n')}`);
+    }
+    
+    if (data.mortgageRates && data.mortgageRates.length > 0) {
+      const mortgageDetails = data.mortgageRates.map(m => 
+        `${m.type}: ${m.rate}%`
+      );
+      summary.push(`MORTGAGE RATES:\n${mortgageDetails.join('\n')}`);
+    }
+    
+    return summary.join('\n\n');
   }
 
   /**
@@ -294,19 +315,68 @@ export class DataOrchestrator {
   private generateMarketInsights(data: LiveMarketData): string[] {
     const insights = [];
     
-    // Check CD rates for savings opportunities
     if (data.cdRates && data.cdRates.length > 0) {
-      const highYieldCDs = data.cdRates.filter(cd => cd.rate > 4);
-      if (highYieldCDs.length > 0) {
-        insights.push('• High-yield CD rates available - consider laddering CDs for steady income');
+      // Find best rates by term
+      const bestRates = data.cdRates.reduce((acc, cd) => {
+        if (!acc[cd.term] || cd.rate > acc[cd.term].rate) {
+          acc[cd.term] = cd;
+        }
+        return acc;
+      }, {} as Record<string, any>);
+      
+      // Generate CD-specific insights
+      const shortTermRates = data.cdRates.filter(cd => cd.term.includes('3-month') || cd.term.includes('6-month'));
+      const longTermRates = data.cdRates.filter(cd => cd.term.includes('1-year') || cd.term.includes('2-year') || cd.term.includes('5-year'));
+      
+      if (shortTermRates.length > 0 && longTermRates.length > 0) {
+        const avgShortTerm = shortTermRates.reduce((sum, cd) => sum + cd.rate, 0) / shortTermRates.length;
+        const avgLongTerm = longTermRates.reduce((sum, cd) => sum + cd.rate, 0) / longTermRates.length;
+        
+        if (avgLongTerm > avgShortTerm + 0.5) {
+          insights.push('• CD rate curve is steep - consider laddering strategy for optimal returns');
+        }
+      }
+      
+      // Highlight special features
+      const noPenaltyCDs = data.cdRates.filter(cd => cd.specialFeatures?.includes('no penalty'));
+      if (noPenaltyCDs.length > 0) {
+        insights.push(`• No-penalty CDs available at ${noPenaltyCDs.map(cd => `${cd.institution} (${cd.rate}%)`).join(', ')}`);
+      }
+      
+      const bumpUpCDs = data.cdRates.filter(cd => cd.specialFeatures?.includes('bump-up'));
+      if (bumpUpCDs.length > 0) {
+        insights.push(`• Bump-up CDs available for rate protection at ${bumpUpCDs.map(cd => `${cd.institution} (${cd.rate}%)`).join(', ')}`);
+      }
+      
+      // Best rates by term
+      Object.entries(bestRates).forEach(([term, cd]) => {
+        insights.push(`• Best ${term} CD: ${cd.institution} at ${cd.rate}% (Min: $${cd.minimumDeposit?.toLocaleString() || 'N/A'})`);
+      });
+    }
+    
+    if (data.treasuryYields && data.treasuryYields.length > 0) {
+      const shortTerm = data.treasuryYields.find(t => t.term === '3-month');
+      const longTerm = data.treasuryYields.find(t => t.term === '10-year');
+      
+      if (shortTerm && longTerm) {
+        const spread = longTerm.yield - shortTerm.yield;
+        if (spread < 0) {
+          insights.push('• Inverted yield curve suggests economic uncertainty - consider defensive positioning');
+        } else if (spread > 2) {
+          insights.push('• Steep yield curve favors longer-term investments');
+        }
       }
     }
     
-    // Check Treasury yields for safe investment opportunities
-    if (data.treasuryYields && data.treasuryYields.length > 0) {
-      const highYieldTreasuries = data.treasuryYields.filter(t => t.yield > 4);
-      if (highYieldTreasuries.length > 0) {
-        insights.push('• Attractive Treasury yields available for conservative investors');
+    if (data.mortgageRates && data.mortgageRates.length > 0) {
+      const fixed30 = data.mortgageRates.find(m => m.type === '30-year-fixed');
+      const fixed15 = data.mortgageRates.find(m => m.type === '15-year-fixed');
+      
+      if (fixed30 && fixed15) {
+        const rateDiff = fixed30.rate - fixed15.rate;
+        if (rateDiff < 0.5) {
+          insights.push('• 15-year mortgages offer significant interest savings with minimal rate premium');
+        }
       }
     }
     

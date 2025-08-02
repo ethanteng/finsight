@@ -43,10 +43,81 @@ export class AlphaVantageProvider implements DataProvider {
       console.log('Alpha Vantage Provider: Using mock data for test environment');
       const mockData: LiveMarketData = {
         cdRates: [
-          { term: '3-month', rate: 5.25, institution: 'National Average', lastUpdated: new Date().toISOString() },
-          { term: '6-month', rate: 5.35, institution: 'National Average', lastUpdated: new Date().toISOString() },
-          { term: '1-year', rate: 5.45, institution: 'National Average', lastUpdated: new Date().toISOString() },
-          { term: '2-year', rate: 5.55, institution: 'National Average', lastUpdated: new Date().toISOString() }
+          { 
+            term: '3-month', 
+            rate: 5.25, 
+            institution: 'Marcus by Goldman Sachs', 
+            lastUpdated: new Date().toISOString(),
+            minimumDeposit: 500,
+            maximumDeposit: 1000000,
+            earlyWithdrawalPenalty: '3 months of interest',
+            apy: 5.25,
+            compoundingFrequency: 'daily',
+            fdicInsured: true,
+            specialFeatures: ['no penalty'],
+            bankType: 'online',
+            state: 'NY'
+          },
+          { 
+            term: '6-month', 
+            rate: 5.35, 
+            institution: 'Ally Bank', 
+            lastUpdated: new Date().toISOString(),
+            minimumDeposit: 2500,
+            maximumDeposit: 1000000,
+            earlyWithdrawalPenalty: '6 months of interest',
+            apy: 5.35,
+            compoundingFrequency: 'daily',
+            fdicInsured: true,
+            specialFeatures: ['bump-up'],
+            bankType: 'online',
+            state: 'MI'
+          },
+          { 
+            term: '1-year', 
+            rate: 5.45, 
+            institution: 'Capital One', 
+            lastUpdated: new Date().toISOString(),
+            minimumDeposit: 1000,
+            maximumDeposit: 1000000,
+            earlyWithdrawalPenalty: '12 months of interest',
+            apy: 5.45,
+            compoundingFrequency: 'daily',
+            fdicInsured: true,
+            specialFeatures: ['step-up'],
+            bankType: 'online',
+            state: 'VA'
+          },
+          { 
+            term: '2-year', 
+            rate: 5.55, 
+            institution: 'Synchrony Bank', 
+            lastUpdated: new Date().toISOString(),
+            minimumDeposit: 2000,
+            maximumDeposit: 1000000,
+            earlyWithdrawalPenalty: '24 months of interest',
+            apy: 5.55,
+            compoundingFrequency: 'daily',
+            fdicInsured: true,
+            specialFeatures: [],
+            bankType: 'online',
+            state: 'UT'
+          },
+          { 
+            term: '5-year', 
+            rate: 5.65, 
+            institution: 'Discover Bank', 
+            lastUpdated: new Date().toISOString(),
+            minimumDeposit: 2500,
+            maximumDeposit: 1000000,
+            earlyWithdrawalPenalty: '60 months of interest',
+            apy: 5.65,
+            compoundingFrequency: 'daily',
+            fdicInsured: true,
+            specialFeatures: ['no penalty'],
+            bankType: 'online',
+            state: 'DE'
+          }
         ],
         treasuryYields: [
           { term: '1-month', yield: 5.12, lastUpdated: new Date().toISOString() },
