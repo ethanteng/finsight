@@ -19,8 +19,20 @@ export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: P
   const createLinkToken = useCallback(async () => {
     setStatus('Requesting link token...');
     const API_URL = process.env.NEXT_PUBLIC_API_URL;
+    const token = localStorage.getItem('auth_token');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
     try {
-      const res = await fetch(`${API_URL}/plaid/create_link_token`, { method: 'POST' });
+      const res = await fetch(`${API_URL}/plaid/create_link_token`, { 
+        method: 'POST',
+        headers
+      });
       const data = await res.json();
       if (data.link_token) {
         setLinkToken(data.link_token);
@@ -49,11 +61,18 @@ export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: P
       trackConversion('account_connection', 1);
       
       const API_URL = process.env.NEXT_PUBLIC_API_URL;
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      
       const res = await fetch(`${API_URL}/plaid/exchange_public_token`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           public_token: publicToken,
           metadata: metadata,
@@ -62,6 +81,9 @@ export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: P
 
       if (res.ok) {
         console.log('Successfully exchanged public token');
+        // Reset the component state after successful connection
+        setLinkToken(null);
+        setStatus('');
         // Call the onSuccess callback if provided
         if (onSuccess) {
           onSuccess(publicToken, metadata);
@@ -73,6 +95,9 @@ export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: P
           error: 'Failed to exchange public token',
           is_demo: isDemo
         });
+        // Reset state on error too
+        setLinkToken(null);
+        setStatus('');
       }
     } catch (error) {
       console.error('Error exchanging public token:', error);
@@ -81,11 +106,18 @@ export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: P
         error: error instanceof Error ? error.message : 'Unknown error',
         is_demo: isDemo
       });
+      // Reset state on error
+      setLinkToken(null);
+      setStatus('');
     }
   }, [trackEvent, trackConversion, isDemo, onSuccess]);
 
   const handleExit: PlaidLinkOnExit = useCallback((err, metadata) => {
     console.log('Plaid Link exit:', err, metadata);
+    
+    // Reset the component state when Plaid Link exits
+    setLinkToken(null);
+    setStatus('');
     
     // Track exit event
     trackEvent('plaid_link_exit', {

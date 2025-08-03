@@ -1,39 +1,46 @@
 const { PrismaClient } = require('@prisma/client');
 
-const prisma = new PrismaClient();
-
 async function checkDatabase() {
+  const prisma = new PrismaClient();
+  
   try {
-    console.log('Checking database...');
+    console.log('Checking database state...\n');
     
-    // Check all accounts
-    const allAccounts = await prisma.account.findMany();
-    console.log('All accounts:', allAccounts.length);
-    allAccounts.forEach(acc => {
-      console.log(`- ${acc.name} (userId: ${acc.userId || 'null'})`);
+    // Check users
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        tier: true,
+        createdAt: true
+      }
     });
+    console.log('Users:', users);
     
-    // Check specific user's accounts
-    const userId = 'cmdpkh1mc0000rzopyhr9h0xd';
-    const userAccounts = await prisma.account.findMany({
-      where: { userId: userId }
+    // Check access tokens
+    const accessTokens = await prisma.accessToken.findMany({
+      select: {
+        id: true,
+        itemId: true,
+        userId: true,
+        lastRefreshed: true
+      }
     });
-    console.log(`\nAccounts for user ${userId}:`, userAccounts.length);
-    userAccounts.forEach(acc => {
-      console.log(`- ${acc.name}`);
-    });
+    console.log('Access Tokens:', accessTokens);
     
-    // Check transactions
-    const allTransactions = await prisma.transaction.findMany({
-      include: { account: true }
+    // Check accounts
+    const accounts = await prisma.account.findMany({
+      select: {
+        id: true,
+        plaidAccountId: true,
+        name: true,
+        userId: true
+      }
     });
-    console.log('\nAll transactions:', allTransactions.length);
-    allTransactions.slice(0, 5).forEach(t => {
-      console.log(`- ${t.name} (account: ${t.account.name}, userId: ${t.account.userId || 'null'})`);
-    });
+    console.log('Accounts:', accounts);
     
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Database error:', error);
   } finally {
     await prisma.$disconnect();
   }

@@ -458,8 +458,11 @@ export const setupPlaidRoutes = (app: any) => {
       }
 
       // Real Plaid integration
-      const accessTokens = await getPrismaClient().accessToken.findMany();
+      const accessTokens = await getPrismaClient().accessToken.findMany({
+        where: req.user?.id ? { userId: req.user.id } : {}
+      });
       const allAccounts: any[] = [];
+      const seenAccountIds = new Set<string>();
 
       for (const tokenRecord of accessTokens) {
         try {
@@ -473,14 +476,23 @@ export const setupPlaidRoutes = (app: any) => {
             access_token: tokenRecord.token,
           });
 
-          // Merge account and balance data
-          const accountsWithBalances = accountsResponse.data.accounts.map((account: any) => {
-            const balance = balancesResponse.data.accounts.find((b: any) => b.account_id === account.account_id);
-            return processAccountData({
-              ...account,
-              balances: balance?.balances || account.balances
+          // Merge account and balance data, deduplicating by account_id
+          const accountsWithBalances = accountsResponse.data.accounts
+            .filter((account: any) => {
+              // Only include accounts we haven't seen before
+              if (seenAccountIds.has(account.account_id)) {
+                return false;
+              }
+              seenAccountIds.add(account.account_id);
+              return true;
+            })
+            .map((account: any) => {
+              const balance = balancesResponse.data.accounts.find((b: any) => b.account_id === account.account_id);
+              return processAccountData({
+                ...account,
+                balances: balance?.balances || account.balances
+              });
             });
-          });
 
           allAccounts.push(...accountsWithBalances);
         } catch (error) {
@@ -488,7 +500,17 @@ export const setupPlaidRoutes = (app: any) => {
         }
       }
 
-      res.json({ accounts: allAccounts });
+      // Deduplicate accounts by name and institution to avoid counting the same account multiple times
+      const uniqueAccounts = allAccounts.reduce((acc: any[], account: any) => {
+        const key = `${account.name}-${account.type}-${account.subtype}`;
+        const existing = acc.find(a => `${a.name}-${a.type}-${a.subtype}` === key);
+        if (!existing) {
+          acc.push(account);
+        }
+        return acc;
+      }, []);
+
+      res.json({ accounts: uniqueAccounts });
     } catch (error) {
       const errorResponse = handlePlaidError(error, 'get all accounts');
       res.status(500).json(errorResponse);
@@ -702,8 +724,11 @@ export const setupPlaidRoutes = (app: any) => {
       }
 
       // Real Plaid integration
-      const accessTokens = await getPrismaClient().accessToken.findMany();
+      const accessTokens = await getPrismaClient().accessToken.findMany({
+        where: req.user?.id ? { userId: req.user.id } : {}
+      });
       const allTransactions: any[] = [];
+      const seenTransactionIds = new Set<string>();
       const { start_date, end_date, count = 100 } = req.query;
 
       // Default to last 30 days if no dates provided
@@ -725,10 +750,19 @@ export const setupPlaidRoutes = (app: any) => {
             }
           });
 
-          // Process and add transactions
-          const processedTransactions = transactionsResponse.data.transactions.map((transaction: any) => {
-            return processTransactionData(transaction);
-          });
+          // Process and add transactions, deduplicating by transaction_id
+          const processedTransactions = transactionsResponse.data.transactions
+            .filter((transaction: any) => {
+              // Only include transactions we haven't seen before
+              if (seenTransactionIds.has(transaction.transaction_id)) {
+                return false;
+              }
+              seenTransactionIds.add(transaction.transaction_id);
+              return true;
+            })
+            .map((transaction: any) => {
+              return processTransactionData(transaction);
+            });
 
           allTransactions.push(...processedTransactions);
         } catch (error) {
@@ -757,7 +791,9 @@ export const setupPlaidRoutes = (app: any) => {
   // Get investment data (if available)
   app.get('/plaid/investments', async (req: any, res: any) => {
     try {
-      const accessTokens = await getPrismaClient().accessToken.findMany();
+      const accessTokens = await getPrismaClient().accessToken.findMany({
+        where: req.user?.id ? { userId: req.user.id } : {}
+      });
       const allInvestments: any[] = [];
 
       for (const tokenRecord of accessTokens) {

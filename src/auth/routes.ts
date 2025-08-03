@@ -43,6 +43,12 @@ router.get('/verify', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'User not found or account deactivated' });
     }
 
+    // Update lastLoginAt when token is verified (this tracks active usage)
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() }
+    });
+
     res.json({
       valid: true,
       user: {

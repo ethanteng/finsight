@@ -106,11 +106,13 @@ export async function askOpenAIWithEnhancedContext(
             
             const plaidClient = new PlaidApi(configuration);
             
-            // Get all access tokens
-            const accessTokens = await prisma.accessToken.findMany();
+            // Get access tokens for the current user only
+            const accessTokens = await prisma.accessToken.findMany({
+              where: { userId }
+            });
             
             if (accessTokens.length > 0) {
-              console.log('OpenAI Enhanced: Found', accessTokens.length, 'access tokens');
+              console.log('OpenAI Enhanced: Found', accessTokens.length, 'access tokens for user', userId);
               
               // Fetch accounts from all tokens
               for (const tokenRecord of accessTokens) {
@@ -558,11 +560,13 @@ export async function askOpenAI(
             
             const plaidClient = new PlaidApi(configuration);
             
-            // Get all access tokens
-            const accessTokens = await prisma.accessToken.findMany();
+            // Get access tokens for the current user only
+            const accessTokens = await prisma.accessToken.findMany({
+              where: { userId }
+            });
             
             if (accessTokens.length > 0) {
-              console.log('OpenAI: Found', accessTokens.length, 'access tokens');
+              console.log('OpenAI: Found', accessTokens.length, 'access tokens for user', userId);
               
               // Fetch accounts from all tokens
               for (const tokenRecord of accessTokens) {
