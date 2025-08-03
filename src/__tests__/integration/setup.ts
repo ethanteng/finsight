@@ -139,4 +139,7 @@ export const createTestConversation = async (sessionId: string, question: string
       sessionId: session.id
     }
   });
-}; 
+};
+
+// Export prisma instance for tests
+export { prisma }; 

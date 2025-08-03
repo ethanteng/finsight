@@ -120,4 +120,7 @@ beforeEach(async () => {
 afterEach(async () => {
   // Reset all mocks
   jest.clearAllMocks();
-}); 
+});
+
+// Export prisma instance for tests
+export { prisma }; 

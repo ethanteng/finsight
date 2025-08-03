@@ -1,11 +1,11 @@
 import { UserTier } from '../../../data/types';
 
 export const createTestUser = (overrides = {}) => ({
-  id: 'test-user-id',
   email: 'test@example.com',
+  passwordHash: 'hashed-password',
   tier: UserTier.STARTER,
-  createdAt: new Date(),
-  updatedAt: new Date(),
+  isActive: true,
+  emailVerified: false,
   ...overrides
 });
 
@@ -19,4 +19,11 @@ export const createTestStandardUser = (overrides = {}) =>
   createTestUserWithTier(UserTier.STANDARD, overrides);
 
 export const createTestPremiumUser = (overrides = {}) => 
-  createTestUserWithTier(UserTier.PREMIUM, overrides); 
+  createTestUserWithTier(UserTier.PREMIUM, overrides);
+
+export const createTestAccessToken = (overrides = {}) => ({
+  userId: 'test-user-id',
+  token: 'test-access-token',
+  itemId: 'test-item-id',
+  ...overrides
+}); 
