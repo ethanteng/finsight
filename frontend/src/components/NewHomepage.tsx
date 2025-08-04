@@ -85,9 +85,9 @@ const NewHomepage = () => {
               </Button>
               <div className="flex flex-col items-center">
                 <a href="/demo">
-                  <Button variant="outline" size="xl">See It In Action</Button>
+                  <Button variant="outline" size="xl">Try the Demo</Button>
                 </a>
-                <p className="mt-2 text-sm text-muted-foreground">No login needed</p>
+                <p className="mt-2 text-sm text-muted-foreground">No login • Uses sample data</p>
               </div>
             </div>
             
