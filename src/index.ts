@@ -1512,6 +1512,39 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
+// Profile endpoints
+app.get('/profile', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { ProfileManager } = await import('./profile/manager');
+    const profileManager = new ProfileManager();
+    const profileText = await profileManager.getOrCreateProfile(req.user!.id);
+    
+    res.json({ profile: { profileText } });
+  } catch (error) {
+    console.error('Failed to fetch profile:', error);
+    res.status(500).json({ error: 'Failed to fetch profile' });
+  }
+});
+
+app.put('/profile', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { profileText } = req.body;
+    
+    if (typeof profileText !== 'string') {
+      return res.status(400).json({ error: 'profileText must be a string' });
+    }
+    
+    const { ProfileManager } = await import('./profile/manager');
+    const profileManager = new ProfileManager();
+    await profileManager.updateProfile(req.user!.id, profileText);
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to update profile:', error);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
 // Test endpoint for RAG search functionality
 app.get('/test/search-context', async (req: Request, res: Response) => {
   try {

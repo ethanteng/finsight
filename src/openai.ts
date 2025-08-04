@@ -417,6 +417,25 @@ export async function askOpenAIWithEnhancedContext(
     answer = enhanceResponseWithUpgrades(answer, tierContext);
 
     console.log('OpenAI Enhanced: Response generated successfully');
+    
+    // Update user profile from conversation (for authenticated users only)
+    if (userId && !isDemo) {
+      try {
+        const { ProfileManager } = await import('./profile/manager');
+        const profileManager = new ProfileManager();
+        await profileManager.updateProfileFromConversation(userId, {
+          id: 'temp',
+          question,
+          answer,
+          createdAt: new Date()
+        });
+        console.log('OpenAI Enhanced: User profile updated from conversation');
+      } catch (error) {
+        console.error('OpenAI Enhanced: Failed to update user profile:', error);
+        // Don't fail the main request if profile update fails
+      }
+    }
+    
     return answer;
   } catch (error) {
     console.error('OpenAI Enhanced: Error calling OpenAI API:', error);
@@ -797,6 +816,25 @@ export async function askOpenAI(
     answer = enhanceResponseWithUpgrades(answer, tierContext);
 
     console.log('OpenAI: Response generated successfully');
+    
+    // Update user profile from conversation (for authenticated users only)
+    if (userId && !isDemo) {
+      try {
+        const { ProfileManager } = await import('./profile/manager');
+        const profileManager = new ProfileManager();
+        await profileManager.updateProfileFromConversation(userId, {
+          id: 'temp',
+          question,
+          answer,
+          createdAt: new Date()
+        });
+        console.log('OpenAI: User profile updated from conversation');
+      } catch (error) {
+        console.error('OpenAI: Failed to update user profile:', error);
+        // Don't fail the main request if profile update fails
+      }
+    }
+    
     return answer;
   } catch (error) {
     console.error('OpenAI: Error calling OpenAI API:', error);

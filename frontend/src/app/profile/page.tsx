@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import PlaidLinkButton from '../../components/PlaidLinkButton';
 import TransactionHistory from '../../components/TransactionHistory';
+import UserProfile from '../../components/UserProfile';
 
 interface Account {
   id: string;
@@ -257,6 +258,9 @@ export default function ProfilePage() {
       </div>
 
       <div className="max-w-4xl mx-auto p-6">
+        {/* User Profile Section */}
+        <UserProfile userId={userEmail ? 'user' : undefined} isDemo={isDemo} />
+        
         {/* Account Management Section */}
         <div className="bg-gray-800 rounded-lg p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">Your Connected Accounts</h2>
