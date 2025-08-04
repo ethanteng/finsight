@@ -250,7 +250,11 @@ export class SearchProvider {
     const financialKeywords = [
       'mortgage rates', 'CD rates', 'savings rates', 'investment advice',
       'retirement planning', 'tax strategies', 'budgeting tips',
-      'credit card rates', 'loan rates', 'financial planning'
+      'credit card rates', 'loan rates', 'financial planning',
+      'auto loan rate', 'personal loan rate', 'student loan rate',
+      'home equity rate', 'heloc rate', 'money market rate',
+      'investment account rate', 'ira rate', '401k rate', 'annuity rate',
+      'tariffs', 'inflation', 'inflation rate', 'unemployment rate'
     ];
 
     const hasFinancialKeyword = financialKeywords.some(keyword => 

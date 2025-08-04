@@ -1329,6 +1329,140 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
+    // Admin endpoints for production data analysis
+    app.get('/admin/production-sessions', async (req, res) => {
+      try {
+        const { getPrismaClient } = await import('./prisma-client');
+        const prisma = getPrismaClient();
+        
+        console.log('Admin: Fetching production sessions...');
+        
+        // Get all production users with conversation counts and stats
+        const users = await prisma.user.findMany({
+          include: {
+            conversations: {
+              orderBy: { createdAt: 'asc' }
+            },
+            _count: {
+              select: { conversations: true }
+            }
+          },
+          orderBy: { createdAt: 'desc' }
+        });
+
+        console.log('Admin: Found production users:', users.length);
+
+        const userStats = users.map(user => {
+          const conversations = user.conversations;
+          const firstConversation = conversations[0];
+          const lastConversation = conversations[conversations.length - 1];
+          
+          return {
+            userId: user.id,
+            email: user.email,
+            tier: user.tier,
+            conversationCount: user._count.conversations,
+            firstQuestion: firstConversation?.question || 'No questions yet',
+            lastActivity: lastConversation?.createdAt || user.createdAt,
+            createdAt: user.createdAt,
+            lastLoginAt: user.lastLoginAt
+          };
+        });
+
+        console.log('Admin: Returning user stats:', userStats.length);
+        res.json({ users: userStats });
+      } catch (error) {
+        console.error('Error fetching production sessions:', error);
+        res.status(500).json({ error: 'Failed to fetch production sessions' });
+      }
+    });
+
+    app.get('/admin/production-conversations', async (req, res) => {
+      try {
+        const { getPrismaClient } = await import('./prisma-client');
+        const prisma = getPrismaClient();
+        
+        console.log('Admin: Fetching production conversations...');
+        
+        // Get all production conversations with user info
+        const conversations = await prisma.conversation.findMany({
+          include: {
+            user: true
+          },
+          orderBy: { createdAt: 'desc' }
+        });
+
+        console.log('Admin: Found conversations:', conversations.length);
+        res.json({ conversations });
+      } catch (error) {
+        console.error('Error fetching production conversations:', error);
+        res.status(500).json({ error: 'Failed to fetch production conversations' });
+      }
+    });
+
+    // Admin endpoint to get all production users
+    app.get('/admin/production-users', async (req, res) => {
+      try {
+        const { getPrismaClient } = await import('./prisma-client');
+        const prisma = getPrismaClient();
+        
+        console.log('Admin: Fetching production users...');
+        
+        const users = await prisma.user.findMany({
+          select: {
+            id: true,
+            email: true,
+            tier: true,
+            createdAt: true,
+            lastLoginAt: true,
+            _count: {
+              select: { conversations: true }
+            }
+          },
+          orderBy: { createdAt: 'desc' }
+        });
+
+        console.log('Admin: Found users:', users.length);
+        res.json({ users });
+      } catch (error) {
+        console.error('Error fetching production users:', error);
+        res.status(500).json({ error: 'Failed to fetch production users' });
+      }
+    });
+
+    // Admin endpoint to update user tier
+    app.put('/admin/update-user-tier', async (req, res) => {
+      try {
+        const { getPrismaClient } = await import('./prisma-client');
+        const prisma = getPrismaClient();
+        
+        const { userId, newTier } = req.body;
+        
+        if (!userId || !newTier) {
+          return res.status(400).json({ error: 'Missing userId or newTier' });
+        }
+
+        console.log('Admin: Updating user tier:', { userId, newTier });
+        
+        const updatedUser = await prisma.user.update({
+          where: { id: userId },
+          data: { tier: newTier },
+          select: {
+            id: true,
+            email: true,
+            tier: true,
+            updatedAt: true
+          }
+        });
+
+        console.log('Admin: Updated user tier:', updatedUser);
+        res.json({ success: true, user: updatedUser });
+      } catch (error) {
+        console.error('Error updating user tier:', error);
+        res.status(500).json({ error: 'Failed to update user tier' });
+      }
+    });
+
     // Test database connection
     app.get('/test-db', async (req, res) => {
       try {

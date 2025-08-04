@@ -1,194 +1,186 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
-// Mock the AdminPage component since it's a client component
+// Mock the API calls
+const mockFetch = jest.fn();
+global.fetch = mockFetch;
+
+// Mock the MarkdownRenderer component
+jest.mock('../components/MarkdownRenderer', () => {
+  return function MockMarkdownRenderer({ children }: { children: string }) {
+    return <div data-testid="markdown-renderer">{children}</div>;
+  };
+});
+
 const MockAdminPage = () => {
-  const [loading, setLoading] = React.useState(true);
-  const [error, _setError] = React.useState('');
-  const [sessions, setSessions] = React.useState<Array<{
-    sessionId: string;
-    conversationCount: number;
-    firstQuestion: string;
-    lastActivity: string;
-    userAgent: string;
-  }>>([]);
-  const [conversations, setConversations] = React.useState<Array<{
-    id: string;
-    question: string;
-    answer: string;
-    sessionId: string;
-    createdAt: string;
-    session: {
-      sessionId: string;
-      userAgent: string;
-      createdAt: string;
-    };
-  }>>([]);
-  const [viewMode, setViewMode] = React.useState('sessions');
+  const [activeTab, setActiveTab] = React.useState<'demo' | 'production' | 'users'>('demo');
+  const [demoData, setDemoData] = React.useState<any>(null);
+  const [productionData, setProductionData] = React.useState<any>(null);
+  const [usersData, setUsersData] = React.useState<any>(null);
 
   React.useEffect(() => {
-    // Simulate loading
-    setTimeout(() => {
-      setLoading(false);
-      setSessions([
-        {
-          sessionId: 'session1',
-          conversationCount: 3,
-          firstQuestion: 'What is my net worth?',
-          lastActivity: '2024-01-01T10:00:00Z',
-          userAgent: 'Mozilla/5.0...'
-        }
-      ]);
-      setConversations([
-        {
-          id: 'conv1',
-          question: 'What is my net worth?',
-          answer: 'Your net worth is $50,000',
-          sessionId: 'session1',
-          createdAt: '2024-01-01T10:00:00Z',
-          session: {
-            sessionId: 'session1',
-            userAgent: 'Mozilla/5.0...',
-            createdAt: '2024-01-01T10:00:00Z'
-          }
-        }
-      ]);
-    }, 100);
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-900 text-white p-6">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold mb-6">Admin Dashboard</h1>
-          <div className="text-gray-400">Loading admin data...</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-900 text-white p-6">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold mb-6">Admin Dashboard</h1>
-          <div className="text-red-400">{error}</div>
-        </div>
-      </div>
-    );
-  }
+    // Simulate loading data for each tab
+    if (activeTab === 'demo') {
+      setDemoData({
+        sessions: [
+          { sessionId: 'demo-1', conversationCount: 2, firstQuestion: 'Test question' }
+        ],
+        conversations: [
+          { id: '1', question: 'Test Q', answer: 'Test A', sessionId: 'demo-1' }
+        ]
+      });
+    } else if (activeTab === 'production') {
+      setProductionData({
+        users: [
+          { userId: 'user-1', email: 'test@example.com', tier: 'starter', conversationCount: 1 }
+        ],
+        conversations: [
+          { id: '1', question: 'Test Q', answer: 'Test A', user: { id: 'user-1', email: 'test@example.com', tier: 'starter' } }
+        ]
+      });
+    } else if (activeTab === 'users') {
+      setUsersData({
+        users: [
+          { id: 'user-1', email: 'test@example.com', tier: 'starter', _count: { conversations: 1 } }
+        ]
+      });
+    }
+  }, [activeTab]);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">Demo Conversations Admin</h1>
-          <div className="flex space-x-2">
-            <button
-              className={`px-4 py-2 rounded ${viewMode === 'sessions' ? 'bg-blue-600' : 'bg-gray-600'}`}
-              onClick={() => setViewMode('sessions')}
-            >
-              Sessions
-            </button>
-            <button
-              className={`px-4 py-2 rounded ${viewMode === 'conversations' ? 'bg-blue-600' : 'bg-gray-600'}`}
-              onClick={() => setViewMode('conversations')}
-            >
-              Conversations
-            </button>
-          </div>
-        </div>
-        
-        {viewMode === 'sessions' && (
-          <div>
-            {sessions.map((session) => (
-              <div key={session.sessionId} className="bg-gray-800 rounded-lg p-4 mb-4">
-                <div className="text-sm font-medium text-blue-300 mb-1">Session: {session.sessionId}</div>
-                <div className="text-white">{session.firstQuestion}</div>
-              </div>
-            ))}
-          </div>
-        )}
-        
-        {viewMode === 'conversations' && (
-          <div>
-            {conversations.map((conv) => (
-              <div key={conv.id} className="bg-gray-700 rounded-lg p-4 mb-4">
-                <div className="text-sm font-medium text-blue-300 mb-1">Question:</div>
-                <div className="text-white">{conv.question}</div>
-                <div className="text-sm font-medium text-green-300 mb-1">Answer:</div>
-                <div className="text-gray-300">{conv.answer}</div>
-              </div>
-            ))}
-          </div>
-        )}
+    <div>
+      <h1>Admin Dashboard</h1>
+      
+      {/* Tab Navigation */}
+      <div className="flex space-x-1 mb-8 bg-gray-800 rounded-lg p-1">
+        <button 
+          onClick={() => setActiveTab('demo')}
+          className={activeTab === 'demo' ? 'bg-blue-600 text-white' : 'text-gray-300'}
+          data-testid="demo-tab"
+        >
+          Demo
+        </button>
+        <button 
+          onClick={() => setActiveTab('production')}
+          className={activeTab === 'production' ? 'bg-blue-600 text-white' : 'text-gray-300'}
+          data-testid="production-tab"
+        >
+          Production
+        </button>
+        <button 
+          onClick={() => setActiveTab('users')}
+          className={activeTab === 'users' ? 'bg-blue-600 text-white' : 'text-gray-300'}
+          data-testid="users-tab"
+        >
+          User Management
+        </button>
       </div>
+
+      {/* Tab Content */}
+      {activeTab === 'demo' && demoData && (
+        <div data-testid="demo-content">
+          <h2>Demo Tab</h2>
+          <div>Active Sessions: {demoData.sessions.length}</div>
+          <div>Total Conversations: {demoData.conversations.length}</div>
+        </div>
+      )}
+
+      {activeTab === 'production' && productionData && (
+        <div data-testid="production-content">
+          <h2>Production Tab</h2>
+          <div>Active Users: {productionData.users.length}</div>
+          <div>Total Conversations: {productionData.conversations.length}</div>
+        </div>
+      )}
+
+      {activeTab === 'users' && usersData && (
+        <div data-testid="users-content">
+          <h2>User Management Tab</h2>
+          <div>Total Users: {usersData.users.length}</div>
+          {usersData.users.map((user: any) => (
+            <div key={user.id} data-testid="user-item">
+              {user.email} - {user.tier}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
 
-// Mock fetch
-const mockFetch = jest.fn();
-global.fetch = mockFetch;
-
-describe('AdminPage', () => {
+describe('Admin Page', () => {
   beforeEach(() => {
     mockFetch.mockClear();
   });
 
-  it('should render loading state initially', async () => {
+  it('should render admin dashboard with three tabs', () => {
     render(<MockAdminPage />);
     
     expect(screen.getByText('Admin Dashboard')).toBeInTheDocument();
-    expect(screen.getByText('Loading admin data...')).toBeInTheDocument();
+    expect(screen.getByTestId('demo-tab')).toBeInTheDocument();
+    expect(screen.getByTestId('production-tab')).toBeInTheDocument();
+    expect(screen.getByTestId('users-tab')).toBeInTheDocument();
   });
 
-  it('should render sessions view by default', async () => {
+  it('should show demo tab by default', () => {
     render(<MockAdminPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Demo Conversations Admin')).toBeInTheDocument();
-      expect(screen.getByText('Sessions')).toBeInTheDocument();
-      expect(screen.getByText('Conversations')).toBeInTheDocument();
-    });
-
-    // Should show session data
-    expect(screen.getByText(/session1/)).toBeInTheDocument();
-    expect(screen.getByText('What is my net worth?')).toBeInTheDocument();
-  });
-
-  it('should switch to conversations view when clicked', async () => {
-    render(<MockAdminPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Conversations')).toBeInTheDocument();
-    });
-
-    // Click on Conversations tab
-    const conversationsTab = screen.getByText('Conversations');
-    conversationsTab.click();
-
-    await waitFor(() => {
-      expect(screen.getByText('What is my net worth?')).toBeInTheDocument();
-      expect(screen.getByText('Your net worth is $50,000')).toBeInTheDocument();
-    });
-  });
-
-  it('should display session and conversation data correctly', async () => {
-    render(<MockAdminPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/Session: session1/)).toBeInTheDocument();
-    });
     
-    // Switch to conversations view to see Question and Answer labels
-    const conversationsTab = screen.getByText('Conversations');
-    conversationsTab.click();
+    expect(screen.getByTestId('demo-content')).toBeInTheDocument();
+    expect(screen.getByText('Demo Tab')).toBeInTheDocument();
+  });
+
+  it('should switch to production tab when clicked', async () => {
+    render(<MockAdminPage />);
+    
+    fireEvent.click(screen.getByTestId('production-tab'));
     
     await waitFor(() => {
-      expect(screen.getByText('Question:')).toBeInTheDocument();
-      expect(screen.getByText('Answer:')).toBeInTheDocument();
+      expect(screen.getByTestId('production-content')).toBeInTheDocument();
+      expect(screen.getByText('Production Tab')).toBeInTheDocument();
+    });
+  });
+
+  it('should switch to users tab when clicked', async () => {
+    render(<MockAdminPage />);
+    
+    fireEvent.click(screen.getByTestId('users-tab'));
+    
+    await waitFor(() => {
+      expect(screen.getByTestId('users-content')).toBeInTheDocument();
+      expect(screen.getByText('User Management Tab')).toBeInTheDocument();
+    });
+  });
+
+  it('should display user data in users tab', async () => {
+    render(<MockAdminPage />);
+    
+    fireEvent.click(screen.getByTestId('users-tab'));
+    
+    await waitFor(() => {
+      expect(screen.getByTestId('user-item')).toBeInTheDocument();
+      expect(screen.getByText('test@example.com - starter')).toBeInTheDocument();
+    });
+  });
+
+  it('should show correct stats for each tab', async () => {
+    render(<MockAdminPage />);
+    
+    // Demo tab stats
+    expect(screen.getByText('Active Sessions: 1')).toBeInTheDocument();
+    expect(screen.getByText('Total Conversations: 1')).toBeInTheDocument();
+    
+    // Production tab stats
+    fireEvent.click(screen.getByTestId('production-tab'));
+    await waitFor(() => {
+      expect(screen.getByText('Active Users: 1')).toBeInTheDocument();
+      expect(screen.getByText('Total Conversations: 1')).toBeInTheDocument();
+    });
+    
+    // Users tab stats
+    fireEvent.click(screen.getByTestId('users-tab'));
+    await waitFor(() => {
+      expect(screen.getByText('Total Users: 1')).toBeInTheDocument();
     });
   });
 }); 

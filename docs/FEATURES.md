@@ -2,7 +2,7 @@
 
 ## 🎯 **Overview**
 
-This document covers the core features of the Ask Linc platform, including the tier-based access control system and enhanced market context capabilities.
+This document covers the core features of the Ask Linc platform, including the tier-based access control system, enhanced market context capabilities, and comprehensive admin dashboard functionality.
 
 ## 🏗️ **Tier-Based Access Control System**
 
@@ -540,6 +540,276 @@ TEST_USER_TIER=starter|standard|premium
 
 The Enhanced Market Context System successfully transforms the reactive data fetching approach into a proactive, cached system that delivers faster, more informed AI responses while reducing external API dependencies and improving overall system reliability.
 
+## 🛠️ **Admin Dashboard & Management System**
+
+### **Overview**
+
+The Admin Dashboard provides comprehensive system management capabilities with three main tabs for monitoring demo activity, production users, and user tier management.
+
+### **Architecture**
+
+#### **Three-Tab Interface**
+
+1. **Demo Tab** - Monitor demo user activity and engagement
+2. **Production Tab** - Monitor production users and conversations
+3. **User Management Tab** - Manage user tiers and access control
+
+#### **Backend Admin Endpoints**
+
+**Demo Management:**
+- `GET /admin/demo-sessions` - Get demo session statistics
+- `GET /admin/demo-conversations` - Get all demo conversations
+
+**Production Management:**
+- `GET /admin/production-sessions` - Get production user statistics
+- `GET /admin/production-conversations` - Get all production conversations
+- `GET /admin/production-users` - Get users for management
+- `PUT /admin/update-user-tier` - Update user tier
+
+### **Implementation Details**
+
+#### **1. Demo Tab Functionality**
+
+**Session Overview:**
+- Track demo sessions with conversation counts
+- Monitor user engagement metrics
+- View session creation and activity timestamps
+- Analyze user agent information
+
+**Conversation Analysis:**
+- View all demo Q&A interactions
+- Analyze question categories (spending, savings, investments, etc.)
+- Track conversation patterns and trends
+- Monitor AI response quality
+
+**Real-time Stats:**
+- Active sessions count
+- Total conversations
+- Average conversations per session
+- Multi-question session percentage
+
+#### **2. Production Tab Functionality**
+
+**User Overview:**
+- Monitor production users with conversation stats
+- Track user tier information (starter/standard/premium)
+- View user creation and last login times
+- Analyze user engagement patterns
+
+**Conversation Analysis:**
+- View all production Q&A interactions
+- Analyze question categories across users
+- Monitor tier-specific usage patterns
+- Track conversation quality and engagement
+
+**Activity Tracking:**
+- Last login times
+- Account creation dates
+- Conversation frequency
+- Tier upgrade patterns
+
+#### **3. User Management Tab Functionality**
+
+**User List:**
+- Complete list of production users by email
+- Current tier status for each user
+- Conversation counts and activity metrics
+- Account creation and last login information
+
+**Tier Management:**
+- Dropdown to change user tiers (Starter/Standard/Premium)
+- Real-time tier updates with loading states
+- Instant feedback on tier changes
+- Bulk tier management capabilities
+
+**User Stats:**
+- Conversation counts per user
+- Account creation dates
+- Last login timestamps
+- Tier change history
+
+### **Frontend Implementation**
+
+#### **Admin Page Structure** (`frontend/src/app/admin/page.tsx`)
+
+```typescript
+interface DemoConversation {
+  id: string;
+  question: string;
+  answer: string;
+  sessionId: string;
+  createdAt: string;
+  session: {
+    sessionId: string;
+    userAgent?: string;
+    createdAt: string;
+  };
+}
+
+interface ProductionUser {
+  userId: string;
+  email: string;
+  tier: string;
+  conversationCount: number;
+  firstQuestion: string;
+  lastActivity: string;
+  createdAt: string;
+  lastLoginAt?: string;
+}
+
+interface UserForManagement {
+  id: string;
+  email: string;
+  tier: string;
+  createdAt: string;
+  lastLoginAt?: string;
+  _count: {
+    conversations: number;
+  };
+}
+```
+
+#### **Tab Navigation System**
+
+```typescript
+const [activeTab, setActiveTab] = useState<'demo' | 'production' | 'users'>('demo');
+
+// Tab navigation with active state indicators
+<div className="flex space-x-1 mb-8 bg-gray-800 rounded-lg p-1">
+  <button onClick={() => setActiveTab('demo')} className={activeTab === 'demo' ? 'bg-blue-600 text-white' : 'text-gray-300'}>
+    Demo
+  </button>
+  <button onClick={() => setActiveTab('production')} className={activeTab === 'production' ? 'bg-blue-600 text-white' : 'text-gray-300'}>
+    Production
+  </button>
+  <button onClick={() => setActiveTab('users')} className={activeTab === 'users' ? 'bg-blue-600 text-white' : 'text-gray-300'}>
+    User Management
+  </button>
+</div>
+```
+
+#### **Tier Management System**
+
+```typescript
+const updateUserTier = async (userId: string, newTier: string) => {
+  setUpdatingTier(userId);
+  try {
+    const response = await fetch(`${API_URL}/admin/update-user-tier`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, newTier }),
+    });
+
+    if (response.ok) {
+      await loadUsersForManagement();
+      await loadProductionData();
+    }
+  } catch (err) {
+    console.error('Error updating user tier:', err);
+  } finally {
+    setUpdatingTier(null);
+  }
+};
+```
+
+### **Data Analysis Features**
+
+#### **Question Categories Analysis**
+
+The system automatically categorizes questions into:
+- **Spending Analysis**: Expense tracking, cost analysis
+- **Savings**: Emergency funds, savings goals
+- **Investments**: Portfolio management, asset allocation
+- **Debt**: Credit cards, loans, debt management
+- **Budgeting**: Income tracking, cash flow
+- **Retirement**: 401k, IRA, retirement planning
+- **Other**: General financial questions
+
+#### **Engagement Metrics**
+
+- **Session Duration**: Time between first and last conversation
+- **Conversation Frequency**: Average conversations per session/user
+- **Question Complexity**: Analysis of question types and patterns
+- **User Retention**: Multi-session user tracking
+- **Tier Utilization**: Feature usage by tier level
+
+### **Security & Access Control**
+
+#### **Admin-Only Access**
+
+- **Protected Routes**: Admin dashboard requires authentication
+- **Data Isolation**: Demo and production data are completely separate
+- **Audit Trail**: All tier changes are logged
+- **Error Handling**: Graceful handling of unauthorized access
+
+#### **Data Privacy**
+
+- **User Data Protection**: Sensitive user information is properly handled
+- **Session Management**: Secure session tracking and management
+- **API Security**: All admin endpoints require proper authentication
+- **Error Sanitization**: Error messages don't expose sensitive data
+
+### **Performance & Scalability**
+
+#### **Efficient Data Loading**
+
+- **Parallel Loading**: All three tabs load data simultaneously
+- **Caching**: Admin data is cached to reduce database load
+- **Pagination**: Large datasets are handled efficiently
+- **Real-time Updates**: Live data refresh capabilities
+
+#### **Scalability Features**
+
+- **Database Optimization**: Efficient queries for large user bases
+- **Memory Management**: Proper cleanup of loaded data
+- **Error Recovery**: Graceful handling of failed API calls
+- **Monitoring**: Comprehensive logging and error tracking
+
+### **Usage Examples**
+
+#### **Monitoring Demo Activity**
+
+```typescript
+// Load demo session statistics
+const sessionsRes = await fetch(`${API_URL}/admin/demo-sessions`);
+const sessionsData = await sessionsRes.json();
+setDemoSessions(sessionsData.sessions);
+
+// Load demo conversations
+const conversationsRes = await fetch(`${API_URL}/admin/demo-conversations`);
+const conversationsData = await conversationsRes.json();
+setDemoConversations(conversationsData.conversations);
+```
+
+#### **Managing User Tiers**
+
+```typescript
+// Update user tier
+const response = await fetch(`${API_URL}/admin/update-user-tier`, {
+  method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ userId, newTier }),
+});
+
+if (response.ok) {
+  // Refresh user data
+  await loadUsersForManagement();
+  await loadProductionData();
+}
+```
+
+### **Success Metrics**
+
+✅ **Complete System Visibility** - Monitor both demo and production environments  
+✅ **Real-time User Management** - Instant tier changes with loading states  
+✅ **Comprehensive Analytics** - Question category analysis and engagement metrics  
+✅ **Secure Admin Access** - Protected routes and data isolation  
+✅ **Scalable Architecture** - Efficient handling of large user bases  
+✅ **User-friendly Interface** - Intuitive tab-based navigation  
+✅ **Data-driven Insights** - Detailed analytics and reporting capabilities  
+
+The Admin Dashboard & Management System provides complete visibility into platform usage while enabling efficient user management and tier control, making it an essential tool for platform administration and growth.
+
 ---
 
-*This features documentation provides comprehensive coverage of the tier-based access control system and enhanced market context capabilities that make Ask Linc a powerful financial analysis platform.* 
+*This features documentation provides comprehensive coverage of the tier-based access control system, enhanced market context capabilities, and admin dashboard functionality that make Ask Linc a powerful financial analysis platform.* 

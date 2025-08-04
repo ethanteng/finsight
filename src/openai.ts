@@ -235,8 +235,21 @@ export async function askOpenAIWithEnhancedContext(
       
       // Detect financial institutions and enhance search queries
       const financialInstitutions = [
+        // Major Banks
         'wells fargo', 'chase', 'bank of america', 'citibank', 'us bank', 'pnc', 'capital one',
-        'ally bank', 'marcus', 'fidelity', 'vanguard', 'schwab', 'td ameritrade', 'robinhood'
+        'goldman sachs', 'morgan stanley', 'jpmorgan',
+        
+        // Regional Banks
+        'bb&t', 'suntrust', 'regions bank', 'keybank', 'fifth third', 'huntington',
+        'comerica', 'citizens bank', 'm&t bank', 'bmo harris',
+        
+        // Credit Unions
+        'navy federal', 'penfed', 'alliant', 'state employees',
+        
+        // Fintech & Digital Banks
+        'ally bank', 'marcus', 'sofi', 'chime', 'current', 'varo', 'upstart',
+        'fidelity', 'vanguard', 'schwab', 'td ameritrade', 'robinhood',
+        'betterment', 'wealthfront', 'acorns', 'stash'
       ];
       
       const rateRelatedTerms = [

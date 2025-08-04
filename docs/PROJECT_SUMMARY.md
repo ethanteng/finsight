@@ -452,6 +452,85 @@ const demoAccounts = [
 - **Tier Management**: Comprehensive access control system
 - **AI Enhancement**: RAG system for superior financial advice
 
+## 🛠️ **Admin Dashboard & Management**
+
+### **Comprehensive Admin Interface**
+
+The platform includes a sophisticated admin dashboard with three main tabs for complete system management and monitoring.
+
+#### **Admin Dashboard Features**
+
+**Location:** `frontend/src/app/admin/page.tsx`
+
+**Three Main Tabs:**
+
+1. **Demo Tab** - Monitor demo user activity
+2. **Production Tab** - Monitor production user activity  
+3. **User Management Tab** - Manage user tiers and access
+
+#### **Demo Tab Functionality**
+
+- **Session Overview**: Track demo sessions with conversation counts
+- **Conversation Analysis**: View all demo Q&A interactions
+- **Question Categories**: Analyze question types (spending, savings, investments, etc.)
+- **User Agent Tracking**: Monitor browser/device information
+- **Session Expansion**: Click to view detailed conversation history
+- **Real-time Stats**: Active sessions, total conversations, engagement metrics
+
+#### **Production Tab Functionality**
+
+- **User Overview**: Monitor production users with conversation stats
+- **Conversation Analysis**: View all production Q&A interactions
+- **Question Categories**: Analyze question types across production users
+- **Tier Information**: Display user tier (starter/standard/premium)
+- **User Expansion**: Click to view detailed conversation history
+- **Activity Tracking**: Last login times, creation dates, engagement metrics
+
+#### **User Management Tab Functionality**
+
+- **User List**: Complete list of production users by email
+- **Tier Management**: Dropdown to change user tiers (Starter/Standard/Premium)
+- **Real-time Updates**: Instant tier changes with loading states
+- **User Stats**: Conversation counts, creation dates, last login times
+- **Bulk Operations**: Efficient management of multiple users
+
+#### **Backend Admin Endpoints**
+
+**Demo Management:**
+- `GET /admin/demo-sessions` - Get demo session statistics
+- `GET /admin/demo-conversations` - Get all demo conversations
+
+**Production Management:**
+- `GET /admin/production-sessions` - Get production user statistics
+- `GET /admin/production-conversations` - Get all production conversations
+- `GET /admin/production-users` - Get users for management
+- `PUT /admin/update-user-tier` - Update user tier
+
+#### **Admin Dashboard Benefits**
+
+- **Complete Visibility**: Monitor both demo and production environments
+- **User Management**: Direct tier control without database access
+- **Analytics**: Question category analysis and engagement metrics
+- **Real-time Updates**: Live data refresh and tier changes
+- **Security**: Admin-only access to sensitive user data
+- **Scalability**: Efficient handling of large user bases
+
+#### **Admin Dashboard Testing**
+
+**Backend Tests** (`src/__tests__/unit/admin-endpoints.test.ts`):
+- **17 tests passing** covering all admin endpoints
+- **Demo endpoints**: Session and conversation retrieval
+- **Production endpoints**: User statistics and conversation management
+- **Tier management**: User tier updates with validation
+- **Error handling**: Invalid request validation and error responses
+
+**Frontend Tests** (`frontend/src/__tests__/admin-page.test.tsx`):
+- **6 tests passing** covering admin interface functionality
+- **Tab navigation**: Three-tab system (Demo, Production, User Management)
+- **Data display**: Stats and user information rendering
+- **User interaction**: Tab switching and tier management interface
+- **Component testing**: Mock data handling and UI responsiveness
+
 ## 🔧 **System Customization & Maintenance**
 
 ### **Enhanced Context Configuration**
@@ -549,4 +628,4 @@ npm run test:integration -- src/__tests__/integration/enhanced-market-context-ap
 
 ---
 
-**This summary provides a comprehensive overview of the Ask Linc platform, including the sophisticated RAG system implementation that sets it apart from traditional financial apps. The platform now offers real-time financial intelligence with privacy protection, comprehensive demo capabilities, and holistic coverage of all financial institutions and products.** 
+**This summary provides a comprehensive overview of the Ask Linc platform, including the sophisticated RAG system implementation that sets it apart from traditional financial apps. The platform now offers real-time financial intelligence with privacy protection, comprehensive demo capabilities, holistic coverage of all financial institutions and products, and a powerful admin dashboard for complete system management.** 
