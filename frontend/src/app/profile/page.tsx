@@ -25,6 +25,7 @@ export default function ProfilePage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [userEmail, setUserEmail] = useState<string>('');
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -105,6 +106,33 @@ export default function ProfilePage() {
       loadConnectedAccountsWithDemoMode(false);
     }
   }, [loadConnectedAccountsWithDemoMode]);
+
+  // Fetch user email when not in demo mode
+  useEffect(() => {
+    if (!isDemo) {
+      const fetchUserEmail = async () => {
+        try {
+          const token = localStorage.getItem('auth_token');
+          if (token) {
+            const res = await fetch(`${API_URL}/auth/verify`, {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+            
+            if (res.ok) {
+              const data = await res.json();
+              setUserEmail(data.user.email);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch user email:', error);
+        }
+      };
+      
+      fetchUserEmail();
+    }
+  }, [isDemo, API_URL]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -202,6 +230,11 @@ export default function ProfilePage() {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-white">Profile</h1>
           <div className="flex items-center space-x-3">
+            {userEmail && !isDemo && (
+              <span className="text-gray-400 text-sm">
+                {userEmail}
+              </span>
+            )}
             <a 
               href={isDemo ? "/demo" : "/app"}
               className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm transition-colors"

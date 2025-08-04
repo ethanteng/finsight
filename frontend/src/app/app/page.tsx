@@ -17,6 +17,7 @@ export default function AppPage() {
   const [showSidebar, _setShowSidebar] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userEmail, setUserEmail] = useState<string>('');
   const router = useRouter();
 
   // Check authentication on mount
@@ -40,7 +41,9 @@ export default function AppPage() {
         });
 
         if (res.ok) {
+          const data = await res.json();
           setIsAuthenticated(true);
+          setUserEmail(data.user.email);
           setIsLoading(false);
         } else {
           // Token invalid, redirect to login
@@ -199,6 +202,11 @@ export default function AppPage() {
             <TierBanner />
           </div>
           <div className="flex items-center space-x-3">
+            {userEmail && (
+              <span className="text-gray-400 text-sm">
+                {userEmail}
+              </span>
+            )}
             <a 
               href="/profile" 
               className="text-gray-300 hover:text-white text-sm transition-colors"
