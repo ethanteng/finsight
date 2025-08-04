@@ -187,7 +187,7 @@ export default function AdminPage() {
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
   };
 
-  const getQuestionCategories = (conversations: any[]) => {
+  const getQuestionCategories = (conversations: (DemoConversation | ProductionConversation)[]) => {
     const categories: { [key: string]: number } = {};
     
     conversations.forEach(conv => {

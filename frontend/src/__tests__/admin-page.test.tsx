@@ -13,11 +13,55 @@ jest.mock('../components/MarkdownRenderer', () => {
   };
 });
 
+interface DemoData {
+  sessions: Array<{
+    sessionId: string;
+    conversationCount: number;
+    firstQuestion: string;
+  }>;
+  conversations: Array<{
+    id: string;
+    question: string;
+    answer: string;
+    sessionId: string;
+  }>;
+}
+
+interface ProductionData {
+  users: Array<{
+    userId: string;
+    email: string;
+    tier: string;
+    conversationCount: number;
+  }>;
+  conversations: Array<{
+    id: string;
+    question: string;
+    answer: string;
+    user: {
+      id: string;
+      email: string;
+      tier: string;
+    };
+  }>;
+}
+
+interface UsersData {
+  users: Array<{
+    id: string;
+    email: string;
+    tier: string;
+    _count: {
+      conversations: number;
+    };
+  }>;
+}
+
 const MockAdminPage = () => {
   const [activeTab, setActiveTab] = React.useState<'demo' | 'production' | 'users'>('demo');
-  const [demoData, setDemoData] = React.useState<any>(null);
-  const [productionData, setProductionData] = React.useState<any>(null);
-  const [usersData, setUsersData] = React.useState<any>(null);
+  const [demoData, setDemoData] = React.useState<DemoData | null>(null);
+  const [productionData, setProductionData] = React.useState<ProductionData | null>(null);
+  const [usersData, setUsersData] = React.useState<UsersData | null>(null);
 
   React.useEffect(() => {
     // Simulate loading data for each tab
@@ -98,7 +142,7 @@ const MockAdminPage = () => {
         <div data-testid="users-content">
           <h2>User Management Tab</h2>
           <div>Total Users: {usersData.users.length}</div>
-          {usersData.users.map((user: any) => (
+          {usersData.users.map((user) => (
             <div key={user.id} data-testid="user-item">
               {user.email} - {user.tier}
             </div>
