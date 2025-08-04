@@ -164,6 +164,59 @@ const demoAccounts = [
     - Source attribution for data transparency
     - Cache management and performance optimization
 
+#### **Tier-Based Data Source Configuration**
+
+The platform uses a sophisticated tier system defined in `src/data/sources.ts` that controls access to different data sources:
+
+**Starter Tier** (Basic financial analysis):
+- ✅ Account balances and transactions (Plaid)
+- ✅ Financial institutions data
+- ❌ No economic indicators
+- ❌ No live market data
+- ❌ No RAG system access
+
+**Standard Tier** (Enhanced with economic context):
+- ✅ All Starter features
+- ✅ Economic indicators (FRED API):
+  - Consumer Price Index (CPI)
+  - Federal Reserve Rate
+  - Mortgage Rates
+  - Credit Card APR
+- ✅ RAG system access (real-time financial search)
+- ❌ No live market data
+
+**Premium Tier** (Complete market insights):
+- ✅ All Standard features
+- ✅ Live market data (Alpha Vantage):
+  - CD Rates
+  - Treasury Yields
+  - Live Mortgage Rates
+  - Stock Market Data
+- ✅ Full RAG system access
+
+#### **Configuration Management**
+
+Data source access is configured in `src/data/sources.ts`:
+
+```typescript
+export const dataSourceRegistry: Record<string, DataSourceConfig> = {
+  'account-balances': {
+    tiers: [UserTier.STARTER, UserTier.STANDARD, UserTier.PREMIUM],
+    // Available to all tiers
+  },
+  'fred-cpi': {
+    tiers: [UserTier.STANDARD, UserTier.PREMIUM],
+    // Available to Standard+ users
+  },
+  'alpha-vantage-cd-rates': {
+    tiers: [UserTier.PREMIUM],
+    // Premium only
+  }
+};
+```
+
+This system ensures users get appropriate data access while encouraging upgrades through intelligent upgrade suggestions.
+
 ### **5. Plaid Integration**
 
 - **Purpose**: Secure banking data access

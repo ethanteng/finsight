@@ -480,7 +480,7 @@ const NewHomepage = () => {
               price: "$5",
               period: "/month",
               description: "For people with checking, savings, and maybe a 401(k). You're focused on saving more and getting clarity.",
-              features: ["Unlimited questions", "Link up to 3 accounts", "Spending & savings analysis", "Basic financial insights"],
+              features: ["Unlimited questions", "Link up to 3 accounts", "Smart savings & spending insights"],
               cta: "Get Early Access",
               popular: false
             }, {
@@ -488,7 +488,7 @@ const NewHomepage = () => {
               price: "$12",
               period: "/month",
               description: "You've leveled up. You want smarter context to grow your money with real-world market awareness.",
-              features: ["Unlimited accounts & questions", "Market context (CPI, Fed rates)", "Investment analysis", "Goal tracking & progress"],
+              features: ["Everything in Starter","Unlimited accounts & questions", "Economic indicators (CPI, Fed rates, mortgage trends, APRs) via FRED", "Instantly search trusted sources like WSJ, Morningstar, Bloomberg, and more"],
               cta: "Get Early Access",
               popular: true
             }, {
@@ -496,7 +496,7 @@ const NewHomepage = () => {
               price: "$25",
               period: "/month",
               description: "Complex finances with long-term goals. Get advisor-level insights without the fees.",
-              features: ["Everything in Standard", "Live market data & rates", "What-if scenario planning", "Advanced portfolio analysis"],
+              features: ["Everything in Standard", "Live market data (CDs, Treasuries, stocks, real mortgage rates) via Alpha Vantage", "What-if scenario modeling", "Advanced portfolio analysis","Personalized retirement planning (e.g. Can I retire by 62? Am I on track?)"],
               cta: "Get Early Access",
               popular: false
             }].map((plan, index) => (

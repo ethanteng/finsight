@@ -84,6 +84,81 @@ User Question → Search API → Content Filtering → OpenAI → Response
 - Cost-effective scaling
 - Automatic content updates
 
+## 🎯 **Tier-Based Data Source Configuration**
+
+The platform implements a sophisticated tier system that controls access to different data sources, including RAG functionality. This configuration is managed in `src/data/sources.ts`:
+
+### **Current Tier Configuration**
+
+**Starter Tier** (Basic financial analysis):
+- ✅ Account balances and transactions (Plaid)
+- ✅ Financial institutions data
+- ❌ No economic indicators
+- ❌ No live market data
+- ❌ No RAG system access
+
+**Standard Tier** (Enhanced with economic context):
+- ✅ All Starter features
+- ✅ Economic indicators (FRED API):
+  - Consumer Price Index (CPI)
+  - Federal Reserve Rate
+  - Mortgage Rates
+  - Credit Card APR
+- ✅ RAG system access (real-time financial search)
+- ❌ No live market data
+
+**Premium Tier** (Complete market insights):
+- ✅ All Standard features
+- ✅ Live market data (Alpha Vantage):
+  - CD Rates
+  - Treasury Yields
+  - Live Mortgage Rates
+  - Stock Market Data
+- ✅ Full RAG system access
+
+### **RAG Integration with Tier System**
+
+The RAG system is currently available to **Standard and Premium tiers only**, providing:
+
+- **Real-time financial search** for current rates and information
+- **Comprehensive coverage** of all financial institutions
+- **Enhanced query generation** based on question type
+- **Source attribution** for transparency
+
+### **Configuration Management**
+
+To modify tier access for RAG or other data sources, edit the `dataSourceRegistry` in `src/data/sources.ts`:
+
+```typescript
+export const dataSourceRegistry: Record<string, DataSourceConfig> = {
+  // Account Data (all tiers)
+  'account-balances': {
+    tiers: [UserTier.STARTER, UserTier.STANDARD, UserTier.PREMIUM],
+    // Available to all tiers
+  },
+  
+  // Economic Indicators (Standard+)
+  'fred-cpi': {
+    tiers: [UserTier.STANDARD, UserTier.PREMIUM],
+    // Available to Standard+ users
+  },
+  
+  // Live Market Data (Premium only)
+  'alpha-vantage-cd-rates': {
+    tiers: [UserTier.PREMIUM],
+    // Premium only
+  },
+  
+  // RAG System (Standard+)
+  'rag-brave-search': {
+    tiers: [UserTier.STANDARD, UserTier.PREMIUM],
+    // Available to Standard+ users
+  }
+};
+```
+
+This tier-based approach ensures cost-effective data access while providing clear upgrade incentives for users.
+
 ## 📈 **Performance Comparison**
 
 ### **Response Quality**

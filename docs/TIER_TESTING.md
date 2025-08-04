@@ -46,19 +46,85 @@ Add the environment variable in your Render dashboard:
 
 ### Starter Tier
 - Basic financial analysis
-- No market data
-- No external context
+- Account balances and transactions (Plaid)
+- Financial institutions data
+- No economic indicators
+- No live market data
+- No RAG system access
 
 ### Standard Tier
-- Basic financial analysis
-- Market context (CPI, Fed rates, average APRs)
-- No live rates or simulations
+- All Starter features
+- Economic indicators (FRED API):
+  - Consumer Price Index (CPI)
+  - Federal Reserve Rate
+  - Mortgage Rates
+  - Credit Card APR
+- RAG system access (real-time financial search)
+- No live market data
 
 ### Premium Tier
-- Everything in Standard
-- Live CD, Treasury, and mortgage rates
+- All Standard features
+- Live market data (Alpha Vantage):
+  - CD Rates
+  - Treasury Yields
+  - Live Mortgage Rates
+  - Stock Market Data
+- Full RAG system access
 - "What-if" scenario testing
 - Forward-looking planning tools
+
+## Tier-Based Data Source Configuration
+
+The tier system is configured in `src/data/sources.ts` using the `dataSourceRegistry`. Each data source has a `tiers` array that defines which user tiers can access it:
+
+```typescript
+export const dataSourceRegistry: Record<string, DataSourceConfig> = {
+  // Account Data (all tiers)
+  'account-balances': {
+    tiers: [UserTier.STARTER, UserTier.STANDARD, UserTier.PREMIUM],
+    // Available to all tiers
+  },
+  
+  // Economic Indicators (Standard+)
+  'fred-cpi': {
+    tiers: [UserTier.STANDARD, UserTier.PREMIUM],
+    // Available to Standard+ users
+  },
+  
+  // Live Market Data (Premium only)
+  'alpha-vantage-cd-rates': {
+    tiers: [UserTier.PREMIUM],
+    // Premium only
+  }
+};
+```
+
+### Modifying Tier Access
+
+To change which tiers can access a data source:
+
+1. **Open** `src/data/sources.ts`
+2. **Find** the data source in `dataSourceRegistry`
+3. **Modify** the `tiers` array to include/exclude tiers
+4. **Test** the changes using the tier testing environment
+
+### Adding New Data Sources
+
+To add a new data source with tier restrictions:
+
+```typescript
+'new-data-source': {
+  id: 'new-data-source',
+  name: 'New Data Source',
+  description: 'Description of the data source',
+  tiers: [UserTier.STANDARD, UserTier.PREMIUM], // Choose which tiers get access
+  category: 'external',
+  provider: 'internal',
+  cacheDuration: 30 * 60 * 1000, // 30 minutes
+  isLive: true,
+  upgradeBenefit: 'Get access to this new data source'
+}
+```
 
 ## Testing Interface
 
