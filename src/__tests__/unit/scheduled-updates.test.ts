@@ -2,7 +2,17 @@ import { dataOrchestrator } from '../../data/orchestrator';
 import cron from 'node-cron';
 
 // Mock the data orchestrator
-jest.mock('../../data/orchestrator');
+jest.mock('../../data/orchestrator', () => ({
+  dataOrchestrator: {
+    forceRefreshAllContext: jest.fn(),
+    getCacheStats: jest.fn(),
+    refreshMarketContext: jest.fn(),
+    getMarketContextSummary: jest.fn(),
+    buildTierAwareContext: jest.fn(),
+    getSearchContext: jest.fn(),
+    invalidateCache: jest.fn()
+  }
+}));
 
 // Mock Plaid module to avoid import issues
 jest.mock('../../plaid', () => ({
