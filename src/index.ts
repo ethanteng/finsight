@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { config } from 'dotenv';
 import express, { Application, Request, Response } from 'express';
 import { setupPlaidRoutes } from './plaid';
-import { askOpenAI } from './openai';
+import { askOpenAI, askOpenAIWithEnhancedContext } from './openai';
 import cors from 'cors';
 import cron from 'node-cron';
 // Removed syncAllAccounts import - keeping transactions real-time only
@@ -218,7 +218,7 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
     }
 
     // Get AI response using enhanced context with RAG
-    const aiResponse = await askOpenAI(question, [], userTier, isDemo, userId);
+    const aiResponse = await askOpenAIWithEnhancedContext(question, [], userTier, isDemo, userId);
 
     // For demo mode, use the AI response directly (no tokenization needed for fake data)
     if (isDemo) {
