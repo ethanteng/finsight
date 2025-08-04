@@ -134,23 +134,8 @@ async function performDeletion(usersWithLogins) {
   });
   console.log(`✅ Deleted ${deletedPrivacySettings.count} privacy settings`);
   
-  // 7. Delete encrypted profile data (references user profiles)
-  console.log('Deleting encrypted profile data...');
-  const deletedEncryptedProfiles = await prisma.encryptedProfileData.deleteMany({
-    where: {
-      userProfile: {
-        userId: { in: userIds }
-      }
-    }
-  });
-  console.log(`✅ Deleted ${deletedEncryptedProfiles.count} encrypted profile data records`);
-  
-  // 8. Delete user profiles (references users)
-  console.log('Deleting user profiles...');
-  const deletedUserProfiles = await prisma.userProfile.deleteMany({
-    where: { userId: { in: userIds } }
-  });
-  console.log(`✅ Deleted ${deletedUserProfiles.count} user profiles`);
+  // Note: encryptedProfileData and userProfile tables don't exist in current schema
+  // Skipping deletion of these tables
   
   // 9. Finally, delete the users themselves
   console.log('Deleting users...');

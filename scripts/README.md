@@ -44,7 +44,7 @@ This folder contains utility scripts for development, testing, and deployment.
 ```bash
 # Database operations
 node scripts/check-db.js
-node scripts/clear-user-data.js
+DATABASE_URL="postgresql://ethanteng:FlHTRQaXnfpy08prcuYdtsywn5iHdKMM@dpg-d21hvvp5pdvs73fuqg2g-a.oregon-postgres.render.com/finsightdb" node scripts/clear-user-data.js
 
 # Testing
 node scripts/test-auth-flow.js
