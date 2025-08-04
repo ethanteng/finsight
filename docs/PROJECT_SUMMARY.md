@@ -217,7 +217,61 @@ export const dataSourceRegistry: Record<string, DataSourceConfig> = {
 
 This system ensures users get appropriate data access while encouraging upgrades through intelligent upgrade suggestions.
 
-### **5. Plaid Integration**
+### **5. Intelligent User Profile System**
+
+- **Purpose**: Dynamically builds personalized user profiles to enhance AI financial advice
+- **Implementation**: AI-powered profile extraction from conversations with natural language storage
+- **Features**:
+    - **Dynamic Profile Building**: AI analyzes conversations to extract personal and financial information
+    - **Natural Language Storage**: Profiles stored as descriptive text, not constrained to predefined fields
+    - **Incremental Learning**: Profile gets richer over time as users interact more
+    - **Privacy-First**: All profile data is anonymized and stored securely
+    - **Seamless Integration**: Works with existing tier-aware and RAG systems
+
+#### **Profile System Architecture**
+
+```typescript
+// Simple database schema for maximum flexibility
+model UserProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id])
+  
+  // Dynamic profile as natural language text
+  profileText     String   @db.Text // "I am 47 years old. I have 2 children, ages 10 and 14..."
+  
+  // Metadata
+  lastUpdated     DateTime @updatedAt
+  createdAt       DateTime @default(now())
+}
+```
+
+#### **Profile Extraction Process**
+
+1. **Conversation Analysis**: AI analyzes user questions and responses to extract personal information
+2. **Information Extraction**: Captures age, occupation, family status, financial goals, debt situation, etc.
+3. **Profile Updates**: New information is intelligently merged with existing profile
+4. **Context Enhancement**: Updated profile provides personalized context for future AI responses
+
+#### **Example Profile Evolution**
+
+```
+Initial: "I am 35 years old and work as a software engineer at Google."
+
+After conversation about family: "I am 35 years old and work as a software engineer at Google. I have a wife and two kids, ages 5 and 8."
+
+After financial discussion: "I am 35 years old and work as a software engineer at Google. I have a wife and two kids, ages 5 and 8. I have a mortgage and some credit card debt."
+```
+
+#### **Benefits**
+
+- **Personalized Advice**: AI can provide much more relevant financial advice based on user's life stage and situation
+- **Better Context**: Understanding user's age, family status, occupation, and financial goals
+- **Natural Evolution**: Profile builds organically through conversation, not manual input
+- **Privacy Protection**: Profile data is anonymized and used only for AI context enhancement
+- **Flexible Storage**: Natural language format allows for any type of information without schema constraints
+
+### **6. Plaid Integration**
 
 - **Purpose**: Secure banking data access
 - **Features**:
@@ -342,6 +396,7 @@ This system ensures users get appropriate data access while encouraging upgrades
 - Personalized financial insights based on user data
 - Market context integration for informed advice
 - **RAG-enhanced responses** with real-time information
+- **Intelligent user profiles** for personalized advice
 - Conversation history for contextual responses
 - Tier-aware recommendations and upgrade suggestions
 
@@ -400,7 +455,7 @@ This system ensures users get appropriate data access while encouraging upgrades
 
 - **Privacy-First**: Financial data never exposed to AI
 - **Real-Time Insights**: Current market data + RAG integration
-- **Personalized Advice**: AI-powered financial recommendations
+- **Personalized Advice**: AI-powered financial recommendations with intelligent user profiles
 - **Easy Integration**: Simple Plaid-based account connection
 - **Comprehensive Coverage**: Any financial institution or product
 
@@ -426,6 +481,7 @@ This system ensures users get appropriate data access while encouraging upgrades
 
 ### **Latest Implementation**
 
+- **Intelligent User Profile System**: Dynamic AI-built user profiles for personalized financial advice
 - **Critical Security Vulnerability Fix**: Resolved cross-user data deletion in privacy endpoints with comprehensive testing
 - **Privacy Endpoint Security**: Added authentication middleware and user-specific filtering to prevent data leakage
 - **Integration Test Expansion**: Added 9 new integration tests specifically for privacy endpoint security validation
