@@ -1,11 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
@@ -15,157 +9,148 @@ datasource db {
 }
 
 model User {
-  id              String   @id @default(cuid())
-  email           String   @unique
+  id              String           @id @default(cuid())
+  email           String           @unique
   passwordHash    String
-  tier            String   @default("starter") // starter, standard, premium
-  isActive        Boolean  @default(true)
-  emailVerified   Boolean  @default(false)
+  tier            String           @default("starter")
+  isActive        Boolean          @default(true)
+  emailVerified   Boolean          @default(false)
   lastLoginAt     DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  // Relationships
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  accessTokens    AccessToken[]
   accounts        Account[]
   conversations   Conversation[]
   privacySettings PrivacySettings?
-  accessTokens    AccessToken[]
-  syncStatuses     SyncStatus[]
-  
+  syncStatuses    SyncStatus[]
+  profile         UserProfile?
+
   @@map("users")
 }
 
 model Account {
-  id            String   @id @default(cuid())
-  plaidAccountId String  @unique
-  name          String
-  type          String
-  subtype       String?
-  mask          String?
-  officialName  String?
-  currentBalance Float?
-  availableBalance Float?
-  limit         Float?
-  currency      String?
-  institution   String?
-  verificationStatus String?
+  id                  String        @id @default(cuid())
+  plaidAccountId      String        @unique
+  name                String
+  type                String
+  subtype             String?
+  mask                String?
+  officialName        String?
+  currentBalance      Float?
+  availableBalance    Float?
+  currency            String?
+  institution         String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  lastSynced          DateTime?
+  limit               Float?
   persistentAccountId String?
-  lastSynced    DateTime?
-  
-  // User relationship
-  userId        String?
-  user          User?   @relation(fields: [userId], references: [id])
-  
-  transactions  Transaction[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  verificationStatus  String?
+  userId              String?
+  user                User?         @relation(fields: [userId], references: [id])
+  transactions        Transaction[]
 }
 
 model AccessToken {
   id            String    @id @default(cuid())
   token         String    @unique
-  itemId        String?
-  lastRefreshed DateTime?
-  
-  // User relationship
-  userId        String?
-  user          User?   @relation(fields: [userId], references: [id])
-  
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  itemId        String?
+  lastRefreshed DateTime?
+  userId        String?
+  user          User?     @relation(fields: [userId], references: [id])
 }
 
 model SyncStatus {
-  id               String   @id @default(cuid())
-  lastSync         DateTime?
-  accountsSynced   Int      @default(0)
-  transactionsSynced Int    @default(0)
-  
-  // User relationship
-  userId           String?
-  user             User?    @relation(fields: [userId], references: [id])
-  
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                 String    @id @default(cuid())
+  lastSync           DateTime?
+  accountsSynced     Int       @default(0)
+  transactionsSynced Int       @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  userId             String?
+  user               User?     @relation(fields: [userId], references: [id])
 }
 
 model Transaction {
-  id              String   @id @default(cuid())
-  plaidTransactionId String @unique
-  account         Account  @relation(fields: [accountId], references: [id])
-  accountId       String
-  amount          Float
-  date            DateTime
-  name            String
-  merchantName    String?
-  originalDescription String?
-  category        String?
-  categoryId      String?
-  pending         Boolean
+  id                   String    @id @default(cuid())
+  plaidTransactionId   String    @unique
+  accountId            String
+  amount               Float
+  date                 DateTime
+  name                 String
+  category             String?
+  pending              Boolean
+  currency             String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  lastSynced           DateTime?
+  authorizedDate       DateTime?
+  categoryId           String?
+  checkNumber          String?
+  location             String?
+  merchantName         String?
+  originalDescription  String?
+  paymentChannel       String?
+  paymentMethod        String?
   pendingTransactionId String?
-  paymentChannel  String?
-  paymentMethod   String?
-  currency        String?
-  authorizedDate  DateTime?
-  checkNumber     String?
-  location        String?
-  lastSynced      DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  account              Account   @relation(fields: [accountId], references: [id])
 }
 
 model Conversation {
-  id        String   @id @default(cuid())
-  question  String
-  answer    String
-  // Privacy: Store anonymized versions for AI context
-  anonymizedQuestion String?
+  id                 String   @id @default(cuid())
+  question           String
+  answer             String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
   anonymizedAnswer   String?
-  
-  // User relationship
-  userId    String?
-  user      User?   @relation(fields: [userId], references: [id])
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  anonymizedQuestion String?
+  userId             String?
+  user               User?    @relation(fields: [userId], references: [id])
 }
 
 model PrivacySettings {
-  id                    String   @id @default(cuid())
-  // User preferences for data handling
-  allowDataStorage      Boolean  @default(true)
-  allowAITraining       Boolean  @default(false)
-  anonymizeData         Boolean  @default(true)
-  dataRetentionDays     Int      @default(30)
-  
-  // User relationship
-  userId                String   @unique
-  user                  User     @relation(fields: [userId], references: [id])
-  
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                String   @id @default(cuid())
+  allowDataStorage  Boolean  @default(true)
+  allowAITraining   Boolean  @default(false)
+  anonymizeData     Boolean  @default(true)
+  dataRetentionDays Int      @default(30)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id])
 }
 
 model DemoSession {
-  id        String   @id @default(cuid())
-  sessionId String   @unique
-  userAgent String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  // Demo conversations for this session
+  id            String             @id @default(cuid())
+  sessionId     String             @unique
+  userAgent     String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
   conversations DemoConversation[]
 }
 
 model DemoConversation {
-  id        String   @id @default(cuid())
+  id        String      @id @default(cuid())
   question  String
   answer    String
-  
-  // Session relationship
   sessionId String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
   session   DemoSession @relation(fields: [sessionId], references: [id])
+}
+
+model UserProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  profileText String   @default("")
+  lastUpdated DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
   
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // User relationship
+  user        User     @relation(fields: [userId], references: [id])
+  
+  @@map("user_profiles")
 }
