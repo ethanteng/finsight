@@ -1214,7 +1214,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
           where: { userId }
         });
         await getPrismaClient().transaction.deleteMany({
-          where: { userId }
+          where: { account: { userId } }
         });
         await getPrismaClient().account.deleteMany({
           where: { userId }
@@ -1246,7 +1246,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         
         // Clear only the authenticated user's account and transaction data
         await getPrismaClient().transaction.deleteMany({
-          where: { userId }
+          where: { account: { userId } }
         });
         await getPrismaClient().account.deleteMany({
           where: { userId }
