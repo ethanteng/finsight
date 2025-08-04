@@ -88,14 +88,11 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
 ```
 finsight/
 ├── 📁 docs/                    # 📚 Documentation
-│   ├── PROJECT_SUMMARY.md      # Complete project overview
-│   ├── TEST_SUMMARY.md         # Test coverage documentation
+│   ├── PROJECT_SUMMARY.md      # Complete project overview (main context)
+│   ├── TESTING.md              # Comprehensive testing documentation
+│   ├── FEATURES.md             # Platform features documentation
 │   ├── RAG_VS_INDIVIDUAL_SOURCES.md
-│   ├── ENHANCED_MARKET_CONTEXT.md
-│   ├── DUAL_DATA_TESTING.md
-│   ├── TIER_SYSTEM.md
-│   ├── TIER_TESTING.md
-│   └── TESTING_BEST_PRACTICES.md
+│   └── TIER_TESTING.md         # Tier-specific testing guide
 ├── 📁 scripts/                 # 🔧 Utility scripts
 │   ├── test-*.js/ts           # Testing scripts
 │   ├── check-db.js            # Database utilities
@@ -364,14 +361,11 @@ GET /auth/profile
 ```
 finsight/
 ├── 📁 docs/                    # 📚 Documentation
-│   ├── PROJECT_SUMMARY.md      # Complete project overview
-│   ├── TEST_SUMMARY.md         # Test coverage documentation
+│   ├── PROJECT_SUMMARY.md      # Complete project overview (main context)
+│   ├── TESTING.md              # Comprehensive testing documentation
+│   ├── FEATURES.md             # Platform features documentation
 │   ├── RAG_VS_INDIVIDUAL_SOURCES.md
-│   ├── ENHANCED_MARKET_CONTEXT.md
-│   ├── DUAL_DATA_TESTING.md
-│   ├── TIER_SYSTEM.md
-│   ├── TIER_TESTING.md
-│   └── TESTING_BEST_PRACTICES.md
+│   └── TIER_TESTING.md         # Tier-specific testing guide
 ├── 📁 scripts/                 # 🔧 Utility scripts
 │   ├── test-*.js/ts           # Testing scripts
 │   ├── check-db.js            # Database utilities
@@ -397,9 +391,10 @@ finsight/
 
 ### **📚 Documentation**
 - **`docs/`** - Comprehensive project documentation
-- **`docs/PROJECT_SUMMARY.md`** - Start here for complete project overview
-- **`docs/TEST_SUMMARY.md`** - Test coverage and validation details
-- **Feature-specific docs** - RAG, Market Context, Tier System, etc.
+- **`docs/PROJECT_SUMMARY.md`** - Start here for complete project overview (main context)
+- **`docs/TESTING.md`** - Comprehensive testing documentation and best practices
+- **`docs/FEATURES.md`** - Platform features including tier system and market context
+- **Feature-specific docs** - RAG, Tier Testing, etc.
 
 ### **🔧 Scripts**
 - **`scripts/`** - Utility scripts for development and deployment

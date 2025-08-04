@@ -387,17 +387,14 @@ const demoAccounts = [
 ### **Core Documentation Files**
 
 - **[RAG_VS_INDIVIDUAL_SOURCES.md](./RAG_VS_INDIVIDUAL_SOURCES.md)** - Comprehensive comparison between RAG approach and individual data sources, including cost analysis, feature comparison, and migration strategy
-- **[ENHANCED_MARKET_CONTEXT.md](./ENHANCED_MARKET_CONTEXT.md)** - Detailed documentation of the enhanced market context system with proactive caching and scheduled updates
-- **[DUAL_DATA_TESTING.md](./DUAL_DATA_TESTING.md)** - Complete testing guide for the dual-data privacy system with unit and integration test coverage
-- **[TIER_SYSTEM.md](./TIER_SYSTEM.md)** - Documentation of the tier-based access control system with feature differentiation
+- **[FEATURES.md](./FEATURES.md)** - Complete documentation of platform features including tier-based access control and enhanced market context system
+- **[TESTING.md](./TESTING.md)** - Comprehensive testing documentation including unit tests, integration tests, security validation, and best practices
 - **[TIER_TESTING.md](./TIER_TESTING.md)** - Testing documentation for the tier system implementation
-- **[TESTING_BEST_PRACTICES.md](./TESTING_BEST_PRACTICES.md)** - Best practices and guidelines for testing the platform
-- **[TEST_SUMMARY.md](./TEST_SUMMARY.md)** - Summary of all test suites and coverage
 
 ### **Technical Documentation**
 
 - **[README.md](./README.md)** - Main project documentation with setup and usage instructions
-- **[TEST_SUMMARY.md](./TEST_SUMMARY.md)** - Comprehensive test results and coverage analysis
+- **[TESTING.md](./TESTING.md)** - Comprehensive test results and coverage analysis
 
 ## 🎉 **Success Metrics**
 
