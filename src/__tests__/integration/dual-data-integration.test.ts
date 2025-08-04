@@ -1,11 +1,12 @@
 import request from 'supertest';
 import { app } from '../../index';
-import { askOpenAI } from '../../openai';
+import { askOpenAI, askOpenAIWithEnhancedContext } from '../../openai';
 import { convertResponseToUserFriendly, clearTokenizationMaps } from '../../privacy';
 
 // Mock the OpenAI module for controlled testing
 jest.mock('../../openai', () => ({
-  askOpenAI: jest.fn()
+  askOpenAI: jest.fn(),
+  askOpenAIWithEnhancedContext: jest.fn()
 }));
 
 // Mock the privacy module for testing
@@ -16,6 +17,7 @@ jest.mock('../../privacy', () => ({
 
 describe('Dual-Data System Integration Tests', () => {
   const mockAskOpenAI = askOpenAI as jest.MockedFunction<typeof askOpenAI>;
+  const mockAskOpenAIWithEnhancedContext = askOpenAIWithEnhancedContext as jest.MockedFunction<typeof askOpenAIWithEnhancedContext>;
   const mockConvertResponse = convertResponseToUserFriendly as jest.MockedFunction<typeof convertResponseToUserFriendly>;
 
   // ✅ Proper setup and teardown
@@ -34,7 +36,8 @@ describe('Dual-Data System Integration Tests', () => {
     jest.clearAllMocks();
     
     // ✅ Default mock implementations
-    mockAskOpenAI.mockResolvedValue('Mock AI response');
+    mockAskOpenAIWithEnhancedContext.mockResolvedValue('Mock AI response');
+    mockAskOpenAIWithEnhancedContext.mockResolvedValue('Mock AI response');
     mockConvertResponse.mockImplementation((response) => 
       response.replace(/Account_\w+/g, 'Chase Checking')
     );
@@ -49,7 +52,7 @@ describe('Dual-Data System Integration Tests', () => {
     test('should return AI response directly for demo mode', async () => {
       // ✅ Arrange
       const demoResponse = 'Your Chase Checking Account has a balance of $1,000.';
-      mockAskOpenAI.mockResolvedValue(demoResponse);
+      mockAskOpenAIWithEnhancedContext.mockResolvedValue(demoResponse);
 
       // ✅ Act
       const response = await request(app)
@@ -69,7 +72,7 @@ describe('Dual-Data System Integration Tests', () => {
     test('should handle demo mode with fake data', async () => {
       // ✅ Arrange
       const fakeDataResponse = 'Your Savings Account at Ally Bank has $5,000.';
-      mockAskOpenAI.mockResolvedValue(fakeDataResponse);
+      mockAskOpenAIWithEnhancedContext.mockResolvedValue(fakeDataResponse);
 
       // ✅ Act
       const response = await request(app)
@@ -88,7 +91,7 @@ describe('Dual-Data System Integration Tests', () => {
     test('should handle demo session persistence', async () => {
       // ✅ Arrange
       const demoResponse = 'Demo response with session data';
-      mockAskOpenAI.mockResolvedValue(demoResponse);
+      mockAskOpenAIWithEnhancedContext.mockResolvedValue(demoResponse);
 
       // ✅ Act
       const response = await request(app)
@@ -111,7 +114,7 @@ describe('Dual-Data System Integration Tests', () => {
       const tokenizedResponse = 'Your Account_abc1 has a balance of $1,000.';
       const userFriendlyResponse = 'Your Chase Checking has a balance of $1,000.';
       
-      mockAskOpenAI.mockResolvedValue(tokenizedResponse);
+      mockAskOpenAIWithEnhancedContext.mockResolvedValue(tokenizedResponse);
       mockConvertResponse.mockReturnValue(userFriendlyResponse);
 
       // ✅ Act
@@ -133,7 +136,7 @@ describe('Dual-Data System Integration Tests', () => {
       const tokenizedResponse = 'You spent $50 at Merchant_xyz1 yesterday.';
       const userFriendlyResponse = 'You spent $50 at Amazon.com yesterday.';
       
-      mockAskOpenAI.mockResolvedValue(tokenizedResponse);
+      mockAskOpenAIWithEnhancedContext.mockResolvedValue(tokenizedResponse);
       mockConvertResponse.mockReturnValue(userFriendlyResponse);
 
       // ✅ Act
@@ -154,7 +157,7 @@ describe('Dual-Data System Integration Tests', () => {
       const tokenizedResponse = 'Your Account_abc1 balance is $1,000.';
       const userFriendlyResponse = 'Your Chase Checking balance is $1,000.';
       
-      mockAskOpenAI.mockResolvedValue(tokenizedResponse);
+      mockAskOpenAIWithEnhancedContext.mockResolvedValue(tokenizedResponse);
       mockConvertResponse.mockReturnValue(userFriendlyResponse);
 
       // ✅ Act
@@ -192,7 +195,7 @@ describe('Dual-Data System Integration Tests', () => {
 
     test('should handle AI service errors gracefully', async () => {
       // ✅ Arrange
-      mockAskOpenAI.mockRejectedValue(new Error('AI service unavailable'));
+      mockAskOpenAIWithEnhancedContext.mockRejectedValue(new Error('AI service unavailable'));
 
       // ✅ Act
       const response = await request(app)
@@ -209,7 +212,7 @@ describe('Dual-Data System Integration Tests', () => {
 
     test('should handle conversion errors gracefully', async () => {
       // ✅ Arrange
-      mockAskOpenAI.mockResolvedValue('Tokenized response');
+      mockAskOpenAIWithEnhancedContext.mockResolvedValue('Tokenized response');
       mockConvertResponse.mockImplementation(() => {
         throw new Error('Conversion failed');
       });
@@ -247,7 +250,7 @@ describe('Dual-Data System Integration Tests', () => {
       const tokenizedResponse = 'Your Account_abc1 has $1,000.';
       const userFriendlyResponse = 'Your Chase Checking has $1,000.';
       
-      mockAskOpenAI.mockResolvedValue(tokenizedResponse);
+      mockAskOpenAIWithEnhancedContext.mockResolvedValue(tokenizedResponse);
       mockConvertResponse.mockReturnValue(userFriendlyResponse);
 
       // ✅ Act
@@ -265,7 +268,7 @@ describe('Dual-Data System Integration Tests', () => {
     test('should ensure demo mode uses fake data without tokenization', async () => {
       // ✅ Arrange
       const fakeResponse = 'Your Chase Checking Account has $1,000.';
-      mockAskOpenAI.mockResolvedValue(fakeResponse);
+      mockAskOpenAIWithEnhancedContext.mockResolvedValue(fakeResponse);
 
       // ✅ Act
       await request(app)
@@ -285,7 +288,7 @@ describe('Dual-Data System Integration Tests', () => {
     test('should handle large responses efficiently', async () => {
       // ✅ Arrange
       const largeResponse = 'A'.repeat(10000);
-      mockAskOpenAI.mockResolvedValue(largeResponse);
+      mockAskOpenAIWithEnhancedContext.mockResolvedValue(largeResponse);
 
       // ✅ Act
       const startTime = Date.now();
@@ -307,7 +310,7 @@ describe('Dual-Data System Integration Tests', () => {
     test('should handle concurrent requests', async () => {
       // ✅ Arrange
       const responses = ['Response 1', 'Response 2', 'Response 3'];
-      mockAskOpenAI
+      mockAskOpenAIWithEnhancedContext
         .mockResolvedValueOnce(responses[0])
         .mockResolvedValueOnce(responses[1])
         .mockResolvedValueOnce(responses[2]);
@@ -336,7 +339,7 @@ describe('Dual-Data System Integration Tests', () => {
   describe('Security Integration', () => {
     test('should not expose sensitive data in error messages', async () => {
       // ✅ Arrange
-      mockAskOpenAI.mockRejectedValue(new Error('Internal error with sensitive data'));
+      mockAskOpenAIWithEnhancedContext.mockRejectedValue(new Error('Internal error with sensitive data'));
 
       // ✅ Act
       const response = await request(app)
