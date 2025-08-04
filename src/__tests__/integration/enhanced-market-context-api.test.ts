@@ -4,7 +4,18 @@ import { dataOrchestrator } from '../../data/orchestrator';
 import { UserTier } from '../../data/types';
 
 // Mock the data orchestrator
-jest.mock('../../data/orchestrator');
+jest.mock('../../data/orchestrator', () => ({
+  dataOrchestrator: {
+    getMarketContextSummary: jest.fn(),
+    getCacheStats: jest.fn(),
+    refreshMarketContext: jest.fn(),
+    invalidateCache: jest.fn(),
+    getMarketContext: jest.fn(),
+    buildTierAwareContext: jest.fn(),
+    getSearchContext: jest.fn(),
+    forceRefreshAllContext: jest.fn()
+  }
+}));
 
 const MockDataOrchestrator = dataOrchestrator as jest.Mocked<typeof dataOrchestrator>;
 
