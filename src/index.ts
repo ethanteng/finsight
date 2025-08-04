@@ -10,7 +10,7 @@ import { PrismaClient } from '@prisma/client';
 import { dataOrchestrator } from './data/orchestrator';
 import { isFeatureEnabled } from './config/features';
 import authRoutes from './auth/routes';
-import { optionalAuth } from './auth/middleware';
+import { optionalAuth, requireAuth } from './auth/middleware';
 import { UserTier } from './data/types';
 
 // Extend Express Request type to include user
@@ -1202,16 +1202,29 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
-    app.delete('/privacy/delete-all-data', async (req: Request, res: Response) => {
+    app.delete('/privacy/delete-all-data', requireAuth, async (req: Request, res: Response) => {
       try {
-        // user_id will be used when user system is implemented
+        const userId = req.user?.id;
+        if (!userId) {
+          return res.status(401).json({ error: 'Authentication required' });
+        }
         
-        // Delete all user data
-        await getPrismaClient().conversation.deleteMany();
-        await getPrismaClient().transaction.deleteMany();
-        await getPrismaClient().account.deleteMany();
-        await getPrismaClient().accessToken.deleteMany();
-        await getPrismaClient().syncStatus.deleteMany();
+        // Delete only the authenticated user's data
+        await getPrismaClient().conversation.deleteMany({
+          where: { userId }
+        });
+        await getPrismaClient().transaction.deleteMany({
+          where: { userId }
+        });
+        await getPrismaClient().account.deleteMany({
+          where: { userId }
+        });
+        await getPrismaClient().accessToken.deleteMany({
+          where: { userId }
+        });
+        await getPrismaClient().syncStatus.deleteMany({
+          where: { userId }
+        });
 
         res.json({ success: true, message: 'All data deleted successfully' });
       } catch (err) {
@@ -1219,15 +1232,28 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
-    app.post('/privacy/disconnect-accounts', async (req: Request, res: Response) => {
+    app.post('/privacy/disconnect-accounts', requireAuth, async (req: Request, res: Response) => {
       try {
-        // Remove all Plaid access tokens
-        await getPrismaClient().accessToken.deleteMany();
+        const userId = req.user?.id;
+        if (!userId) {
+          return res.status(401).json({ error: 'Authentication required' });
+        }
         
-        // Clear account and transaction data
-        await getPrismaClient().transaction.deleteMany();
-        await getPrismaClient().account.deleteMany();
-        await getPrismaClient().syncStatus.deleteMany();
+        // Remove only the authenticated user's Plaid access tokens
+        await getPrismaClient().accessToken.deleteMany({
+          where: { userId }
+        });
+        
+        // Clear only the authenticated user's account and transaction data
+        await getPrismaClient().transaction.deleteMany({
+          where: { userId }
+        });
+        await getPrismaClient().account.deleteMany({
+          where: { userId }
+        });
+        await getPrismaClient().syncStatus.deleteMany({
+          where: { userId }
+        });
 
         res.json({ success: true, message: 'All accounts disconnected and data cleared' });
       } catch (err) {
