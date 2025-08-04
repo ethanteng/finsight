@@ -5,7 +5,7 @@ import { Badge } from './ui/badge';
 import MailerLiteForm from './MailerLiteForm';
 import MailerLiteScript from './MailerLiteScript';
 import AnimatedPrompt from './AnimatedPrompt';
-import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, Database, BarChart3, MessageCircle, ArrowRight, Sparkles, X, Target } from 'lucide-react';
+import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, Database, BarChart3, MessageCircle, ArrowRight, Sparkles, X, Target, XCircle } from 'lucide-react';
 
 const NewHomepage = () => {
   const scrollToSection = (id: string) => {
@@ -479,24 +479,24 @@ const NewHomepage = () => {
               name: "Starter",
               price: "$5",
               period: "/month",
-              description: "For people with checking, savings, and maybe a 401(k). You're focused on saving more and getting clarity.",
-              features: ["Unlimited questions", "Link up to 3 accounts", "Smart savings & spending insights"],
+              description: "For simple savings and spending clarity.",
+              features: ["Unlimited questions", "Link up to 3 accounts", "Smart savings & spending insights", "LIMIT: No economic indicators or market data", "LIMIT: No real-time financial search"],
               cta: "Get Early Access",
               popular: false
             }, {
               name: "Standard",
               price: "$12",
               period: "/month",
-              description: "You've leveled up. You want smarter context to grow your money with real-world market awareness.",
-              features: ["Everything in Starter","Unlimited accounts & questions", "Economic indicators (CPI, Fed rates, mortgage trends, APRs) via FRED", "Instantly search trusted sources like WSJ, Morningstar, Bloomberg, and more"],
+              description: "Level up with real-world context.",
+              features: ["Everything in Starter","Unlimited accounts & questions", "Track CPI, Fed rates, APRs & more", "Search trusted sources like WSJ & Bloomberg", "LIMIT: No live market data"],
               cta: "Get Early Access",
               popular: true
             }, {
               name: "Premium",
               price: "$25",
               period: "/month",
-              description: "Complex finances with long-term goals. Get advisor-level insights without the fees.",
-              features: ["Everything in Standard", "Live market data (CDs, Treasuries, stocks, real mortgage rates) via Alpha Vantage", "What-if scenario modeling", "Advanced portfolio analysis","Personalized retirement planning (e.g. Can I retire by 62? Am I on track?)"],
+              description: "Get advisor-level insights without the fees.",
+              features: ["Everything in Standard", "Live market data (CDs, Treasuries, stocks, mortgage rates)", "What-if scenario modeling", "Portfolio analysis & retirement planning"],
               cta: "Get Early Access",
               popular: false
             }].map((plan, index) => (
@@ -519,8 +519,17 @@ const NewHomepage = () => {
                   <ul className="space-y-3">
                     {plan.features.map((feature, featureIndex) => (
                       <li key={featureIndex} className="flex items-center space-x-3">
-                        <CheckCircle className="h-5 w-5 text-primary flex-shrink-0" />
-                        <span className="text-sm">{feature}</span>
+                        {feature.startsWith('LIMIT:') ? (
+                          <>
+                            <XCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+                            <span className="text-sm">{feature.replace('LIMIT: ', '')}</span>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle className="h-5 w-5 text-primary flex-shrink-0" />
+                            <span className="text-sm">{feature}</span>
+                          </>
+                        )}
                       </li>
                     ))}
                   </ul>
