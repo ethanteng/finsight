@@ -453,7 +453,17 @@ const handleDemoRequest = async (req: Request, res: Response) => {
       // Don't fail the request, just log the error
       // In test environment, this might be due to cleanup running concurrently
       if (process.env.NODE_ENV === 'test') {
-        console.log('Demo conversation storage failed in test environment - likely due to concurrent cleanup');
+        // Check if it's a foreign key constraint violation (session was deleted)
+        if (storageError && typeof storageError === 'object' && 'code' in storageError) {
+          const error = storageError as any;
+          if (error.code === 'P2003' && error.meta?.constraint === 'DemoConversation_sessionId_fkey') {
+            console.log('Demo conversation storage failed - session was deleted during test cleanup');
+          } else {
+            console.log('Demo conversation storage failed in test environment - likely due to concurrent cleanup');
+          }
+        } else {
+          console.log('Demo conversation storage failed in test environment - likely due to concurrent cleanup');
+        }
       }
     }
     

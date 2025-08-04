@@ -84,6 +84,31 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
 - PostgreSQL
 - npm or yarn
 
+### **Project Structure**
+```
+finsight/
+├── 📁 docs/                    # 📚 Documentation
+│   ├── PROJECT_SUMMARY.md      # Complete project overview
+│   ├── TEST_SUMMARY.md         # Test coverage documentation
+│   ├── RAG_VS_INDIVIDUAL_SOURCES.md
+│   ├── ENHANCED_MARKET_CONTEXT.md
+│   ├── DUAL_DATA_TESTING.md
+│   ├── TIER_SYSTEM.md
+│   ├── TIER_TESTING.md
+│   └── TESTING_BEST_PRACTICES.md
+├── 📁 scripts/                 # 🔧 Utility scripts
+│   ├── test-*.js/ts           # Testing scripts
+│   ├── check-db.js            # Database utilities
+│   ├── clear-*.js             # Cleanup scripts
+│   ├── build.sh               # Build scripts
+│   └── deploy-*.sh            # Deployment scripts
+├── 📁 frontend/               # 🎨 Next.js frontend
+├── 📁 src/                    # ⚙️ Backend source code
+├── 📁 prisma/                 # 🗄️ Database schema
+├── 📁 .github/                # 🔄 CI/CD workflows
+└── 📄 Configuration files     # ⚙️ Project config
+```
+
 ### **Environment Setup**
 
 1. **Clone the repository**
@@ -338,22 +363,50 @@ GET /auth/profile
 
 ```
 finsight/
-├── src/                    # Backend source code
-│   ├── __tests__/         # Test suites
-│   ├── auth/              # Authentication system
-│   ├── config/            # Configuration files
-│   ├── data/              # Data providers and orchestrator
-│   └── index.ts           # Main server file
-├── frontend/              # Next.js frontend
+├── 📁 docs/                    # 📚 Documentation
+│   ├── PROJECT_SUMMARY.md      # Complete project overview
+│   ├── TEST_SUMMARY.md         # Test coverage documentation
+│   ├── RAG_VS_INDIVIDUAL_SOURCES.md
+│   ├── ENHANCED_MARKET_CONTEXT.md
+│   ├── DUAL_DATA_TESTING.md
+│   ├── TIER_SYSTEM.md
+│   ├── TIER_TESTING.md
+│   └── TESTING_BEST_PRACTICES.md
+├── 📁 scripts/                 # 🔧 Utility scripts
+│   ├── test-*.js/ts           # Testing scripts
+│   ├── check-db.js            # Database utilities
+│   ├── clear-*.js             # Cleanup scripts
+│   ├── build.sh               # Build scripts
+│   └── deploy-*.sh            # Deployment scripts
+├── 📁 src/                    # ⚙️ Backend source code
+│   ├── __tests__/             # Test suites
+│   ├── auth/                  # Authentication system
+│   ├── config/                # Configuration files
+│   ├── data/                  # Data providers and orchestrator
+│   └── index.ts               # Main server file
+├── 📁 frontend/               # 🎨 Next.js frontend
 │   ├── src/
-│   │   ├── app/          # Next.js app router
-│   │   ├── components/   # React components
-│   │   └── lib/          # Utility functions
+│   │   ├── app/              # Next.js app router
+│   │   ├── components/       # React components
+│   │   └── lib/              # Utility functions
 │   └── package.json
-├── prisma/               # Database schema and migrations
-├── .github/              # CI/CD workflows
-└── docs/                 # Project documentation
+├── 📁 prisma/                 # 🗄️ Database schema and migrations
+├── 📁 .github/                # 🔄 CI/CD workflows
+└── 📄 Configuration files     # ⚙️ Project config
 ```
+
+### **📚 Documentation**
+- **`docs/`** - Comprehensive project documentation
+- **`docs/PROJECT_SUMMARY.md`** - Start here for complete project overview
+- **`docs/TEST_SUMMARY.md`** - Test coverage and validation details
+- **Feature-specific docs** - RAG, Market Context, Tier System, etc.
+
+### **🔧 Scripts**
+- **`scripts/`** - Utility scripts for development and deployment
+- **Testing scripts** - Authentication, Plaid, API testing
+- **Database scripts** - Health checks, cleanup, data management
+- **Deployment scripts** - Build, deploy, verify processes
+- **Cleanup scripts** - Environment maintenance
 
 ## 🤝 **Contributing**
 
