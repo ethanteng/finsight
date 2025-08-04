@@ -353,6 +353,74 @@ This system ensures users get appropriate data access while encouraging upgrades
 - Source attribution for transparency
 - **Real-time search results** for current financial information
 
+## 🧠 **Intelligent User Profile System**
+
+### **Dynamic AI-Built User Profiles**
+
+The platform now features an advanced **Intelligent User Profile System** that automatically builds and maintains user profiles by analyzing conversations and financial data to provide highly personalized financial advice.
+
+#### **Core Profile Features**
+
+- **Conversation Analysis**: AI extracts personal and financial context from user conversations
+- **Plaid Data Integration**: Real-time analysis of account and transaction data for profile enhancement
+- **Natural Language Storage**: Profiles stored as descriptive text, not constrained to predefined fields
+- **Privacy-First Design**: Profile data is anonymized and used only for AI context enhancement
+- **Automatic Updates**: Profiles evolve organically through user interactions and financial data
+
+#### **Profile Enhancement Process**
+
+```typescript
+// Real-time Plaid data analysis without persisting raw data
+const plaidEnhancer = new PlaidProfileEnhancer();
+const enhancedProfile = await plaidEnhancer.enhanceProfileFromPlaidData(
+  userId,
+  accounts,    // Analyzed in real-time, not stored
+  transactions // Analyzed in real-time, not stored
+);
+```
+
+#### **Profile Evolution Example**
+
+```
+Initial: "I am 35 years old and work as a software engineer."
+
+After Plaid Analysis: "I am 35 years old and work as a software engineer. 
+The user has a monthly income of $4,250, total savings of $40,900.67 
+in depository accounts, and an investment portfolio worth $156,780.45. 
+The user's financial institutions include Chase Bank, Ally Bank, and 
+Fidelity Investments."
+
+After Conversation: "I am 35 years old and work as a software engineer. 
+The user has a monthly income of $4,250, total savings of $40,900.67 
+in depository accounts, and an investment portfolio worth $156,780.45. 
+The user has a wife and two kids, ages 5 and 8, and is focused on 
+saving for their children's education and retirement."
+```
+
+#### **Technical Implementation**
+
+- **ProfileExtractor**: AI-powered conversation analysis for context extraction
+- **PlaidProfileEnhancer**: Real-time financial data analysis without data persistence
+- **ProfileManager**: Database operations and profile lifecycle management
+- **Frontend Integration**: UserProfile component with edit capabilities
+- **API Endpoints**: `/api/profile` for profile management
+- **Automatic Triggers**: Profile enhancement on account connection and transaction fetching
+
+#### **Privacy & Security**
+
+- **No Raw Data Storage**: Only analyzed insights are stored in profiles
+- **Real-Time Processing**: Plaid data analyzed and discarded immediately
+- **Anonymized Analysis**: Account summaries anonymized before AI processing
+- **User Control**: Users can view, edit, or delete their enhanced profiles
+- **Secure Integration**: Works seamlessly with existing authentication and privacy systems
+
+#### **Enhanced AI Responses**
+
+- **Personalized Context**: AI responses include user's financial situation
+- **Specific Recommendations**: Advice tailored to actual account balances and spending patterns
+- **Risk-Aware Suggestions**: Recommendations based on user's investment style and risk tolerance
+- **Goal-Oriented Guidance**: Financial advice aligned with user's stated goals and family situation
+
 ### **User Experience**
 
 - Seamless account connection via Plaid
@@ -360,6 +428,7 @@ This system ensures users get appropriate data access while encouraging upgrades
 - Responsive web interface
 - Mobile-friendly design
 - **Holistic financial advice** for any institution or product
+- **Personalized profile management** with automatic enhancement
 
 ## 🚀 **Deployment & CI/CD**
 
@@ -400,7 +469,8 @@ This system ensures users get appropriate data access while encouraging upgrades
 
 - **Privacy-First**: Financial data never exposed to AI
 - **Real-Time Insights**: Current market data + RAG integration
-- **Personalized Advice**: AI-powered financial recommendations
+- **Personalized Advice**: AI-powered financial recommendations enhanced with user profiles
+- **Intelligent Profiles**: Automatic profile building from conversations and financial data
 - **Easy Integration**: Simple Plaid-based account connection
 - **Comprehensive Coverage**: Any financial institution or product
 
@@ -426,6 +496,11 @@ This system ensures users get appropriate data access while encouraging upgrades
 
 ### **Latest Implementation**
 
+- **Intelligent User Profile System**: Complete implementation of AI-powered profile building with Plaid data integration
+- **PlaidProfileEnhancer**: Real-time financial data analysis without persisting raw data for privacy
+- **Profile Management**: Frontend UserProfile component with edit capabilities and automatic enhancement
+- **Profile API Integration**: `/api/profile` endpoints for profile management and enhancement
+- **Automatic Profile Triggers**: Profile enhancement on account connection and transaction fetching
 - **Critical Security Vulnerability Fix**: Resolved cross-user data deletion in privacy endpoints with comprehensive testing
 - **Privacy Endpoint Security**: Added authentication middleware and user-specific filtering to prevent data leakage
 - **Integration Test Expansion**: Added 9 new integration tests specifically for privacy endpoint security validation
