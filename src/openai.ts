@@ -254,7 +254,8 @@ export async function askOpenAIWithEnhancedContext(
       
       const rateRelatedTerms = [
         'mortgage rate', 'refinance', 'interest rate', 'apr', 'cd rate', 'savings rate',
-        'credit card rate', 'loan rate', 'investment return', 'yield'
+        'credit card rate', 'loan rate', 'investment return', 'yield', 'unemployment rate',
+        'inflation rate', 'fed rate', 'federal reserve rate', 'treasury rate'
       ];
       
       // Check if question mentions a specific financial institution

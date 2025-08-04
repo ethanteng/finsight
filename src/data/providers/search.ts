@@ -44,6 +44,9 @@ export class SearchProvider {
     region?: string;
     language?: string;
   } = {}): Promise<SearchResult[]> {
+    console.log('SearchProvider: Starting search for query:', query);
+    console.log('SearchProvider: Using provider:', this.config.provider);
+    
     const {
       maxResults = this.config.maxResults,
       timeRange = 'day',
@@ -59,9 +62,13 @@ export class SearchProvider {
         language
       });
 
-      return this.formatResults(results, query);
+      console.log('SearchProvider: Raw search results received');
+      const formattedResults = this.formatResults(results, query);
+      console.log('SearchProvider: Formatted', formattedResults.length, 'results');
+      
+      return formattedResults;
     } catch (error) {
-      console.error('Search failed:', error);
+      console.error('SearchProvider: Search failed:', error);
       return [];
     }
   }
@@ -131,6 +138,10 @@ export class SearchProvider {
   }
 
   private async braveSearch(query: string, options: any): Promise<any> {
+    console.log('SearchProvider: Performing Brave search for query:', query);
+    console.log('SearchProvider: Brave search URL:', this.config.baseUrl);
+    console.log('SearchProvider: API key present:', !!this.config.apiKey);
+    
     const params = new URLSearchParams({
       q: query,
       count: options.maxResults?.toString() || '10',
@@ -138,19 +149,28 @@ export class SearchProvider {
       language: options.language || 'en'
     });
 
+    console.log('SearchProvider: Brave search params:', params.toString());
+
     const response = await fetch(`${this.config.baseUrl}?${params}`, {
       headers: {
         'Accept': 'application/json',
-        'X-Subscription-Token': this.config.apiKey
+        'X-Subscription-Token': this.config.apiKey,
+        'User-Agent': 'Finsight-Financial-App/1.0'
       },
       signal: AbortSignal.timeout(this.config.timeout!)
     });
 
+    console.log('SearchProvider: Brave search response status:', response.status);
+
     if (!response.ok) {
-      throw new Error(`Brave search failed: ${response.status}`);
+      const errorText = await response.text();
+      console.error('SearchProvider: Brave search error response:', errorText);
+      throw new Error(`Brave search failed: ${response.status} - ${errorText}`);
     }
 
-    return response.json();
+    const result = await response.json();
+    console.log('SearchProvider: Brave search response received');
+    return result;
   }
 
   private async serpapiSearch(query: string, options: any): Promise<any> {
@@ -262,7 +282,7 @@ export class SearchProvider {
     );
 
     if (hasFinancialKeyword) {
-      return `${query} financial advice 2024`;
+      return `${query} financial advice 2025`;
     }
 
     return query;

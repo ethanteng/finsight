@@ -74,6 +74,11 @@ export class DataOrchestrator {
     const alphaVantageApiKey = process.env.NODE_ENV === 'test' ? 'test_alpha_vantage_key' : process.env.ALPHA_VANTAGE_API_KEY;
     const searchApiKey = process.env.NODE_ENV === 'test' ? 'test_search_key' : process.env.SEARCH_API_KEY;
 
+    console.log('DataOrchestrator: Initializing with API keys:');
+    console.log('DataOrchestrator: FRED_API_KEY:', fredApiKey ? 'SET' : 'NOT SET');
+    console.log('DataOrchestrator: ALPHA_VANTAGE_API_KEY:', alphaVantageApiKey ? 'SET' : 'NOT SET');
+    console.log('DataOrchestrator: SEARCH_API_KEY:', searchApiKey ? 'SET' : 'NOT SET');
+
     if (!fredApiKey) {
       console.warn('FRED_API_KEY not set, economic indicators will be unavailable');
     }
@@ -86,7 +91,13 @@ export class DataOrchestrator {
 
     this.fredProvider = new FREDProvider(fredApiKey || '');
     this.alphaVantageProvider = new AlphaVantageProvider(alphaVantageApiKey || '');
-    this.searchProvider = new SearchProvider(searchApiKey || '', 'brave');
+    
+    // Make search provider configurable
+    const searchProviderType = process.env.SEARCH_PROVIDER || 'brave';
+    this.searchProvider = new SearchProvider(searchApiKey || '', searchProviderType as 'bing' | 'google' | 'brave' | 'serpapi');
+    
+    console.log('DataOrchestrator: Search provider initialized with key:', searchApiKey ? 'PRESENT' : 'MISSING');
+    console.log('DataOrchestrator: Search provider type:', searchProviderType);
   }
 
   getTierAccess(tier: UserTier): TierAccess {
@@ -485,9 +496,13 @@ export class DataOrchestrator {
   }
 
   async getSearchContext(query: string, tier: UserTier, isDemo: boolean = false): Promise<SearchContext | null> {
+    console.log('DataOrchestrator: getSearchContext called with query:', query, 'tier:', tier, 'isDemo:', isDemo);
+    
     const tierAccess = this.getTierAccess(tier);
+    console.log('DataOrchestrator: Tier access hasSearchContext:', tierAccess.hasSearchContext);
     
     if (!tierAccess.hasSearchContext) {
+      console.log('DataOrchestrator: No search context access for tier:', tier);
       return null;
     }
 
@@ -495,11 +510,15 @@ export class DataOrchestrator {
     const cached = this.searchCache.get(cacheKey);
     
     if (cached && this.isSearchFresh(cached.lastUpdate)) {
+      console.log('DataOrchestrator: Using cached search results');
       return cached;
     }
 
+    console.log('DataOrchestrator: Performing new search for query:', query);
     try {
       const results = await this.searchProvider.search(query);
+      console.log('DataOrchestrator: Search completed, found', results.length, 'results');
+      
       const summary = await this.generateSearchSummary(results, query);
       
       const searchContext: SearchContext = {
@@ -512,7 +531,7 @@ export class DataOrchestrator {
       this.searchCache.set(cacheKey, searchContext);
       return searchContext;
     } catch (error) {
-      console.error('Failed to get search context:', error);
+      console.error('DataOrchestrator: Failed to get search context:', error);
       return null;
     }
   }
@@ -578,4 +597,20 @@ export class DataOrchestrator {
   }
 }
 
-export const dataOrchestrator = new DataOrchestrator(); 
+// Lazy initialization to ensure environment variables are loaded
+let _dataOrchestrator: DataOrchestrator | null = null;
+
+export function getDataOrchestrator(): DataOrchestrator {
+  if (!_dataOrchestrator) {
+    _dataOrchestrator = new DataOrchestrator();
+  }
+  return _dataOrchestrator;
+}
+
+// For backward compatibility - make this truly lazy
+export const dataOrchestrator = new Proxy({} as DataOrchestrator, {
+  get(target, prop) {
+    const orchestrator = getDataOrchestrator();
+    return (orchestrator as any)[prop];
+  }
+}); 

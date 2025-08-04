@@ -1,4 +1,4 @@
-import { SearchProvider } from './src/data/providers/search';
+import { SearchProvider } from '../src/data/providers/search';
 import dotenv from 'dotenv';
 
 async function testBraveSearch() {
@@ -13,20 +13,21 @@ async function testBraveSearch() {
     return;
   }
 
-  console.log('🔍 Testing Brave Search API...');
+  console.log('🔍 Testing Brave Search API for unemployment rate...');
   
   try {
     const searchProvider = new SearchProvider(apiKey, 'brave');
     
-    const results = await searchProvider.search('current mortgage rates 2024', {
+    // Test unemployment rate query
+    const results = await searchProvider.search('current unemployment rate 2024', {
       maxResults: 5,
       timeRange: 'day'
     });
 
     console.log('✅ Brave Search API is working!');
-    console.log(`📊 Found ${results.length} results:`);
+    console.log(`📊 Found ${results.length} results for unemployment rate:`);
     
-    results.forEach((result, index) => {
+    results.forEach((result: any, index: number) => {
       console.log(`${index + 1}. ${result.title}`);
       console.log(`   ${result.snippet.substring(0, 100)}...`);
       console.log(`   Source: ${result.source}`);
