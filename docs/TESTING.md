@@ -44,6 +44,93 @@ This document provides comprehensive documentation for the testing implementatio
 - **Enhanced Market Context**: `enhanced-market-context-simple.test.ts` (15 tests)
 - **Dual Data System**: `dual-data-system.test.ts` (8 tests)
 
+## Database Schema Management
+
+### ⚠️ Critical: Preventing Schema Drift
+
+**Schema drift** occurs when local and production database schemas become out of sync, causing deployment failures and data inconsistencies.
+
+#### ❌ Common Causes of Schema Drift:
+1. **Direct database modifications** without migrations
+2. **Using `prisma db push`** instead of proper migrations
+3. **Incomplete git history** of schema changes
+4. **Feature branch development** without proper schema sync
+5. **Manual SQL modifications** to production database
+
+#### ✅ Proper Schema Workflow:
+
+**Before Starting New Features:**
+```bash
+# 1. Sync with production schema
+npx prisma db pull
+npx prisma generate
+
+# 2. Verify schema is clean
+npx prisma migrate status
+```
+
+**When Making Schema Changes:**
+```bash
+# 1. Edit schema.prisma
+# 2. Create proper migration
+npx prisma migrate dev --name descriptive_migration_name
+
+# 3. Test migration locally
+npx prisma migrate reset
+npx prisma migrate deploy
+
+# 4. Commit everything to git
+git add prisma/
+git commit -m "feat: add UserProfile model with proper migrations"
+```
+
+**Before Deploying:**
+```bash
+# 1. Test migrations in preview
+npx prisma migrate deploy --preview-feature
+
+# 2. Verify schema consistency
+npx prisma db pull
+npx prisma generate
+```
+
+#### 🚨 Schema Drift Recovery:
+
+If schema drift occurs (like the 2025-08-05 incident):
+
+1. **Identify the drift:**
+   ```bash
+   npx prisma migrate status
+   npx prisma db pull
+   ```
+
+2. **Create conditional migrations** for missing columns:
+   ```sql
+   -- Example: Safe column addition
+   DO $$
+   BEGIN
+       IF NOT EXISTS (
+           SELECT 1 FROM information_schema.columns 
+           WHERE table_name = 'user_profiles' 
+           AND column_name = 'email'
+       ) THEN
+           ALTER TABLE "user_profiles" ADD COLUMN "email" TEXT;
+       END IF;
+   END $$;
+   ```
+
+3. **Never use `prisma db push`** in production
+4. **Always test migrations** before deploying
+
+#### 📋 Schema Management Checklist:
+
+- [ ] **Before feature development**: `npx prisma db pull`
+- [ ] **Schema changes**: Always use `npx prisma migrate dev`
+- [ ] **Test migrations**: `npx prisma migrate reset && npx prisma migrate deploy`
+- [ ] **Commit migrations**: Always commit migration files to git
+- [ ] **Before deployment**: `npx prisma migrate deploy --preview-feature`
+- [ ] **Monitor deployments**: Check migration logs for failures
+
 ## Test Commands
 
 ### Development Commands
