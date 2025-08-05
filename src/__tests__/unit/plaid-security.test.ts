@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
-import { prisma } from '../unit/setup';
+import { prisma, generateUniqueEmail } from '../unit/setup';
 import { createTestUser, createTestAccessToken } from './factories/user.factory';
 
 describe('Plaid Security Tests', () => {
@@ -15,10 +15,10 @@ describe('Plaid Security Tests', () => {
 
     // Create test users in database
     user1 = await prisma.user.create({
-      data: createTestUser({ email: 'user1@test.com' })
+      data: createTestUser({ email: generateUniqueEmail('plaid-user1') })
     });
     user2 = await prisma.user.create({
-      data: createTestUser({ email: 'user2@test.com' })
+      data: createTestUser({ email: generateUniqueEmail('plaid-user2') })
     });
 
     // Create access tokens for each user in database

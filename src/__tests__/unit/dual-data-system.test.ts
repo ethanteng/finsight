@@ -9,7 +9,7 @@ import {
   clearTokenizationMaps
 } from '../../privacy';
 import { describe, it, expect, beforeAll } from '@jest/globals';
-import { prisma } from './setup';
+import { prisma, generateUniqueEmail } from './setup';
 import { DataOrchestrator } from '../../data/orchestrator';
 import { UserTier } from '../../data/types';
 
@@ -22,8 +22,8 @@ describe('Context Builder User Isolation', () => {
 
   beforeEach(async () => {
     // Create test data in beforeEach so it survives the cleanup
-    user1 = await prisma.user.create({ data: { email: 'user1@test.com', passwordHash: 'pw', tier: 'starter' } });
-    user2 = await prisma.user.create({ data: { email: 'user2@test.com', passwordHash: 'pw', tier: 'starter' } });
+    user1 = await prisma.user.create({ data: { email: generateUniqueEmail('user1'), passwordHash: 'pw', tier: 'starter' } });
+    user2 = await prisma.user.create({ data: { email: generateUniqueEmail('user2'), passwordHash: 'pw', tier: 'starter' } });
     // Create accounts for user1 only
     await prisma.account.create({ data: { name: 'User1 Checking', type: 'checking', plaidAccountId: 'acc1', userId: user1.id } });
     await prisma.account.create({ data: { name: 'User1 Savings', type: 'savings', plaidAccountId: 'acc2', userId: user1.id } });

@@ -121,8 +121,8 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
 
-      - name: Run backend tests
-        run: npm test
+      - name: Run backend unit tests with coverage
+        run: npm run test:coverage:unit
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
           PLAID_CLIENT_ID: test_client_id
@@ -131,6 +131,15 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
+
+      - name: Upload unit test coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+          flags: unit
+          name: unit-tests
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   # Frontend Build
   frontend-build:
@@ -221,8 +230,8 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
 
-      - name: Run integration tests
-        run: npm run test:integration
+      - name: Run integration tests with coverage
+        run: npm run test:coverage:integration
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
           PLAID_CLIENT_ID: test_client_id
@@ -231,6 +240,15 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY_REAL }}
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY_REAL }}
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
+
+      - name: Upload integration test coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+          flags: integration
+          name: integration-tests
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   # Build Verification
   build-verification:

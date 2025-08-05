@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { PrismaClient } from '@prisma/client';
-import { anonymizeAccountData, anonymizeTransactionData, anonymizeConversationHistory } from './privacy';
+import { anonymizeAccountData, anonymizeTransactionData, anonymizeConversationHistory, tokenizeAccount, tokenizeMerchant } from './privacy';
 import { dataOrchestrator, TierAwareContext } from './data/orchestrator';
 import { UserTier } from './data/types';
 
@@ -209,17 +209,28 @@ export async function askOpenAIWithEnhancedContext(
 
   // Anonymize data before sending to OpenAI (skip for demo mode)
   if (!isDemo) {
-    accounts = accounts.map(account => ({
-      ...account,
-      name: `Account_${account.id.slice(-4)}`,
-      plaidAccountId: `plaid_${account.id.slice(-8)}`
-    }));
+    // Use proper anonymization functions that maintain tokenization maps
+    const accountSummary = anonymizeAccountData(accounts);
+    const transactionSummary = anonymizeTransactionData(transactions);
     
-    transactions = transactions.map(transaction => ({
-      ...transaction,
-      name: transaction.name ? `Transaction_${transaction.id.slice(-4)}` : 'Unknown',
-      merchantName: transaction.merchantName ? `Merchant_${transaction.id.slice(-4)}` : 'Unknown'
-    }));
+    // Replace the accounts and transactions with anonymized versions for AI processing
+    accounts = accounts.map(account => {
+      const tokenizedName = tokenizeAccount(account.name, account.institution);
+      return {
+        ...account,
+        name: tokenizedName,
+        plaidAccountId: `plaid_${account.id.slice(-8)}`
+      };
+    });
+    
+    transactions = transactions.map(transaction => {
+      const tokenizedName = transaction.name ? tokenizeMerchant(transaction.name) : 'Unknown';
+      return {
+        ...transaction,
+        name: tokenizedName,
+        merchantName: transaction.merchantName ? tokenizeMerchant(transaction.merchantName) : 'Unknown'
+      };
+    });
   }
 
   // Get enhanced market context (proactively cached)

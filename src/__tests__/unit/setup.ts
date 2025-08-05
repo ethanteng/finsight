@@ -110,6 +110,8 @@ beforeEach(async () => {
     await prisma.account.deleteMany();
     await prisma.accessToken.deleteMany();
     await prisma.privacySettings.deleteMany();
+    await prisma.userProfile.deleteMany(); // Add UserProfile cleanup
+    await prisma.syncStatus.deleteMany(); // Add SyncStatus cleanup
     await prisma.user.deleteMany();
   } catch (error) {
     // Ignore cleanup errors in unit tests
@@ -123,4 +125,9 @@ afterEach(async () => {
 });
 
 // Export prisma instance for tests
-export { prisma }; 
+export { prisma };
+
+// Helper function to generate unique test emails
+export const generateUniqueEmail = (prefix: string = 'test') => {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}@example.com`;
+}; 
