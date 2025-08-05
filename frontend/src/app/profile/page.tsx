@@ -394,6 +394,7 @@ export default function ProfilePage() {
                   <li>• Transaction history</li>
                   <li>• Conversation history</li>
                   <li>• Account balances and sync data</li>
+                  <li>• Financial profile</li>
                 </ul>
                 <p className="text-sm text-red-400 mb-4 font-medium">
                   This action cannot be undone.

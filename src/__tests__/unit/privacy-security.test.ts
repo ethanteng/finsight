@@ -19,6 +19,9 @@ const mockPrismaClient = {
   },
   syncStatus: {
     deleteMany: jest.fn()
+  },
+  userProfile: {
+    deleteMany: jest.fn()
   }
 };
 
@@ -64,6 +67,9 @@ app.delete('/privacy/delete-all-data', mockRequireAuth, async (req: any, res: an
       where: { userId }
     });
     await mockPrismaClient.syncStatus.deleteMany({
+      where: { userId }
+    });
+    await mockPrismaClient.userProfile.deleteMany({
       where: { userId }
     });
 
@@ -155,6 +161,18 @@ describe('Privacy Endpoints Security', () => {
       expect(mockPrismaClient.account.deleteMany).not.toHaveBeenCalledWith({});
       expect(mockPrismaClient.accessToken.deleteMany).not.toHaveBeenCalledWith({});
       expect(mockPrismaClient.syncStatus.deleteMany).not.toHaveBeenCalledWith({});
+    });
+
+    it('should delete UserProfile when deleting all data', async () => {
+      const response = await request(app)
+        .delete('/privacy/delete-all-data')
+        .set('Authorization', 'Bearer valid-token');
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(mockPrismaClient.userProfile.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'user-123' }
+      });
     });
   });
 

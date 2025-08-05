@@ -1227,6 +1227,9 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         await getPrismaClient().syncStatus.deleteMany({
           where: { userId }
         });
+        await getPrismaClient().userProfile.deleteMany({
+          where: { userId }
+        });
 
         res.json({ success: true, message: 'All data deleted successfully' });
       } catch (err) {
