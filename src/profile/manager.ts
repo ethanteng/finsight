@@ -30,6 +30,7 @@ export class ProfileManager {
       profile = await prisma.userProfile.create({
         data: {
           userId,
+          email: user.email, // Include user's email
           profileText: ''
         }
       });
@@ -41,10 +42,24 @@ export class ProfileManager {
   async updateProfile(userId: string, newProfileText: string): Promise<void> {
     const prisma = getPrismaClient();
     
+    // Get user to include email in create operation
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    
+    if (!user) {
+      console.log('User not found, cannot update profile for userId:', userId);
+      return;
+    }
+    
     await prisma.userProfile.upsert({
       where: { userId },
       update: { profileText: newProfileText },
-      create: { userId, profileText: newProfileText }
+      create: { 
+        userId, 
+        email: user.email, // Include user's email
+        profileText: newProfileText 
+      }
     });
   }
   
