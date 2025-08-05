@@ -22,16 +22,30 @@ export class ProfileManager {
       return '';
     }
     
+    // Try to find profile by userId first, then by email
     let profile = await prisma.userProfile.findUnique({
       where: { userId }
     });
     
     if (!profile) {
+      // Try to find by email as fallback
+      profile = await prisma.userProfile.findUnique({
+        where: { email: user.email }
+      });
+    }
+    
+    if (!profile) {
+      // Generate a unique profile hash
+      const profileHash = `profile_${userId}_${Date.now()}`;
+      
       profile = await prisma.userProfile.create({
         data: {
+          email: user.email,
+          profileHash,
           userId,
-          email: user.email, // Include user's email
-          profileText: ''
+          profileText: '',
+          isActive: true,
+          conversationCount: 0
         }
       });
     }
@@ -52,15 +66,41 @@ export class ProfileManager {
       return;
     }
     
-    await prisma.userProfile.upsert({
-      where: { userId },
-      update: { profileText: newProfileText },
-      create: { 
-        userId, 
-        email: user.email, // Include user's email
-        profileText: newProfileText 
-      }
+    // Try to find existing profile
+    let profile = await prisma.userProfile.findUnique({
+      where: { userId }
     });
+    
+    if (!profile) {
+      // Try to find by email as fallback
+      profile = await prisma.userProfile.findUnique({
+        where: { email: user.email }
+      });
+    }
+    
+    if (profile) {
+      // Update existing profile
+      await prisma.userProfile.update({
+        where: { id: profile.id },
+        data: { 
+          profileText: newProfileText,
+          lastUpdated: new Date()
+        }
+      });
+    } else {
+      // Create new profile
+      const profileHash = `profile_${userId}_${Date.now()}`;
+      await prisma.userProfile.create({
+        data: { 
+          email: user.email,
+          profileHash,
+          userId,
+          profileText: newProfileText,
+          isActive: true,
+          conversationCount: 0
+        }
+      });
+    }
   }
   
   async updateProfileFromConversation(
