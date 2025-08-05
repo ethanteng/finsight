@@ -39,6 +39,9 @@ export async function sendEmailVerificationCode(
   try {
     const transporter = createTransporter();
     
+    // Use localhost for development, production URL for production
+    const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.FRONTEND_URL;
+    
     const mailOptions = {
       from: EMAIL_FROM,
       to: email,
@@ -68,7 +71,7 @@ export async function sendEmailVerificationCode(
             </p>
             
             <div style="text-align: center; margin-top: 30px;">
-              <a href="${process.env.FRONTEND_URL || 'https://asklinc.com'}" 
+              <a href="${isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'https://asklinc.com')}" 
                  style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block;">
                 Visit Ask Linc
               </a>
@@ -100,7 +103,11 @@ export async function sendPasswordResetEmail(
 ): Promise<boolean> {
   try {
     const transporter = createTransporter();
-    const resetUrl = `${process.env.FRONTEND_URL || 'https://asklinc.com'}/reset-password?token=${resetToken}`;
+    
+    // Use localhost for development, production URL for production
+    const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.FRONTEND_URL;
+    const baseUrl = isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'https://asklinc.com');
+    const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
     
     const mailOptions = {
       from: EMAIL_FROM,
