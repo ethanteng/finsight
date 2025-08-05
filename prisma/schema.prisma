@@ -24,6 +24,8 @@ model User {
   privacySettings PrivacySettings?
   syncStatuses    SyncStatus[]
   profile         UserProfile?
+  passwordResetTokens PasswordResetToken[]
+  emailVerificationCodes EmailVerificationCode[]
 
   @@map("users")
 }
@@ -167,4 +169,28 @@ model encrypted_profile_data {
   createdAt     DateTime    @default(now())
   updatedAt     DateTime
   user_profiles UserProfile @relation(fields: [profileHash], references: [profileHash])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
+
+model EmailVerificationCode {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  userId    String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_verification_codes")
 }

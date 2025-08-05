@@ -9,6 +9,12 @@ import {
   verifyToken
 } from './utils';
 import { authenticateUser, AuthenticatedRequest } from './middleware';
+import { 
+  sendEmailVerificationCode, 
+  sendPasswordResetEmail, 
+  generateRandomCode, 
+  generateRandomToken 
+} from './email';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -120,6 +126,22 @@ router.post('/register', async (req: Request, res: Response) => {
       }
     });
 
+    // Generate verification code
+    const verificationCode = generateRandomCode();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+    // Create verification code
+    await prisma.emailVerificationCode.create({
+      data: {
+        code: verificationCode,
+        userId: user.id,
+        expiresAt
+      }
+    });
+
+    // Send verification email
+    await sendEmailVerificationCode(user.email, verificationCode);
+
     // Generate token
     const token = generateToken({
       userId: user.id,
@@ -128,7 +150,7 @@ router.post('/register', async (req: Request, res: Response) => {
     });
 
     res.status(201).json({
-      message: 'User registered successfully',
+      message: 'User registered successfully. Please check your email for verification code.',
       user: {
         id: user.id,
         email: user.email,
@@ -311,6 +333,276 @@ router.post('/logout', authenticateUser, async (req: AuthenticatedRequest, res: 
   } catch (error) {
     console.error('Logout error:', error);
     res.status(500).json({ error: 'Logout failed' });
+  }
+});
+
+// Forgot password - send reset email
+router.post('/forgot-password', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    if (!validateEmail(email)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    // Find user by email
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() }
+    });
+
+    if (!user) {
+      // Don't reveal if user exists or not for security
+      return res.json({ message: 'If an account with that email exists, a password reset link has been sent' });
+    }
+
+    if (!user.isActive) {
+      return res.status(400).json({ error: 'Account is deactivated' });
+    }
+
+    // Generate reset token
+    const resetToken = generateRandomToken();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    // Delete any existing reset tokens for this user
+    await prisma.passwordResetToken.deleteMany({
+      where: { userId: user.id }
+    });
+
+    // Create new reset token
+    await prisma.passwordResetToken.create({
+      data: {
+        token: resetToken,
+        userId: user.id,
+        expiresAt
+      }
+    });
+
+    // Send reset email
+    const emailSent = await sendPasswordResetEmail(email, resetToken);
+
+    if (!emailSent) {
+      return res.status(500).json({ error: 'Failed to send password reset email' });
+    }
+
+    res.json({ message: 'If an account with that email exists, a password reset link has been sent' });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Failed to process password reset request' });
+  }
+});
+
+// Reset password with token
+router.post('/reset-password', async (req: Request, res: Response) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({ error: 'Token and new password are required' });
+    }
+
+    // Validate new password
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.isValid) {
+      return res.status(400).json({ error: passwordValidation.error });
+    }
+
+    // Find reset token
+    const resetToken = await prisma.passwordResetToken.findUnique({
+      where: { token },
+      include: { user: true }
+    });
+
+    if (!resetToken) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    if (resetToken.used) {
+      return res.status(400).json({ error: 'Reset token has already been used' });
+    }
+
+    if (resetToken.expiresAt < new Date()) {
+      return res.status(400).json({ error: 'Reset token has expired' });
+    }
+
+    // Hash new password
+    const newPasswordHash = await hashPassword(newPassword);
+
+    // Update user password
+    await prisma.user.update({
+      where: { id: resetToken.userId },
+      data: { passwordHash: newPasswordHash }
+    });
+
+    // Mark token as used
+    await prisma.passwordResetToken.update({
+      where: { id: resetToken.id },
+      data: { used: true }
+    });
+
+    res.json({ message: 'Password reset successfully' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+// Send email verification code
+router.post('/send-verification', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.emailVerified) {
+      return res.status(400).json({ error: 'Email is already verified' });
+    }
+
+    // Generate verification code
+    const verificationCode = generateRandomCode();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+    // Delete any existing verification codes for this user
+    await prisma.emailVerificationCode.deleteMany({
+      where: { userId: user.id }
+    });
+
+    // Create new verification code
+    await prisma.emailVerificationCode.create({
+      data: {
+        code: verificationCode,
+        userId: user.id,
+        expiresAt
+      }
+    });
+
+    // Send verification email
+    const emailSent = await sendEmailVerificationCode(user.email, verificationCode);
+
+    if (!emailSent) {
+      return res.status(500).json({ error: 'Failed to send verification email' });
+    }
+
+    res.json({ message: 'Verification code sent to your email' });
+  } catch (error) {
+    console.error('Send verification error:', error);
+    res.status(500).json({ error: 'Failed to send verification code' });
+  }
+});
+
+// Verify email with code
+router.post('/verify-email', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { code } = req.body;
+
+    if (!code) {
+      return res.status(400).json({ error: 'Verification code is required' });
+    }
+
+    // Find verification code
+    const verificationCode = await prisma.emailVerificationCode.findUnique({
+      where: { code },
+      include: { user: true }
+    });
+
+    if (!verificationCode) {
+      return res.status(400).json({ error: 'Invalid verification code' });
+    }
+
+    if (verificationCode.userId !== req.user!.id) {
+      return res.status(403).json({ error: 'Verification code does not belong to this user' });
+    }
+
+    if (verificationCode.used) {
+      return res.status(400).json({ error: 'Verification code has already been used' });
+    }
+
+    if (verificationCode.expiresAt < new Date()) {
+      return res.status(400).json({ error: 'Verification code has expired' });
+    }
+
+    // Mark email as verified
+    await prisma.user.update({
+      where: { id: req.user!.id },
+      data: { emailVerified: true }
+    });
+
+    // Mark code as used
+    await prisma.emailVerificationCode.update({
+      where: { id: verificationCode.id },
+      data: { used: true }
+    });
+
+    res.json({ message: 'Email verified successfully' });
+  } catch (error) {
+    console.error('Verify email error:', error);
+    res.status(500).json({ error: 'Failed to verify email' });
+  }
+});
+
+// Resend verification code
+router.post('/resend-verification', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.emailVerified) {
+      return res.status(400).json({ error: 'Email is already verified' });
+    }
+
+    // Check if there's a recent verification code (rate limiting)
+    const recentCode = await prisma.emailVerificationCode.findFirst({
+      where: { 
+        userId: user.id,
+        createdAt: { gte: new Date(Date.now() - 60 * 1000) } // Within last minute
+      }
+    });
+
+    if (recentCode) {
+      return res.status(429).json({ error: 'Please wait before requesting another verification code' });
+    }
+
+    // Generate new verification code
+    const verificationCode = generateRandomCode();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+    // Delete any existing verification codes for this user
+    await prisma.emailVerificationCode.deleteMany({
+      where: { userId: user.id }
+    });
+
+    // Create new verification code
+    await prisma.emailVerificationCode.create({
+      data: {
+        code: verificationCode,
+        userId: user.id,
+        expiresAt
+      }
+    });
+
+    // Send verification email
+    const emailSent = await sendEmailVerificationCode(user.email, verificationCode);
+
+    if (!emailSent) {
+      return res.status(500).json({ error: 'Failed to send verification email' });
+    }
+
+    res.json({ message: 'Verification code resent to your email' });
+  } catch (error) {
+    console.error('Resend verification error:', error);
+    res.status(500).json({ error: 'Failed to resend verification code' });
   }
 });
 
