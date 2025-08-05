@@ -101,6 +101,52 @@ const insights = await profileExtractor.extractProfileData(conversation);
 // Returns: Financial preferences and patterns
 ```
 
+#### Demo Profile Integration
+```typescript
+// Demo profile integration for enhanced AI responses
+export async function askOpenAIWithEnhancedContext(
+  question: string, 
+  conversationHistory: Conversation[] = [], 
+  userTier: UserTier | string = UserTier.STARTER, 
+  isDemo: boolean = false, 
+  userId?: string,
+  model?: string,
+  demoProfile?: string
+): Promise<string> {
+  // Get user profile if available
+  let userProfile: string = '';
+  if (isDemo && demoProfile) {
+    // Use provided demo profile
+    userProfile = demoProfile;
+    console.log('OpenAI Enhanced: Using provided demo profile, length:', userProfile.length);
+  } else if (userId && !isDemo) {
+    // ... existing production profile logic ...
+  }
+
+  // Build enhanced system prompt with proactive market context
+  const systemPrompt = buildEnhancedSystemPrompt(tierContext, accountSummary, transactionSummary, marketContextSummary, searchContext, userProfile);
+  
+  // ... rest of function ...
+}
+```
+
+#### Demo Profile Content
+The demo profile provides realistic financial context for AI responses:
+
+```typescript
+const demoProfile = `I am Sarah Chen, a 35-year-old software engineer living in Austin, TX with my husband Michael (37, Marketing Manager) and our two children (ages 5 and 8). 
+
+Our household income is $157,000 annually, with me earning $85,000 as a software engineer and Michael earning $72,000 as a marketing manager. We have a stable dual-income household with good job security in the tech industry.
+
+We own our home with a $485,000 mortgage at 3.25% interest rate, and we're focused on building our emergency fund, saving for our children's education, and planning for retirement. Our financial goals include:
+- Building a $50,000 emergency fund (currently at $28,450)
+- Saving for a family vacation to Europe ($8,000 target, currently at $3,200)
+- Building a house down payment fund ($100,000 target, currently at $45,000)
+- Long-term retirement planning (currently have $246,200 in retirement accounts)
+
+Our investment strategy is conservative with a mix of index funds in our 401(k) and Roth IRA. We prioritize saving and are working to increase our monthly savings rate. We're also focused on paying down our credit card debt and maintaining good credit scores.`;
+```
+
 ## Performance Optimization
 
 ### Caching Strategy
@@ -249,6 +295,32 @@ logger.info('RAG request processed', {
 - **Caching Layer**: Redis implementation
 - **Load Balancing**: Multiple API endpoints
 - **CDN Integration**: Global content delivery
+
+## Demo Profile Integration Benefits
+
+### Enhanced User Experience
+- **Realistic Context**: Demo profile provides comprehensive financial background
+- **Personalized Responses**: AI generates context-aware financial advice
+- **Goal-Oriented Guidance**: Responses aligned with demo user's stated objectives
+- **Risk-Free Exploration**: Full platform functionality without real data
+
+### Technical Advantages
+- **Consistent Architecture**: Same profile system works in demo and production
+- **Performance Optimized**: No database queries needed for demo profile
+- **Type Safety**: Full TypeScript support with proper interfaces
+- **Error Resilience**: Graceful fallbacks for missing profile data
+
+### Business Value
+- **Feature Demonstration**: Shows personalization capabilities to potential users
+- **Conversion Optimization**: Realistic experience increases sign-up likelihood
+- **Reduced Friction**: No account creation required for demo access
+- **User Education**: Helps users understand profile feature benefits
+
+### Implementation Benefits
+- **Code Reuse**: Single UserProfile component serves both modes
+- **Maintainability**: Clear separation between demo and production logic
+- **Scalability**: Easy to extend with additional demo profiles
+- **Testing**: Comprehensive test coverage for profile functionality
 
 ## Troubleshooting
 

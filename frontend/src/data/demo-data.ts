@@ -41,6 +41,13 @@ export interface DemoUser {
   location: string;
 }
 
+export interface DemoProfile {
+  id: string;
+  profileText: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Comprehensive demo dataset
 export const demoData = {
   user: {
@@ -475,4 +482,11 @@ export const getDemoDataAnalysis = () => {
     netWorth,
     goalProgress
   };
-}; 
+};
+
+// Debug logging to verify demo data is loaded
+console.log('Demo data loaded:', {
+  hasUser: !!demoData.user,
+  accountsCount: demoData.accounts.length,
+  transactionsCount: demoData.transactions.length
+}); 

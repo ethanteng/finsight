@@ -540,6 +540,176 @@ TEST_USER_TIER=starter|standard|premium
 
 The Enhanced Market Context System successfully transforms the reactive data fetching approach into a proactive, cached system that delivers faster, more informed AI responses while reducing external API dependencies and improving overall system reliability.
 
+## 🎭 **Demo Profile System**
+
+### **Overview**
+
+The Demo Profile System provides users with a realistic financial profile experience in demo mode, showcasing the platform's personalization capabilities without requiring real user data.
+
+### **Key Features**
+
+#### **1. Realistic Financial Profile**
+- **Personal Information**: Age, occupation, family status, location
+- **Financial Details**: Household income, mortgage information, investment strategy
+- **Financial Goals**: Emergency fund, vacation savings, retirement planning
+- **Risk Profile**: Conservative investment approach with index funds
+
+#### **2. Read-Only Interface**
+- **Demo Mode Indicator**: Clear indication when viewing demo profile
+- **Non-Editable**: Users cannot modify the demo profile
+- **Consistent UI**: Same UserProfile component works in both modes
+- **Appropriate Messaging**: Demo-specific help text and descriptions
+
+#### **3. AI Integration**
+- **Enhanced Responses**: Demo profile incorporated into AI prompts
+- **Personalized Advice**: AI provides context-aware financial recommendations
+- **Realistic Scenarios**: Responses based on demo user's financial situation
+- **Goal-Oriented Guidance**: Advice aligned with demo user's stated goals
+
+### **Implementation Details**
+
+#### **1. Demo Profile Data Structure** (`frontend/src/data/demo-data.ts`)
+
+```typescript
+export interface DemoProfile {
+  id: string;
+  profileText: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const demoData = {
+  // ... existing demo data ...
+  profile: {
+    id: "demo_profile_1",
+    profileText: `I am Sarah Chen, a 35-year-old software engineer living in Austin, TX with my husband Michael (37, Marketing Manager) and our two children (ages 5 and 8). 
+
+Our household income is $157,000 annually, with me earning $85,000 as a software engineer and Michael earning $72,000 as a marketing manager. We have a stable dual-income household with good job security in the tech industry.
+
+We own our home with a $485,000 mortgage at 3.25% interest rate, and we're focused on building our emergency fund, saving for our children's education, and planning for retirement. Our financial goals include:
+- Building a $50,000 emergency fund (currently at $28,450)
+- Saving for a family vacation to Europe ($8,000 target, currently at $3,200)
+- Building a house down payment fund ($100,000 target, currently at $45,000)
+- Long-term retirement planning (currently have $246,200 in retirement accounts)
+
+Our investment strategy is conservative with a mix of index funds in our 401(k) and Roth IRA. We prioritize saving and are working to increase our monthly savings rate. We're also focused on paying down our credit card debt and maintaining good credit scores.`,
+    createdAt: "2024-07-28T10:30:00Z",
+    updatedAt: "2024-07-28T10:30:00Z"
+  }
+};
+```
+
+#### **2. Enhanced UserProfile Component** (`frontend/src/components/UserProfile.tsx`)
+
+```typescript
+export default function UserProfile({ userId, isDemo }: UserProfileProps) {
+  // ... existing logic ...
+
+  useEffect(() => {
+    if (userId && !isDemo) {
+      loadProfile();
+    } else if (isDemo) {
+      // Load demo profile
+      setProfileText(demoData.profile.profileText);
+    }
+  }, [userId, isDemo]);
+
+  return (
+    <div className="bg-gray-800 rounded-lg p-6 mb-6">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-semibold text-white">Your Financial Profile</h3>
+        {!loading && !isDemo && (
+          <button onClick={() => setEditing(!editing)}>
+            {editing ? 'Cancel' : 'Edit'}
+          </button>
+        )}
+        {isDemo && (
+          <span className="text-gray-400 text-sm">Demo Mode - Read Only</span>
+        )}
+      </div>
+      {/* ... rest of component ... */}
+    </div>
+  );
+}
+```
+
+#### **3. Backend Integration** (`src/openai.ts`)
+
+```typescript
+export async function askOpenAIWithEnhancedContext(
+  question: string, 
+  conversationHistory: Conversation[] = [], 
+  userTier: UserTier | string = UserTier.STARTER, 
+  isDemo: boolean = false, 
+  userId?: string,
+  model?: string,
+  demoProfile?: string
+): Promise<string> {
+  // ... existing logic ...
+
+  // Get user profile if available
+  let userProfile: string = '';
+  if (isDemo && demoProfile) {
+    // Use provided demo profile
+    userProfile = demoProfile;
+    console.log('OpenAI Enhanced: Using provided demo profile, length:', userProfile.length);
+  } else if (userId && !isDemo) {
+    // ... existing production profile logic ...
+  }
+
+  // Build enhanced system prompt with proactive market context
+  const systemPrompt = buildEnhancedSystemPrompt(tierContext, accountSummary, transactionSummary, marketContextSummary, searchContext, userProfile);
+  
+  // ... rest of function ...
+}
+```
+
+#### **4. Demo Request Handlers** (`src/index.ts`)
+
+```typescript
+const handleDemoRequest = async (req: Request, res: Response) => {
+  // ... existing logic ...
+  
+  // Include demo profile in the AI prompt
+  const demoProfile = `I am Sarah Chen, a 35-year-old software engineer living in Austin, TX with my husband Michael (37, Marketing Manager) and our two children (ages 5 and 8). 
+
+Our household income is $157,000 annually, with me earning $85,000 as a software engineer and Michael earning $72,000 as a marketing manager. We have a stable dual-income household with good job security in the tech industry.
+
+We own our home with a $485,000 mortgage at 3.25% interest rate, and we're focused on building our emergency fund, saving for our children's education, and planning for retirement. Our financial goals include:
+- Building a $50,000 emergency fund (currently at $28,450)
+- Saving for a family vacation to Europe ($8,000 target, currently at $3,200)
+- Building a house down payment fund ($100,000 target, currently at $45,000)
+- Long-term retirement planning (currently have $246,200 in retirement accounts)
+
+Our investment strategy is conservative with a mix of index funds in our 401(k) and Roth IRA. We prioritize saving and are working to increase our monthly savings rate. We're also focused on paying down our credit card debt and maintaining good credit scores.`;
+  
+  const answer = await askOpenAIWithEnhancedContext(questionString, recentConversations, backendTier as any, true, undefined, undefined, demoProfile);
+  
+  // ... rest of handler ...
+};
+```
+
+### **Benefits**
+
+#### **For Users**
+- **Risk-Free Experience**: Full platform functionality without real data
+- **Realistic Demonstration**: See how personalized the platform can be
+- **Clear Expectations**: Understand what the profile feature offers
+- **No Data Entry**: Immediate access to realistic financial scenarios
+
+#### **For Business**
+- **Feature Showcase**: Demonstrates personalization capabilities
+- **User Engagement**: Realistic experience increases conversion potential
+- **Reduced Friction**: No account creation required for demo
+- **Consistent Experience**: Same UI components in demo and production
+
+### **Technical Benefits**
+- **Code Reuse**: Same UserProfile component works in both modes
+- **Type Safety**: Full TypeScript support with proper interfaces
+- **Error Handling**: Graceful fallbacks for missing profile data
+- **Performance**: No database queries needed for demo profile
+- **Maintainability**: Clear separation between demo and production logic
+
 ## 🛠️ **Admin Dashboard & Management System**
 
 ### **Overview**

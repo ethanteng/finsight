@@ -43,7 +43,8 @@ export async function askOpenAIWithEnhancedContext(
   userTier: UserTier | string = UserTier.STARTER, 
   isDemo: boolean = false, 
   userId?: string,
-  model?: string
+  model?: string,
+  demoProfile?: string
 ): Promise<string> {
   // Convert string tier to enum if needed
   const tier = typeof userTier === 'string' ? (userTier as UserTier) : userTier;
@@ -393,7 +394,11 @@ export async function askOpenAIWithEnhancedContext(
 
   // Get user profile if available
   let userProfile: string = '';
-  if (userId && !isDemo) {
+  if (isDemo && demoProfile) {
+    // Use provided demo profile
+    userProfile = demoProfile;
+    console.log('OpenAI Enhanced: Using provided demo profile, length:', userProfile.length);
+  } else if (userId && !isDemo) {
     try {
       const { ProfileManager } = await import('./profile/manager');
       const profileManager = new ProfileManager();

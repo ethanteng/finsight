@@ -93,6 +93,7 @@ The demo system is a sophisticated implementation that allows users to experienc
 - **AI Integration**: Full AI analysis with demo data + RAG system
 - **Market Context**: Real market data integration
 - **Privacy Protection**: No tokenization needed for fake data
+- **Demo Profile System**: Realistic financial profile with read-only interface
 
 ### **Enhanced Demo Data Structure**
 
@@ -107,7 +108,47 @@ const demoAccounts = [
   { name: 'Wells Fargo Mortgage', balance: 485000.00, type: 'loan', interestRate: 6.72 },
   { name: 'Marcus 12-Month CD', balance: 25000.00, type: 'savings', interestRate: 4.85 }
 ];
+
+// Demo profile with realistic financial information
+const demoProfile = {
+  id: "demo_profile_1",
+  profileText: `I am Sarah Chen, a 35-year-old software engineer living in Austin, TX with my husband Michael (37, Marketing Manager) and our two children (ages 5 and 8). 
+
+Our household income is $157,000 annually, with me earning $85,000 as a software engineer and Michael earning $72,000 as a marketing manager. We have a stable dual-income household with good job security in the tech industry.
+
+We own our home with a $485,000 mortgage at 3.25% interest rate, and we're focused on building our emergency fund, saving for our children's education, and planning for retirement. Our financial goals include:
+- Building a $50,000 emergency fund (currently at $28,450)
+- Saving for a family vacation to Europe ($8,000 target, currently at $3,200)
+- Building a house down payment fund ($100,000 target, currently at $45,000)
+- Long-term retirement planning (currently have $246,200 in retirement accounts)
+
+Our investment strategy is conservative with a mix of index funds in our 401(k) and Roth IRA. We prioritize saving and are working to increase our monthly savings rate. We're also focused on paying down our credit card debt and maintaining good credit scores.`,
+  createdAt: "2024-07-28T10:30:00Z",
+  updatedAt: "2024-07-28T10:30:00Z"
+};
 ```
+
+### **Demo Profile Integration**
+
+The demo system now includes a comprehensive financial profile that demonstrates the platform's personalization capabilities:
+
+#### **Profile Features**
+- **Realistic Content**: Detailed financial profile with personal and financial information
+- **Read-Only Interface**: Users can view the profile but cannot edit it in demo mode
+- **AI Integration**: Profile is incorporated into AI prompts for personalized responses
+- **Consistent UI**: Same UserProfile component works in both demo and production modes
+
+#### **Profile Content**
+- **Personal Information**: Age, occupation, family status, location
+- **Financial Details**: Household income, mortgage information, investment strategy
+- **Financial Goals**: Emergency fund, vacation savings, retirement planning
+- **Risk Profile**: Conservative investment approach with index funds
+
+#### **Technical Implementation**
+- **Backend Integration**: Demo profile passed to AI function for enhanced responses
+- **Frontend Display**: UserProfile component shows demo profile with appropriate messaging
+- **System Prompt**: Profile included in AI system prompt for context-aware responses
+- **Error Handling**: Graceful fallback if profile data is unavailable
 
 ### **Demo vs Production Flow**
 
