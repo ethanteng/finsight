@@ -40,7 +40,10 @@ export async function sendEmailVerificationCode(
     const transporter = createTransporter();
     
     // Use localhost for development, production URL for production
-    const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.FRONTEND_URL;
+    // Check if we're running locally (no NODE_ENV set or development)
+    const isDevelopment = !process.env.NODE_ENV || 
+                         process.env.NODE_ENV === 'development' || 
+                         process.env.FRONTEND_URL?.includes('localhost');
     
     const mailOptions = {
       from: EMAIL_FROM,
@@ -105,7 +108,10 @@ export async function sendPasswordResetEmail(
     const transporter = createTransporter();
     
     // Use localhost for development, production URL for production
-    const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.FRONTEND_URL;
+    // Check if we're running locally (no NODE_ENV set or development)
+    const isDevelopment = !process.env.NODE_ENV || 
+                         process.env.NODE_ENV === 'development' || 
+                         process.env.FRONTEND_URL?.includes('localhost');
     const baseUrl = isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'https://asklinc.com');
     const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
     
