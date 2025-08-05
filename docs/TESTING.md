@@ -44,6 +44,40 @@ This document provides comprehensive documentation for the testing implementatio
 - **Enhanced Market Context**: `enhanced-market-context-simple.test.ts` (15 tests)
 - **Dual Data System**: `dual-data-system.test.ts` (8 tests)
 
+## Tier System Testing
+
+### Tier-Based Access Control Testing
+
+The tier system implements different levels of access to RAG functionality and data sources. Testing ensures proper access control and upgrade paths.
+
+#### Tier Levels
+- **Starter**: Basic functionality, no RAG access
+- **Standard**: RAG access with enhanced market context
+- **Premium**: Full RAG access with all data sources
+
+#### Testing Strategy
+```typescript
+describe('Tier System Tests', () => {
+  it('should block RAG access for Starter tier', async () => {
+    // Test that Starter users cannot access RAG features
+  });
+
+  it('should allow RAG access for Standard tier', async () => {
+    // Test that Standard users can access RAG with limitations
+  });
+
+  it('should provide full RAG access for Premium tier', async () => {
+    // Test that Premium users have full RAG access
+  });
+});
+```
+
+#### Tier Upgrade Testing
+- **Upgrade Paths**: Test progression between tiers
+- **Feature Unlocking**: Verify features unlock with tier upgrades
+- **Data Source Access**: Test access to different data sources per tier
+- **Limitation Enforcement**: Ensure tier limitations are properly enforced
+
 ## Database Schema Management
 
 ### ⚠️ Critical: Preventing Schema Drift
