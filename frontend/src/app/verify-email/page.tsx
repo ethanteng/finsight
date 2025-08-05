@@ -33,9 +33,11 @@ export default function VerifyEmailPage() {
       const data = await res.json();
 
       if (res.ok) {
-        setSuccess('Email verified successfully! Redirecting to app...');
+        setSuccess('Email verified successfully! Redirecting to login...');
+        // Clear the auth token and redirect to login
+        localStorage.removeItem('auth_token');
         setTimeout(() => {
-          router.push('/app');
+          router.push('/login');
         }, 2000);
       } else {
         setError(data.error || 'Failed to verify email');
@@ -176,7 +178,7 @@ export default function VerifyEmailPage() {
         </div>
 
         <div className="text-center">
-          <Link href="/app" className="text-gray-400 hover:text-white text-sm">
+          <Link href="/login" className="text-gray-400 hover:text-white text-sm">
             Skip for now
           </Link>
         </div>

@@ -36,7 +36,7 @@ export default function RegisterPage() {
 
       if (res.ok && data.token) {
         localStorage.setItem('auth_token', data.token);
-        // Redirect to email verification instead of app
+        // Redirect to email verification
         router.push('/verify-email');
       } else {
         setError(data.error || 'Registration failed');
