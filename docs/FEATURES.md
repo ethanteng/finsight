@@ -2,13 +2,231 @@
 
 ## 🎯 **Overview**
 
-This document covers the core features of the Ask Linc platform, including the tier-based access control system, enhanced market context capabilities, and comprehensive admin dashboard functionality.
+This document covers the core features of the Ask Linc platform, including the tier-based access control system, enhanced market context capabilities, comprehensive authentication system, and admin dashboard functionality.
 
 ## 🏗️ **Tier-Based Access Control System**
 
 ### **Overview**
 
 The tier-based system provides differentiated access to financial data sources based on user subscription levels. This system ensures users get appropriate data access while encouraging upgrades through intelligent upgrade suggestions.
+
+## 🔐 **Authentication & Security System**
+
+### **Overview**
+
+The platform implements a comprehensive authentication system with advanced security features including email verification, forgot password functionality, and secure token management. The system follows industry best practices for user authentication and data protection.
+
+### **Key Features**
+
+#### **Email Verification System**
+- **6-Digit Verification Codes**: Secure random codes (100000-999999) with 15-minute expiration
+- **Rate Limiting**: Protection against rapid verification code requests (1-minute cooldown)
+- **Automatic Code Generation**: Codes sent automatically upon registration
+- **Resend Functionality**: Users can request new codes with proper rate limiting
+- **One-Time Use**: Codes marked as used after successful verification
+
+#### **Forgot Password System**
+- **Secure Token Generation**: 64-character hex strings using crypto.randomBytes()
+- **1-Hour Expiration**: Tokens expire after 60 minutes for security
+- **One-Time Use**: Tokens marked as used after password reset
+- **Automatic Cleanup**: Old tokens deleted when new ones are generated
+- **No User Enumeration**: Same response for all email addresses (security through obscurity)
+
+#### **Security Best Practices**
+- **Explicit Authentication**: Users must log in after email verification (not auto-login)
+- **Token Invalidation**: Old authentication tokens cleared after verification
+- **Environment Detection**: Automatic localhost/production URL switching for testing
+- **Comprehensive Validation**: Input validation, rate limiting, and error handling
+
+### **Implementation Details**
+
+#### **1. Email Service Integration** (`src/auth/email.ts`)
+
+Professional email service with Nodemailer integration:
+
+```typescript
+// Environment-aware URL generation
+const isDevelopment = !process.env.NODE_ENV || 
+                     process.env.NODE_ENV === 'development' || 
+                     process.env.FRONTEND_URL?.includes('localhost');
+const baseUrl = isDevelopment ? 'http://localhost:3001' : 
+                (process.env.FRONTEND_URL || 'https://asklinc.com');
+
+// Secure token generation
+export function generateRandomToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+export function generateRandomCode(length: number = 6): string {
+  return crypto.randomInt(100000, 999999).toString();
+}
+```
+
+#### **2. Database Schema** (`prisma/schema.prisma`)
+
+Secure token storage with proper relationships:
+
+```prisma
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model EmailVerificationCode {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  userId    String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+```
+
+#### **3. Authentication Routes** (`src/auth/routes.ts`)
+
+Comprehensive API endpoints with security features:
+
+```typescript
+// Forgot password with security
+router.post('/forgot-password', async (req: Request, res: Response) => {
+  // Generate secure token
+  const resetToken = generateRandomToken();
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+  
+  // Delete old tokens and create new one
+  await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+  await prisma.passwordResetToken.create({ data: { token: resetToken, userId: user.id, expiresAt } });
+  
+  // Send email with environment-aware URL
+  await sendPasswordResetEmail(email, resetToken);
+});
+
+// Email verification with rate limiting
+router.post('/verify-email', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
+  // Validate code, check expiration, mark as used
+  await prisma.user.update({ where: { id: req.user!.id }, data: { emailVerified: true } });
+  await prisma.emailVerificationCode.update({ where: { id: verificationCode.id }, data: { used: true } });
+});
+```
+
+#### **4. Frontend Authentication Pages**
+
+**Forgot Password Page** (`frontend/src/app/forgot-password/page.tsx`):
+- Clean form for email input
+- Success/error messaging
+- Links to login and registration
+
+**Reset Password Page** (`frontend/src/app/reset-password/page.tsx`):
+- Token validation from URL
+- Password confirmation
+- Security validation (minimum 8 characters)
+- Redirect to login after success
+
+**Email Verification Page** (`frontend/src/app/verify-email/page.tsx`):
+- Large, clear code input
+- Resend functionality with rate limiting
+- Success feedback and redirect to login
+- Skip option for later verification
+
+### **User Flow Security**
+
+#### **Registration Flow**
+1. **User Registration**: `Register → Email Verification`
+2. **Email Verification**: `Enter Code → Success → Redirect to Login`
+3. **Login**: `Enter Credentials → Success → Go to App`
+
+#### **Forgot Password Flow**
+1. **Request Reset**: `Enter Email → Send Reset Link`
+2. **Reset Password**: `Click Link → Enter New Password → Success`
+3. **Login**: `Enter Credentials → Success → Go to App`
+
+### **Security Features**
+
+#### **Token Management**
+- **Secure Generation**: Crypto-secure random tokens and codes
+- **Time-Based Expiration**: 15 minutes for codes, 1 hour for reset tokens
+- **One-Time Use**: Tokens and codes marked as used after consumption
+- **Automatic Cleanup**: Old tokens deleted when new ones are generated
+
+#### **Rate Limiting**
+- **Verification Codes**: 1-minute cooldown between requests
+- **Password Reset**: No rate limiting (security through obscurity)
+- **Login Attempts**: Standard JWT authentication with proper validation
+
+#### **Environment Configuration**
+- **Development**: Automatic localhost URL generation for testing
+- **Production**: Environment variable-based URL configuration
+- **Testing**: Easy local development with proper URL handling
+
+### **Email Service Features**
+
+#### **Professional Templates**
+- **Beautiful HTML Design**: Consistent with Ask Linc branding
+- **Responsive Layout**: Works on all devices and email clients
+- **Clear Call-to-Action**: Prominent buttons and clear messaging
+- **Security Information**: Expiration times and security notices
+
+#### **Configuration Options**
+- **SMTP Providers**: Gmail, SendGrid, Resend, or custom SMTP
+- **Environment Variables**: Easy configuration for different environments
+- **Error Handling**: Graceful fallbacks when email sending fails
+- **Testing Support**: Localhost URLs for development testing
+
+### **Testing & Validation**
+
+#### **Unit Tests** (`src/__tests__/unit/auth-email.test.ts`)
+- **Token Generation**: Secure random code and token generation
+- **Email Service**: Configuration and template testing
+- **Security Validation**: Proper random generation and uniqueness
+
+#### **Integration Tests** (`src/__tests__/integration/auth-forgot-password.test.ts`)
+- **Complete Flow Testing**: End-to-end password reset and email verification
+- **Security Testing**: Rate limiting, token validation, expiration handling
+- **Error Handling**: Invalid inputs, missing data, expired tokens
+- **Database Operations**: Proper token creation, validation, and cleanup
+
+### **Deployment Configuration**
+
+#### **Environment Variables (Render)**
+```bash
+# Email Configuration
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USER=your-email@gmail.com
+EMAIL_PASS=your-app-password
+EMAIL_FROM=noreply@asklinc.com
+
+# Environment
+NODE_ENV=production
+
+# Frontend URL
+FRONTEND_URL=https://asklinc.com
+```
+
+#### **Frontend Environment (Vercel)**
+```bash
+NEXT_PUBLIC_API_URL=https://your-backend-url.onrender.com
+```
+
+### **Benefits**
+
+#### **For Users**
+- **Secure Authentication**: Industry-standard security practices
+- **Easy Recovery**: Simple forgot password process
+- **Email Verification**: Account security and validation
+- **Clear Feedback**: Success/error messages and proper redirects
+
+#### **For Developers**
+- **Comprehensive Testing**: Full test coverage for all authentication features
+- **Easy Configuration**: Environment-based setup for different deployments
+- **Security Best Practices**: Proper token management and rate limiting
+- **Maintainable Code**: Clean separation of concerns and proper error handling
 
 ### **Architecture**
 

@@ -32,6 +32,72 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
 - **Database**: PostgreSQL (Render)
 - **CI/CD**: GitHub Actions with automated testing
 
+## 🔐 **Authentication & Security System**
+
+### **Comprehensive Authentication Features**
+
+The platform implements a robust authentication system with advanced security features including forgot password functionality and email verification.
+
+#### **Key Authentication Features**
+
+- **JWT-Based Authentication**: Secure token-based authentication with configurable expiration
+- **Email Verification**: 6-digit code verification system with 15-minute expiration
+- **Forgot Password Flow**: Secure token-based password reset with 1-hour expiration
+- **Security Best Practices**: Explicit login requirement after email verification
+- **Rate Limiting**: Protection against rapid verification code requests
+- **Environment-Aware URLs**: Automatic localhost/production URL switching
+
+#### **Email Verification System**
+
+```typescript
+// 6-digit verification codes with expiration
+const verificationCode = generateRandomCode(); // 100000-999999
+const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+// Rate limiting for verification requests
+const recentCode = await prisma.emailVerificationCode.findFirst({
+  where: { 
+    userId: user.id,
+    createdAt: { gte: new Date(Date.now() - 60 * 1000) } // Within last minute
+  }
+});
+```
+
+#### **Forgot Password System**
+
+```typescript
+// Secure token generation for password reset
+const resetToken = generateRandomToken(); // 64-character hex string
+const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+// One-time use tokens with automatic cleanup
+await prisma.passwordResetToken.deleteMany({
+  where: { userId: user.id } // Clear old tokens
+});
+```
+
+#### **Security Features**
+
+- **One-Time Use Tokens**: Password reset tokens marked as used after reset
+- **Automatic Cleanup**: Old verification codes and reset tokens automatically deleted
+- **No User Enumeration**: Same response for all email addresses (security through obscurity)
+- **Environment Detection**: Automatic localhost/production URL switching for testing
+- **Explicit Authentication**: Users must log in after email verification (not auto-login)
+
+#### **User Flow Security**
+
+1. **Registration**: `Register → Email Verification → Login Required`
+2. **Email Verification**: `Enter Code → Success → Redirect to Login`
+3. **Forgot Password**: `Request Reset → Email Link → Reset Password → Login`
+4. **Login**: `Enter Credentials → Success → Go to App`
+
+#### **Email Service Integration**
+
+- **Nodemailer Integration**: Configurable SMTP with Gmail, SendGrid, or custom providers
+- **Beautiful HTML Templates**: Professional email designs with Ask Linc branding
+- **Environment Configuration**: Automatic localhost/production URL detection
+- **Error Handling**: Graceful fallbacks when email sending fails
+
 ## 🧠 **RAG System Implementation**
 
 ### **Retrieval-Augmented Generation (RAG)**
@@ -527,6 +593,13 @@ saving for their children's education and retirement."
 
 ### **Technical Improvements (Latest)**
 
+- **Authentication System Enhancement**: Complete forgot password and email verification implementation
+- **Security Best Practices**: Implemented explicit login requirement after email verification
+- **Email Service Integration**: Nodemailer integration with environment-aware URL generation
+- **Database Schema Updates**: Added PasswordResetToken and EmailVerificationCode models
+- **Frontend Authentication Pages**: Created forgot password, reset password, and email verification pages
+- **Comprehensive Testing**: Added unit and integration tests for all authentication features
+- **Environment Configuration**: Automatic localhost/production URL switching for development testing
 - **Integration Test Optimization**: Achieved 57/74 tests passing with 17 race condition tests strategically skipped
 - **Critical Security Validation**: Confirmed all critical security tests pass when run individually
 - **Foreign Key Constraint Fix**: Resolved demo conversation storage race conditions with improved error handling
