@@ -272,6 +272,9 @@ export class DataOrchestrator {
     if (data.creditCardAPR) {
       summary.push(`• Credit Card APR: ${data.creditCardAPR.value}%`);
     }
+    if (data.unemployment) {
+      summary.push(`• Unemployment Rate: ${data.unemployment.value}%`);
+    }
     
     return summary.join('\n');
   }
@@ -303,7 +306,7 @@ export class DataOrchestrator {
       fedRate: data.fedRate?.value?.toString() || 'N/A',
       treasury10Y: 'N/A', // Not available in current EconomicIndicator type
       cpi: data.cpi?.value?.toString() || 'N/A',
-      unemployment: 'N/A', // Not available in current EconomicIndicator type
+      unemployment: data.unemployment?.value?.toString() || 'N/A',
       sp500: 'N/A' // Will be updated by live data
     };
   }
@@ -324,6 +327,12 @@ export class DataOrchestrator {
     
     if (data.mortgageRate && data.mortgageRate.value > 6) {
       insights.push('• High mortgage rates suggest waiting for refinancing opportunities');
+    }
+    
+    if (data.unemployment && data.unemployment.value < 5) {
+      insights.push('• Low unemployment suggests a strong job market - good time to negotiate salary or seek new opportunities');
+    } else if (data.unemployment && data.unemployment.value > 6) {
+      insights.push('• Elevated unemployment suggests building emergency savings and maintaining job security');
     }
     
     return insights;

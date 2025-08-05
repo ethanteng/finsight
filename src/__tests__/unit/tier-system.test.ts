@@ -57,9 +57,13 @@ describe('Tier System', () => {
       expect(accountSources.length).toBeGreaterThan(0);
       expect(economicSources.length).toBeGreaterThan(0);
       
-      // Should not have external sources (Premium only)
+      // Should have brave-search (external) but not Alpha Vantage sources (Premium only)
       const externalSources = sources.filter(s => s.category === 'external');
-      expect(externalSources.length).toBe(0);
+      const braveSearchSources = externalSources.filter(s => s.provider === 'brave');
+      const alphaVantageSources = externalSources.filter(s => s.provider === 'alpha-vantage');
+      
+      expect(braveSearchSources.length).toBeGreaterThan(0);
+      expect(alphaVantageSources.length).toBe(0);
     });
 
     test('should get correct sources for Premium tier', () => {
@@ -237,14 +241,20 @@ describe('Tier System', () => {
       });
     });
 
-    test('should have external sources for Premium only', () => {
+    test('should have external sources for Standard+ tiers', () => {
       const externalSources = Object.values(dataSourceRegistry).filter(s => s.category === 'external');
       
       externalSources.forEach(source => {
+        // All external sources should be available for Premium
         expect(source.tiers).toContain(UserTier.PREMIUM);
-        // External sources should not be available for Starter or Standard
+        // External sources should not be available for Starter
         expect(source.tiers).not.toContain(UserTier.STARTER);
-        expect(source.tiers).not.toContain(UserTier.STANDARD);
+        // Brave search is available for Standard, Alpha Vantage is Premium only
+        if (source.provider === 'brave') {
+          expect(source.tiers).toContain(UserTier.STANDARD);
+        } else if (source.provider === 'alpha-vantage') {
+          expect(source.tiers).not.toContain(UserTier.STANDARD);
+        }
       });
     });
 
@@ -252,11 +262,12 @@ describe('Tier System', () => {
       Object.values(dataSourceRegistry).forEach(source => {
         expect(source.cacheDuration).toBeGreaterThan(0);
         
-        // Live data should have shorter cache durations (5 minutes max)
+        // Live data should have reasonable cache durations
         if (source.isLive) {
-          expect(source.cacheDuration).toBeLessThanOrEqual(300000); // 5 minutes max
+          // Brave search has 30-minute cache, Alpha Vantage has 1-5 minute cache
+          expect(source.cacheDuration).toBeLessThanOrEqual(30 * 60 * 1000); // 30 minutes max for live data
         } else {
-          expect(source.cacheDuration).toBeGreaterThan(300000); // More than 5 minutes
+          expect(source.cacheDuration).toBeGreaterThan(300000); // More than 5 minutes for non-live data
         }
       });
     });

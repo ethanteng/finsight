@@ -82,8 +82,31 @@ export function anonymizeAccountData(accounts: any[]): string {
 
 export function anonymizeTransactionData(transactions: any[]): string {
   return transactions.map(t => {
-    const date = t.date.toISOString().slice(0,10);
-    const amount = `$${t.amount.toFixed(2)}`;
+    // Handle different date formats
+    let dateStr = 'Unknown';
+    if (t.date) {
+      if (t.date instanceof Date) {
+        dateStr = t.date.toISOString().slice(0, 10);
+      } else if (typeof t.date === 'string') {
+        // If it's already a string in YYYY-MM-DD format
+        if (t.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          dateStr = t.date;
+        } else {
+          // Try to parse it as a date
+          try {
+            const date = new Date(t.date);
+            if (!isNaN(date.getTime())) {
+              dateStr = date.toISOString().slice(0, 10);
+            }
+          } catch (e) {
+            // If parsing fails, use the original string
+            dateStr = t.date;
+          }
+        }
+      }
+    }
+    
+    const amount = t.amount !== undefined && t.amount !== null ? `$${Number(t.amount).toFixed(2)}` : '$0.00';
     const category = t.category ? ` [${t.category}]` : '';
     const pending = t.pending ? ' [PENDING]' : '';
     
@@ -96,9 +119,21 @@ export function anonymizeTransactionData(transactions: any[]): string {
     const paymentMethod = (t as any).paymentMethod ? ` via ${(t as any).paymentMethod}` : '';
     
     // Anonymize location - only show if it's a generic city, not specific addresses
-    const location = (t as any).location ? ` at ${JSON.parse((t as any).location).city || 'Unknown location'}` : '';
+    let location = '';
+    if ((t as any).location) {
+      try {
+        const locationData = JSON.parse((t as any).location);
+        if (locationData && locationData.city) {
+          location = ` at ${locationData.city}`;
+        }
+      } catch (e) {
+        // If JSON parsing fails, skip location
+        location = '';
+      }
+    }
     
-    return `- [${date}] ${t.name}${merchant}: ${amount}${category}${pending}${paymentMethod}${location}`;
+    const transactionName = t.name || 'Unknown Transaction';
+    return `- [${dateStr}] ${transactionName}${merchant}: ${amount}${category}${pending}${paymentMethod}${location}`;
   }).join('\n');
 }
 

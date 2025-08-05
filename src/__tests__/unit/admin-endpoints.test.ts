@@ -1,6 +1,7 @@
 import request from 'supertest';
 import express from 'express';
 import { PrismaClient } from '@prisma/client';
+import { generateUniqueEmail } from './setup';
 
 describe('Admin Endpoints', () => {
   let app: express.Application;
@@ -436,10 +437,10 @@ describe('Admin Endpoints', () => {
     });
 
     it('should return production users with conversation stats', async () => {
-      // Create test user
+      // Create test user with unique email
       const user = await prisma.user.create({
         data: {
-          email: 'test@example.com',
+          email: generateUniqueEmail('admin-test'),
           passwordHash: 'hashedpassword',
           tier: 'starter',
         }
@@ -461,7 +462,7 @@ describe('Admin Endpoints', () => {
       expect(response.body.users).toHaveLength(1);
       expect(response.body.users[0]).toMatchObject({
         userId: user.id,
-        email: 'test@example.com',
+        email: user.email, // Use the actual user email instead of hardcoded
         tier: 'starter',
         conversationCount: 1,
         firstQuestion: 'What is my net worth?',
@@ -483,10 +484,10 @@ describe('Admin Endpoints', () => {
     });
 
     it('should return production conversations with user data', async () => {
-      // Create test user
+      // Create test user with unique email
       const user = await prisma.user.create({
         data: {
-          email: 'test@example.com',
+          email: generateUniqueEmail('admin-conv'),
           passwordHash: 'hashedpassword',
           tier: 'starter',
         }
@@ -512,7 +513,7 @@ describe('Admin Endpoints', () => {
         answer: 'Your net worth is $50,000',
         user: {
           id: user.id,
-          email: 'test@example.com',
+          email: user.email, // Use the actual user email instead of hardcoded
           tier: 'starter'
         }
       });

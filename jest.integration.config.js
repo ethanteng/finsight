@@ -8,7 +8,7 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/integration/setup.ts'],
   testTimeout: 60000, // 60 seconds for integration tests
   verbose: true,
-  collectCoverage: false, // Disable coverage for integration tests
+  collectCoverage: true, // Enable coverage for integration tests
   globals: {
     'ts-jest': {
       tsconfig: 'tsconfig.json',

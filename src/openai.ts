@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { PrismaClient } from '@prisma/client';
-import { anonymizeAccountData, anonymizeTransactionData, anonymizeConversationHistory } from './privacy';
+import { anonymizeAccountData, anonymizeTransactionData, anonymizeConversationHistory, tokenizeAccount, tokenizeMerchant } from './privacy';
 import { dataOrchestrator, TierAwareContext } from './data/orchestrator';
 import { UserTier } from './data/types';
 
@@ -16,8 +16,9 @@ interface Conversation {
 }
 
 // Enhanced post-processing function with tier-aware upgrade suggestions
-function enhanceResponseWithUpgrades(answer: string, tierContext: TierAwareContext): string {
-  if (tierContext.upgradeHints.length === 0) {
+function enhanceResponseWithUpgrades(answer: string, tierContext: TierAwareContext, searchContext?: string): string {
+  // Don't add upgrade suggestions if search context is available (user already has access to real-time data)
+  if (searchContext || tierContext.upgradeHints.length === 0) {
     return answer;
   }
 
@@ -208,17 +209,28 @@ export async function askOpenAIWithEnhancedContext(
 
   // Anonymize data before sending to OpenAI (skip for demo mode)
   if (!isDemo) {
-    accounts = accounts.map(account => ({
-      ...account,
-      name: `Account_${account.id.slice(-4)}`,
-      plaidAccountId: `plaid_${account.id.slice(-8)}`
-    }));
+    // Use proper anonymization functions that maintain tokenization maps
+    const accountSummary = anonymizeAccountData(accounts);
+    const transactionSummary = anonymizeTransactionData(transactions);
     
-    transactions = transactions.map(transaction => ({
-      ...transaction,
-      name: transaction.name ? `Transaction_${transaction.id.slice(-4)}` : 'Unknown',
-      merchantName: transaction.merchantName ? `Merchant_${transaction.id.slice(-4)}` : 'Unknown'
-    }));
+    // Replace the accounts and transactions with anonymized versions for AI processing
+    accounts = accounts.map(account => {
+      const tokenizedName = tokenizeAccount(account.name, account.institution);
+      return {
+        ...account,
+        name: tokenizedName,
+        plaidAccountId: `plaid_${account.id.slice(-8)}`
+      };
+    });
+    
+    transactions = transactions.map(transaction => {
+      const tokenizedName = transaction.name ? tokenizeMerchant(transaction.name) : 'Unknown';
+      return {
+        ...transaction,
+        name: tokenizedName,
+        merchantName: transaction.merchantName ? tokenizeMerchant(transaction.merchantName) : 'Unknown'
+      };
+    });
   }
 
   // Get enhanced market context (proactively cached)
@@ -379,8 +391,46 @@ export async function askOpenAIWithEnhancedContext(
     console.log('OpenAI Enhanced: Full transaction summary:', transactionSummary);
   }
 
+  // Get user profile if available
+  let userProfile: string = '';
+  if (userId && !isDemo) {
+    try {
+      const { ProfileManager } = await import('./profile/manager');
+      const profileManager = new ProfileManager();
+      userProfile = await profileManager.getOrCreateProfile(userId);
+      console.log('OpenAI Enhanced: User profile retrieved, length:', userProfile.length);
+      
+      // Enhance profile with Plaid data if available
+      if (accounts.length > 0 || transactions.length > 0) {
+        try {
+          const { PlaidProfileEnhancer } = await import('./profile/plaid-enhancer');
+          const plaidEnhancer = new PlaidProfileEnhancer();
+          const enhancedProfile = await plaidEnhancer.enhanceProfileFromPlaidData(
+            userId,
+            accounts,
+            transactions,
+            userProfile
+          );
+          
+          if (enhancedProfile !== userProfile) {
+            // Update the profile with Plaid insights
+            await profileManager.updateProfile(userId, enhancedProfile);
+            userProfile = enhancedProfile;
+            console.log('OpenAI Enhanced: User profile enhanced with Plaid data');
+          }
+        } catch (error) {
+          console.error('OpenAI Enhanced: Failed to enhance profile with Plaid data:', error);
+          // Don't fail the main request if Plaid enhancement fails
+        }
+      }
+    } catch (error) {
+      console.error('OpenAI Enhanced: Failed to get user profile:', error);
+      // Don't fail the main request if profile retrieval fails
+    }
+  }
+
   // Build enhanced system prompt with proactive market context
-  const systemPrompt = buildEnhancedSystemPrompt(tierContext, accountSummary, transactionSummary, marketContextSummary, searchContext);
+  const systemPrompt = buildEnhancedSystemPrompt(tierContext, accountSummary, transactionSummary, marketContextSummary, searchContext, userProfile);
 
   console.log('OpenAI Enhanced: System prompt length:', systemPrompt.length);
   console.log('OpenAI Enhanced: System prompt preview:', systemPrompt.substring(0, 500));
@@ -414,9 +464,28 @@ export async function askOpenAIWithEnhancedContext(
     let answer = completion.choices[0]?.message?.content || 'I apologize, but I was unable to generate a response.';
 
     // Enhance response with upgrade suggestions
-    answer = enhanceResponseWithUpgrades(answer, tierContext);
+    answer = enhanceResponseWithUpgrades(answer, tierContext, searchContext);
 
     console.log('OpenAI Enhanced: Response generated successfully');
+    
+    // Update user profile from conversation (for authenticated users only)
+    if (userId && !isDemo) {
+      try {
+        const { ProfileManager } = await import('./profile/manager');
+        const profileManager = new ProfileManager();
+        await profileManager.updateProfileFromConversation(userId, {
+          id: 'temp',
+          question,
+          answer,
+          createdAt: new Date()
+        });
+        console.log('OpenAI Enhanced: User profile updated from conversation');
+      } catch (error) {
+        console.error('OpenAI Enhanced: Failed to update user profile:', error);
+        // Don't fail the main request if profile update fails
+      }
+    }
+    
     return answer;
   } catch (error) {
     console.error('OpenAI Enhanced: Error calling OpenAI API:', error);
@@ -432,11 +501,30 @@ function buildEnhancedSystemPrompt(
   accountSummary: string, 
   transactionSummary: string,
   marketContextSummary: string,
-  searchContext?: string
+  searchContext?: string,
+  userProfile?: string
 ): string {
   const { tierInfo, upgradeHints } = tierContext;
 
-  let systemPrompt = `You are Linc, an AI-powered financial analyst. You help users understand their finances by analyzing their account data and providing clear, actionable insights.
+  let systemPrompt = '';
+
+  // Add search context at the very top with clear delimiters if available
+  if (searchContext) {
+    systemPrompt += `=== REAL-TIME FINANCIAL DATA ===
+${searchContext}
+=== END REAL-TIME FINANCIAL DATA ===
+
+CRITICAL INSTRUCTIONS:
+- You MUST use the information between the === REAL-TIME FINANCIAL DATA === markers to answer the user's question
+- Do NOT say you lack access to real-time data when the answer is present above
+- When the user asks about rates, prices, or current information, use the specific data from the search results above
+- Provide the current information from the search results directly
+- If the search results contain the answer, use that information instead of your training data
+
+`;
+  }
+
+  systemPrompt += `You are Linc, an AI-powered financial analyst. You help users understand their finances by analyzing their account data and providing clear, actionable insights.
 
 IMPORTANT: You have access to the user's financial data and current market conditions based on their subscription tier. Use this data to provide personalized, accurate financial advice.
 
@@ -458,10 +546,8 @@ ${tierInfo.unavailableSources.map(source => `• ${source}`).join('\n')}` : ''}
 ${marketContextSummary ? `ENHANCED MARKET CONTEXT:
 ${marketContextSummary}` : 'No market context available (upgrade to Standard tier)'}
 
-${searchContext ? `REAL-TIME FINANCIAL INFORMATION:
-${searchContext}
-
-IMPORTANT: Use this real-time information to provide current, accurate financial advice. Always cite sources when referencing external information. Prioritize the most recent and relevant information from these sources.
+${searchContext ? `ADDITIONAL REAL-TIME INFORMATION:
+The search results above contain current financial data. When the user asks about rates, prices, or current information, use the specific data from the search results above. Do NOT say you don't have access to this information when it is provided in the search results.
 
 When providing financial advice, be specific about:
 - Current rates, prices, or market conditions relevant to the question
@@ -486,8 +572,8 @@ For personal finance questions:
 - Reference current financial products or services
 - Consider user's income, expenses, and financial situation` : ''}
 
-TIER LIMITATIONS:
-${tierInfo.limitations.map(limitation => `• ${limitation}`).join('\n')}
+${!searchContext ? `TIER LIMITATIONS:
+${tierInfo.limitations.map(limitation => `• ${limitation}`).join('\n')}` : ''}
 
 INSTRUCTIONS:
 - Provide clear, actionable financial advice based on available data
@@ -497,11 +583,12 @@ INSTRUCTIONS:
 - Be conversational but professional
 - If you don't have enough data, ask for more information
 - Always provide source attribution when using external data
-- Be helpful with current tier limitations
-- When relevant, mention upgrade benefits for unavailable features
 - Focus on the user's specific financial situation and goals
 - Use the enhanced market context to provide more informed recommendations
-- When using search results, prioritize the most recent and relevant information`;
+- When using search results, prioritize the most recent and relevant information
+${!searchContext && tierInfo.unavailableSources.length > 0 ? `
+- Be helpful with current tier limitations
+- When relevant, mention upgrade benefits for unavailable features` : ''}`;
 
   return systemPrompt;
 }
@@ -708,6 +795,25 @@ export async function askOpenAI(
     upgradeHints: tierContext.upgradeHints.length
   });
 
+  // Get search context for real-time financial information
+  let searchContext: string | undefined;
+  if (tier === UserTier.STANDARD || tier === UserTier.PREMIUM) {
+    try {
+      console.log('OpenAI: Getting search context for question:', question);
+      const searchResults = await dataOrchestrator.getSearchContext(question, tier, isDemo);
+      
+      if (searchResults && searchResults.results.length > 0) {
+        searchContext = searchResults.summary;
+        console.log('OpenAI: Search context found with', searchResults.results.length, 'results');
+        console.log('OpenAI: Search context preview:', searchContext.substring(0, 200) + '...');
+      } else {
+        console.log('OpenAI: No search context found for question');
+      }
+    } catch (error) {
+      console.error('OpenAI: Error getting search context:', error);
+    }
+  }
+
   // Create account summary using display data (real names for user)
   const accountSummary = displayAccounts.map(account => {
     let balance;
@@ -759,8 +865,46 @@ export async function askOpenAI(
     console.log('OpenAI: Full transaction summary:', transactionSummary);
   }
 
+  // Get user profile if available
+  let userProfile: string = '';
+  if (userId && !isDemo) {
+    try {
+      const { ProfileManager } = await import('./profile/manager');
+      const profileManager = new ProfileManager();
+      userProfile = await profileManager.getOrCreateProfile(userId);
+      console.log('OpenAI: User profile retrieved, length:', userProfile.length);
+      
+      // Enhance profile with Plaid data if available
+      if (accounts.length > 0 || transactions.length > 0) {
+        try {
+          const { PlaidProfileEnhancer } = await import('./profile/plaid-enhancer');
+          const plaidEnhancer = new PlaidProfileEnhancer();
+          const enhancedProfile = await plaidEnhancer.enhanceProfileFromPlaidData(
+            userId,
+            accounts,
+            transactions,
+            userProfile
+          );
+          
+          if (enhancedProfile !== userProfile) {
+            // Update the profile with Plaid insights
+            await profileManager.updateProfile(userId, enhancedProfile);
+            userProfile = enhancedProfile;
+            console.log('OpenAI: User profile enhanced with Plaid data');
+          }
+        } catch (error) {
+          console.error('OpenAI: Failed to enhance profile with Plaid data:', error);
+          // Don't fail the main request if Plaid enhancement fails
+        }
+      }
+    } catch (error) {
+      console.error('OpenAI: Failed to get user profile:', error);
+      // Don't fail the main request if profile retrieval fails
+    }
+  }
+
   // Build enhanced system prompt with tier-aware context
-  const systemPrompt = buildTierAwareSystemPrompt(tierContext, accountSummary, transactionSummary);
+  const systemPrompt = buildTierAwareSystemPrompt(tierContext, accountSummary, transactionSummary, searchContext, userProfile);
 
   console.log('OpenAI: System prompt length:', systemPrompt.length);
   console.log('OpenAI: System prompt preview:', systemPrompt.substring(0, 500));
@@ -794,9 +938,28 @@ export async function askOpenAI(
     let answer = completion.choices[0]?.message?.content || 'I apologize, but I was unable to generate a response.';
 
     // Enhance response with upgrade suggestions
-    answer = enhanceResponseWithUpgrades(answer, tierContext);
+    answer = enhanceResponseWithUpgrades(answer, tierContext, searchContext);
 
     console.log('OpenAI: Response generated successfully');
+    
+    // Update user profile from conversation (for authenticated users only)
+    if (userId && !isDemo) {
+      try {
+        const { ProfileManager } = await import('./profile/manager');
+        const profileManager = new ProfileManager();
+        await profileManager.updateProfileFromConversation(userId, {
+          id: 'temp',
+          question,
+          answer,
+          createdAt: new Date()
+        });
+        console.log('OpenAI: User profile updated from conversation');
+      } catch (error) {
+        console.error('OpenAI: Failed to update user profile:', error);
+        // Don't fail the main request if profile update fails
+      }
+    }
+    
     return answer;
   } catch (error) {
     console.error('OpenAI: Error calling OpenAI API:', error);
@@ -807,13 +970,41 @@ export async function askOpenAI(
 function buildTierAwareSystemPrompt(
   tierContext: TierAwareContext, 
   accountSummary: string, 
-  transactionSummary: string
+  transactionSummary: string,
+  searchContext?: string,
+  userProfile?: string
 ): string {
   const { tierInfo, marketContext, upgradeHints } = tierContext;
 
-  let systemPrompt = `You are Linc, an AI-powered financial analyst. You help users understand their finances by analyzing their account data and providing clear, actionable insights.
+  let systemPrompt = '';
+
+  // Add search context at the very top with clear delimiters if available
+  if (searchContext) {
+    systemPrompt += `=== REAL-TIME FINANCIAL DATA ===
+${searchContext}
+=== END REAL-TIME FINANCIAL DATA ===
+
+CRITICAL INSTRUCTIONS:
+- You MUST use the information between the === REAL-TIME FINANCIAL DATA === markers to answer the user's question
+- Do NOT say you lack access to real-time data when the answer is present above
+- When the user asks about rates, prices, or current information, use the specific data from the search results above
+- Provide the current information from the search results directly
+- If the search results contain the answer, use that information instead of your training data
+
+`;
+  }
+
+  systemPrompt += `You are Linc, an AI-powered financial analyst. You help users understand their finances by analyzing their account data and providing clear, actionable insights.
 
 IMPORTANT: You have access to the user's financial data and current market conditions based on their subscription tier. Use this data to provide personalized, accurate financial advice.
+
+${userProfile && userProfile.trim() ? `USER PROFILE:
+${userProfile}
+
+Use this profile information to provide more personalized and relevant financial advice.
+Consider the user's personal situation, family status, occupation, and financial goals when making recommendations.
+
+` : ''}
 
 USER'S FINANCIAL DATA:
 Accounts:
@@ -842,19 +1033,25 @@ CD Rates (APY): ${marketContext.liveMarketData.cdRates.map(cd => `${cd.term}: ${
 Treasury Yields: ${marketContext.liveMarketData.treasuryYields.slice(0, 4).map(t => `${t.term}: ${t.yield}%`).join(', ')}
 Current Mortgage Rates: ${marketContext.liveMarketData.mortgageRates.map(m => `${m.type}: ${m.rate}%`).join(', ')}` : 'No live market data available (upgrade to Premium tier)'}
 
-TIER LIMITATIONS:
-${tierInfo.limitations.map(limitation => `• ${limitation}`).join('\n')}
+${searchContext ? `ADDITIONAL REAL-TIME INFORMATION:
+The search results above contain current financial data. When the user asks about rates, prices, or current information, use the specific data from the search results above. Do NOT say you don't have access to this information when it is provided in the search results.` : ''}
+
+${!searchContext ? `TIER LIMITATIONS:
+${tierInfo.limitations.map(limitation => `• ${limitation}`).join('\n')}` : ''}
 
 INSTRUCTIONS:
 - Provide clear, actionable financial advice based on available data
 - Use specific numbers from the user's data when possible
 - Reference current market conditions when relevant and available
+- Use real-time financial information when available to provide the most current advice
 - Be conversational but professional
 - If you don't have enough data, ask for more information
 - Always provide source attribution when using external data
+- Focus on the user's specific financial situation and goals
+- When using search results, prioritize the most recent and relevant information
+${!searchContext && tierInfo.unavailableSources.length > 0 ? `
 - Be helpful with current tier limitations
-- When relevant, mention upgrade benefits for unavailable features
-- Focus on the user's specific financial situation and goals`;
+- When relevant, mention upgrade benefits for unavailable features` : ''}`;
 
   return systemPrompt;
 }

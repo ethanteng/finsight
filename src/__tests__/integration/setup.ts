@@ -9,12 +9,14 @@ beforeAll(async () => {
   // ✅ Force test API keys for integration tests to avoid hitting live APIs
   process.env.FRED_API_KEY = 'test_fred_key';
   process.env.ALPHA_VANTAGE_API_KEY = 'test_alpha_vantage_key';
+  process.env.SEARCH_API_KEY = 'test_search_key';
   
   // ✅ Verify API keys are available for integration tests
   const requiredKeys = [
     'OPENAI_API_KEY',
     'FRED_API_KEY', 
-    'ALPHA_VANTAGE_API_KEY'
+    'ALPHA_VANTAGE_API_KEY',
+    'SEARCH_API_KEY'
   ];
   
   const missingKeys = requiredKeys.filter(key => !process.env[key]);

@@ -39,7 +39,8 @@ export class FREDProvider implements DataProvider {
         cpi: { value: 3.1, date: '2024-01', source: 'FRED (mock)', lastUpdated: new Date().toISOString() },
         fedRate: { value: 5.25, date: '2024-01', source: 'FRED (mock)', lastUpdated: new Date().toISOString() },
         mortgageRate: { value: 6.85, date: '2024-01', source: 'FRED (mock)', lastUpdated: new Date().toISOString() },
-        creditCardAPR: { value: 24.59, date: '2024-01', source: 'FRED (mock)', lastUpdated: new Date().toISOString() }
+        creditCardAPR: { value: 24.59, date: '2024-01', source: 'FRED (mock)', lastUpdated: new Date().toISOString() },
+        unemployment: { value: 4.2, date: '2024-01', source: 'FRED (mock)', lastUpdated: new Date().toISOString() }
       };
       
       await cacheService.set(cacheKey, mockIndicators, 24 * 60 * 60 * 1000); // 24 hours
@@ -53,22 +54,25 @@ export class FREDProvider implements DataProvider {
       cpi: { value: 3.1, date: '2024-01', source: 'FRED (fallback)', lastUpdated: now },
       fedRate: { value: 5.25, date: '2024-01', source: 'FRED (fallback)', lastUpdated: now },
       mortgageRate: { value: 6.85, date: '2024-01', source: 'FRED (fallback)', lastUpdated: now },
-      creditCardAPR: { value: 24.59, date: '2024-01', source: 'FRED (fallback)', lastUpdated: now }
+      creditCardAPR: { value: 24.59, date: '2024-01', source: 'FRED (fallback)', lastUpdated: now },
+      unemployment: { value: 4.2, date: '2024-01', source: 'FRED (fallback)', lastUpdated: now }
     };
 
-    const [cpi, fedRate, mortgageRate, creditCardAPR] = await Promise.all([
+    const [cpi, fedRate, mortgageRate, creditCardAPR, unemployment] = await Promise.all([
       this.getDataPoint('CPIAUCSL').catch(e => { console.error('CPI error:', e); return fallback.cpi; }),
       this.getDataPoint('FEDFUNDS').catch(e => { console.error('FedFunds error:', e); return fallback.fedRate; }),
       this.getDataPoint('MORTGAGE30US').catch(e => { console.error('Mortgage error:', e); return fallback.mortgageRate; }),
       // Temporarily use fallback for credit card APR due to FRED API issues
-      Promise.resolve(fallback.creditCardAPR).catch(e => { console.error('CreditCardAPR error:', e); return fallback.creditCardAPR; })
+      Promise.resolve(fallback.creditCardAPR).catch(e => { console.error('CreditCardAPR error:', e); return fallback.creditCardAPR; }),
+      this.getDataPoint('UNRATE').catch(e => { console.error('Unemployment error:', e); return fallback.unemployment; })
     ]);
 
     const indicators: EconomicIndicator = {
       cpi,
       fedRate,
       mortgageRate,
-      creditCardAPR
+      creditCardAPR,
+      unemployment
     };
 
     await cacheService.set(cacheKey, indicators, 24 * 60 * 60 * 1000); // 24 hours
@@ -87,9 +91,36 @@ export class FREDProvider implements DataProvider {
     // Use mock data for test environment
     if (this.apiKey === 'test_fred_key' || this.apiKey.startsWith('test_')) {
       console.log('FRED Provider: Using mock data for test environment');
+      
+      // Return appropriate mock values for different series
+      let mockValue = 3.1; // Default mock value
+      let mockDate = '2024-01';
+      
+      switch (seriesId) {
+        case 'CPIAUCSL':
+          mockValue = 3.1;
+          mockDate = '2024-01';
+          break;
+        case 'FEDFUNDS':
+          mockValue = 5.25;
+          mockDate = '2024-01';
+          break;
+        case 'MORTGAGE30US':
+          mockValue = 6.85;
+          mockDate = '2024-01';
+          break;
+        case 'UNRATE':
+          mockValue = 4.2;
+          mockDate = '2024-01';
+          break;
+        default:
+          mockValue = 3.1;
+          mockDate = '2024-01';
+      }
+      
       const mockData: MarketDataPoint = {
-        value: 3.1, // Default mock value
-        date: '2024-01',
+        value: mockValue,
+        date: mockDate,
         source: 'FRED (mock)',
         lastUpdated: new Date().toISOString()
       };

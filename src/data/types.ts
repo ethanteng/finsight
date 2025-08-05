@@ -11,6 +11,7 @@ export interface EconomicIndicator {
   fedRate: MarketDataPoint;
   mortgageRate: MarketDataPoint;
   creditCardAPR: MarketDataPoint;
+  unemployment?: MarketDataPoint; // Optional for backward compatibility
 }
 
 export interface LiveMarketData {

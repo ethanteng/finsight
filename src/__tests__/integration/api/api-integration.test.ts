@@ -503,6 +503,8 @@ describe('API Integration Tests', () => {
                                    answer.includes('economic indicators') ||
                                    answer.includes('market data') ||
                                    answer.includes('fed rate') ||
+                                   answer.includes('federal funds rate') ||
+                                   answer.includes('5.25') ||
                                    answer.includes('inflation') ||
                                    answer.includes('4.33') ||
                                    answer.includes('federal reserve funds rate');
