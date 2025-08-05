@@ -6,7 +6,7 @@ export interface DataSourceConfig {
   description: string;
   tiers: UserTier[];
   category: 'account' | 'market' | 'external' | 'economic';
-  provider: 'plaid' | 'fred' | 'alpha-vantage' | 'internal';
+  provider: 'plaid' | 'fred' | 'alpha-vantage' | 'internal' | 'brave';
   cacheDuration: number; // milliseconds
   rateLimit?: number; // requests per minute
   isLive: boolean;
@@ -140,6 +140,19 @@ export const dataSourceRegistry: Record<string, DataSourceConfig> = {
     rateLimit: 5, // 5 requests per minute
     isLive: true,
     upgradeBenefit: 'Track your investments with real-time market data'
+  },
+
+  // Search Context (Standard+)
+  'brave-search': {
+    id: 'brave-search',
+    name: 'Real-time Financial Search',
+    description: 'Search for current financial information and rates',
+    tiers: [UserTier.STANDARD, UserTier.PREMIUM],
+    category: 'external',
+    provider: 'brave',
+    cacheDuration: 30 * 60 * 1000, // 30 minutes
+    isLive: true,
+    upgradeBenefit: 'Get real-time financial information and current rates'
   }
 };
 
@@ -200,12 +213,13 @@ export class DataSourceManager {
       case UserTier.STARTER:
         limitations.push('Limited to account data only');
         limitations.push('No economic context for financial decisions');
+        limitations.push('No real-time search for current financial information');
         limitations.push('No live market data for investment insights');
         break;
       case UserTier.STANDARD:
-        limitations.push('No real-time market data');
         limitations.push('No live CD rates or Treasury yields');
         limitations.push('No stock market tracking');
+        limitations.push('No real-time market data feeds');
         break;
       case UserTier.PREMIUM:
         limitations.push('Full access to all data sources');

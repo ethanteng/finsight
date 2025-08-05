@@ -402,13 +402,14 @@ const handleDemoRequest = async (req: Request, res: Response) => {
       take: 5,
     });
     
-    // Use environment variable for tier in demo mode
-    const backendTier = process.env.TEST_USER_TIER || 'starter';
+    // Use userTier from request body, fallback to environment variable
+    const { userTier = process.env.TEST_USER_TIER || 'starter' } = req.body;
+    const backendTier = userTier;
     
     // Always demo mode in this handler
     const marketContext = await dataOrchestrator.getMarketContext(backendTier as any, true); // true = demo mode
     
-    const answer = await askOpenAI(questionString, recentConversations, backendTier as any, true, undefined);
+    const answer = await askOpenAIWithEnhancedContext(questionString, recentConversations, backendTier as any, true, undefined);
     
     // Store the demo conversation with session association
     try {
@@ -521,8 +522,8 @@ const handleUserRequest = async (req: Request, res: Response) => {
     // Get market context (will be tier-aware in Step 4)
     const marketContext = await dataOrchestrator.getMarketContext(userTier as any, false);
     
-    console.log('Ask endpoint - calling askOpenAI with userId:', user.id);
-    const answer = await askOpenAI(question, recentConversations, userTier as any, false, user.id);
+    console.log('Ask endpoint - calling askOpenAIWithEnhancedContext with userId:', user.id);
+    const answer = await askOpenAIWithEnhancedContext(question, recentConversations, userTier as any, false, user.id);
     console.log('Ask endpoint - received answer from OpenAI');
     
     // Store the new Q&A pair with user association
@@ -566,8 +567,8 @@ const handleTierAwareUserRequest = async (req: Request, res: Response) => {
     // Use user's tier
     const userTier = user.tier;
     
-    console.log('Tier-aware ask endpoint - calling askOpenAI with userId:', user.id, 'tier:', userTier);
-    const answer = await askOpenAI(question, recentConversations, userTier as any, false, user.id);
+    console.log('Tier-aware ask endpoint - calling askOpenAIWithEnhancedContext with userId:', user.id, 'tier:', userTier);
+    const answer = await askOpenAIWithEnhancedContext(question, recentConversations, userTier as any, false, user.id);
     console.log('Tier-aware ask endpoint - received answer from OpenAI');
     
     // Store the new Q&A pair with user association
@@ -664,8 +665,9 @@ const handleTierAwareDemoRequest = async (req: Request, res: Response) => {
       take: 5,
     });
     
-    // Use environment variable for tier in demo mode, default to premium to showcase full capabilities
-    const backendTier = process.env.TEST_USER_TIER || 'premium';
+    // Use userTier from request body, fallback to environment variable
+    const { userTier = process.env.TEST_USER_TIER || 'premium' } = req.body;
+    const backendTier = userTier;
     
     console.log('Tier-aware demo - Environment check:', {
       TEST_USER_TIER: process.env.TEST_USER_TIER,
@@ -673,8 +675,8 @@ const handleTierAwareDemoRequest = async (req: Request, res: Response) => {
       nodeEnv: process.env.NODE_ENV
     });
     
-    console.log('Tier-aware demo - calling askOpenAI with tier:', backendTier);
-    const answer = await askOpenAI(questionString, recentConversations, backendTier as any, true, undefined);
+    console.log('Tier-aware demo - calling askOpenAIWithEnhancedContext with tier:', backendTier);
+    const answer = await askOpenAIWithEnhancedContext(questionString, recentConversations, backendTier as any, true, undefined);
     
     // Store the demo conversation with session association
     try {
