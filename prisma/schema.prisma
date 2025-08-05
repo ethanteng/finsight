@@ -144,7 +144,7 @@ model DemoConversation {
 model UserProfile {
   id          String   @id @default(cuid())
   userId      String   @unique
-  email       String?
+  email       String   // Required to match production
   profileText String   @default("")
   lastUpdated DateTime @default(now())
   createdAt   DateTime @default(now())
