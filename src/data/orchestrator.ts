@@ -97,7 +97,7 @@ export class DataOrchestrator {
     this.searchProvider = new SearchProvider(searchApiKey || '', searchProviderType as 'bing' | 'google' | 'brave' | 'serpapi');
     
     console.log('DataOrchestrator: Search provider initialized with key:', searchApiKey ? 'PRESENT' : 'MISSING');
-    console.log('DataOrchestrator: Search provider type:', searchProviderType);
+    console.log('DataOrchestrator: Search provider type:', process.env.SEARCH_PROVIDER || 'brave');
   }
 
   getTierAccess(tier: UserTier): TierAccess {
