@@ -15,6 +15,46 @@ interface Conversation {
   createdAt: Date;
 }
 
+// Simple regex-based formatting function (alternative to GPT formatting)
+function formatResponseWithRegex(rawResponse: string): string {
+  return rawResponse
+    // Fix bullet lists - ensure bullet and text are on same line
+    .replace(/(\n)(\s*[-*+]\s*)(\n)(\s*)/g, '\n$2')
+    .replace(/([-*+])\s*\n\s*(.+)/g, '$1 $2')
+    
+    // Fix numbered lists - ensure number and text are on same line
+    .replace(/(\n)(\s*\d+\.\s*)(\n)(\s*)/g, '\n$2')
+    .replace(/(\d+\.)\s*\n\s*(.+)/g, '$1 $2')
+    
+    // Remove extra blank lines between list items
+    .replace(/([-*+] .+)\n\n(?=[-*+] )/g, '$1\n')
+    .replace(/(\d+\. .+)\n\n(?=\d+\. )/g, '$1\n')
+    
+    // Ensure proper spacing around headers
+    .replace(/(\n)(#{1,6}\s)/g, '\n\n$2')
+    
+    // Ensure proper spacing around code blocks
+    .replace(/(\n)(```)/g, '\n\n$2')
+    
+    // Fix multiple consecutive line breaks
+    .replace(/\n{3,}/g, '\n\n')
+    
+    // Remove extra spaces at beginning of lines
+    .replace(/^\s+/gm, '')
+    
+    // Ensure consistent list formatting
+    .replace(/^\s*[-*+]\s+/gm, '- ')
+    .replace(/^\s*\d+\.\s+/gm, (match) => {
+      const number = match.match(/\d+/)?.[0] || '1';
+      return `${number}. `;
+    })
+    
+    // Clean up any remaining formatting issues
+    .trim();
+}
+
+
+
 // Enhanced post-processing function with tier-aware upgrade suggestions
 function enhanceResponseWithUpgrades(answer: string, tierContext: TierAwareContext, searchContext?: string): string {
   // Don't add upgrade suggestions if search context is available (user already has access to real-time data)
@@ -24,10 +64,11 @@ function enhanceResponseWithUpgrades(answer: string, tierContext: TierAwareConte
 
   const upgradeSection = `
 
-💡 **Want more insights?** Upgrade your plan to access:
-${tierContext.upgradeHints.map(hint => `• **${hint.feature}**: ${hint.benefit}`).join('\n')}
-
-*Your current tier: ${tierContext.tierInfo.currentTier}*
+> **💡 Want more insights?** Upgrade your plan to access:
+> 
+> ${tierContext.upgradeHints.map(hint => `> • **${hint.feature}**: ${hint.benefit}`).join('\n')}
+> 
+> *Your current tier: ${tierContext.tierInfo.currentTier}*
 `;
 
   return answer + upgradeSection;
@@ -468,6 +509,19 @@ export async function askOpenAIWithEnhancedContext(
 
     let answer = completion.choices[0]?.message?.content || 'I apologize, but I was unable to generate a response.';
 
+    console.log('🔧 TEST: Got OpenAI response, length:', answer.length);
+    console.log('🔧 PREPROCESSING: Starting response formatting fix...');
+    console.log('🔧 PREPROCESSING: Original answer length:', answer.length);
+    console.log('🔧 PREPROCESSING: Original answer preview:', answer.substring(0, 200));
+    
+          try {
+        // Fix list formatting issues
+        answer = formatResponseWithRegex(answer);
+        console.log('🔧 PREPROCESSING: Response formatting fix completed');
+      } catch (error) {
+        console.error('🔧 PREPROCESSING: Error in formatResponseWithRegex:', error);
+      }
+
     // Enhance response with upgrade suggestions
     answer = enhanceResponseWithUpgrades(answer, tierContext, searchContext);
 
@@ -585,6 +639,15 @@ INSTRUCTIONS:
 - Use specific numbers from the user's data when possible
 - Reference current market conditions when relevant and available
 - Use real-time financial information when available to provide the most current advice
+
+RESPONSE FORMATTING:
+- Use bullet points (- ) for lists, keeping bullet and text on same line
+- Use numbered lists (1. 2. 3.) for steps or rankings
+- Use ## for section headers
+- Keep paragraphs concise with single line breaks between them
+- Format numbers and percentages clearly
+- Make the response clean and professional
+- Avoid excessive blank lines between list items
 - Be conversational but professional
 - If you don't have enough data, ask for more information
 - Always provide source attribution when using external data
@@ -942,6 +1005,19 @@ export async function askOpenAI(
 
     let answer = completion.choices[0]?.message?.content || 'I apologize, but I was unable to generate a response.';
 
+    console.log('🔧 TEST: Got OpenAI response, length:', answer.length);
+    console.log('🔧 PREPROCESSING: Starting response formatting fix...');
+    console.log('🔧 PREPROCESSING: Original answer length:', answer.length);
+    console.log('🔧 PREPROCESSING: Original answer preview:', answer.substring(0, 200));
+    
+          try {
+        // Fix list formatting issues
+        answer = formatResponseWithRegex(answer);
+        console.log('🔧 PREPROCESSING: Response formatting fix completed');
+      } catch (error) {
+        console.error('🔧 PREPROCESSING: Error in formatResponseWithRegex:', error);
+      }
+
     // Enhance response with upgrade suggestions
     answer = enhanceResponseWithUpgrades(answer, tierContext, searchContext);
 
@@ -1053,10 +1129,23 @@ INSTRUCTIONS:
 - If you don't have enough data, ask for more information
 - Always provide source attribution when using external data
 - Focus on the user's specific financial situation and goals
-- When using search results, prioritize the most recent and relevant information
+
+FORMATTING GUIDELINES:
+- Use proper markdown formatting with clear headers (##, ###)
+- Create compact, well-formatted lists without excessive line breaks
+- Use numbered lists (1. 2. 3.) for sequential items like accounts
+- Use bullet points (- or *) for general lists
+- Ensure lists are compact with no blank lines between items
+- **IMPORTANT**: Always put the number/bullet and content on the same line (e.g., "1. Account Name: $100" not "1.\nAccount Name: $100")
+- Use **bold** for important numbers and percentages
+- Use \`code\` blocks for specific rates or calculations
+- Separate sections with clear line breaks
+- Use blockquotes for important warnings or tips
+
 ${!searchContext && tierInfo.unavailableSources.length > 0 ? `
 - Be helpful with current tier limitations
-- When relevant, mention upgrade benefits for unavailable features` : ''}`;
+- Suggest upgrades when appropriate
+- Focus on available data sources` : ''}`;
 
   return systemPrompt;
 }
