@@ -142,16 +142,29 @@ model DemoConversation {
 }
 
 model UserProfile {
-  id          String   @id @default(cuid())
-  userId      String   @unique
-  email       String   // Required to match production
-  profileText String   @default("")
-  lastUpdated DateTime @default(now())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  // User relationship
-  user        User     @relation(fields: [userId], references: [id])
-  
+  id                     String                  @id @default(cuid())
+  email                  String                  @unique
+  profileHash            String                  @unique
+  lastActive             DateTime?
+  conversationCount      Int                     @default(0)
+  isActive               Boolean                 @default(true)
+  profileDeleted         Boolean                 @default(false)
+  userId                 String?                 @unique
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  profileText            String                  @default("")
+  lastUpdated            DateTime                @default(now())
+  encrypted_profile_data encrypted_profile_data?
+  user                   User?                   @relation(fields: [userId], references: [id])
+
   @@map("user_profiles")
+}
+
+model encrypted_profile_data {
+  id            String      @id
+  profileHash   String      @unique
+  encryptedData String
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime
+  user_profiles UserProfile @relation(fields: [profileHash], references: [profileHash])
 }

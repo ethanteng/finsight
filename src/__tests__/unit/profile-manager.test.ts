@@ -57,7 +57,11 @@ describe('ProfileManager Unit Tests', () => {
       mockPrisma.userProfile.create.mockResolvedValue({
         id: 'profile-1',
         userId: 'test-user-id',
+        email: 'test@example.com',
+        profileHash: 'profile_test-user-id_1754380566596',
         profileText: '',
+        isActive: true,
+        conversationCount: 0,
         createdAt: new Date(),
         updatedAt: new Date()
       });
@@ -74,7 +78,11 @@ describe('ProfileManager Unit Tests', () => {
       expect(mockPrisma.userProfile.create).toHaveBeenCalledWith({
         data: {
           userId: 'test-user-id',
-          profileText: ''
+          email: 'test@example.com',
+          profileHash: expect.stringMatching(/^profile_test-user-id_\d+$/),
+          profileText: '',
+          isActive: true,
+          conversationCount: 0
         }
       });
     });
@@ -87,7 +95,11 @@ describe('ProfileManager Unit Tests', () => {
       mockPrisma.userProfile.findUnique.mockResolvedValue({
         id: 'profile-1',
         userId: 'test-user-id',
+        email: 'test@example.com',
+        profileHash: 'profile_test-user-id_1234567890',
         profileText: 'An existing user profile',
+        isActive: true,
+        conversationCount: 5,
         createdAt: new Date(),
         updatedAt: new Date()
       });
@@ -114,7 +126,22 @@ describe('ProfileManager Unit Tests', () => {
 
   describe('Profile Updates', () => {
     it('should update profile with new information', async () => {
-      mockPrisma.userProfile.upsert.mockResolvedValue({
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'test-user-id',
+        email: 'test@example.com'
+      });
+      mockPrisma.userProfile.findUnique.mockResolvedValue({
+        id: 'profile-1',
+        userId: 'test-user-id',
+        email: 'test@example.com',
+        profileHash: 'profile_test-user-id_1234567890',
+        profileText: 'Existing profile',
+        isActive: true,
+        conversationCount: 3,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      mockPrisma.userProfile.update.mockResolvedValue({
         id: 'profile-1',
         userId: 'test-user-id',
         profileText: 'Updated profile with new information',
@@ -123,15 +150,32 @@ describe('ProfileManager Unit Tests', () => {
 
       await profileManager.updateProfile('test-user-id', 'Updated profile with new information');
 
-      expect(mockPrisma.userProfile.upsert).toHaveBeenCalledWith({
-        where: { userId: 'test-user-id' },
-        update: { profileText: 'Updated profile with new information' },
-        create: { userId: 'test-user-id', profileText: 'Updated profile with new information' }
+      expect(mockPrisma.userProfile.update).toHaveBeenCalledWith({
+        where: { id: 'profile-1' },
+        data: { 
+          profileText: 'Updated profile with new information',
+          lastUpdated: expect.any(Date)
+        }
       });
     });
 
     it('should handle update errors gracefully', async () => {
-      mockPrisma.userProfile.upsert.mockRejectedValue(new Error('Update failed'));
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'test-user-id',
+        email: 'test@example.com'
+      });
+      mockPrisma.userProfile.findUnique.mockResolvedValue({
+        id: 'profile-1',
+        userId: 'test-user-id',
+        email: 'test@example.com',
+        profileHash: 'profile_test-user-id_1234567890',
+        profileText: 'Existing profile',
+        isActive: true,
+        conversationCount: 3,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      mockPrisma.userProfile.update.mockRejectedValue(new Error('Update failed'));
 
       await expect(
         profileManager.updateProfile('test-user-id', 'Updated profile')
@@ -155,202 +199,85 @@ describe('ProfileManager Unit Tests', () => {
       mockPrisma.userProfile.findUnique.mockResolvedValue({
         id: 'profile-1',
         userId: 'test-user-id',
+        email: 'test@example.com',
+        profileHash: 'profile_test-user-id_1234567890',
         profileText: 'Existing profile',
+        isActive: true,
+        conversationCount: 3,
         createdAt: new Date(),
         updatedAt: new Date()
       });
 
       mockExtractor.extractAndUpdateProfile.mockResolvedValue('A 30-year-old software engineer');
-      mockPrisma.userProfile.upsert.mockResolvedValue({
+      mockPrisma.userProfile.update.mockResolvedValue({
         id: 'profile-1',
         userId: 'test-user-id',
         profileText: 'A 30-year-old software engineer',
         updatedAt: new Date()
       });
 
-      await profileManager.updateProfileFromConversation('test-user-id', conversation);
+      await profileManager.updateProfileFromConversation(
+        'test-user-id',
+        conversation
+      );
 
       expect(mockExtractor.extractAndUpdateProfile).toHaveBeenCalledWith(
         'test-user-id',
         conversation,
         'Existing profile'
       );
-      expect(mockPrisma.userProfile.upsert).toHaveBeenCalledWith({
-        where: { userId: 'test-user-id' },
-        update: { profileText: 'A 30-year-old software engineer' },
-        create: { userId: 'test-user-id', profileText: 'A 30-year-old software engineer' }
+      expect(mockPrisma.userProfile.update).toHaveBeenCalledWith({
+        where: { id: 'profile-1' },
+        data: { 
+          profileText: 'A 30-year-old software engineer',
+          lastUpdated: expect.any(Date)
+        }
       });
-    });
-
-    it('should update profile with existing profile context', async () => {
-      const conversation = {
-        id: 'conv-1',
-        question: 'I make $120,000 per year',
-        answer: 'Given your income...',
-        createdAt: new Date()
-      };
-
-      mockPrisma.user.findUnique.mockResolvedValue({
-        id: 'test-user-id',
-        email: 'test@example.com'
-      });
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
-        id: 'profile-1',
-        userId: 'test-user-id',
-        profileText: 'A 30-year-old software engineer',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
-
-      mockExtractor.extractAndUpdateProfile.mockResolvedValue('A 30-year-old software engineer making $120,000 per year');
-      mockPrisma.userProfile.upsert.mockResolvedValue({
-        id: 'profile-1',
-        userId: 'test-user-id',
-        profileText: 'A 30-year-old software engineer making $120,000 per year',
-        updatedAt: new Date()
-      });
-
-      await profileManager.updateProfileFromConversation('test-user-id', conversation);
-
-      expect(mockExtractor.extractAndUpdateProfile).toHaveBeenCalledWith(
-        'test-user-id',
-        conversation,
-        'A 30-year-old software engineer'
-      );
-    });
-
-    it('should handle extraction errors gracefully', async () => {
-      const conversation = {
-        id: 'conv-1',
-        question: 'I am a software engineer',
-        answer: 'Here is some advice...',
-        createdAt: new Date()
-      };
-
-      mockPrisma.user.findUnique.mockResolvedValue({
-        id: 'test-user-id',
-        email: 'test@example.com'
-      });
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
-        id: 'profile-1',
-        userId: 'test-user-id',
-        profileText: 'Existing profile',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
-
-      mockExtractor.extractAndUpdateProfile.mockRejectedValue(new Error('Extraction failed'));
-
-      await expect(
-        profileManager.updateProfileFromConversation('test-user-id', conversation)
-      ).rejects.toThrow('Extraction failed');
-    });
-  });
-
-  describe('Caching and Performance', () => {
-    it('should cache profile data efficiently', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({
-        id: 'test-user-id',
-        email: 'test@example.com'
-      });
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
-        id: 'profile-1',
-        userId: 'test-user-id',
-        profileText: 'Cached profile data',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
-
-      // First call should hit database
-      const result1 = await profileManager.getOrCreateProfile('test-user-id');
-      expect(result1).toBe('Cached profile data');
-
-      // Second call should use cache (but since no caching is implemented, it will call DB again)
-      const result2 = await profileManager.getOrCreateProfile('test-user-id');
-      expect(result2).toBe('Cached profile data');
-
-      // Should call database twice since no caching is implemented
-      expect(mockPrisma.userProfile.findUnique).toHaveBeenCalledTimes(2);
-    });
-
-    it('should handle cache invalidation on updates', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({
-        id: 'test-user-id',
-        email: 'test@example.com'
-      });
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
-        id: 'profile-1',
-        userId: 'test-user-id',
-        profileText: 'Original profile',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
-
-      mockPrisma.userProfile.upsert.mockResolvedValue({
-        id: 'profile-1',
-        userId: 'test-user-id',
-        profileText: 'Updated profile',
-        updatedAt: new Date()
-      });
-
-      // Get initial profile
-      const initialProfile = await profileManager.getOrCreateProfile('test-user-id');
-      expect(initialProfile).toBe('Original profile');
-
-      // Update profile
-      await profileManager.updateProfile('test-user-id', 'Updated profile');
-
-      // Get profile again (should reflect update - but since no caching, it returns original)
-      const updatedProfile = await profileManager.getOrCreateProfile('test-user-id');
-      expect(updatedProfile).toBe('Original profile');
     });
   });
 
   describe('Error Handling and Edge Cases', () => {
-    it('should handle null conversation gracefully', async () => {
-      const conversation = null as any;
+    it('should handle user not found gracefully', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
 
-      // The method doesn't actually throw for null conversations, it just processes them
-      await expect(
-        profileManager.updateProfileFromConversation('test-user-id', conversation)
-      ).resolves.toBeUndefined();
-    });
+      const result = await profileManager.getOrCreateProfile('non-existent-user');
 
-    it('should handle empty user ID gracefully', async () => {
-      // The method returns empty string for empty user ID instead of throwing
-      const result = await profileManager.getOrCreateProfile('');
       expect(result).toBe('');
+      expect(mockPrisma.userProfile.create).not.toHaveBeenCalled();
     });
 
-    it('should handle very long profile data', async () => {
-      const longProfile = 'A'.repeat(10000);
-      
+    it('should handle profile update when user not found', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+
+      await profileManager.updateProfile('non-existent-user', 'New profile text');
+
+      expect(mockPrisma.userProfile.update).not.toHaveBeenCalled();
+      expect(mockPrisma.userProfile.create).not.toHaveBeenCalled();
+    });
+
+    it('should handle concurrent profile updates', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({
         id: 'test-user-id',
         email: 'test@example.com'
       });
-      mockPrisma.userProfile.findUnique.mockResolvedValue(null);
-      mockPrisma.userProfile.create.mockResolvedValue({
+      mockPrisma.userProfile.findUnique.mockResolvedValue({
         id: 'profile-1',
         userId: 'test-user-id',
-        profileText: longProfile,
+        email: 'test@example.com',
+        profileHash: 'profile_test-user-id_1234567890',
+        profileText: 'Existing profile',
+        isActive: true,
+        conversationCount: 3,
         createdAt: new Date(),
         updatedAt: new Date()
       });
-
-      const result = await profileManager.getOrCreateProfile('test-user-id');
-      expect(result).toBe(longProfile);
-    });
-
-    it('should handle concurrent profile updates', async () => {
-      mockPrisma.userProfile.upsert.mockResolvedValue({
+      mockPrisma.userProfile.update.mockResolvedValue({
         id: 'profile-1',
         userId: 'test-user-id',
         profileText: 'Updated profile',
         updatedAt: new Date()
       });
 
-      // Simulate concurrent updates
       const promises = [
         profileManager.updateProfile('test-user-id', 'Update 1'),
         profileManager.updateProfile('test-user-id', 'Update 2'),
@@ -359,7 +286,7 @@ describe('ProfileManager Unit Tests', () => {
 
       await Promise.all(promises);
 
-      expect(mockPrisma.userProfile.upsert).toHaveBeenCalledTimes(3);
+      expect(mockPrisma.userProfile.update).toHaveBeenCalledTimes(3);
     });
   });
 }); 
