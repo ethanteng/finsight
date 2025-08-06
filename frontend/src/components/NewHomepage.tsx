@@ -442,7 +442,7 @@ const NewHomepage = () => {
               price: "$25",
               period: "/month",
               description: "Get advisor-level insights without the fees.",
-              features: ["Everything in Standard", "Live market data (CDs, Treasuries, stocks, mortgage rates)", "What-if scenario modeling", "Portfolio analysis & retirement planning"],
+              features: ["Everything in Standard", "Live market data (CDs, Treasuries, stocks, mortgage rates)", "What-if scenario modeling", "Portfolio analysis & retirement planning", "Get real-time alerts on changing market conditions"],
               cta: "Get Early Access",
               popular: false
             }].map((plan, index) => (
@@ -465,6 +465,7 @@ const NewHomepage = () => {
                   <ul className="space-y-3">
                     {plan.features.map((feature, featureIndex) => {
                       const isHighlighted = feature.includes("Factor in CPI") || feature.includes("Pull from trusted sources") || feature.includes("Live market data");
+                      const isNewFeature = feature.includes("real-time alerts");
                       return (
                         <li key={featureIndex} className="flex items-center space-x-3">
                           {feature.startsWith('LIMIT:') ? (
@@ -475,8 +476,14 @@ const NewHomepage = () => {
                           ) : (
                             <>
                               <CheckCircle className="h-5 w-5 text-primary flex-shrink-0" />
-                              <span className={`text-sm ${isHighlighted ? 'text-[hsl(158,64%,52%)]' : ''}`}>
+                              <span className={`text-sm ${isHighlighted ? 'text-[hsl(158,64%,52%)]' : ''} flex items-center`}>
                                 {feature}
+                                {isNewFeature && (
+                                  <span className="ml-2 inline-block bg-gradient-to-l from-primary to-secondary text-primary-foreground text-xs px-2 py-0.5 rounded-full flex items-center space-x-1">
+                                    <span>New</span>
+                                    <span>✨</span>
+                                  </span>
+                                )}
                               </span>
                             </>
                           )}
@@ -500,7 +507,7 @@ const NewHomepage = () => {
           
           {/* Data Sources Note */}
           <div className="mt-8 text-center">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-[hsl(158,64%,52%)]">
               Powered by real-time data from FRED, Brave Search, and Alpha Vantage
             </p>
           </div>
