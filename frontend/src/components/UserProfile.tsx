@@ -43,7 +43,7 @@ Our investment strategy is conservative with a mix of index funds in our 401(k) 
       
       setProfileText(fallbackProfile);
     }
-  }, [userId, isDemo]);
+  }, [userId, isDemo, loadProfile]);
 
   const loadProfile = async () => {
     setLoading(true);
