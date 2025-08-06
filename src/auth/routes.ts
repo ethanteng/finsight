@@ -14,7 +14,7 @@ import {
   sendPasswordResetEmail, 
   generateRandomCode, 
   generateRandomToken 
-} from './email';
+} from './resend-email';
 
 const router = Router();
 const prisma = new PrismaClient();
