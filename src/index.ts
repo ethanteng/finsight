@@ -1293,7 +1293,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
     });
 
     // Admin endpoints for demo data analysis
-    app.get('/admin/demo-sessions', async (req, res) => {
+    app.get('/admin/demo-sessions', async (req: Request, res: Response) => {
       try {
         const { getPrismaClient } = await import('./prisma-client');
         const prisma = getPrismaClient();
@@ -1337,7 +1337,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
-    app.get('/admin/demo-conversations', async (req, res) => {
+    app.get('/admin/demo-conversations', async (req: Request, res: Response) => {
       try {
         const { getPrismaClient } = await import('./prisma-client');
         const prisma = getPrismaClient();
@@ -1361,7 +1361,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
     });
 
     // Admin endpoints for production data analysis
-    app.get('/admin/production-sessions', async (req, res) => {
+    app.get('/admin/production-sessions', async (req: Request, res: Response) => {
       try {
         const { getPrismaClient } = await import('./prisma-client');
         const prisma = getPrismaClient();
@@ -1408,7 +1408,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
-    app.get('/admin/production-conversations', async (req, res) => {
+    app.get('/admin/production-conversations', async (req: Request, res: Response) => {
       try {
         const { getPrismaClient } = await import('./prisma-client');
         const prisma = getPrismaClient();
@@ -1432,7 +1432,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
     });
 
     // Admin endpoint to get all production users
-    app.get('/admin/production-users', async (req, res) => {
+    app.get('/admin/production-users', async (req: Request, res: Response) => {
       try {
         const { getPrismaClient } = await import('./prisma-client');
         const prisma = getPrismaClient();
@@ -1462,7 +1462,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
     });
 
     // Admin endpoint to update user tier
-    app.put('/admin/update-user-tier', async (req, res) => {
+    app.put('/admin/update-user-tier', async (req: Request, res: Response) => {
       try {
         const { getPrismaClient } = await import('./prisma-client');
         const prisma = getPrismaClient();
@@ -1495,7 +1495,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
     });
 
     // Test database connection
-    app.get('/test-db', async (req, res) => {
+    app.get('/test-db', async (req: Request, res: Response) => {
       try {
         const { getPrismaClient } = await import('./prisma-client');
         const prisma = getPrismaClient();

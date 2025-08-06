@@ -246,12 +246,12 @@ const NewHomepage = () => {
         </div>
       </section>
 
-      {/* How It Works Section */}
+      {/* How Linc Works Section */}
       <section className="py-20 bg-muted/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-16">
             <h2 className="text-3xl md:text-4xl font-bold">
-              How <span className="gradient-text">This Works</span>
+              How <span className="gradient-text">Linc Works</span>
             </h2>
             <p className="text-xl text-muted-foreground">
               No dashboards. No spreadsheets. No setup required.
@@ -292,50 +292,99 @@ const NewHomepage = () => {
         </div>
       </section>
 
-      {/* What You Can Ask Linc Section */}
+      {/* Data Sources by Tier Section */}
       <section className="py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-16">
             <h2 className="text-3xl md:text-4xl font-bold">
-              What You Can <span className="gradient-text">Ask Linc</span>
+              Data Sources by <span className="gradient-text">Tier</span>
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Linc is here for wherever you are in your financial journey. Here are common things people ask about:
+              Linc combines your financial data with real-time market information. Here's what's available at each tier:
             </p>
           </div>
           
           <div className="grid md:grid-cols-3 gap-8">
             {[{
-              tier: "Starter Questions",
+              tier: "Starter",
+              price: "$5/month",
               color: "from-emerald-500/20 to-green-500/20",
               borderColor: "border-emerald-500/30",
-              description: "For people with checking, savings, and maybe a 401(k). You're focused on saving more and getting clarity.",
-              questions: ["What's my actual asset allocation across all accounts?", "Are we overpaying in fees?", "How much cash is just sitting in low-yield savings?", "How much do I save each month on average?", "Where is most of my money sitting right now?"]
+              description: "Basic financial analysis with your account data",
+              dataSources: [
+                {
+                  name: "Account Balances",
+                  description: "Real-time balances from checking, savings, credit cards, and investment accounts via Plaid integration"
+                },
+                {
+                  name: "Transaction History", 
+                  description: "Complete transaction data with merchant names, categories, amounts, and dates from all connected accounts"
+                },
+                {
+                  name: "Financial Institutions",
+                  description: "Connected banks, credit unions, and investment firms with account types and routing information"
+                }
+              ]
             }, {
-              tier: "Standard Questions",
+              tier: "Standard", 
+              price: "$12/month",
               color: "from-blue-500/20 to-indigo-500/20",
               borderColor: "border-blue-500/30",
-              description: "You've leveled up. You want smarter context to grow your money with real-world market awareness.",
-              questions: ["Which of our CDs mature next month?", "How does inflation affect our savings goals?", "What's the average credit card APR vs. ours?", "Should we move excess cash into something higher-yield?", "How far are we from our house down payment target?"]
+              description: "Enhanced analysis with economic context and real-time search",
+              dataSources: [
+                {
+                  name: "Everything in Starter",
+                  description: "All account balances, transaction history, and financial institution data from Plaid"
+                },
+                {
+                  name: "Economic Indicators (FRED)",
+                  description: "Consumer Price Index (CPI), Federal Funds Rate, 30-year mortgage rates, and credit card APR data from Federal Reserve Economic Data"
+                },
+                {
+                  name: "Real-time Financial Search",
+                  description: "Brave Search API integration for current financial rates, bank offerings, and market information from trusted sources"
+                }
+              ]
             }, {
-              tier: "Premium Questions",
+              tier: "Premium",
+              price: "$25/month", 
               color: "from-purple-500/20 to-pink-500/20",
               borderColor: "border-purple-500/30",
-              description: "Complex finances with long-term goals. Get advisor-level insights without the fees.",
-              questions: ["Should we refinance based on current mortgage rates?", "Are Treasuries a better option than CDs right now?", "What happens to our spending power if rates go to 6%?", "What asset mix gives us the right balance of safety and growth?", "How long can we last without touching our emergency fund if the market drops?"]
+              description: "Complete financial intelligence with live market data",
+              dataSources: [
+                {
+                  name: "Everything in Standard",
+                  description: "All account data, economic indicators (FRED), and real-time financial search capabilities"
+                },
+                {
+                  name: "Live Market Data (Alpha Vantage)",
+                  description: "Real-time CD rates from major banks, Treasury yields (1-month to 30-year), and live stock market data with 5-minute refresh rates"
+                },
+                {
+                  name: "Live Mortgage Rates",
+                  description: "Real-time mortgage rates from multiple lenders including 30-year fixed, 15-year fixed, and ARM rates with instant updates"
+                }
+              ]
             }].map((tier, index) => (
               <Card key={index} className={`relative overflow-hidden glass-card hover:shadow-xl transition-all duration-300 hover:scale-105 border-2 ${tier.borderColor}`}>
                 <div className={`absolute inset-0 bg-gradient-to-br ${tier.color} opacity-50`} />
                 <CardContent className="relative p-8 space-y-6">
                   <div className="space-y-3">
-                    <h3 className="text-xl font-bold text-center">{tier.tier}</h3>
+                    <div className="text-center">
+                      <h3 className="text-2xl font-bold">{tier.tier}</h3>
+                      <p className="text-lg font-semibold text-primary">{tier.price}</p>
+                    </div>
                     <p className="text-sm text-muted-foreground leading-relaxed text-center">{tier.description}</p>
                   </div>
                   
-                  <div className="space-y-4">
-                    {tier.questions.map((question, qIndex) => (
-                      <div key={qIndex} className="glass-card p-4 rounded-lg bg-background/50">
-                        <p className="text-sm font-medium">&quot;{question}&quot;</p>
+                  <div className="space-y-6">
+                    {tier.dataSources.map((source, sIndex) => (
+                      <div key={sIndex} className="space-y-3">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-2 h-2 bg-primary rounded-full"></div>
+                          <h4 className="font-semibold text-sm">{source.name}</h4>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">{source.description}</p>
                       </div>
                     ))}
                   </div>
