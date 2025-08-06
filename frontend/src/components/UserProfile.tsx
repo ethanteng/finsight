@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { demoData } from '../data/demo-data';
 
 interface UserProfileProps {
@@ -45,7 +45,7 @@ Our investment strategy is conservative with a mix of index funds in our 401(k) 
     }
   }, [userId, isDemo, loadProfile]);
 
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -74,7 +74,7 @@ Our investment strategy is conservative with a mix of index funds in our 401(k) 
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_URL]);
 
   const saveProfile = async (newText: string) => {
     setSaving(true);
