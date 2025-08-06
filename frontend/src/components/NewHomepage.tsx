@@ -426,7 +426,7 @@ const NewHomepage = () => {
               price: "$5",
               period: "/month",
               description: "For simple savings and spending clarity.",
-              features: ["Unlimited questions", "Link up to 3 accounts", "Smart savings & spending insights", "LIMIT: No economic indicators or market data", "LIMIT: No real-time financial search"],
+              features: ["Unlimited questions", "Link up to 3 accounts", "Smart savings & spending insights"],
               cta: "Get Early Access",
               popular: false
             }, {
@@ -434,7 +434,7 @@ const NewHomepage = () => {
               price: "$12",
               period: "/month",
               description: "Level up with real-world context.",
-              features: ["Everything in Starter","Unlimited accounts & questions", "Track CPI, Fed rates, APRs & more", "Search trusted sources like WSJ & Bloomberg", "LIMIT: No live market data"],
+              features: ["Everything in Starter","Unlimited accounts & questions", "Factor in CPI, Fed rates, APRs & more", "Pull from trusted sources like WSJ & Bloomberg"],
               cta: "Get Early Access",
               popular: true
             }, {
@@ -463,21 +463,26 @@ const NewHomepage = () => {
                   </div>
                   
                   <ul className="space-y-3">
-                    {plan.features.map((feature, featureIndex) => (
-                      <li key={featureIndex} className="flex items-center space-x-3">
-                        {feature.startsWith('LIMIT:') ? (
-                          <>
-                            <XCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
-                            <span className="text-sm">{feature.replace('LIMIT: ', '')}</span>
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle className="h-5 w-5 text-primary flex-shrink-0" />
-                            <span className="text-sm">{feature}</span>
-                          </>
-                        )}
-                      </li>
-                    ))}
+                    {plan.features.map((feature, featureIndex) => {
+                      const isHighlighted = feature.includes("Factor in CPI") || feature.includes("Pull from trusted sources") || feature.includes("Live market data");
+                      return (
+                        <li key={featureIndex} className="flex items-center space-x-3">
+                          {feature.startsWith('LIMIT:') ? (
+                            <>
+                              <XCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+                              <span className="text-sm">{feature.replace('LIMIT: ', '')}</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle className="h-5 w-5 text-primary flex-shrink-0" />
+                              <span className={`text-sm ${isHighlighted ? 'text-[hsl(158,64%,52%)]' : ''}`}>
+                                {feature}
+                              </span>
+                            </>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                   
                   <Button 
@@ -491,6 +496,13 @@ const NewHomepage = () => {
                 </CardContent>
               </Card>
             ))}
+          </div>
+          
+          {/* Data Sources Note */}
+          <div className="mt-8 text-center">
+            <p className="text-sm text-muted-foreground">
+              Powered by real-time data from FRED, Brave Search, and Alpha Vantage
+            </p>
           </div>
         </div>
       </section>
