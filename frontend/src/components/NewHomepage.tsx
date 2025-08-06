@@ -297,10 +297,10 @@ const NewHomepage = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-16">
             <h2 className="text-3xl md:text-4xl font-bold">
-              Data Sources by <span className="gradient-text">Tier</span>
+              Data Included in <span className="gradient-text">Each Tier</span>
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Linc combines your financial data with real-time market information. Here's what's available at each tier:
+              See the account and market data available in each tier.
             </p>
           </div>
           
@@ -322,7 +322,7 @@ const NewHomepage = () => {
                 },
                 {
                   name: "Financial Institutions",
-                  description: "Connected banks, credit unions, and investment firms with account types and routing information"
+                  description: "Connected banks, credit unions, and investment accounts with balances, transaction history, and financial institution data"
                 }
               ]
             }, {
@@ -334,7 +334,7 @@ const NewHomepage = () => {
               dataSources: [
                 {
                   name: "Everything in Starter",
-                  description: "All account balances, transaction history, and financial institution data from Plaid"
+                  description: "All account balances, transaction history, and financial institution data"
                 },
                 {
                   name: "Economic Indicators (FRED)",
