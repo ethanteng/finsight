@@ -9,23 +9,23 @@ datasource db {
 }
 
 model User {
-  id              String           @id @default(cuid())
-  email           String           @unique
-  passwordHash    String
-  tier            String           @default("starter")
-  isActive        Boolean          @default(true)
-  emailVerified   Boolean          @default(false)
-  lastLoginAt     DateTime?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  accessTokens    AccessToken[]
-  accounts        Account[]
-  conversations   Conversation[]
-  privacySettings PrivacySettings?
-  syncStatuses    SyncStatus[]
-  profile         UserProfile?
-  passwordResetTokens PasswordResetToken[]
+  id                     String                  @id @default(cuid())
+  email                  String                  @unique
+  passwordHash           String
+  tier                   String                  @default("starter")
+  isActive               Boolean                 @default(true)
+  emailVerified          Boolean                 @default(false)
+  lastLoginAt            DateTime?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  accessTokens           AccessToken[]
+  accounts               Account[]
+  conversations          Conversation[]
+  privacySettings        PrivacySettings?
+  syncStatuses           SyncStatus[]
   emailVerificationCodes EmailVerificationCode[]
+  passwordResetTokens    PasswordResetToken[]
+  profile                UserProfile?
 
   @@map("users")
 }
