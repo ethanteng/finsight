@@ -434,7 +434,7 @@ const NewHomepage = () => {
               price: "$12",
               period: "/month",
               description: "Level up with real-world context.",
-              features: ["Everything in Starter","Unlimited accounts & questions", "Factor in CPI, Fed rates, APRs & more", "Pull from trusted sources like WSJ & Bloomberg"],
+              features: ["Everything in Starter","Unlimited accounts & questions", "Factor in economic indicators like CPI, Fed rates, APRs & more", "Searches the web for current financial headlines from trusted sites"],
               cta: "Get Early Access",
               popular: true
             }, {
@@ -442,7 +442,7 @@ const NewHomepage = () => {
               price: "$25",
               period: "/month",
               description: "Get advisor-level insights without the fees.",
-              features: ["Everything in Standard", "Live market data (CDs, Treasuries, stocks, mortgage rates)", "What-if scenario modeling", "Portfolio analysis & retirement planning", "Get real-time alerts on changing market conditions"],
+              features: ["Everything in Standard", "Live market data (CDs, Treasuries, stocks, crypto, mortgage rates)", "Real-time news feeds from trusted providers like Bloomberg, Reuters, and 60+ official sources", "What-if scenario modeling", "Portfolio analysis & retirement planning", "Get instant alerts on changing market conditions"],
               cta: "Get Early Access",
               popular: false
             }].map((plan, index) => (
@@ -452,7 +452,7 @@ const NewHomepage = () => {
                     Most Popular
                   </div>
                 )}
-                <CardContent className="p-8 space-y-6">
+                <CardContent className="p-8 flex flex-col h-full">
                   <div className="space-y-2">
                     <h3 className="text-2xl font-bold">{plan.name}</h3>
                     <div className="flex items-baseline space-x-1">
@@ -462,10 +462,10 @@ const NewHomepage = () => {
                     <p className="text-muted-foreground text-sm leading-relaxed">{plan.description}</p>
                   </div>
                   
-                  <ul className="space-y-3">
+                  <ul className="space-y-3 mt-6">
                     {plan.features.map((feature, featureIndex) => {
-                      const isHighlighted = feature.includes("Factor in CPI") || feature.includes("Pull from trusted sources") || feature.includes("Live market data");
-                      const isNewFeature = feature.includes("real-time alerts");
+                      const isHighlighted = feature.includes("Factor in economic indicators") || feature.includes("Pull from trusted sources") || feature.includes("Pulls the latest financial news") || feature.includes("Searches the web for current financial headlines") || feature.includes("Live market data") || feature.includes("Real-time news feeds from trusted providers");
+                      const isNewFeature = feature.includes("instant alerts");
                       return (
                         <li key={featureIndex} className="flex items-center space-x-3">
                           {feature.startsWith('LIMIT:') ? (
@@ -492,25 +492,22 @@ const NewHomepage = () => {
                     })}
                   </ul>
                   
-                  <Button 
-                    variant={plan.popular ? "hero" : "outline"} 
-                    className="w-full" 
-                    size="lg"
-                    onClick={() => scrollToSection('waitlist')}
-                  >
-                    {plan.cta}
-                  </Button>
+                  <div className="mt-auto pt-6">
+                    <Button 
+                      variant={plan.popular ? "hero" : "outline"} 
+                      className="w-full" 
+                      size="lg"
+                      onClick={() => scrollToSection('waitlist')}
+                    >
+                      {plan.cta}
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
           </div>
           
-          {/* Data Sources Note */}
-          <div className="mt-8 text-center">
-            <p className="text-sm text-[hsl(158,64%,52%)]">
-              Powered by real-time data from FRED, Brave Search, and Alpha Vantage
-            </p>
-          </div>
+
         </div>
       </section>
 
