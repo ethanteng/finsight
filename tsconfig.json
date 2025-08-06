@@ -8,8 +8,9 @@
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "downlevelIteration": true
+    "downlevelIteration": true,
+    "types": ["node", "jest"]
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "frontend", "generated", "**/*.test.ts", "**/*.spec.ts"]
+  "exclude": ["node_modules", "frontend", "generated"]
 }

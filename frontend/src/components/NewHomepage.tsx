@@ -246,6 +246,52 @@ const NewHomepage = () => {
         </div>
       </section>
 
+      {/* How It Works Section */}
+      <section className="py-20 bg-muted/30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center space-y-4 mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold">
+              How <span className="gradient-text">This Works</span>
+            </h2>
+            <p className="text-xl text-muted-foreground">
+              No dashboards. No spreadsheets. No setup required.
+            </p>
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-12 items-start">
+            {[{
+              step: "1",
+              title: "Connect your accounts",
+              description: "Link your financial accounts securely via Plaid",
+              icon: Target
+            }, {
+              step: "2",
+              title: "Ask a question in plain English",
+              description: "No complex setup or navigation required",
+              icon: MessageCircle
+            }, {
+              step: "3",
+              title: "Get actionable answers",
+              description: "Linc uses your data + live market info to provide smart insights",
+              icon: Brain
+            }].map((step, index) => (
+              <div key={index} className="text-center space-y-6 group">
+                <div className="relative">
+                  <div className="h-20 w-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto group-hover:bg-primary/20 transition-colors border-4 border-primary/20">
+                    <step.icon className="h-10 w-10 text-primary" />
+                  </div>
+
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-xl font-bold">{step.title}</h3>
+                  <p className="text-muted-foreground">{step.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* What You Can Ask Linc Section */}
       <section className="py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -295,52 +341,6 @@ const NewHomepage = () => {
                   </div>
                 </CardContent>
               </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works Section */}
-      <section className="py-20 bg-muted/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center space-y-4 mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold">
-              How <span className="gradient-text">This Works</span>
-            </h2>
-            <p className="text-xl text-muted-foreground">
-              No dashboards. No spreadsheets. No setup required.
-            </p>
-          </div>
-          
-          <div className="grid md:grid-cols-3 gap-12 items-start">
-            {[{
-              step: "1",
-              title: "Connect your accounts",
-              description: "Link your financial accounts securely via Plaid",
-              icon: Target
-            }, {
-              step: "2",
-              title: "Ask a question in plain English",
-              description: "No complex setup or navigation required",
-              icon: MessageCircle
-            }, {
-              step: "3",
-              title: "Get actionable answers",
-              description: "Linc uses your data + live market info to provide smart insights",
-              icon: Brain
-            }].map((step, index) => (
-              <div key={index} className="text-center space-y-6 group">
-                <div className="relative">
-                  <div className="h-20 w-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto group-hover:bg-primary/20 transition-colors border-4 border-primary/20">
-                    <step.icon className="h-10 w-10 text-primary" />
-                  </div>
-
-                </div>
-                <div className="space-y-2">
-                  <h3 className="text-xl font-bold">{step.title}</h3>
-                  <p className="text-muted-foreground">{step.description}</p>
-                </div>
-              </div>
             ))}
           </div>
         </div>

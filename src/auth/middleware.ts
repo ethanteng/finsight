@@ -8,6 +8,8 @@ export interface AuthenticatedRequest extends Request {
     email: string;
     tier: string;
   };
+  headers: Request['headers'];
+  body: any;
 }
 
 export async function authenticateUser(

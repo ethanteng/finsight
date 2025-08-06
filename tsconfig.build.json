@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "exclude": [
+    "node_modules", 
+    "frontend", 
+    "generated", 
+    "**/*.test.ts", 
+    "**/*.spec.ts", 
+    "**/__tests__/**",
+    "**/setup.ts"
+  ]
+} 
