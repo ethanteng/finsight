@@ -425,8 +425,8 @@ const NewHomepage = () => {
               name: "Starter",
               price: "$5",
               period: "/month",
-              description: "For simple savings and spending clarity.",
-              features: ["Unlimited questions", "Link up to 3 accounts", "Smart savings & spending insights"],
+              description: "Perfect for simple financial clarity — without giving up your privacy.",
+              features: ["Ask anything about your spending — get real answers, instantly", "Connect up to 3 accounts — like checking, savings, and your 401(k)", "Automatically categorize spending and highlight patterns","No ads. No upsells. No selling your data."],
               cta: "Get Early Access",
               popular: false
             }, {
@@ -434,7 +434,7 @@ const NewHomepage = () => {
               price: "$12",
               period: "/month",
               description: "Level up with real-world context.",
-              features: ["Everything in Starter","Unlimited accounts & questions", "Factor in economic indicators like CPI, Fed rates, APRs & more", "Searches the web for current financial headlines from trusted sites"],
+              features: ["Everything in Starter","Connect all your accounts — banks, cards, investments, and more. Ask anything, anytime.", "Factor in key economic indicators like CPI, Fed rates, APRs & more", "Searches the web for current financial headlines from trusted sites"],
               cta: "Get Early Access",
               popular: true
             }, {
@@ -442,7 +442,7 @@ const NewHomepage = () => {
               price: "$25",
               period: "/month",
               description: "Get advisor-level insights without the fees.",
-              features: ["Everything in Standard", "Live market data (CDs, Treasuries, stocks, crypto, mortgage rates)", "Real-time news feeds from trusted providers like Bloomberg, Reuters, and 60+ official sources", "What-if scenario modeling", "Portfolio analysis & retirement planning", "Get instant alerts on changing market conditions"],
+              features: ["Everything in Standard", "Live market data (CDs, Treasuries, stocks, crypto, mortgage rates)", "Real-time news feeds from 60+ trusted sources like Bloomberg and Reuters", "What-if scenario modeling", "Portfolio analysis & retirement planning", "Get notified when markets move — instantly"],
               cta: "Get Early Access",
               popular: false
             }].map((plan, index) => (
@@ -464,8 +464,8 @@ const NewHomepage = () => {
                   
                   <ul className="space-y-3 mt-6">
                     {plan.features.map((feature, featureIndex) => {
-                      const isHighlighted = feature.includes("Factor in economic indicators") || feature.includes("Pull from trusted sources") || feature.includes("Pulls the latest financial news") || feature.includes("Searches the web for current financial headlines") || feature.includes("Live market data") || feature.includes("Real-time news feeds from trusted providers");
-                      const isNewFeature = feature.includes("instant alerts");
+                      const isHighlighted = feature.includes("Factor in economic indicators") || feature.includes("Factor in key economic indicators") || feature.includes("Pull from trusted sources") || feature.includes("Pulls the latest financial news") || feature.includes("Searches the web for current financial headlines") || feature.includes("Live market data") || feature.includes("Real-time news feeds from 60+ trusted sources");
+                      const isNewFeature = feature.includes("Get notified when markets move");
                       return (
                         <li key={featureIndex} className="flex items-center space-x-3">
                           {feature.startsWith('LIMIT:') ? (
