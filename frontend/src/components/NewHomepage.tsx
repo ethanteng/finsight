@@ -587,7 +587,7 @@ const NewHomepage = () => {
               answer: "On its own, ChatGPT doesn't. That's why Linc pulls in real-time data — like CD rates, bond yields, and current news — and feeds it into OpenAI as context for your questions."
             }, {
               question: "Is this just another budgeting app?",
-              answer: "Nope! Linc does not track your spending or categorize transactions. It answers your questions using your actual account data + live market context. Think of Linc as your financial advisor, not your accountant."
+              answer: "Nope. Budgeting apps track every transaction and show you charts. Linc helps you make sense of it all. It answers questions like “Am I saving enough?” or “Will I ever be able to buy a house?” by connecting to your real accounts, layering in market data, and giving you clear, personalized answers — without tracking your every move or selling your data."
             }, {
               question: "What if I want to delete everything?",
               answer: "Easy. You can view, export, or delete all your data anytime with a single click. Full transparency, full control."
