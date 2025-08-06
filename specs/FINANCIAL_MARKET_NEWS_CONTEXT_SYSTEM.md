@@ -6,7 +6,7 @@ A dynamic AI-built market news context system that intelligently aggregates and 
 
 ## **Core Objectives**
 
-1. **Real-Time Market Intelligence**: Continuously aggregate news from FRED, Alpha Vantage, Brave Search, and other financial sources
+1. **Real-Time Market Intelligence**: Continuously aggregate news from Finnhub, FRED, Alpha Vantage, and other financial sources
 2. **AI-Enhanced Synthesis**: Use AI to process and synthesize complex market data into actionable insights
 3. **Tier-Aware Access**: Provide different levels of market context based on user subscription tiers
 4. **Admin Management**: Allow manual editing and oversight of market context content
@@ -30,7 +30,7 @@ model MarketNewsContext {
   createdAt       DateTime @default(now())
   
   // Source tracking
-  dataSources     String[] // Array of sources used (FRED, AlphaVantage, Brave, etc.)
+  dataSources     String[] // Array of sources used (Finnhub, FRED, AlphaVantage, etc.)
   keyEvents       String[] // Array of major market events identified
   
   // Tier configuration
@@ -122,6 +122,68 @@ model MarketNewsEmailLog {
 }
 ```
 
+## **Data Source Integration**
+
+### **Primary Data Source: Finnhub.io**
+
+**Why Finnhub is the Optimal Choice:**
+
+1. **Comprehensive Data Coverage**
+   - Real-time stock data for 60+ exchanges worldwide
+   - Financial news from 60+ professional sources (Reuters, Bloomberg, etc.)
+   - Economic indicators and calendar events
+   - Company fundamentals and earnings data
+   - Forex and crypto market data
+   - Built-in sentiment analysis
+
+2. **Perfect Alignment with System Requirements**
+   - Single API provides news, market data, and economic indicators
+   - Real-time data with professional quality
+   - Sentiment analysis enhances AI synthesis
+   - Structured data format simplifies processing
+   - Cost-effective pricing for tiered access
+
+3. **API Rate Limits & Pricing**
+   - Free tier: 60 API calls/minute
+   - Paid tiers start at $9.99/month for higher limits
+   - Suitable for scheduled updates every 2 hours
+   - Enterprise options for high-volume usage
+
+4. **Enhanced Tier-Based Access Implementation**
+
+   | Tier | Data Sources | Features | Value Proposition |
+   |------|-------------|----------|------------------|
+   | **Starter** | ❌ No market news | Basic financial analysis only | Core financial advice without market context |
+   | **Standard** | ✅ FRED + Brave Search | Economic indicators and general trends | Basic market awareness with economic data |
+   | **Premium** | ✅ Full Finnhub Access | Comprehensive market intelligence with sentiment analysis | Professional-grade market insights and real-time data |
+
+### **Tier-Specific Data Sources**
+
+#### **Starter Tier**
+- **No market data**: Focus on personal financial analysis only
+- **Basic AI responses**: General financial advice without market context
+- **Value**: Essential financial guidance for basic needs
+- **Upgrade incentive**: "Get market-aware advice with Standard tier"
+
+#### **Standard Tier**
+- **FRED**: Federal Reserve Economic Data (economic indicators)
+- **Brave Search**: Web search for general financial news
+- **Limited market context**: Basic economic trends and indicators
+- **Value**: Basic market context for informed decisions
+- **Upgrade incentive**: "Get professional-grade market intelligence with Premium tier"
+
+#### **Premium Tier**
+- **Finnhub**: Complete market intelligence platform
+  - Real-time stock data from 60+ exchanges
+  - Professional news from Reuters, Bloomberg, and 60+ sources
+  - Economic calendar and events
+  - Company fundamentals and earnings data
+  - Built-in sentiment analysis
+  - Forex and crypto market data
+- **Enhanced AI responses**: Market-aware recommendations with sentiment analysis
+- **Daily email summaries**: Rich market context with professional insights
+- **Value**: Professional-grade market intelligence for serious investors
+
 ## **System Architecture**
 
 ### **1. Market News Aggregator**
@@ -152,25 +214,35 @@ export class MarketNewsAggregator {
   }
   
   private initializeSources() {
-    this.sources.set('fred', {
-      id: 'fred',
-      name: 'Federal Reserve Economic Data',
-      priority: 1,
+    // Premium tier sources (Finnhub only)
+    this.sources.set('finnhub', {
+      id: 'finnhub',
+      name: 'Finnhub Financial Data',
+      priority: 1, // Premium tier only
       enabled: true
     });
     
-    this.sources.set('alpha_vantage', {
-      id: 'alpha_vantage', 
-      name: 'Alpha Vantage Market Data',
-      priority: 2,
+    // Standard tier sources
+    this.sources.set('fred', {
+      id: 'fred',
+      name: 'Federal Reserve Economic Data',
+      priority: 2, // Standard tier
       enabled: true
     });
     
     this.sources.set('brave_search', {
       id: 'brave_search',
       name: 'Brave Search Financial News',
-      priority: 3,
+      priority: 3, // Standard tier
       enabled: true
+    });
+    
+    // Fallback sources (if needed)
+    this.sources.set('alpha_vantage', {
+      id: 'alpha_vantage', 
+      name: 'Alpha Vantage Market Data',
+      priority: 4, // Fallback only
+      enabled: false // Disabled by default
     });
   }
   
@@ -200,16 +272,151 @@ export class MarketNewsAggregator {
   
   private async fetchFromSource(sourceId: string): Promise<MarketNewsData[]> {
     switch (sourceId) {
+      case 'finnhub':
+        return this.fetchFinnhubData();
       case 'fred':
         return this.fetchFREDData();
-      case 'alpha_vantage':
-        return this.fetchAlphaVantageData();
       case 'brave_search':
         return this.fetchBraveSearchData();
+      case 'alpha_vantage':
+        return this.fetchAlphaVantageData(); // Fallback only
       default:
         return [];
     }
   }
+  
+  private async fetchFinnhubData(): Promise<MarketNewsData[]> {
+    const [news, economicCalendar, marketData] = await Promise.all([
+      this.fetchFinnhubNews(),
+      this.fetchFinnhubEconomicCalendar(),
+      this.fetchFinnhubMarketData()
+    ]);
+    
+    return [...news, ...economicCalendar, ...marketData];
+  }
+  
+  private async fetchFinnhubNews(): Promise<MarketNewsData[]> {
+    try {
+      const response = await fetch(
+        `https://finnhub.io/api/v1/news?category=general&token=${process.env.FINNHUB_API_KEY}`
+      );
+      const news = await response.json();
+      
+      return news.map((item: any) => ({
+        source: 'finnhub',
+        timestamp: new Date(item.datetime * 1000),
+        data: {
+          headline: item.headline,
+          summary: item.summary,
+          url: item.url,
+          sentiment: item.sentiment,
+          category: item.category
+        },
+        type: 'news_article',
+        relevance: this.calculateNewsRelevance(item.headline, item.summary, item.sentiment)
+      }));
+    } catch (error) {
+      console.error('Error fetching Finnhub news:', error);
+      return [];
+    }
+  }
+  
+  private async fetchFinnhubEconomicCalendar(): Promise<MarketNewsData[]> {
+    try {
+      const today = new Date();
+      const response = await fetch(
+        `https://finnhub.io/api/v1/calendar/economic?from=${today.toISOString().split('T')[0]}&to=${today.toISOString().split('T')[0]}&token=${process.env.FINNHUB_API_KEY}`
+      );
+      const calendar = await response.json();
+      
+      return calendar.economicCalendar?.map((item: any) => ({
+        source: 'finnhub',
+        timestamp: new Date(item.time),
+        data: {
+          event: item.event,
+          country: item.country,
+          currency: item.currency,
+          impact: item.impact,
+          actual: item.actual,
+          forecast: item.forecast,
+          previous: item.previous
+        },
+        type: 'economic_indicator',
+        relevance: this.calculateEconomicRelevance(item.impact, item.country)
+      })) || [];
+    } catch (error) {
+      console.error('Error fetching Finnhub economic calendar:', error);
+      return [];
+    }
+  }
+  
+  private async fetchFinnhubMarketData(): Promise<MarketNewsData[]> {
+    try {
+      // Fetch major indices (S&P 500, NASDAQ, DOW)
+      const indices = ['^GSPC', '^IXIC', '^DJI'];
+      const marketData: MarketNewsData[] = [];
+      
+      for (const symbol of indices) {
+        const response = await fetch(
+          `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${process.env.FINNHUB_API_KEY}`
+        );
+        const quote = await response.json();
+        
+        if (quote.c && quote.d) {
+          marketData.push({
+            source: 'finnhub',
+            timestamp: new Date(),
+            data: {
+              symbol,
+              currentPrice: quote.c,
+              change: quote.d,
+              changePercent: quote.dp,
+              high: quote.h,
+              low: quote.l,
+              open: quote.o,
+              previousClose: quote.pc
+            },
+            type: 'market_data',
+            relevance: this.calculateMarketRelevance(symbol, quote.dp)
+          });
+        }
+      }
+      
+      return marketData;
+    } catch (error) {
+      console.error('Error fetching Finnhub market data:', error);
+      return [];
+    }
+  }
+
+private calculateNewsRelevance(headline: string, summary: string, sentiment: number): number {
+  // Calculate relevance based on keywords, sentiment, and recency
+  const financialKeywords = ['earnings', 'revenue', 'profit', 'loss', 'market', 'economy', 'inflation', 'interest', 'rate', 'fed', 'trading'];
+  const keywordMatches = financialKeywords.filter(keyword => 
+    headline.toLowerCase().includes(keyword) || summary.toLowerCase().includes(keyword)
+  ).length;
+  
+  const sentimentScore = Math.abs(sentiment || 0);
+  const keywordScore = keywordMatches / financialKeywords.length;
+  
+  return Math.min(1, (keywordScore * 0.6) + (sentimentScore * 0.4));
+}
+
+private calculateEconomicRelevance(impact: string, country: string): number {
+  const impactScores = { 'high': 1.0, 'medium': 0.7, 'low': 0.4 };
+  const countryScores = { 'US': 1.0, 'EU': 0.8, 'GB': 0.8, 'JP': 0.7, 'CN': 0.7 };
+  
+  const impactScore = impactScores[impact as keyof typeof impactScores] || 0.5;
+  const countryScore = countryScores[country as keyof typeof countryScores] || 0.5;
+  
+  return impactScore * countryScore;
+}
+
+private calculateMarketRelevance(symbol: string, changePercent: number): number {
+  // Higher relevance for significant market movements
+  const absChange = Math.abs(changePercent || 0);
+  return Math.min(1, absChange / 10); // Normalize to 0-1 scale
+}
 }
 ```
 
@@ -304,11 +511,11 @@ MARKET OUTLOOK:
   private getTierContext(tier: UserTier): string {
     switch (tier) {
       case UserTier.STARTER:
-        return 'Basic economic indicators and general market trends';
+        return 'No market context available - focus on personal financial analysis';
       case UserTier.STANDARD:
-        return 'Enhanced economic context with rate information and market analysis';
+        return 'Basic economic indicators and general market trends from FRED and web search';
       case UserTier.PREMIUM:
-        return 'Comprehensive market intelligence including live data, trends, and detailed analysis';
+        return 'Comprehensive market intelligence including real-time data, professional news, sentiment analysis, and detailed market analysis from Finnhub';
       default:
         return 'Standard market context';
     }
@@ -703,6 +910,22 @@ ${process.env.FRONTEND_URL}/app/unsubscribe?type=market-news
     });
   }
 }
+```
+
+## **Environment Variables**
+
+Add the following environment variables to your `.env` file:
+
+```bash
+# Finnhub API Configuration
+FINNHUB_API_KEY=your_finnhub_api_key
+FINNHUB_API_KEY_REAL=your_production_finnhub_api_key
+
+# Existing API Keys (keep for fallback)
+ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key
+ALPHA_VANTAGE_API_KEY_REAL=your_production_alpha_vantage_key
+FRED_API_KEY=your_fred_key
+FRED_API_KEY_REAL=your_production_fred_key
 ```
 
 ## **API Endpoints**
@@ -1101,6 +1324,7 @@ ${marketNewsContext}
 
 Use this market news context to provide more timely and relevant financial advice.
 Consider current market conditions, trends, and developments when making recommendations.
+When available, incorporate market sentiment analysis from Finnhub data.
 `;
   }
   
@@ -1128,8 +1352,10 @@ ${userProfile ? `USER PROFILE:\n${userProfile}\n` : ''}
 INSTRUCTIONS:
 - Provide personalized financial advice based on current market conditions
 - Consider the latest market news and trends in your recommendations
+- When available, reference market sentiment from Finnhub data
 - When relevant, mention upgrade benefits for unavailable features
 - Focus on actionable, specific recommendations tailored to current market environment
+- Premium tier users get comprehensive market intelligence including sentiment analysis
 `;
 }
 ```
@@ -1352,12 +1578,12 @@ private filterDataForTier(data: MarketNewsData[], tier: UserTier): MarketNewsDat
       
     case UserTier.STANDARD:
       return data.filter(d => 
-        d.type === 'economic_indicator' || 
-        d.source === 'fred'
+        d.source === 'fred' || 
+        d.source === 'brave_search'
       );
       
     case UserTier.PREMIUM:
-      return data; // All data for premium tier
+      return data; // Full access to all data including complete Finnhub suite
       
     default:
       return [];
@@ -1419,27 +1645,97 @@ describe('Market News Integration', () => {
 });
 ```
 
+## **Enhanced Tier Differentiation Strategy**
+
+### **Clear Value Proposition by Tier**
+
+#### **Starter Tier - Core Financial Analysis**
+- **No market context**: Focus purely on personal financial analysis
+- **Basic AI responses**: General financial advice without market considerations
+- **Value**: Essential financial guidance for basic needs
+- **Upgrade incentive**: "Get market-aware advice with Standard tier"
+
+#### **Standard Tier - Basic Market Awareness**
+- **Data sources**: FRED (economic indicators) + Brave Search (general news)
+- **Features**: Basic economic trends and general market awareness
+- **AI responses**: Market-aware but limited to basic economic data
+- **Value**: Basic market context for informed decisions
+- **Upgrade incentive**: "Get professional-grade market intelligence with Premium tier"
+
+#### **Premium Tier - Professional Market Intelligence**
+- **Data sources**: Complete Finnhub platform access
+- **Features**: 
+  - Real-time stock data from 60+ exchanges
+  - Professional news from Reuters, Bloomberg, and 60+ sources
+  - Economic calendar and events
+  - Company fundamentals and earnings data
+  - Built-in sentiment analysis
+  - Forex and crypto market data
+- **AI responses**: Market-aware recommendations with sentiment analysis
+- **Email summaries**: Rich market context with professional insights
+- **Value**: Professional-grade market intelligence for serious investors
+
+### **Finnhub Integration Advantages**
+
+### **1. Enhanced Data Quality**
+- **Professional Sources**: News from Reuters, Bloomberg, and 60+ professional financial sources
+- **Real-time Data**: Live market data from 60+ exchanges worldwide
+- **Sentiment Analysis**: Built-in sentiment scoring for news articles
+- **Economic Calendar**: Upcoming economic events and their expected impact
+- **Company Fundamentals**: Earnings, revenue, and financial metrics
+
+### **2. Simplified Architecture**
+- **Single API**: One integration instead of managing multiple data sources
+- **Structured Data**: Consistent format across all data types
+- **Better Error Handling**: More reliable API with comprehensive error responses
+- **Rate Limiting**: Clear rate limits and usage tracking
+
+### **3. Enhanced AI Synthesis**
+- **Sentiment Integration**: AI can incorporate market sentiment into recommendations
+- **Richer Context**: More comprehensive market intelligence for better advice
+- **Tier Differentiation**: Clear distinction between starter, standard, and premium access
+- **Real-time Updates**: Market context reflects current conditions
+
+### **4. Improved Email Content**
+- **Market Sentiment**: Include sentiment scores in daily summaries
+- **Economic Events**: Highlight upcoming economic calendar events
+- **Market Movements**: Real-time index performance and trends
+- **Professional Quality**: Higher quality content from professional sources
+
 ## **Benefits**
 
 ### **For Users**
 
-- **Enhanced Context**: AI responses include current market intelligence
-- **Timely Advice**: Recommendations based on latest market developments
-- **Tier Differentiation**: Premium users get comprehensive market analysis
-- **Better Decisions**: More informed financial advice with market context
-- **Daily Email Summaries**: Optional daily market news emails for engaged users
-- **Email Preferences**: Full control over email frequency and content tier
-- **Professional Templates**: Beautiful, mobile-friendly email designs
+#### **Starter Tier**
+- **Core Financial Analysis**: Essential financial guidance without market distractions
+- **Simple Interface**: Focus on personal financial management
+- **Clear Upgrade Path**: Easy transition to market-aware advice
+
+#### **Standard Tier**
+- **Basic Market Awareness**: Economic indicators and general market trends
+- **Informed Decisions**: Market context for better financial choices
+- **FRED Integration**: Reliable economic data from Federal Reserve
+- **Web Search Context**: General financial news and trends
+
+#### **Premium Tier**
+- **Professional Market Intelligence**: Real-time data from 60+ exchanges
+- **Sentiment Analysis**: Market sentiment incorporated into AI recommendations
+- **Professional News**: Reuters, Bloomberg, and 60+ professional sources
+- **Economic Calendar**: Upcoming events and their market impact
+- **Company Fundamentals**: Earnings, revenue, and financial metrics
+- **Enhanced Email Summaries**: Rich market context with professional insights
+- **Real-time Updates**: Market context reflects current conditions
 
 ### **For Business**
 
-- **Value Proposition**: Premium tier becomes more valuable with market intelligence
-- **User Engagement**: More relevant and timely responses increase engagement
-- **Competitive Advantage**: Real-time market context differentiates from competitors
-- **Revenue Optimization**: Enhanced premium tier justifies higher pricing
-- **Email Marketing**: Daily emails increase user engagement and platform usage
-- **User Retention**: Regular market updates keep users engaged and returning
-- **Lead Generation**: Email summaries can attract new users to the platform
+- **Clear Tier Differentiation**: Strong value proposition for each tier upgrade
+- **Premium Justification**: Professional-grade market intelligence justifies higher pricing
+- **Upgrade Incentives**: Clear path from Starter → Standard → Premium
+- **Competitive Advantage**: Finnhub integration provides professional-grade data
+- **Revenue Optimization**: Premium tier becomes significantly more valuable
+- **User Engagement**: Market-aware responses increase user interaction
+- **Email Marketing**: Rich market content drives engagement and retention
+- **Lead Generation**: Professional market intelligence attracts serious investors
 
 ### **Technical Benefits**
 
@@ -1463,10 +1759,40 @@ describe('Market News Integration', () => {
 - **User Retention**: Increased user retention through daily engagement
 - **Platform Usage**: Higher daily active users due to email-driven engagement
 
+## **Implementation Steps**
+
+### **Phase 1: Tier-Specific Data Source Setup**
+1. **Configure tier filtering** to restrict data sources by user tier
+2. **Implement Starter tier**: No market data, basic financial analysis only
+3. **Implement Standard tier**: FRED + Brave Search integration
+4. **Test tier access control** to ensure proper data filtering
+5. **Update AI prompts** to reflect tier-specific capabilities
+
+### **Phase 2: Premium Tier Finnhub Integration**
+1. **Sign up for Finnhub API** and obtain API key
+2. **Implement Finnhub data fetching** for Premium tier only
+3. **Add sentiment analysis** integration for Premium users
+4. **Test Premium tier features** with real Finnhub data
+5. **Compare data quality** between Standard and Premium tiers
+
+### **Phase 3: Enhanced Premium Features**
+1. **Add economic calendar** integration for Premium users
+2. **Implement market data** fetching for major indices
+3. **Create Premium-specific email templates** with rich market content
+4. **Add company fundamentals** and earnings data for Premium tier
+5. **Test upgrade flow** from Standard to Premium tier
+
+### **Phase 4: Advanced Premium Features**
+1. **Implement real-time alerts** for significant market events
+2. **Add personalized market context** based on user profiles
+3. **Create historical analysis** and trend identification
+4. **Optimize performance** and caching for Premium tier
+5. **Add advanced analytics** and market predictions
+
 ## **Future Enhancements**
 
-1. **Sentiment Analysis**: Add market sentiment to context
-2. **Personalized Context**: Tailor market news to user's financial profile
+1. **Advanced Sentiment Analysis**: Enhanced sentiment modeling with machine learning
+2. **Personalized Context**: Tailor market news to user's financial profile and holdings
 3. **Real-Time Alerts**: Push notifications for significant market events
 4. **Historical Analysis**: Include trend analysis and historical context
 5. **Multi-Language**: Support for international market news
@@ -1475,6 +1801,11 @@ describe('Market News Integration', () => {
 8. **Email A/B Testing**: Test different email formats and content
 9. **Email Analytics**: Track open rates, click rates, and engagement metrics
 10. **Smart Scheduling**: Adjust email timing based on user timezone and preferences
+11. **Finnhub Webhooks**: Real-time data updates via webhooks
+12. **Custom Market Indices**: Create personalized market indices for users
+13. **Sector-Specific Analysis**: Focus on user's specific investment sectors
+14. **Earnings Calendar Integration**: Highlight upcoming earnings for user's holdings
+15. **Market Correlation Analysis**: Show how different assets correlate with market movements
 
 ---
 
