@@ -96,7 +96,7 @@ describe('Forgot Password and Email Verification', () => {
         .post('/auth/reset-password')
         .send({
           token: 'test-reset-token',
-          newPassword: 'newpassword123'
+          newPassword: 'NewPassword123'
         });
 
       expect(response.status).toBe(200);
@@ -114,7 +114,7 @@ describe('Forgot Password and Email Verification', () => {
         .post('/auth/reset-password')
         .send({
           token: 'invalid-token',
-          newPassword: 'newpassword123'
+          newPassword: 'NewPassword123'
         });
 
       expect(response.status).toBe(400);
