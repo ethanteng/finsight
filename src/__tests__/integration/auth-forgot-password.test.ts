@@ -183,6 +183,13 @@ describe('Forgot Password and Email Verification', () => {
     */
 
     it('should reject for already verified email', async () => {
+      // Login to get auth token
+      const loginResponse = await request(app)
+        .post('/auth/login')
+        .send({ email: 'test@example.com', password: 'password123' });
+
+      const authToken = loginResponse.body.token;
+
       // Mark user as verified
       await prisma.user.update({
         where: { id: testUser.id },
