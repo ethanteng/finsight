@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { testEmailConfiguration } from './auth/resend-email';
+import { testEmailConfiguration } from './auth/email';
 
 async function testEmail() {
   console.log('Testing email configuration...');
@@ -9,7 +9,7 @@ async function testEmail() {
   if (result) {
     console.log('✅ Email configuration is working!');
   } else {
-    console.log('❌ Email configuration failed. Check your RESEND_API_KEY.');
+    console.log('❌ Email configuration failed. Check your EMAIL_HOST, EMAIL_USER, and EMAIL_PASS.');
   }
 }
 

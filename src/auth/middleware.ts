@@ -105,3 +105,35 @@ export function optionalAuth(
   
   next();
 } 
+
+export function adminAuth(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): void {
+  // First, ensure user is authenticated
+  if (!req.user) {
+    res.status(401).json({ error: 'Authentication required for admin access' });
+    return;
+  }
+
+  // Get allowed admin emails from environment variable
+  const allowedAdminEmails = process.env.ADMIN_EMAILS?.split(',').map(email => email.trim().toLowerCase()).filter(email => email.length > 0) || [];
+  
+  if (allowedAdminEmails.length === 0) {
+    console.warn('ADMIN_EMAILS environment variable not set - admin access disabled');
+    res.status(403).json({ error: 'Admin access not configured' });
+    return;
+  }
+
+  // Check if user's email is in the allowed list
+  const userEmail = req.user.email.toLowerCase();
+  if (!allowedAdminEmails.includes(userEmail)) {
+    console.warn(`Admin access denied for email: ${req.user.email}`);
+    res.status(403).json({ error: 'Admin access denied' });
+    return;
+  }
+
+  console.log(`Admin access granted for email: ${req.user.email}`);
+  next();
+} 

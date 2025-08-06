@@ -79,20 +79,37 @@ export default function AdminPage() {
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+  // Helper function to get auth headers
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('auth_token');
+    return {
+      'Content-Type': 'application/json',
+      ...(token && { 'Authorization': `Bearer ${token}` })
+    };
+  };
+
   const loadDemoData = useCallback(async () => {
     try {
       // Load demo sessions overview
-      const sessionsRes = await fetch(`${API_URL}/admin/demo-sessions`);
+      const sessionsRes = await fetch(`${API_URL}/admin/demo-sessions`, {
+        headers: getAuthHeaders()
+      });
       if (sessionsRes.ok) {
         const sessionsData = await sessionsRes.json();
         setDemoSessions(sessionsData.sessions);
+      } else if (sessionsRes.status === 401 || sessionsRes.status === 403) {
+        setError('Authentication required for admin access');
       }
 
       // Load demo conversations
-      const conversationsRes = await fetch(`${API_URL}/admin/demo-conversations`);
+      const conversationsRes = await fetch(`${API_URL}/admin/demo-conversations`, {
+        headers: getAuthHeaders()
+      });
       if (conversationsRes.ok) {
         const conversationsData = await conversationsRes.json();
         setDemoConversations(conversationsData.conversations);
+      } else if (conversationsRes.status === 401 || conversationsRes.status === 403) {
+        setError('Authentication required for admin access');
       }
     } catch (err) {
       console.error('Demo data load error:', err);
@@ -102,17 +119,25 @@ export default function AdminPage() {
   const loadProductionData = useCallback(async () => {
     try {
       // Load production users overview
-      const usersRes = await fetch(`${API_URL}/admin/production-sessions`);
+      const usersRes = await fetch(`${API_URL}/admin/production-sessions`, {
+        headers: getAuthHeaders()
+      });
       if (usersRes.ok) {
         const usersData = await usersRes.json();
         setProductionUsers(usersData.users);
+      } else if (usersRes.status === 401 || usersRes.status === 403) {
+        setError('Authentication required for admin access');
       }
 
       // Load production conversations
-      const conversationsRes = await fetch(`${API_URL}/admin/production-conversations`);
+      const conversationsRes = await fetch(`${API_URL}/admin/production-conversations`, {
+        headers: getAuthHeaders()
+      });
       if (conversationsRes.ok) {
         const conversationsData = await conversationsRes.json();
         setProductionConversations(conversationsData.conversations);
+      } else if (conversationsRes.status === 401 || conversationsRes.status === 403) {
+        setError('Authentication required for admin access');
       }
     } catch (err) {
       console.error('Production data load error:', err);
@@ -121,10 +146,14 @@ export default function AdminPage() {
 
   const loadUsersForManagement = useCallback(async () => {
     try {
-      const usersRes = await fetch(`${API_URL}/admin/production-users`);
+      const usersRes = await fetch(`${API_URL}/admin/production-users`, {
+        headers: getAuthHeaders()
+      });
       if (usersRes.ok) {
         const usersData = await usersRes.json();
         setUsersForManagement(usersData.users);
+      } else if (usersRes.status === 401 || usersRes.status === 403) {
+        setError('Authentication required for admin access');
       }
     } catch (err) {
       console.error('Users management load error:', err);
@@ -158,9 +187,7 @@ export default function AdminPage() {
     try {
       const response = await fetch(`${API_URL}/admin/update-user-tier`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ userId, newTier }),
       });
 
@@ -169,6 +196,8 @@ export default function AdminPage() {
         await loadUsersForManagement();
         // Also refresh production data to show updated tiers
         await loadProductionData();
+      } else if (response.status === 401 || response.status === 403) {
+        setError('Authentication required for admin access');
       } else {
         console.error('Failed to update user tier');
       }
@@ -617,7 +646,26 @@ export default function AdminPage() {
       <div className="min-h-screen bg-gray-900 text-white p-6">
         <div className="max-w-6xl mx-auto">
           <h1 className="text-2xl font-bold mb-6">Admin Dashboard</h1>
-          <div className="text-red-400">{error}</div>
+          <div className="bg-red-900 border border-red-700 text-red-100 px-4 py-3 rounded mb-6">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-200">
+                  Admin Access Required
+                </h3>
+                <div className="mt-2 text-sm text-red-100">
+                  {error}
+                </div>
+                <div className="mt-2 text-xs text-red-200">
+                  Please log in with an admin account to access this dashboard.
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
