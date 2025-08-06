@@ -14,7 +14,7 @@ interface PromptHistory {
 export default function AppPage() {
   const [promptHistory, setPromptHistory] = useState<PromptHistory[]>([]);
   const [selectedPrompt, setSelectedPrompt] = useState<PromptHistory | null>(null);
-  const [showSidebar, _setShowSidebar] = useState(true);
+  const [showSidebar, setShowSidebar] = useState(true); // Show by default on desktop
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('');
@@ -199,11 +199,15 @@ export default function AppPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <h1 className="text-2xl font-bold text-white">Ask Linc</h1>
-            <TierBanner />
+            {/* Hide TierBanner on mobile */}
+            <div className="hidden md:block">
+              <TierBanner />
+            </div>
           </div>
           <div className="flex items-center space-x-3">
+            {/* Hide email on mobile */}
             {userEmail && (
-              <span className="text-gray-400 text-sm">
+              <span className="hidden md:block text-gray-400 text-sm">
                 {userEmail}
               </span>
             )}
@@ -224,9 +228,9 @@ export default function AppPage() {
       </div>
 
       <div className="flex h-[calc(100vh-80px)]">
-        {/* Sidebar */}
+        {/* Sidebar - Hidden on mobile, visible on desktop */}
         {showSidebar && (
-          <div className="w-80 bg-gray-800 border-r border-gray-700 overflow-y-auto">
+          <div className="w-80 bg-gray-800 border-r border-gray-700 overflow-y-auto hidden lg:block">
             <div className="p-4">
               <h2 className="text-lg font-semibold mb-4">Prompt History</h2>
               {promptHistory.length === 0 ? (
@@ -259,9 +263,9 @@ export default function AppPage() {
 
         {/* Main Content */}
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-4xl mx-auto p-6">
+          <div className="max-w-4xl mx-auto p-4 md:p-6">
             {/* Q&A Interface */}
-            <div className="bg-gray-800 rounded-lg p-6">
+            <div className="bg-gray-800 rounded-lg p-4 md:p-6">
               <FinanceQA 
                 onNewAnswer={addToHistory}
                 selectedPrompt={selectedPrompt}

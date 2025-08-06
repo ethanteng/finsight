@@ -15,7 +15,7 @@ interface PromptHistory {
 export default function DemoPage() {
   const [promptHistory, setPromptHistory] = useState<PromptHistory[]>([]);
   const [selectedPrompt, setSelectedPrompt] = useState<PromptHistory | null>(null);
-  const [showSidebar, setShowSidebar] = useState(true);
+  const [showSidebar, setShowSidebar] = useState(true); // Show by default on desktop
   const [sessionId, setSessionId] = useState<string>('');
 
   // Generate or retrieve session ID for demo mode from localStorage (client-side only)
@@ -106,18 +106,25 @@ export default function DemoPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <h1 className="text-2xl font-bold text-white">Ask Linc</h1>
-            <TierBanner isDemoPage={true} />
-            <div className="px-3 py-1 bg-yellow-500 text-yellow-900 rounded-full text-xs font-medium">
+            {/* Hide TierBanner on mobile */}
+            <div className="hidden md:block">
+              <TierBanner isDemoPage={true} />
+            </div>
+            {/* Hide DEMO MODE badge on mobile */}
+            <div className="hidden md:block px-3 py-1 bg-yellow-500 text-yellow-900 rounded-full text-xs font-medium">
               DEMO MODE
             </div>
           </div>
           <div className="flex items-center space-x-3">
-            <Link 
-              href="/#waitlist" 
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
-            >
-              Join the Waitlist
-            </Link>
+            {/* Hide Join the Waitlist button on mobile */}
+            <div className="hidden md:block">
+              <Link 
+                href="/#waitlist" 
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                Join the Waitlist
+              </Link>
+            </div>
             <a 
               href="/profile?demo=true" 
               className="text-gray-300 hover:text-white text-sm transition-colors"
@@ -135,24 +142,13 @@ export default function DemoPage() {
       </div>
 
       <div className="flex h-[calc(100vh-80px)]">
-        {/* Sidebar */}
+        {/* Sidebar - Hidden on mobile, visible on desktop */}
         {showSidebar && (
-          <div className="w-80 bg-gray-800 border-r border-gray-700 overflow-y-auto">
+          <div className="w-80 bg-gray-800 border-r border-gray-700 overflow-y-auto hidden lg:block">
             <div className="p-4">
               <h2 className="text-lg font-semibold mb-4">Prompt History</h2>
               {promptHistory.length === 0 ? (
-                <div className="space-y-3">
-                  <p className="text-gray-400 text-sm">No prompts yet. Start asking questions!</p>
-                  <div className="bg-gray-700 rounded-lg p-3">
-                    <h3 className="text-sm font-medium text-white mb-2">Demo Data Available:</h3>
-                    <ul className="text-xs text-gray-300 space-y-1">
-                      <li>• 7 accounts (checking, savings, investments, credit, mortgage)</li>
-                      <li>• 6 months of transaction history</li>
-                      <li>• 4 financial goals</li>
-                      <li>• Real market data integration</li>
-                    </ul>
-                  </div>
-                </div>
+                <p className="text-gray-400 text-sm">No prompts yet. Start asking questions!</p>
               ) : (
                 <div className="space-y-2">
                   {promptHistory.map((prompt) => (
@@ -181,7 +177,7 @@ export default function DemoPage() {
 
         {/* Main Content */}
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-4xl mx-auto p-6">
+          <div className="max-w-4xl mx-auto p-4 md:p-6">
             {/* Demo Info Banner */}
             <div className="bg-blue-900 border border-blue-700 rounded-lg p-4 mb-6">
               <div className="flex items-center space-x-2 mb-2">
@@ -213,7 +209,7 @@ export default function DemoPage() {
             </div>
 
             {/* Q&A Interface */}
-            <div className="bg-gray-800 rounded-lg p-6">
+            <div className="bg-gray-800 rounded-lg p-4 md:p-6">
               <FinanceQA 
                 onNewAnswer={addToHistory}
                 selectedPrompt={selectedPrompt}
