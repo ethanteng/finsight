@@ -89,8 +89,24 @@ describe('Market News System', () => {
         ]
       };
 
-      // Mock multiple fetch calls for different FRED indicators
+      // Mock multiple fetch calls for different FRED indicators (CPI, FEDFUNDS, MORTGAGE30US, DGS10)
       (fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockFredResponse
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockFredResponse
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockFredResponse
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockFredResponse
+        })
         .mockResolvedValueOnce({
           ok: true,
           json: async () => mockFredResponse
@@ -128,8 +144,24 @@ describe('Market News System', () => {
         ]
       };
 
-      // Mock multiple fetch calls for different indicators
+      // Mock multiple fetch calls for different FRED indicators (CPI, FEDFUNDS, MORTGAGE30US, DGS10)
       (fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockFredResponse
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockFredResponse
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockFredResponse
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockFredResponse
+        })
         .mockResolvedValueOnce({
           ok: true,
           json: async () => mockFredResponse

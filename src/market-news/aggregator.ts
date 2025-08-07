@@ -178,6 +178,56 @@ export class MarketNewsAggregator {
             }
             
             return await response.json();
+          },
+
+          // Direct HTTP method for inflation data
+          async getFedV1Inflation(params: { limit?: string; sort?: string } = {}) {
+            await this.checkRateLimit();
+            
+            const queryParams = new URLSearchParams({
+              apiKey: this.apiKey,
+              ...(params.limit && { limit: params.limit }),
+              ...(params.sort && { sort: params.sort })
+            });
+            
+            const url = `${this.baseUrl}/fed/v1/inflation?${queryParams}`;
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+              if (response.status === 429) {
+                console.log('Polygon API rate limit hit, waiting 60 seconds...');
+                await new Promise(resolve => setTimeout(resolve, 60000));
+                return this.getFedV1Inflation(params);
+              }
+              throw new Error(`Polygon API error: ${response.status} ${response.statusText}`);
+            }
+            
+            return await response.json();
+          },
+
+          // Direct HTTP method for inflation expectations
+          async getFedV1InflationExpectations(params: { limit?: string; sort?: string } = {}) {
+            await this.checkRateLimit();
+            
+            const queryParams = new URLSearchParams({
+              apiKey: this.apiKey,
+              ...(params.limit && { limit: params.limit }),
+              ...(params.sort && { sort: params.sort })
+            });
+            
+            const url = `${this.baseUrl}/fed/v1/inflation-expectations?${queryParams}`;
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+              if (response.status === 429) {
+                console.log('Polygon API rate limit hit, waiting 60 seconds...');
+                await new Promise(resolve => setTimeout(resolve, 60000));
+                return this.getFedV1InflationExpectations(params);
+              }
+              throw new Error(`Polygon API error: ${response.status} ${response.statusText}`);
+            }
+            
+            return await response.json();
           }
         };
         
@@ -466,13 +516,82 @@ export class MarketNewsAggregator {
             type: 'rate_information',
             relevance: 0.9 // High relevance for rate-sensitive advice
           });
-        }
+                }
       } catch (error) {
         console.log('Error fetching treasury yield data:', (error as Error).message);
         // Continue with other data sources instead of failing completely
       }
 
-      // 3. News for market context - "Why did SPY drop 2%?"
+      // 3. Inflation Data - Key economic indicators for monetary policy analysis
+      try {
+        console.log('Fetching inflation data from Polygon.io...');
+        const inflationData = await this.polygonClient.getFedV1Inflation({
+          limit: '1',
+          sort: 'date.desc'
+        });
+        
+        if (inflationData.results && inflationData.results.length > 0) {
+          const latest = inflationData.results[0];
+          polygonData.push({
+            source: 'polygon',
+            timestamp: new Date(),
+            data: {
+              symbol: 'INFLATION_DATA',
+              cpi: latest.cpi,
+              cpi_core: latest.cpi_core,
+              cpi_year_over_year: latest.cpi_year_over_year,
+              pce: latest.pce,
+              pce_core: latest.pce_core,
+              pce_spending: latest.pce_spending,
+              date: latest.date,
+              inflationType: 'Realized Inflation',
+              inflationContext: this.getInflationContext(latest)
+            },
+            type: 'economic_indicator',
+            relevance: 0.95 // Very high relevance for economic analysis
+          });
+        }
+      } catch (error) {
+        console.log('Error fetching inflation data:', (error as Error).message);
+        // Continue with other data sources instead of failing completely
+      }
+
+      // 4. Inflation Expectations - Market and model-based forecasts
+      try {
+        console.log('Fetching inflation expectations from Polygon.io...');
+        const expectationsData = await this.polygonClient.getFedV1InflationExpectations({
+          limit: '1',
+          sort: 'date.desc'
+        });
+        
+        if (expectationsData.results && expectationsData.results.length > 0) {
+          const latest = expectationsData.results[0];
+          polygonData.push({
+            source: 'polygon',
+            timestamp: new Date(),
+            data: {
+              symbol: 'INFLATION_EXPECTATIONS',
+              model_1_year: latest.model_1_year,
+              model_5_year: latest.model_5_year,
+              model_10_year: latest.model_10_year,
+              model_30_year: latest.model_30_year,
+              market_5_year: latest.market_5_year,
+              market_10_year: latest.market_10_year,
+              forward_years_5_to_10: latest.forward_years_5_to_10,
+              date: latest.date,
+              expectationsType: 'Inflation Expectations',
+              expectationsContext: this.getInflationExpectationsContext(latest)
+            },
+            type: 'economic_indicator',
+            relevance: 0.9 // High relevance for economic forecasting
+          });
+        }
+      } catch (error) {
+        console.log('Error fetching inflation expectations:', (error as Error).message);
+        // Continue with other data sources instead of failing completely
+      }
+      
+      // 5. News for market context - "Why did SPY drop 2%?"
       // Note: News API not available in current Polygon.io client version
       // Using Brave Search for news instead
       try {
@@ -553,6 +672,16 @@ export class MarketNewsAggregator {
   private getTreasuryRateContext(treasuryData: any): string {
     const yields = treasuryData;
     return `Current Treasury Yields: 1Y: ${yields.yield_1_year?.toFixed(2)}%, 5Y: ${yields.yield_5_year?.toFixed(2)}%, 10Y: ${yields.yield_10_year?.toFixed(2)}%. These affect CD rates, mortgage rates, and retirement planning.`;
+  }
+
+  private getInflationContext(inflationData: any): string {
+    const data = inflationData;
+    return `Current Inflation Data: CPI: ${data.cpi?.toFixed(2)}, Core CPI: ${data.cpi_core?.toFixed(2)}, Year-over-Year: ${data.cpi_year_over_year?.toFixed(2)}%, PCE: ${data.pce?.toFixed(2)}, Core PCE: ${data.pce_core?.toFixed(2)}. This reflects realized inflation and consumer spending patterns.`;
+  }
+
+  private getInflationExpectationsContext(expectationsData: any): string {
+    const data = expectationsData;
+    return `Inflation Expectations: 1Y Model: ${data.model_1_year?.toFixed(2)}%, 5Y Model: ${data.model_5_year?.toFixed(2)}%, 10Y Model: ${data.model_10_year?.toFixed(2)}%, 30Y Model: ${data.model_30_year?.toFixed(2)}%, 5Y Market: ${data.market_5_year?.toFixed(2)}%, 10Y Market: ${data.market_10_year?.toFixed(2)}%. This shows market and model-based inflation forecasts.`;
   }
 
   private assessMarketImpact(title: string, description: string): string {
