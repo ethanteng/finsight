@@ -275,10 +275,26 @@ export async function askOpenAIWithEnhancedContext(
     });
   }
 
-  // Get enhanced market context (proactively cached)
-  console.log('OpenAI Enhanced: Getting enhanced market context for tier:', tier);
-  const marketContextSummary = await dataOrchestrator.getMarketContextSummary(tier, isDemo);
-  console.log('OpenAI Enhanced: Market context summary length:', marketContextSummary.length);
+  // Get enhanced market context from MarketNewsManager
+  console.log('OpenAI Enhanced: Getting market news context for tier:', tier);
+  let marketContextSummary = '';
+  
+  try {
+    const { MarketNewsManager } = await import('./market-news/manager');
+    const marketNewsManager = new MarketNewsManager();
+    marketContextSummary = await marketNewsManager.getMarketContext(tier);
+    console.log('OpenAI Enhanced: Market news context length:', marketContextSummary.length);
+  } catch (error) {
+    console.error('OpenAI Enhanced: Error getting market news context:', error);
+    // Fallback to data orchestrator if market news manager fails
+    try {
+      marketContextSummary = await dataOrchestrator.getMarketContextSummary(tier, isDemo);
+      console.log('OpenAI Enhanced: Fallback to data orchestrator market context length:', marketContextSummary.length);
+    } catch (fallbackError) {
+      console.error('OpenAI Enhanced: Fallback market context also failed:', fallbackError);
+      marketContextSummary = '';
+    }
+  }
 
   // Get search context for real-time financial information
   let searchContext: string | undefined;

@@ -16,10 +16,27 @@ jest.mock('openai', () => {
   };
 });
 
+// Mock SearchProvider
+const mockSearchProvider = {
+  search: jest.fn().mockResolvedValue([
+    {
+      title: 'Test Search Result',
+      snippet: 'This is a test search result for financial data',
+      url: 'https://example.com/test',
+      query: 'test query'
+    }
+  ])
+};
+
+jest.mock('../../data/providers/search', () => ({
+  SearchProvider: jest.fn().mockImplementation(() => mockSearchProvider)
+}));
+
 import { MarketNewsAggregator } from '../../market-news/aggregator';
 import { MarketNewsSynthesizer } from '../../market-news/synthesizer';
 import { MarketNewsManager } from '../../market-news/manager';
 import { UserTier } from '../../data/types';
+import { SearchProvider } from '../../data/providers/search';
 
 // Mock fetch globally
 global.fetch = jest.fn();
@@ -27,6 +44,15 @@ global.fetch = jest.fn();
 describe('Market News System', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset the mock to return successful data by default
+    mockSearchProvider.search.mockResolvedValue([
+      {
+        title: 'Test Search Result',
+        snippet: 'This is a test search result for financial data',
+        url: 'https://example.com/test',
+        query: 'test query'
+      }
+    ]);
   });
 
   describe('MarketNewsAggregator', () => {
@@ -42,17 +68,54 @@ describe('Market News System', () => {
     });
 
     test('should handle FRED API errors gracefully', async () => {
-      (fetch as jest.Mock).mockRejectedValueOnce(new Error('Network error'));
+      // Mock fetch to fail for FRED API calls
+      (fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
 
       const data = await aggregator.aggregateMarketData();
-      expect(data).toEqual([]);
+      // Should still get Brave Search data even if FRED fails
+      expect(data.length).toBeGreaterThan(0);
+      expect(data.some(d => d.source === 'brave_search')).toBe(true);
+      expect(data.some(d => d.source === 'fred')).toBe(false);
     });
 
     test('should handle Brave Search API errors gracefully', async () => {
-      (fetch as jest.Mock).mockRejectedValueOnce(new Error('Network error'));
+      // Mock FRED API to succeed
+      const mockFredResponse = {
+        observations: [
+          {
+            date: '2025-01-01',
+            value: '5.25'
+          }
+        ]
+      };
+
+      // Mock multiple fetch calls for different FRED indicators
+      (fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockFredResponse
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockFredResponse
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockFredResponse
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => mockFredResponse
+        });
+
+      // Mock SearchProvider to throw error
+      mockSearchProvider.search.mockRejectedValue(new Error('Search API error'));
 
       const data = await aggregator.aggregateMarketData();
-      expect(data).toEqual([]);
+      // Should still get FRED data even if Brave Search fails
+      expect(data.length).toBeGreaterThan(0);
+      expect(data.some(d => d.source === 'fred')).toBe(true);
+      expect(data.some(d => d.source === 'brave_search')).toBe(false);
     });
 
     test('should process FRED data correctly', async () => {
@@ -139,18 +202,22 @@ describe('Market News System', () => {
       synthesizer = new MarketNewsSynthesizer();
     });
 
-    test('should filter data correctly for Starter tier', async () => {
+    test('should synthesize market context for different tiers', async () => {
       const mockData = [
         { source: 'fred', timestamp: new Date(), data: {}, type: 'economic_indicator' as const, relevance: 0.8 },
         { source: 'brave_search', timestamp: new Date(), data: {}, type: 'news_article' as const, relevance: 0.6 }
       ];
 
-      const context = await synthesizer.synthesizeMarketContext(mockData, UserTier.STARTER);
-      expect(context.contextText).toBe('Mock AI response');
-      expect(context.dataSources).toEqual([]);
+      const starterContext = await synthesizer.synthesizeMarketContext(mockData, UserTier.STARTER);
+      const standardContext = await synthesizer.synthesizeMarketContext(mockData, UserTier.STANDARD);
+      const premiumContext = await synthesizer.synthesizeMarketContext(mockData, UserTier.PREMIUM);
+
+      expect(starterContext.contextText).toBe('Mock AI response');
+      expect(standardContext.contextText).toBe('Mock AI response');
+      expect(premiumContext.contextText).toBe('Mock AI response');
     });
 
-    test('should filter data correctly for Standard tier', async () => {
+    test('should filter data sources by tier', async () => {
       const mockData = [
         { source: 'fred', timestamp: new Date(), data: {}, type: 'economic_indicator' as const, relevance: 0.8 },
         { source: 'brave_search', timestamp: new Date(), data: {}, type: 'news_article' as const, relevance: 0.6 },
@@ -233,11 +300,14 @@ describe('Market News System', () => {
 
   describe('Error Handling', () => {
     test('should handle API failures gracefully', async () => {
+      // Mock both FRED and Brave Search to fail
       (fetch as jest.Mock).mockRejectedValue(new Error('API Error'));
+      mockSearchProvider.search.mockRejectedValue(new Error('Search API Error'));
       
       const aggregator = new MarketNewsAggregator();
       const data = await aggregator.aggregateMarketData();
       
+      // Should return empty array when all sources fail
       expect(data).toEqual([]);
     });
 

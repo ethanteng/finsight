@@ -65,7 +65,7 @@ export class MarketNewsSynthesizer {
         );
         
       case UserTier.PREMIUM:
-        return data; // Full access to all data including complete Finnhub suite (future)
+        return data; // Full access to all data including complete Polygon.io suite
         
       default:
         return [];
@@ -112,7 +112,7 @@ MARKET OUTLOOK:
       case UserTier.STANDARD:
         return 'Basic economic indicators and general market trends from FRED and web search';
       case UserTier.PREMIUM:
-        return 'Comprehensive market intelligence including real-time data, professional news, sentiment analysis, and detailed market analysis from Finnhub';
+        return 'Comprehensive market intelligence including real-time data, professional news, advanced analytics, and detailed market analysis from Polygon.io';
       default:
         return 'Standard market context';
     }
