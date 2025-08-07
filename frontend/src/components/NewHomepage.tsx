@@ -670,20 +670,40 @@ const NewHomepage = () => {
               >
                 Terms of Service
               </a>
-              <button 
+              <a 
+                href="/contact" 
                 className="hover:text-primary transition-colors"
-                onClick={() => {
-                  if (typeof window !== 'undefined' && window.hj) {
-                    window.hj('event', 'contact_button_clicked');
-                  }
-                }}
               >
                 Contact
-              </button>
+              </a>
             </div>
           </div>
-          <div className="mt-8 pt-8 border-t border-border text-center text-sm text-muted-foreground">
-            <p>&copy; 2025 Ask Linc. Your AI financial analyst. Built with privacy in mind.</p>
+          <div className="mt-8 pt-8 border-t border-border">
+            <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+              <p className="text-sm text-muted-foreground">
+                &copy; 2025 Ask Linc. Your AI financial analyst. Built with privacy in mind.
+              </p>
+              <div className="flex items-center space-x-4">
+                <a 
+                  href="https://bsky.app/profile/asklinc.com" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <div className="w-4 h-4 bg-blue-500 rounded"></div>
+                  <span>Bluesky</span>
+                </a>
+                <a 
+                  href="https://asklinc.substack.com/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <div className="w-4 h-4 bg-orange-500 rounded"></div>
+                  <span>Substack</span>
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       </footer>

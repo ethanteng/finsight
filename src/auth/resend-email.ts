@@ -1,8 +1,20 @@
 import { Resend } from 'resend';
 import crypto from 'crypto';
 
-// Initialize Resend client conditionally
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+// Initialize Resend client function
+function getResendClient(): Resend | null {
+  try {
+    if (process.env.RESEND_API_KEY) {
+      return new Resend(process.env.RESEND_API_KEY);
+    } else {
+      console.log('Resend not configured, skipping email send');
+      return null;
+    }
+  } catch (error) {
+    console.error('Error initializing Resend client:', error);
+    return null;
+  }
+}
 
 // Generate random code/token
 export function generateRandomCode(length: number = 6): string {
@@ -20,6 +32,9 @@ export async function sendEmailVerificationCode(
   userName?: string
 ): Promise<boolean> {
   try {
+    // Get Resend client
+    const resend = getResendClient();
+    
     // Check if Resend is available
     if (!resend) {
       console.log('Resend not configured, skipping email send');
@@ -95,6 +110,9 @@ export async function sendPasswordResetEmail(
   userName?: string
 ): Promise<boolean> {
   try {
+    // Get Resend client
+    const resend = getResendClient();
+    
     // Check if Resend is available
     if (!resend) {
       console.log('Resend not configured, skipping email send');
@@ -163,6 +181,79 @@ export async function sendPasswordResetEmail(
     return true;
   } catch (error) {
     console.error('Error sending password reset email:', error);
+    return false;
+  }
+}
+
+// Send contact form email to admins
+export async function sendContactEmail(
+  userEmail: string,
+  message: string
+): Promise<boolean> {
+  try {
+    // Get admin emails from environment variable
+    const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(email => email.trim()).filter(email => email.length > 0) || [];
+    
+    // Get Resend client
+    const resend = getResendClient();
+    
+    // Check if Resend is available
+    if (!resend) {
+      console.log('Resend not configured, skipping contact email send');
+      return true; // Return true for testing purposes
+    }
+    
+    if (adminEmails.length === 0) {
+      console.warn('No admin emails configured for contact form');
+      return false;
+    }
+
+    const { data, error } = await resend.emails.send({
+      from: 'Ask Linc Contact Form <noreply@asklinc.com>',
+      to: adminEmails,
+      subject: 'New Contact Form Submission - Ask Linc',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; color: white;">
+            <h1 style="margin: 0; font-size: 28px;">Ask Linc</h1>
+            <p style="margin: 10px 0 0 0; opacity: 0.9;">New Contact Form Submission</p>
+          </div>
+          
+          <div style="padding: 30px; background: #f8f9fa;">
+            <h2 style="color: #333; margin-bottom: 20px;">Contact Form Message</h2>
+            
+            <div style="background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+              <p style="color: #666; margin-bottom: 10px;"><strong>From:</strong> ${userEmail}</p>
+              <p style="color: #666; margin-bottom: 10px;"><strong>Date:</strong> ${new Date().toLocaleString()}</p>
+              <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 15px 0;">
+              <p style="color: #333; line-height: 1.6; white-space: pre-wrap;">${message}</p>
+            </div>
+            
+            <div style="text-align: center; margin-top: 30px;">
+              <a href="${process.env.FRONTEND_URL || 'https://asklinc.com'}" 
+                 style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                View Ask Linc
+              </a>
+            </div>
+          </div>
+          
+          <div style="background: #333; color: #999; padding: 20px; text-align: center; font-size: 12px;">
+            <p style="margin: 0;">© 2025 Ask Linc. All rights reserved.</p>
+            <p style="margin: 5px 0 0 0;">This email was sent to admin team</p>
+          </div>
+        </div>
+      `,
+    });
+
+    if (error) {
+      console.error('Resend error:', error);
+      return false;
+    }
+
+    console.log(`Contact form email sent to admins from ${userEmail}`);
+    return true;
+  } catch (error) {
+    console.error('Error sending contact email:', error);
     return false;
   }
 }

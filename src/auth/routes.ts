@@ -15,6 +15,7 @@ import {
   generateRandomCode, 
   generateRandomToken 
 } from './email';
+import { sendContactEmail } from './resend-email';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -603,6 +604,42 @@ router.post('/resend-verification', authenticateUser, async (req: AuthenticatedR
   } catch (error) {
     console.error('Resend verification error:', error);
     res.status(500).json({ error: 'Failed to resend verification code' });
+  }
+});
+
+// Contact form endpoint
+router.post('/contact', async (req: Request, res: Response) => {
+  try {
+    const { email, message } = req.body;
+
+    // Validate input
+    if (!email || !message) {
+      return res.status(400).json({ error: 'Email and message are required' });
+    }
+
+    if (!validateEmail(email)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    if (message.trim().length < 10) {
+      return res.status(400).json({ error: 'Message must be at least 10 characters long' });
+    }
+
+    if (message.length > 2000) {
+      return res.status(400).json({ error: 'Message is too long (maximum 2000 characters)' });
+    }
+
+    // Send email to admins
+    const emailSent = await sendContactEmail(email, message);
+
+    if (!emailSent) {
+      return res.status(500).json({ error: 'Failed to send contact message' });
+    }
+
+    res.json({ message: 'Contact message sent successfully' });
+  } catch (error) {
+    console.error('Contact form error:', error);
+    res.status(500).json({ error: 'Failed to process contact form' });
   }
 });
 
