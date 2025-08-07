@@ -1,4 +1,5 @@
 import { UserTier } from '../data/types';
+import { SearchProvider } from '../data/providers/search';
 
 export interface MarketNewsSource {
   id: string;
@@ -15,12 +16,43 @@ export interface MarketNewsData {
   relevance: number; // 0-1, how relevant to current market conditions
 }
 
+// Global rate limiter for Brave Search API calls
+class BraveSearchRateLimiter {
+  private static instance: BraveSearchRateLimiter;
+  private lastCallTime: number = 0;
+  private readonly MIN_INTERVAL = 1100; // 1.1 seconds between calls
+
+  static getInstance(): BraveSearchRateLimiter {
+    if (!BraveSearchRateLimiter.instance) {
+      BraveSearchRateLimiter.instance = new BraveSearchRateLimiter();
+    }
+    return BraveSearchRateLimiter.instance;
+  }
+
+  async waitForNextCall(): Promise<void> {
+    const now = Date.now();
+    const timeSinceLastCall = now - this.lastCallTime;
+    
+    if (timeSinceLastCall < this.MIN_INTERVAL) {
+      const waitTime = this.MIN_INTERVAL - timeSinceLastCall;
+      console.log(`BraveSearchRateLimiter: Waiting ${waitTime}ms before next API call`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+    
+    this.lastCallTime = Date.now();
+  }
+}
+
 export class MarketNewsAggregator {
   private sources: Map<string, MarketNewsSource> = new Map();
   private dataCache: Map<string, MarketNewsData[]> = new Map();
+  private searchProvider: SearchProvider;
+  private rateLimiter: BraveSearchRateLimiter;
   
   constructor() {
     this.initializeSources();
+    this.searchProvider = new SearchProvider(process.env.SEARCH_API_KEY || '', 'brave');
+    this.rateLimiter = BraveSearchRateLimiter.getInstance();
   }
   
   private initializeSources() {
@@ -152,23 +184,13 @@ export class MarketNewsAggregator {
       
       for (const query of searchQueries) {
         try {
-          const response = await fetch(
-            `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=3`,
-            {
-              headers: {
-                'Accept': 'application/json',
-                'X-Subscription-Token': process.env.BRAVE_API_KEY || ''
-              }
-            }
-          );
+          // Use global rate limiter to prevent concurrent API calls
+          await this.rateLimiter.waitForNextCall();
           
-          if (!response.ok) {
-            console.error(`Brave Search API error for query "${query}":`, response.status);
-            continue;
-          }
-          
-          const data = await response.json();
-          const results = data.web?.results || [];
+          const results = await this.searchProvider.search(query, {
+            maxResults: 3,
+            timeRange: 'day'
+          });
           
           for (const result of results) {
             searchData.push({
@@ -176,12 +198,12 @@ export class MarketNewsAggregator {
               timestamp: new Date(),
               data: {
                 title: result.title,
-                description: result.description,
+                description: result.snippet,
                 url: result.url,
                 query: query
               },
               type: 'news_article',
-              relevance: this.calculateNewsRelevance(result.title, result.description, query)
+              relevance: this.calculateNewsRelevance(result.title, result.snippet, query)
             });
           }
         } catch (error) {

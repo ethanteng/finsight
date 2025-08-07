@@ -1641,7 +1641,7 @@ app.get('/market-news/context/:tier', async (req: Request, res: Response) => {
 });
 
 // Admin: Update market context manually
-app.put('/admin/market-news/context/:tier', requireAuth, async (req: Request, res: Response) => {
+app.put('/admin/market-news/context/:tier', adminAuth, async (req: Request, res: Response) => {
   try {
     const { tier } = req.params;
     const { contextText } = req.body;
@@ -1664,7 +1664,7 @@ app.put('/admin/market-news/context/:tier', requireAuth, async (req: Request, re
 });
 
 // Admin: Get market context history
-app.get('/admin/market-news/history/:tier', requireAuth, async (req: Request, res: Response) => {
+app.get('/admin/market-news/history/:tier', adminAuth, async (req: Request, res: Response) => {
   try {
     const { tier } = req.params;
     
@@ -1680,7 +1680,7 @@ app.get('/admin/market-news/history/:tier', requireAuth, async (req: Request, re
 });
 
 // Admin: Force refresh market context
-app.post('/admin/market-news/refresh/:tier', requireAuth, async (req: Request, res: Response) => {
+app.post('/admin/market-news/refresh/:tier', adminAuth, async (req: Request, res: Response) => {
   try {
     const { tier } = req.params;
     
@@ -1731,8 +1731,8 @@ if (require.main === module) {
       name: 'market-context-refresh'
     });
     
-    // Set up cron job to refresh market news context every 2 hours
-    cron.schedule('0 */2 * * *', async () => {
+    // Set up cron job to refresh market news context every 4 hours (reduced from 2 hours)
+    cron.schedule('0 */4 * * *', async () => {
       console.log('🔄 Starting market news context refresh...');
       
       try {
@@ -1757,7 +1757,7 @@ if (require.main === module) {
     });
     
     console.log('Cron job scheduled: market context refresh every hour');
-    console.log('Cron job scheduled: market news context refresh every 2 hours');
+    console.log('Cron job scheduled: market news context refresh every 4 hours');
   });
 }
 
