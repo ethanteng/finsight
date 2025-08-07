@@ -8,6 +8,10 @@ import { useAnalytics } from './Analytics';
 declare global {
   interface Window {
     hj?: (command: string, ...args: unknown[]) => void;
+    _hjSettings?: {
+      hjid: number;
+      hjsv: number;
+    };
   }
 }
 
@@ -34,6 +38,30 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   const [userTier, setUserTier] = useState<string>('starter');
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const { trackEvent } = useAnalytics();
+
+  // Helper function to check if Hotjar is properly loaded and working
+  const isHotjarWorking = () => {
+    if (typeof window === 'undefined') return false;
+    
+    // Check if we're on HTTPS (Hotjar requirement)
+    const isHttps = window.location.protocol === 'https:';
+    
+    // Check if Hotjar is loaded
+    const isHotjarLoaded = window.hj && typeof window.hj === 'function';
+    
+    // Check if Hotjar settings are present
+    const hasHotjarSettings = window._hjSettings && window._hjSettings.hjid;
+    
+    console.log('Hotjar Debug:', {
+      isHttps,
+      isHotjarLoaded,
+      hasHotjarSettings,
+      protocol: window.location.protocol,
+      hostname: window.location.hostname
+    });
+    
+    return isHttps && isHotjarLoaded && hasHotjarSettings;
+  };
 
   // Demo placeholder questions that rotate
   const demoPlaceholders = [
@@ -145,9 +173,18 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
           is_demo: isDemo
         });
         
-        // Trigger Hotjar event for demo feedback survey
-        if (isDemo && typeof window !== 'undefined' && window.hj) {
-          window.hj('event', 'gpt_response_completed');
+        // Trigger Hotjar event for feedback survey (both demo and app users)
+        if (isHotjarWorking()) {
+          try {
+            if (window.hj) {
+              window.hj('event', 'gpt_response_completed');
+              console.log('Hotjar event fired: gpt_response_completed', { isDemo });
+            }
+          } catch (error) {
+            console.log('Hotjar event failed:', error);
+          }
+        } else {
+          console.log('Hotjar not working - likely due to HTTP/localhost or not loaded');
         }
       } else {
         setError('No answer returned.');
