@@ -2,7 +2,7 @@
 
 ## Overview
 
-Successfully implemented the Financial Market News Context system for Starter and Standard tiers, providing AI-powered market context synthesis and tier-based access control.
+Successfully implemented the Financial Market News Context system for Starter and Standard tiers, providing AI-powered market context synthesis and tier-based access control. The system is designed to integrate with Polygon.io for Premium tier functionality in future phases.
 
 ## Implementation Summary
 
@@ -17,7 +17,7 @@ Successfully implemented the Financial Market News Context system for Starter an
 - Collects data from FRED (economic indicators) and Brave Search (market news)
 - Implements source prioritization and data filtering
 - Handles API rate limiting and error recovery
-- Supports tier-based data access (Starter: FRED only, Standard: FRED + Brave Search)
+- Supports tier-based data access (Starter: FRED only, Standard: FRED + Brave Search, Premium: Polygon.io + all sources)
 
 #### 2. MarketNewsSynthesizer (`src/market-news/synthesizer.ts`)
 - Uses OpenAI GPT-4 to synthesize raw market data into actionable insights
@@ -56,7 +56,7 @@ Successfully implemented the Financial Market News Context system for Starter an
 - Enhanced AI synthesis with broader market perspective
 
 #### Premium Tier (Future)
-- Will include Finnhub data for complete market coverage
+- Will include Polygon.io data for complete market coverage
 - Real-time stock data and advanced analytics
 - Full market context with all available sources
 
@@ -97,10 +97,48 @@ Successfully implemented the Financial Market News Context system for Starter an
 ✅ **Documentation**: Clear code comments and implementation summary
 ✅ **Git Workflow**: Clean commits with descriptive messages
 
+## Environment Variable Configuration
+
+### API Key Management
+
+The system uses different API keys for different environments to ensure proper testing and production separation:
+
+#### **Localhost Development**
+- `.env`: `POLYGON_API_KEY` - Real production key for local development
+- `.env.test`: `POLYGON_API_KEY` - Fake key for CI/CD tests
+
+#### **Production (GitHub Actions)**
+- `POLYGON_API_KEY` - Fake key for CI/CD tests
+- `POLYGON_API_KEY_REAL` - Real production key
+
+#### **Production (Render)**
+- `POLYGON_API_KEY` - Real production key
+
+This configuration ensures that:
+- Local development uses real API keys for testing
+- CI/CD tests use fake keys to avoid API costs
+- Production uses real keys for actual functionality
+
+### Required Environment Variables
+
+```bash
+# Standard Tier (Current Implementation)
+FRED_API_KEY=your_fred_key
+FRED_API_KEY_REAL=your_production_fred_key
+
+# Premium Tier (Future Implementation)
+POLYGON_API_KEY=your_polygon_api_key
+POLYGON_API_KEY_REAL=your_production_polygon_api_key
+
+# Existing Keys (Fallback)
+ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key
+ALPHA_VANTAGE_API_KEY_REAL=your_production_alpha_vantage_key
+```
+
 ## Performance Considerations
 
 - **Caching**: Market context cached for 1 hour to reduce API calls
-- **Rate Limiting**: Respects API limits for FRED and Brave Search
+- **Rate Limiting**: Respects API limits for FRED, Brave Search, and Polygon.io
 - **Database Optimization**: Proper indexing on frequently queried fields
 - **Memory Management**: Efficient data structures and cleanup
 
@@ -122,8 +160,8 @@ Successfully implemented the Financial Market News Context system for Starter an
 ## Future Enhancements
 
 ### Premium Tier Implementation
-- Integrate Finnhub API for real-time stock data
-- Add advanced market analytics and sentiment analysis
+- Integrate Polygon.io API for real-time stock data
+- Add advanced market analytics and technical indicators
 - Implement market alerts and notifications
 
 ### Enhanced Features
@@ -199,7 +237,7 @@ The implementation is ready for deployment with:
 1. **Deploy to staging environment** for final testing
 2. **Monitor performance** and adjust caching strategies
 3. **Gather user feedback** on market context quality
-4. **Plan Premium tier implementation** with Finnhub integration
+4. **Plan Premium tier implementation** with Polygon.io integration
 5. **Implement email digest system** for daily market updates
 
 ---
