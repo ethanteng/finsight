@@ -126,6 +126,12 @@ export default function DemoPage() {
               </Link>
             </div>
             <a 
+              href="/contact" 
+              className="text-blue-300 hover:text-blue-200 text-sm transition-colors font-medium"
+            >
+              Give Feedback
+            </a>
+            <a 
               href="/profile?demo=true" 
               className="text-gray-300 hover:text-white text-sm transition-colors"
             >

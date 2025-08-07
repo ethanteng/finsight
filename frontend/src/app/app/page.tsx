@@ -212,6 +212,12 @@ export default function AppPage() {
               </span>
             )}
             <a 
+              href="/contact" 
+              className="text-blue-300 hover:text-blue-200 text-sm transition-colors font-medium"
+            >
+              Give Feedback
+            </a>
+            <a 
               href="/profile" 
               className="text-gray-300 hover:text-white text-sm transition-colors"
             >

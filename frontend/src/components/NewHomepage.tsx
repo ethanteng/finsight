@@ -690,7 +690,17 @@ const NewHomepage = () => {
                   rel="noopener noreferrer"
                   className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-primary transition-colors"
                 >
-                  <div className="w-4 h-4 bg-blue-500 rounded"></div>
+                  <img 
+                    src="/logos/bluesky.jpeg" 
+                    alt="Bluesky" 
+                    className="w-4 h-4"
+                    onError={(e) => {
+                      // Fallback to colored square if logo fails to load
+                      e.currentTarget.style.display = 'none';
+                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                    }}
+                  />
+                  <div className="w-4 h-4 bg-blue-500 rounded hidden"></div>
                   <span>Bluesky</span>
                 </a>
                 <a 
@@ -699,7 +709,17 @@ const NewHomepage = () => {
                   rel="noopener noreferrer"
                   className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-primary transition-colors"
                 >
-                  <div className="w-4 h-4 bg-orange-500 rounded"></div>
+                  <img 
+                    src="/logos/substack.png" 
+                    alt="Substack" 
+                    className="w-4 h-4"
+                    onError={(e) => {
+                      // Fallback to colored square if logo fails to load
+                      e.currentTarget.style.display = 'none';
+                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                    }}
+                  />
+                  <div className="w-4 h-4 bg-orange-500 rounded hidden"></div>
                   <span>Substack</span>
                 </a>
               </div>
