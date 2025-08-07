@@ -194,3 +194,52 @@ model EmailVerificationCode {
 
   @@map("email_verification_codes")
 }
+
+model MarketNewsContext {
+  id              String   @id @default(cuid())
+  
+  // Content
+  contextText     String   @db.Text // AI-synthesized market news summary
+  rawData         Json?    // Raw data from various sources for reference
+  
+  // Metadata
+  lastUpdate      DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  
+  // Source tracking
+  dataSources     String[] // Array of sources used (FRED, Brave Search, etc.)
+  keyEvents       String[] // Array of major market events identified
+  
+  // Tier configuration
+  availableTiers  String[] // Which tiers can access this context (starter, standard, premium)
+  
+  // Admin controls
+  isActive        Boolean  @default(true)
+  manualOverride  Boolean  @default(false) // True if manually edited
+  lastEditedBy    String?  // Admin who last edited (if manual override)
+  
+  // Relations
+  history         MarketNewsHistory[]
+  
+  @@map("market_news_context")
+}
+
+model MarketNewsHistory {
+  id              String   @id @default(cuid())
+  contextId       String
+  context         MarketNewsContext @relation(fields: [contextId], references: [id])
+  
+  // Content snapshot
+  contextText     String   @db.Text
+  dataSources     String[]
+  keyEvents       String[]
+  
+  // Change tracking
+  changeType      String   // 'auto_update', 'manual_edit', 'admin_override'
+  changeReason    String?  // Optional reason for change
+  changedBy       String?  // User/admin who made the change
+  
+  createdAt       DateTime @default(now())
+  
+  @@map("market_news_history")
+}
