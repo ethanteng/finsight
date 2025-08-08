@@ -57,8 +57,16 @@ interface UserForManagement {
   };
 }
 
+interface MarketNewsContext {
+  contextText: string;
+  dataSources: string[];
+  keyEvents: string[];
+  lastUpdate: string;
+  tier: string;
+}
+
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'demo' | 'production' | 'users'>('demo');
+  const [activeTab, setActiveTab] = useState<'demo' | 'production' | 'users' | 'market-news'>('demo');
   
   // Demo data state
   const [demoConversations, setDemoConversations] = useState<DemoConversation[]>([]);
@@ -72,7 +80,18 @@ export default function AdminPage() {
   const [usersForManagement, setUsersForManagement] = useState<UserForManagement[]>([]);
   const [updatingTier, setUpdatingTier] = useState<string | null>(null);
   
+  // Market news state
+  const [marketNewsContexts, setMarketNewsContexts] = useState<Record<string, MarketNewsContext>>({});
+  const [editingContext, setEditingContext] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState<string>('');
+  const [refreshingContext, setRefreshingContext] = useState<string | null>(null);
+  const [refreshingDemo, setRefreshingDemo] = useState(false);
+  const [refreshingProduction, setRefreshingProduction] = useState(false);
+  const [refreshingUsers, setRefreshingUsers] = useState(false);
+  const [refreshingAllContexts, setRefreshingAllContexts] = useState(false);
+  
   const [loading, setLoading] = useState(true);
+  const [refreshingAll, setRefreshingAll] = useState(false);
   const [error, setError] = useState('');
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'sessions' | 'conversations'>('sessions');
@@ -82,6 +101,19 @@ export default function AdminPage() {
   // Helper function to get auth headers
   const getAuthHeaders = () => {
     const token = localStorage.getItem('auth_token');
+    console.log('Auth token:', token ? token.substring(0, 20) + '...' : 'none');
+    
+    // Decode JWT token to see user info
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        console.log('JWT payload:', payload);
+        console.log('User email:', payload.email);
+      } catch (err) {
+        console.error('Error decoding JWT:', err);
+      }
+    }
+    
     return {
       'Content-Type': 'application/json',
       ...(token && { 'Authorization': `Bearer ${token}` })
@@ -116,6 +148,17 @@ export default function AdminPage() {
     }
   }, [API_URL]);
 
+  const refreshDemoData = async () => {
+    setRefreshingDemo(true);
+    try {
+      await loadDemoData();
+    } catch (err) {
+      console.error('Demo data refresh error:', err);
+    } finally {
+      setRefreshingDemo(false);
+    }
+  };
+
   const loadProductionData = useCallback(async () => {
     try {
       // Load production users overview
@@ -144,6 +187,17 @@ export default function AdminPage() {
     }
   }, [API_URL]);
 
+  const refreshProductionData = async () => {
+    setRefreshingProduction(true);
+    try {
+      await loadProductionData();
+    } catch (err) {
+      console.error('Production data refresh error:', err);
+    } finally {
+      setRefreshingProduction(false);
+    }
+  };
+
   const loadUsersForManagement = useCallback(async () => {
     try {
       const usersRes = await fetch(`${API_URL}/admin/production-users`, {
@@ -160,6 +214,68 @@ export default function AdminPage() {
     }
   }, [API_URL]);
 
+  const refreshUsersData = async () => {
+    setRefreshingUsers(true);
+    try {
+      await loadUsersForManagement();
+    } catch (err) {
+      console.error('Users data refresh error:', err);
+    } finally {
+      setRefreshingUsers(false);
+    }
+  };
+
+  const loadMarketNewsContexts = useCallback(async () => {
+    try {
+      console.log('Loading market news contexts...');
+      const tiers = ['starter', 'standard', 'premium'];
+      const contexts: Record<string, MarketNewsContext> = {};
+      
+      for (const tier of tiers) {
+        try {
+          console.log(`Loading context for tier: ${tier}`);
+          const response = await fetch(`${API_URL}/market-news/context/${tier}`, {
+            headers: getAuthHeaders()
+          });
+          
+          console.log(`Context response for ${tier}: ${response.status}`);
+          
+          if (response.ok) {
+            const data = await response.json();
+            contexts[tier] = data;
+            console.log(`Loaded context for ${tier}:`, data);
+          } else if (response.status === 404) {
+            // No context found for this tier
+            contexts[tier] = {
+              contextText: '',
+              dataSources: [],
+              keyEvents: [],
+              lastUpdate: '',
+              tier
+            };
+            console.log(`No context found for ${tier}`);
+          } else {
+            console.error(`Error loading context for ${tier}: ${response.status}`);
+          }
+        } catch (err) {
+          console.error(`Error loading market context for ${tier}:`, err);
+          contexts[tier] = {
+            contextText: '',
+            dataSources: [],
+            keyEvents: [],
+            lastUpdate: '',
+            tier
+          };
+        }
+      }
+      
+      console.log('All contexts loaded:', contexts);
+      setMarketNewsContexts(contexts);
+    } catch (err) {
+      console.error('Market news contexts load error:', err);
+    }
+  }, [API_URL]);
+
   const loadAdminData = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -168,7 +284,8 @@ export default function AdminPage() {
       await Promise.all([
         loadDemoData(),
         loadProductionData(),
-        loadUsersForManagement()
+        loadUsersForManagement(),
+        loadMarketNewsContexts()
       ]);
     } catch (err) {
       setError('Failed to load admin data');
@@ -176,7 +293,63 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [loadDemoData, loadProductionData, loadUsersForManagement]);
+  }, [loadDemoData, loadProductionData, loadUsersForManagement, loadMarketNewsContexts]);
+
+  const refreshAllData = async () => {
+    setRefreshingAll(true);
+    setError('');
+    
+    try {
+      console.log('Starting refresh of all admin data...');
+      await Promise.all([
+        loadDemoData(),
+        loadProductionData(),
+        loadUsersForManagement(),
+        loadMarketNewsContexts()
+      ]);
+      console.log('All admin data refresh completed');
+    } catch (err) {
+      setError('Failed to refresh admin data');
+      console.error('Admin data refresh error:', err);
+    } finally {
+      setRefreshingAll(false);
+    }
+  };
+
+  const refreshAllMarketContexts = async () => {
+    setRefreshingAllContexts(true);
+    console.log('Starting refresh of all market contexts...');
+    const tiers = ['starter', 'standard', 'premium'];
+    
+    try {
+      // Refresh all tiers in parallel
+      await Promise.all(
+        tiers.map(async (tier) => {
+          console.log(`Refreshing market context for tier: ${tier}`);
+          const response = await fetch(`${API_URL}/admin/market-news/refresh/${tier}`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+          });
+          
+          console.log(`Refresh response for ${tier}: ${response.status}`);
+          
+          if (response.ok) {
+            console.log(`Successfully refreshed ${tier} tier`);
+          } else {
+            console.error(`Failed to refresh ${tier} tier: ${response.status}`);
+          }
+        })
+      );
+      
+      // After refreshing, reload the contexts
+      await loadMarketNewsContexts();
+      console.log('All market contexts refresh completed');
+    } catch (err) {
+      console.error('Error refreshing all market contexts:', err);
+    } finally {
+      setRefreshingAllContexts(false);
+    }
+  };
 
   useEffect(() => {
     loadAdminData();
@@ -208,7 +381,84 @@ export default function AdminPage() {
     }
   };
 
+  const refreshMarketContext = async (tier: string) => {
+    setRefreshingContext(tier);
+    try {
+      console.log(`Refreshing market context for tier: ${tier}`);
+      const response = await fetch(`${API_URL}/admin/market-news/refresh/${tier}`, {
+        method: 'POST',
+        headers: getAuthHeaders()
+      });
+      
+      console.log(`Refresh response status: ${response.status}`);
+      
+      if (response.ok) {
+        console.log('Refresh successful, reloading context...');
+        // Reload the specific context
+        const contextResponse = await fetch(`${API_URL}/market-news/context/${tier}`, {
+          headers: getAuthHeaders()
+        });
+        
+        console.log(`Context reload status: ${contextResponse.status}`);
+        
+        if (contextResponse.ok) {
+          const data = await contextResponse.json();
+          console.log('Context data received:', data);
+          setMarketNewsContexts(prev => ({
+            ...prev,
+            [tier]: data
+          }));
+        } else {
+          console.error('Failed to reload context:', contextResponse.status, contextResponse.statusText);
+        }
+      } else if (response.status === 401 || response.status === 403) {
+        console.error('Authentication error:', response.status, response.statusText);
+        setError('Authentication required for admin access');
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Refresh failed:', response.status, errorData);
+      }
+    } catch (err) {
+      console.error(`Error refreshing market context for ${tier}:`, err);
+    } finally {
+      setRefreshingContext(null);
+    }
+  };
+
+  const editMarketContext = (tier: string) => {
+    const context = marketNewsContexts[tier];
+    setEditingContext(tier);
+    setEditingText(context?.contextText || '');
+  };
+
+  const saveMarketContext = async (tier: string) => {
+    try {
+      const response = await fetch(`${API_URL}/admin/market-news/context/${tier}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ contextText: editingText })
+      });
+      
+      if (response.ok) {
+        setEditingContext(null);
+        setEditingText('');
+        // Reload the context
+        await loadMarketNewsContexts();
+      } else if (response.status === 401 || response.status === 403) {
+        setError('Authentication required for admin access');
+      }
+    } catch (err) {
+      console.error(`Error saving market context for ${tier}:`, err);
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingContext(null);
+    setEditingText('');
+  };
+
   const formatDate = (dateString: string) => {
+    if (!dateString) return 'Never';
     return new Date(dateString).toLocaleString();
   };
 
@@ -247,6 +497,23 @@ export default function AdminPage() {
     
     return (
       <div>
+        {/* Header with refresh button */}
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-semibold text-white">Demo Activity</h2>
+          <button
+            onClick={refreshDemoData}
+            disabled={refreshingDemo}
+            className={`px-4 py-2 rounded text-sm ${
+              refreshingDemo 
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                : 'bg-green-600 hover:bg-green-700 text-white'
+            }`}
+            title="Refresh demo data only"
+          >
+            {refreshingDemo ? 'Refreshing...' : 'Refresh Demo Data'}
+          </button>
+        </div>
+
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-gray-800 rounded-lg p-4">
@@ -417,6 +684,23 @@ export default function AdminPage() {
     
     return (
       <div>
+        {/* Header with refresh button */}
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-semibold text-white">Production Activity</h2>
+          <button
+            onClick={refreshProductionData}
+            disabled={refreshingProduction}
+            className={`px-4 py-2 rounded text-sm ${
+              refreshingProduction 
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                : 'bg-green-600 hover:bg-green-700 text-white'
+            }`}
+            title="Refresh production data only"
+          >
+            {refreshingProduction ? 'Refreshing...' : 'Refresh Production Data'}
+          </button>
+        </div>
+
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-gray-800 rounded-lg p-4">
@@ -584,6 +868,23 @@ export default function AdminPage() {
   const renderUsersTab = () => {
     return (
       <div>
+        {/* Header with refresh button */}
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-semibold text-white">User Management</h2>
+          <button
+            onClick={refreshUsersData}
+            disabled={refreshingUsers}
+            className={`px-4 py-2 rounded text-sm ${
+              refreshingUsers 
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                : 'bg-green-600 hover:bg-green-700 text-white'
+            }`}
+            title="Refresh user management data only"
+          >
+            {refreshingUsers ? 'Refreshing...' : 'Refresh User Data'}
+          </button>
+        </div>
+
         <div className="bg-gray-800 rounded-lg p-6">
           <h2 className="text-xl font-semibold mb-4">User Management</h2>
           <div className="space-y-4">
@@ -625,6 +926,131 @@ export default function AdminPage() {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderMarketNewsTab = () => {
+    const tiers = ['starter', 'standard', 'premium'];
+    
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h2 className="text-xl font-semibold text-white">Market News Context</h2>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => refreshAllMarketContexts()}
+              disabled={refreshingAllContexts}
+              className={`px-4 py-2 rounded ${
+                refreshingAllContexts 
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+              title="Refresh all market news contexts"
+            >
+              {refreshingAllContexts ? 'Refreshing...' : 'Refresh All Contexts'}
+            </button>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 gap-6">
+          {tiers.map(tier => {
+            const context = marketNewsContexts[tier];
+            const isEditing = editingContext === tier;
+            const isRefreshing = refreshingContext === tier;
+            
+            return (
+              <div key={tier} className="bg-gray-800 rounded-lg p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-white capitalize">{tier} Tier</h3>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => refreshMarketContext(tier)}
+                      disabled={isRefreshing}
+                      className={`px-3 py-1 rounded text-sm ${
+                        isRefreshing 
+                          ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                          : 'bg-green-600 text-white hover:bg-green-700'
+                      }`}
+                    >
+                      {isRefreshing ? 'Refreshing...' : 'Refresh'}
+                    </button>
+                    <button
+                      onClick={() => editMarketContext(tier)}
+                      disabled={isEditing}
+                      className={`px-3 py-1 rounded text-sm ${
+                        isEditing 
+                          ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                          : 'bg-yellow-600 text-white hover:bg-yellow-700'
+                      }`}
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </div>
+                
+                {isEditing ? (
+                  <div>
+                    <textarea
+                      value={editingText}
+                      onChange={(e) => setEditingText(e.target.value)}
+                      className="w-full h-64 p-3 bg-gray-700 text-white rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+                      placeholder="Enter market context..."
+                    />
+                    <div className="mt-3 flex space-x-2">
+                      <button
+                        onClick={() => saveMarketContext(tier)}
+                        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={cancelEdit}
+                        className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="text-sm text-gray-400 mb-2">
+                      Last updated: {formatDate(context?.lastUpdate || '')}
+                      {context?.dataSources && context.dataSources.length > 0 && (
+                        <span className="ml-4">
+                          Sources: {context.dataSources.join(', ')}
+                        </span>
+                      )}
+                    </div>
+                    
+                    {context?.contextText ? (
+                      <div className="text-gray-300 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto bg-gray-700 p-4 rounded">
+                        <MarkdownRenderer>{context.contextText}</MarkdownRenderer>
+                      </div>
+                    ) : (
+                      <div className="text-gray-500 italic text-sm bg-gray-700 p-4 rounded">
+                        No market context available for this tier.
+                      </div>
+                    )}
+                    
+                    {context?.keyEvents && context.keyEvents.length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="text-sm font-medium text-gray-400 mb-2">Key Events:</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {context.keyEvents.map((event, index) => (
+                            <span key={index} className="px-2 py-1 bg-blue-600 text-white text-xs rounded">
+                              {event}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -676,12 +1102,6 @@ export default function AdminPage() {
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-          <button
-            onClick={loadAdminData}
-            className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm"
-          >
-            Refresh Data
-          </button>
         </div>
 
         {/* Tab Navigation */}
@@ -716,12 +1136,23 @@ export default function AdminPage() {
           >
             User Management
           </button>
+          <button
+            onClick={() => setActiveTab('market-news')}
+            className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
+              activeTab === 'market-news' 
+                ? 'bg-blue-600 text-white' 
+                : 'text-gray-300 hover:text-white hover:bg-gray-700'
+            }`}
+          >
+            Market News
+          </button>
         </div>
 
         {/* Tab Content */}
         {activeTab === 'demo' && renderDemoTab()}
         {activeTab === 'production' && renderProductionTab()}
         {activeTab === 'users' && renderUsersTab()}
+        {activeTab === 'market-news' && renderMarketNewsTab()}
       </div>
     </div>
   );

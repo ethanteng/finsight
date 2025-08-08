@@ -29,7 +29,7 @@ model MarketNewsContext {
   createdAt       DateTime @default(now())
   
   // Source tracking
-  dataSources     String[] // Array of sources used (Finnhub, FRED, AlphaVantage, etc.)
+  dataSources     String[] // Array of sources used (Polygon.io, FRED, AlphaVantage, etc.)
   keyEvents       String[] // Array of major market events identified
   
   // Tier configuration
@@ -54,7 +54,7 @@ model MarketNewsHistory {
   
   // Content snapshot
   contextText     String   @db.Text
-  dataSources     String[]
+  dataSources     String[] // Array of sources used (Polygon.io, FRED, AlphaVantage, etc.)
   keyEvents       String[]
   
   // Change tracking
@@ -70,28 +70,36 @@ model MarketNewsHistory {
 
 ## **Data Source Integration**
 
-### **Primary Data Source: Finnhub.io**
+### **Primary Data Source: Polygon.io**
 
-**Why Finnhub is the Optimal Choice:**
+**Why Polygon.io is the Optimal Choice:**
+
+**Library Integration Benefits:**
+- **Official TypeScript Client**: `@polygon.io/client-js` provides full TypeScript support
+- **Comprehensive API Coverage**: REST and WebSocket APIs for real-time and historical data
+- **Built-in Pagination**: Automatic handling of paginated responses
+- **Error Handling**: Robust error handling and retry mechanisms
+- **WebSocket Support**: Real-time data streaming capabilities
+- **MIT License**: Open source with commercial-friendly licensing
 
 1. **Comprehensive Data Coverage**
-   - Real-time stock data for 60+ exchanges worldwide
-   - Financial news from 60+ professional sources (Reuters, Bloomberg, etc.)
-   - Economic indicators and calendar events
+   - Real-time and historical stock data for 60+ exchanges worldwide
+   - Financial news from professional sources (Reuters, Bloomberg, etc.)
+   - Economic indicators and market data
    - Company fundamentals and earnings data
-   - Forex and crypto market data
-   - Built-in sentiment analysis
+   - Options and forex market data
+   - Advanced market analytics and technical indicators
 
 2. **Perfect Alignment with System Requirements**
    - Single API provides news, market data, and economic indicators
    - Real-time data with professional quality
-   - Sentiment analysis enhances AI synthesis
+   - Advanced analytics enhance AI synthesis
    - Structured data format simplifies processing
    - Cost-effective pricing for tiered access
 
 3. **API Rate Limits & Pricing**
-   - Free tier: 60 API calls/minute
-   - Paid tiers start at $9.99/month for higher limits
+   - Free tier: 5 API calls/minute
+   - Paid tiers start at $29/month for higher limits
    - Suitable for scheduled updates every 2 hours
    - Enterprise options for high-volume usage
 
@@ -101,7 +109,7 @@ model MarketNewsHistory {
    |------|-------------|----------|------------------|
    | **Starter** | ❌ No market news | Basic financial analysis only | Core financial advice without market context |
    | **Standard** | ✅ FRED + Brave Search | Economic indicators and general trends | Basic market awareness with economic data |
-   | **Premium** | ✅ Full Finnhub Access | Comprehensive market intelligence with sentiment analysis | Professional-grade market insights and real-time data |
+   | **Premium** | ✅ Full Polygon.io Access | Comprehensive market intelligence with advanced analytics | Professional-grade market insights and real-time data |
 
 ### **Tier-Specific Data Sources**
 
@@ -119,15 +127,363 @@ model MarketNewsHistory {
 - **Upgrade incentive**: "Get professional-grade market intelligence with Premium tier"
 
 #### **Premium Tier**
-- **Finnhub**: Complete market intelligence platform
-  - Real-time stock data from 60+ exchanges
-  - Professional news from Reuters, Bloomberg, and 60+ sources
-  - Economic calendar and events
+- **Polygon.io**: Complete market intelligence platform
+  - Real-time and historical stock data from 60+ exchanges
+  - Professional news from Reuters, Bloomberg, and other sources
+  - Economic indicators and market data
   - Company fundamentals and earnings data
-  - Built-in sentiment analysis
-  - Forex and crypto market data
-- **Enhanced AI responses**: Market-aware recommendations with sentiment analysis
+  - Advanced market analytics and technical indicators
+  - Options and forex market data
+- **Enhanced AI responses**: Market-aware recommendations with advanced analytics
 - **Value**: Professional-grade market intelligence for serious investors
+
+## **Recommended Polygon.io Integration Strategy**
+
+### **Must-Use Polygon.io Endpoints for Ask Linc**
+
+Based on the Ask Linc use case of answering everyday financial questions, contextualizing spending/saving, and supporting long-term planning, here are the essential endpoints:
+
+#### **1. 📈 Stocks (Equities) - Market Sentiment & Context**
+- **Endpoint**: `getStocksAggregates()` for previous close and historical data
+- **Key Tickers**: `SPY`, `VTI`, `DIA`, `AAPL`, `MSFT`
+- **Use Case**: "How's the market doing?" and big-picture market context
+- **Implementation**: Daily market overview for AI responses
+
+#### **2. 🧾 Dividends, Splits & Earnings - Retirement & Investing**
+- **Endpoint**: `getDividends()` and `getEarnings()` for company fundamentals
+- **Use Case**: "What does this stock pay in dividends?" and retirement income planning
+- **Implementation**: Portfolio-based Q&A and retirement planning support
+
+#### **3. 🏦 Treasury Yields - Rate Planning & Bond Ladders**
+- **Endpoint**: `getStocksAggregates()` for yield curve data
+- **Key Tickers**: `US1Y`, `US2Y`, `US10Y`, `US30Y` for yield curve context
+- **Use Case**: Retirement planning, CD comparisons, "what if rates drop?"
+- **Implementation**: Rate-sensitive financial advice and bond ladder strategies
+
+#### **4. 💸 Forex - USD Comparisons**
+- **Endpoint**: `getLastQuote()` for currency pairs
+- **Examples**: USD → EUR, USD → TWD for global user base
+- **Use Case**: "Is it a good time to exchange USD to EUR?"
+- **Implementation**: International financial advice and currency timing
+
+#### **5. 🏠 Mortgage Rate Proxies - Home Buying Context**
+- **Approach**: Approximate based on `US10Y` yield + spread
+- **Use Case**: Home buying advice and mortgage rate context
+- **Implementation**: Combine with external mortgage rate data if needed
+
+#### **6. 🗞️ News Integration - Market Context**
+- **Endpoint**: `getNews()` for market-moving events
+- **Use Case**: "SPY dropped 2% — why?" and market explanation
+- **Implementation**: Pair stock movements with news headlines for context
+
+### **Integration Architecture**
+
+#### **Client Setup**
+```typescript
+import { restClient, websocketClient } from '@polygon.io/client-js';
+
+// REST client for historical and reference data
+const polygonRest = restClient(process.env.POLYGON_API_KEY);
+
+// WebSocket client for real-time data (future enhancement)
+const polygonWS = websocketClient(process.env.POLYGON_API_KEY, 'wss://delayed.polygon.io');
+```
+
+#### **Data Fetching Strategy**
+```typescript
+// Focused data fetching for Ask Linc use cases
+async fetchPolygonMarketData(): Promise<MarketNewsData[]> {
+  const marketData: MarketNewsData[] = [];
+  
+  try {
+    // 1. Market Sentiment - Key indices for "How's the market doing?"
+    const marketIndices = ['SPY', 'VTI', 'DIA']; // S&P 500, Total Market, DOW
+    for (const ticker of marketIndices) {
+      const aggregates = await polygonRest.getStocksAggregates(
+        ticker, 1, 'day', 
+        new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 7 days ago
+        new Date().toISOString().split('T')[0] // today
+      );
+      
+      if (aggregates.results && aggregates.results.length > 0) {
+        const latest = aggregates.results[aggregates.results.length - 1];
+        const previous = aggregates.results[aggregates.results.length - 2];
+        
+        marketData.push({
+          source: 'polygon',
+          timestamp: new Date(),
+          data: {
+            symbol: ticker,
+            currentPrice: latest.c,
+            change: latest.c - previous.c,
+            changePercent: ((latest.c - previous.c) / previous.c) * 100,
+            volume: latest.v,
+            high: latest.h,
+            low: latest.l,
+            marketContext: this.getMarketContext(ticker)
+          },
+          type: 'market_data',
+          relevance: this.calculateMarketRelevance(ticker, ((latest.c - previous.c) / previous.c) * 100)
+        });
+      }
+    }
+    
+    // 2. Treasury Yields - Rate planning for retirement and CDs
+    const yieldTickers = ['US1Y', 'US2Y', 'US10Y', 'US30Y'];
+    for (const ticker of yieldTickers) {
+      const yieldData = await polygonRest.getStocksAggregates(
+        ticker, 1, 'day',
+        new Date().toISOString().split('T')[0],
+        new Date().toISOString().split('T')[0]
+      );
+      
+      if (yieldData.results && yieldData.results.length > 0) {
+        const latest = yieldData.results[yieldData.results.length - 1];
+        marketData.push({
+          source: 'polygon',
+          timestamp: new Date(),
+          data: {
+            symbol: ticker,
+            yield: latest.c,
+            yieldType: this.getYieldType(ticker),
+            rateContext: this.getRateContext(ticker, latest.c)
+          },
+          type: 'rate_data',
+          relevance: 0.9 // High relevance for rate-sensitive advice
+        });
+      }
+    }
+    
+    // 3. News for market context - "Why did SPY drop 2%?"
+    const news = await polygonRest.getNews();
+    const marketNews = news.results?.slice(0, 5).map(item => ({
+      source: 'polygon',
+      timestamp: new Date(item.published_utc),
+      data: {
+        title: item.title,
+        description: item.description,
+        url: item.article_url,
+        ticker: item.ticker,
+        marketImpact: this.assessMarketImpact(item.title, item.description)
+      },
+      type: 'news_article',
+      relevance: this.calculateNewsRelevance(item.title, item.description, 0)
+    })) || [];
+    
+    return [...marketData, ...marketNews];
+    
+  } catch (error) {
+    console.error('Error fetching Polygon data:', error);
+    return [];
+  }
+}
+
+// Helper methods for context
+private getMarketContext(ticker: string): string {
+  const contexts = {
+    'SPY': 'S&P 500 - broad market sentiment',
+    'VTI': 'Total US market - overall market health',
+    'DIA': 'Dow Jones - blue chip performance'
+  };
+  return contexts[ticker] || 'market indicator';
+}
+
+private getYieldType(ticker: string): string {
+  const types = {
+    'US1Y': '1-year Treasury yield',
+    'US2Y': '2-year Treasury yield', 
+    'US10Y': '10-year Treasury yield',
+    'US30Y': '30-year Treasury yield'
+  };
+  return types[ticker] || 'Treasury yield';
+}
+
+private getRateContext(ticker: string, yield: number): string {
+  return `Current ${this.getYieldType(ticker)}: ${yield.toFixed(2)}%. This affects CD rates, mortgage rates, and retirement planning.`;
+}
+
+private assessMarketImpact(title: string, description: string): string {
+  const keywords = ['fed', 'rate', 'earnings', 'inflation', 'recession'];
+  const hasMarketKeywords = keywords.some(keyword => 
+    title.toLowerCase().includes(keyword) || description.toLowerCase().includes(keyword)
+  );
+  return hasMarketKeywords ? 'high' : 'medium';
+}
+```
+
+#### **Real-time Data Integration (Future)**
+```typescript
+// WebSocket integration for real-time market updates
+async setupRealTimeData(): Promise<void> {
+  const stocksWS = polygonWS.stocks();
+  
+  stocksWS.onmessage = ({ response }) => {
+    const [message] = JSON.parse(response);
+    
+    switch (message.ev) {
+      case "AM": // Aggregate minute
+        this.handleAggregateMinute(message);
+        break;
+      case "A": // Trade
+        this.handleTrade(message);
+        break;
+      case "Q": // Quote
+        this.handleQuote(message);
+        break;
+    }
+  };
+  
+  // Subscribe to major market indices
+  stocksWS.send({ action: "subscribe", params: "T.SPY,T.QQQ,T.DIA" });
+}
+```
+
+### **Premium Tier Value Proposition**
+
+#### **Enhanced Financial Intelligence**
+- **Market Sentiment**: "How's the market doing?" for everyday decisions
+- **Rate Context**: Treasury yields for retirement planning and CD comparisons
+- **News Integration**: "Why did SPY drop 2%?" market explanations
+- **Retirement Planning**: Dividend and earnings data for income strategies
+- **Home Buying**: Mortgage rate proxies for real estate decisions
+
+#### **AI Enhancement Opportunities**
+- **Rate-Sensitive Advice**: Combine yield data with financial recommendations
+- **Market Context**: Explain market movements for better financial decisions
+- **Retirement Planning**: Use dividend data for income planning
+- **Life Event Timing**: Market context for major purchases and investments
+- **International Finance**: Forex data for global financial advice
+
+### **Implementation Phases**
+
+#### **Phase 1: Core Financial Context (Week 1-2)**
+1. **Install Polygon Client**: `npm install @polygon.io/client-js`
+2. **Market Sentiment**: Implement `getStocksAggregates()` for SPY, VTI, DIA
+3. **Treasury Yields**: Add yield data for US1Y, US2Y, US10Y, US30Y
+4. **Error Handling**: Robust error handling and fallbacks
+5. **Testing**: Unit tests for data fetching and processing
+
+#### **Phase 2: Enhanced Financial Advice (Week 3-4)**
+1. **News Integration**: Add `getNews()` for market explanations
+2. **Rate Context**: Combine yield data with financial recommendations
+3. **Market Context**: Explain market movements for better decisions
+4. **Life Event Timing**: Market context for major purchases
+5. **Performance Optimization**: Caching and rate limiting
+
+#### **Phase 3: Advanced Financial Planning (Week 5-6)**
+1. **Dividend Data**: Implement `getDividends()` for retirement planning
+2. **Earnings Data**: Add `getEarnings()` for portfolio Q&A
+3. **Forex Integration**: Add currency data for international advice
+4. **Mortgage Proxies**: Combine yield data with mortgage rate estimates
+5. **Advanced Context**: Comprehensive financial intelligence
+
+### **Data Quality & Reliability**
+
+#### **Rate Limiting Strategy**
+- **Free Tier**: 5 API calls/minute (suitable for hourly updates)
+- **Paid Tier**: 100+ API calls/minute (suitable for real-time features)
+- **Smart Caching**: Cache data for 15-30 minutes to optimize calls
+- **Fallback Strategy**: Graceful degradation when API limits reached
+
+#### **Error Handling**
+```typescript
+// Robust error handling with fallbacks
+async fetchPolygonDataWithFallback(): Promise<MarketNewsData[]> {
+  try {
+    return await this.fetchPolygonMarketData();
+  } catch (error) {
+    console.error('Polygon API error:', error);
+    
+    // Fallback to cached data
+    const cachedData = await this.getCachedMarketData();
+    if (cachedData.length > 0) {
+      console.log('Using cached market data');
+      return cachedData;
+    }
+    
+    // Final fallback to basic market context
+    return this.getBasicMarketContext();
+  }
+}
+```
+
+### **Ask Linc Ticker Watchlist**
+
+#### **Essential Tickers for Financial Context**
+```typescript
+const ASK_LINC_TICKERS = {
+  // Market Sentiment - "How's the market doing?"
+  marketIndices: ['SPY', 'VTI', 'DIA'],
+  
+  // Rate Planning - Retirement and CD comparisons
+  treasuryYields: ['US1Y', 'US2Y', 'US10Y', 'US30Y'],
+  
+  // Home Buying Context - Mortgage rate proxies
+  realEstate: ['VNQ', 'XHB'], // REITs and home builders
+  
+  // Retirement Planning - Income strategies
+  dividendStocks: ['VYM', 'SCHD'], // High dividend ETFs
+  
+  // International Finance - Global user base
+  currencies: ['USD/EUR', 'USD/JPY', 'USD/TWD'],
+  
+  // Major Tech - Market leadership
+  techLeaders: ['AAPL', 'MSFT', 'GOOGL']
+};
+```
+
+#### **Data Fetching Strategy by Category**
+```typescript
+// Market sentiment for everyday decisions
+async fetchMarketSentiment(): Promise<MarketData[]> {
+  return await Promise.all(
+    ASK_LINC_TICKERS.marketIndices.map(ticker => 
+      this.fetchTickerData(ticker, 'market_sentiment')
+    )
+  );
+}
+
+// Rate context for retirement planning
+async fetchRateContext(): Promise<RateData[]> {
+  return await Promise.all(
+    ASK_LINC_TICKERS.treasuryYields.map(ticker => 
+      this.fetchTickerData(ticker, 'rate_planning')
+    )
+  );
+}
+
+// News context for market explanations
+async fetchNewsContext(): Promise<NewsData[]> {
+  const news = await polygonRest.getNews();
+  return news.results?.slice(0, 5).map(item => ({
+    ...item,
+    category: this.categorizeNews(item.title, item.description),
+    financialImpact: this.assessFinancialImpact(item)
+  })) || [];
+}
+```
+
+### **Cost-Benefit Analysis**
+
+#### **Free Tier (5 calls/minute)**
+- **Cost**: $0/month
+- **Features**: Basic market data, limited news
+- **Suitable for**: Development and testing
+- **Ask Linc Value**: Core market sentiment and basic rate data
+
+#### **Paid Tier ($29/month)**
+- **Cost**: $29/month
+- **Features**: Full market data, unlimited news, real-time data
+- **ROI**: Justified by Premium tier pricing ($19.99/month)
+- **Break-even**: 2 Premium users cover the cost
+- **Ask Linc Value**: Complete financial intelligence for Premium users
+
+#### **Enterprise Tier ($99/month)**
+- **Cost**: $99/month
+- **Features**: All features + WebSocket, high rate limits
+- **ROI**: Justified by 5+ Premium users
+- **Benefits**: Real-time features and advanced analytics
+- **Ask Linc Value**: Real-time financial advice and alerts
 
 ## **System Architecture**
 
@@ -159,10 +515,10 @@ export class MarketNewsAggregator {
   }
   
   private initializeSources() {
-    // Premium tier sources (Finnhub only)
-    this.sources.set('finnhub', {
-      id: 'finnhub',
-      name: 'Finnhub Financial Data',
+    // Premium tier sources (Polygon.io only)
+    this.sources.set('polygon', {
+      id: 'polygon',
+      name: 'Polygon.io Financial Data',
       priority: 1, // Premium tier only
       enabled: true
     });
@@ -217,8 +573,8 @@ export class MarketNewsAggregator {
   
   private async fetchFromSource(sourceId: string): Promise<MarketNewsData[]> {
     switch (sourceId) {
-      case 'finnhub':
-        return this.fetchFinnhubData();
+      case 'polygon':
+        return this.fetchPolygonData();
       case 'fred':
         return this.fetchFREDData();
       case 'brave_search':
@@ -230,106 +586,94 @@ export class MarketNewsAggregator {
     }
   }
   
-  private async fetchFinnhubData(): Promise<MarketNewsData[]> {
-    const [news, economicCalendar, marketData] = await Promise.all([
-      this.fetchFinnhubNews(),
-      this.fetchFinnhubEconomicCalendar(),
-      this.fetchFinnhubMarketData()
+  private async fetchPolygonData(): Promise<MarketNewsData[]> {
+    const [news, marketData, economicData] = await Promise.all([
+      this.fetchPolygonNews(),
+      this.fetchPolygonMarketData(),
+      this.fetchPolygonEconomicData()
     ]);
     
-    return [...news, ...economicCalendar, ...marketData];
+    return [...news, ...marketData, ...economicData];
   }
   
-  private async fetchFinnhubNews(): Promise<MarketNewsData[]> {
+  private async fetchPolygonNews(): Promise<MarketNewsData[]> {
     try {
-      const response = await fetch(
-        `https://finnhub.io/api/v1/news?category=general&token=${process.env.FINNHUB_API_KEY}`
-      );
-      const news = await response.json();
+      // Use Polygon client library for news
+      const news = await polygonRest.getNews();
       
-      return news.map((item: any) => ({
-        source: 'finnhub',
-        timestamp: new Date(item.datetime * 1000),
+      return news.results?.slice(0, 10).map((item: any) => ({
+        source: 'polygon',
+        timestamp: new Date(item.published_utc),
         data: {
-          headline: item.headline,
-          summary: item.summary,
-          url: item.url,
-          sentiment: item.sentiment,
-          category: item.category
+          title: item.title,
+          description: item.description,
+          url: item.article_url,
+          author: item.author,
+          ticker: item.ticker
         },
         type: 'news_article',
-        relevance: this.calculateNewsRelevance(item.headline, item.summary, item.sentiment)
-      }));
-    } catch (error) {
-      console.error('Error fetching Finnhub news:', error);
-      return [];
-    }
-  }
-  
-  private async fetchFinnhubEconomicCalendar(): Promise<MarketNewsData[]> {
-    try {
-      const today = new Date();
-      const response = await fetch(
-        `https://finnhub.io/api/v1/calendar/economic?from=${today.toISOString().split('T')[0]}&to=${today.toISOString().split('T')[0]}&token=${process.env.FINNHUB_API_KEY}`
-      );
-      const calendar = await response.json();
-      
-      return calendar.economicCalendar?.map((item: any) => ({
-        source: 'finnhub',
-        timestamp: new Date(item.time),
-        data: {
-          event: item.event,
-          country: item.country,
-          currency: item.currency,
-          impact: item.impact,
-          actual: item.actual,
-          forecast: item.forecast,
-          previous: item.previous
-        },
-        type: 'economic_indicator',
-        relevance: this.calculateEconomicRelevance(item.impact, item.country)
+        relevance: this.calculateNewsRelevance(item.title, item.description, 0)
       })) || [];
     } catch (error) {
-      console.error('Error fetching Finnhub economic calendar:', error);
+      console.error('Error fetching Polygon news:', error);
       return [];
     }
   }
   
-  private async fetchFinnhubMarketData(): Promise<MarketNewsData[]> {
+  private async fetchPolygonMarketData(): Promise<MarketNewsData[]> {
     try {
-      // Fetch major indices (S&P 500, NASDAQ, DOW)
-      const indices = ['^GSPC', '^IXIC', '^DJI'];
+      // Use Polygon client library for market snapshots
+      const snapshots = await polygonRest.getSnapshots();
+      const majorIndices = ['SPY', 'QQQ', 'DIA', 'IWM']; // S&P 500, NASDAQ, DOW, Russell 2000
       const marketData: MarketNewsData[] = [];
       
-      for (const symbol of indices) {
-        const response = await fetch(
-          `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${process.env.FINNHUB_API_KEY}`
-        );
-        const quote = await response.json();
-        
-        if (quote.c && quote.d) {
+      for (const ticker of majorIndices) {
+        const snapshot = snapshots.find((s: any) => s.ticker === ticker);
+        if (snapshot && snapshot.lastTrade) {
           marketData.push({
-            source: 'finnhub',
+            source: 'polygon',
             timestamp: new Date(),
             data: {
-              symbol,
-              currentPrice: quote.c,
-              change: quote.d,
-              changePercent: quote.dp,
-              high: quote.h,
-              low: quote.l,
-              open: quote.o,
-              previousClose: quote.pc
+              symbol: ticker,
+              currentPrice: snapshot.lastTrade.p || 0,
+              change: (snapshot.lastTrade.p - snapshot.prevDay?.c) || 0,
+              changePercent: ((snapshot.lastTrade.p - snapshot.prevDay?.c) / snapshot.prevDay?.c) * 100 || 0,
+              volume: snapshot.lastTrade.s || 0,
+              high: snapshot.prevDay?.h || 0,
+              low: snapshot.prevDay?.l || 0
             },
             type: 'market_data',
-            relevance: this.calculateMarketRelevance(symbol, quote.dp)
+            relevance: this.calculateMarketRelevance(ticker, snapshot.lastTrade.p || 0)
           });
         }
       }
       
       return marketData;
     } catch (error) {
-      console.error('Error fetching Finnhub market data:', error);
+      console.error('Error fetching Polygon market data:', error);
+      return [];
+    }
+  }
+  
+  private async fetchPolygonEconomicData(): Promise<MarketNewsData[]> {
+    try {
+      // Use Polygon client library for market overview
+      const tickers = await polygonRest.getTickers();
+      
+      return [{
+        source: 'polygon',
+        timestamp: new Date(),
+        data: {
+          marketStatus: 'active',
+          totalTickers: tickers.results?.length || 0,
+          lastUpdated: new Date().toISOString(),
+          marketBreadth: this.calculateMarketBreadth(tickers.results || [])
+        },
+        type: 'economic_indicator',
+        relevance: 0.8
+      }];
+    } catch (error) {
+      console.error('Error fetching Polygon economic data:', error);
       return [];
     }
   }
@@ -460,7 +804,7 @@ MARKET OUTLOOK:
       case UserTier.STANDARD:
         return 'Basic economic indicators and general market trends from FRED and web search';
       case UserTier.PREMIUM:
-        return 'Comprehensive market intelligence including real-time data, professional news, sentiment analysis, and detailed market analysis from Finnhub';
+        return 'Comprehensive market intelligence including real-time data, professional news, advanced analytics, and detailed market analysis from Polygon.io';
       default:
         return 'Standard market context';
     }
@@ -601,16 +945,36 @@ FRED_API_KEY_REAL=your_production_fred_key
 # No additional keys needed
 ```
 
-### **Phase 2 (Premium Tier) - Finnhub Integration**
+### **Phase 2 (Premium Tier) - Polygon.io Integration**
 ```bash
 # Required for Premium tier (comprehensive market intelligence)
-FINNHUB_API_KEY=your_finnhub_api_key
-FINNHUB_API_KEY_REAL=your_production_finnhub_api_key
+POLYGON_API_KEY=your_polygon_api_key
+POLYGON_API_KEY_REAL=your_production_polygon_api_key
 
 # Keep existing keys for fallback
 ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key
 ALPHA_VANTAGE_API_KEY_REAL=your_production_alpha_vantage_key
 ```
+
+### **Environment Variable Configuration**
+
+The system uses different API keys for different environments to ensure proper testing and production separation:
+
+#### **Localhost Development**
+- `.env`: `POLYGON_API_KEY` - Real production key for local development
+- `.env.test`: `POLYGON_API_KEY` - Fake key for CI/CD tests
+
+#### **Production (GitHub Actions)**
+- `POLYGON_API_KEY` - Fake key for CI/CD tests
+- `POLYGON_API_KEY_REAL` - Real production key
+
+#### **Production (Render)**
+- `POLYGON_API_KEY` - Real production key
+
+This configuration ensures that:
+- Local development uses real API keys for testing
+- CI/CD tests use fake keys to avoid API costs
+- Production uses real keys for actual functionality
 
 ## **API Endpoints**
 
@@ -981,7 +1345,7 @@ private filterDataForTier(data: MarketNewsData[], tier: UserTier): MarketNewsDat
       );
       
     case UserTier.PREMIUM:
-      return data; // Full access to all data including complete Finnhub suite
+      return data; // Full access to all data including complete Polygon.io suite
       
     default:
       return [];
@@ -1064,34 +1428,42 @@ describe('Market News Integration', () => {
 - **Upgrade incentive**: "Get professional-grade market intelligence with Premium tier"
 
 #### **Premium Tier - Professional Market Intelligence**
-- **Data sources**: Complete Finnhub platform access
+- **Data sources**: Complete Polygon.io platform access
 - **Features**: 
-  - Real-time stock data from 60+ exchanges
-  - Professional news from Reuters, Bloomberg, and 60+ sources
-  - Economic calendar and events
+  - Real-time and historical stock data from 60+ exchanges
+  - Professional news from Reuters, Bloomberg, and other sources
+  - Economic indicators and market data
   - Company fundamentals and earnings data
-  - Built-in sentiment analysis
-  - Forex and crypto market data
-- **AI responses**: Market-aware recommendations with sentiment analysis
+  - Advanced market analytics and technical indicators
+  - Options and forex market data
+- **AI responses**: Market-aware recommendations with advanced analytics
 - **Value**: Professional-grade market intelligence for serious investors
 
-### **Finnhub Integration Advantages**
+### **Polygon.io Integration Advantages**
 
-### **1. Enhanced Data Quality**
-- **Professional Sources**: News from Reuters, Bloomberg, and 60+ professional financial sources
+### **1. Client Library Benefits**
+- **Official TypeScript Support**: Full type safety with `@polygon.io/client-js`
+- **Built-in Error Handling**: Robust error handling and retry mechanisms
+- **Automatic Pagination**: Handles paginated responses automatically
+- **WebSocket Support**: Real-time data streaming capabilities
+- **MIT License**: Open source with commercial-friendly licensing
+- **Active Development**: Regular updates and community support
+
+### **2. Enhanced Data Quality**
+- **Professional Sources**: News from Reuters, Bloomberg, and other professional financial sources
 - **Real-time Data**: Live market data from 60+ exchanges worldwide
-- **Sentiment Analysis**: Built-in sentiment scoring for news articles
-- **Economic Calendar**: Upcoming economic events and their expected impact
+- **Advanced Analytics**: Technical indicators and market analytics
+- **Economic Indicators**: Comprehensive economic data and market metrics
 - **Company Fundamentals**: Earnings, revenue, and financial metrics
 
-### **2. Simplified Architecture**
+### **3. Simplified Architecture**
 - **Single API**: One integration instead of managing multiple data sources
 - **Structured Data**: Consistent format across all data types
 - **Better Error Handling**: More reliable API with comprehensive error responses
 - **Rate Limiting**: Clear rate limits and usage tracking
 
-### **3. Enhanced AI Synthesis**
-- **Sentiment Integration**: AI can incorporate market sentiment into recommendations
+### **4. Enhanced AI Synthesis**
+- **Analytics Integration**: AI can incorporate advanced market analytics into recommendations
 - **Richer Context**: More comprehensive market intelligence for better advice
 - **Tier Differentiation**: Clear distinction between starter, standard, and premium access
 - **Real-time Updates**: Market context reflects current conditions
@@ -1113,9 +1485,9 @@ describe('Market News Integration', () => {
 
 #### **Premium Tier**
 - **Professional Market Intelligence**: Real-time data from 60+ exchanges
-- **Sentiment Analysis**: Market sentiment incorporated into AI recommendations
-- **Professional News**: Reuters, Bloomberg, and 60+ professional sources
-- **Economic Calendar**: Upcoming events and their market impact
+- **Advanced Analytics**: Market analytics incorporated into AI recommendations
+- **Professional News**: Reuters, Bloomberg, and other professional sources
+- **Economic Indicators**: Comprehensive economic data and market metrics
 - **Company Fundamentals**: Earnings, revenue, and financial metrics
 - **Real-time Updates**: Market context reflects current conditions
 
@@ -1124,7 +1496,7 @@ describe('Market News Integration', () => {
 - **Clear Tier Differentiation**: Strong value proposition for each tier upgrade
 - **Premium Justification**: Professional-grade market intelligence justifies higher pricing
 - **Upgrade Incentives**: Clear path from Starter → Standard → Premium
-- **Competitive Advantage**: Finnhub integration provides professional-grade data
+- **Competitive Advantage**: Polygon.io integration provides professional-grade data
 - **Revenue Optimization**: Premium tier becomes significantly more valuable
 - **User Engagement**: Market-aware responses increase user interaction
 
@@ -1144,6 +1516,152 @@ describe('Market News Integration', () => {
 - **Admin Efficiency**: Reduced manual intervention needed
 - **System Performance**: Fast context retrieval and updates
 
+## **Implementation Recommendations**
+
+### **Library Integration Setup**
+
+#### **1. Install Polygon Client**
+```bash
+npm install @polygon.io/client-js
+```
+
+#### **2. Environment Configuration**
+```typescript
+// src/market-news/polygon-client.ts
+import { restClient, websocketClient } from '@polygon.io/client-js';
+
+// Initialize REST client for historical and reference data
+export const polygonRest = restClient(process.env.POLYGON_API_KEY);
+
+// Initialize WebSocket client for real-time data (future)
+export const polygonWS = websocketClient(process.env.POLYGON_API_KEY, 'wss://delayed.polygon.io');
+
+// Configure global options for pagination and error handling
+export const polygonConfig = {
+  pagination: true,
+  retries: 3,
+  timeout: 10000
+};
+```
+
+#### **3. Type Definitions**
+```typescript
+// src/market-news/types.ts
+export interface PolygonMarketData {
+  symbol: string;
+  currentPrice: number;
+  change: number;
+  changePercent: number;
+  volume: number;
+  high: number;
+  low: number;
+  timestamp: Date;
+}
+
+export interface PolygonNewsData {
+  title: string;
+  description: string;
+  url: string;
+  author: string;
+  ticker?: string;
+  published_utc: string;
+}
+
+export interface PolygonSnapshot {
+  ticker: string;
+  lastTrade: {
+    p: number; // price
+    s: number; // size
+    t: number; // timestamp
+  };
+  prevDay: {
+    c: number; // close
+    h: number; // high
+    l: number; // low
+    o: number; // open
+    v: number; // volume
+  };
+}
+```
+
+### **Ask Linc-Focused Data Integration Priority**
+
+#### **Priority 1: Market Sentiment (Immediate Value)**
+- **API**: `polygonRest.getStocksAggregates()` for SPY, VTI, DIA
+- **Value**: "How's the market doing?" context for everyday questions
+- **Use Case**: Market sentiment for spending/saving decisions
+- **Implementation**: Daily cache, hourly refresh
+
+#### **Priority 2: Treasury Yields (High Value)**
+- **API**: `polygonRest.getStocksAggregates()` for US1Y, US2Y, US10Y, US30Y
+- **Value**: Rate context for retirement planning and CD comparisons
+- **Use Case**: "What if rates drop?" and bond ladder strategies
+- **Implementation**: 4-hour cache, daily refresh
+
+#### **Priority 3: News Context (Medium Value)**
+- **API**: `polygonRest.getNews()` for market-moving events
+- **Value**: "Why did SPY drop 2%?" explanations
+- **Use Case**: Market explanation for financial decisions
+- **Implementation**: 2-hour cache, 4-hour refresh
+
+#### **Priority 4: Dividends & Earnings (Future Value)**
+- **API**: `polygonRest.getDividends()` and `polygonRest.getEarnings()`
+- **Value**: Retirement income planning and portfolio Q&A
+- **Use Case**: "What does this stock pay in dividends?"
+- **Implementation**: Weekly cache, daily refresh
+
+### **Error Handling Strategy**
+
+#### **Graceful Degradation**
+```typescript
+async fetchPolygonDataWithFallback(): Promise<MarketNewsData[]> {
+  try {
+    // Primary: Polygon.io data
+    return await this.fetchPolygonMarketData();
+  } catch (error) {
+    console.error('Polygon API error:', error);
+    
+    // Fallback 1: Cached data
+    const cachedData = await this.getCachedMarketData();
+    if (cachedData.length > 0) {
+      console.log('Using cached market data');
+      return cachedData;
+    }
+    
+    // Fallback 2: Basic market context
+    return this.getBasicMarketContext();
+  }
+}
+```
+
+#### **Rate Limiting Management**
+```typescript
+class PolygonRateLimiter {
+  private callCount = 0;
+  private lastReset = Date.now();
+  private readonly limit = 5; // Free tier: 5 calls/minute
+  private readonly window = 60000; // 1 minute
+
+  async checkRateLimit(): Promise<boolean> {
+    const now = Date.now();
+    
+    // Reset counter if window has passed
+    if (now - this.lastReset > this.window) {
+      this.callCount = 0;
+      this.lastReset = now;
+    }
+    
+    if (this.callCount >= this.limit) {
+      console.warn('Polygon API rate limit reached');
+      return false;
+    }
+    
+    this.callCount++;
+    return true;
+  }
+}
+```
+
 ## **Implementation Steps**
 
 ### **Phase 1: Tier-Specific Data Source Setup**
@@ -1153,11 +1671,11 @@ describe('Market News Integration', () => {
 4. **Test tier access control** to ensure proper data filtering
 5. **Update AI prompts** to reflect tier-specific capabilities
 
-### **Phase 2: Premium Tier Finnhub Integration**
-1. **Sign up for Finnhub API** and obtain API key
-2. **Implement Finnhub data fetching** for Premium tier only
-3. **Add sentiment analysis** integration for Premium users
-4. **Test Premium tier features** with real Finnhub data
+### **Phase 2: Premium Tier Polygon.io Integration**
+1. **Sign up for Polygon.io API** and obtain API key
+2. **Implement Polygon.io data fetching** for Premium tier only
+3. **Add advanced analytics** integration for Premium users
+4. **Test Premium tier features** with real Polygon.io data
 5. **Compare data quality** between Standard and Premium tiers
 
 ### **Phase 3: Enhanced Premium Features**
@@ -1181,7 +1699,7 @@ describe('Market News Integration', () => {
 4. **Historical Analysis**: Include trend analysis and historical context
 5. **Multi-Language**: Support for international market news
 6. **Advanced Analytics**: Market prediction and scenario modeling
-7. **Finnhub Webhooks**: Real-time data updates via webhooks
+7. **Polygon.io Webhooks**: Real-time data updates via webhooks
 8. **Custom Market Indices**: Create personalized market indices for users
 9. **Sector-Specific Analysis**: Focus on user's specific investment sectors
 10. **Earnings Calendar Integration**: Highlight upcoming earnings for user's holdings

@@ -8,10 +8,38 @@ export interface SearchProviderConfig {
   timeout?: number;
 }
 
+// Global rate limiter for Brave Search API calls
+class BraveSearchRateLimiter {
+  private static instance: BraveSearchRateLimiter;
+  private lastCallTime: number = 0;
+  private readonly MIN_INTERVAL = 1100; // 1.1 seconds between calls
+
+  static getInstance(): BraveSearchRateLimiter {
+    if (!BraveSearchRateLimiter.instance) {
+      BraveSearchRateLimiter.instance = new BraveSearchRateLimiter();
+    }
+    return BraveSearchRateLimiter.instance;
+  }
+
+  async waitForNextCall(): Promise<void> {
+    const now = Date.now();
+    const timeSinceLastCall = now - this.lastCallTime;
+    
+    if (timeSinceLastCall < this.MIN_INTERVAL) {
+      const waitTime = this.MIN_INTERVAL - timeSinceLastCall;
+      console.log(`BraveSearchRateLimiter: Waiting ${waitTime}ms before next API call`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
+    
+    this.lastCallTime = Date.now();
+  }
+}
+
 export class SearchProvider {
   private config: SearchProviderConfig;
   private readonly DEFAULT_TIMEOUT = 10000;
   private readonly DEFAULT_MAX_RESULTS = 10;
+  private rateLimiter: BraveSearchRateLimiter;
 
   constructor(apiKey: string, provider: 'bing' | 'google' | 'brave' | 'serpapi' = 'bing') {
     this.config = {
@@ -21,6 +49,7 @@ export class SearchProvider {
       maxResults: this.DEFAULT_MAX_RESULTS,
       timeout: this.DEFAULT_TIMEOUT
     };
+    this.rateLimiter = BraveSearchRateLimiter.getInstance();
   }
 
   private getBaseUrl(provider: string): string {
@@ -190,6 +219,9 @@ export class SearchProvider {
         lastUpdate: new Date().toISOString()
       };
     }
+    
+    // Use global rate limiter for Brave Search API calls
+    await this.rateLimiter.waitForNextCall();
     
     const params = new URLSearchParams({
       q: query,

@@ -1605,6 +1605,96 @@ app.get('/test/search-context', async (req: Request, res: Response) => {
   }
 });
 
+// Market News Context API Endpoints
+
+// Get current market context for a tier
+app.get('/market-news/context/:tier', async (req: Request, res: Response) => {
+  try {
+    const { tier } = req.params;
+    const { MarketNewsManager } = await import('./market-news/manager');
+    const manager = new MarketNewsManager();
+    const contextText = await manager.getMarketContext(tier as UserTier);
+    
+    // Get the full context object from database
+    const contextRecord = await manager.prisma.marketNewsContext.findFirst({
+      where: {
+        availableTiers: { has: tier }
+      },
+      orderBy: { lastUpdate: 'desc' }
+    });
+    
+    if (!contextRecord) {
+      return res.status(404).json({ error: 'Market context not found for this tier' });
+    }
+    
+    res.json({
+      contextText: contextRecord.contextText,
+      dataSources: contextRecord.dataSources,
+      keyEvents: contextRecord.keyEvents,
+      lastUpdate: contextRecord.lastUpdate,
+      tier: tier
+    });
+  } catch (error) {
+    console.error('Error fetching market context:', error);
+    res.status(500).json({ error: 'Failed to fetch market context' });
+  }
+});
+
+// Admin: Update market context manually
+app.put('/admin/market-news/context/:tier', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { tier } = req.params;
+    const { contextText } = req.body;
+    
+    if (!contextText || typeof contextText !== 'string') {
+      return res.status(400).json({ error: 'contextText must be a string' });
+    }
+    
+    const adminUser = req.user?.email || 'unknown';
+    
+    const { MarketNewsManager } = await import('./market-news/manager');
+    const manager = new MarketNewsManager();
+    await manager.updateMarketContextManual(tier as UserTier, contextText, adminUser);
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating market context:', error);
+    res.status(500).json({ error: 'Failed to update market context' });
+  }
+});
+
+// Admin: Get market context history
+app.get('/admin/market-news/history/:tier', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { tier } = req.params;
+    
+    const { MarketNewsManager } = await import('./market-news/manager');
+    const manager = new MarketNewsManager();
+    const history = await manager.getMarketContextHistory(tier as UserTier);
+    
+    res.json({ history });
+  } catch (error) {
+    console.error('Error fetching market context history:', error);
+    res.status(500).json({ error: 'Failed to fetch market context history' });
+  }
+});
+
+// Admin: Force refresh market context
+app.post('/admin/market-news/refresh/:tier', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { tier } = req.params;
+    
+    const { MarketNewsManager } = await import('./market-news/manager');
+    const manager = new MarketNewsManager();
+    await manager.updateMarketContext(tier as UserTier);
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error refreshing market context:', error);
+    res.status(500).json({ error: 'Failed to refresh market context' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 
 // Only start the server if this file is run directly
@@ -1641,7 +1731,33 @@ if (require.main === module) {
       name: 'market-context-refresh'
     });
     
+    // Set up cron job to refresh market news context every 4 hours (reduced from 2 hours)
+    cron.schedule('0 */4 * * *', async () => {
+      console.log('🔄 Starting market news context refresh...');
+      
+      try {
+        const { MarketNewsManager } = await import('./market-news/manager');
+        const manager = new MarketNewsManager();
+        
+        // Update for all tiers (including Starter for future flexibility)
+        // Note: Starter tier currently returns empty context, but this allows for future changes
+        await Promise.all([
+          manager.updateMarketContext(UserTier.STARTER),
+          manager.updateMarketContext(UserTier.STANDARD),
+          manager.updateMarketContext(UserTier.PREMIUM)
+        ]);
+        
+        console.log('✅ Market news context refresh completed');
+      } catch (error) {
+        console.error('❌ Error in market news context refresh:', error);
+      }
+    }, {
+      timezone: 'America/New_York',
+      name: 'market-news-refresh'
+    });
+    
     console.log('Cron job scheduled: market context refresh every hour');
+    console.log('Cron job scheduled: market news context refresh every 4 hours');
   });
 }
 

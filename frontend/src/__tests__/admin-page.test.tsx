@@ -1,10 +1,21 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
+import AdminPage from '../app/admin/page';
 
-// Mock the API calls
-const mockFetch = jest.fn();
-global.fetch = mockFetch;
+// Mock fetch
+global.fetch = jest.fn();
+
+// Mock localStorage
+const localStorageMock = {
+  getItem: jest.fn(),
+  setItem: jest.fn(),
+  removeItem: jest.fn(),
+  clear: jest.fn(),
+  length: 0,
+  key: jest.fn(),
+};
+global.localStorage = localStorageMock as Storage;
 
 // Mock the MarkdownRenderer component
 jest.mock('../components/MarkdownRenderer', () => {
@@ -153,78 +164,120 @@ const MockAdminPage = () => {
   );
 };
 
-describe('Admin Page', () => {
+describe('AdminPage', () => {
   beforeEach(() => {
-    mockFetch.mockClear();
+    jest.clearAllMocks();
+    localStorageMock.getItem.mockReturnValue('mock-token');
   });
 
-  it('should render admin dashboard with three tabs', () => {
-    render(<MockAdminPage />);
+  it('should render all tabs including Market News', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ sessions: [], conversations: [], users: [] })
+    });
+
+    render(<AdminPage />);
     
-    expect(screen.getByText('Admin Dashboard')).toBeInTheDocument();
-    expect(screen.getByTestId('demo-tab')).toBeInTheDocument();
-    expect(screen.getByTestId('production-tab')).toBeInTheDocument();
-    expect(screen.getByTestId('users-tab')).toBeInTheDocument();
+    // Wait for loading to complete
+    await waitFor(() => {
+      expect(screen.queryByText('Loading admin data...')).not.toBeInTheDocument();
+    });
+    
+    expect(screen.getByText('Demo')).toBeInTheDocument();
+    expect(screen.getByText('Production')).toBeInTheDocument();
+    expect(screen.getByText('User Management')).toBeInTheDocument();
+    expect(screen.getByText('Market News')).toBeInTheDocument();
   });
 
-  it('should show demo tab by default', () => {
-    render(<MockAdminPage />);
-    
-    expect(screen.getByTestId('demo-content')).toBeInTheDocument();
-    expect(screen.getByText('Demo Tab')).toBeInTheDocument();
-  });
+  it('should switch to Market News tab when clicked', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ sessions: [], conversations: [], users: [] })
+    });
 
-  it('should switch to production tab when clicked', async () => {
-    render(<MockAdminPage />);
+    render(<AdminPage />);
     
-    fireEvent.click(screen.getByTestId('production-tab'));
+    // Wait for loading to complete
+    await waitFor(() => {
+      expect(screen.queryByText('Loading admin data...')).not.toBeInTheDocument();
+    });
+    
+    const marketNewsTab = screen.getByText('Market News');
+    fireEvent.click(marketNewsTab);
     
     await waitFor(() => {
-      expect(screen.getByTestId('production-content')).toBeInTheDocument();
-      expect(screen.getByText('Production Tab')).toBeInTheDocument();
+      expect(screen.getByText('Market News Context')).toBeInTheDocument();
     });
   });
 
-  it('should switch to users tab when clicked', async () => {
-    render(<MockAdminPage />);
+  it('should display market context for each tier', async () => {
+    // Mock successful responses for market news contexts
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ sessions: [], conversations: [], users: [] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: 'Test context', dataSources: ['fred'], keyEvents: ['event1'], lastUpdate: '2025-08-07T01:00:00Z', tier: 'starter' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: 'Standard context', dataSources: ['fred', 'brave'], keyEvents: ['event1', 'event2'], lastUpdate: '2025-08-07T01:00:00Z', tier: 'standard' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: 'Premium context', dataSources: ['finnhub'], keyEvents: ['event1', 'event2', 'event3'], lastUpdate: '2025-08-07T01:00:00Z', tier: 'premium' }) });
+
+    render(<AdminPage />);
     
-    fireEvent.click(screen.getByTestId('users-tab'));
+    // Wait for loading to complete
+    await waitFor(() => {
+      expect(screen.queryByText('Loading admin data...')).not.toBeInTheDocument();
+    });
+    
+    const marketNewsTab = screen.getByText('Market News');
+    fireEvent.click(marketNewsTab);
     
     await waitFor(() => {
-      expect(screen.getByTestId('users-content')).toBeInTheDocument();
-      expect(screen.getByText('User Management Tab')).toBeInTheDocument();
+      expect(screen.getByText('starter Tier')).toBeInTheDocument();
+      expect(screen.getByText('standard Tier')).toBeInTheDocument();
+      expect(screen.getByText('premium Tier')).toBeInTheDocument();
     });
   });
 
-  it('should display user data in users tab', async () => {
-    render(<MockAdminPage />);
+  it('should show refresh and edit buttons for each tier', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ sessions: [], conversations: [], users: [] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: 'Test context', dataSources: ['fred'], keyEvents: ['event1'], lastUpdate: '2025-08-07T01:00:00Z', tier: 'starter' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: 'Standard context', dataSources: ['fred', 'brave'], keyEvents: ['event1', 'event2'], lastUpdate: '2025-08-07T01:00:00Z', tier: 'standard' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: 'Premium context', dataSources: ['finnhub'], keyEvents: ['event1', 'event2', 'event3'], lastUpdate: '2025-08-07T01:00:00Z', tier: 'premium' }) });
+
+    render(<AdminPage />);
     
-    fireEvent.click(screen.getByTestId('users-tab'));
+    // Wait for loading to complete
+    await waitFor(() => {
+      expect(screen.queryByText('Loading admin data...')).not.toBeInTheDocument();
+    });
+    
+    const marketNewsTab = screen.getByText('Market News');
+    fireEvent.click(marketNewsTab);
     
     await waitFor(() => {
-      expect(screen.getByTestId('user-item')).toBeInTheDocument();
-      expect(screen.getByText('test@example.com - starter')).toBeInTheDocument();
+      expect(screen.getAllByText('Refresh')).toHaveLength(3);
+      expect(screen.getAllByText('Edit')).toHaveLength(3);
     });
   });
 
-  it('should show correct stats for each tab', async () => {
-    render(<MockAdminPage />);
+  it('should handle empty market context gracefully', async () => {
+    // Mock 404 responses for market news contexts (no context found)
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ sessions: [], conversations: [], users: [] }) })
+      .mockResolvedValueOnce({ ok: false, status: 404 })
+      .mockResolvedValueOnce({ ok: false, status: 404 })
+      .mockResolvedValueOnce({ ok: false, status: 404 });
+
+    render(<AdminPage />);
     
-    // Demo tab stats
-    expect(screen.getByText('Active Sessions: 1')).toBeInTheDocument();
-    expect(screen.getByText('Total Conversations: 1')).toBeInTheDocument();
-    
-    // Production tab stats
-    fireEvent.click(screen.getByTestId('production-tab'));
+    // Wait for loading to complete
     await waitFor(() => {
-      expect(screen.getByText('Active Users: 1')).toBeInTheDocument();
-      expect(screen.getByText('Total Conversations: 1')).toBeInTheDocument();
+      expect(screen.queryByText('Loading admin data...')).not.toBeInTheDocument();
     });
     
-    // Users tab stats
-    fireEvent.click(screen.getByTestId('users-tab'));
+    const marketNewsTab = screen.getByText('Market News');
+    fireEvent.click(marketNewsTab);
+    
     await waitFor(() => {
-      expect(screen.getByText('Total Users: 1')).toBeInTheDocument();
+      expect(screen.getAllByText('No market context available for this tier.')).toHaveLength(3);
     });
   });
 }); 
