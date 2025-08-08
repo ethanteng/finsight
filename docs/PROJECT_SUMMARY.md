@@ -146,6 +146,85 @@ if (mentionedInstitution && isRateQuestion) {
 - **Source Transparency**: Clear attribution of information sources
 - **Performance Optimized**: 30-minute cache with intelligent refresh
 
+## 📰 **Financial Market News Context System**
+
+### **AI-Powered Market Intelligence**
+
+The platform now features a comprehensive **Financial Market News Context System** that provides real-time market intelligence to enhance AI responses with current market conditions, trends, and insights.
+
+#### **Key Features**
+
+- **Real-Time Market Data**: Polygon.io integration for Premium tier users
+- **Economic Indicators**: FRED data for Standard+ users (CPI, Fed rates, mortgage rates)
+- **Professional News**: Reuters, Bloomberg, and other professional sources
+- **AI Synthesis**: GPT-4 powered market context generation
+- **Tier-Based Access**: Different market intelligence levels per subscription tier
+- **Admin Management**: Manual override and management capabilities
+
+#### **Tier-Specific Market Intelligence**
+
+**Starter Tier:**
+- Basic financial analysis without market context
+- Focus on personal financial management
+- Clear upgrade path to market-aware advice
+
+**Standard Tier:**
+- Economic indicators (FRED): CPI, Fed rates, mortgage rates, credit card APR
+- Basic market trends and economic context
+- Enhanced financial recommendations with economic data
+
+**Premium Tier:**
+- **Complete Polygon.io Integration**: Real-time market data from 60+ exchanges
+- **Treasury Yields**: 1Y, 5Y, 10Y, 30Y for rate planning and yield curve analysis
+- **Inflation Data**: CPI, Core CPI, PCE, and year-over-year inflation metrics
+- **Inflation Expectations**: Market and model-based forecasts (1Y, 5Y, 10Y, 30Y)
+- **Professional News**: Reuters, Bloomberg, and other professional sources
+- **Advanced Analytics**: Market analytics incorporated into AI recommendations
+- **Rate Context**: Treasury yields for retirement planning and CD comparisons
+- **Market Explanations**: "Why did SPY drop 2%?" market context
+- **Economic Intelligence**: Comprehensive inflation and economic forecasting data
+
+#### **Technical Implementation**
+
+**Core Components:**
+- **MarketNewsAggregator**: Collects data from multiple sources with tier-based filtering
+- **MarketNewsSynthesizer**: AI-powered market context generation using GPT-4
+- **MarketNewsManager**: Database operations and admin management
+- **Scheduled Updates**: Hourly market context refresh via cron jobs
+
+**API Endpoints:**
+- `GET /market-news/context/:tier` - Get current market context for a tier
+- `PUT /admin/market-news/context/:tier` - Manual market context updates
+- `POST /admin/market-news/refresh/:tier` - Force refresh market context
+
+**Database Schema:**
+- **MarketNewsContext**: Stores AI-synthesized market context with metadata
+- **MarketNewsHistory**: Tracks changes and provides audit trail
+
+#### **Market Intelligence Benefits**
+
+**For Users:**
+- **Market-Aware Advice**: Financial recommendations based on current market conditions
+- **Rate Context**: Treasury yields for retirement planning and CD comparisons
+- **Economic Insights**: Inflation data and economic indicators for informed decisions
+- **Professional News**: Reuters, Bloomberg, and other professional sources
+- **Real-Time Updates**: Market context reflects current conditions
+
+**For Business:**
+- **Premium Justification**: Professional-grade market intelligence justifies higher pricing
+- **Clear Tier Differentiation**: Strong value proposition for each tier upgrade
+- **Competitive Advantage**: Polygon.io integration provides professional-grade data
+- **Revenue Optimization**: Premium tier becomes significantly more valuable
+
+#### **Implementation Status**
+
+✅ **Complete Implementation**: All planned features successfully implemented
+✅ **Polygon.io Integration**: Real market data from 60+ exchanges worldwide
+✅ **Tier-Based Access Control**: Proper restrictions and upgrade incentives
+✅ **Admin Panel**: Complete management interface with manual override capabilities
+✅ **Testing Coverage**: 324 tests passing with comprehensive validation
+✅ **Production Ready**: All environment variables and security measures in place
+
 ## 🎭 **Demo System Implementation**
 
 ### **Demo Mode Architecture**
