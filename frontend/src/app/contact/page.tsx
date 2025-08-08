@@ -64,6 +64,14 @@ const ContactPage = () => {
               <Link href="/" className="text-muted-foreground hover:text-primary transition-colors">
                 Home
               </Link>
+              <a 
+                href="https://ask-linc-blog.ghost.io/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-primary transition-colors"
+              >
+                Our Blog
+              </a>
               <Link href="/demo" className="text-muted-foreground hover:text-primary transition-colors">
                 Demo
               </Link>

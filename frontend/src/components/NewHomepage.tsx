@@ -29,6 +29,14 @@ const NewHomepage = () => {
               <button onClick={() => scrollToSection('features')} className="text-muted-foreground hover:text-primary transition-colors">Features</button>
               <button onClick={() => scrollToSection('pricing')} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
               <a 
+                href="https://ask-linc-blog.ghost.io/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-primary transition-colors"
+              >
+                Our Blog
+              </a>
+              <a 
                 href="/how-we-protect-your-data" 
                 className="text-primary hover:text-primary/80 transition-colors cursor-pointer"
               >
