@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { UserTier } from '../data/types';
 import { MarketNewsData } from './aggregator';
+import crypto from 'crypto';
 
 export interface MarketNewsContext {
   id: string;
