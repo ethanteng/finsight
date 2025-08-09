@@ -28,10 +28,16 @@ export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: P
       headers['Authorization'] = `Bearer ${token}`;
     }
     
+    // Add demo mode header if this is a demo request
+    if (isDemo) {
+      headers['x-demo-mode'] = 'true';
+    }
+    
     try {
       const res = await fetch(`${API_URL}/plaid/create_link_token`, { 
         method: 'POST',
-        headers
+        headers,
+        body: JSON.stringify({ isDemo })
       });
       const data = await res.json();
       if (data.link_token) {
@@ -45,7 +51,7 @@ export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: P
     } catch {
       setStatus('Network error. Please try again.');
     }
-  }, []);
+  }, [isDemo]);
 
   // Exchange public_token for access_token
   const handleSuccess: PlaidLinkOnSuccess = useCallback(async (publicToken, metadata) => {
