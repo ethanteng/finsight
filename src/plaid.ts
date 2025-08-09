@@ -13,7 +13,7 @@ const getPrismaClient = () => {
 
 // For testing, use sandbox environment to avoid Data Transparency Messaging requirements
 // TODO: Switch back to production once Data Transparency Messaging is properly configured
-const useSandbox = false; // Back to production mode
+const useSandbox = process.env.PLAID_ENV === 'sandbox';
 
 const configuration = new Configuration({
   basePath: useSandbox ? PlaidEnvironments.sandbox : PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
@@ -31,10 +31,25 @@ console.log('Plaid Configuration:', {
   accessLevel: useSandbox ? 'sandbox' : (process.env.PLAID_ACCESS_LEVEL || 'sandbox'),
   hasClientId: !!process.env.PLAID_CLIENT_ID,
   hasSecret: !!process.env.PLAID_SECRET,
-  useSandbox: useSandbox
+  useSandbox: useSandbox,
+  isProduction: process.env.PLAID_ENV === 'production'
 });
 
 const plaidClient = new PlaidApi(configuration);
+
+// Helper function to get Plaid client for demo mode (always sandbox)
+const getDemoPlaidClient = () => {
+  const demoConfiguration = new Configuration({
+    basePath: PlaidEnvironments.sandbox,
+    baseOptions: {
+      headers: {
+        'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID,
+        'PLAID-SECRET': process.env.PLAID_SECRET,
+      },
+    },
+  });
+  return new PlaidApi(demoConfiguration);
+};
 
 // Helper function to get subtype for demo accounts
 const getSubtypeForType = (type: string): string => {
@@ -149,35 +164,41 @@ export const setupPlaidRoutes = (app: any) => {
   // Create link token
   app.post('/plaid/create_link_token', async (req: any, res: any) => {
     try {
+      // Check if this is a demo request
+      const isDemoRequest = req.headers['x-demo-mode'] === 'true' || req.body.isDemo === true;
+      
       // Determine available products based on environment
       const isProduction = process.env.PLAID_ENV === 'production';
       const isLimitedProduction = process.env.PLAID_ENV === 'production' && process.env.PLAID_ACCESS_LEVEL === 'limited';
       
-      // For limited production, use only Transactions (most compatible)
-      // This should work with your limited production access
-      let products = [Products.Transactions];
-      
-      // Only add Balance if we're sure it's available
-      if (isLimitedProduction) {
-        // Start with just Transactions to test
-        products = [Products.Transactions];
-        console.log('Using limited production configuration with Transactions only');
-        console.log('Note: Limited production access may not work with OAuth institutions like Bank of America');
-        console.log('Consider using sandbox mode for testing or request full production access');
+      // For demo mode, always use sandbox
+      if (isDemoRequest) {
+        console.log('Demo mode detected - using sandbox environment for Plaid');
+        const demoPlaidClient = getDemoPlaidClient();
+        
+        const request = {
+          user: { client_user_id: 'demo-user-id' },
+          client_name: 'Ask Linc (Demo)',
+          products: [Products.Transactions, Products.Balance],
+          country_codes: [CountryCode.Us],
+          language: 'en',
+        };
+
+        console.log('Creating demo link token with sandbox environment');
+        const createTokenResponse = await demoPlaidClient.linkTokenCreate(request);
+        res.json({ link_token: createTokenResponse.data.link_token });
+        return;
       }
       
-      // For full production, add more products including enhanced features
-      if (isProduction && !isLimitedProduction) {
-        products = [
-          Products.Transactions,
-          Products.Balance,
-          Products.Investments,
-          Products.Identity,
-          Products.Income,
-          Products.Liabilities,
-          Products.Statements
-        ];
-        console.log('Using full production configuration with enhanced features');
+      // For production (including limited), use only the basic products that are available
+      // Based on the error message, we only have access to Transactions and Balance
+      let products = [Products.Transactions, Products.Balance];
+      
+      if (isProduction) {
+        console.log('Using production configuration with basic products (Transactions, Balance)');
+        console.log('Note: Enhanced products (Identity, Income, Statements) are not available in this Plaid account');
+      } else {
+        console.log('Using sandbox configuration with basic products (Transactions, Balance)');
       }
 
       const request = {
