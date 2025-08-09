@@ -179,7 +179,7 @@ export const setupPlaidRoutes = (app: any) => {
         const request = {
           user: { client_user_id: 'demo-user-id' },
           client_name: 'Ask Linc (Demo)',
-          products: [Products.Transactions, Products.Balance],
+          products: [Products.Transactions], // Use only Transactions product
           country_codes: [CountryCode.Us],
           language: 'en',
         };
@@ -190,15 +190,15 @@ export const setupPlaidRoutes = (app: any) => {
         return;
       }
       
-      // For production (including limited), use only the basic products that are available
-      // Based on the error message, we only have access to Transactions and Balance
-      let products = [Products.Transactions, Products.Balance];
+      // For production (including limited), use only the Transactions product
+      // Transactions product will also provide balance information when fetching accounts
+      let products = [Products.Transactions];
       
       if (isProduction) {
-        console.log('Using production configuration with basic products (Transactions, Balance)');
-        console.log('Note: Enhanced products (Identity, Income, Statements) are not available in this Plaid account');
+        console.log('Using production configuration with Transactions product');
+        console.log('Note: Balance information will be available when fetching accounts');
       } else {
-        console.log('Using sandbox configuration with basic products (Transactions, Balance)');
+        console.log('Using sandbox configuration with Transactions product');
       }
 
       const request = {
