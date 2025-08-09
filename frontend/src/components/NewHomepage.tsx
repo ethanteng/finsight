@@ -667,6 +667,14 @@ const NewHomepage = () => {
             </div>
             <div className="flex items-center space-x-6 text-sm text-muted-foreground">
               <a 
+                href="https://ask-linc-blog.ghost.io/i-pasted-my-bank-statements-into-chatgpt-and-immediately-regretted-it/" 
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:text-primary/80 transition-colors"
+              >
+                Our Story
+              </a>
+              <a 
                 href="/privacy" 
                 className="hover:text-primary transition-colors"
               >
