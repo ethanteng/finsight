@@ -8,6 +8,24 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 export const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 const prisma = new PrismaClient();
 
+// Helper function to get Plaid credentials based on mode
+const getPlaidCredentials = () => {
+  const plaidMode = process.env.PLAID_MODE || 'sandbox';
+  if (plaidMode === 'production') {
+    return {
+      clientId: process.env.PLAID_CLIENT_ID_PROD || process.env.PLAID_CLIENT_ID,
+      secret: process.env.PLAID_SECRET_PROD || process.env.PLAID_SECRET,
+      env: process.env.PLAID_ENV_PROD || 'production'
+    };
+  } else {
+    return {
+      clientId: process.env.PLAID_CLIENT_ID,
+      secret: process.env.PLAID_SECRET,
+      env: 'sandbox'
+    };
+  }
+};
+
 interface Conversation {
   id: string;
   question: string;
@@ -137,12 +155,13 @@ export async function askOpenAIWithEnhancedContext(
             // Import Plaid functions directly
             const { Configuration, PlaidApi, PlaidEnvironments } = await import('plaid');
             
+            const credentials = getPlaidCredentials();
             const configuration = new Configuration({
-              basePath: PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
+              basePath: PlaidEnvironments[credentials.env],
               baseOptions: {
                 headers: {
-                  'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID,
-                  'PLAID-SECRET': process.env.PLAID_SECRET,
+                  'PLAID-CLIENT-ID': credentials.clientId,
+                  'PLAID-SECRET': credentials.secret,
                 },
               },
             });
@@ -733,12 +752,13 @@ export async function askOpenAI(
             // Import Plaid functions directly
             const { Configuration, PlaidApi, PlaidEnvironments } = await import('plaid');
             
+            const credentials = getPlaidCredentials();
             const configuration = new Configuration({
-              basePath: PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
+              basePath: PlaidEnvironments[credentials.env],
               baseOptions: {
                 headers: {
-                  'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID,
-                  'PLAID-SECRET': process.env.PLAID_SECRET,
+                  'PLAID-CLIENT-ID': credentials.clientId,
+                  'PLAID-SECRET': credentials.secret,
                 },
               },
             });

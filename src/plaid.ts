@@ -11,40 +11,62 @@ const getPrismaClient = () => {
   return prisma;
 };
 
-// For testing, use sandbox environment to avoid Data Transparency Messaging requirements
-// TODO: Switch back to production once Data Transparency Messaging is properly configured
-const useSandbox = process.env.PLAID_ENV === 'sandbox';
+// Determine Plaid mode from environment variable
+const plaidMode = process.env.PLAID_MODE || 'sandbox';
+const useSandbox = plaidMode === 'sandbox';
+
+// Select appropriate environment variables based on mode
+const getPlaidCredentials = () => {
+  if (plaidMode === 'production') {
+    return {
+      clientId: process.env.PLAID_CLIENT_ID_PROD || process.env.PLAID_CLIENT_ID,
+      secret: process.env.PLAID_SECRET_PROD || process.env.PLAID_SECRET,
+      env: process.env.PLAID_ENV_PROD || 'production'
+    };
+  } else {
+    return {
+      clientId: process.env.PLAID_CLIENT_ID,
+      secret: process.env.PLAID_SECRET,
+      env: 'sandbox'
+    };
+  }
+};
+
+const credentials = getPlaidCredentials();
 
 const configuration = new Configuration({
-  basePath: useSandbox ? PlaidEnvironments.sandbox : PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
+  basePath: useSandbox ? PlaidEnvironments.sandbox : PlaidEnvironments[credentials.env],
   baseOptions: {
     headers: {
-      'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID,
-      'PLAID-SECRET': process.env.PLAID_SECRET,
+      'PLAID-CLIENT-ID': credentials.clientId,
+      'PLAID-SECRET': credentials.secret,
     },
   },
 });
 
 // Log Plaid environment configuration
 console.log('Plaid Configuration:', {
-  environment: useSandbox ? 'sandbox' : (process.env.PLAID_ENV || 'sandbox'),
+  mode: plaidMode,
+  environment: useSandbox ? 'sandbox' : credentials.env,
   accessLevel: useSandbox ? 'sandbox' : (process.env.PLAID_ACCESS_LEVEL || 'sandbox'),
-  hasClientId: !!process.env.PLAID_CLIENT_ID,
-  hasSecret: !!process.env.PLAID_SECRET,
+  hasClientId: !!credentials.clientId,
+  hasSecret: !!credentials.secret,
   useSandbox: useSandbox,
-  isProduction: process.env.PLAID_ENV === 'production'
+  isProduction: plaidMode === 'production',
+  credentialsSource: plaidMode === 'production' ? 'production variables' : 'sandbox variables'
 });
 
 const plaidClient = new PlaidApi(configuration);
 
 // Helper function to get Plaid client for demo mode (always sandbox)
 const getDemoPlaidClient = () => {
+  // Demo mode ALWAYS uses sandbox credentials, regardless of PLAID_MODE setting
   const demoConfiguration = new Configuration({
     basePath: PlaidEnvironments.sandbox,
     baseOptions: {
       headers: {
-        'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID,
-        'PLAID-SECRET': process.env.PLAID_SECRET,
+        'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID, // Always use sandbox credentials
+        'PLAID-SECRET': process.env.PLAID_SECRET,       // Always use sandbox credentials
       },
     },
   });
@@ -279,12 +301,12 @@ export const setupPlaidRoutes = (app: any) => {
       const isInvestmentRequest = req.body.productType === 'investments';
       
       // Determine available products based on environment
-      const isProduction = process.env.PLAID_ENV === 'production';
-      const isLimitedProduction = process.env.PLAID_ENV === 'production' && process.env.PLAID_ACCESS_LEVEL === 'limited';
+      const isProduction = plaidMode === 'production';
+      const isLimitedProduction = plaidMode === 'production' && process.env.PLAID_ACCESS_LEVEL === 'limited';
       
-      // For demo mode, always use sandbox
+      // For demo mode, ALWAYS use sandbox regardless of PLAID_MODE setting
       if (isDemoRequest) {
-        console.log('Demo mode detected - using sandbox environment for Plaid');
+        console.log('Demo mode detected - ALWAYS using sandbox environment for Plaid (ignoring PLAID_MODE)');
         const demoPlaidClient = getDemoPlaidClient();
         
         const request = {
