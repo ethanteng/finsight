@@ -207,10 +207,9 @@ export const setupPlaidRoutes = (app: any) => {
         products: products,
         country_codes: [CountryCode.Us],
         language: 'en',
-        // Add webhook for production
-        webhook: isProduction ? process.env.PLAID_WEBHOOK_URL : undefined,
-        // Add Link customization name for production (Data Transparency Messaging configured in Dashboard)
-        link_customization_name: isProduction ? 'default' : undefined
+        // Remove conflicting configuration options that cause INVALID_CONFIGURATION error
+        // webhook: isProduction ? process.env.PLAID_WEBHOOK_URL : undefined,
+        // link_customization_name: isProduction ? 'default' : undefined
       };
 
       console.log(`Creating link token with products: ${products.join(', ')}`);
