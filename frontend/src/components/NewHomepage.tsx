@@ -515,6 +515,21 @@ const NewHomepage = () => {
             ))}
           </div>
           
+          {/* Blog link for plan selection help */}
+          <div className="text-center mt-12">
+            <p className="text-muted-foreground">
+              Not sure which plan is right?{" "}
+              <a 
+                href="https://ask-linc-blog.ghost.io/which-ask-linc-plan-fits-you/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-[hsl(158,64%,52%)] hover:text-[hsl(158,64%,62%)] transition-colors font-medium"
+              >
+                Read our blog
+              </a>{" "}
+              to help you choose.
+            </p>
+          </div>
 
         </div>
       </section>
