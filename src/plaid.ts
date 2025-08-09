@@ -102,17 +102,115 @@ const processTransactionData = (transaction: any) => {
     amount: transaction.amount,
     date: transaction.date,
     name: transaction.name,
-    merchant_name: transaction.merchant_name,
-    category: transaction.category,
-    category_id: transaction.category_id,
+    category: transaction.category || [],
     pending: transaction.pending,
+    merchant_name: transaction.merchant_name,
     payment_channel: transaction.payment_channel,
-    // Enhanced metadata
-    location: transaction.location,
-    payment_meta: transaction.payment_meta,
-    pending_transaction_id: transaction.pending_transaction_id,
-    account_owner: transaction.account_owner,
-    transaction_code: transaction.transaction_code
+    transaction_type: transaction.transaction_type
+  };
+};
+
+// Enhanced investment data processing functions
+const processInvestmentHolding = (holding: any) => {
+  return {
+    id: holding.account_id,
+    account_id: holding.account_id,
+    security_id: holding.security_id,
+    institution_value: holding.institution_value,
+    institution_price: holding.institution_price,
+    institution_price_as_of: holding.institution_price_as_of,
+    cost_basis: holding.cost_basis,
+    quantity: holding.quantity,
+    iso_currency_code: holding.iso_currency_code,
+    unofficial_currency_code: holding.unofficial_currency_code
+  };
+};
+
+const processInvestmentTransaction = (transaction: any) => {
+  return {
+    id: transaction.investment_transaction_id,
+    account_id: transaction.account_id,
+    security_id: transaction.security_id,
+    amount: transaction.amount,
+    date: transaction.date,
+    name: transaction.name,
+    quantity: transaction.quantity,
+    fees: transaction.fees,
+    price: transaction.price,
+    type: transaction.type,
+    subtype: transaction.subtype,
+    iso_currency_code: transaction.iso_currency_code,
+    unofficial_currency_code: transaction.unofficial_currency_code
+  };
+};
+
+const processSecurity = (security: any) => {
+  return {
+    id: security.security_id,
+    name: security.name,
+    ticker_symbol: security.ticker_symbol,
+    type: security.type,
+    close_price: security.close_price,
+    close_price_as_of: security.close_price_as_of,
+    iso_currency_code: security.iso_currency_code,
+    unofficial_currency_code: security.unofficial_currency_code
+  };
+};
+
+// Portfolio analysis functions
+const analyzePortfolio = (holdings: any[], securities: any[]) => {
+  const portfolioValue = holdings.reduce((total, holding) => {
+    return total + (holding.institution_value || 0);
+  }, 0);
+
+  const securityMap = new Map(securities.map(sec => [sec.security_id, sec]));
+  
+  const assetAllocation = holdings.reduce((allocation, holding) => {
+    const security = securityMap.get(holding.security_id);
+    const assetType = security?.type || 'Unknown';
+    
+    if (!allocation[assetType]) {
+      allocation[assetType] = 0;
+    }
+    allocation[assetType] += (holding.institution_value as number) || 0;
+    
+    return allocation;
+  }, {} as Record<string, number>);
+
+  // Calculate percentages
+  const allocationPercentages = Object.entries(assetAllocation).map(([type, value]) => ({
+    type,
+    value: value as number,
+    percentage: portfolioValue > 0 ? ((value as number) / portfolioValue) * 100 : 0
+  }));
+
+  return {
+    totalValue: portfolioValue,
+    assetAllocation: allocationPercentages,
+    holdingCount: holdings.length,
+    securityCount: securities.length
+  };
+};
+
+const analyzeInvestmentActivity = (transactions: any[]) => {
+  const activityByType = transactions.reduce((activity, transaction) => {
+    const type = transaction.type || 'Unknown';
+    if (!activity[type]) {
+      activity[type] = { count: 0, totalAmount: 0 };
+    }
+    activity[type].count++;
+    activity[type].totalAmount += Math.abs(transaction.amount || 0);
+    return activity;
+  }, {} as Record<string, { count: number; totalAmount: number }>);
+
+  const totalTransactions = transactions.length;
+  const totalVolume = transactions.reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
+
+  return {
+    totalTransactions,
+    totalVolume,
+    activityByType,
+    averageTransactionSize: totalTransactions > 0 ? totalVolume / totalTransactions : 0
   };
 };
 
@@ -160,12 +258,25 @@ const handlePlaidError = (error: any, operation: string) => {
   };
 };
 
+// Export helper functions for testing and external use
+export {
+  processInvestmentHolding,
+  processInvestmentTransaction,
+  processSecurity,
+  analyzePortfolio,
+  analyzeInvestmentActivity,
+  handlePlaidError
+};
+
 export const setupPlaidRoutes = (app: any) => {
   // Create link token
   app.post('/plaid/create_link_token', async (req: any, res: any) => {
     try {
       // Check if this is a demo request
       const isDemoRequest = req.headers['x-demo-mode'] === 'true' || req.body.isDemo === true;
+      
+      // Check if this is an investment-specific request
+      const isInvestmentRequest = req.body.productType === 'investments';
       
       // Determine available products based on environment
       const isProduction = process.env.PLAID_ENV === 'production';
@@ -179,7 +290,7 @@ export const setupPlaidRoutes = (app: any) => {
         const request = {
           user: { client_user_id: 'demo-user-id' },
           client_name: 'Ask Linc (Demo)',
-          products: [Products.Transactions, Products.Balance],
+          products: [Products.Transactions], // Use only Transactions product
           country_codes: [CountryCode.Us],
           language: 'en',
         };
@@ -190,15 +301,32 @@ export const setupPlaidRoutes = (app: any) => {
         return;
       }
       
-      // For production (including limited), use only the basic products that are available
-      // Based on the error message, we only have access to Transactions and Balance
-      let products = [Products.Transactions, Products.Balance];
+      // For investment-specific requests, use Investments product
+      if (isInvestmentRequest) {
+        console.log('Creating investment-specific link token');
+        const request = {
+          user: { client_user_id: 'user-id' },
+          client_name: 'Ask Linc (Investments)',
+          products: [Products.Investments], // Use Investments product
+          country_codes: [CountryCode.Us],
+          language: 'en',
+        };
+
+        console.log('Creating investment link token');
+        const createTokenResponse = await plaidClient.linkTokenCreate(request);
+        res.json({ link_token: createTokenResponse.data.link_token });
+        return;
+      }
+      
+      // For regular requests, use Transactions product
+      // Transactions product will also provide balance information when fetching accounts
+      let products = [Products.Transactions];
       
       if (isProduction) {
-        console.log('Using production configuration with basic products (Transactions, Balance)');
-        console.log('Note: Enhanced products (Identity, Income, Statements) are not available in this Plaid account');
+        console.log('Using production configuration with Transactions product');
+        console.log('Note: Balance information will be available when fetching accounts');
       } else {
-        console.log('Using sandbox configuration with basic products (Transactions, Balance)');
+        console.log('Using sandbox configuration with Transactions product');
       }
 
       const request = {
@@ -830,19 +958,40 @@ export const setupPlaidRoutes = (app: any) => {
             end_date: new Date().toISOString().split('T')[0],
           });
 
+          // Process and analyze the data
+          const processedHoldings = holdingsResponse.data.holdings.map(processInvestmentHolding);
+          const processedSecurities = holdingsResponse.data.securities.map(processSecurity);
+          const processedTransactions = transactionsResponse.data.investment_transactions.map(processInvestmentTransaction);
+
+          // Generate portfolio analysis
+          const portfolioAnalysis = analyzePortfolio(processedHoldings, processedSecurities);
+          const activityAnalysis = analyzeInvestmentActivity(processedTransactions);
+
           allInvestments.push({
-            holdings: holdingsResponse.data.holdings,
-            securities: holdingsResponse.data.securities,
+            holdings: processedHoldings,
+            securities: processedSecurities,
             accounts: holdingsResponse.data.accounts,
-            investment_transactions: transactionsResponse.data.investment_transactions,
-            total_investment_transactions: transactionsResponse.data.total_investment_transactions
+            investment_transactions: processedTransactions,
+            total_investment_transactions: transactionsResponse.data.total_investment_transactions,
+            analysis: {
+              portfolio: portfolioAnalysis,
+              activity: activityAnalysis
+            }
           });
         } catch (error) {
           console.error(`Error fetching investments for token ${tokenRecord.id}:`, error);
         }
       }
 
-      res.json({ investments: allInvestments });
+      res.json({ 
+        investments: allInvestments,
+        summary: {
+          totalAccounts: allInvestments.length,
+          totalHoldings: allInvestments.reduce((sum, inv) => sum + inv.holdings.length, 0),
+          totalSecurities: allInvestments.reduce((sum, inv) => sum + inv.securities.length, 0),
+          totalTransactions: allInvestments.reduce((sum, inv) => sum + inv.investment_transactions.length, 0)
+        }
+      });
     } catch (error) {
       const errorResponse = handlePlaidError(error, 'get investments');
       res.status(500).json(errorResponse);
@@ -1117,18 +1266,34 @@ export const setupPlaidRoutes = (app: any) => {
             access_token: tokenRecord.token,
           });
           
+          // Process and analyze the data
+          const processedHoldings = holdingsResponse.data.holdings.map(processInvestmentHolding);
+          const processedSecurities = holdingsResponse.data.securities.map(processSecurity);
+          
+          // Generate portfolio analysis
+          const portfolioAnalysis = analyzePortfolio(processedHoldings, processedSecurities);
+          
           allHoldings.push({
-            holdings: holdingsResponse.data.holdings,
-            securities: holdingsResponse.data.securities,
+            holdings: processedHoldings,
+            securities: processedSecurities,
             accounts: holdingsResponse.data.accounts,
-            item: holdingsResponse.data.item
+            item: holdingsResponse.data.item,
+            analysis: portfolioAnalysis
           });
         } catch (error) {
           console.error(`Error fetching holdings for token ${tokenRecord.id}:`, error);
         }
       }
       
-      res.json({ holdings: allHoldings });
+      res.json({ 
+        holdings: allHoldings,
+        summary: {
+          totalAccounts: allHoldings.length,
+          totalHoldings: allHoldings.reduce((sum, h) => sum + h.holdings.length, 0),
+          totalSecurities: allHoldings.reduce((sum, h) => sum + h.securities.length, 0),
+          totalPortfolioValue: allHoldings.reduce((sum, h) => sum + (h.analysis?.totalValue || 0), 0)
+        }
+      });
     } catch (error) {
       const errorResponse = handlePlaidError(error, 'get investment holdings');
       res.status(500).json(errorResponse);
@@ -1153,19 +1318,44 @@ export const setupPlaidRoutes = (app: any) => {
             end_date: end_date || new Date().toISOString().split('T')[0],
           });
           
+          // Process and analyze the data
+          const processedTransactions = transactionsResponse.data.investment_transactions.map(processInvestmentTransaction);
+          const processedSecurities = transactionsResponse.data.securities.map(processSecurity);
+          
+          // Generate activity analysis
+          const activityAnalysis = analyzeInvestmentActivity(processedTransactions);
+          
           allTransactions.push({
-            investment_transactions: transactionsResponse.data.investment_transactions,
+            investment_transactions: processedTransactions,
             total_investment_transactions: transactionsResponse.data.total_investment_transactions,
             accounts: transactionsResponse.data.accounts,
-            securities: transactionsResponse.data.securities,
-            item: transactionsResponse.data.item
+            securities: processedSecurities,
+            item: transactionsResponse.data.item,
+            analysis: activityAnalysis
           });
         } catch (error) {
           console.error(`Error fetching investment transactions for token ${tokenRecord.id}:`, error);
         }
       }
       
-      res.json({ transactions: allTransactions });
+      // Sort transactions by date (newest first)
+      const sortedTransactions = allTransactions.flatMap(t => t.investment_transactions)
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, parseInt(count as string));
+      
+      res.json({ 
+        transactions: allTransactions,
+        sortedTransactions: sortedTransactions,
+        summary: {
+          totalAccounts: allTransactions.length,
+          totalTransactions: allTransactions.reduce((sum, t) => sum + t.investment_transactions.length, 0),
+          totalSecurities: allTransactions.reduce((sum, t) => sum + t.securities.length, 0),
+          dateRange: { 
+            start_date: start_date || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            end_date: end_date || new Date().toISOString().split('T')[0]
+          }
+        }
+      });
     } catch (error) {
       const errorResponse = handlePlaidError(error, 'get investment transactions');
       res.status(500).json(errorResponse);

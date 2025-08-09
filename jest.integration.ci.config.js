@@ -4,7 +4,8 @@ module.exports = {
   testMatch: [
     '**/__tests__/integration/dual-data-integration.test.ts',
     '**/__tests__/integration/enhanced-market-context-api.test.ts',
-    '**/__tests__/integration/basic-integration.test.ts'
+    '**/__tests__/integration/basic-integration.test.ts',
+    '**/__tests__/integration/enhanced-investment-workflow.test.ts'
   ],
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/integration/setup.ts'],
   testTimeout: 60000, // 60 seconds for integration tests

@@ -220,13 +220,29 @@ describe('Tier System', () => {
       });
     });
 
-    test('should have account sources for all tiers', () => {
-      const accountSources = Object.values(dataSourceRegistry).filter(s => s.category === 'account');
+    test('should have basic account sources for all tiers', () => {
+      const basicAccountSources = Object.values(dataSourceRegistry).filter(s => 
+        s.category === 'account' && 
+        ['account-balances', 'account-transactions', 'account-institutions'].includes(s.id)
+      );
       
-      accountSources.forEach(source => {
+      basicAccountSources.forEach(source => {
         expect(source.tiers).toContain(UserTier.STARTER);
         expect(source.tiers).toContain(UserTier.STANDARD);
         expect(source.tiers).toContain(UserTier.PREMIUM);
+      });
+    });
+
+    test('should have investment account sources for Standard+ tiers', () => {
+      const investmentAccountSources = Object.values(dataSourceRegistry).filter(s => 
+        s.category === 'account' && 
+        ['plaid-investments', 'plaid-investment-transactions'].includes(s.id)
+      );
+      
+      investmentAccountSources.forEach(source => {
+        expect(source.tiers).toContain(UserTier.STANDARD);
+        expect(source.tiers).toContain(UserTier.PREMIUM);
+        expect(source.tiers).not.toContain(UserTier.STARTER);
       });
     });
 
