@@ -233,16 +233,17 @@ describe('Tier System', () => {
       });
     });
 
-    test('should have investment account sources for Standard+ tiers', () => {
+    test('should have investment account sources for all tiers', () => {
       const investmentAccountSources = Object.values(dataSourceRegistry).filter(s => 
         s.category === 'account' && 
         ['plaid-investments', 'plaid-investment-transactions'].includes(s.id)
       );
       
       investmentAccountSources.forEach(source => {
+        // Plaid investment data should be available to ALL tiers
+        expect(source.tiers).toContain(UserTier.STARTER);
         expect(source.tiers).toContain(UserTier.STANDARD);
         expect(source.tiers).toContain(UserTier.PREMIUM);
-        expect(source.tiers).not.toContain(UserTier.STARTER);
       });
     });
 

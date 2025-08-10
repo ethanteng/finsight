@@ -1,5 +1,6 @@
 import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode } from 'plaid';
 import { PrismaClient } from '@prisma/client';
+import { enhanceProfileWithInvestmentData, enhanceProfileWithLiabilityData, enhanceProfileWithEnrichmentData } from './profile/enhancer';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
@@ -128,14 +129,26 @@ const processTransactionData = (transaction: any) => {
     pending: transaction.pending,
     merchant_name: transaction.merchant_name,
     payment_channel: transaction.payment_channel,
-    transaction_type: transaction.transaction_type
+    transaction_type: transaction.transaction_type,
+    // Enhanced transaction data fields
+    enriched_data: {
+      merchant_name: transaction.merchant_name,
+      website: transaction.website,
+      logo_url: transaction.logo_url,
+      primary_color: transaction.primary_color,
+      domain: transaction.domain,
+      category: transaction.category || [],
+      category_id: transaction.category_id,
+      brand_logo_url: transaction.brand_logo_url,
+      brand_name: transaction.brand_name
+    }
   };
 };
 
 // Enhanced investment data processing functions
 const processInvestmentHolding = (holding: any) => {
   return {
-    id: holding.account_id,
+    id: `${holding.account_id}_${holding.security_id}_${holding.quantity}_${holding.institution_value}`,
     account_id: holding.account_id,
     security_id: holding.security_id,
     institution_value: holding.institution_value,
@@ -150,7 +163,7 @@ const processInvestmentHolding = (holding: any) => {
 
 const processInvestmentTransaction = (transaction: any) => {
   return {
-    id: transaction.investment_transaction_id,
+    id: `${transaction.investment_transaction_id}_${transaction.account_id}_${transaction.security_id}_${transaction.date}`,
     account_id: transaction.account_id,
     security_id: transaction.security_id,
     amount: transaction.amount,
@@ -169,6 +182,7 @@ const processInvestmentTransaction = (transaction: any) => {
 const processSecurity = (security: any) => {
   return {
     id: security.security_id,
+    security_id: security.security_id,
     name: security.name,
     ticker_symbol: security.ticker_symbol,
     type: security.type,
@@ -340,15 +354,18 @@ export const setupPlaidRoutes = (app: any) => {
         return;
       }
       
-      // For regular requests, use Transactions product
-      // Transactions product will also provide balance information when fetching accounts
-      let products = [Products.Transactions];
+      // Note: The regular flow now includes both Transactions and Investments products
+      // This ensures all users get access to investment data without needing special requests
+      
+      // For regular requests, use both Transactions and Investments products
+      // This ensures users can access both transaction data and investment data
+      let products = [Products.Transactions, Products.Investments];
       
       if (isProduction) {
-        console.log('Using production configuration with Transactions product');
-        console.log('Note: Balance information will be available when fetching accounts');
+        console.log('Using production configuration with Transactions + Investments products');
+        console.log('Note: Users will have access to both transaction and investment data');
       } else {
-        console.log('Using sandbox configuration with Transactions product');
+        console.log('Using sandbox configuration with Transactions + Investments products');
       }
 
       const request = {
@@ -934,7 +951,47 @@ export const setupPlaidRoutes = (app: any) => {
               return processTransactionData(transaction);
             });
 
-          allTransactions.push(...processedTransactions);
+          // Automatically enrich transactions with merchant data
+          try {
+            const enrichResponse = await plaidClient.transactionsEnrich({
+              account_type: 'depository',
+              transactions: transactionsResponse.data.transactions.map((t: any) => ({
+                id: t.transaction_id,
+                description: t.name,
+                amount: t.amount,
+                direction: t.amount > 0 ? 'INFLOW' as any : 'OUTFLOW' as any,
+                iso_currency_code: t.iso_currency_code || 'USD'
+              }))
+            });
+
+            // Merge enriched data with processed transactions
+            const enrichedTransactions = processedTransactions.map((transaction, index) => {
+              const enrichedTransaction = enrichResponse.data.enriched_transactions[index];
+              if (enrichedTransaction) {
+                return {
+                  ...transaction,
+                  enriched_data: {
+                    merchant_name: (enrichedTransaction as any).merchant_name || transaction.merchant_name,
+                    website: (enrichedTransaction as any).website,
+                    logo_url: (enrichedTransaction as any).logo_url,
+                    primary_color: (enrichedTransaction as any).primary_color,
+                    domain: (enrichedTransaction as any).domain,
+                    category: (enrichedTransaction as any).category || transaction.category,
+                    category_id: (enrichedTransaction as any).category_id || (transaction as any).category_id,
+                    brand_logo_url: (enrichedTransaction as any).brand_logo_url,
+                    brand_name: (enrichedTransaction as any).brand_name
+                  }
+                };
+              }
+              return transaction;
+            });
+
+            allTransactions.push(...enrichedTransactions);
+          } catch (enrichError) {
+            console.warn(`Error enriching transactions for token ${tokenRecord.id}:`, enrichError);
+            // Continue with unenriched transactions if enrichment fails
+            allTransactions.push(...processedTransactions);
+          }
         } catch (error) {
           console.error(`Error fetching transactions for token ${tokenRecord.id}:`, error);
         }
@@ -958,9 +1015,74 @@ export const setupPlaidRoutes = (app: any) => {
     }
   });
 
-  // Get investment data (if available)
+  // Get comprehensive investment data (automatically combines holdings and transactions)
   app.get('/plaid/investments', async (req: any, res: any) => {
     try {
+      // Check if this is a demo request
+      const isDemo = req.headers['x-demo-mode'] === 'true';
+      
+      if (isDemo) {
+        // Return demo investment data
+        const demoData = {
+          portfolio: {
+            totalValue: 619951.34,
+            assetAllocation: [
+              { type: 'Unknown', value: 619951.34, percentage: 100.0 }
+            ],
+            holdingCount: 60,
+            securityCount: 26
+          },
+          holdings: [
+            {
+              id: 'demo_account_1_security_1_100_50000',
+              account_id: 'demo_account_1',
+              security_id: 'demo_security_1',
+              institution_value: 50000,
+              institution_price: 500.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 48000,
+              quantity: 100,
+              iso_currency_code: 'USD',
+              security_name: 'Apple Inc. (AAPL)',
+              security_type: 'equity',
+              ticker_symbol: 'AAPL'
+            },
+            {
+              id: 'demo_account_1_security_2_50_25000',
+              account_id: 'demo_account_1',
+              security_id: 'demo_security_2',
+              institution_value: 25000,
+              institution_price: 500.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 24000,
+              quantity: 50,
+              iso_currency_code: 'USD',
+              security_name: 'Microsoft Corporation (MSFT)',
+              security_type: 'equity',
+              ticker_symbol: 'MSFT'
+            }
+          ],
+          transactions: [
+            {
+              id: 'demo_transaction_1_demo_account_1_demo_security_1_2024-08-10',
+              account_id: 'demo_account_1',
+              security_id: 'demo_security_1',
+              amount: 50000,
+              date: '2024-08-10',
+              name: 'Demo Stock Purchase',
+              quantity: 100,
+              fees: 0,
+              price: 500.00,
+              type: 'buy',
+              subtype: 'purchase',
+              iso_currency_code: 'USD'
+            }
+          ]
+        };
+        
+        return res.json(demoData);
+      }
+
       const accessTokens = await getPrismaClient().accessToken.findMany({
         where: req.user?.id ? { userId: req.user.id } : {}
       });
@@ -985,12 +1107,21 @@ export const setupPlaidRoutes = (app: any) => {
           const processedSecurities = holdingsResponse.data.securities.map(processSecurity);
           const processedTransactions = transactionsResponse.data.investment_transactions.map(processInvestmentTransaction);
 
+          // Merge security information with holdings
+          const securitiesMap = new Map(processedSecurities.map(sec => [sec.security_id, sec]));
+          const enrichedHoldings = processedHoldings.map(holding => ({
+            ...holding,
+            security_name: securitiesMap.get(holding.security_id)?.name || 'Unknown Security',
+            security_type: securitiesMap.get(holding.security_id)?.type || 'Unknown Type',
+            ticker_symbol: securitiesMap.get(holding.security_id)?.ticker_symbol
+          }));
+
           // Generate portfolio analysis
-          const portfolioAnalysis = analyzePortfolio(processedHoldings, processedSecurities);
+          const portfolioAnalysis = analyzePortfolio(enrichedHoldings, processedSecurities);
           const activityAnalysis = analyzeInvestmentActivity(processedTransactions);
 
           allInvestments.push({
-            holdings: processedHoldings,
+            holdings: enrichedHoldings,
             securities: processedSecurities,
             accounts: holdingsResponse.data.accounts,
             investment_transactions: processedTransactions,
@@ -1005,14 +1136,18 @@ export const setupPlaidRoutes = (app: any) => {
         }
       }
 
-      res.json({ 
-        investments: allInvestments,
-        summary: {
-          totalAccounts: allInvestments.length,
-          totalHoldings: allInvestments.reduce((sum, inv) => sum + inv.holdings.length, 0),
-          totalSecurities: allInvestments.reduce((sum, inv) => sum + inv.securities.length, 0),
-          totalTransactions: allInvestments.reduce((sum, inv) => sum + inv.investment_transactions.length, 0)
-        }
+      // Combine all data into the format expected by the frontend
+      const combinedHoldings = allInvestments.flatMap(inv => inv.holdings);
+      const combinedSecurities = allInvestments.flatMap(inv => inv.securities);
+      const combinedTransactions = allInvestments.flatMap(inv => inv.investment_transactions);
+      
+      // Get the first portfolio analysis (or combine if multiple)
+      const portfolioAnalysis = allInvestments.length > 0 ? allInvestments[0].analysis.portfolio : null;
+      
+      res.json({
+        portfolio: portfolioAnalysis,
+        holdings: combinedHoldings,
+        transactions: combinedTransactions
       });
     } catch (error) {
       const errorResponse = handlePlaidError(error, 'get investments');
@@ -1292,16 +1427,30 @@ export const setupPlaidRoutes = (app: any) => {
           const processedHoldings = holdingsResponse.data.holdings.map(processInvestmentHolding);
           const processedSecurities = holdingsResponse.data.securities.map(processSecurity);
           
-          // Generate portfolio analysis
-          const portfolioAnalysis = analyzePortfolio(processedHoldings, processedSecurities);
-          
-          allHoldings.push({
-            holdings: processedHoldings,
-            securities: processedSecurities,
-            accounts: holdingsResponse.data.accounts,
-            item: holdingsResponse.data.item,
-            analysis: portfolioAnalysis
-          });
+                // Generate portfolio analysis
+      const portfolioAnalysis = analyzePortfolio(processedHoldings, processedSecurities);
+      
+      allHoldings.push({
+        holdings: processedHoldings,
+        securities: processedSecurities,
+        accounts: holdingsResponse.data.accounts,
+        item: holdingsResponse.data.item,
+        analysis: portfolioAnalysis
+      });
+      
+      // Enhance user profile with investment data (if user is authenticated)
+      if (req.user?.id) {
+        try {
+          await enhanceProfileWithInvestmentData(
+            req.user.id,
+            processedHoldings,
+            [] // No transactions in this endpoint
+          );
+        } catch (profileError) {
+          console.error('Error enhancing profile with investment data:', profileError);
+          // Don't fail the request if profile enhancement fails
+        }
+      }
         } catch (error) {
           console.error(`Error fetching holdings for token ${tokenRecord.id}:`, error);
         }
@@ -1344,17 +1493,31 @@ export const setupPlaidRoutes = (app: any) => {
           const processedTransactions = transactionsResponse.data.investment_transactions.map(processInvestmentTransaction);
           const processedSecurities = transactionsResponse.data.securities.map(processSecurity);
           
-          // Generate activity analysis
-          const activityAnalysis = analyzeInvestmentActivity(processedTransactions);
-          
-          allTransactions.push({
-            investment_transactions: processedTransactions,
-            total_investment_transactions: transactionsResponse.data.total_investment_transactions,
-            accounts: transactionsResponse.data.accounts,
-            securities: processedSecurities,
-            item: transactionsResponse.data.item,
-            analysis: activityAnalysis
-          });
+                // Generate activity analysis
+      const activityAnalysis = analyzeInvestmentActivity(processedTransactions);
+      
+      allTransactions.push({
+        investment_transactions: processedTransactions,
+        total_investment_transactions: transactionsResponse.data.total_investment_transactions,
+        accounts: transactionsResponse.data.accounts,
+        securities: processedSecurities,
+        item: transactionsResponse.data.item,
+        analysis: activityAnalysis
+      });
+      
+      // Enhance user profile with investment data (if user is authenticated)
+      if (req.user?.id) {
+        try {
+          await enhanceProfileWithInvestmentData(
+            req.user.id,
+            [], // No holdings in this endpoint
+            processedTransactions
+          );
+        } catch (profileError) {
+          console.error('Error enhancing profile with investment data:', profileError);
+          // Don't fail the request if profile enhancement fails
+        }
+      }
         } catch (error) {
           console.error(`Error fetching investment transactions for token ${tokenRecord.id}:`, error);
         }
@@ -1384,7 +1547,7 @@ export const setupPlaidRoutes = (app: any) => {
     }
   });
 
-  // Get liability information
+  // Get liability information (automatically available for all connected accounts)
   app.get('/plaid/liabilities', async (req: any, res: any) => {
     try {
       const accessTokens = await getPrismaClient().accessToken.findMany({
@@ -1404,6 +1567,19 @@ export const setupPlaidRoutes = (app: any) => {
             item: liabilitiesResponse.data.item,
             request_id: liabilitiesResponse.data.request_id
           });
+          
+          // Enhance user profile with liability data (if user is authenticated)
+          if (req.user?.id) {
+            try {
+              await enhanceProfileWithLiabilityData(
+                req.user.id,
+                liabilitiesResponse.data.accounts
+              );
+            } catch (profileError) {
+              console.error('Error enhancing profile with liability data:', profileError);
+              // Don't fail the request if profile enhancement fails
+            }
+          }
         } catch (error) {
           console.error(`Error fetching liabilities for token ${tokenRecord.id}:`, error);
         }
@@ -1416,7 +1592,97 @@ export const setupPlaidRoutes = (app: any) => {
     }
   });
 
-  // Enrich transactions with merchant data
+  // Get comprehensive investment overview (combines holdings and transactions)
+  app.get('/plaid/investments', async (req: any, res: any) => {
+    try {
+      const { start_date, end_date, count = 100 } = req.query;
+      const accessTokens = await getPrismaClient().accessToken.findMany({
+        where: req.user?.id ? { userId: req.user.id } : {}
+      });
+      
+      const allInvestments: any[] = [];
+      
+      for (const tokenRecord of accessTokens) {
+        try {
+          // Fetch both holdings and transactions
+          const [holdingsResponse, transactionsResponse] = await Promise.all([
+            plaidClient.investmentsHoldingsGet({
+              access_token: tokenRecord.token,
+            }),
+            plaidClient.investmentsTransactionsGet({
+              access_token: tokenRecord.token,
+              start_date: start_date || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              end_date: end_date || new Date().toISOString().split('T')[0],
+            })
+          ]);
+          
+          // Process the data
+          const processedHoldings = holdingsResponse.data.holdings.map(processInvestmentHolding);
+          const processedSecurities = holdingsResponse.data.securities.map(processSecurity);
+          const processedTransactions = transactionsResponse.data.investment_transactions.map(processInvestmentTransaction);
+          
+          // Generate comprehensive analysis
+          const portfolioAnalysis = analyzePortfolio(processedHoldings, processedSecurities);
+          const activityAnalysis = analyzeInvestmentActivity(processedTransactions);
+          
+          allInvestments.push({
+            holdings: processedHoldings,
+            securities: processedSecurities,
+            investment_transactions: processedTransactions,
+            total_investment_transactions: transactionsResponse.data.total_investment_transactions,
+            accounts: holdingsResponse.data.accounts,
+            item: holdingsResponse.data.item,
+            analysis: {
+              portfolio: portfolioAnalysis,
+              activity: activityAnalysis
+            }
+          });
+          
+          // Enhance user profile with comprehensive investment data (if user is authenticated)
+          if (req.user?.id) {
+            try {
+              await enhanceProfileWithInvestmentData(
+                req.user.id,
+                processedHoldings,
+                processedTransactions
+              );
+            } catch (profileError) {
+              console.error('Error enhancing profile with investment data:', profileError);
+              // Don't fail the request if profile enhancement fails
+            }
+          }
+        } catch (error) {
+          console.error(`Error fetching investments for token ${tokenRecord.id}:`, error);
+        }
+      }
+      
+      // Sort transactions by date (newest first)
+      const sortedTransactions = allInvestments.flatMap(t => t.investment_transactions)
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, parseInt(count as string));
+      
+      res.json({ 
+        investments: allInvestments,
+        sortedTransactions: sortedTransactions,
+        summary: {
+          totalAccounts: allInvestments.length,
+          totalHoldings: allInvestments.reduce((sum, inv) => sum + inv.holdings.length, 0),
+          totalSecurities: allInvestments.reduce((sum, inv) => sum + inv.securities.length, 0),
+          totalTransactions: allInvestments.reduce((sum, inv) => sum + inv.investment_transactions.length, 0),
+          totalPortfolioValue: allInvestments.reduce((sum, inv) => sum + (inv.analysis?.portfolio?.totalValue || 0), 0),
+          dateRange: { 
+            start_date: start_date || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            end_date: end_date || new Date().toISOString().split('T')[0]
+          }
+        }
+      });
+    } catch (error) {
+      const errorResponse = handlePlaidError(error, 'get comprehensive investments');
+      res.status(500).json(errorResponse);
+    }
+  });
+
+  // Enrich transactions with merchant data (now automatic in /transactions endpoint)
   app.post('/plaid/enrich/transactions', async (req: any, res: any) => {
     try {
       const { transaction_ids, account_type = 'depository' } = req.body;
@@ -1451,6 +1717,19 @@ export const setupPlaidRoutes = (app: any) => {
             enriched_transactions: enrichResponse.data.enriched_transactions,
             request_id: enrichResponse.data.request_id
           });
+          
+          // Enhance user profile with enrichment data (if user is authenticated)
+          if (req.user?.id) {
+            try {
+              await enhanceProfileWithEnrichmentData(
+                req.user.id,
+                enrichResponse.data.enriched_transactions
+              );
+            } catch (profileError) {
+              console.error('Error enhancing profile with enrichment data:', profileError);
+              // Don't fail the request if profile enhancement fails
+            }
+          }
         } catch (error) {
           console.error(`Error enriching transactions for token ${tokenRecord.id}:`, error);
         }
@@ -1459,6 +1738,88 @@ export const setupPlaidRoutes = (app: any) => {
       res.json({ enrichments: allEnrichments });
     } catch (error) {
       const errorResponse = handlePlaidError(error, 'enrich transactions');
+      res.status(500).json(errorResponse);
+    }
+  });
+
+  // Check access token products and scope
+  app.get('/plaid/check-token-scope', async (req: any, res: any) => {
+    try {
+      // Require user authentication
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      // Get access tokens for the user
+      const accessTokens = await getPrismaClient().accessToken.findMany({
+        where: { userId: user.id }
+      });
+
+      if (accessTokens.length === 0) {
+        return res.status(404).json({ error: 'No access tokens found for user' });
+      }
+
+      const tokenInfo = [];
+      
+      for (const tokenRecord of accessTokens) {
+        try {
+          // Get item information to check products
+          const itemResponse = await plaidClient.itemGet({
+            access_token: tokenRecord.token,
+          });
+
+          // Get accounts to see what types are available
+          const accountsResponse = await plaidClient.accountsGet({
+            access_token: tokenRecord.token,
+          });
+
+          const item = itemResponse.data.item;
+          const accounts = accountsResponse.data.accounts;
+
+          tokenInfo.push({
+            tokenId: tokenRecord.id,
+            itemId: item.item_id,
+            institutionId: item.institution_id,
+            products: item.available_products || [],
+            webhook: item.webhook,
+            accounts: accounts.map((acc: any) => ({
+              id: acc.account_id,
+              name: acc.name,
+              type: acc.type,
+              subtype: acc.subtype,
+              mask: acc.mask
+            })),
+            hasInvestments: accounts.some((acc: any) => 
+              acc.type === 'investment' || 
+              acc.subtype === 'investment' ||
+              acc.subtype === '401k' ||
+              acc.subtype === 'ira' ||
+              acc.subtype === 'brokerage'
+            )
+          });
+        } catch (error: any) {
+          console.error('Error checking token:', error);
+          tokenInfo.push({
+            tokenId: tokenRecord.id,
+            error: error.message || 'Unknown error',
+            hasInvestments: false
+          });
+        }
+      }
+
+      res.json({ 
+        message: 'Token scope information retrieved',
+        tokens: tokenInfo,
+        summary: {
+          totalTokens: tokenInfo.length,
+          tokensWithInvestments: tokenInfo.filter(t => t.hasInvestments).length,
+          tokensWithErrors: tokenInfo.filter(t => t.error).length
+        }
+      });
+
+    } catch (error) {
+      const errorResponse = handlePlaidError(error, 'check token scope');
       res.status(500).json(errorResponse);
     }
   });

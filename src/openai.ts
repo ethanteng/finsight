@@ -113,15 +113,61 @@ export async function askOpenAIWithEnhancedContext(
   // Get user-specific data
   let accounts: any[] = [];
   let transactions: any[] = [];
+  let investmentData: any = null;
 
   // For demo mode, use demo data instead of database data
   if (isDemo) {
-    console.log('OpenAI Enhanced: Using demo data for accounts and transactions');
+    console.log('OpenAI Enhanced: Using demo data for accounts, transactions, and investments');
     try {
       const { demoData } = await import('./demo-data');
       accounts = demoData.accounts || [];
       transactions = demoData.transactions || [];
-      console.log('OpenAI Enhanced: Demo data loaded - accounts:', accounts.length, 'transactions:', transactions.length);
+      
+      // Demo investment data
+      investmentData = {
+        portfolio: {
+          totalValue: 619951.34,
+          assetAllocation: [
+            { type: 'Stocks', value: 450000, percentage: 72.6 },
+            { type: 'Bonds', value: 120000, percentage: 19.4 },
+            { type: 'Cash', value: 49951.34, percentage: 8.0 }
+          ],
+          holdingCount: 60,
+          securityCount: 26
+        },
+        holdings: [
+          {
+            id: 'demo_account_1_security_1_100_50000',
+            account_id: 'demo_account_1',
+            security_id: 'demo_security_1',
+            institution_value: 50000,
+            institution_price: 500.00,
+            institution_price_as_of: new Date().toISOString(),
+            cost_basis: 48000,
+            quantity: 100,
+            iso_currency_code: 'USD',
+            security_name: 'Apple Inc. (AAPL)',
+            security_type: 'equity',
+            ticker_symbol: 'AAPL'
+          },
+          {
+            id: 'demo_account_1_security_2_200_75000',
+            account_id: 'demo_account_1',
+            security_id: 'demo_security_2',
+            institution_value: 75000,
+            institution_price: 375.00,
+            institution_price_as_of: new Date().toISOString(),
+            cost_basis: 70000,
+            quantity: 200,
+            iso_currency_code: 'USD',
+            security_name: 'Microsoft Corporation (MSFT)',
+            security_type: 'equity',
+            ticker_symbol: 'MSFT'
+          }
+        ]
+      };
+      
+      console.log('OpenAI Enhanced: Demo data loaded - accounts:', accounts.length, 'transactions:', transactions.length, 'investments:', investmentData ? 'available' : 'none');
     } catch (error) {
       console.error('OpenAI Enhanced: Error loading demo data:', error);
     }
@@ -195,7 +241,6 @@ export async function askOpenAIWithEnhancedContext(
                       name: account.name,
                       type: account.type,
                       subtype: account.subtype,
-                      mask: account.mask,
                       balance: {
                         available: balance?.balances?.available || account.balances?.available,
                         current: balance?.balances?.current || account.balances?.current,
@@ -253,13 +298,91 @@ export async function askOpenAIWithEnhancedContext(
                   console.error('OpenAI Enhanced: Error fetching transactions from token:', error);
                 }
               }
+              
+              // Fetch investment data from all tokens
+              for (const tokenRecord of accessTokens) {
+                try {
+                  console.log('OpenAI Enhanced: Fetching investment data from Plaid for token');
+                  
+                  // Fetch holdings (this also includes securities data)
+                  const holdingsResponse = await plaidClient.investmentsHoldingsGet({
+                    access_token: tokenRecord.token,
+                  });
+                  
+                  // Process and merge the data
+                  const processedHoldings = holdingsResponse.data.holdings.map((holding: any) => ({
+                    id: `${holding.account_id}_${holding.security_id}_${holding.quantity}_${holding.institution_value}`,
+                    account_id: holding.account_id,
+                    security_id: holding.security_id,
+                    institution_value: holding.institution_value,
+                    institution_price: holding.institution_price,
+                    institution_price_as_of: holding.institution_price_as_of,
+                    cost_basis: holding.cost_basis,
+                    quantity: holding.quantity,
+                    iso_currency_code: holding.iso_currency_code,
+                    unofficial_currency_code: holding.unofficial_currency_code
+                  }));
+                  
+                  const processedSecurities = holdingsResponse.data.securities.map((security: any) => ({
+                    id: security.security_id,
+                    security_id: security.security_id,
+                    name: security.name,
+                    ticker_symbol: security.ticker_symbol,
+                    type: security.type,
+                    close_price: security.close_price,
+                    close_price_as_of: security.close_price_as_of,
+                    iso_currency_code: security.iso_currency_code,
+                    unofficial_currency_code: security.unofficial_currency_code
+                  }));
+                  
+                  // Merge security information with holdings
+                  const securitiesMap = new Map(processedSecurities.map((sec: any) => [sec.security_id, sec]));
+                  const enrichedHoldings = processedHoldings.map(holding => ({
+                    ...holding,
+                    security_name: securitiesMap.get(holding.security_id)?.name || 'Unknown Security',
+                    security_type: securitiesMap.get(holding.security_id)?.type || 'Unknown',
+                    ticker_symbol: securitiesMap.get(holding.security_id)?.ticker_symbol || 'N/A'
+                  }));
+                  
+                  // Calculate portfolio summary
+                  const totalValue = enrichedHoldings.reduce((sum, holding) => sum + (holding.institution_value || 0), 0);
+                  const assetTypes = new Map<string, number>();
+                  
+                  enrichedHoldings.forEach(holding => {
+                    const type = holding.security_type || 'Unknown';
+                    assetTypes.set(type, (assetTypes.get(type) || 0) + (holding.institution_value || 0));
+                  });
+                  
+                  const assetAllocation = Array.from(assetTypes.entries()).map(([type, value]: [string, number]) => ({
+                    type,
+                    value,
+                    percentage: totalValue > 0 ? (value / totalValue) * 100 : 0
+                  }));
+                  
+                  investmentData = {
+                    portfolio: {
+                      totalValue,
+                      assetAllocation,
+                      holdingCount: enrichedHoldings.length,
+                      securityCount: processedSecurities.length
+                    },
+                    holdings: enrichedHoldings
+                  };
+                  
+                  console.log('OpenAI Enhanced: Fetched investment data - total value:', totalValue, 'holdings:', enrichedHoldings.length);
+                  break; // Only need to fetch from one token since investments are typically consolidated
+                } catch (error) {
+                  console.error('OpenAI Enhanced: Error fetching investment data from token:', error);
+                  // Continue to next token if this one fails
+                }
+              }
             }
           } catch (plaidError) {
             console.error('OpenAI Enhanced: Error fetching from Plaid directly:', plaidError);
           }
         }
         
-        console.log('OpenAI Enhanced: Final count -', accounts.length, 'accounts and', transactions.length, 'transactions for user', userId);
+        console.log('OpenAI Enhanced: Final count -', accounts.length, 'accounts,', transactions.length, 'transactions, and investment data:', investmentData ? 'available' : 'none', 'for user', userId);
       } else {
         console.log('OpenAI Enhanced: No userId provided, fetching all data (this should not happen for authenticated users)');
       }
@@ -446,10 +569,34 @@ export async function askOpenAIWithEnhancedContext(
     return `- ${name} (${category || 'Unknown'}): $${correctedAmount?.toFixed(2) || '0.00'} on ${transaction.date}`;
   }).join('\n');
 
+  // Create investment summary
+  let investmentSummary = '';
+  if (investmentData) {
+    const { portfolio, holdings } = investmentData;
+    
+    // Portfolio overview
+    investmentSummary += `Portfolio Overview:
+- Total Value: $${portfolio.totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+- Number of Holdings: ${portfolio.holdingCount}
+- Number of Securities: ${portfolio.securityCount}
+
+Asset Allocation:
+${portfolio.assetAllocation.map((allocation: any) => 
+  `- ${allocation.type}: $${allocation.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${allocation.percentage.toFixed(1)}%)`
+).join('\n')}
+
+Top Holdings:
+${holdings.slice(0, 10).map((holding: any) => 
+  `- ${holding.security_name || 'Unknown Security'} (${holding.ticker_symbol || 'N/A'}): ${holding.quantity} shares @ $${(holding.institution_price || 0).toFixed(2)} = $${(holding.institution_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+).join('\n')}`;
+  }
+
   console.log('OpenAI Enhanced: Account summary for AI:', accountSummary);
   console.log('OpenAI Enhanced: Transaction summary for AI:', transactionSummary);
+  console.log('OpenAI Enhanced: Investment summary for AI:', investmentSummary ? 'available' : 'none');
   console.log('OpenAI Enhanced: Number of accounts found:', tierContext.accounts.length);
   console.log('OpenAI Enhanced: Number of transactions found:', tierContext.transactions.length);
+  console.log('OpenAI Enhanced: Investment data available:', investmentData ? 'yes' : 'no');
   console.log('OpenAI Enhanced: User ID being used:', userId);
 
   // Get conversation history
@@ -462,10 +609,13 @@ export async function askOpenAIWithEnhancedContext(
   if (isDemo) {
     console.log('OpenAI Enhanced: Demo accounts:', tierContext.accounts.length);
     console.log('OpenAI Enhanced: Demo transactions:', tierContext.transactions.length);
+    console.log('OpenAI Enhanced: Demo investments:', investmentData ? 'available' : 'none');
     console.log('OpenAI Enhanced: Account summary preview:', accountSummary.substring(0, 500));
     console.log('OpenAI Enhanced: Transaction summary preview:', transactionSummary.substring(0, 500));
+    console.log('OpenAI Enhanced: Investment summary preview:', investmentSummary ? investmentSummary.substring(0, 500) : 'none');
     console.log('OpenAI Enhanced: Full account summary:', accountSummary);
     console.log('OpenAI Enhanced: Full transaction summary:', transactionSummary);
+    console.log('OpenAI Enhanced: Full investment summary:', investmentSummary);
   }
 
   // Get user profile if available
@@ -511,7 +661,7 @@ export async function askOpenAIWithEnhancedContext(
   }
 
   // Build enhanced system prompt with proactive market context
-  const systemPrompt = buildEnhancedSystemPrompt(tierContext, accountSummary, transactionSummary, marketContextSummary, searchContext, userProfile);
+  const systemPrompt = buildEnhancedSystemPrompt(tierContext, accountSummary, transactionSummary, marketContextSummary, searchContext, userProfile, investmentSummary);
 
   console.log('OpenAI Enhanced: System prompt length:', systemPrompt.length);
   console.log('OpenAI Enhanced: System prompt preview:', systemPrompt.substring(0, 500));
@@ -596,7 +746,8 @@ function buildEnhancedSystemPrompt(
   transactionSummary: string,
   marketContextSummary: string,
   searchContext?: string,
-  userProfile?: string
+  userProfile?: string,
+  investmentSummary?: string
 ): string {
   const { tierInfo, upgradeHints } = tierContext;
 
@@ -622,12 +773,23 @@ CRITICAL INSTRUCTIONS:
 
 IMPORTANT: You have access to the user's financial data and current market conditions based on their subscription tier. Use this data to provide personalized, accurate financial advice.
 
+${userProfile && userProfile.trim() ? `USER PROFILE:
+${userProfile}
+
+Use this profile information to provide more personalized and relevant financial advice.
+Consider the user's personal situation, family status, occupation, and financial goals when making recommendations.
+
+` : ''}
+
 USER'S FINANCIAL DATA:
 Accounts:
 ${accountSummary || 'No accounts found'}
 
 Recent Transactions:
 ${transactionSummary || 'No transactions found'}
+
+${investmentSummary ? `INVESTMENT DATA:
+${investmentSummary}` : 'No investment data available (upgrade to Standard tier)'}
 
 USER TIER: ${tierInfo.currentTier.toUpperCase()}
 

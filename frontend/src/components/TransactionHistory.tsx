@@ -20,6 +20,18 @@ interface Transaction {
     zip?: string;
     country?: string;
   };
+  // Enhanced transaction data
+  enriched_data?: {
+    merchant_name?: string;
+    website?: string;
+    logo_url?: string;
+    primary_color?: string;
+    domain?: string;
+    category?: string[];
+    category_id?: string;
+    brand_logo_url?: string;
+    brand_name?: string;
+  };
 }
 
 interface TransactionHistoryProps {
@@ -57,6 +69,7 @@ export default function TransactionHistory({ isDemo = false }: TransactionHistor
       const endDate = new Date().toISOString().split('T')[0];
       const startDate = new Date(Date.now() - parseInt(dateRange) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
+      // Use the existing transactions endpoint which already includes enriched data
       const res = await fetch(`${API_URL}/plaid/transactions?start_date=${startDate}&end_date=${endDate}&count=50`, {
         method: 'GET',
         headers,
@@ -193,20 +206,50 @@ export default function TransactionHistory({ isDemo = false }: TransactionHistor
                   
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-white truncate">
-                      {transaction.merchant_name || transaction.name}
+                      {transaction.enriched_data?.merchant_name || transaction.merchant_name || transaction.name}
                     </div>
                     <div className="text-sm text-gray-400">
                       {formatDate(transaction.date)}
                       {transaction.pending && (
                         <span className="ml-2 text-yellow-400">• Pending</span>
                       )}
-                      {transaction.category && transaction.category.length > 0 && (
+                      {/* Show enriched category data if available, fallback to basic category */}
+                      {transaction.enriched_data?.category && transaction.enriched_data.category.length > 0 ? (
+                        <span className="ml-2">• {transaction.enriched_data.category.join(', ')}</span>
+                      ) : transaction.category && transaction.category.length > 0 ? (
                         <span className="ml-2">• {transaction.category.join(', ')}</span>
-                      )}
+                      ) : null}
                     </div>
                     {transaction.location?.city && (
                       <div className="text-xs text-gray-500">
                         📍 {transaction.location.city}, {transaction.location.state}
+                      </div>
+                    )}
+                    {/* Show enhanced merchant information if available */}
+                    {transaction.enriched_data?.website && (
+                      <div className="text-xs text-blue-400">
+                        🌐 {transaction.enriched_data.website}
+                      </div>
+                    )}
+                    {transaction.enriched_data?.brand_name && (
+                      <div className="text-xs text-gray-400">
+                        🏷️ {transaction.enriched_data.brand_name}
+                      </div>
+                    )}
+                    {/* Show merchant logo if available */}
+                    {transaction.enriched_data?.logo_url && (
+                      <div className="mt-2 flex items-center space-x-2">
+                        <img 
+                          src={transaction.enriched_data.logo_url} 
+                          alt={`${transaction.enriched_data.merchant_name || transaction.name} logo`}
+                          className="w-4 h-4 rounded"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                        <span className="text-xs text-gray-500">
+                          Verified merchant
+                        </span>
                       </div>
                     )}
                   </div>

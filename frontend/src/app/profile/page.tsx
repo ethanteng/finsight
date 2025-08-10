@@ -3,6 +3,8 @@ import { useState, useEffect, useCallback } from 'react';
 import PlaidLinkButton from '../../components/PlaidLinkButton';
 import TransactionHistory from '../../components/TransactionHistory';
 import UserProfile from '../../components/UserProfile';
+import InvestmentPortfolio from '../../components/InvestmentPortfolio';
+import EnhancedTransactions from '../../components/EnhancedTransactions';
 
 interface Account {
   id: string;
@@ -16,10 +18,20 @@ interface Account {
   };
 }
 
-
+interface InvestmentData {
+  portfolio: {
+    total_value: number;
+    asset_allocation: Record<string, number>;
+    holding_count: number;
+    security_count: number;
+  };
+  holdings: any[];
+  transactions: any[];
+}
 
 export default function ProfilePage() {
   const [connectedAccounts, setConnectedAccounts] = useState<Account[]>([]);
+  const [investmentData, setInvestmentData] = useState<InvestmentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isDemo, setIsDemo] = useState(false);
@@ -80,7 +92,41 @@ export default function ProfilePage() {
     }
   }, [API_URL]);
 
+  // NEW: Load enhanced investment data
+  const loadInvestmentData = useCallback(async (demoMode: boolean) => {
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
 
+      if (demoMode) {
+        headers['x-demo-mode'] = 'true';
+      } else {
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+      }
+
+      // Use the new comprehensive investment endpoint
+      const res = await fetch(`${API_URL}/plaid/investments`, {
+        method: 'GET',
+        headers,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        console.log('Received enhanced investment data:', data);
+        setInvestmentData(data);
+      } else {
+        console.log('Failed to load investment data:', res.status);
+        // Don't set error here as this is optional data
+      }
+    } catch (err) {
+      console.error('Error loading investment data:', err);
+      // Don't set error here as this is optional data
+    }
+  }, [API_URL]);
 
   useEffect(() => {
     // Check if user came from demo page
@@ -102,11 +148,13 @@ export default function ProfilePage() {
       console.log('Demo mode detected, calling API functions');
       // Call the functions directly with the correct demo mode
       loadConnectedAccountsWithDemoMode(true);
+      loadInvestmentData(true);
     } else {
       console.log('Not demo mode, calling API functions');
       loadConnectedAccountsWithDemoMode(false);
+      loadInvestmentData(false);
     }
-  }, [loadConnectedAccountsWithDemoMode]);
+  }, [loadConnectedAccountsWithDemoMode, loadInvestmentData]);
 
   // Fetch user email when not in demo mode
   useEffect(() => {
@@ -265,23 +313,21 @@ export default function ProfilePage() {
         <div className="bg-gray-800 rounded-lg p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">Your Connected Accounts</h2>
           
-                            {/* Connect New Account */}
-                  <div className="mb-6">
-                    <PlaidLinkButton 
-                      onSuccess={() => {
-                        // Only reload accounts when an account is actually linked
-                        console.log('Account linked, reloading accounts');
-                        loadConnectedAccountsWithDemoMode(isDemo || false);
-                      }}
-                      isDemo={isDemo}
-                    />
-                  </div>
-
-
+          {/* Connect New Account */}
+          <div className="mb-6">
+            <PlaidLinkButton 
+              onSuccess={() => {
+                // Only reload accounts when an account is actually linked
+                console.log('Account linked, reloading accounts');
+                loadConnectedAccountsWithDemoMode(isDemo || false);
+                loadInvestmentData(isDemo || false);
+              }}
+              isDemo={isDemo}
+            />
+          </div>
 
           {/* Connected Accounts List */}
           <div>
-            
             {loading ? (
               <div className="text-gray-400">Loading accounts...</div>
             ) : error ? (
@@ -319,9 +365,21 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Transaction History */}
+        {/* NEW: Enhanced Investment Portfolio Section */}
+        {investmentData && (
+          <div className="mb-6">
+            <InvestmentPortfolio 
+              portfolio={investmentData.portfolio}
+              holdings={investmentData.holdings}
+              transactions={investmentData.transactions}
+              isDemo={isDemo}
+            />
+          </div>
+        )}
+
+        {/* Enhanced Transaction History */}
         <div className="mb-6">
-          <TransactionHistory isDemo={isDemo} />
+          <EnhancedTransactions isDemo={isDemo} />
         </div>
 
         {/* Account Settings */}
