@@ -1411,6 +1411,100 @@ export const setupPlaidRoutes = (app: any) => {
   // Get investment holdings for all connected accounts
   app.get('/plaid/investments/holdings', async (req: any, res: any) => {
     try {
+      // Check for demo mode
+      const isDemo = req.headers['x-demo-mode'] === 'true';
+      
+      if (isDemo) {
+        // Return demo investment holdings data
+        const demoData = {
+          holdings: [
+            {
+              holdings: [
+                {
+                  id: 'demo_account_1_security_1_100_50000',
+                  account_id: 'demo_account_1',
+                  security_id: 'demo_security_1',
+                  institution_value: 50000,
+                  institution_price: 500.00,
+                  institution_price_as_of: new Date().toISOString(),
+                  cost_basis: 48000,
+                  quantity: 100,
+                  iso_currency_code: 'USD',
+                  security_name: 'Apple Inc. (AAPL)',
+                  security_type: 'equity',
+                  ticker_symbol: 'AAPL'
+                },
+                {
+                  id: 'demo_account_1_security_2_50_25000',
+                  account_id: 'demo_account_1',
+                  security_id: 'demo_security_2',
+                  institution_value: 25000,
+                  institution_price: 500.00,
+                  institution_price_as_of: new Date().toISOString(),
+                  cost_basis: 24000,
+                  quantity: 50,
+                  iso_currency_code: 'USD',
+                  security_name: 'Microsoft Corporation (MSFT)',
+                  security_type: 'equity',
+                  ticker_symbol: 'MSFT'
+                }
+              ],
+              securities: [
+                {
+                  id: 'demo_security_1',
+                  security_id: 'demo_security_1',
+                  name: 'Apple Inc. (AAPL)',
+                  ticker_symbol: 'AAPL',
+                  type: 'equity',
+                  close_price: 500.00,
+                  close_price_as_of: new Date().toISOString(),
+                  iso_currency_code: 'USD'
+                },
+                {
+                  id: 'demo_security_2',
+                  security_id: 'demo_security_2',
+                  name: 'Microsoft Corporation (MSFT)',
+                  ticker_symbol: 'MSFT',
+                  type: 'equity',
+                  close_price: 500.00,
+                  close_price_as_of: new Date().toISOString(),
+                  iso_currency_code: 'USD'
+                }
+              ],
+              accounts: [
+                {
+                  account_id: 'demo_account_1',
+                  name: 'Demo Investment Account',
+                  mask: '1234',
+                  type: 'investment',
+                  subtype: 'brokerage'
+                }
+              ],
+              item: {
+                item_id: 'demo_item_1',
+                institution_id: 'demo_institution_1'
+              },
+              analysis: {
+                totalValue: 75000,
+                assetAllocation: [
+                  { type: 'Stocks', value: 75000, percentage: 100.0 }
+                ],
+                holdingCount: 2,
+                securityCount: 2
+              }
+            }
+          ],
+          summary: {
+            totalAccounts: 1,
+            totalHoldings: 2,
+            totalSecurities: 2,
+            totalPortfolioValue: 75000
+          }
+        };
+        
+        return res.json(demoData);
+      }
+
       const accessTokens = await getPrismaClient().accessToken.findMany({
         where: req.user?.id ? { userId: req.user.id } : {}
       });
@@ -1474,6 +1568,87 @@ export const setupPlaidRoutes = (app: any) => {
   // Get investment transactions
   app.get('/plaid/investments/transactions', async (req: any, res: any) => {
     try {
+      // Check for demo mode
+      const isDemo = req.headers['x-demo-mode'] === 'true';
+      
+      if (isDemo) {
+        // Return demo investment transactions data
+        const demoData = {
+          transactions: [
+            {
+              investment_transactions: [
+                {
+                  id: 'demo_transaction_1_demo_account_1_demo_security_1_2024-08-10',
+                  account_id: 'demo_account_1',
+                  security_id: 'demo_security_1',
+                  amount: 50000,
+                  date: '2024-08-10',
+                  name: 'Demo Stock Purchase',
+                  quantity: 100,
+                  fees: 0,
+                  price: 500.00,
+                  type: 'buy',
+                  subtype: 'purchase',
+                  iso_currency_code: 'USD'
+                },
+                {
+                  id: 'demo_transaction_2_demo_account_1_demo_security_2_2024-08-15',
+                  account_id: 'demo_account_1',
+                  security_id: 'demo_security_2',
+                  amount: 25000,
+                  date: '2024-08-15',
+                  name: 'Demo Stock Purchase',
+                  quantity: 50,
+                  fees: 0,
+                  price: 500.00,
+                  type: 'buy',
+                  subtype: 'purchase',
+                  iso_currency_code: 'USD'
+                }
+              ],
+              total_investment_transactions: 2,
+              accounts: [
+                {
+                  account_id: 'demo_account_1',
+                  name: 'Demo Investment Account',
+                  mask: '1234',
+                  type: 'investment',
+                  subtype: 'brokerage'
+                }
+              ],
+              securities: [
+                {
+                  id: 'demo_security_1',
+                  security_id: 'demo_security_1',
+                  name: 'Apple Inc. (AAPL)',
+                  ticker_symbol: 'AAPL',
+                  type: 'equity'
+                },
+                {
+                  id: 'demo_security_2',
+                  security_id: 'demo_security_2',
+                  name: 'Microsoft Corporation (MSFT)',
+                  ticker_symbol: 'MSFT',
+                  type: 'equity'
+                }
+              ],
+              item: {
+                item_id: 'demo_item_1',
+                institution_id: 'demo_institution_1'
+              },
+              analysis: {
+                totalTransactions: 2,
+                totalAmount: 75000,
+                transactionTypes: { buy: 2 },
+                averageAmount: 37500
+              }
+            }
+          ]
+        };
+        
+        return res.json(demoData);
+      }
+
       const { start_date, end_date, count = 100 } = req.query;
       const accessTokens = await getPrismaClient().accessToken.findMany({
         where: req.user?.id ? { userId: req.user.id } : {}
@@ -1550,6 +1725,55 @@ export const setupPlaidRoutes = (app: any) => {
   // Get liability information (automatically available for all connected accounts)
   app.get('/plaid/liabilities', async (req: any, res: any) => {
     try {
+      // Check for demo mode
+      const isDemo = req.headers['x-demo-mode'] === 'true';
+      
+      if (isDemo) {
+        // Return demo liability data
+        const demoData = {
+          liabilities: [
+            {
+              accounts: [
+                {
+                  account_id: 'demo_mortgage_1',
+                  account_number: '****1234',
+                  account_type: 'mortgage',
+                  account_subtype: 'mortgage',
+                  account_name: 'Wells Fargo Mortgage',
+                  account_mask: '1234',
+                  current_balance: 450000,
+                  available_balance: 450000,
+                  iso_currency_code: 'USD',
+                  unofficial_currency_code: null,
+                  liability_type: 'mortgage',
+                  apr: [4.25],
+                  last_payment_amount: 2500,
+                  last_payment_date: '2025-07-01',
+                  next_payment_due_date: '2025-08-01',
+                  next_monthly_payment: 2500,
+                  last_statement_balance: 450000,
+                  minimum_payment_amount: 2500
+                }
+              ],
+              item: {
+                item_id: 'demo_item_1',
+                institution_id: 'demo_institution_1',
+                webhook: null,
+                error: null,
+                available_products: ['liabilities'],
+                billed_products: ['liabilities'],
+                products: ['liabilities'],
+                update_type: 'background',
+                consent_expiration_time: null
+              },
+              request_id: 'demo_request_1'
+            }
+          ]
+        };
+        
+        return res.json(demoData);
+      }
+
       const accessTokens = await getPrismaClient().accessToken.findMany({
         where: req.user?.id ? { userId: req.user.id } : {}
       });

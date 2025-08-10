@@ -308,6 +308,7 @@ This document provides a comprehensive overview of what has been implemented so 
 3. **✅ ENHANCED TESTING**: Comprehensive test coverage for all new Plaid endpoints
 4. **✅ DEVELOPMENT SCRIPTS**: Easy mode-specific development commands
 5. **✅ INVESTMENT DATA GPT CONTEXT**: **NEW MAJOR MILESTONE**: Investment data now included in GPT system prompts for personalized AI advice
+6. **✅ TRANSACTION TIER RESTRICTION FIX**: **FIXED**: Enhanced transaction data now available to Standard+ users (was incorrectly restricted to Premium only)
 
 ### **Current Limitations**
 1. **Transaction Enrichment**: The current implementation has a limitation where it needs full transaction data for enrichment, but only receives IDs
