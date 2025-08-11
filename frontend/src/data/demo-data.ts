@@ -14,6 +14,18 @@ export interface DemoTransaction {
   category: string;
   date: string;
   description: string;
+  // Enhanced transaction data
+  enriched_data?: {
+    merchant_name?: string;
+    website?: string;
+    logo_url?: string;
+    primary_color?: string;
+    domain?: string;
+    category?: string[];
+    category_id?: string;
+    brand_logo_url?: string;
+    brand_name?: string;
+  };
 }
 
 export interface DemoInvestment {
@@ -135,6 +147,31 @@ export const demoData = {
       type: "savings" as const,
       institution: "Marcus by Goldman Sachs",
       lastUpdated: "2025-08-11T10:30:00Z"
+    },
+    // Additional investment accounts to reach 60 holdings
+    {
+      id: "brokerage_1",
+      name: "Fidelity Individual Brokerage",
+      balance: 125000.00,
+      type: "investment" as const,
+      institution: "Fidelity",
+      lastUpdated: "2025-08-11T10:30:00Z"
+    },
+    {
+      id: "hsa_1",
+      name: "Health Savings Account",
+      balance: 18500.00,
+      type: "investment" as const,
+      institution: "Fidelity",
+      lastUpdated: "2025-08-11T10:30:00Z"
+    },
+    {
+      id: "529_1",
+      name: "College Savings 529 Plan",
+      balance: 32000.00,
+      type: "investment" as const,
+      institution: "Vanguard",
+      lastUpdated: "2025-08-11T10:30:00Z"
     }
   ],
 
@@ -162,7 +199,18 @@ export const demoData = {
       amount: -120.00,
       category: "utilities",
       date: "2025-07-05",
-      description: "Electric Bill"
+      description: "Electric Bill",
+      enriched_data: {
+        merchant_name: "Austin Energy",
+        website: "austinenergy.com",
+        logo_url: "https://logo.clearbit.com/austinenergy.com",
+        primary_color: "#0066CC",
+        domain: "austinenergy.com",
+        category: ["utilities", "electric", "government"],
+        category_id: "18000000",
+        brand_logo_url: "https://logo.clearbit.com/austinenergy.com",
+        brand_name: "Austin Energy"
+      }
     },
     {
       id: "t4",
@@ -170,7 +218,18 @@ export const demoData = {
       amount: -85.00,
       category: "insurance",
       date: "2025-07-10",
-      description: "Car Insurance"
+      description: "Car Insurance",
+      enriched_data: {
+        merchant_name: "State Farm",
+        website: "statefarm.com",
+        logo_url: "https://logo.clearbit.com/statefarm.com",
+        primary_color: "#E31837",
+        domain: "statefarm.com",
+        category: ["insurance", "auto", "financial"],
+        category_id: "22000000",
+        brand_logo_url: "https://logo.clearbit.com/statefarm.com",
+        brand_name: "State Farm"
+      }
     },
     {
       id: "t5",
@@ -178,7 +237,18 @@ export const demoData = {
       amount: -450.00,
       category: "groceries",
       date: "2025-07-12",
-      description: "Whole Foods"
+      description: "Whole Foods",
+      enriched_data: {
+        merchant_name: "Whole Foods Market",
+        website: "wholefoodsmarket.com",
+        logo_url: "https://logo.clearbit.com/wholefoodsmarket.com",
+        primary_color: "#2E7D32",
+        domain: "wholefoodsmarket.com",
+        category: ["food", "groceries", "organic"],
+        category_id: "13000000",
+        brand_logo_url: "https://logo.clearbit.com/wholefoodsmarket.com",
+        brand_name: "Whole Foods Market"
+      }
     },
     {
       id: "t6",
@@ -341,6 +411,127 @@ export const demoData = {
       category: "dividend",
       date: "2025-07-05",
       description: "VTI Dividend Reinvestment"
+    },
+    // Additional recent transactions to show more activity
+    {
+      id: "t26",
+      accountId: "checking_1",
+      amount: -75.00,
+      category: "gas",
+      date: "2025-07-28",
+      description: "Shell Gas Station"
+    },
+    {
+      id: "t27",
+      accountId: "checking_1",
+      amount: -120.00,
+      category: "dining",
+      date: "2025-07-27",
+      description: "Restaurant Dinner"
+    },
+    {
+      id: "t28",
+      accountId: "checking_1",
+      amount: -200.00,
+      category: "shopping",
+      date: "2025-07-26",
+      description: "Target Shopping"
+    },
+    {
+      id: "t29",
+      accountId: "checking_1",
+      amount: -85.00,
+      category: "insurance",
+      date: "2025-07-25",
+      description: "Home Insurance"
+    },
+    {
+      id: "t30",
+      accountId: "checking_1",
+      amount: -150.00,
+      category: "entertainment",
+      date: "2025-07-24",
+      description: "Weekend Activities"
+    },
+    {
+      id: "t31",
+      accountId: "checking_1",
+      amount: -95.00,
+      category: "shopping",
+      date: "2025-07-23",
+      description: "CVS Pharmacy"
+    },
+    {
+      id: "t32",
+      accountId: "checking_1",
+      amount: -180.00,
+      category: "groceries",
+      date: "2025-07-22",
+      description: "H-E-B Groceries"
+    },
+    {
+      id: "t33",
+      accountId: "checking_1",
+      amount: -60.00,
+      category: "gas",
+      date: "2025-07-21",
+      description: "Shell Gas Station"
+    },
+    {
+      id: "t34",
+      accountId: "checking_1",
+      amount: -110.00,
+      category: "dining",
+      date: "2025-07-20",
+      description: "Coffee & Breakfast"
+    },
+    {
+      id: "t35",
+      accountId: "checking_1",
+      amount: -250.00,
+      category: "shopping",
+      date: "2025-07-19",
+      description: "Home Depot"
+    },
+    {
+      id: "t36",
+      accountId: "checking_1",
+      amount: -90.00,
+      category: "dining",
+      date: "2025-07-18",
+      description: "Lunch with Colleagues"
+    },
+    {
+      id: "t37",
+      accountId: "checking_1",
+      amount: -75.00,
+      category: "gas",
+      date: "2025-07-17",
+      description: "Costco Gas"
+    },
+    {
+      id: "t38",
+      accountId: "checking_1",
+      amount: -120.00,
+      category: "utilities",
+      date: "2025-07-16",
+      description: "Water Bill"
+    },
+    {
+      id: "t39",
+      accountId: "checking_1",
+      amount: -200.00,
+      category: "shopping",
+      date: "2025-07-14",
+      description: "Clothing Shopping"
+    },
+    {
+      id: "t40",
+      accountId: "checking_1",
+      amount: -85.00,
+      category: "insurance",
+      date: "2025-07-13",
+      description: "Car Insurance"
     },
 
     // Historical transactions (last 6 months)
@@ -771,12 +962,12 @@ export const demoData = {
     }
   ],
 
-  // Investment portfolio data - now with realistic math
+  // Investment portfolio data - now with realistic math and more holdings
   investments: {
     "401k_1": [
       { 
         symbol: "VTSAX", 
-        name: "Vanguard Total Stock Market", 
+        name: "Vanguard Total Stock Market Index Fund", 
         shares: 1097.45, 
         price: 142.80, 
         value: 156780.45, 
@@ -787,7 +978,7 @@ export const demoData = {
       },
       { 
         symbol: "VTIAX", 
-        name: "Vanguard Total International", 
+        name: "Vanguard Total International Stock Index Fund", 
         shares: 447.89, 
         price: 35.00, 
         value: 15678.05, 
@@ -798,7 +989,7 @@ export const demoData = {
       },
       { 
         symbol: "VBTLX", 
-        name: "Vanguard Total Bond Market", 
+        name: "Vanguard Total Bond Market Index Fund", 
         shares: 1567.80, 
         price: 10.00, 
         value: 15678.00, 
@@ -830,6 +1021,188 @@ export const demoData = {
         change1d: -0.15,
         change1m: 0.90,
         change1y: 11.80
+      }
+    ],
+    "brokerage_1": [
+      { 
+        symbol: "AAPL", 
+        name: "Apple Inc.", 
+        shares: 45.67, 
+        price: 185.50, 
+        value: 8471.85, 
+        allocation: 0.15,
+        change1d: 1.25,
+        change1m: 5.20,
+        change1y: 28.50
+      },
+      { 
+        symbol: "MSFT", 
+        name: "Microsoft Corporation", 
+        shares: 32.45, 
+        price: 420.80, 
+        value: 13655.36, 
+        allocation: 0.25,
+        change1d: 0.85,
+        change1m: 3.10,
+        change1y: 22.40
+      },
+      { 
+        symbol: "GOOGL", 
+        name: "Alphabet Inc.", 
+        shares: 28.90, 
+        price: 175.20, 
+        value: 5063.28, 
+        allocation: 0.10,
+        change1d: -0.45,
+        change1m: 1.80,
+        change1y: 15.60
+      },
+      { 
+        symbol: "AMZN", 
+        name: "Amazon.com Inc.", 
+        shares: 35.67, 
+        price: 185.40, 
+        value: 6613.28, 
+        allocation: 0.12,
+        change1d: 0.95,
+        change1m: 4.20,
+        change1y: 18.90
+      },
+      { 
+        symbol: "TSLA", 
+        name: "Tesla Inc.", 
+        shares: 42.34, 
+        price: 245.60, 
+        value: 10398.70, 
+        allocation: 0.18,
+        change1d: -1.20,
+        change1m: -2.10,
+        change1y: 12.40
+      },
+      { 
+        symbol: "NVDA", 
+        name: "NVIDIA Corporation", 
+        shares: 15.78, 
+        price: 890.50, 
+        value: 14052.09, 
+        allocation: 0.25,
+        change1d: 2.10,
+        change1m: 8.50,
+        change1y: 45.20
+      },
+      { 
+        symbol: "BRK.B", 
+        name: "Berkshire Hathaway Inc.", 
+        shares: 18.90, 
+        price: 365.40, 
+        value: 6906.06, 
+        allocation: 0.12,
+        change1d: 0.65,
+        change1m: 2.80,
+        change1y: 16.80
+      },
+      { 
+        symbol: "JPM", 
+        name: "JPMorgan Chase & Co.", 
+        shares: 67.45, 
+        price: 198.50, 
+        value: 13389.53, 
+        allocation: 0.23,
+        change1d: 0.45,
+        change1m: 1.90,
+        change1y: 12.60
+      },
+      { 
+        symbol: "JNJ", 
+        name: "Johnson & Johnson", 
+        shares: 89.12, 
+        price: 165.80, 
+        value: 14776.50, 
+        allocation: 0.25,
+        change1d: 0.25,
+        change1m: 1.20,
+        change1y: 8.90
+      },
+      { 
+        symbol: "PG", 
+        name: "Procter & Gamble Co.", 
+        shares: 76.34, 
+        price: 145.60, 
+        value: 11114.62, 
+        allocation: 0.19,
+        change1d: 0.35,
+        change1m: 1.50,
+        change1y: 9.80
+      }
+    ],
+    "hsa_1": [
+      { 
+        symbol: "VTSAX", 
+        name: "Vanguard Total Stock Market Index Fund", 
+        shares: 89.45, 
+        price: 142.80, 
+        value: 12773.46, 
+        allocation: 0.7,
+        change1d: 0.85,
+        change1m: 2.45,
+        change1y: 18.90
+      },
+      { 
+        symbol: "VTIAX", 
+        name: "Vanguard Total International Stock Index Fund", 
+        shares: 36.78, 
+        price: 35.00, 
+        value: 1287.30, 
+        allocation: 0.2,
+        change1d: -0.25,
+        change1m: 1.20,
+        change1y: 12.45
+      },
+      { 
+        symbol: "VBTLX", 
+        name: "Vanguard Total Bond Market Index Fund", 
+        shares: 128.90, 
+        price: 10.00, 
+        value: 1289.00, 
+        allocation: 0.1,
+        change1d: 0.05,
+        change1m: 0.30,
+        change1y: 2.10
+      }
+    ],
+    "529_1": [
+      { 
+        symbol: "VTSAX", 
+        name: "Vanguard Total Stock Market Index Fund", 
+        shares: 156.78, 
+        price: 142.80, 
+        value: 22387.58, 
+        allocation: 0.6,
+        change1d: 0.85,
+        change1m: 2.45,
+        change1y: 18.90
+      },
+      { 
+        symbol: "VTIAX", 
+        name: "Vanguard Total International Stock Index Fund", 
+        shares: 67.45, 
+        price: 35.00, 
+        value: 2360.75, 
+        allocation: 0.2,
+        change1d: -0.25,
+        change1m: 1.20,
+        change1y: 12.45
+      },
+      { 
+        symbol: "VBTLX", 
+        name: "Vanguard Total Bond Market Index Fund", 
+        shares: 225.67, 
+        price: 10.00, 
+        value: 2256.70, 
+        allocation: 0.2,
+        change1d: 0.05,
+        change1m: 0.30,
+        change1y: 2.10
       }
     ]
   },

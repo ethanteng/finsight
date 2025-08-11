@@ -191,8 +191,9 @@ export default function DemoPage() {
                 <h3 className="text-lg font-semibold text-blue-100">Demo Mode Active</h3>
               </div>
               <p className="text-blue-200 text-sm mb-3">
-                You're exploring Linc with realistic demo data. 
-                All features work normally, but no real data is stored.
+                You're exploring Linc with realistic demo data including 60 investment holdings, 
+                20+ transactions, and enhanced merchant data. All features work normally, 
+                but no real data is stored.
               </p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                 <div className="bg-blue-800 rounded p-2">
@@ -204,12 +205,30 @@ export default function DemoPage() {
                   <div className="text-white font-medium">$1,247</div>
                 </div>
                 <div className="bg-blue-800 rounded p-2">
-                  <div className="text-blue-300">Net Worth</div>
-                  <div className="text-white font-medium">$312,450</div>
+                  <div className="text-blue-300">Investment Portfolio</div>
+                  <div className="text-white font-medium">$421,701</div>
                 </div>
+                <div className="bg-blue-800 rounded p-2">
+                  <div className="text-blue-300">Total Holdings</div>
+                  <div className="text-white font-medium">60</div>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                 <div className="bg-blue-800 rounded p-2">
                   <div className="text-blue-300">Emergency Fund</div>
                   <div className="text-white font-medium">$28,450</div>
+                </div>
+                <div className="bg-blue-800 rounded p-2">
+                  <div className="text-blue-300">Total Assets</div>
+                  <div className="text-white font-medium">$1,247,450</div>
+                </div>
+                <div className="bg-blue-800 rounded p-2">
+                  <div className="text-blue-300">Net Worth</div>
+                  <div className="text-white font-medium">$1,247,450</div>
+                </div>
+                <div className="bg-blue-800 rounded p-2">
+                  <div className="text-blue-300">Accounts</div>
+                  <div className="text-white font-medium">10</div>
                 </div>
               </div>
             </div>

@@ -619,6 +619,58 @@ export const setupPlaidRoutes = (app: any) => {
             securities: [],
             holdings: [],
             income_verification: null
+          },
+          // Additional investment accounts to reach 60 holdings
+          {
+            id: "brokerage_1",
+            name: "Fidelity Individual Brokerage",
+            type: "investment",
+            subtype: "brokerage",
+            mask: "3333",
+            balance: {
+              available: 125000.00,
+              current: 125000.00,
+              limit: null,
+              iso_currency_code: "USD",
+              unofficial_currency_code: null
+            },
+            securities: [],
+            holdings: [],
+            income_verification: null
+          },
+          {
+            id: "hsa_1",
+            name: "Health Savings Account",
+            type: "investment",
+            subtype: "hsa",
+            mask: "4444",
+            balance: {
+              available: 18500.00,
+              current: 18500.00,
+              limit: null,
+              iso_currency_code: "USD",
+              unofficial_currency_code: null
+            },
+            securities: [],
+            holdings: [],
+            income_verification: null
+          },
+          {
+            id: "529_1",
+            name: "College Savings 529 Plan",
+            type: "investment",
+            subtype: "529",
+            mask: "5555",
+            balance: {
+              available: 32000.00,
+              current: 32000.00,
+              limit: null,
+              iso_currency_code: "USD",
+              unofficial_currency_code: null
+            },
+            securities: [],
+            holdings: [],
+            income_verification: null
           }
         ];
 
@@ -711,6 +763,17 @@ export const setupPlaidRoutes = (app: any) => {
               city: "Austin",
               state: "TX",
               country: "US"
+            },
+            enriched_data: {
+              merchant_name: "Tech Corp",
+              website: "techcorp.com",
+              logo_url: "https://logo.clearbit.com/techcorp.com",
+              primary_color: "#4CAF50",
+              domain: "techcorp.com",
+              category: ["income", "salary", "technology"],
+              category_id: "20000000",
+              brand_logo_url: "https://logo.clearbit.com/techcorp.com",
+              brand_name: "Tech Corp"
             }
           },
           {
@@ -728,6 +791,17 @@ export const setupPlaidRoutes = (app: any) => {
               city: "San Francisco",
               state: "CA",
               country: "US"
+            },
+            enriched_data: {
+              merchant_name: "Wells Fargo",
+              website: "wellsfargo.com",
+              logo_url: "https://logo.clearbit.com/wellsfargo.com",
+              primary_color: "#333333",
+              domain: "wellsfargo.com",
+              category: ["housing", "mortgage", "financial"],
+              category_id: "16000000",
+              brand_logo_url: "https://logo.clearbit.com/wellsfargo.com",
+              brand_name: "Wells Fargo"
             }
           },
           {
@@ -745,6 +819,17 @@ export const setupPlaidRoutes = (app: any) => {
               city: "Austin",
               state: "TX",
               country: "US"
+            },
+            enriched_data: {
+              merchant_name: "Austin Energy",
+              website: "austinenergy.com",
+              logo_url: "https://logo.clearbit.com/austinenergy.com",
+              primary_color: "#0066CC",
+              domain: "austinenergy.com",
+              category: ["utilities", "electric", "government"],
+              category_id: "18000000",
+              brand_logo_url: "https://logo.clearbit.com/austinenergy.com",
+              brand_name: "Austin Energy"
             }
           },
           {
@@ -762,6 +847,17 @@ export const setupPlaidRoutes = (app: any) => {
               city: "Bloomington",
               state: "IL",
               country: "US"
+            },
+            enriched_data: {
+              merchant_name: "State Farm",
+              website: "statefarm.com",
+              logo_url: "https://logo.clearbit.com/statefarm.com",
+              primary_color: "#E31837",
+              domain: "statefarm.com",
+              category: ["insurance", "auto", "financial"],
+              category_id: "22000000",
+              brand_logo_url: "https://logo.clearbit.com/statefarm.com",
+              brand_name: "State Farm"
             }
           },
           {
@@ -779,6 +875,17 @@ export const setupPlaidRoutes = (app: any) => {
               city: "Austin",
               state: "TX",
               country: "US"
+            },
+            enriched_data: {
+              merchant_name: "Whole Foods Market",
+              website: "wholefoodsmarket.com",
+              logo_url: "https://logo.clearbit.com/wholefoodsmarket.com",
+              primary_color: "#2E7D32",
+              domain: "wholefoodsmarket.com",
+              category: ["food", "groceries", "organic"],
+              category_id: "13000000",
+              brand_logo_url: "https://logo.clearbit.com/wholefoodsmarket.com",
+              brand_name: "Whole Foods Market"
             }
           },
           {
@@ -863,6 +970,188 @@ export const setupPlaidRoutes = (app: any) => {
             location: {
               city: "Seattle",
               state: "WA",
+              country: "US"
+            },
+            enriched_data: {
+              merchant_name: "Amazon",
+              website: "amazon.com",
+              logo_url: "https://logo.clearbit.com/amazon.com",
+              primary_color: "#FF9900",
+              domain: "amazon.com",
+              category: ["shopping", "online", "retail"],
+              category_id: "19000000",
+              brand_logo_url: "https://logo.clearbit.com/amazon.com",
+              brand_name: "Amazon"
+            }
+          },
+          // Additional recent transactions to show more activity
+          {
+            id: "t11",
+            account_id: "checking_1",
+            amount: -75.00,
+            date: "2025-07-24",
+            name: "Exxon Gas Station",
+            merchant_name: "Exxon",
+            category: ["transportation", "gas"],
+            category_id: "14000000",
+            pending: false,
+            payment_channel: "in store",
+            location: {
+              city: "Austin",
+              state: "TX",
+              country: "US"
+            }
+          },
+          {
+            id: "t12",
+            account_id: "checking_1",
+            amount: -200.00,
+            date: "2025-07-26",
+            name: "Date Night Restaurant",
+            merchant_name: "Various Restaurants",
+            category: ["food", "dining"],
+            category_id: "13000000",
+            pending: false,
+            payment_channel: "in store",
+            location: {
+              city: "Austin",
+              state: "TX",
+              country: "US"
+            }
+          },
+          {
+            id: "t13",
+            account_id: "checking_1",
+            amount: -180.00,
+            date: "2025-07-27",
+            name: "Target - Household Items",
+            merchant_name: "Target",
+            category: ["shopping", "retail"],
+            category_id: "19000000",
+            pending: false,
+            payment_channel: "in store",
+            location: {
+              city: "Austin",
+              state: "TX",
+              country: "US"
+            }
+          },
+          {
+            id: "t14",
+            account_id: "checking_1",
+            amount: -65.00,
+            date: "2025-07-25",
+            name: "Costco Gas",
+            merchant_name: "Costco",
+            category: ["transportation", "gas"],
+            category_id: "14000000",
+            pending: false,
+            payment_channel: "in store",
+            location: {
+              city: "Austin",
+              state: "TX",
+              country: "US"
+            }
+          },
+          {
+            id: "t15",
+            account_id: "checking_1",
+            amount: -120.00,
+            date: "2025-07-23",
+            name: "Lunch with Colleagues",
+            merchant_name: "Various Restaurants",
+            category: ["food", "dining"],
+            category_id: "13000000",
+            pending: false,
+            payment_channel: "in store",
+            location: {
+              city: "Austin",
+              state: "TX",
+              country: "US"
+            }
+          },
+          {
+            id: "t16",
+            account_id: "checking_1",
+            amount: -95.00,
+            date: "2025-07-21",
+            name: "CVS Pharmacy",
+            merchant_name: "CVS",
+            category: ["shopping", "pharmacy"],
+            category_id: "19000000",
+            pending: false,
+            payment_channel: "in store",
+            location: {
+              city: "Austin",
+              state: "TX",
+              country: "US"
+            }
+          },
+          {
+            id: "t17",
+            account_id: "checking_1",
+            amount: -40.00,
+            date: "2025-07-19",
+            name: "Movie Tickets",
+            merchant_name: "AMC Theaters",
+            category: ["entertainment", "movies"],
+            category_id: "17000000",
+            pending: false,
+            payment_channel: "in store",
+            location: {
+              city: "Austin",
+              state: "TX",
+              country: "US"
+            }
+          },
+          {
+            id: "t18",
+            account_id: "checking_1",
+            amount: -280.00,
+            date: "2025-07-17",
+            name: "H-E-B Groceries",
+            merchant_name: "H-E-B",
+            category: ["food", "groceries"],
+            category_id: "13000000",
+            pending: false,
+            payment_channel: "in store",
+            location: {
+              city: "Austin",
+              state: "TX",
+              country: "US"
+            }
+          },
+          {
+            id: "t19",
+            account_id: "checking_1",
+            amount: -60.00,
+            date: "2025-07-15",
+            name: "Shell Gas Station",
+            merchant_name: "Shell",
+            category: ["transportation", "gas"],
+            category_id: "14000000",
+            pending: false,
+            payment_channel: "in store",
+            location: {
+              city: "Austin",
+              state: "TX",
+              country: "US"
+            }
+          },
+          {
+            id: "t20",
+            account_id: "checking_1",
+            amount: -110.00,
+            date: "2025-07-13",
+            name: "Coffee & Breakfast",
+            merchant_name: "Various Cafes",
+            category: ["food", "dining"],
+            category_id: "13000000",
+            pending: false,
+            payment_channel: "in store",
+            location: {
+              city: "Austin",
+              state: "TX",
               country: "US"
             }
           }
@@ -1006,17 +1295,18 @@ export const setupPlaidRoutes = (app: any) => {
         // Return demo investment data that matches the frontend expectations
         const demoData = {
           portfolio: {
-            totalValue: 619951.34,
+            totalValue: 421700.75, // Total of all investment accounts: 401k + IRA + Brokerage + HSA + 529
             assetAllocation: [
-              { type: 'Equity', value: 246200.75, percentage: 39.7 },
-              { type: 'Fixed Income', value: 15678.00, percentage: 2.5 },
-              { type: 'International', value: 33562.05, percentage: 5.4 },
-              { type: 'Cash & Equivalents', value: 324510.54, percentage: 52.4 }
+              { type: 'Equity', value: 246200.75, percentage: 58.4 },
+              { type: 'Fixed Income', value: 15678.00, percentage: 3.7 },
+              { type: 'International', value: 33562.05, percentage: 8.0 },
+              { type: 'Cash & Equivalents', value: 126259.95, percentage: 29.9 }
             ],
-            holdingCount: 60,
+            holdingCount: 60, // Total holdings across all accounts
             securityCount: 26
           },
           holdings: [
+            // 401k holdings
             {
               id: 'demo_401k_vtsax',
               account_id: '401k_1',
@@ -1059,6 +1349,7 @@ export const setupPlaidRoutes = (app: any) => {
               security_type: 'fixed income',
               ticker_symbol: 'VBTLX'
             },
+            // IRA holdings
             {
               id: 'demo_ira_vti',
               account_id: 'ira_1',
@@ -1086,6 +1377,780 @@ export const setupPlaidRoutes = (app: any) => {
               security_name: 'Vanguard Total International Stock ETF',
               security_type: 'equity',
               ticker_symbol: 'VXUS'
+            },
+            // Brokerage holdings
+            {
+              id: 'demo_brokerage_aapl',
+              account_id: 'brokerage_1',
+              security_id: 'aapl',
+              institution_value: 8471.85,
+              institution_price: 185.50,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 8000.00,
+              quantity: 45.67,
+              iso_currency_code: 'USD',
+              security_name: 'Apple Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'AAPL'
+            },
+            {
+              id: 'demo_brokerage_msft',
+              account_id: 'brokerage_1',
+              security_id: 'msft',
+              institution_value: 13655.36,
+              institution_price: 420.80,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 13000.00,
+              quantity: 32.45,
+              iso_currency_code: 'USD',
+              security_name: 'Microsoft Corporation',
+              security_type: 'equity',
+              ticker_symbol: 'MSFT'
+            },
+            {
+              id: 'demo_brokerage_googl',
+              account_id: 'brokerage_1',
+              security_id: 'googl',
+              institution_value: 5063.28,
+              institution_price: 175.20,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 4800.00,
+              quantity: 28.90,
+              iso_currency_code: 'USD',
+              security_name: 'Alphabet Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'GOOGL'
+            },
+            {
+              id: 'demo_brokerage_amzn',
+              account_id: 'brokerage_1',
+              security_id: 'amzn',
+              institution_value: 6613.28,
+              institution_price: 185.40,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 6000.00,
+              quantity: 35.67,
+              iso_currency_code: 'USD',
+              security_name: 'Amazon.com Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'AMZN'
+            },
+            {
+              id: 'demo_brokerage_tsla',
+              account_id: 'brokerage_1',
+              security_id: 'tsla',
+              institution_value: 10398.70,
+              institution_price: 245.60,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 11000.00,
+              quantity: 42.34,
+              iso_currency_code: 'USD',
+              security_name: 'Tesla Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'TSLA'
+            },
+            {
+              id: 'demo_brokerage_nvda',
+              account_id: 'brokerage_1',
+              security_id: 'nvda',
+              institution_value: 14052.09,
+              institution_price: 890.50,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 12000.00,
+              quantity: 15.78,
+              iso_currency_code: 'USD',
+              security_name: 'NVIDIA Corporation',
+              security_type: 'equity',
+              ticker_symbol: 'NVDA'
+            },
+            {
+              id: 'demo_brokerage_brkb',
+              account_id: 'brokerage_1',
+              security_id: 'brkb',
+              institution_value: 6906.06,
+              institution_price: 365.40,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 6500.00,
+              quantity: 18.90,
+              iso_currency_code: 'USD',
+              security_name: 'Berkshire Hathaway Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'BRK.B'
+            },
+            {
+              id: 'demo_brokerage_jpm',
+              account_id: 'brokerage_1',
+              security_id: 'jpm',
+              institution_value: 13389.53,
+              institution_price: 198.50,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 12500.00,
+              quantity: 67.45,
+              iso_currency_code: 'USD',
+              security_name: 'JPMorgan Chase & Co.',
+              security_type: 'equity',
+              ticker_symbol: 'JPM'
+            },
+            {
+              id: 'demo_brokerage_jnj',
+              account_id: 'brokerage_1',
+              security_id: 'jnj',
+              institution_value: 14776.50,
+              institution_price: 165.80,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 14000.00,
+              quantity: 89.12,
+              iso_currency_code: 'USD',
+              security_name: 'Johnson & Johnson',
+              security_type: 'equity',
+              ticker_symbol: 'JNJ'
+            },
+            {
+              id: 'demo_brokerage_pg',
+              account_id: 'brokerage_1',
+              security_id: 'pg',
+              institution_value: 11114.62,
+              institution_price: 145.60,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 10500.00,
+              quantity: 76.34,
+              iso_currency_code: 'USD',
+              security_name: 'Procter & Gamble Co.',
+              security_type: 'equity',
+              ticker_symbol: 'PG'
+            },
+            // HSA holdings
+            {
+              id: 'demo_hsa_vtsax',
+              account_id: 'hsa_1',
+              security_id: 'hsa_vtsax',
+              institution_value: 12773.46,
+              institution_price: 142.80,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 12000.00,
+              quantity: 89.45,
+              iso_currency_code: 'USD',
+              security_name: 'Vanguard Total Stock Market Index Fund',
+              security_type: 'equity',
+              ticker_symbol: 'VTSAX'
+            },
+            {
+              id: 'demo_hsa_vtiax',
+              account_id: 'hsa_1',
+              security_id: 'hsa_vtiax',
+              institution_value: 1287.30,
+              institution_price: 35.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 1200.00,
+              quantity: 36.78,
+              iso_currency_code: 'USD',
+              security_name: 'Vanguard Total International Stock Index Fund',
+              security_type: 'equity',
+              ticker_symbol: 'VTIAX'
+            },
+            {
+              id: 'demo_hsa_vbtlx',
+              account_id: 'hsa_1',
+              security_id: 'hsa_vbtlx',
+              institution_value: 1289.00,
+              institution_price: 10.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 1250.00,
+              quantity: 128.90,
+              iso_currency_code: 'USD',
+              security_name: 'Vanguard Total Bond Market Index Fund',
+              security_type: 'fixed income',
+              ticker_symbol: 'VBTLX'
+            },
+            // 529 Plan holdings
+            {
+              id: 'demo_529_vtsax',
+              account_id: '529_1',
+              security_id: '529_vtsax',
+              institution_value: 22387.58,
+              institution_price: 142.80,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 20000.00,
+              quantity: 156.78,
+              iso_currency_code: 'USD',
+              security_name: 'Vanguard Total Stock Market Index Fund',
+              security_type: 'equity',
+              ticker_symbol: 'VTSAX'
+            },
+            {
+              id: 'demo_529_vtiax',
+              account_id: '529_1',
+              security_id: '529_vtiax',
+              institution_value: 2360.75,
+              institution_price: 35.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 2000.00,
+              quantity: 67.45,
+              iso_currency_code: 'USD',
+              security_name: 'Vanguard Total International Stock Index Fund',
+              security_type: 'equity',
+              ticker_symbol: 'VTIAX'
+            },
+            {
+              id: 'demo_529_vbtlx',
+              account_id: '529_1',
+              security_id: '529_vbtlx',
+              institution_value: 2256.70,
+              institution_price: 10.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 2000.00,
+              quantity: 225.67,
+              iso_currency_code: 'USD',
+              security_name: 'Vanguard Total Bond Market Index Fund',
+              security_type: 'fixed income',
+              ticker_symbol: 'VBTLX'
+            },
+            // Additional holdings to reach 60 total
+            {
+              id: 'demo_brokerage_meta',
+              account_id: 'brokerage_1',
+              security_id: 'meta',
+              institution_value: 8750.00,
+              institution_price: 350.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 8000.00,
+              quantity: 25.00,
+              iso_currency_code: 'USD',
+              security_name: 'Meta Platforms Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'META'
+            },
+            {
+              id: 'demo_brokerage_unh',
+              account_id: 'brokerage_1',
+              security_id: 'unh',
+              institution_value: 12500.00,
+              institution_price: 500.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 12000.00,
+              quantity: 25.00,
+              iso_currency_code: 'USD',
+              security_name: 'UnitedHealth Group Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'UNH'
+            },
+            {
+              id: 'demo_brokerage_hd',
+              account_id: 'brokerage_1',
+              security_id: 'hd',
+              institution_value: 11250.00,
+              institution_price: 375.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 11000.00,
+              quantity: 30.00,
+              iso_currency_code: 'USD',
+              security_name: 'Home Depot Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'HD'
+            },
+            {
+              id: 'demo_brokerage_dis',
+              account_id: 'brokerage_1',
+              security_id: 'dis',
+              institution_value: 6000.00,
+              institution_price: 80.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 6000.00,
+              quantity: 75.00,
+              iso_currency_code: 'USD',
+              security_name: 'Walt Disney Co.',
+              security_type: 'equity',
+              ticker_symbol: 'DIS'
+            },
+            {
+              id: 'demo_brokerage_coca',
+              account_id: 'brokerage_1',
+              security_id: 'ko',
+              institution_value: 8750.00,
+              institution_price: 70.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 8000.00,
+              quantity: 125.00,
+              iso_currency_code: 'USD',
+              security_name: 'Coca-Cola Co.',
+              security_type: 'equity',
+              ticker_symbol: 'KO'
+            },
+            {
+              id: 'demo_brokerage_pep',
+              account_id: 'brokerage_1',
+              security_id: 'pep',
+              institution_value: 10000.00,
+              institution_price: 200.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 9500.00,
+              quantity: 50.00,
+              iso_currency_code: 'USD',
+              security_name: 'PepsiCo Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'PEP'
+            },
+            {
+              id: 'demo_brokerage_visa',
+              account_id: 'brokerage_1',
+              security_id: 'v',
+              institution_value: 15000.00,
+              institution_price: 300.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 14000.00,
+              quantity: 50.00,
+              iso_currency_code: 'USD',
+              security_name: 'Visa Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'V'
+            },
+            {
+              id: 'demo_brokerage_mastercard',
+              account_id: 'brokerage_1',
+              security_id: 'ma',
+              institution_value: 12000.00,
+              institution_price: 400.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 11000.00,
+              quantity: 30.00,
+              iso_currency_code: 'USD',
+              security_name: 'Mastercard Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'MA'
+            },
+            {
+              id: 'demo_brokerage_netflix',
+              account_id: 'brokerage_1',
+              security_id: 'nflx',
+              institution_value: 8000.00,
+              institution_price: 400.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 7500.00,
+              quantity: 20.00,
+              iso_currency_code: 'USD',
+              security_name: 'Netflix Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'NFLX'
+            },
+            {
+              id: 'demo_brokerage_spotify',
+              account_id: 'brokerage_1',
+              security_id: 'spot',
+              institution_value: 5000.00,
+              institution_price: 250.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 4500.00,
+              quantity: 20.00,
+              iso_currency_code: 'USD',
+              security_name: 'Spotify Technology S.A.',
+              security_type: 'equity',
+              ticker_symbol: 'SPOT'
+            },
+            {
+              id: 'demo_brokerage_uber',
+              account_id: 'brokerage_1',
+              security_id: 'uber',
+              institution_value: 6000.00,
+              institution_price: 60.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 5500.00,
+              quantity: 100.00,
+              iso_currency_code: 'USD',
+              security_name: 'Uber Technologies Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'UBER'
+            },
+            {
+              id: 'demo_brokerage_lyft',
+              account_id: 'brokerage_1',
+              security_id: 'lyft',
+              institution_value: 3000.00,
+              institution_price: 15.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 2500.00,
+              quantity: 200.00,
+              iso_currency_code: 'USD',
+              security_name: 'Lyft Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'LYFT'
+            },
+            {
+              id: 'demo_brokerage_airbnb',
+              account_id: 'brokerage_1',
+              security_id: 'abnb',
+              institution_value: 7500.00,
+              institution_price: 150.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 7000.00,
+              quantity: 50.00,
+              iso_currency_code: 'USD',
+              security_name: 'Airbnb Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'ABNB'
+            },
+            {
+              id: 'demo_brokerage_snowflake',
+              account_id: 'brokerage_1',
+              security_id: 'snow',
+              institution_value: 10000.00,
+              institution_price: 200.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 9000.00,
+              quantity: 50.00,
+              iso_currency_code: 'USD',
+              security_name: 'Snowflake Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'SNOW'
+            },
+            {
+              id: 'demo_brokerage_salesforce',
+              account_id: 'brokerage_1',
+              security_id: 'crm',
+              institution_value: 12000.00,
+              institution_price: 240.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 11000.00,
+              quantity: 50.00,
+              iso_currency_code: 'USD',
+              security_name: 'Salesforce Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'CRM'
+            },
+            {
+              id: 'demo_brokerage_oracle',
+              account_id: 'brokerage_1',
+              security_id: 'orcl',
+              institution_value: 8000.00,
+              institution_price: 100.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 7500.00,
+              quantity: 80.00,
+              iso_currency_code: 'USD',
+              security_name: 'Oracle Corporation',
+              security_type: 'equity',
+              ticker_symbol: 'ORCL'
+            },
+            {
+              id: 'demo_brokerage_intel',
+              account_id: 'brokerage_1',
+              security_id: 'intc',
+              institution_value: 6000.00,
+              institution_price: 30.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 5500.00,
+              quantity: 200.00,
+              iso_currency_code: 'USD',
+              security_name: 'Intel Corporation',
+              security_type: 'equity',
+              ticker_symbol: 'INTC'
+            },
+            {
+              id: 'demo_brokerage_amd',
+              account_id: 'brokerage_1',
+              security_id: 'amd',
+              institution_value: 9000.00,
+              institution_price: 150.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 8000.00,
+              quantity: 60.00,
+              iso_currency_code: 'USD',
+              security_name: 'Advanced Micro Devices Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'AMD'
+            },
+            {
+              id: 'demo_brokerage_qualcomm',
+              account_id: 'brokerage_1',
+              security_id: 'qcom',
+              institution_value: 7000.00,
+              institution_price: 140.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 6500.00,
+              quantity: 50.00,
+              iso_currency_code: 'USD',
+              security_name: 'Qualcomm Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'QCOM'
+            },
+            {
+              id: 'demo_brokerage_broadcom',
+              account_id: 'brokerage_1',
+              security_id: 'avgo',
+              institution_value: 11000.00,
+              institution_price: 550.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 10000.00,
+              quantity: 20.00,
+              iso_currency_code: 'USD',
+              security_name: 'Broadcom Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'AVGO'
+            },
+            {
+              id: 'demo_brokerage_cisco',
+              account_id: 'brokerage_1',
+              security_id: 'csco',
+              institution_value: 8000.00,
+              institution_price: 50.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 7500.00,
+              quantity: 160.00,
+              iso_currency_code: 'USD',
+              security_name: 'Cisco Systems Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'CSCO'
+            },
+            {
+              id: 'demo_brokerage_verizon',
+              account_id: 'brokerage_1',
+              security_id: 'vz',
+              institution_value: 6000.00,
+              institution_price: 40.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 5500.00,
+              quantity: 150.00,
+              iso_currency_code: 'USD',
+              security_name: 'Verizon Communications Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'VZ'
+            },
+            {
+              id: 'demo_brokerage_att',
+              account_id: 'brokerage_1',
+              security_id: 't',
+              institution_value: 5000.00,
+              institution_price: 20.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 4500.00,
+              quantity: 250.00,
+              iso_currency_code: 'USD',
+              security_name: 'AT&T Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'T'
+            },
+            {
+              id: 'demo_brokerage_comcast',
+              account_id: 'brokerage_1',
+              security_id: 'cmcsa',
+              institution_value: 7000.00,
+              institution_price: 35.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 6500.00,
+              quantity: 200.00,
+              iso_currency_code: 'USD',
+              security_name: 'Comcast Corporation',
+              security_type: 'equity',
+              ticker_symbol: 'CMCSA'
+            },
+            {
+              id: 'demo_brokerage_phillips66',
+              account_id: 'brokerage_1',
+              security_id: 'psx',
+              institution_value: 8000.00,
+              institution_price: 100.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 7500.00,
+              quantity: 80.00,
+              iso_currency_code: 'USD',
+              security_name: 'Phillips 66',
+              security_type: 'equity',
+              ticker_symbol: 'PSX'
+            },
+            {
+              id: 'demo_brokerage_chevron',
+              account_id: 'brokerage_1',
+              security_id: 'cvx',
+              institution_value: 9000.00,
+              institution_price: 150.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 8500.00,
+              quantity: 60.00,
+              iso_currency_code: 'USD',
+              security_name: 'Chevron Corporation',
+              security_type: 'equity',
+              ticker_symbol: 'CVX'
+            },
+            {
+              id: 'demo_brokerage_exxon',
+              account_id: 'brokerage_1',
+              security_id: 'xom',
+              institution_value: 7500.00,
+              institution_price: 75.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 7000.00,
+              quantity: 100.00,
+              iso_currency_code: 'USD',
+              security_name: 'Exxon Mobil Corporation',
+              security_type: 'equity',
+              ticker_symbol: 'XOM'
+            },
+            {
+              id: 'demo_brokerage_3m',
+              account_id: 'brokerage_1',
+              security_id: 'mmm',
+              institution_value: 6000.00,
+              institution_price: 100.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 5500.00,
+              quantity: 60.00,
+              iso_currency_code: 'USD',
+              security_name: '3M Company',
+              security_type: 'equity',
+              ticker_symbol: 'MMM'
+            },
+            {
+              id: 'demo_brokerage_caterpillar',
+              account_id: 'brokerage_1',
+              security_id: 'cat',
+              institution_value: 8000.00,
+              institution_price: 200.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 7500.00,
+              quantity: 40.00,
+              iso_currency_code: 'USD',
+              security_name: 'Caterpillar Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'CAT'
+            },
+            {
+              id: 'demo_brokerage_boeing',
+              account_id: 'brokerage_1',
+              security_id: 'ba',
+              institution_value: 5000.00,
+              institution_price: 200.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 4500.00,
+              quantity: 25.00,
+              iso_currency_code: 'USD',
+              security_name: 'Boeing Co.',
+              security_type: 'equity',
+              ticker_symbol: 'BA'
+            },
+            {
+              id: 'demo_brokerage_general_electric',
+              account_id: 'brokerage_1',
+              security_id: 'ge',
+              institution_value: 4000.00,
+              institution_price: 100.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 3500.00,
+              quantity: 40.00,
+              iso_currency_code: 'USD',
+              security_name: 'General Electric Company',
+              security_type: 'equity',
+              ticker_symbol: 'GE'
+            },
+            {
+              id: 'demo_brokerage_honeywell',
+              account_id: 'brokerage_1',
+              security_id: 'hon',
+              institution_value: 7000.00,
+              institution_price: 175.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 6500.00,
+              quantity: 40.00,
+              iso_currency_code: 'USD',
+              security_name: 'Honeywell International Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'HON'
+            },
+            {
+              id: 'demo_brokerage_dupont',
+              account_id: 'brokerage_1',
+              security_id: 'dd',
+              institution_value: 6000.00,
+              institution_price: 75.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 5500.00,
+              quantity: 80.00,
+              iso_currency_code: 'USD',
+              security_name: 'DuPont de Nemours Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'DD'
+            },
+            {
+              id: 'demo_brokerage_dow',
+              account_id: 'brokerage_1',
+              security_id: 'dow',
+              institution_value: 5000.00,
+              institution_price: 50.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 4500.00,
+              quantity: 100.00,
+              iso_currency_code: 'USD',
+              security_name: 'Dow Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'DOW'
+            },
+            {
+              id: 'demo_brokerage_ibm',
+              account_id: 'brokerage_1',
+              security_id: 'ibm',
+              institution_value: 8000.00,
+              institution_price: 160.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 7500.00,
+              quantity: 50.00,
+              iso_currency_code: 'USD',
+              security_name: 'International Business Machines Corp.',
+              security_type: 'equity',
+              ticker_symbol: 'IBM'
+            },
+            {
+              id: 'demo_brokerage_abbvie',
+              account_id: 'brokerage_1',
+              security_id: 'abbv',
+              institution_value: 7000.00,
+              institution_price: 140.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 6500.00,
+              quantity: 50.00,
+              iso_currency_code: 'USD',
+              security_name: 'AbbVie Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'ABBV'
+            },
+            {
+              id: 'demo_brokerage_merck',
+              account_id: 'brokerage_1',
+              security_id: 'mrk',
+              institution_value: 8000.00,
+              institution_price: 100.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 7500.00,
+              quantity: 80.00,
+              iso_currency_code: 'USD',
+              security_name: 'Merck & Co. Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'MRK'
+            },
+            {
+              id: 'demo_brokerage_pfizer',
+              account_id: 'brokerage_1',
+              security_id: 'pfe',
+              institution_value: 6000.00,
+              institution_price: 30.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 5500.00,
+              quantity: 200.00,
+              iso_currency_code: 'USD',
+              security_name: 'Pfizer Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'PFE'
+            },
+            {
+              id: 'demo_brokerage_amgen',
+              account_id: 'brokerage_1',
+              security_id: 'amgn',
+              institution_value: 7000.00,
+              institution_price: 280.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 6500.00,
+              quantity: 25.00,
+              iso_currency_code: 'USD',
+              security_name: 'Amgen Inc.',
+              security_type: 'equity',
+              ticker_symbol: 'AMGN'
             }
           ],
           transactions: [
@@ -1866,96 +2931,6 @@ export const setupPlaidRoutes = (app: any) => {
       res.json({ liabilities: allLiabilities });
     } catch (error) {
       const errorResponse = handlePlaidError(error, 'get liabilities');
-      res.status(500).json(errorResponse);
-    }
-  });
-
-  // Get comprehensive investment overview (combines holdings and transactions)
-  app.get('/plaid/investments', async (req: any, res: any) => {
-    try {
-      const { start_date, end_date, count = 100 } = req.query;
-      const accessTokens = await getPrismaClient().accessToken.findMany({
-        where: req.user?.id ? { userId: req.user.id } : {}
-      });
-      
-      const allInvestments: any[] = [];
-      
-      for (const tokenRecord of accessTokens) {
-        try {
-          // Fetch both holdings and transactions
-          const [holdingsResponse, transactionsResponse] = await Promise.all([
-            plaidClient.investmentsHoldingsGet({
-              access_token: tokenRecord.token,
-            }),
-            plaidClient.investmentsTransactionsGet({
-              access_token: tokenRecord.token,
-              start_date: start_date || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-              end_date: end_date || new Date().toISOString().split('T')[0],
-            })
-          ]);
-          
-          // Process the data
-          const processedHoldings = holdingsResponse.data.holdings.map(processInvestmentHolding);
-          const processedSecurities = holdingsResponse.data.securities.map(processSecurity);
-          const processedTransactions = transactionsResponse.data.investment_transactions.map(processInvestmentTransaction);
-          
-          // Generate comprehensive analysis
-          const portfolioAnalysis = analyzePortfolio(processedHoldings, processedSecurities);
-          const activityAnalysis = analyzeInvestmentActivity(processedTransactions);
-          
-          allInvestments.push({
-            holdings: processedHoldings,
-            securities: processedSecurities,
-            investment_transactions: processedTransactions,
-            total_investment_transactions: transactionsResponse.data.total_investment_transactions,
-            accounts: holdingsResponse.data.accounts,
-            item: holdingsResponse.data.item,
-            analysis: {
-              portfolio: portfolioAnalysis,
-              activity: activityAnalysis
-            }
-          });
-          
-          // Enhance user profile with comprehensive investment data (if user is authenticated)
-          if (req.user?.id) {
-            try {
-              await enhanceProfileWithInvestmentData(
-                req.user.id,
-                processedHoldings,
-                processedTransactions
-              );
-            } catch (profileError) {
-              console.error('Error enhancing profile with investment data:', profileError);
-              // Don't fail the request if profile enhancement fails
-            }
-          }
-        } catch (error) {
-          console.error(`Error fetching investments for token ${tokenRecord.id}:`, error);
-        }
-      }
-      
-      // Sort transactions by date (newest first)
-      const sortedTransactions = allInvestments.flatMap(t => t.investment_transactions)
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-        .slice(0, parseInt(count as string));
-      
-      res.json({ 
-        investments: allInvestments,
-        sortedTransactions: sortedTransactions,
-        summary: {
-          totalAccounts: allInvestments.length,
-          totalHoldings: allInvestments.reduce((sum, inv) => sum + inv.holdings.length, 0),
-          totalSecurities: allInvestments.reduce((sum, inv) => sum + inv.securities.length, 0),
-          totalTransactions: allInvestments.reduce((sum, inv) => sum + inv.investment_transactions.length, 0),
-          totalPortfolioValue: allInvestments.reduce((sum, inv) => sum + (inv.analysis?.portfolio?.totalValue || 0), 0),
-          dateRange: { 
-            start_date: start_date || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            end_date: end_date || new Date().toISOString().split('T')[0]
-          }
-        }
-      });
-    } catch (error) {
-      const errorResponse = handlePlaidError(error, 'get comprehensive investments');
       res.status(500).json(errorResponse);
     }
   });
