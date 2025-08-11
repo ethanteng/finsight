@@ -59,12 +59,12 @@ export default function ProfilePage() {
   const [investmentData, setInvestmentData] = useState<InvestmentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isDemo, setIsDemo] = useState(true);
+  const [isDemo, setIsDemo] = useState<boolean | undefined>(undefined); // Start as undefined to prevent premature rendering
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('');
-  const [demoStatusDetermined, setDemoStatusDetermined] = useState(true);
+  const [demoStatusDetermined, setDemoStatusDetermined] = useState(false); // Start as false
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -167,24 +167,32 @@ export default function ProfilePage() {
     const urlParams = new URLSearchParams(window.location.search);
     const isFromDemo = urlParams.get('demo') === 'true';
     
+    // Also check if we have an auth token (indicates real user)
+    const hasAuthToken = !!localStorage.getItem('auth_token');
+    
+    // Determine demo mode: true only if explicitly requested via URL
+    const shouldBeDemo = isFromDemo;
+    
     console.log('Demo detection debug:', {
       urlParams: urlParams.get('demo'),
       isFromDemo,
+      hasAuthToken,
+      shouldBeDemo,
       currentUrl: window.location.href
     });
     
-    console.log('Setting isDemo to:', isFromDemo);
-    setIsDemo(isFromDemo);
+    console.log('Setting isDemo to:', shouldBeDemo);
+    setIsDemo(shouldBeDemo);
     setDemoStatusDetermined(true);
     
     // Only call API functions after we've determined demo mode
-    if (isFromDemo) {
+    if (shouldBeDemo) {
       console.log('Demo mode detected, calling API functions');
       console.log('API_URL:', API_URL);
       loadConnectedAccountsWithDemoMode(true);
       loadInvestmentData(true);
     } else {
-      console.log('Not demo mode, calling API functions');
+      console.log('Real user mode detected, calling API functions');
       loadConnectedAccountsWithDemoMode(false);
       loadInvestmentData(false);
     }
@@ -304,6 +312,18 @@ export default function ProfilePage() {
       setShowDeleteConfirm(false);
     }
   };
+
+  // Don't render anything until we've determined if this is demo mode or not
+  if (!demoStatusDetermined || isDemo === undefined) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-400">Loading profile...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">

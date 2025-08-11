@@ -1277,40 +1277,196 @@ export const setupPlaidRoutes = (app: any) => {
 
           // Automatically enrich transactions with merchant data
           try {
-            const enrichResponse = await plaidClient.transactionsEnrich({
-              account_type: 'depository',
-              transactions: transactionsResponse.data.transactions.map((t: any) => ({
+            console.log(`🚀 STARTING TRANSACTION ENRICHMENT PROCESS`);
+            console.log(`🔍 Transaction enrichment: Processing ${transactionsResponse.data.transactions.length} transactions`);
+            
+            // Debug: Check what we're getting from Plaid
+            console.log(`📊 Sample transaction data:`, transactionsResponse.data.transactions.slice(0, 2).map(t => ({
+              id: t.transaction_id,
+              name: t.name,
+              amount: t.amount,
+              type: typeof t.amount,
+              keys: Object.keys(t)
+            })));
+            
+            // Use absolute values for enrichment while preserving original signs
+            const transactionsForEnrichment = transactionsResponse.data.transactions
+              .filter((t: any) => {
+                const isValid = typeof t.amount === 'number' && !isNaN(t.amount);
+                if (!isValid) {
+                  console.log(`❌ Invalid amount for transaction "${t.name}":`, {
+                    amount: t.amount,
+                    type: typeof t.amount,
+                    isNaN: isNaN(t.amount)
+                  });
+                }
+                return isValid;
+              });
+
+            console.log(`🚀 Calling Plaid transactionsEnrich with ${transactionsForEnrichment.length} transactions (using absolute values)`);
+            
+            // Debug: Check filtered transactions
+            if (transactionsForEnrichment.length === 0) {
+              console.log(`❌ No transactions for enrichment! Filter result:`, transactionsResponse.data.transactions.map(t => ({
                 id: t.transaction_id,
-                description: t.name,
                 amount: t.amount,
-                direction: t.amount > 0 ? 'INFLOW' as any : 'OUTFLOW' as any,
-                iso_currency_code: t.iso_currency_code || 'USD'
-              }))
+                type: typeof t.amount
+              })));
+            }
+            
+            // Debug: Check the mapping result
+            const mappedTransactions = transactionsForEnrichment.map((t: any) => ({
+              id: t.transaction_id,
+              description: t.name,
+              amount: Math.abs(t.amount), // Use absolute value for Plaid API
+              direction: t.amount > 0 ? 'INFLOW' as any : 'OUTFLOW' as any,
+              iso_currency_code: t.iso_currency_code || 'USD'
+            }));
+            
+            console.log(`🔍 Mapped transactions for Plaid:`, {
+              count: mappedTransactions.length,
+              sample: mappedTransactions.slice(0, 2)
             });
+            
+            // Final debug: Check right before API call
+            console.log(`🚀 About to call Plaid API with ${mappedTransactions.length} transactions`);
+            console.log(`🔍 First transaction:`, mappedTransactions[0]);
+            console.log(`🔍 Last transaction:`, mappedTransactions[mappedTransactions.length - 1]);
+            
+            // Final sanity check - what are we actually sending?
+            console.log(`🔍 FINAL CHECK - mappedTransactions:`, {
+              length: mappedTransactions.length,
+              isArray: Array.isArray(mappedTransactions),
+              type: typeof mappedTransactions,
+              stringified: JSON.stringify(mappedTransactions).substring(0, 200) + '...'
+            });
+            
+            // Create a completely new array to avoid any reference issues
+            const transactionsForPlaid = mappedTransactions.map(t => ({
+              id: t.id,
+              description: t.description,
+              amount: t.amount,
+              direction: t.direction,
+              iso_currency_code: t.iso_currency_code
+            }));
+            
+            console.log(`🔍 NEW ARRAY for Plaid:`, {
+              length: transactionsForPlaid.length,
+              isArray: Array.isArray(transactionsForPlaid),
+              first: transactionsForPlaid[0]
+            });
+            
+                        // Now let's try the real transactions with the exact same structure as the working test
+            console.log(`🚀 Attempting real transaction enrichment with ${transactionsForPlaid.length} transactions`);
+            
+            try {
+              const enrichResponse = await plaidClient.transactionsEnrich({
+                account_type: 'depository',
+                transactions: transactionsForPlaid
+              });
+              
+              console.log(`✅ Real transaction enrichment SUCCESS!`, {
+                enrichedCount: enrichResponse.data.enriched_transactions?.length || 0,
+                requestId: enrichResponse.data.request_id
+              });
+              
+              // Merge enriched data with processed transactions
+              const enrichedDataMap = new Map();
+              enrichResponse.data.enriched_transactions.forEach((enriched: any, index: number) => {
+                const originalTransaction = transactionsForPlaid[index];
+                if (originalTransaction) {
+                  enrichedDataMap.set(originalTransaction.id, enriched);
+                }
+              });
 
-            // Merge enriched data with processed transactions
-            const enrichedTransactions = processedTransactions.map((transaction, index) => {
-              const enrichedTransaction = enrichResponse.data.enriched_transactions[index];
-              if (enrichedTransaction) {
-                return {
-                  ...transaction,
-                  enriched_data: {
-                    merchant_name: (enrichedTransaction as any).merchant_name || transaction.merchant_name,
-                    website: (enrichedTransaction as any).website,
-                    logo_url: (enrichedTransaction as any).logo_url,
-                    primary_color: (enrichedTransaction as any).primary_color,
-                    domain: (enrichedTransaction as any).domain,
-                    category: (enrichedTransaction as any).category || transaction.category,
-                    category_id: (enrichedTransaction as any).category_id || (transaction as any).category_id,
-                    brand_logo_url: (enrichedTransaction as any).brand_logo_url,
-                    brand_name: (enrichedTransaction as any).brand_name
+              console.log(`🔍 Debug: enrichedDataMap size:`, enrichedDataMap.size);
+              console.log(`🔍 Debug: Sample enriched data:`, Array.from(enrichedDataMap.entries()).slice(0, 2));
+              
+              // Debug: Check what Plaid actually returned
+              console.log(`🔍 Debug: Plaid enrichment response structure:`, {
+                totalEnriched: enrichResponse.data.enriched_transactions?.length || 0,
+                firstEnriched: enrichResponse.data.enriched_transactions?.[0],
+                firstEnrichedKeys: enrichResponse.data.enriched_transactions?.[0] ? Object.keys(enrichResponse.data.enriched_transactions[0]) : [],
+                firstEnrichedMerchantName: (enrichResponse.data.enriched_transactions?.[0] as any)?.merchant_name
+              });
+              
+              // Debug: Check transaction ID mapping
+              console.log(`🔍 Debug: transactionsForPlaid IDs:`, transactionsForPlaid.slice(0, 3).map(t => t.id));
+              console.log(`🔍 Debug: processedTransactions IDs:`, processedTransactions.slice(0, 3).map(t => t.id));
+              console.log(`🔍 Debug: enrichedDataMap keys:`, Array.from(enrichedDataMap.keys()).slice(0, 3));
+
+              const enrichedTransactions = processedTransactions.map((transaction) => {
+                // Try to find enriched data by matching the transaction ID
+                // The issue is that processedTransactions might have different IDs than transactionsForPlaid
+                // Let's try to find by matching the original Plaid transaction ID
+                let enrichedTransaction = enrichedDataMap.get(transaction.id);
+                
+                // If not found by current ID, try to find by the original Plaid transaction ID
+                if (!enrichedTransaction && (transaction as any).transaction_id) {
+                  enrichedTransaction = enrichedDataMap.get((transaction as any).transaction_id);
+                }
+                
+                // If still not found, try to find by matching the transaction name (fallback)
+                if (!enrichedTransaction) {
+                  for (const [key, value] of enrichedDataMap.entries()) {
+                    if (value.description === transaction.name) {
+                      enrichedTransaction = value;
+                      break;
+                    }
                   }
-                };
-              }
-              return transaction;
-            });
+                }
+                
+                // Debug: Show exactly what Plaid returned for this transaction
+                if (enrichedTransaction) {
+                  console.log(`🔍 Debug: Plaid enrichment data for ${transaction.id}:`, {
+                    plaidResponse: enrichedTransaction,
+                    plaidKeys: Object.keys(enrichedTransaction),
+                    plaidMerchantName: (enrichedTransaction as any).enrichments?.merchant_name,
+                    plaidDescription: (enrichedTransaction as any).description,
+                    enrichmentsKeys: (enrichedTransaction as any).enrichments ? Object.keys((enrichedTransaction as any).enrichments) : 'No enrichments'
+                  });
+                }
+                
+                console.log(`🔍 Debug: Processing transaction ${transaction.id}:`, {
+                  hasEnrichedData: !!enrichedTransaction,
+                  enrichedMerchantName: enrichedTransaction?.merchant_name,
+                  originalMerchantName: transaction.merchant_name,
+                  matchedBy: enrichedTransaction ? 'ID' : 'Not found'
+                });
+                
+                if (enrichedTransaction) {
+                  return {
+                    ...transaction,
+                    enriched_data: {
+                      merchant_name: (enrichedTransaction as any).enrichments?.merchant_name || transaction.merchant_name,
+                      website: (enrichedTransaction as any).enrichments?.website,
+                      logo_url: (enrichedTransaction as any).enrichments?.logo_url,
+                      primary_color: (enrichedTransaction as any).enrichments?.primary_color,
+                      domain: (enrichedTransaction as any).enrichments?.domain,
+                      // Extract meaningful categories from personal_finance_category instead of legacy_category
+                      category: (enrichedTransaction as any).enrichments?.personal_finance_category ? [
+                        (enrichedTransaction as any).enrichments.personal_finance_category.primary,
+                        (enrichedTransaction as any).enrichments.personal_finance_category.detailed
+                      ].filter(Boolean) : [],
+                      category_id: (enrichedTransaction as any).enrichments?.personal_finance_category?.primary || (transaction as any).category_id,
+                      brand_logo_url: (enrichedTransaction as any).enrichments?.brand_logo_url,
+                      brand_name: (enrichedTransaction as any).enrichments?.brand_name
+                    }
+                  };
+                }
+                return transaction;
+              });
 
-            allTransactions.push(...enrichedTransactions);
+              allTransactions.push(...enrichedTransactions);
+            } catch (enrichError: any) {
+              console.log(`❌ Real transaction enrichment FAILED:`, {
+                error: enrichError.message,
+                status: enrichError.response?.status,
+                data: enrichError.response?.data
+              });
+              // Continue with unenriched transactions if enrichment fails
+              allTransactions.push(...processedTransactions);
+            }
           } catch (enrichError) {
             console.warn(`Error enriching transactions for token ${tokenRecord.id}:`, enrichError);
             // Continue with unenriched transactions if enrichment fails
@@ -1327,12 +1483,21 @@ export const setupPlaidRoutes = (app: any) => {
       // Limit to requested count
       const limitedTransactions = allTransactions.slice(0, parseInt(count as string));
 
-      res.json({ 
-        transactions: limitedTransactions,
-        total: allTransactions.length,
-        requested: parseInt(count as string),
-        dateRange: { start_date: startDate, end_date: endDate }
-      });
+                    // Debug: Check what we're sending to frontend
+              console.log(`📤 Sending to frontend:`, {
+                totalTransactions: allTransactions.length,
+                limitedTransactions: limitedTransactions.length,
+                sampleTransaction: limitedTransactions[0],
+                hasEnrichedData: limitedTransactions[0]?.enriched_data ? 'YES' : 'NO',
+                enrichedFields: limitedTransactions[0]?.enriched_data ? Object.keys(limitedTransactions[0].enriched_data) : 'NONE'
+              });
+              
+              res.json({ 
+                transactions: limitedTransactions,
+                total: allTransactions.length,
+                requested: parseInt(count as string),
+                dateRange: { start_date: startDate, end_date: endDate }
+              });
     } catch (error) {
       const errorResponse = handlePlaidError(error, 'get transactions');
       res.status(500).json(errorResponse);
