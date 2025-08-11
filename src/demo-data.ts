@@ -41,6 +41,13 @@ export interface DemoUser {
   location: string;
 }
 
+export interface DemoProfile {
+  id: string;
+  profileText: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Comprehensive demo dataset
 export const demoData = {
   user: {
@@ -67,7 +74,7 @@ export const demoData = {
       balance: 12450.67,
       type: "checking" as const,
       institution: "Chase Bank",
-      lastUpdated: "2024-07-28T10:30:00Z"
+      lastUpdated: "2025-08-11T10:30:00Z"
     },
     {
       id: "savings_1", 
@@ -75,7 +82,7 @@ export const demoData = {
       balance: 28450.00,
       type: "savings" as const,
       institution: "Ally Bank",
-      lastUpdated: "2024-07-28T10:30:00Z",
+      lastUpdated: "2025-08-11T10:30:00Z",
       interestRate: 4.25 // Savings account rate
     },
     {
@@ -84,7 +91,7 @@ export const demoData = {
       balance: 156780.45,
       type: "investment" as const,
       institution: "Fidelity",
-      lastUpdated: "2024-07-28T10:30:00Z"
+      lastUpdated: "2025-08-11T10:30:00Z"
     },
     {
       id: "ira_1",
@@ -92,7 +99,7 @@ export const demoData = {
       balance: 89420.30,
       type: "investment" as const,
       institution: "Vanguard",
-      lastUpdated: "2024-07-28T10:30:00Z"
+      lastUpdated: "2025-08-11T10:30:00Z"
     },
     {
       id: "credit_1",
@@ -100,7 +107,7 @@ export const demoData = {
       balance: -3240.50,
       type: "credit" as const,
       institution: "Chase Bank",
-      lastUpdated: "2024-07-28T10:30:00Z",
+      lastUpdated: "2025-08-11T10:30:00Z",
       interestRate: 18.99 // Credit card APR
     },
     {
@@ -109,7 +116,7 @@ export const demoData = {
       balance: 485000.00,
       type: "loan" as const,
       institution: "Wells Fargo",
-      lastUpdated: "2024-07-28T10:30:00Z",
+      lastUpdated: "2025-08-11T10:30:00Z",
       interestRate: 6.72 // Mock interest rate for demo purposes
     },
     {
@@ -118,7 +125,7 @@ export const demoData = {
       balance: 25000.00,
       type: "savings" as const,
       institution: "Marcus by Goldman Sachs",
-      lastUpdated: "2024-07-28T10:30:00Z",
+      lastUpdated: "2025-08-11T10:30:00Z",
       interestRate: 4.85 // CD rate
     }
   ],
@@ -228,7 +235,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: 4250.00,
       category: "salary",
-      date: "2024-06-15",
+      date: "2025-06-15",
       description: "Salary - Tech Corp"
     },
     {
@@ -236,7 +243,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: -850.00,
       category: "mortgage",
-      date: "2024-06-01",
+      date: "2025-06-01",
       description: "Mortgage Payment"
     },
     {
@@ -244,7 +251,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: -1200.00,
       category: "transfer",
-      date: "2024-06-05",
+      date: "2025-06-05",
       description: "Transfer to Savings"
     },
     {
@@ -252,7 +259,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: 4250.00,
       category: "salary",
-      date: "2024-05-15",
+      date: "2025-05-15",
       description: "Salary - Tech Corp"
     },
     {
@@ -260,7 +267,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: -850.00,
       category: "mortgage",
-      date: "2024-05-01",
+      date: "2025-05-01",
       description: "Mortgage Payment"
     },
     {
@@ -268,7 +275,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: -800.00,
       category: "transfer",
-      date: "2024-05-10",
+      date: "2025-05-10",
       description: "Transfer to Savings"
     },
     {
@@ -276,7 +283,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: 4250.00,
       category: "salary",
-      date: "2024-04-15",
+      date: "2025-04-15",
       description: "Salary - Tech Corp"
     },
     {
@@ -284,7 +291,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: -850.00,
       category: "mortgage",
-      date: "2024-04-01",
+      date: "2025-04-01",
       description: "Mortgage Payment"
     },
     {
@@ -292,7 +299,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: -600.00,
       category: "transfer",
-      date: "2024-04-12",
+      date: "2025-04-12",
       description: "Transfer to Savings"
     },
     {
@@ -300,7 +307,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: 4250.00,
       category: "salary",
-      date: "2024-03-15",
+      date: "2025-03-15",
       description: "Salary - Tech Corp"
     },
     {
@@ -308,7 +315,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: -850.00,
       category: "mortgage",
-      date: "2024-03-01",
+      date: "2025-03-01",
       description: "Mortgage Payment"
     },
     {
@@ -316,7 +323,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: -500.00,
       category: "transfer",
-      date: "2024-03-08",
+      date: "2025-03-08",
       description: "Transfer to Savings"
     },
     {
@@ -324,7 +331,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: 4250.00,
       category: "salary",
-      date: "2024-02-15",
+      date: "2025-02-15",
       description: "Salary - Tech Corp"
     },
     {
@@ -332,7 +339,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: -850.00,
       category: "mortgage",
-      date: "2024-02-01",
+      date: "2025-02-01",
       description: "Mortgage Payment"
     },
     {
@@ -340,7 +347,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: -400.00,
       category: "transfer",
-      date: "2024-02-05",
+      date: "2025-02-05",
       description: "Transfer to Savings"
     },
     {
@@ -348,7 +355,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: 4250.00,
       category: "salary",
-      date: "2024-01-15",
+      date: "2025-01-15",
       description: "Salary - Tech Corp"
     },
     {
@@ -356,7 +363,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: -850.00,
       category: "mortgage",
-      date: "2024-01-01",
+      date: "2025-01-01",
       description: "Mortgage Payment"
     },
     {
@@ -364,7 +371,7 @@ export const demoData = {
       accountId: "checking_1",
       amount: -300.00,
       category: "transfer",
-      date: "2024-01-10",
+      date: "2025-01-10",
       description: "Transfer to Savings"
     }
   ],
@@ -375,7 +382,7 @@ export const demoData = {
       name: "Emergency Fund",
       target: 50000,
       current: 28450,
-      targetDate: "2024-12-31"
+      targetDate: "2025-12-31"
     },
     {
       id: "vacation",
@@ -418,9 +425,29 @@ export const demoData = {
     "credit_1": {
       limit: 15000,
       apr: 18.99,
-      dueDate: "2024-08-15",
+      dueDate: "2025-08-15",
       minimumPayment: 35.00
     }
+  },
+
+  // User profile data
+  profile: {
+    id: "demo_profile_1",
+    profileText: `I am Sarah Chen, a 35-year-old software engineer living in Austin, TX with my husband Michael (37, Marketing Manager) and our two children (ages 5 and 8). 
+
+Our household income is $157,000 annually, with me earning $85,000 as a software engineer and Michael earning $72,000 as a marketing manager. We have a stable dual-income household with good job security in the tech industry.
+
+We own our home with a $485,000 mortgage at 3.25% interest rate, and we're focused on building our emergency fund, saving for our children's education, and planning for retirement. Our financial goals include:
+- Building a $50,000 emergency fund (currently at $28,450)
+- Saving for a family vacation to Europe ($8,000 target, currently at $3,200)
+- Building a house down payment fund ($100,000 target, currently at $45,000)
+- Long-term retirement planning (currently have $246,200 in retirement accounts)
+
+Our investment strategy is conservative with a mix of index funds in our 401(k) and Roth IRA. We prioritize saving and are working to increase our monthly savings rate. We're also focused on paying down our credit card debt and maintaining good credit scores.
+
+Note: This profile reflects our financial situation as of August 2025.`,
+    createdAt: "2025-08-11T10:30:00Z",
+    updatedAt: "2025-08-11T10:30:00Z"
   },
 
   // Loan data
@@ -430,7 +457,7 @@ export const demoData = {
       interestRate: 3.25,
       term: 30,
       monthlyPayment: 850.00,
-      nextPayment: "2024-08-01"
+      nextPayment: "2025-08-01"
     }
   }
 };

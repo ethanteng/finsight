@@ -107,9 +107,9 @@ export class AlphaVantageProvider implements DataProvider {
     const cached = await cacheService.get(cacheKey);
     if (cached) return cached;
 
-    // Use mock data for test environment
-    if (this.apiKey === 'your_alpha_vantage_api_key') {
-      console.log('Alpha Vantage Provider: Using mock data for test environment');
+    // Use mock data for test environment or CI/CD
+    if (this.apiKey === 'your_alpha_vantage_api_key' || process.env.GITHUB_ACTIONS) {
+      console.log('Alpha Vantage Provider: Using mock data for test environment or CI/CD');
       const mockData = {
         symbol: key,
         data: 'mock_data',

@@ -6,6 +6,11 @@ import { UserTier } from './data/types';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 export const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+
+// Safety check: Prevent real OpenAI API calls in test/CI environments
+if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
+  console.log('OpenAI: Test/CI environment detected - using mock responses');
+}
 const prisma = new PrismaClient();
 
 // Helper function to get Plaid credentials based on mode

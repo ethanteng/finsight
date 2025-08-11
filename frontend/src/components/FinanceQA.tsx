@@ -149,14 +149,22 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
         headers['x-session-id'] = propSessionId;
       }
       
-      const res = await fetch(`${API_URL}/ask/display-real`, {
+      // Use different endpoints for demo vs production
+      const endpoint = isDemo ? '/ask' : '/ask/display-real';
+      const requestBody = isDemo ? {
+        question,
+        userTier: 'premium', // Demo mode gets premium tier access
+        isDemo: true
+      } : {
+        question,
+        isDemo: isDemo,
+        sessionId: propSessionId
+      };
+      
+      const res = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ 
-          question,
-          isDemo: isDemo, // Pass demo flag to backend
-          sessionId: propSessionId // Pass session ID for demo mode
-        }),
+        body: JSON.stringify(requestBody),
       });
       const data = await res.json();
       if (data.answer) {

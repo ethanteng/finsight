@@ -943,8 +943,8 @@ We own our home with a $485,000 mortgage at 3.25% interest rate, and we're focus
 - Long-term retirement planning (currently have $246,200 in retirement accounts)
 
 Our investment strategy is conservative with a mix of index funds in our 401(k) and Roth IRA. We prioritize saving and are working to increase our monthly savings rate. We're also focused on paying down our credit card debt and maintaining good credit scores.`,
-    createdAt: "2024-07-28T10:30:00Z",
-    updatedAt: "2024-07-28T10:30:00Z"
+    createdAt: "2025-08-11T10:30:00Z",
+    updatedAt: "2025-08-11T10:30:00Z"
   }
 };
 ```

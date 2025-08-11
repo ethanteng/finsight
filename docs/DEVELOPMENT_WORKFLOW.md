@@ -100,6 +100,83 @@ npx prisma migrate status
 npx prisma migrate deploy --preview-feature
 ```
 
+## 🎭 DEMO Mode Development - SEPARATE FROM CORE APP
+
+### ⚠️ CRITICAL: DEMO Mode is Completely Separate
+
+**DEMO mode should NEVER be mixed with core app development or debugging. When developing features, focus ONLY on the core application.**
+
+#### ✅ Correct Development Approach:
+```bash
+# For core app development (production mode)
+npm run dev:production
+
+# Focus ONLY on:
+# - Core app functionality
+# - Production features
+# - Real user workflows
+# - Production data handling
+# - Core app testing
+
+# DO NOT:
+# - Compare DEMO vs production behavior
+# - "Fix" DEMO mode during core development
+# - Mix DEMO and production logic
+# - Update DEMO data structures
+```
+
+#### ❌ Never Do This During Core Development:
+```bash
+# DON'T: Try to "fix" DEMO mode while developing core features
+# DON'T: Compare DEMO behavior with production behavior
+# DON'T: Update DEMO data or components during core development
+# DON'T: Mix DEMO and production debugging
+# DON'T: Use DEMO mode to test production features
+```
+
+#### 🔄 DEMO Mode Development Workflow:
+```bash
+# 1. Complete core app development FIRST
+# 2. Test core functionality thoroughly
+# 3. Commit and merge core changes
+# 4. ONLY THEN: Switch to DEMO mode development
+
+# For DEMO mode development (separate task):
+npm run dev:sandbox  # or appropriate DEMO mode command
+
+# Focus ONLY on:
+# - DEMO data structures
+# - DEMO user experience
+# - DEMO testing scenarios
+# - DEMO mode specific features
+```
+
+#### 📋 Development Priority Order:
+1. **Core App Development** (production mode)
+   - Implement new features
+   - Fix production bugs
+   - Test core functionality
+   - Deploy to production
+
+2. **DEMO Mode Updates** (separate task)
+   - Update DEMO data structures
+   - Enhance DEMO user experience
+   - Test DEMO scenarios
+   - Deploy DEMO improvements
+
+#### 🚫 Common Anti-Patterns to Avoid:
+- **"Let me check if this works in DEMO mode too"** - NO! Focus on core app first
+- **"I need to fix DEMO mode while I'm here"** - NO! Separate task
+- **"Let me compare DEMO vs production behavior"** - NO! One at a time
+- **"I'll update DEMO data while developing this feature"** - NO! Sequential development
+
+#### 💡 Why This Separation Matters:
+- **Prevents confusion** between DEMO and production logic
+- **Faster development** by focusing on one thing at a time
+- **Cleaner commits** with clear separation of concerns
+- **Easier debugging** without cross-contamination
+- **Better testing** of each mode independently
+
 ## 🗄️ Database Schema Management
 
 ### ⚠️ Critical: Preventing Schema Drift

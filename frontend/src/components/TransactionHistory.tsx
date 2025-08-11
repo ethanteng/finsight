@@ -42,8 +42,9 @@ export default function TransactionHistory({ isDemo = false }: TransactionHistor
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [dateRange, setDateRange] = useState('30'); // days
+  const [dateRange, setDateRange] = useState('90'); // days - default to 90 to match backend demo data
   const [showPending, setShowPending] = useState(true);
+  const [showEnhancedData, setShowEnhancedData] = useState(true); // Toggle for enhanced data
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -162,6 +163,17 @@ export default function TransactionHistory({ isDemo = false }: TransactionHistor
             <span>Show pending</span>
           </label>
           
+          {/* Toggle for enhanced transaction data */}
+          <label className="flex items-center space-x-2 text-sm text-gray-300">
+            <input
+              type="checkbox"
+              checked={showEnhancedData}
+              onChange={(e) => setShowEnhancedData(e.target.checked)}
+              className="rounded border-gray-600 bg-gray-700"
+            />
+            <span>Show enhanced data</span>
+          </label>
+          
           <button
             onClick={loadTransactions}
             disabled={loading}
@@ -206,15 +218,17 @@ export default function TransactionHistory({ isDemo = false }: TransactionHistor
                   
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-white truncate">
-                      {transaction.enriched_data?.merchant_name || transaction.merchant_name || transaction.name}
+                      {showEnhancedData && transaction.enriched_data?.merchant_name 
+                        ? transaction.enriched_data.merchant_name 
+                        : transaction.merchant_name || transaction.name}
                     </div>
                     <div className="text-sm text-gray-400">
                       {formatDate(transaction.date)}
                       {transaction.pending && (
                         <span className="ml-2 text-yellow-400">• Pending</span>
                       )}
-                      {/* Show enriched category data if available, fallback to basic category */}
-                      {transaction.enriched_data?.category && transaction.enriched_data.category.length > 0 ? (
+                      {/* Show enriched category data if available and toggle is enabled, fallback to basic category */}
+                      {showEnhancedData && transaction.enriched_data?.category && transaction.enriched_data.category.length > 0 ? (
                         <span className="ml-2">• {transaction.enriched_data.category.join(', ')}</span>
                       ) : transaction.category && transaction.category.length > 0 ? (
                         <span className="ml-2">• {transaction.category.join(', ')}</span>
@@ -225,19 +239,19 @@ export default function TransactionHistory({ isDemo = false }: TransactionHistor
                         📍 {transaction.location.city}, {transaction.location.state}
                       </div>
                     )}
-                    {/* Show enhanced merchant information if available */}
-                    {transaction.enriched_data?.website && (
+                    {/* Show enhanced merchant information if available and toggle is enabled */}
+                    {showEnhancedData && transaction.enriched_data?.website && (
                       <div className="text-xs text-blue-400">
                         🌐 {transaction.enriched_data.website}
                       </div>
                     )}
-                    {transaction.enriched_data?.brand_name && (
+                    {showEnhancedData && transaction.enriched_data?.brand_name && (
                       <div className="text-xs text-gray-400">
                         🏷️ {transaction.enriched_data.brand_name}
                       </div>
                     )}
-                    {/* Show merchant logo if available */}
-                    {transaction.enriched_data?.logo_url && (
+                    {/* Show merchant logo if available and toggle is enabled */}
+                    {showEnhancedData && transaction.enriched_data?.logo_url && (
                       <div className="mt-2 flex items-center space-x-2">
                         <img 
                           src={transaction.enriched_data.logo_url} 
@@ -247,9 +261,6 @@ export default function TransactionHistory({ isDemo = false }: TransactionHistor
                             e.currentTarget.style.display = 'none';
                           }}
                         />
-                        <span className="text-xs text-gray-500">
-                          Verified merchant
-                        </span>
                       </div>
                     )}
                   </div>

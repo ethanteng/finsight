@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { demoData } from '../data/demo-data';
 
 interface UserProfileProps {
   userId?: string;
@@ -51,28 +50,6 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
   useEffect(() => {
     if (userId && !isDemo) {
       loadProfile();
-    } else if (isDemo) {
-      // Load demo profile with defensive programming
-      console.log('Demo mode detected, demoData:', demoData);
-      console.log('Demo data import check:', {
-        hasDemoData: !!demoData,
-        demoDataKeys: demoData ? Object.keys(demoData) : []
-      });
-      
-      // Use fallback demo profile since the separate export isn't working
-      const fallbackProfile = `I am Sarah Chen, a 35-year-old software engineer living in Austin, TX with my husband Michael (37, Marketing Manager) and our two children (ages 5 and 8). 
-
-Our household income is $157,000 annually, with me earning $85,000 as a software engineer and Michael earning $72,000 as a marketing manager. We have a stable dual-income household with good job security in the tech industry.
-
-We own our home with a $485,000 mortgage at 3.25% interest rate, and we're focused on building our emergency fund, saving for our children's education, and planning for retirement. Our financial goals include:
-- Building a $50,000 emergency fund (currently at $28,450)
-- Saving for a family vacation to Europe ($8,000 target, currently at $3,200)
-- Building a house down payment fund ($100,000 target, currently at $45,000)
-- Long-term retirement planning (currently have $246,200 in retirement accounts)
-
-Our investment strategy is conservative with a mix of index funds in our 401(k) and Roth IRA. We prioritize saving and are working to increase our monthly savings rate. We're also focused on paying down our credit card debt and maintaining good credit scores.`;
-      
-      setProfileText(fallbackProfile);
     }
   }, [userId, isDemo, loadProfile]);
 
@@ -112,6 +89,38 @@ Our investment strategy is conservative with a mix of index funds in our 401(k) 
   // Don't show anything if not in demo mode and no userId
   if (!isDemo && !userId) {
     return null;
+  }
+
+  // For demo mode, show the profile immediately using the same data structure as the backend
+  if (isDemo) {
+    const demoProfileText = `I am Sarah Chen, a 35-year-old software engineer living in Austin, TX with my husband Michael (37, Marketing Manager) and our two children (ages 5 and 8). 
+
+Our household income is $157,000 annually, with me earning $85,000 as a software engineer and Michael earning $72,000 as a marketing manager. We have a stable dual-income household with good job security in the tech industry.
+
+We own our home with a $485,000 mortgage at 3.25% interest rate, and we're focused on building our emergency fund, saving for our children's education, and planning for retirement. Our financial goals include:
+- Building a $50,000 emergency fund (currently at $28,450)
+- Saving for a family vacation to Europe ($8,000 target, currently at $3,200)
+- Building a house down payment fund ($100,000 target, currently at $45,000)
+- Long-term retirement planning (currently have $246,200 in retirement accounts)
+
+Our investment strategy is conservative with a mix of index funds in our 401(k) and Roth IRA. We prioritize saving and are working to increase our monthly savings rate. We're also focused on paying down our credit card debt and maintaining good credit scores.
+
+Note: This profile reflects our financial situation as of August 2025.`;
+    
+    return (
+      <div className="bg-gray-800 rounded-lg p-6 mb-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-white">Your Financial Profile</h3>
+          <span className="text-gray-400 text-sm">Demo Mode - Read Only</span>
+        </div>
+        <div>
+          <p className="text-gray-300 whitespace-pre-wrap">{demoProfileText}</p>
+          <div className="mt-4 text-xs text-gray-500">
+            This is a demo profile showing how your financial profile would look in production.
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

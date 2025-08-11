@@ -162,9 +162,9 @@ export class SearchProvider {
   }
 
   private async googleSearch(query: string, options: any): Promise<any> {
-    // Use mock data for test environment
-    if (this.config.apiKey === 'test_search_key' || this.config.apiKey.startsWith('test_')) {
-      console.log('SearchProvider: Using mock data for test environment');
+    // Use mock data for test environment or CI/CD
+    if (this.config.apiKey === 'test_search_key' || this.config.apiKey.startsWith('test_') || process.env.GITHUB_ACTIONS) {
+      console.log('SearchProvider: Using mock data for test environment or CI/CD');
       return {
         items: [
           {
@@ -201,9 +201,9 @@ export class SearchProvider {
     console.log('SearchProvider: Brave search URL:', this.config.baseUrl);
     console.log('SearchProvider: API key present:', !!this.config.apiKey);
     
-    // Use mock data for test environment
-    if (this.config.apiKey === 'test_search_key' || this.config.apiKey.startsWith('test_')) {
-      console.log('SearchProvider: Using mock data for test environment');
+    // Use mock data for test environment or CI/CD
+    if (this.config.apiKey === 'test_search_key' || this.config.apiKey.startsWith('test_') || process.env.GITHUB_ACTIONS) {
+      console.log('SearchProvider: Using mock data for test environment or CI/CD');
       return {
         query: query,
         results: [

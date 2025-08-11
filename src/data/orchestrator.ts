@@ -69,10 +69,10 @@ export class DataOrchestrator {
   private readonly SEARCH_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
   constructor() {
-    // For integration tests, use test API keys to avoid hitting live APIs
-    const fredApiKey = process.env.NODE_ENV === 'test' ? 'test_fred_key' : process.env.FRED_API_KEY;
-    const alphaVantageApiKey = process.env.NODE_ENV === 'test' ? 'test_alpha_vantage_key' : process.env.ALPHA_VANTAGE_API_KEY;
-    const searchApiKey = process.env.NODE_ENV === 'test' ? 'test_search_key' : process.env.SEARCH_API_KEY;
+    // For integration tests and CI/CD, use test API keys to avoid hitting live APIs
+    const fredApiKey = (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) ? 'test_fred_key' : process.env.FRED_API_KEY;
+    const alphaVantageApiKey = (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) ? 'test_alpha_vantage_key' : process.env.ALPHA_VANTAGE_API_KEY;
+    const searchApiKey = (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) ? 'test_search_key' : process.env.SEARCH_API_KEY;
 
     console.log('DataOrchestrator: Initializing with API keys:');
     console.log('DataOrchestrator: FRED_API_KEY:', fredApiKey ? 'SET' : 'NOT SET');

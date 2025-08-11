@@ -19,7 +19,7 @@ interface LiabilityAccount {
 
 interface LiabilityData {
   accounts: LiabilityAccount[];
-  item: any;
+  item: unknown;
   request_id: string;
 }
 

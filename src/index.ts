@@ -410,17 +410,8 @@ const handleDemoRequest = async (req: Request, res: Response) => {
     const marketContext = await dataOrchestrator.getMarketContext(backendTier as any, true); // true = demo mode
     
     // Include demo profile in the AI prompt
-    const demoProfile = `I am Sarah Chen, a 35-year-old software engineer living in Austin, TX with my husband Michael (37, Marketing Manager) and our two children (ages 5 and 8). 
-
-Our household income is $157,000 annually, with me earning $85,000 as a software engineer and Michael earning $72,000 as a marketing manager. We have a stable dual-income household with good job security in the tech industry.
-
-We own our home with a $485,000 mortgage at 3.25% interest rate, and we're focused on building our emergency fund, saving for our children's education, and planning for retirement. Our financial goals include:
-- Building a $50,000 emergency fund (currently at $28,450)
-- Saving for a family vacation to Europe ($8,000 target, currently at $3,200)
-- Building a house down payment fund ($100,000 target, currently at $45,000)
-- Long-term retirement planning (currently have $246,200 in retirement accounts)
-
-Our investment strategy is conservative with a mix of index funds in our 401(k) and Roth IRA. We prioritize saving and are working to increase our monthly savings rate. We're also focused on paying down our credit card debt and maintaining good credit scores.`;
+    const { demoData } = await import('./demo-data');
+    const demoProfile = demoData.profile?.profileText || 'Demo profile not available';
     
     const answer = await askOpenAIWithEnhancedContext(questionString, recentConversations, backendTier as any, true, undefined, undefined, demoProfile);
     
@@ -689,17 +680,8 @@ const handleTierAwareDemoRequest = async (req: Request, res: Response) => {
     });
     
     // Include demo profile in the AI prompt
-    const demoProfile = `I am Sarah Chen, a 35-year-old software engineer living in Austin, TX with my husband Michael (37, Marketing Manager) and our two children (ages 5 and 8). 
-
-Our household income is $157,000 annually, with me earning $85,000 as a software engineer and Michael earning $72,000 as a marketing manager. We have a stable dual-income household with good job security in the tech industry.
-
-We own our home with a $485,000 mortgage at 3.25% interest rate, and we're focused on building our emergency fund, saving for our children's education, and planning for retirement. Our financial goals include:
-- Building a $50,000 emergency fund (currently at $28,450)
-- Saving for a family vacation to Europe ($8,000 target, currently at $3,200)
-- Building a house down payment fund ($100,000 target, currently at $45,000)
-- Long-term retirement planning (currently have $246,200 in retirement accounts)
-
-Our investment strategy is conservative with a mix of index funds in our 401(k) and Roth IRA. We prioritize saving and are working to increase our monthly savings rate. We're also focused on paying down our credit card debt and maintaining good credit scores.`;
+    const { demoData } = await import('./demo-data');
+    const demoProfile = demoData.profile?.profileText || 'Demo profile not available';
     
     console.log('Tier-aware demo - calling askOpenAIWithEnhancedContext with tier:', backendTier);
     const answer = await askOpenAIWithEnhancedContext(questionString, recentConversations, backendTier as any, true, undefined, undefined, demoProfile);

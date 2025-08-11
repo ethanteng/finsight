@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 
 interface Security {
   id: string;
@@ -21,6 +21,28 @@ interface Holding {
   institution_price_as_of: string;
   cost_basis: number;
   quantity: number;
+  iso_currency_code: string;
+  security_name?: string;
+  security_type?: string;
+  ticker_symbol?: string;
+  name?: string;
+  type?: string;
+  value?: number;
+}
+
+interface InvestmentTransaction {
+  id?: string;
+  transaction_id?: string;
+  account_id: string;
+  security_id: string;
+  amount: number;
+  date: string;
+  name?: string;
+  security_name?: string;
+  security_type?: string;
+  ticker_symbol?: string;
+  quantity: number;
+  type: string;
   iso_currency_code: string;
 }
 
@@ -53,9 +75,9 @@ interface InvestmentData {
   holdings: Holding[];
   securities: Security[];
   accounts: Account[];
-  investment_transactions: any[];
+  investment_transactions: unknown[];
   total_investment_transactions: number;
-  item: any;
+  item: unknown;
   analysis: {
     portfolio: PortfolioAnalysis;
     activity: ActivityAnalysis;
@@ -73,14 +95,12 @@ interface InvestmentPortfolioProps {
     holdingCount: number;
     securityCount: number;
   };
-  holdings: any[];
-  transactions: any[];
+  holdings: Holding[];
+  transactions: InvestmentTransaction[];
   isDemo?: boolean;
 }
 
-export default function InvestmentPortfolio({ portfolio, holdings, transactions, isDemo = false }: InvestmentPortfolioProps) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+export default function InvestmentPortfolio({ portfolio, holdings, transactions }: InvestmentPortfolioProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'holdings' | 'transactions'>('overview');
 
   const formatCurrency = (amount: number) => {
@@ -88,14 +108,6 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions,
       style: 'currency',
       currency: 'USD',
     }).format(amount);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
   };
 
   const getAssetTypeIcon = (type: string) => {
@@ -115,14 +127,6 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions,
     return portfolio.assetAllocation
       .sort((a, b) => b.value - a.value);
   };
-
-  if (error) {
-    return (
-      <div className="bg-gray-800 rounded-lg p-6">
-        <div className="text-red-400 text-center py-4">{error}</div>
-      </div>
-    );
-  }
 
   if (!portfolio) {
     return (

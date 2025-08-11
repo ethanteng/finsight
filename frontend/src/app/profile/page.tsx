@@ -4,7 +4,6 @@ import PlaidLinkButton from '../../components/PlaidLinkButton';
 import TransactionHistory from '../../components/TransactionHistory';
 import UserProfile from '../../components/UserProfile';
 import InvestmentPortfolio from '../../components/InvestmentPortfolio';
-import EnhancedTransactions from '../../components/EnhancedTransactions';
 
 interface Account {
   id: string;
@@ -20,13 +19,39 @@ interface Account {
 
 interface InvestmentData {
   portfolio: {
-    total_value: number;
-    asset_allocation: Record<string, number>;
-    holding_count: number;
-    security_count: number;
+    totalValue: number;
+    assetAllocation: Array<{
+      type: string;
+      value: number;
+      percentage: number;
+    }>;
+    holdingCount: number;
+    securityCount: number;
   };
-  holdings: any[];
-  transactions: any[];
+  holdings: Array<{
+    id: string;
+    account_id: string;
+    security_id: string;
+    institution_value: number;
+    institution_price: number;
+    institution_price_as_of: string;
+    cost_basis: number;
+    quantity: number;
+    iso_currency_code: string;
+  }>;
+  transactions: Array<{
+    id: string;
+    account_id: string;
+    security_id: string;
+    amount: number;
+    date: string;
+    name: string;
+    quantity: number;
+    price: number;
+    fees: number;
+    type: string;
+    iso_currency_code: string;
+  }>;
 }
 
 export default function ProfilePage() {
@@ -34,17 +59,19 @@ export default function ProfilePage() {
   const [investmentData, setInvestmentData] = useState<InvestmentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isDemo, setIsDemo] = useState(false);
+  const [isDemo, setIsDemo] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('');
+  const [demoStatusDetermined, setDemoStatusDetermined] = useState(true);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
   // Helper functions that take demo mode as parameter
   const loadConnectedAccountsWithDemoMode = useCallback(async (demoMode: boolean) => {
     console.log('loadConnectedAccountsWithDemoMode called with demoMode:', demoMode);
+    console.log('API_URL in function:', API_URL);
     
     setLoading(true);
     setError('');
@@ -68,11 +95,17 @@ export default function ProfilePage() {
         }
       }
 
-      console.log('Making request to /plaid/all-accounts with headers:', headers);
-      const res = await fetch(`${API_URL}/plaid/all-accounts`, {
+      const requestUrl = `${API_URL}/plaid/all-accounts`;
+      console.log('Making request to:', requestUrl);
+      console.log('Request headers:', headers);
+      
+      const res = await fetch(requestUrl, {
         method: 'GET',
         headers,
       });
+
+      console.log('Response status:', res.status);
+      console.log('Response ok:', res.ok);
 
       if (res.ok) {
         const data = await res.json();
@@ -85,7 +118,8 @@ export default function ProfilePage() {
           setError('Failed to load accounts');
         }
       }
-    } catch {
+    } catch (error) {
+      console.error('Error in loadConnectedAccountsWithDemoMode:', error);
       setError('Error loading accounts');
     } finally {
       setLoading(false);
@@ -129,24 +163,24 @@ export default function ProfilePage() {
   }, [API_URL]);
 
   useEffect(() => {
-    // Check if user came from demo page
-    const referrer = document.referrer;
+    // Check if demo mode is explicitly requested via URL parameter
     const urlParams = new URLSearchParams(window.location.search);
-    const isFromDemo = referrer.includes('/demo') || urlParams.get('demo') === 'true';
+    const isFromDemo = urlParams.get('demo') === 'true';
     
     console.log('Demo detection debug:', {
-      referrer,
       urlParams: urlParams.get('demo'),
       isFromDemo,
       currentUrl: window.location.href
     });
     
+    console.log('Setting isDemo to:', isFromDemo);
     setIsDemo(isFromDemo);
+    setDemoStatusDetermined(true);
     
     // Only call API functions after we've determined demo mode
     if (isFromDemo) {
       console.log('Demo mode detected, calling API functions');
-      // Call the functions directly with the correct demo mode
+      console.log('API_URL:', API_URL);
       loadConnectedAccountsWithDemoMode(true);
       loadInvestmentData(true);
     } else {
@@ -154,7 +188,7 @@ export default function ProfilePage() {
       loadConnectedAccountsWithDemoMode(false);
       loadInvestmentData(false);
     }
-  }, [loadConnectedAccountsWithDemoMode, loadInvestmentData]);
+  }, [loadConnectedAccountsWithDemoMode, loadInvestmentData, API_URL]);
 
   // Fetch user email when not in demo mode
   useEffect(() => {
@@ -307,7 +341,9 @@ export default function ProfilePage() {
 
       <div className="max-w-4xl mx-auto p-6">
         {/* User Profile Section */}
-        <UserProfile userId={userEmail ? 'user' : undefined} isDemo={isDemo} />
+        {demoStatusDetermined && (
+          <UserProfile userId={userEmail ? 'user' : undefined} isDemo={isDemo} />
+        )}
         
         {/* Account Management Section */}
         <div className="bg-gray-800 rounded-lg p-6 mb-6">
@@ -369,17 +405,22 @@ export default function ProfilePage() {
         {investmentData && (
           <div className="mb-6">
             <InvestmentPortfolio 
-              portfolio={investmentData.portfolio}
-              holdings={investmentData.holdings}
-              transactions={investmentData.transactions}
+              portfolio={{
+                totalValue: investmentData.portfolio?.totalValue || 0,
+                assetAllocation: investmentData.portfolio?.assetAllocation || [],
+                holdingCount: investmentData.portfolio?.holdingCount || 0,
+                securityCount: investmentData.portfolio?.securityCount || 0
+              }}
+              holdings={investmentData.holdings || []}
+              transactions={investmentData.transactions || []}
               isDemo={isDemo}
             />
           </div>
         )}
 
-        {/* Enhanced Transaction History */}
+        {/* Transaction History - Show ALL transactions */}
         <div className="mb-6">
-          <EnhancedTransactions isDemo={isDemo} />
+          <TransactionHistory isDemo={isDemo} />
         </div>
 
         {/* Account Settings */}

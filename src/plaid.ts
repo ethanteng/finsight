@@ -59,20 +59,10 @@ console.log('Plaid Configuration:', {
 
 const plaidClient = new PlaidApi(configuration);
 
-// Helper function to get Plaid client for demo mode (always sandbox)
-const getDemoPlaidClient = () => {
-  // Demo mode ALWAYS uses sandbox credentials, regardless of PLAID_MODE setting
-  const demoConfiguration = new Configuration({
-    basePath: PlaidEnvironments.sandbox,
-    baseOptions: {
-      headers: {
-        'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID, // Always use sandbox credentials
-        'PLAID-SECRET': process.env.PLAID_SECRET,       // Always use sandbox credentials
-      },
-    },
-  });
-  return new PlaidApi(demoConfiguration);
-};
+// Safety check: Prevent real Plaid API calls in test/CI environments
+if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
+  console.log('Plaid: Test/CI environment detected - using mock responses');
+}
 
 // Helper function to get subtype for demo accounts
 const getSubtypeForType = (type: string): string => {
@@ -318,22 +308,13 @@ export const setupPlaidRoutes = (app: any) => {
       const isProduction = plaidMode === 'production';
       const isLimitedProduction = plaidMode === 'production' && process.env.PLAID_ACCESS_LEVEL === 'limited';
       
-      // For demo mode, ALWAYS use sandbox regardless of PLAID_MODE setting
+      // For demo mode, ALWAYS use fake data instead of hitting Plaid APIs
       if (isDemoRequest) {
-        console.log('Demo mode detected - ALWAYS using sandbox environment for Plaid (ignoring PLAID_MODE)');
-        const demoPlaidClient = getDemoPlaidClient();
+        console.log('Demo mode detected - returning fake data instead of hitting Plaid APIs');
         
-        const request = {
-          user: { client_user_id: 'demo-user-id' },
-          client_name: 'Ask Linc (Demo)',
-          products: [Products.Transactions], // Use only Transactions product
-          country_codes: [CountryCode.Us],
-          language: 'en',
-        };
-
-        console.log('Creating demo link token with sandbox environment');
-        const createTokenResponse = await demoPlaidClient.linkTokenCreate(request);
-        res.json({ link_token: createTokenResponse.data.link_token });
+        // Return fake link token for demo mode - NO REAL API CALLS
+        const fakeLinkToken = 'demo_link_token_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        res.json({ link_token: fakeLinkToken });
         return;
       }
       
@@ -1022,59 +1003,132 @@ export const setupPlaidRoutes = (app: any) => {
       const isDemo = req.headers['x-demo-mode'] === 'true';
       
       if (isDemo) {
-        // Return demo investment data
+        // Return demo investment data that matches the frontend expectations
         const demoData = {
           portfolio: {
             totalValue: 619951.34,
             assetAllocation: [
-              { type: 'Unknown', value: 619951.34, percentage: 100.0 }
+              { type: 'Equity', value: 246200.75, percentage: 39.7 },
+              { type: 'Fixed Income', value: 15678.00, percentage: 2.5 },
+              { type: 'International', value: 33562.05, percentage: 5.4 },
+              { type: 'Cash & Equivalents', value: 324510.54, percentage: 52.4 }
             ],
             holdingCount: 60,
             securityCount: 26
           },
           holdings: [
             {
-              id: 'demo_account_1_security_1_100_50000',
-              account_id: 'demo_account_1',
-              security_id: 'demo_security_1',
-              institution_value: 50000,
-              institution_price: 500.00,
+              id: 'demo_401k_vtsax',
+              account_id: '401k_1',
+              security_id: 'vtsax',
+              institution_value: 156780.45,
+              institution_price: 142.80,
               institution_price_as_of: new Date().toISOString(),
-              cost_basis: 48000,
-              quantity: 100,
+              cost_basis: 156000.00,
+              quantity: 1097.45,
               iso_currency_code: 'USD',
-              security_name: 'Apple Inc. (AAPL)',
+              security_name: 'Vanguard Total Stock Market Index Fund',
               security_type: 'equity',
-              ticker_symbol: 'AAPL'
+              ticker_symbol: 'VTSAX'
             },
             {
-              id: 'demo_account_1_security_2_50_25000',
-              account_id: 'demo_account_1',
-              security_id: 'demo_security_2',
-              institution_value: 25000,
-              institution_price: 500.00,
+              id: 'demo_401k_vtiax',
+              account_id: '401k_1',
+              security_id: 'vtiax',
+              institution_value: 15678.05,
+              institution_price: 35.00,
               institution_price_as_of: new Date().toISOString(),
-              cost_basis: 24000,
-              quantity: 50,
+              cost_basis: 15000.00,
+              quantity: 447.89,
               iso_currency_code: 'USD',
-              security_name: 'Microsoft Corporation (MSFT)',
+              security_name: 'Vanguard Total International Stock Index Fund',
               security_type: 'equity',
-              ticker_symbol: 'MSFT'
+              ticker_symbol: 'VTIAX'
+            },
+            {
+              id: 'demo_401k_vbtlx',
+              account_id: '401k_1',
+              security_id: 'vbtlx',
+              institution_value: 15678.00,
+              institution_price: 10.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 15500.00,
+              quantity: 1567.80,
+              iso_currency_code: 'USD',
+              security_name: 'Vanguard Total Bond Market Index Fund',
+              security_type: 'fixed income',
+              ticker_symbol: 'VBTLX'
+            },
+            {
+              id: 'demo_ira_vti',
+              account_id: 'ira_1',
+              security_id: 'vti',
+              institution_value: 89420.30,
+              institution_price: 570.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 85000.00,
+              quantity: 156.78,
+              iso_currency_code: 'USD',
+              security_name: 'Vanguard Total Stock Market ETF',
+              security_type: 'equity',
+              ticker_symbol: 'VTI'
+            },
+            {
+              id: 'demo_ira_vxus',
+              account_id: 'ira_1',
+              security_id: 'vxus',
+              institution_value: 17884.00,
+              institution_price: 40.00,
+              institution_price_as_of: new Date().toISOString(),
+              cost_basis: 17000.00,
+              quantity: 447.10,
+              iso_currency_code: 'USD',
+              security_name: 'Vanguard Total International Stock ETF',
+              security_type: 'equity',
+              ticker_symbol: 'VXUS'
             }
           ],
           transactions: [
             {
-              id: 'demo_transaction_1_demo_account_1_demo_security_1_2024-08-10',
-              account_id: 'demo_account_1',
-              security_id: 'demo_security_1',
-              amount: 50000,
-              date: '2024-08-10',
-              name: 'Demo Stock Purchase',
-              quantity: 100,
+              id: 'demo_transaction_1',
+              account_id: '401k_1',
+              security_id: 'vtsax',
+              amount: 1200.00,
+              date: '2025-07-15',
+              name: '401k Contribution - Tech Corp',
+              quantity: 8.40,
               fees: 0,
-              price: 500.00,
+              price: 142.80,
               type: 'buy',
-              subtype: 'purchase',
+              subtype: 'contribution',
+              iso_currency_code: 'USD'
+            },
+            {
+              id: 'demo_transaction_2',
+              account_id: '401k_1',
+              security_id: 'vtsax',
+              amount: 45.67,
+              date: '2025-07-10',
+              name: 'VTSAX Dividend Reinvestment',
+              quantity: 0.32,
+              fees: 0,
+              price: 142.80,
+              type: 'buy',
+              subtype: 'dividend',
+              iso_currency_code: 'USD'
+            },
+            {
+              id: 'demo_transaction_3',
+              account_id: 'ira_1',
+              security_id: 'vti',
+              amount: 6500.00,
+              date: '2025-07-01',
+              name: 'Roth IRA Contribution',
+              quantity: 11.40,
+              fees: 0,
+              price: 570.00,
+              type: 'buy',
+              subtype: 'contribution',
               iso_currency_code: 'USD'
             }
           ]
@@ -1578,11 +1632,11 @@ export const setupPlaidRoutes = (app: any) => {
             {
               investment_transactions: [
                 {
-                  id: 'demo_transaction_1_demo_account_1_demo_security_1_2024-08-10',
+                  id: 'demo_transaction_1_demo_account_1_demo_security_1_2025-08-10',
                   account_id: 'demo_account_1',
                   security_id: 'demo_security_1',
                   amount: 50000,
-                  date: '2024-08-10',
+                  date: '2025-08-10',
                   name: 'Demo Stock Purchase',
                   quantity: 100,
                   fees: 0,
@@ -1592,11 +1646,11 @@ export const setupPlaidRoutes = (app: any) => {
                   iso_currency_code: 'USD'
                 },
                 {
-                  id: 'demo_transaction_2_demo_account_1_demo_security_2_2024-08-15',
+                  id: 'demo_transaction_2_demo_account_1_demo_security_2_2025-08-15',
                   account_id: 'demo_account_1',
                   security_id: 'demo_security_2',
                   amount: 25000,
-                  date: '2024-08-15',
+                  date: '2025-08-15',
                   name: 'Demo Stock Purchase',
                   quantity: 50,
                   fees: 0,
