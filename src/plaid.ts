@@ -295,18 +295,11 @@ export {
 };
 
 export const setupPlaidRoutes = (app: any) => {
-  // Create link token
+  // Create link token with SEAMLESS approach - minimal products + additional consent
   app.post('/plaid/create_link_token', async (req: any, res: any) => {
     try {
       // Check if this is a demo request
       const isDemoRequest = req.headers['x-demo-mode'] === 'true' || req.body.isDemo === true;
-      
-      // Check if this is an investment-specific request
-      const isInvestmentRequest = req.body.productType === 'investments';
-      
-      // Determine available products based on environment
-      const isProduction = plaidMode === 'production';
-      const isLimitedProduction = plaidMode === 'production' && process.env.PLAID_ACCESS_LEVEL === 'limited';
       
       // For demo mode, ALWAYS use fake data instead of hitting Plaid APIs
       if (isDemoRequest) {
@@ -318,49 +311,31 @@ export const setupPlaidRoutes = (app: any) => {
         return;
       }
       
-      // For investment-specific requests, use Investments product
-      if (isInvestmentRequest) {
-        console.log('Creating investment-specific link token');
-        const request = {
-          user: { client_user_id: 'user-id' },
-          client_name: 'Ask Linc (Investments)',
-          products: [Products.Investments], // Use Investments product
-          country_codes: [CountryCode.Us],
-          language: 'en',
-        };
-
-        console.log('Creating investment link token');
-        const createTokenResponse = await plaidClient.linkTokenCreate(request);
-        res.json({ link_token: createTokenResponse.data.link_token });
-        return;
-      }
+      // SEAMLESS APPROACH: Start with minimal products to maximize institution coverage
+      // Use additional_consented_products to collect consent for everything we might need later
       
-      // Note: The regular flow now includes both Transactions and Investments products
-      // This ensures all users get access to investment data without needing special requests
-      
-      // For regular requests, use both Transactions and Investments products
-      // This ensures users can access both transaction data and investment data
-      let products = [Products.Transactions, Products.Investments];
-      
-      if (isProduction) {
-        console.log('Using production configuration with Transactions + Investments products');
-        console.log('Note: Users will have access to both transaction and investment data');
-      } else {
-        console.log('Using sandbox configuration with Transactions + Investments products');
-      }
-
       const request = {
         user: { client_user_id: 'user-id' },
         client_name: 'Ask Linc',
-        products: products,
-        country_codes: [CountryCode.Us],
         language: 'en',
-        // Remove conflicting configuration options that cause INVALID_CONFIGURATION error
-        // webhook: isProduction ? process.env.PLAID_WEBHOOK_URL : undefined,
-        // link_customization_name: isProduction ? 'default' : undefined
+        country_codes: [CountryCode.Us],
+        // Start with only Transactions to maximize FI coverage
+        products: [Products.Transactions],
+        // Ask consent up-front so you can add these later without relinking
+        additional_consented_products: [
+          Products.Investments,  // For investment accounts
+          Products.Liabilities,  // For credit/loan accounts
+          Products.Auth,         // For real-time balance (when needed)
+        ],
+        // Optional: If you want certain scopes *when supported* (but not block Link), list them here:
+        // required_if_supported_products: [Products.Investments],
+        webhook: process.env.PLAID_WEBHOOK_URL || undefined,
       };
 
-      console.log(`Creating link token with products: ${products.join(', ')}`);
+      console.log('Creating seamless link token:');
+      console.log(`- Products: ${request.products.join(', ')} (minimal to maximize institution coverage)`);
+      console.log(`- Additional consent: ${request.additional_consented_products.join(', ')} (for future access)`);
+      
       const createTokenResponse = await plaidClient.linkTokenCreate(request);
       res.json({ link_token: createTokenResponse.data.link_token });
     } catch (error) {
@@ -420,6 +395,85 @@ export const setupPlaidRoutes = (app: any) => {
       }
       
       console.log(`Token stored with userId: ${req.user?.id || 'NO USER'}`);
+      
+      // INTELLIGENT ACCOUNT DETECTION: After successful linking, detect what's available
+      // and call appropriate endpoints based on account types
+      try {
+        console.log('Starting intelligent account detection...');
+        
+        // Get accounts to see what types we have
+        const accountsResponse = await plaidClient.accountsGet({
+          access_token: access_token,
+        });
+        
+        const accounts = accountsResponse.data.accounts;
+        console.log(`Found ${accounts.length} accounts to analyze`);
+        
+        // Analyze each account and call appropriate endpoints
+        for (const account of accounts) {
+          const accountType = account.type;
+          const accountSubtype = account.subtype;
+          
+          console.log(`Analyzing account: ${account.name} (${accountType}/${accountSubtype})`);
+          
+          // For investment accounts, get holdings and transactions
+          if (accountType === 'investment') {
+            console.log('Investment account detected - fetching holdings and transactions');
+            try {
+              // Get investment holdings
+              const holdingsResponse = await plaidClient.investmentsHoldingsGet({
+                access_token: access_token,
+              });
+              console.log(`Retrieved ${holdingsResponse.data.holdings?.length || 0} investment holdings`);
+              
+              // Get investment transactions
+              const transactionsResponse = await plaidClient.investmentsTransactionsGet({
+                access_token: access_token,
+                start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Last 30 days
+                end_date: new Date().toISOString().split('T')[0],
+              });
+              console.log(`Retrieved ${transactionsResponse.data.investment_transactions?.length || 0} investment transactions`);
+            } catch (error: any) {
+              console.log('Investment data not available for this account:', error.message);
+            }
+          }
+          
+          // For credit/loan accounts, get liabilities
+          if (accountType === 'credit' || accountType === 'loan') {
+            console.log('Credit/Loan account detected - fetching liabilities');
+            try {
+              const liabilitiesResponse = await plaidClient.liabilitiesGet({
+                access_token: access_token,
+              });
+              console.log(`Retrieved ${liabilitiesResponse.data.accounts?.length || 0} liability accounts`);
+            } catch (error: any) {
+              console.log('Liability data not available for this account:', error.message);
+            }
+          }
+          
+          // For standard deposit accounts, get transactions
+          if (accountType === 'depository') {
+            console.log('Depository account detected - fetching transactions');
+            try {
+              const transactionsResponse = await plaidClient.transactionsSync({
+                access_token: access_token,
+                options: {
+                  include_personal_finance_category: true
+                }
+              });
+              console.log(`Retrieved ${transactionsResponse.data.added?.length || 0} transactions`);
+            } catch (error: any) {
+              console.log('Transaction data not available for this account:', error.message);
+            }
+          }
+        }
+        
+        console.log('Intelligent account detection completed successfully');
+      } catch (detectionError: any) {
+        // Don't fail the token exchange if detection fails
+        console.log('Account detection failed (non-critical):', detectionError.message);
+      }
+      
       res.json({ access_token });
     } catch (error) {
       const errorInfo = handlePlaidError(error, 'exchanging public token');
@@ -3074,6 +3128,143 @@ export const setupPlaidRoutes = (app: any) => {
     } catch (error) {
       const errorResponse = handlePlaidError(error, 'check token scope');
       res.status(500).json(errorResponse);
+    }
+  });
+
+  // NEW: Comprehensive sync endpoint - intelligently pulls all available data
+  // Strategy: /accounts/get to see what they actually linked, then branch based on account types
+  app.post('/plaid/sync', async (req: any, res: any) => {
+    try {
+      const { needRealtimeBalance } = req.body as { needRealtimeBalance?: boolean };
+      const accessToken = req.headers.authorization?.replace('Bearer ', '') || req.query.access_token;
+      
+      if (!accessToken) {
+        return res.status(400).json({ error: 'Access token required' });
+      }
+
+      console.log('Starting comprehensive sync for access token...');
+      
+      // Get accounts to see what types we have
+      const accountsResponse = await plaidClient.accountsGet({
+        access_token: accessToken,
+      });
+      
+      const accounts = accountsResponse.data.accounts;
+      console.log(`Found ${accounts.length} accounts to sync`);
+      
+      // Quick feature detection
+      const hasInvestment = accounts.some((a: any) => a.type === 'investment');
+      const hasCreditOrLoan = accounts.some((a: any) => a.type === 'credit' || a.type === 'loan');
+      const hasDepository = accounts.some((a: any) => a.type === 'depository');
+      
+      const result: any = { 
+        accountsSummary: accounts.map((a: any) => ({
+          account_id: a.account_id,
+          name: a.name,
+          type: a.type,
+          subtype: a.subtype,
+          mask: a.mask,
+        }))
+      };
+      
+      // Investments
+      if (hasInvestment) {
+        console.log('Investment accounts detected - fetching holdings and transactions');
+        try {
+          const holdings = await plaidClient.investmentsHoldingsGet({ access_token: accessToken });
+          const invTx = await plaidClient.investmentsTransactionsGet({
+            access_token: accessToken,
+            start_date: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Last 90 days
+            end_date: new Date().toISOString().split('T')[0],
+          });
+          
+          result.investments = {
+            holdings: holdings.data.holdings,
+            securities: holdings.data.securities,
+            transactions: invTx.data.investment_transactions,
+          };
+          
+          console.log(`Retrieved ${holdings.data.holdings?.length || 0} holdings and ${invTx.data.investment_transactions?.length || 0} transactions`);
+        } catch (error: any) {
+          console.log('Investment data not available:', error.message);
+          result.investments = { error: 'Investment data not available' };
+        }
+      }
+      
+      // Liabilities (credit cards, student loans, mortgages)
+      if (hasCreditOrLoan) {
+        console.log('Credit/Loan accounts detected - fetching liabilities');
+        try {
+          const liab = await plaidClient.liabilitiesGet({ access_token: accessToken });
+          result.liabilities = liab.data.liabilities;
+          console.log(`Retrieved ${liab.data.accounts?.length || 0} liability accounts`);
+        } catch (error: any) {
+          console.log('Liability data not available:', error.message);
+          result.liabilities = { error: 'Liability data not available' };
+        }
+      }
+      
+      // Banking transactions (checking/savings)
+      if (hasDepository) {
+        console.log('Depository accounts detected - fetching transactions');
+        try {
+          // Use /transactions/sync, not /transactions/get
+          let cursor: string | null = null;
+          const added: any[] = [];
+          const modified: any[] = [];
+          const removed: any[] = [];
+          let hasMore = true;
+          
+          while (hasMore) {
+            const syncResp = await plaidClient.transactionsSync({
+              access_token: accessToken,
+              cursor: cursor || undefined,
+            });
+            added.push(...syncResp.data.added);
+            modified.push(...syncResp.data.modified);
+            removed.push(...syncResp.data.removed);
+            cursor = syncResp.data.next_cursor;
+            hasMore = syncResp.data.has_more;
+          }
+          
+          result.transactions = { added, modified, removed, cursor };
+          console.log(`Retrieved ${added.length} transactions`);
+        } catch (error: any) {
+          console.log('Transaction data not available:', error.message);
+          result.transactions = { error: 'Transaction data not available' };
+        }
+      }
+      
+      // Real-time balances (only if you actually need them)
+      if (needRealtimeBalance) {
+        console.log('Fetching real-time balances...');
+        try {
+          const bal = await plaidClient.accountsBalanceGet({ access_token: accessToken });
+          result.realtimeBalances = bal.data.accounts.map((a: any) => ({
+            account_id: a.account_id,
+            name: a.name,
+            available: a.balances.available,
+            current: a.balances.current,
+            iso_currency_code: a.balances.iso_currency_code,
+          }));
+          console.log(`Retrieved real-time balances for ${result.realtimeBalances.length} accounts`);
+        } catch (error: any) {
+          console.log('Real-time balance data not available:', error.message);
+          result.realtimeBalances = { error: 'Real-time balance data not available' };
+        }
+      }
+      
+      console.log('Comprehensive sync completed successfully');
+      res.json(result);
+      
+    } catch (error: any) {
+      // If you forgot to include a product in additional_consented_products,
+      // certain calls can fail here with consent errors → you'd need Update Mode.
+      console.error('Sync failed:', error?.response?.data || error);
+      res.status(500).json({ 
+        error: 'SYNC_FAILED',
+        details: error?.response?.data || error?.message || 'Unknown error'
+      });
     }
   });
 };
