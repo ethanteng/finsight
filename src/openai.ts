@@ -1,6 +1,15 @@
 import OpenAI from 'openai';
 import { PrismaClient } from '@prisma/client';
-import { anonymizeAccountData, anonymizeTransactionData, anonymizeConversationHistory, tokenizeAccount, tokenizeMerchant } from './privacy';
+import { 
+  anonymizeAccountData, 
+  anonymizeTransactionData, 
+  anonymizeInvestmentData,
+  anonymizeLiabilityData,
+  anonymizeEnhancedTransactionData,
+  anonymizeConversationHistory, 
+  tokenizeAccount, 
+  tokenizeMerchant 
+} from './privacy';
 import { dataOrchestrator, TierAwareContext } from './data/orchestrator';
 import { UserTier } from './data/types';
 
@@ -651,7 +660,7 @@ export async function askOpenAIWithEnhancedContext(
   if (investmentData) {
     const { portfolio, holdings } = investmentData;
     
-    // Portfolio overview
+    // Portfolio overview (keep totals but anonymize individual holdings)
     investmentSummary += `Portfolio Overview:
 - Total Value: $${portfolio.totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
 - Number of Holdings: ${portfolio.holdingCount}
@@ -663,9 +672,7 @@ ${portfolio.assetAllocation.map((allocation: any) =>
 ).join('\n')}
 
 Top Holdings:
-${holdings.slice(0, 10).map((holding: any) => 
-  `- ${holding.security_name || 'Unknown Security'} (${holding.ticker_symbol || 'N/A'}): ${holding.quantity} shares @ $${(holding.institution_price || 0).toFixed(2)} = $${(holding.institution_value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-).join('\n')}`;
+${anonymizeInvestmentData(holdings.slice(0, 10))}`;
   }
 
   console.log('OpenAI Enhanced: Account summary for AI:', accountSummary);
@@ -767,23 +774,19 @@ ${holdings.slice(0, 10).map((holding: any) =>
             
             // Add liabilities context to user profile
             if (liabilitiesData.liabilities && liabilitiesData.liabilities.length > 0) {
-              const liabilityContext = liabilitiesData.liabilities.map((liability: any) => {
+              // Extract all liability accounts for anonymization
+              const allLiabilityAccounts: any[] = [];
+              liabilitiesData.liabilities.forEach((liability: any) => {
                 if (liability.accounts && liability.accounts.length > 0) {
-                  return liability.accounts.map((account: any) => {
-                    if (account.account_type === 'credit') {
-                      return `Credit Card: ${account.account_name} - Credit Limit: $${account.limit || 'Unknown'}, Current Balance: $${account.current_balance || 'Unknown'}`;
-                    } else if (account.account_type === 'mortgage') {
-                      return `Mortgage: ${account.account_name} - Original Amount: $${account.limit || 'Unknown'}, Current Balance: $${account.current_balance || 'Unknown'}`;
-                    }
-                    return null;
-                  }).filter(Boolean).join('; ');
+                  allLiabilityAccounts.push(...liability.accounts);
                 }
-                return null;
-              }).filter(Boolean).join('. ');
+              });
               
-              if (liabilityContext) {
-                userProfile += `\n\nLIABILITIES INFORMATION:\n${liabilityContext}`;
-                console.log('OpenAI Enhanced: Added liabilities context to profile');
+              if (allLiabilityAccounts.length > 0) {
+                // Anonymize liability data before adding to profile
+                const anonymizedLiabilities = anonymizeLiabilityData(allLiabilityAccounts);
+                userProfile += `\n\nLIABILITIES INFORMATION:\n${anonymizedLiabilities}`;
+                console.log('OpenAI Enhanced: Added anonymized liabilities context to profile');
               }
             }
           } else {

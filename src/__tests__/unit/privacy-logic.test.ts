@@ -490,4 +490,382 @@ describe('Privacy Logic Tests', () => {
       expect(remainingTransactions.length).toBe(0);
     });
   });
+
+  describe('Privacy Anonymization Functions', () => {
+    // Import the privacy functions
+    const {
+      tokenizeAccount,
+      tokenizeInstitution,
+      tokenizeMerchant,
+      tokenizeSecurity,
+      tokenizeLiability,
+      anonymizeAccountData,
+      anonymizeTransactionData,
+      anonymizeInvestmentData,
+      anonymizeLiabilityData,
+      anonymizeEnhancedTransactionData,
+      convertResponseToUserFriendly,
+      clearTokenizationMaps,
+      getRealAccountName,
+      getRealInstitutionName,
+      getRealMerchantName,
+      getRealSecurityName,
+      getRealLiabilityName
+    } = require('../../privacy');
+
+    beforeEach(() => {
+      // Clear tokenization maps before each test for isolation
+      clearTokenizationMaps();
+    });
+
+    afterEach(() => {
+      // Clear tokenization maps after each test for cleanup
+      clearTokenizationMaps();
+    });
+
+    describe('Tokenization Functions', () => {
+      it('should tokenize account names consistently', () => {
+        const token1 = tokenizeAccount('Chase Checking', 'Chase Bank');
+        const token2 = tokenizeAccount('Chase Checking', 'Chase Bank');
+        const token3 = tokenizeAccount('Chase Savings', 'Chase Bank');
+        
+        expect(token1).toBe(token2); // Same account should get same token
+        expect(token1).not.toBe(token3); // Different accounts should get different tokens
+        expect(token1).toMatch(/^Account_\d+$/);
+        expect(token3).toMatch(/^Account_\d+$/);
+      });
+
+      it('should tokenize institution names consistently', () => {
+        const token1 = tokenizeInstitution('Chase Bank');
+        const token2 = tokenizeInstitution('Chase Bank');
+        const token3 = tokenizeInstitution('Bank of America');
+        
+        expect(token1).toBe(token2); // Same institution should get same token
+        expect(token1).not.toBe(token3); // Different institutions should get different tokens
+        expect(token1).toMatch(/^Institution_\d+$/);
+        expect(token3).toMatch(/^Institution_\d+$/);
+      });
+
+      it('should tokenize merchant names consistently', () => {
+        const token1 = tokenizeMerchant('Starbucks');
+        const token2 = tokenizeMerchant('Starbucks');
+        const token3 = tokenizeMerchant('Amazon');
+        
+        expect(token1).toBe(token2); // Same merchant should get same token
+        expect(token1).not.toBe(token3); // Different merchants should get different tokens
+        expect(token1).toMatch(/^Merchant_\d+$/);
+        expect(token3).toMatch(/^Merchant_\d+$/);
+      });
+
+      it('should tokenize security names with ticker and type', () => {
+        const token1 = tokenizeSecurity('Apple Inc.', 'AAPL', 'stock');
+        const token2 = tokenizeSecurity('Apple Inc.', 'AAPL', 'stock');
+        const token3 = tokenizeSecurity('Apple Inc.', 'AAPL', 'etf');
+        
+        expect(token1).toBe(token2); // Same security should get same token
+        expect(token1).not.toBe(token3); // Different type should get different token
+        expect(token1).toMatch(/^Security_\d+$/);
+        expect(token3).toMatch(/^Security_\d+$/);
+      });
+
+      it('should tokenize liability names with type and institution', () => {
+        const token1 = tokenizeLiability('Chase Credit Card', 'credit', 'Chase Bank');
+        const token2 = tokenizeLiability('Chase Credit Card', 'credit', 'Chase Bank');
+        const token3 = tokenizeLiability('Chase Credit Card', 'mortgage', 'Chase Bank');
+        
+        expect(token1).toBe(token2); // Same liability should get same token
+        expect(token1).not.toBe(token3); // Different type should get different token
+        expect(token1).toMatch(/^Liability_\d+$/);
+        expect(token3).toMatch(/^Liability_\d+$/);
+      });
+
+      it('should handle null/undefined inputs safely', () => {
+        expect(() => tokenizeAccount(null as any, undefined)).not.toThrow();
+        expect(() => tokenizeInstitution(null as any)).not.toThrow();
+        expect(() => tokenizeMerchant(undefined as any)).not.toThrow();
+        expect(() => tokenizeSecurity('', '', '')).not.toThrow();
+        expect(() => tokenizeLiability('', '', '')).not.toThrow();
+      });
+    });
+
+    describe('Anonymization Functions', () => {
+      it('should anonymize account data correctly', () => {
+        const accounts = [
+          { name: 'Chase Checking', institution: 'Chase Bank', type: 'checking', subtype: 'checking', currentBalance: 2500.75, availableBalance: 2400.50 },
+          { name: 'Chase Savings', institution: 'Chase Bank', type: 'depository', subtype: 'savings', currentBalance: 15200.00, availableBalance: 15200.00 }
+        ];
+
+        const anonymized = anonymizeAccountData(accounts);
+        
+        expect(anonymized).toContain('Account_1');
+        expect(anonymized).toContain('Account_2');
+        expect(anonymized).toContain('Institution_1');
+        expect(anonymized).toContain('$2500.75');
+        expect(anonymized).toContain('$15200.00');
+        expect(anonymized).not.toContain('Chase Checking');
+        expect(anonymized).not.toContain('Chase Bank');
+      });
+
+      it('should anonymize transaction data correctly', () => {
+        const transactions = [
+          { 
+            name: 'Starbucks', 
+            date: '2025-01-15', 
+            amount: -4.75, 
+            category: ['Food and Drink', 'Coffee Shop'],
+            pending: false,
+            merchantName: 'Starbucks Coffee'
+          },
+          { 
+            name: 'Amazon', 
+            date: '2025-01-14', 
+            amount: -89.99, 
+            category: ['Shopping', 'Online'],
+            pending: true,
+            merchantName: 'Amazon.com'
+          }
+        ];
+
+        const anonymized = anonymizeTransactionData(transactions);
+        
+        expect(anonymized).toContain('Merchant_1');
+        expect(anonymized).toContain('Merchant_2');
+        expect(anonymized).toContain('$-4.75');
+        expect(anonymized).toContain('$-89.99');
+        expect(anonymized).toContain('[PENDING]');
+        expect(anonymized).not.toContain('Starbucks');
+        expect(anonymized).not.toContain('Amazon');
+      });
+
+      it('should anonymize investment data correctly', () => {
+        const investments = [
+          {
+            security_name: 'Apple Inc.',
+            ticker_symbol: 'AAPL',
+            security_type: 'stock',
+            quantity: 100,
+            institution_price: 150.25,
+            institution_value: 15025.00
+          },
+          {
+            security_name: 'Vanguard Total Stock Market ETF',
+            ticker_symbol: 'VTSAX',
+            security_type: 'etf',
+            quantity: 50.5,
+            institution_price: 85.75,
+            institution_value: 4330.38
+          }
+        ];
+
+        const anonymized = anonymizeInvestmentData(investments);
+        
+        expect(anonymized).toContain('Security_1');
+        expect(anonymized).toContain('Security_2');
+        expect(anonymized).toContain('100 shares');
+        expect(anonymized).toContain('50.5000 shares');
+        expect(anonymized).toContain('$150.25');
+        expect(anonymized).toContain('$85.75');
+        expect(anonymized).toContain('(stock)');
+        expect(anonymized).toContain('(etf)');
+        expect(anonymized).not.toContain('Apple Inc.');
+        expect(anonymized).not.toContain('AAPL');
+        expect(anonymized).not.toContain('Vanguard Total Stock Market ETF');
+        expect(anonymized).not.toContain('VTSAX');
+      });
+
+      it('should anonymize liability data correctly', () => {
+        const liabilities = [
+          {
+            name: 'Chase Credit Card',
+            type: 'credit',
+            institution: 'Chase Bank',
+            balance: 1245.50,
+            limit: 5000.00,
+            apr: 24.99
+          },
+          {
+            name: 'Student Loan',
+            type: 'student',
+            institution: 'Sallie Mae',
+            balance: 25000.00,
+            limit: 25000.00,
+            apr: 5.50
+          }
+        ];
+
+        const anonymized = anonymizeLiabilityData(liabilities);
+        
+        expect(anonymized).toContain('Liability_1');
+        expect(anonymized).toContain('Liability_2');
+        expect(anonymized).toContain('Institution_1');
+        expect(anonymized).toContain('Institution_2');
+        expect(anonymized).toContain('$1245.50');
+        expect(anonymized).toContain('$25000.00');
+        expect(anonymized).toContain('(credit)');
+        expect(anonymized).toContain('(student)');
+        expect(anonymized).toContain('24.99%');
+        expect(anonymized).toContain('5.50%');
+        expect(anonymized).not.toContain('Chase Credit Card');
+        expect(anonymized).not.toContain('Chase Bank');
+        expect(anonymized).not.toContain('Student Loan');
+        expect(anonymized).not.toContain('Sallie Mae');
+      });
+
+      it('should anonymize enhanced transaction data correctly', () => {
+        const enhancedTransactions = [
+          {
+            name: 'Starbucks',
+            date: '2025-01-15',
+            amount: -4.75,
+            category: ['Food and Drink', 'Coffee Shop'],
+            pending: false,
+            enriched_data: {
+              merchant_name: 'Starbucks Coffee',
+              category: ['Food and Drink', 'Coffee Shop', 'Beverages'],
+              payment_method: 'credit card',
+              location: JSON.stringify({ city: 'Seattle', state: 'WA' }),
+              website: 'starbucks.com',
+              brand_name: 'Starbucks'
+            }
+          }
+        ];
+
+        const anonymized = anonymizeEnhancedTransactionData(enhancedTransactions);
+        
+        expect(anonymized).toContain('Merchant_1');
+        expect(anonymized).toContain('$-4.75');
+        expect(anonymized).toContain('[Enhanced: Food and Drink, Coffee Shop, Beverages]');
+        expect(anonymized).toContain('via credit card');
+        expect(anonymized).toContain('at Seattle');
+        expect(anonymized).not.toContain('Starbucks');
+        expect(anonymized).not.toContain('Starbucks Coffee');
+      });
+
+      it('should handle empty arrays gracefully', () => {
+        expect(anonymizeAccountData([])).toBe('');
+        expect(anonymizeTransactionData([])).toBe('');
+        expect(anonymizeInvestmentData([])).toBe('');
+        expect(anonymizeLiabilityData([])).toBe('');
+        expect(anonymizeEnhancedTransactionData([])).toBe('');
+      });
+
+      it('should handle missing or null data gracefully', () => {
+        const accounts = [
+          { name: null, institution: undefined, type: 'checking', currentBalance: null, availableBalance: undefined }
+        ];
+
+        const anonymized = anonymizeAccountData(accounts);
+        expect(anonymized).toContain('Account_1');
+        expect(anonymized).toContain('N/A');
+      });
+    });
+
+    describe('De-anonymization Functions', () => {
+      it('should convert response back to user-friendly format', () => {
+        // First create some tokens
+        tokenizeAccount('Chase Checking', 'Chase Bank');
+        tokenizeMerchant('Starbucks');
+        tokenizeSecurity('Apple Inc.', 'AAPL', 'stock');
+        tokenizeLiability('Chase Credit Card', 'credit', 'Chase Bank');
+
+        const aiResponse = 'Your Account_1 at Institution_1 has a transaction from Merchant_1. Consider investing in Security_1 and managing your Liability_1.';
+        
+        const userFriendly = convertResponseToUserFriendly(aiResponse);
+        
+        expect(userFriendly).toContain('Chase Checking at Chase Bank');
+        expect(userFriendly).toContain('Starbucks');
+        expect(userFriendly).toContain('Apple Inc. (AAPL) - stock');
+        expect(userFriendly).toContain('Chase Credit Card (credit) at Chase Bank');
+        expect(userFriendly).not.toContain('Account_1');
+        expect(userFriendly).not.toContain('Merchant_1');
+        expect(userFriendly).not.toContain('Security_1');
+        expect(userFriendly).not.toContain('Liability_1');
+      });
+
+      it('should handle unknown tokens gracefully', () => {
+        const aiResponse = 'Unknown token: Unknown_Token_123';
+        const userFriendly = convertResponseToUserFriendly(aiResponse);
+        
+        expect(userFriendly).toBe(aiResponse); // Should remain unchanged
+      });
+
+      it('should handle non-string inputs safely', () => {
+        expect(convertResponseToUserFriendly(null as any)).toBe('null');
+        expect(convertResponseToUserFriendly(undefined as any)).toBe('undefined');
+        expect(convertResponseToUserFriendly(123 as any)).toBe('123');
+      });
+    });
+
+    describe('Tokenization Map Management', () => {
+      it('should clear all tokenization maps correctly', () => {
+        // Create some tokens
+        tokenizeAccount('Test Account', 'Test Bank');
+        tokenizeMerchant('Test Merchant');
+        tokenizeSecurity('Test Security', 'TEST', 'stock');
+        tokenizeLiability('Test Liability', 'credit', 'Test Bank');
+
+        // Verify tokens exist
+        expect(getRealAccountName('Account_1')).toBe('Test Account');
+        expect(getRealMerchantName('Merchant_1')).toBe('Test Merchant');
+        expect(getRealSecurityName('Security_1')).toBe('Test Security');
+        expect(getRealLiabilityName('Liability_1')).toBe('Test Liability');
+
+        // Clear maps
+        clearTokenizationMaps();
+
+        // Verify tokens are cleared
+        expect(getRealAccountName('Account_1')).toBe('Account_1');
+        expect(getRealMerchantName('Merchant_1')).toBe('Merchant_1');
+        expect(getRealSecurityName('Security_1')).toBe('Security_1');
+        expect(getRealLiabilityName('Liability_1')).toBe('Liability_1');
+      });
+
+      it('should maintain token consistency within a session', () => {
+        const token1 = tokenizeAccount('Chase Checking', 'Chase Bank');
+        const token2 = tokenizeAccount('Chase Checking', 'Chase Bank');
+        
+        expect(token1).toBe(token2);
+        expect(getRealAccountName(token1)).toBe('Chase Checking');
+        expect(getRealAccountName(token2)).toBe('Chase Checking');
+      });
+    });
+
+    describe('Edge Cases and Error Handling', () => {
+      it('should handle very long names gracefully', () => {
+        const longName = 'A'.repeat(1000);
+        const token = tokenizeAccount(longName, 'Long Bank Name');
+        
+        expect(token).toMatch(/^Account_\d+$/);
+        expect(getRealAccountName(token)).toBe(longName);
+      });
+
+      it('should handle special characters in names', () => {
+        const specialName = 'Account & Co. (Ltd.) - Special "Quotes" & <Tags>';
+        const token = tokenizeAccount(specialName, 'Special Bank');
+        
+        expect(token).toMatch(/^Account_\d+$/);
+        expect(getRealAccountName(token)).toBe(specialName);
+      });
+
+      it('should handle numeric names', () => {
+        const numericName = '12345';
+        const token = tokenizeAccount(numericName, 'Numeric Bank');
+        
+        expect(token).toMatch(/^Account_\d+$/);
+        expect(getRealAccountName(token)).toBe(numericName);
+      });
+
+      it('should handle empty strings and whitespace', () => {
+        const token1 = tokenizeAccount('', '');
+        const token2 = tokenizeAccount('   ', '   ');
+        const token3 = tokenizeAccount('normal', 'normal');
+        
+        expect(token1).toMatch(/^Account_\d+$/);
+        expect(token2).toMatch(/^Account_\d+$/);
+        expect(token3).toMatch(/^Account_\d+$/);
+        expect(token1).not.toBe(token2);
+        expect(token2).not.toBe(token3);
+      });
+    });
+  });
 }); 
