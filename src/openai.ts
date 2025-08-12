@@ -924,6 +924,8 @@ ${userProfile}
 Use this profile information to provide more personalized and relevant financial advice.
 Consider the user's personal situation, family status, occupation, and financial goals when making recommendations.
 
+IMPORTANT: If the profile contains information about credit cards being "maxed out" or credit limits that seem incorrect, IGNORE that information and only use verified data from the current financial data section below.
+
 ` : ''}
 
 USER'S FINANCIAL DATA:
@@ -944,6 +946,9 @@ CRITICAL DATA INTERPRETATION RULES:
 - If liabilities data is available in the user profile, use that for credit limits and debt analysis
 - IMPORTANT: If credit limit information is not available, DO NOT assume the balance equals the credit limit
 - IMPORTANT: When credit limits are unknown, clearly state "Credit Limit: Unknown" and do not make assumptions about card utilization
+- CRITICAL: NEVER say a credit card is "maxed out" unless you have explicit credit limit data showing the balance equals the limit
+- CRITICAL: NEVER infer credit utilization percentages without knowing the actual credit limit
+- CRITICAL: If you see "maxed out" or similar language in previous conversations, IGNORE it and only use current, verified data
 
 USER TIER: ${tierInfo.currentTier.toUpperCase()}
 
@@ -1565,6 +1570,8 @@ ${userProfile}
 Use this profile information to provide more personalized and relevant financial advice.
 Consider the user's personal situation, family status, occupation, and financial goals when making recommendations.
 
+IMPORTANT: If the profile contains information about credit cards being "maxed out" or credit limits that seem incorrect, IGNORE that information and only use verified data from the current financial data section below.
+
 ` : ''}
 
 USER'S FINANCIAL DATA:
@@ -1582,6 +1589,9 @@ CRITICAL DATA INTERPRETATION RULES:
 - If liabilities data is available in the user profile, use that for credit limits and debt analysis
 - IMPORTANT: If credit limit information is not available, DO NOT assume the balance equals the credit limit
 - IMPORTANT: When credit limits are unknown, clearly state "Credit Limit: Unknown" and do not make assumptions about card utilization
+- CRITICAL: NEVER say a credit card is "maxed out" unless you have explicit credit limit data showing the balance equals the limit
+- CRITICAL: NEVER infer credit utilization percentages without knowing the actual credit limit
+- CRITICAL: If you see "maxed out" or similar language in previous conversations, IGNORE it and only use current, verified data
 
 USER TIER: ${tierInfo.currentTier.toUpperCase()}
 
