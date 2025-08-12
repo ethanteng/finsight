@@ -790,9 +790,14 @@ export const setupPlaidRoutes = (app: any) => {
         return res.json({ accounts: demoAccounts });
       }
 
+      // 🔒 CRITICAL SECURITY: Require authentication for real user data
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Authentication required for accessing account data' });
+      }
+
       // Real Plaid integration
       const accessTokens = await getPrismaClient().accessToken.findMany({
-        where: req.user?.id ? { userId: req.user.id } : {}
+        where: { userId: req.user.id }
       });
       const allAccounts: any[] = [];
       const seenAccountIds = new Set<string>();
@@ -1274,12 +1279,40 @@ export const setupPlaidRoutes = (app: any) => {
         return;
       }
       
+            // 🔒 CRITICAL SECURITY: Require authentication for real user data
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Authentication required for accessing transaction data' });
+      }
+      
+      const token = authHeader.replace('Bearer ', '');
+      if (!token) {
+        return res.status(401).json({ error: 'Authentication required for accessing transaction data' });
+      }
+      
+      // Verify token and get user info
+      try {
+        const { verifyToken } = await import('./auth/utils');
+        const payload = verifyToken(token);
+        if (!payload || !payload.userId) {
+          return res.status(401).json({ error: 'Authentication required for accessing transaction data' });
+        }
+        
+        // Set req.user for the rest of the endpoint
+        req.user = {
+          id: payload.userId,
+          email: payload.email || 'unknown',
+          tier: payload.tier || 'starter'
+        };
+      } catch (error) {
+        return res.status(401).json({ error: 'Authentication required for accessing transaction data' });
+      }
+      
       // ✅ PRODUCTION MODE: Handle real user authentication and fetch enhanced transactions
       const { start_date, end_date, count = '50' } = req.query;
       
-      // Get access tokens for the authenticated user
       const accessTokens = await getPrismaClient().accessToken.findMany({
-        where: { userId: { not: null } },
+        where: { userId: req.user.id },
         orderBy: { createdAt: 'desc' }
       });
       
@@ -2408,8 +2441,13 @@ export const setupPlaidRoutes = (app: any) => {
         return res.json(demoData);
       }
 
+      // 🔒 CRITICAL SECURITY: Require authentication for real user data
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Authentication required for accessing investment data' });
+      }
+
       const accessTokens = await getPrismaClient().accessToken.findMany({
-        where: req.user?.id ? { userId: req.user.id } : {}
+        where: { userId: req.user.id }
       });
       const allInvestments: any[] = [];
 
@@ -2830,8 +2868,13 @@ export const setupPlaidRoutes = (app: any) => {
         return res.json(demoData);
       }
 
+      // 🔒 CRITICAL SECURITY: Require authentication for real user data
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Authentication required for accessing investment holdings data' });
+      }
+
       const accessTokens = await getPrismaClient().accessToken.findMany({
-        where: req.user?.id ? { userId: req.user.id } : {}
+        where: { userId: req.user.id }
       });
       
       const allHoldings: any[] = [];
@@ -2974,9 +3017,14 @@ export const setupPlaidRoutes = (app: any) => {
         return res.json(demoData);
       }
 
+      // 🔒 CRITICAL SECURITY: Require authentication for real user data
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Authentication required for accessing investment transaction data' });
+      }
+
       const { start_date, end_date, count = 100 } = req.query;
       const accessTokens = await getPrismaClient().accessToken.findMany({
-        where: req.user?.id ? { userId: req.user.id } : {}
+        where: { userId: req.user.id }
       });
       
       const allTransactions: any[] = [];
@@ -3099,8 +3147,13 @@ export const setupPlaidRoutes = (app: any) => {
         return res.json(demoData);
       }
 
+      // 🔒 CRITICAL SECURITY: Require authentication for real user data
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Authentication required for accessing liability data' });
+      }
+
       const accessTokens = await getPrismaClient().accessToken.findMany({
-        where: req.user?.id ? { userId: req.user.id } : {}
+        where: { userId: req.user.id }
       });
       
       const allLiabilities: any[] = [];
@@ -3144,6 +3197,11 @@ export const setupPlaidRoutes = (app: any) => {
   // Enrich transactions with merchant data (now automatic in /transactions endpoint)
   app.post('/plaid/enrich/transactions', async (req: any, res: any) => {
     try {
+      // 🔒 CRITICAL SECURITY: Require authentication for real user data
+      if (!req.user?.id) {
+        return res.status(400).json({ error: 'Authentication required for accessing transaction enrichment data' });
+      }
+
       const { transaction_ids, account_type = 'depository' } = req.body;
       
       if (!transaction_ids || !Array.isArray(transaction_ids)) {
@@ -3151,7 +3209,7 @@ export const setupPlaidRoutes = (app: any) => {
       }
       
       const accessTokens = await getPrismaClient().accessToken.findMany({
-        where: req.user?.id ? { userId: req.user.id } : {}
+        where: { userId: req.user.id }
       });
       
       const allEnrichments: any[] = [];

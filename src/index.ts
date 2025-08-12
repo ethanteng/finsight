@@ -278,7 +278,10 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
         console.log('Not saving demo conversation - isDemo:', isDemo, 'sessionId:', sessionId);
       }
       
-      return res.json({ answer: displayResponse });
+      return res.json({ 
+        answer: displayResponse,
+        conversationId: null
+      });
     }
 
     // For production, convert AI response back to user-friendly format
@@ -296,7 +299,7 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
         const { getPrismaClient } = await import('./prisma-client');
         const prisma = getPrismaClient();
         
-        await prisma.conversation.create({
+        const conversation = await prisma.conversation.create({
           data: {
             userId,
             question,
@@ -305,15 +308,69 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
           }
         });
         console.log('Conversation saved for user:', userId);
+        
+        res.json({ 
+          answer: displayResponse,
+          conversationId: conversation.id
+        });
+        return;
       } catch (error) {
         console.error('Error saving conversation:', error);
       }
     }
 
-    res.json({ answer: displayResponse });
+    res.json({ 
+      answer: displayResponse,
+      conversationId: null
+    });
   } catch (error) {
     console.error('Error in ask endpoint:', error);
     res.status(500).json({ error: 'Failed to process question' });
+  }
+});
+
+// Feedback endpoint for both demo and production conversations
+app.post('/feedback', async (req: Request, res: Response) => {
+  try {
+    const { conversationId, score, isDemo } = req.body;
+    
+    if (!conversationId || !score || typeof isDemo !== 'boolean') {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    if (score < 1 || score > 5) {
+      return res.status(400).json({ error: 'Score must be between 1 and 5' });
+    }
+    
+    const { getPrismaClient } = await import('./prisma-client');
+    const prisma = getPrismaClient();
+    
+    let feedback;
+    
+    if (isDemo) {
+      // Save feedback for demo conversation
+      feedback = await prisma.feedback.create({
+        data: {
+          score,
+          demoConversationId: conversationId
+        }
+      });
+    } else {
+      // Save feedback for production conversation
+      feedback = await prisma.feedback.create({
+        data: {
+          score,
+          conversationId: conversationId
+        }
+      });
+    }
+    
+    console.log('Feedback saved:', { id: feedback.id, score, isDemo });
+    res.json({ success: true, feedbackId: feedback.id });
+    
+  } catch (error) {
+    console.error('Error saving feedback:', error);
+    res.status(500).json({ error: 'Failed to save feedback' });
   }
 });
 
@@ -453,6 +510,31 @@ const handleDemoRequest = async (req: Request, res: Response) => {
           question: verifyConversation.question.substring(0, 50)
         });
       }
+      
+      // Log demo interactions for analytics (disabled in test environment)
+      if (process.env.NODE_ENV !== 'test') {
+        try {
+          await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/log-demo`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question: questionString,
+              answer,
+              timestamp: new Date().toISOString(),
+              sessionId,
+              userAgent
+            })
+          });
+        } catch (logError) {
+          console.error('Failed to log demo interaction:', logError);
+        }
+      }
+      
+      // Send response with conversation ID
+      res.json({ 
+        answer,
+        conversationId: storedConversation.id 
+      });
     } catch (storageError) {
       console.error('Failed to store demo conversation:', storageError);
       // Don't fail the request, just log the error
@@ -470,28 +552,10 @@ const handleDemoRequest = async (req: Request, res: Response) => {
           console.log('Demo conversation storage failed in test environment - likely due to concurrent cleanup');
         }
       }
+      
+      // Send response without conversation ID if storage failed
+      res.json({ answer });
     }
-    
-    // Log demo interactions for analytics (disabled in test environment)
-    if (process.env.NODE_ENV !== 'test') {
-      try {
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/log-demo`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            question: questionString,
-            answer,
-            timestamp: new Date().toISOString(),
-            sessionId,
-            userAgent
-          })
-        });
-      } catch (logError) {
-        console.error('Failed to log demo interaction:', logError);
-      }
-    }
-    
-    res.json({ answer });
   } catch (err) {
     if (err instanceof Error) {
       res.status(500).json({ error: err.message });
@@ -863,22 +927,9 @@ app.post('/log-demo', async (req: Request, res: Response) => {
       userAgent: userAgent?.substring(0, 50) + (userAgent?.length > 50 ? '...' : '')
     });
     
-    // Store in database for persistence
-    await getPrismaClient().conversation.create({
-      data: {
-        question: `[DEMO-${sessionId}] ${question}`,
-        answer: answer,
-        // Store demo info in anonymized fields for tracking
-        anonymizedQuestion: JSON.stringify({
-          isDemo: true,
-          sessionId,
-          userAgent,
-          timestamp,
-          originalQuestion: question
-        }),
-        anonymizedAnswer: answer
-      },
-    });
+    // Note: Demo conversations are already stored in the demoConversation table
+    // This endpoint is just for analytics logging, not conversation storage
+    console.log('📊 Demo interaction logged for analytics (conversation already stored in demo table)');
     
     res.json({ success: true });
   } catch (err) {
@@ -1326,10 +1377,17 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         
         console.log('Admin: Fetching demo conversations...');
         
-        // Get all demo conversations with session info
+        // Get all demo conversations with session info and feedback
         const conversations = await prisma.demoConversation.findMany({
           include: {
-            session: true
+            session: true,
+            feedback: {
+              select: {
+                id: true,
+                score: true,
+                createdAt: true
+              }
+            }
           },
           orderBy: { createdAt: 'desc' }
         });
@@ -1397,15 +1455,33 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         
         console.log('Admin: Fetching production conversations...');
         
-        // Get all production conversations with user info
+        // Get all production conversations with user info and feedback
+        // Filter out conversations without users to prevent data integrity issues
         const conversations = await prisma.conversation.findMany({
+          where: {
+            userId: { not: null } // Only include conversations with valid user IDs
+          },
           include: {
-            user: true
+            user: true,
+            feedback: {
+              select: {
+                id: true,
+                score: true,
+                createdAt: true
+              }
+            }
           },
           orderBy: { createdAt: 'desc' }
         });
 
         console.log('Admin: Found conversations:', conversations.length);
+        
+        // Log any conversations that might still have issues
+        const conversationsWithoutUsers = conversations.filter(conv => !conv.user);
+        if (conversationsWithoutUsers.length > 0) {
+          console.warn('Admin: Found conversations without users:', conversationsWithoutUsers.length);
+        }
+        
         res.json({ conversations });
       } catch (error) {
         console.error('Error fetching production conversations:', error);

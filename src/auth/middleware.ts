@@ -101,6 +101,8 @@ export function optionalAuth(
     }
   } else {
     console.log('OptionalAuth middleware - no token found');
+    // Explicitly clear req.user when no token is provided
+    (req as any).user = undefined;
   }
   
   next();

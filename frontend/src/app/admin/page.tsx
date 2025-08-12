@@ -13,6 +13,11 @@ interface DemoConversation {
     userAgent?: string;
     createdAt: string;
   };
+  feedback: Array<{
+    id: string;
+    score: number;
+    createdAt: string;
+  }>;
 }
 
 interface SessionStats {
@@ -44,6 +49,11 @@ interface ProductionConversation {
     email: string;
     tier: string;
   };
+  feedback: Array<{
+    id: string;
+    score: number;
+    createdAt: string;
+  }>;
 }
 
 interface UserForManagement {
@@ -629,6 +639,30 @@ export default function AdminPage() {
                             <div className="text-xs text-gray-500 mt-1">
                               {formatDate(conv.createdAt)}
                             </div>
+                            
+                            {/* Feedback Display */}
+                            {conv.feedback && conv.feedback.length > 0 && (
+                              <div className="mt-2">
+                                <div className="text-xs font-medium text-yellow-300 mb-1">Feedback:</div>
+                                <div className="flex items-center space-x-2">
+                                  {conv.feedback.map((fb) => (
+                                    <div key={fb.id} className="flex items-center space-x-1">
+                                      <span className="text-xs text-gray-400">Score:</span>
+                                      <span className={`text-xs font-medium px-2 py-1 rounded ${
+                                        fb.score >= 4 ? 'bg-green-600 text-white' :
+                                        fb.score >= 3 ? 'bg-yellow-600 text-white' :
+                                        'bg-red-600 text-white'
+                                      }`}>
+                                        {fb.score}/5
+                                      </span>
+                                      <span className="text-xs text-gray-500">
+                                        ({formatDate(fb.createdAt)})
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))}
                     </div>
@@ -669,6 +703,30 @@ export default function AdminPage() {
                           <MarkdownRenderer>{conv.answer}</MarkdownRenderer>
                         </div>
                       </div>
+                      
+                      {/* Feedback Display */}
+                      {conv.feedback && conv.feedback.length > 0 && (
+                        <div>
+                          <div className="text-sm font-medium text-yellow-300 mb-1">Feedback:</div>
+                          <div className="flex items-center space-x-2">
+                            {conv.feedback.map((fb) => (
+                              <div key={fb.id} className="flex items-center space-x-1">
+                                <span className="text-xs text-gray-400">Score:</span>
+                                <span className={`text-sm font-medium px-2 py-1 rounded ${
+                                  fb.score >= 4 ? 'bg-green-600 text-white' :
+                                  fb.score >= 3 ? 'bg-yellow-600 text-white' :
+                                  'bg-red-600 text-white'
+                                }`}>
+                                  {fb.score}/5
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  ({formatDate(fb.createdAt)})
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -708,12 +766,24 @@ export default function AdminPage() {
             <div className="text-gray-400 text-sm">Active Users</div>
           </div>
           <div className="bg-gray-800 rounded-lg p-4">
-            <div className="text-2xl font-bold text-green-400">{productionConversations.length}</div>
-            <div className="text-gray-400 text-sm">Total Conversations</div>
+            <div className="text-2xl font-bold text-green-400">
+              {productionConversations.filter(conv => conv.user).length}
+              {productionConversations.some(conv => !conv.user) && (
+                <span className="text-sm text-yellow-400 ml-1">
+                  /{productionConversations.length}
+                </span>
+              )}
+            </div>
+            <div className="text-gray-400 text-sm">
+              Valid Conversations
+              {productionConversations.some(conv => !conv.user) && (
+                <span className="text-yellow-400 text-xs block">({productionConversations.filter(conv => !conv.user).length} with missing data)</span>
+              )}
+            </div>
           </div>
           <div className="bg-gray-800 rounded-lg p-4">
             <div className="text-2xl font-bold text-yellow-400">
-              {productionConversations.length > 0 ? Math.round(productionConversations.length / productionUsers.length) : 0}
+              {productionConversations.filter(conv => conv.user).length > 0 ? Math.round(productionConversations.filter(conv => conv.user).length / productionUsers.length) : 0}
             </div>
             <div className="text-gray-400 text-sm">Avg Conversations/User</div>
           </div>
@@ -801,8 +871,17 @@ export default function AdminPage() {
                   {/* Show conversations for this user when expanded */}
                   {selectedSession === user.userId && (
                     <div className="mt-4 space-y-3">
+                      {/* Check if there are conversations with missing user data */}
+                      {productionConversations.some(conv => !conv.user) && (
+                        <div className="bg-yellow-900 border border-yellow-700 rounded-lg p-2 mb-3">
+                          <div className="text-yellow-200 text-xs">
+                            ⚠️ Some conversations have missing user data
+                          </div>
+                        </div>
+                      )}
+                      
                       {productionConversations
-                        .filter(conv => conv.user.id === user.userId)
+                        .filter(conv => conv.user && conv.user.id === user.userId)
                         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                         .map((conv) => (
                           <div key={conv.id} className="bg-gray-600 rounded p-3 ml-4">
@@ -829,8 +908,23 @@ export default function AdminPage() {
         {viewMode === 'conversations' && (
           <div className="bg-gray-800 rounded-lg p-6">
             <h2 className="text-xl font-semibold mb-4">All Production Conversations</h2>
+            
+            {/* Warning about conversations with missing user data */}
+            {(() => {
+              const conversationsWithMissingUsers = productionConversations.filter(conv => !conv.user).length;
+              return conversationsWithMissingUsers > 0 ? (
+                <div className="bg-yellow-900 border border-yellow-700 rounded-lg p-3 mb-4">
+                  <div className="text-yellow-200 text-sm">
+                    ⚠️ {conversationsWithMissingUsers} conversation{conversationsWithMissingUsers !== 1 ? 's' : ''} have missing user data and are not displayed. 
+                    This may indicate a data integrity issue in the backend.
+                  </div>
+                </div>
+              ) : null;
+            })()}
+            
             <div className="space-y-4">
               {productionConversations
+                .filter(conv => conv.user) // Filter out conversations with null users
                 .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                 .map((conv) => (
                   <div key={conv.id} className="bg-gray-700 rounded-lg p-4">
@@ -855,6 +949,30 @@ export default function AdminPage() {
                           <MarkdownRenderer>{conv.answer}</MarkdownRenderer>
                         </div>
                       </div>
+                      
+                      {/* Feedback Display */}
+                      {conv.feedback && conv.feedback.length > 0 && (
+                        <div>
+                          <div className="text-sm font-medium text-yellow-300 mb-1">Feedback:</div>
+                          <div className="flex items-center space-x-2">
+                            {conv.feedback.map((fb) => (
+                              <div key={fb.id} className="flex items-center space-x-1">
+                                <span className="text-xs text-gray-400">Score:</span>
+                                <span className={`text-sm font-medium px-2 py-1 rounded ${
+                                  fb.score >= 4 ? 'bg-green-600 text-white' :
+                                  fb.score >= 3 ? 'bg-yellow-600 text-white' :
+                                  'bg-red-600 text-white'
+                                }`}>
+                                  {fb.score}/5
+                                </span>
+                                <span className="text-xs text-gray-500">
+                                  ({formatDate(fb.createdAt)})
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

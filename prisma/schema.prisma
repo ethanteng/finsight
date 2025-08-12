@@ -110,6 +110,7 @@ model Conversation {
   anonymizedQuestion String?
   userId             String?
   user               User?    @relation(fields: [userId], references: [id])
+  feedback           Feedback[]
 }
 
 model PrivacySettings {
@@ -141,6 +142,7 @@ model DemoConversation {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
   session   DemoSession @relation(fields: [sessionId], references: [id])
+  feedback  Feedback[]
 }
 
 model UserProfile {
@@ -225,4 +227,19 @@ model MarketNewsHistory {
   context      MarketNewsContext @relation(fields: [contextId], references: [id])
 
   @@map("market_news_history")
+}
+
+model Feedback {
+  id        String   @id @default(cuid())
+  score     Int      // 1-5 rating
+  createdAt DateTime @default(now())
+  
+  // Optional relationships - only one will be set
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id])
+  
+  demoConversationId String?
+  demoConversation   DemoConversation? @relation(fields: [demoConversationId], references: [id])
+  
+  @@map("feedback")
 }

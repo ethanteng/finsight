@@ -3,17 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import MarkdownRenderer from './MarkdownRenderer';
 import { useAnalytics } from './Analytics';
-
-// Declare Hotjar global type
-declare global {
-  interface Window {
-    hj?: (command: string, ...args: unknown[]) => void;
-    _hjSettings?: {
-      hjid: number;
-      hjsv: number;
-    };
-  }
-}
+import Feedback from './Feedback';
 
 interface PromptHistory {
   id: string;
@@ -37,31 +27,8 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   const [error, setError] = useState('');
   const [userTier, setUserTier] = useState<string>('starter');
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const { trackEvent } = useAnalytics();
-
-  // Helper function to check if Hotjar is properly loaded and working
-  const isHotjarWorking = () => {
-    if (typeof window === 'undefined') return false;
-    
-    // Check if we're on HTTPS (Hotjar requirement)
-    const isHttps = window.location.protocol === 'https:';
-    
-    // Check if Hotjar is loaded
-    const isHotjarLoaded = window.hj && typeof window.hj === 'function';
-    
-    // Check if Hotjar settings are present
-    const hasHotjarSettings = window._hjSettings && window._hjSettings.hjid;
-    
-    console.log('Hotjar Debug:', {
-      isHttps,
-      isHotjarLoaded,
-      hasHotjarSettings,
-      protocol: window.location.protocol,
-      hostname: window.location.hostname
-    });
-    
-    return isHttps && isHotjarLoaded && hasHotjarSettings;
-  };
 
   // Demo placeholder questions that rotate
   const demoPlaceholders = [
@@ -169,6 +136,14 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       const data = await res.json();
       if (data.answer) {
         setAnswer(data.answer);
+        // Store conversation ID for feedback
+        if (data.conversationId) {
+          setConversationId(data.conversationId);
+        } else if (isDemo) {
+          // Generate a demo conversation ID if none is provided
+          const demoConversationId = `demo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          setConversationId(demoConversationId);
+        }
         // Call onNewAnswer callback if provided
         if (onNewAnswer) {
           onNewAnswer(question, data.answer);
@@ -180,20 +155,6 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
           user_tier: userTier,
           is_demo: isDemo
         });
-        
-        // Trigger Hotjar event for feedback survey (both demo and app users)
-        if (isHotjarWorking()) {
-          try {
-            if (window.hj) {
-              window.hj('event', 'gpt_response_completed');
-              console.log('Hotjar event fired: gpt_response_completed', { isDemo });
-            }
-          } catch (error) {
-            console.log('Hotjar event failed:', error);
-          }
-        } else {
-          console.log('Hotjar not working - likely due to HTTP/localhost or not loaded');
-        }
       } else {
         setError('No answer returned.');
         // Track error
@@ -235,7 +196,6 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
                 : "How much did I spend on dining last month? What's my current asset allocation? Which accounts have the highest fees?"
               }
               required
-              data-hj-allow
             />
           </div>
           <button
@@ -256,6 +216,23 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
               <MarkdownRenderer>{answer}</MarkdownRenderer>
             </div>
           </div>
+          
+          {/* Feedback Component */}
+          {conversationId && (
+            <Feedback
+              conversationId={conversationId}
+              isDemo={isDemo}
+              onFeedbackSubmitted={(score) => {
+                console.log('Feedback submitted:', score);
+                // Track feedback submission
+                trackEvent('feedback_submitted', {
+                  score,
+                  is_demo: isDemo,
+                  user_tier: userTier
+                });
+              }}
+            />
+          )}
         </div>
       )}
 

@@ -181,11 +181,7 @@ export default function TransactionHistory({ isDemo = false }: { isDemo?: boolea
         </div>
       </div>
 
-      {error ? (
-        <div className="bg-red-600 text-white p-3 rounded mb-4">
-          {error}
-        </div>
-      ) : null}
+
 
       {transactions.length === 0 && !loading ? (
         <div className="text-center text-gray-400 py-8">
