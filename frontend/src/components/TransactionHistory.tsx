@@ -192,33 +192,14 @@ export default function TransactionHistory({ isDemo = false }: { isDemo?: boolea
           No transactions found for the selected date range.
         </div>
       ) : (
-        <>
-          {/* Enriched data summary */}
-          {transactions.length > 0 && (
-            <div className="bg-gray-800 rounded-lg p-3 mb-4">
-              <div className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-400">Enriched Data:</span>
-                  <span className="text-blue-400 font-medium">
-                    {transactions.filter(t => t.enriched_data && Object.keys(t.enriched_data).length > 0).length} of {transactions.length} transactions enhanced
-                  </span>
-                </div>
-                <div className="text-gray-500">
-                  <span className="w-2 h-2 bg-blue-400 rounded-full inline-block mr-1"></span>
-                  Enhanced transactions have additional merchant details
-                </div>
-              </div>
-            </div>
-          )}
-          
-          <div className="space-y-3 max-h-96 overflow-y-auto">
+        <div className="space-y-3 max-h-96 overflow-y-auto">
           {filteredTransactions.map((transaction) => {
             const hasEnrichedData = transaction.enriched_data && Object.keys(transaction.enriched_data).length > 0;
             return (
             <div 
               key={transaction.id} 
               className={`bg-gray-700 rounded-lg p-4 border-l-4 ${
-                transaction.amount > 0 ? 'border-green-500' : 'border-red-500'
+                transaction.amount < 0 ? 'border-red-500' : 'border-green-500'
               } ${hasEnrichedData ? 'ring-1 ring-blue-400/30' : ''}`}
             >
               {/* Enriched data indicator */}
@@ -356,9 +337,9 @@ export default function TransactionHistory({ isDemo = false }: { isDemo?: boolea
                 
                 <div className="text-right ml-4 flex-shrink-0">
                   <div className={`font-semibold text-lg ${
-                    transaction.amount > 0 ? 'text-green-400' : 'text-red-400'
+                    transaction.amount < 0 ? 'text-red-400' : 'text-green-400'
                   }`}>
-                    {transaction.amount > 0 ? '+' : ''}${Math.abs(transaction.amount).toFixed(2)}
+                    {transaction.amount < 0 ? '' : '+'}${Math.abs(transaction.amount).toFixed(2)}
                   </div>
                   {transaction.pending && (
                     <div className="text-xs text-yellow-400 mt-1">Pending</div>
@@ -368,7 +349,6 @@ export default function TransactionHistory({ isDemo = false }: { isDemo?: boolea
             </div>
           )})}
         </div>
-      </>
       )}
       
       {transactions.length > 0 && (

@@ -123,10 +123,65 @@ const processTransactionData = (transaction: any) => {
     basicCategoryId = transaction.personal_finance_category.primary;
   }
   
+  // ✅ FIX: Interpret transaction amounts correctly
+  // Most transactions from Plaid are purchases/charges (money going out)
+  // We need to make them negative for intuitive display
+  let correctedAmount = transaction.amount;
+  
+  // Check if this is likely a credit/refund (should remain positive)
+  const isCredit = transaction.name?.toLowerCase().includes('credit') ||
+                   transaction.name?.toLowerCase().includes('refund') ||
+                   transaction.name?.toLowerCase().includes('return') ||
+                   transaction.name?.toLowerCase().includes('deposit') ||
+                   transaction.name?.toLowerCase().includes('payment') ||
+                   transaction.name?.toLowerCase().includes('reimbursement') ||
+                   transaction.name?.toLowerCase().includes('claim') ||
+                   transaction.name?.toLowerCase().includes('insurance') ||
+                   transaction.name?.toLowerCase().includes('zelle') ||
+                   transaction.merchant_name?.toLowerCase().includes('credit') ||
+                   transaction.merchant_name?.toLowerCase().includes('refund') ||
+                   transaction.merchant_name?.toLowerCase().includes('return') ||
+                   transaction.merchant_name?.toLowerCase().includes('deposit') ||
+                   transaction.merchant_name?.toLowerCase().includes('payment') ||
+                   transaction.merchant_name?.toLowerCase().includes('reimbursement') ||
+                   transaction.merchant_name?.toLowerCase().includes('claim') ||
+                   transaction.merchant_name?.toLowerCase().includes('insurance') ||
+                   // Check if categories suggest this is income/credit
+                   (basicCategory && basicCategory.some((cat: string) => 
+                     cat?.toLowerCase().includes('income') || 
+                     cat?.toLowerCase().includes('transfer') ||
+                     cat?.toLowerCase().includes('insurance')
+                   ));
+  
+  // If this is a credit/refund, ensure it's positive
+  if (isCredit) {
+    if (correctedAmount < 0) {
+      correctedAmount = Math.abs(correctedAmount);
+      console.log(`✅ Credit correction: "${transaction.name}" ${transaction.amount} → ${correctedAmount} (negative credit converted to positive)`);
+    } else {
+      console.log(`✅ Credit detected: "${transaction.name}" ${transaction.amount} (already positive)`);
+    }
+  }
+  // If this looks like a purchase (has merchant info, categories, etc.), make it negative
+  // BUT only if it's not a credit/refund
+  else if (!isCredit && (
+      transaction.merchant_name || 
+      transaction.merchant_entity_id || 
+      (basicCategory && basicCategory.length > 0) ||
+      transaction.payment_channel === 'in store' ||
+      transaction.payment_channel === 'online')) {
+    
+    // If amount is positive, it's likely a purchase that should be negative
+    if (correctedAmount > 0) {
+      correctedAmount = -correctedAmount;
+      console.log(`🔄 Amount correction: "${transaction.name}" ${transaction.amount} → ${correctedAmount} (purchase detected)`);
+    }
+  }
+  
   return {
     id: transaction.transaction_id,
     account_id: transaction.account_id,
-    amount: transaction.amount,
+    amount: correctedAmount, // Use corrected amount
     date: transaction.date,
     name: transaction.name,
     category: basicCategory,
