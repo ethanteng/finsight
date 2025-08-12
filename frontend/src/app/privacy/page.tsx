@@ -298,16 +298,12 @@ const PrivacyPage = () => {
               >
                 Terms of Service
               </a>
-              <button 
+              <a 
+                href="mailto:hello@asklinc.com"
                 className="hover:text-primary transition-colors"
-                onClick={() => {
-                  if (typeof window !== 'undefined' && window.hj) {
-                    window.hj('event', 'contact_button_clicked');
-                  }
-                }}
               >
                 Contact
-              </button>
+              </a>
             </div>
           </div>
           <div className="mt-8 pt-8 border-t border-border text-center text-sm text-muted-foreground">
