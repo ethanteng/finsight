@@ -572,11 +572,37 @@ export async function askOpenAIWithEnhancedContext(
   // Create transaction summary
   const transactionSummary = tierContext.transactions.map(transaction => {
     const name = isDemo ? transaction.description : transaction.name;
-    const category = isDemo ? transaction.category : transaction.category?.[0];
+    
+    // ✅ PRIORITIZE enriched data over basic data for better categorization
+    const category = isDemo ? transaction.category : 
+                     transaction.enriched_data?.category?.[0] || 
+                     transaction.category?.[0] || 
+                     'Unknown';
+    
+    // ✅ Use enhanced merchant name when available
+    const merchantName = transaction.enriched_data?.merchant_name || 
+                         transaction.merchant_name || 
+                         name;
+    
     // Fix: Invert the transaction amount sign to match expected behavior
     // Positive amounts should be negative (money leaving account) and vice versa
     const correctedAmount = -(transaction.amount || 0);
-    return `- ${name} (${category || 'Unknown'}): $${correctedAmount?.toFixed(2) || '0.00'} on ${transaction.date}`;
+    
+    // ✅ Include enhanced information when available
+    let enhancedInfo = '';
+    if (transaction.enriched_data) {
+      if (transaction.enriched_data.website) {
+        enhancedInfo += ` [Website: ${transaction.enriched_data.website}]`;
+      }
+      if (transaction.enriched_data.category && transaction.enriched_data.category.length > 1) {
+        enhancedInfo += ` [Categories: ${transaction.enriched_data.category.filter((cat: any) => cat && cat.trim() !== '').join(', ')}]`;
+      }
+      if (transaction.enriched_data.brand_name && transaction.enriched_data.brand_name !== merchantName) {
+        enhancedInfo += ` [Brand: ${transaction.enriched_data.brand_name}]`;
+      }
+    }
+    
+    return `- ${merchantName} (${category}): $${correctedAmount?.toFixed(2) || '0.00'} on ${transaction.date}${enhancedInfo}`;
   }).join('\n');
 
   // Create investment summary
@@ -608,6 +634,18 @@ ${holdings.slice(0, 10).map((holding: any) =>
   console.log('OpenAI Enhanced: Number of transactions found:', tierContext.transactions.length);
   console.log('OpenAI Enhanced: Investment data available:', investmentData ? 'yes' : 'no');
   console.log('OpenAI Enhanced: User ID being used:', userId);
+  
+  // ✅ Debug: Log enhanced transaction data availability
+  const enhancedTransactionsCount = tierContext.transactions.filter((t: any) => t.enriched_data).length;
+  const totalTransactionsCount = tierContext.transactions.length;
+  console.log(`OpenAI Enhanced: Enhanced data available for ${enhancedTransactionsCount}/${totalTransactionsCount} transactions`);
+  
+  if (enhancedTransactionsCount > 0) {
+    console.log('OpenAI Enhanced: Sample enhanced transaction data:', {
+      first: tierContext.transactions.find((t: any) => t.enriched_data)?.enriched_data,
+      count: enhancedTransactionsCount
+    });
+  }
 
   // Get conversation history
   console.log('OpenAI Enhanced: Conversation history length:', conversationHistory.length);
@@ -994,53 +1032,97 @@ export async function askOpenAI(
                 
                 for (const tokenRecord of accessTokens) {
                   try {
-                    const transactionsResponse = await plaidClient.transactionsGet({
-                      access_token: tokenRecord.token,
-                      start_date: startDate,
-                      end_date: endDate,
-                      options: {
-                        count: 50,
-                        include_personal_finance_category: true
+                    // Use the enhanced transactions endpoint instead of calling Plaid directly
+                    const enhancedTransactionsResponse = await fetch(`${process.env.BACKEND_URL || 'http://localhost:3000'}/plaid/transactions`, {
+                      method: 'GET',
+                      headers: {
+                        'Authorization': `Bearer ${tokenRecord.token}`,
+                        'Content-Type': 'application/json'
                       }
                     });
                     
-                    const processedTransactions = transactionsResponse.data.transactions.map((transaction: any) => ({
-                      id: transaction.transaction_id,
-                      account_id: transaction.account_id,
-                      amount: transaction.amount,
-                      date: transaction.date,
-                      name: transaction.name,
-                      merchant_name: transaction.merchant_name,
-                      category: transaction.category,
-                      category_id: transaction.category_id,
-                      pending: transaction.pending,
-                      payment_channel: transaction.payment_channel,
-                      location: transaction.location,
-                      payment_meta: transaction.payment_meta,
-                      pending_transaction_id: transaction.pending_transaction_id,
-                      account_owner: transaction.account_owner,
-                      transaction_code: transaction.transaction_code
-                    }));
-                    
-                    transactions.push(...processedTransactions);
-                    console.log('OpenAI: Fetched', processedTransactions.length, 'transactions from Plaid');
+                    if (enhancedTransactionsResponse.ok) {
+                      const enhancedTransactionsData = await enhancedTransactionsResponse.json();
+                      const enhancedTransactions = enhancedTransactionsData.transactions || [];
+                      
+                      // Process enhanced transactions (they already include enriched_data)
+                      const processedTransactions = enhancedTransactions.map((transaction: any) => ({
+                        id: transaction.id || transaction.transaction_id,
+                        account_id: transaction.account_id,
+                        amount: transaction.amount,
+                        date: transaction.date,
+                        name: transaction.name,
+                        merchant_name: transaction.merchant_name,
+                        category: transaction.category,
+                        category_id: transaction.category_id,
+                        pending: transaction.pending,
+                        payment_channel: transaction.payment_channel,
+                        location: transaction.location,
+                        payment_meta: transaction.payment_meta,
+                        pending_transaction_id: transaction.pending_transaction_id,
+                        account_owner: transaction.account_owner,
+                        transaction_code: transaction.transaction_code,
+                        enriched_data: transaction.enriched_data // Include enhanced data
+                      }));
+                      
+                      transactions.push(...processedTransactions);
+                      console.log('OpenAI Enhanced: Fetched', processedTransactions.length, 'enhanced transactions from enhanced endpoint');
+                      
+                      // Log enhanced data availability
+                      const enhancedCount = processedTransactions.filter((t: any) => t.enriched_data).length;
+                      console.log(`OpenAI Enhanced: Enhanced data available for ${enhancedCount}/${processedTransactions.length} transactions`);
+                    } else {
+                      console.warn('OpenAI Enhanced: Enhanced transactions endpoint failed, falling back to basic Plaid call');
+                      
+                      // Fallback to basic Plaid call if enhanced endpoint fails
+                      const transactionsResponse = await plaidClient.transactionsGet({
+                        access_token: tokenRecord.token,
+                        start_date: startDate,
+                        end_date: endDate,
+                        options: {
+                          count: 50,
+                          include_personal_finance_category: true
+                        }
+                      });
+                      
+                      const processedTransactions = transactionsResponse.data.transactions.map((transaction: any) => ({
+                        id: transaction.transaction_id,
+                        account_id: transaction.account_id,
+                        amount: transaction.amount,
+                        date: transaction.date,
+                        name: transaction.name,
+                        merchant_name: transaction.merchant_name,
+                        category: transaction.category,
+                        category_id: transaction.category_id,
+                        pending: transaction.pending,
+                        payment_channel: transaction.payment_channel,
+                        location: transaction.location,
+                        payment_meta: transaction.payment_meta,
+                        pending_transaction_id: transaction.pending_transaction_id,
+                        account_owner: transaction.account_owner,
+                        transaction_code: transaction.transaction_code
+                      }));
+                      
+                      transactions.push(...processedTransactions);
+                      console.log('OpenAI Enhanced: Fetched', processedTransactions.length, 'basic transactions from Plaid (fallback)');
+                    }
                   } catch (error) {
-                    console.error('OpenAI: Error fetching transactions from token:', error);
+                    console.error('OpenAI Enhanced: Error fetching transactions:', error);
                   }
                 }
               }
             } catch (plaidError) {
-              console.error('OpenAI: Error fetching from Plaid directly:', plaidError);
+              console.error('OpenAI Enhanced: Error fetching from Plaid directly:', plaidError);
             }
           }
         }
         
-        console.log('OpenAI: Final count -', accounts.length, 'accounts and', transactions.length, 'transactions for user', userId);
+        console.log('OpenAI Enhanced: Final count -', accounts.length, 'accounts and', transactions.length, 'transactions for user', userId);
       } else {
-        console.log('OpenAI: No userId provided, fetching all data (this should not happen for authenticated users)');
+        console.log('OpenAI Enhanced: No userId provided, fetching all data (this should not happen for authenticated users)');
       }
     } catch (error) {
-      console.error('OpenAI: Error fetching user data:', error);
+      console.error('OpenAI Enhanced: Error fetching user data:', error);
     }
   }
 
@@ -1061,7 +1143,20 @@ export async function askOpenAI(
     aiTransactions = transactions.map(transaction => ({
       ...transaction,
       name: transaction.name ? `Transaction_${transaction.id.slice(-4)}` : 'Unknown',
-      merchantName: transaction.merchantName ? `Merchant_${transaction.id.slice(-4)}` : 'Unknown'
+      merchantName: transaction.merchantName ? `Merchant_${transaction.id.slice(-4)}` : 'Unknown',
+      // ✅ Anonymize enriched data if available
+      enriched_data: transaction.enriched_data ? {
+        ...transaction.enriched_data,
+        merchant_name: transaction.enriched_data.merchant_name ? 
+          tokenizeMerchant(transaction.enriched_data.merchant_name) : 'Unknown',
+        category: transaction.enriched_data.category?.map((cat: any) => 
+          cat && cat.trim() !== '' ? tokenizeMerchant(cat) : 'Unknown'
+        ) || [],
+        website: transaction.enriched_data.website ? 
+          `website_${transaction.enriched_data.website.split('.').slice(-2).join('_')}` : undefined,
+        brand_name: transaction.enriched_data.brand_name ? 
+          tokenizeMerchant(transaction.enriched_data.brand_name) : 'Unknown'
+      } : undefined
     }));
   }
 
@@ -1117,11 +1212,37 @@ export async function askOpenAI(
   // Create transaction summary using display data (real names for user)
   const transactionSummary = displayTransactions.map(transaction => {
     const name = isDemo ? transaction.description : transaction.name;
-    const category = isDemo ? transaction.category : transaction.category?.[0];
+    
+    // ✅ PRIORITIZE enriched data over basic data for better categorization
+    const category = isDemo ? transaction.category : 
+                     transaction.enriched_data?.category?.[0] || 
+                     transaction.category?.[0] || 
+                     'Unknown';
+    
+    // ✅ Use enhanced merchant name when available
+    const merchantName = transaction.enriched_data?.merchant_name || 
+                         transaction.merchant_name || 
+                         name;
+    
     // Fix: Invert the transaction amount sign to match expected behavior
     // Positive amounts should be negative (money leaving account) and vice versa
     const correctedAmount = -(transaction.amount || 0);
-    return `- ${name} (${category || 'Unknown'}): $${correctedAmount?.toFixed(2) || '0.00'} on ${transaction.date}`;
+    
+    // ✅ Include enhanced information when available
+    let enhancedInfo = '';
+    if (transaction.enriched_data) {
+      if (transaction.enriched_data.website) {
+        enhancedInfo += ` [Website: ${transaction.enriched_data.website}]`;
+      }
+      if (transaction.enriched_data.category && transaction.enriched_data.category.length > 1) {
+        enhancedInfo += ` [Categories: ${transaction.enriched_data.category.filter((cat: any) => cat && cat.trim() !== '').join(', ')}]`;
+      }
+      if (transaction.enriched_data.brand_name && transaction.enriched_data.brand_name !== merchantName) {
+        enhancedInfo += ` [Brand: ${transaction.enriched_data.brand_name}]`;
+      }
+    }
+    
+    return `- ${merchantName} (${category}): $${correctedAmount?.toFixed(2) || '0.00'} on ${transaction.date}${enhancedInfo}`;
   }).join('\n');
 
   console.log('OpenAI: Account summary for AI:', accountSummary);
@@ -1129,6 +1250,18 @@ export async function askOpenAI(
   console.log('OpenAI: Number of accounts found:', tierContext.accounts.length);
   console.log('OpenAI: Number of transactions found:', tierContext.transactions.length);
   console.log('OpenAI: User ID being used:', userId);
+  
+  // ✅ Debug: Log enhanced transaction data availability
+  const enhancedTransactionsCount = tierContext.transactions.filter((t: any) => t.enriched_data).length;
+  const totalTransactionsCount = tierContext.transactions.length;
+  console.log(`OpenAI Enhanced: Enhanced data available for ${enhancedTransactionsCount}/${totalTransactionsCount} transactions`);
+  
+  if (enhancedTransactionsCount > 0) {
+    console.log('OpenAI Enhanced: Sample enhanced transaction data:', {
+      first: tierContext.transactions.find((t: any) => t.enriched_data)?.enriched_data,
+      count: enhancedTransactionsCount
+    });
+  }
 
   // Get conversation history
   console.log('OpenAI: Conversation history length:', conversationHistory.length);
