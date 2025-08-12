@@ -107,7 +107,30 @@ export function anonymizeTransactionData(transactions: any[]): string {
     }
     
     const amount = t.amount !== undefined && t.amount !== null ? `$${Number(t.amount).toFixed(2)}` : '$0.00';
-    const category = t.category ? ` [${t.category}]` : '';
+    
+    // ✅ ENHANCED: Prioritize enriched data over basic data for better categorization
+    let category = '';
+    if (t.enriched_data?.category && Array.isArray(t.enriched_data.category)) {
+      // Use enriched categories first
+      const validCategories = t.enriched_data.category.filter((cat: any) => cat && cat.trim() !== '' && cat !== '0');
+      if (validCategories.length > 0) {
+        category = ` [Enhanced: ${validCategories.join(', ')}]`;
+      }
+    }
+    
+    // Fallback to basic categories if no enriched data
+    if (!category && t.category) {
+      if (Array.isArray(t.category)) {
+        // Filter out empty/null categories and join with commas
+        const validCategories = t.category.filter((cat: any) => cat && cat.trim() !== '' && cat !== '0');
+        if (validCategories.length > 0) {
+          category = ` [Basic: ${validCategories.join(', ')}]`;
+        }
+      } else if (typeof t.category === 'string' && t.category.trim() !== '') {
+        category = ` [Basic: ${t.category}]`;
+      }
+    }
+    
     const pending = t.pending ? ' [PENDING]' : '';
     
     // Tokenize merchant name if available

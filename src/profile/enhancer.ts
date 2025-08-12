@@ -284,7 +284,20 @@ const analyzeSpendingPatterns = (enrichedTransactions: any[]) => {
   }, 0);
 
   const spendingByCategory = enrichedTransactions.reduce((categories, transaction) => {
-    const category = transaction.category || 'Unknown';
+    // ✅ FIXED: Handle category arrays properly
+    let category = 'Unknown';
+    if (transaction.category) {
+      if (Array.isArray(transaction.category)) {
+        // Use the first valid category from the array
+        const validCategory = transaction.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
+        if (validCategory) {
+          category = validCategory;
+        }
+      } else if (typeof transaction.category === 'string' && transaction.category.trim() !== '') {
+        category = transaction.category;
+      }
+    }
+    
     if (!categories[category]) {
       categories[category] = 0;
     }
@@ -307,9 +320,21 @@ const analyzeSpendingPatterns = (enrichedTransactions: any[]) => {
     }
     insights[merchant].totalSpent += Math.abs(transaction.amount || 0);
     insights[merchant].transactionCount += 1;
+    
+    // ✅ FIXED: Handle category arrays in merchant insights
     if (transaction.category) {
-      insights[merchant].categories.add(transaction.category);
+      if (Array.isArray(transaction.category)) {
+        // Add all valid categories from the array
+        transaction.category.forEach((cat: any) => {
+          if (cat && cat.trim() !== '' && cat !== '0') {
+            insights[merchant].categories.add(cat);
+          }
+        });
+      } else if (typeof transaction.category === 'string' && transaction.category.trim() !== '') {
+        insights[merchant].categories.add(transaction.category);
+      }
     }
+    
     return insights;
   }, {} as Record<string, any>);
 

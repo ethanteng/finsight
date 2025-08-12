@@ -570,14 +570,48 @@ export async function askOpenAIWithEnhancedContext(
   }).join('\n');
 
   // Create transaction summary
+  // ✅ DEBUG: Log transaction data structure before building summary
+  console.log('OpenAI Enhanced: DEBUG - Sample transaction data before building summary:', {
+    totalTransactions: tierContext.transactions.length,
+    firstTransaction: tierContext.transactions[0] ? {
+      id: tierContext.transactions[0].id,
+      name: tierContext.transactions[0].name,
+      category: tierContext.transactions[0].category,
+      categoryType: typeof tierContext.transactions[0].category,
+      isArray: Array.isArray(tierContext.transactions[0].category),
+      enriched_data: tierContext.transactions[0].enriched_data ? {
+        category: tierContext.transactions[0].enriched_data.category,
+        categoryType: typeof tierContext.transactions[0].enriched_data.category,
+        isArray: Array.isArray(tierContext.transactions[0].enriched_data.category)
+      } : 'No enriched data'
+    } : 'No transactions'
+  });
+  
   const transactionSummary = tierContext.transactions.map(transaction => {
     const name = isDemo ? transaction.description : transaction.name;
     
     // ✅ PRIORITIZE enriched data over basic data for better categorization
-    const category = isDemo ? transaction.category : 
-                     transaction.enriched_data?.category?.[0] || 
-                     transaction.category?.[0] || 
-                     'Unknown';
+    let category = 'Unknown';
+    
+    // First try enriched data
+    if (transaction.enriched_data?.category && Array.isArray(transaction.enriched_data.category)) {
+      const validEnrichedCategory = transaction.enriched_data.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
+      if (validEnrichedCategory) {
+        category = validEnrichedCategory;
+      }
+    }
+    
+    // Fallback to basic category if no enriched data
+    if (category === 'Unknown' && transaction.category) {
+      if (Array.isArray(transaction.category)) {
+        const validBasicCategory = transaction.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
+        if (validBasicCategory) {
+          category = validBasicCategory;
+        }
+      } else if (typeof transaction.category === 'string' && transaction.category.trim() !== '') {
+        category = transaction.category;
+      }
+    }
     
     // ✅ Use enhanced merchant name when available
     const merchantName = transaction.enriched_data?.merchant_name || 
@@ -604,6 +638,13 @@ export async function askOpenAIWithEnhancedContext(
     
     return `- ${merchantName} (${category}): $${correctedAmount?.toFixed(2) || '0.00'} on ${transaction.date}${enhancedInfo}`;
   }).join('\n');
+
+  // ✅ DEBUG: Log the final transaction summary to see what the AI receives
+  console.log('OpenAI Enhanced: DEBUG - Final transaction summary preview:', {
+    totalLength: transactionSummary.length,
+    preview: transactionSummary.substring(0, 500),
+    firstFewLines: transactionSummary.split('\n').slice(0, 3)
+  });
 
   // Create investment summary
   let investmentSummary = '';
@@ -952,15 +993,26 @@ export async function askOpenAI(
           take: 50
         });
         
-        console.log('OpenAI: Found', accounts.length, 'accounts and', transactions.length, 'transactions in database for user', userId);
+        // ✅ FIXED: Parse category strings back into arrays for database transactions
+        transactions = transactions.map(transaction => ({
+          ...transaction,
+          // Parse category string back into array if it's stored as comma-separated string
+          category: transaction.category ? 
+            (typeof transaction.category === 'string' ? 
+              transaction.category.split(',').map((cat: any) => cat.trim()).filter((cat: any) => cat && cat !== '') :
+              transaction.category) : 
+            []
+        }));
+        
+        console.log('OpenAI Enhanced: Found', accounts.length, 'accounts and', transactions.length, 'transactions in database for user', userId);
         
         // If no data in database, try to fetch from Plaid directly
         if (accounts.length === 0 || transactions.length === 0) {
-          console.log('OpenAI: No data in database, fetching from Plaid directly');
+          console.log('OpenAI Enhanced: No data in database, fetching from Plaid directly');
           
           // CRITICAL SECURITY FIX: Never call Plaid APIs in demo mode
           if (isDemo) {
-            console.log('OpenAI: DEMO MODE - Skipping Plaid API calls for security');
+            console.log('OpenAI Enhanced: DEMO MODE - Skipping Plaid API calls for security');
           } else {
             try {
               // Import Plaid functions directly
@@ -985,7 +1037,7 @@ export async function askOpenAI(
               });
               
               if (accessTokens.length > 0) {
-                console.log('OpenAI: Found', accessTokens.length, 'access tokens for user', userId);
+                console.log('OpenAI Enhanced: Found', accessTokens.length, 'access tokens for user', userId);
                 
                 // Fetch accounts from all tokens
                 for (const tokenRecord of accessTokens) {
@@ -1020,9 +1072,9 @@ export async function askOpenAI(
                     });
                     
                     accounts.push(...accountsWithBalances);
-                    console.log('OpenAI: Fetched', accountsWithBalances.length, 'accounts from Plaid');
+                    console.log('OpenAI Enhanced: Fetched', accountsWithBalances.length, 'accounts from Plaid');
                   } catch (error) {
-                    console.error('OpenAI: Error fetching accounts from token:', error);
+                    console.error('OpenAI Enhanced: Error fetching accounts from token:', error);
                   }
                 }
                 
@@ -1214,10 +1266,27 @@ export async function askOpenAI(
     const name = isDemo ? transaction.description : transaction.name;
     
     // ✅ PRIORITIZE enriched data over basic data for better categorization
-    const category = isDemo ? transaction.category : 
-                     transaction.enriched_data?.category?.[0] || 
-                     transaction.category?.[0] || 
-                     'Unknown';
+    let category = 'Unknown';
+    
+    // First try enriched data
+    if (transaction.enriched_data?.category && Array.isArray(transaction.enriched_data.category)) {
+      const validEnrichedCategory = transaction.enriched_data.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
+      if (validEnrichedCategory) {
+        category = validEnrichedCategory;
+      }
+    }
+    
+    // Fallback to basic category if no enriched data
+    if (category === 'Unknown' && transaction.category) {
+      if (Array.isArray(transaction.category)) {
+        const validBasicCategory = transaction.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
+        if (validBasicCategory) {
+          category = validBasicCategory;
+        }
+      } else if (typeof transaction.category === 'string' && transaction.category.trim() !== '') {
+        category = transaction.category;
+      }
+    }
     
     // ✅ Use enhanced merchant name when available
     const merchantName = transaction.enriched_data?.merchant_name || 
