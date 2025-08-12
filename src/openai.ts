@@ -743,6 +743,62 @@ ${holdings.slice(0, 10).map((holding: any) =>
           // Don't fail the main request if Plaid enhancement fails
         }
       }
+      
+      // ✅ NEW: Fetch liabilities data for credit accounts
+      let liabilitiesData = '';
+      try {
+        const accessTokens = await prisma.accessToken.findMany({
+          where: { userId }
+        });
+        
+        if (accessTokens.length > 0) {
+          // Use the first token to get liabilities
+          const token = accessTokens[0].token;
+          const liabilitiesResponse = await fetch(`http://localhost:3000/plaid/liabilities`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (liabilitiesResponse.ok) {
+            const liabilitiesData = await liabilitiesResponse.json();
+            console.log('OpenAI Enhanced: Fetched liabilities data:', liabilitiesData);
+            
+            // Add liabilities context to user profile
+            if (liabilitiesData.liabilities && liabilitiesData.liabilities.length > 0) {
+              const liabilityContext = liabilitiesData.liabilities.map((liability: any) => {
+                if (liability.accounts && liability.accounts.length > 0) {
+                  return liability.accounts.map((account: any) => {
+                    if (account.account_type === 'credit') {
+                      return `Credit Card: ${account.account_name} - Credit Limit: $${account.limit || 'Unknown'}, Current Balance: $${account.current_balance || 'Unknown'}`;
+                    } else if (account.account_type === 'mortgage') {
+                      return `Mortgage: ${account.account_name} - Original Amount: $${account.limit || 'Unknown'}, Current Balance: $${account.current_balance || 'Unknown'}`;
+                    }
+                    return null;
+                  }).filter(Boolean).join('; ');
+                }
+                return null;
+              }).filter(Boolean).join('. ');
+              
+              if (liabilityContext) {
+                userProfile += `\n\nLIABILITIES INFORMATION:\n${liabilityContext}`;
+                console.log('OpenAI Enhanced: Added liabilities context to profile');
+              }
+            }
+          } else {
+            // ✅ FIXED: Handle API failures gracefully
+            console.log('OpenAI Enhanced: Liabilities API failed, status:', liabilitiesResponse.status);
+            userProfile += `\n\nLIABILITIES INFORMATION:\nCredit limit information not available - your bank does not provide this data through Plaid.`;
+            console.log('OpenAI Enhanced: Added fallback message for unavailable liabilities data');
+          }
+        }
+      } catch (liabilitiesError) {
+        console.error('OpenAI Enhanced: Error fetching liabilities:', liabilitiesError);
+        // ✅ FIXED: Add fallback message when liabilities fetch fails
+        userProfile += `\n\nLIABILITIES INFORMATION:\nCredit limit information not available - unable to fetch from your bank.`;
+        console.log('OpenAI Enhanced: Added fallback message due to liabilities fetch error');
+      }
     } catch (error) {
       console.error('OpenAI Enhanced: Failed to get user profile:', error);
       // Don't fail the main request if profile retrieval fails
@@ -879,6 +935,15 @@ ${transactionSummary || 'No transactions found'}
 
 ${investmentSummary ? `INVESTMENT DATA:
 ${investmentSummary}` : 'No investment data available (upgrade to Standard tier)'}
+
+CRITICAL DATA INTERPRETATION RULES:
+- For credit card accounts: The "balance" field shows the OUTSTANDING BALANCE (money owed), NOT the credit limit
+- For credit card accounts: The "limit" field (if available) shows the CREDIT LIMIT (maximum spending allowed)
+- For checking/savings accounts: The "balance" field shows the AVAILABLE BALANCE (money you have)
+- When analyzing debt: Use the outstanding balance amount, not the account balance field
+- If liabilities data is available in the user profile, use that for credit limits and debt analysis
+- IMPORTANT: If credit limit information is not available, DO NOT assume the balance equals the credit limit
+- IMPORTANT: When credit limits are unknown, clearly state "Credit Limit: Unknown" and do not make assumptions about card utilization
 
 USER TIER: ${tierInfo.currentTier.toUpperCase()}
 
@@ -1509,6 +1574,15 @@ ${accountSummary || 'No accounts found'}
 Recent Transactions:
 ${transactionSummary || 'No transactions found'}
 
+CRITICAL DATA INTERPRETATION RULES:
+- For credit card accounts: The "balance" field shows the OUTSTANDING BALANCE (money owed), NOT the credit limit
+- For credit card accounts: The "limit" field (if available) shows the CREDIT LIMIT (maximum spending allowed)
+- For checking/savings accounts: The "balance" field shows the AVAILABLE BALANCE (money you have)
+- When analyzing debt: Use the outstanding balance amount, not the account balance field
+- If liabilities data is available in the user profile, use that for credit limits and debt analysis
+- IMPORTANT: If credit limit information is not available, DO NOT assume the balance equals the credit limit
+- IMPORTANT: When credit limits are unknown, clearly state "Credit Limit: Unknown" and do not make assumptions about card utilization
+
 USER TIER: ${tierInfo.currentTier.toUpperCase()}
 
 AVAILABLE DATA SOURCES:
@@ -1518,13 +1592,13 @@ ${tierInfo.unavailableSources.length > 0 ? `UNAVAILABLE DATA SOURCES (upgrade to
 ${tierInfo.unavailableSources.map(source => `• ${source}`).join('\n')}` : ''}
 
 MARKET CONTEXT:
-${marketContext.economicIndicators ? `Economic Indicators:
+${marketContext?.economicIndicators ? `Economic Indicators:
 - CPI Index: ${marketContext.economicIndicators.cpi.value} (${marketContext.economicIndicators.cpi.date})
 - Fed Funds Rate: ${marketContext.economicIndicators.fedRate.value}%
 - Average 30-year Mortgage Rate: ${marketContext.economicIndicators.mortgageRate.value}%
 - Average Credit Card APR: ${marketContext.economicIndicators.creditCardAPR.value}%` : 'No economic indicators available (upgrade to Standard tier)'}
 
-${marketContext.liveMarketData ? `Live Market Data:
+${marketContext?.liveMarketData ? `Live Market Data:
 CD Rates (APY): ${marketContext.liveMarketData.cdRates.map(cd => `${cd.term}: ${cd.rate}%`).join(', ')}
 Treasury Yields: ${marketContext.liveMarketData.treasuryYields.slice(0, 4).map(t => `${t.term}: ${t.yield}%`).join(', ')}
 Current Mortgage Rates: ${marketContext.liveMarketData.mortgageRates.map(m => `${m.type}: ${m.rate}%`).join(', ')}` : 'No live market data available (upgrade to Premium tier)'}
