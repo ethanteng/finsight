@@ -88,9 +88,9 @@ export class FREDProvider implements DataProvider {
     const cached = await cacheService.get<MarketDataPoint>(cacheKey);
     if (cached) return cached;
 
-    // Use mock data for test environment
-    if (this.apiKey === 'test_fred_key' || this.apiKey.startsWith('test_')) {
-      console.log('FRED Provider: Using mock data for test environment');
+    // Use mock data for test environment or CI/CD
+    if (this.apiKey === 'test_fred_key' || this.apiKey.startsWith('test_') || process.env.GITHUB_ACTIONS) {
+      console.log('FRED Provider: Using mock data for test environment or CI/CD');
       
       // Return appropriate mock values for different series
       let mockValue = 3.1; // Default mock value

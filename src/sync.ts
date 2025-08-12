@@ -11,12 +11,35 @@ const getPrismaClient = () => {
   return prisma;
 };
 
+// Determine Plaid mode from environment variable
+const plaidMode = process.env.PLAID_MODE || 'sandbox';
+const useSandbox = plaidMode === 'sandbox';
+
+// Select appropriate environment variables based on mode
+const getPlaidCredentials = () => {
+  if (plaidMode === 'production') {
+    return {
+      clientId: process.env.PLAID_CLIENT_ID_PROD || process.env.PLAID_CLIENT_ID,
+      secret: process.env.PLAID_SECRET_PROD || process.env.PLAID_SECRET,
+      env: process.env.PLAID_ENV_PROD || 'production'
+    };
+  } else {
+    return {
+      clientId: process.env.PLAID_CLIENT_ID,
+      secret: process.env.PLAID_SECRET,
+      env: 'sandbox'
+    };
+  }
+};
+
+const credentials = getPlaidCredentials();
+
 const configuration = new Configuration({
-  basePath: PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
+  basePath: useSandbox ? PlaidEnvironments.sandbox : PlaidEnvironments[credentials.env],
   baseOptions: {
     headers: {
-      'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID,
-      'PLAID-SECRET': process.env.PLAID_SECRET,
+      'PLAID-CLIENT-ID': credentials.clientId,
+      'PLAID-SECRET': credentials.secret,
     },
   },
 });

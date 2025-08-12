@@ -275,14 +275,9 @@ export class MarketNewsAggregator {
   }
   
   private getPolygonApiKey(): string | undefined {
-    // In test environment, use the fake key
-    if (process.env.NODE_ENV === 'test') {
-      return process.env.POLYGON_API_KEY; // Fake key for tests
-    }
-    
-    // In production (GitHub Actions), use the real key
-    if (process.env.NODE_ENV === 'production' && process.env.GITHUB_ACTIONS) {
-      return process.env.POLYGON_API_KEY_REAL; // Real key for production
+    // In test environment or CI/CD, use the fake key
+    if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
+      return process.env.POLYGON_API_KEY; // Fake key for tests and CI/CD
     }
     
     // In production (Render), use the real key
@@ -335,6 +330,25 @@ export class MarketNewsAggregator {
   
   private async fetchFREDData(): Promise<MarketNewsData[]> {
     try {
+      // Skip real API calls in test environment or CI/CD
+      if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
+        console.log('MarketNewsAggregator: Using mock data for FRED in test/CI environment');
+        return [
+          {
+            source: 'fred',
+            timestamp: new Date(),
+            data: {
+              series: 'CPIAUCSL',
+              name: 'Consumer Price Index',
+              value: 3.1,
+              date: '2024-01'
+            },
+            type: 'economic_indicator',
+            relevance: 0.8
+          }
+        ];
+      }
+      
       // Fetch key economic indicators from FRED
       const indicators = [
         { series: 'CPIAUCSL', name: 'Consumer Price Index' },

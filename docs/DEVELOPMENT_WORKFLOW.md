@@ -100,6 +100,83 @@ npx prisma migrate status
 npx prisma migrate deploy --preview-feature
 ```
 
+## 🎭 DEMO Mode Development - SEPARATE FROM CORE APP
+
+### ⚠️ CRITICAL: DEMO Mode is Completely Separate
+
+**DEMO mode should NEVER be mixed with core app development or debugging. When developing features, focus ONLY on the core application.**
+
+#### ✅ Correct Development Approach:
+```bash
+# For core app development (production mode)
+npm run dev:production
+
+# Focus ONLY on:
+# - Core app functionality
+# - Production features
+# - Real user workflows
+# - Production data handling
+# - Core app testing
+
+# DO NOT:
+# - Compare DEMO vs production behavior
+# - "Fix" DEMO mode during core development
+# - Mix DEMO and production logic
+# - Update DEMO data structures
+```
+
+#### ❌ Never Do This During Core Development:
+```bash
+# DON'T: Try to "fix" DEMO mode while developing core features
+# DON'T: Compare DEMO behavior with production behavior
+# DON'T: Update DEMO data or components during core development
+# DON'T: Mix DEMO and production debugging
+# DON'T: Use DEMO mode to test production features
+```
+
+#### 🔄 DEMO Mode Development Workflow:
+```bash
+# 1. Complete core app development FIRST
+# 2. Test core functionality thoroughly
+# 3. Commit and merge core changes
+# 4. ONLY THEN: Switch to DEMO mode development
+
+# For DEMO mode development (separate task):
+npm run dev:sandbox  # or appropriate DEMO mode command
+
+# Focus ONLY on:
+# - DEMO data structures
+# - DEMO user experience
+# - DEMO testing scenarios
+# - DEMO mode specific features
+```
+
+#### 📋 Development Priority Order:
+1. **Core App Development** (production mode)
+   - Implement new features
+   - Fix production bugs
+   - Test core functionality
+   - Deploy to production
+
+2. **DEMO Mode Updates** (separate task)
+   - Update DEMO data structures
+   - Enhance DEMO user experience
+   - Test DEMO scenarios
+   - Deploy DEMO improvements
+
+#### 🚫 Common Anti-Patterns to Avoid:
+- **"Let me check if this works in DEMO mode too"** - NO! Focus on core app first
+- **"I need to fix DEMO mode while I'm here"** - NO! Separate task
+- **"Let me compare DEMO vs production behavior"** - NO! One at a time
+- **"I'll update DEMO data while developing this feature"** - NO! Sequential development
+
+#### 💡 Why This Separation Matters:
+- **Prevents confusion** between DEMO and production logic
+- **Faster development** by focusing on one thing at a time
+- **Cleaner commits** with clear separation of concerns
+- **Easier debugging** without cross-contamination
+- **Better testing** of each mode independently
+
 ## 🗄️ Database Schema Management
 
 ### ⚠️ Critical: Preventing Schema Drift
@@ -171,6 +248,84 @@ npm run test:coverage:all
 - Test database operations with proper cleanup
 - Mock external API calls
 - Use realistic test data
+
+## 🔒 CI/CD API Safety
+
+### ⚠️ Critical: API Key Safety in CI/CD
+
+**Problem**: CI/CD integration tests were previously using real API keys (`FRED_API_KEY_REAL`, `ALPHA_VANTAGE_API_KEY_REAL`) which could hit live API endpoints.
+
+**Solution**: Updated GitHub Actions workflow and all providers to use test API keys for all test environments.
+
+### 🛡️ Safety Measures in Place
+
+#### 1. **Multiple Layers of Protection**
+- GitHub Actions environment variables (test keys only)
+- Provider-level API key validation
+- Environment detection (`NODE_ENV === 'test'`)
+- CI/CD detection (`process.env.GITHUB_ACTIONS`)
+- Comprehensive Jest mocking for all external APIs
+- Module-level safety checks
+
+#### 2. **Environment Isolation**
+- **Test environment**: Uses `test_*` keys
+- **CI/CD environment**: Uses `test_*` keys  
+- **Production environment**: Uses real keys (only on Render)
+- **Development environment**: Uses real keys (only on localhost)
+
+#### 3. **What This Prevents**
+- ❌ Real FRED API calls in CI/CD
+- ❌ Real Alpha Vantage API calls in CI/CD
+- ❌ Real Search API calls in CI/CD
+- ❌ Real Polygon.io API calls in CI/CD
+- ❌ Real OpenAI API calls in CI/CD
+- ❌ Real Plaid API calls in CI/CD
+- ❌ Any accidental real API usage during testing
+
+### 🔧 Implementation Details
+
+#### GitHub Actions Workflow
+```yaml
+# SAFE: All tests use test API keys
+FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+```
+
+#### Provider-Level Safety Checks
+```typescript
+// Example: FRED Provider safety check
+if (this.apiKey === 'test_fred_key' || 
+    this.apiKey.startsWith('test_') || 
+    process.env.GITHUB_ACTIONS) {
+  // Return mock data, no real API calls
+}
+```
+
+#### Comprehensive Mocking
+```typescript
+// Integration test setup mocks all external APIs
+jest.mock('../../openai', () => ({
+  askOpenAI: jest.fn().mockResolvedValue('Mocked AI response'),
+  // ... other mocks
+}));
+```
+
+### 📋 Verification Steps
+
+To verify these changes work:
+
+1. **Run tests locally**: `npm run test:unit && npm run test:integration`
+2. **Check CI/CD logs**: Ensure no real API calls are made
+3. **Verify mock data**: Confirm tests receive expected mock responses
+4. **Monitor API usage**: Check that no real API endpoints are hit
+
+### 🚀 Deployment Safety
+
+These changes are safe to deploy immediately as they:
+- Don't affect production functionality
+- Only change test/CI behavior
+- Maintain backward compatibility
+- Improve security and reliability
 
 ## 🚀 Deployment Workflow
 

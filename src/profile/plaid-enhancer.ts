@@ -86,7 +86,14 @@ export class PlaidProfileEnhancer {
       if (!balancesByType[type]) {
         balancesByType[type] = 0;
       }
-      balancesByType[type] += balance;
+      
+      // For credit accounts, we want the outstanding amount (positive), not the raw balance
+      if (type === 'credit') {
+        // Credit card balances are typically negative, so we want the absolute value
+        balancesByType[type] += Math.abs(balance);
+      } else {
+        balancesByType[type] += balance;
+      }
       
       if (account.institution) {
         institutions.add(account.institution);
@@ -108,7 +115,7 @@ export class PlaidProfileEnhancer {
     }
     
     if (totalCredit > 0) {
-      insights.push(`The user has credit accounts with a total limit of $${totalCredit.toFixed(2)}`);
+      insights.push(`The user has credit accounts with outstanding balances totaling $${totalCredit.toFixed(2)} (credit limit information not available)`);
     }
     
     if (totalLoan > 0) {

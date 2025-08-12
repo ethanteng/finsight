@@ -30,8 +30,15 @@
     "build:deploy": "./deploy-build.sh",
     "start": "node dist/index.js || node ./dist/index.js || (echo 'Build failed, attempting to build now...' && npm run build:backend && node dist/index.js) || (echo 'Current directory:' && pwd && echo 'Directory contents:' && ls -la && echo 'Dist contents:' && ls -la dist/ && exit 1)",
     "dev:backend": "ts-node src/index.ts",
+    "dev:backend:sandbox": "PLAID_MODE=sandbox ts-node src/index.ts",
+    "dev:backend:production": "PLAID_MODE=production ts-node src/index.ts",
     "dev:frontend": "npm run dev --prefix frontend",
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\""
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:sandbox": "concurrently \"npm run dev:backend:sandbox\" \"npm run dev:frontend\"",
+    "dev:production": "concurrently \"npm run dev:backend:production\" \"npm run dev:frontend\"",
+    "test:token-scope": "node scripts/test-token-scope.js",
+    "test:production-investments": "node scripts/test-production-investments.js",
+    "check:access-tokens": "node scripts/check-access-tokens.js"
   },
   "keywords": [],
   "author": "",

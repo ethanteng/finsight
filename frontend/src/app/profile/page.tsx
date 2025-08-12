@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import PlaidLinkButton from '../../components/PlaidLinkButton';
 import TransactionHistory from '../../components/TransactionHistory';
 import UserProfile from '../../components/UserProfile';
+import InvestmentPortfolio from '../../components/InvestmentPortfolio';
 
 interface Account {
   id: string;
@@ -16,23 +17,61 @@ interface Account {
   };
 }
 
-
+interface InvestmentData {
+  portfolio: {
+    totalValue: number;
+    assetAllocation: Array<{
+      type: string;
+      value: number;
+      percentage: number;
+    }>;
+    holdingCount: number;
+    securityCount: number;
+  };
+  holdings: Array<{
+    id: string;
+    account_id: string;
+    security_id: string;
+    institution_value: number;
+    institution_price: number;
+    institution_price_as_of: string;
+    cost_basis: number;
+    quantity: number;
+    iso_currency_code: string;
+  }>;
+  transactions: Array<{
+    id: string;
+    account_id: string;
+    security_id: string;
+    amount: number;
+    date: string;
+    name: string;
+    quantity: number;
+    price: number;
+    fees: number;
+    type: string;
+    iso_currency_code: string;
+  }>;
+}
 
 export default function ProfilePage() {
   const [connectedAccounts, setConnectedAccounts] = useState<Account[]>([]);
+  const [investmentData, setInvestmentData] = useState<InvestmentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isDemo, setIsDemo] = useState(false);
+  const [isDemo, setIsDemo] = useState<boolean | undefined>(undefined); // Start as undefined to prevent premature rendering
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('');
+  const [demoStatusDetermined, setDemoStatusDetermined] = useState(false); // Start as false
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
   // Helper functions that take demo mode as parameter
   const loadConnectedAccountsWithDemoMode = useCallback(async (demoMode: boolean) => {
     console.log('loadConnectedAccountsWithDemoMode called with demoMode:', demoMode);
+    console.log('API_URL in function:', API_URL);
     
     setLoading(true);
     setError('');
@@ -56,11 +95,17 @@ export default function ProfilePage() {
         }
       }
 
-      console.log('Making request to /plaid/all-accounts with headers:', headers);
-      const res = await fetch(`${API_URL}/plaid/all-accounts`, {
+      const requestUrl = `${API_URL}/plaid/all-accounts`;
+      console.log('Making request to:', requestUrl);
+      console.log('Request headers:', headers);
+      
+      const res = await fetch(requestUrl, {
         method: 'GET',
         headers,
       });
+
+      console.log('Response status:', res.status);
+      console.log('Response ok:', res.ok);
 
       if (res.ok) {
         const data = await res.json();
@@ -73,40 +118,85 @@ export default function ProfilePage() {
           setError('Failed to load accounts');
         }
       }
-    } catch {
+    } catch (error) {
+      console.error('Error in loadConnectedAccountsWithDemoMode:', error);
       setError('Error loading accounts');
     } finally {
       setLoading(false);
     }
   }, [API_URL]);
 
+  // NEW: Load enhanced investment data
+  const loadInvestmentData = useCallback(async (demoMode: boolean) => {
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
 
+      if (demoMode) {
+        headers['x-demo-mode'] = 'true';
+      } else {
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+      }
+
+      // Use the new comprehensive investment endpoint
+      const res = await fetch(`${API_URL}/plaid/investments`, {
+        method: 'GET',
+        headers,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        console.log('Received enhanced investment data:', data);
+        setInvestmentData(data);
+      } else {
+        console.log('Failed to load investment data:', res.status);
+        // Don't set error here as this is optional data
+      }
+    } catch (err) {
+      console.error('Error loading investment data:', err);
+      // Don't set error here as this is optional data
+    }
+  }, [API_URL]);
 
   useEffect(() => {
-    // Check if user came from demo page
-    const referrer = document.referrer;
+    // Check if demo mode is explicitly requested via URL parameter
     const urlParams = new URLSearchParams(window.location.search);
-    const isFromDemo = referrer.includes('/demo') || urlParams.get('demo') === 'true';
+    const isFromDemo = urlParams.get('demo') === 'true';
+    
+    // Also check if we have an auth token (indicates real user)
+    const hasAuthToken = !!localStorage.getItem('auth_token');
+    
+    // Determine demo mode: true only if explicitly requested via URL
+    const shouldBeDemo = isFromDemo;
     
     console.log('Demo detection debug:', {
-      referrer,
       urlParams: urlParams.get('demo'),
       isFromDemo,
+      hasAuthToken,
+      shouldBeDemo,
       currentUrl: window.location.href
     });
     
-    setIsDemo(isFromDemo);
+    console.log('Setting isDemo to:', shouldBeDemo);
+    setIsDemo(shouldBeDemo);
+    setDemoStatusDetermined(true);
     
     // Only call API functions after we've determined demo mode
-    if (isFromDemo) {
+    if (shouldBeDemo) {
       console.log('Demo mode detected, calling API functions');
-      // Call the functions directly with the correct demo mode
+      console.log('API_URL:', API_URL);
       loadConnectedAccountsWithDemoMode(true);
+      loadInvestmentData(true);
     } else {
-      console.log('Not demo mode, calling API functions');
+      console.log('Real user mode detected, calling API functions');
       loadConnectedAccountsWithDemoMode(false);
+      loadInvestmentData(false);
     }
-  }, [loadConnectedAccountsWithDemoMode]);
+  }, [loadConnectedAccountsWithDemoMode, loadInvestmentData, API_URL]);
 
   // Fetch user email when not in demo mode
   useEffect(() => {
@@ -223,6 +313,18 @@ export default function ProfilePage() {
     }
   };
 
+  // Don't render anything until we've determined if this is demo mode or not
+  if (!demoStatusDetermined || isDemo === undefined) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-400">Loading profile...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       
@@ -259,29 +361,29 @@ export default function ProfilePage() {
 
       <div className="max-w-4xl mx-auto p-6">
         {/* User Profile Section */}
-        <UserProfile userId={userEmail ? 'user' : undefined} isDemo={isDemo} />
+        {demoStatusDetermined && (
+          <UserProfile userId={userEmail ? 'user' : undefined} isDemo={isDemo} />
+        )}
         
         {/* Account Management Section */}
         <div className="bg-gray-800 rounded-lg p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">Your Connected Accounts</h2>
           
-                            {/* Connect New Account */}
-                  <div className="mb-6">
-                    <PlaidLinkButton 
-                      onSuccess={() => {
-                        // Only reload accounts when an account is actually linked
-                        console.log('Account linked, reloading accounts');
-                        loadConnectedAccountsWithDemoMode(isDemo || false);
-                      }}
-                      isDemo={isDemo}
-                    />
-                  </div>
-
-
+          {/* Connect New Account */}
+          <div className="mb-6">
+            <PlaidLinkButton 
+              onSuccess={() => {
+                // Only reload accounts when an account is actually linked
+                console.log('Account linked, reloading accounts');
+                loadConnectedAccountsWithDemoMode(isDemo || false);
+                loadInvestmentData(isDemo || false);
+              }}
+              isDemo={isDemo}
+            />
+          </div>
 
           {/* Connected Accounts List */}
           <div>
-            
             {loading ? (
               <div className="text-gray-400">Loading accounts...</div>
             ) : error ? (
@@ -319,7 +421,24 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Transaction History */}
+        {/* NEW: Enhanced Investment Portfolio Section */}
+        {investmentData && (
+          <div className="mb-6">
+            <InvestmentPortfolio 
+              portfolio={{
+                totalValue: investmentData.portfolio?.totalValue || 0,
+                assetAllocation: investmentData.portfolio?.assetAllocation || [],
+                holdingCount: investmentData.portfolio?.holdingCount || 0,
+                securityCount: investmentData.portfolio?.securityCount || 0
+              }}
+              holdings={investmentData.holdings || []}
+              transactions={investmentData.transactions || []}
+              isDemo={isDemo}
+            />
+          </div>
+        )}
+
+        {/* Transaction History - Show ALL transactions */}
         <div className="mb-6">
           <TransactionHistory isDemo={isDemo} />
         </div>

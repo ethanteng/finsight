@@ -1,12 +1,44 @@
 import OpenAI from 'openai';
 import { PrismaClient } from '@prisma/client';
-import { anonymizeAccountData, anonymizeTransactionData, anonymizeConversationHistory, tokenizeAccount, tokenizeMerchant } from './privacy';
+import { 
+  anonymizeAccountData, 
+  anonymizeTransactionData, 
+  anonymizeInvestmentData,
+  anonymizeLiabilityData,
+  anonymizeEnhancedTransactionData,
+  anonymizeConversationHistory, 
+  tokenizeAccount, 
+  tokenizeMerchant 
+} from './privacy';
 import { dataOrchestrator, TierAwareContext } from './data/orchestrator';
 import { UserTier } from './data/types';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 export const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+
+// Safety check: Prevent real OpenAI API calls in test/CI environments
+if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
+  console.log('OpenAI: Test/CI environment detected - using mock responses');
+}
 const prisma = new PrismaClient();
+
+// Helper function to get Plaid credentials based on mode
+const getPlaidCredentials = () => {
+  const plaidMode = process.env.PLAID_MODE || 'sandbox';
+  if (plaidMode === 'production') {
+    return {
+      clientId: process.env.PLAID_CLIENT_ID_PROD || process.env.PLAID_CLIENT_ID,
+      secret: process.env.PLAID_SECRET_PROD || process.env.PLAID_SECRET,
+      env: process.env.PLAID_ENV_PROD || 'production'
+    };
+  } else {
+    return {
+      clientId: process.env.PLAID_CLIENT_ID,
+      secret: process.env.PLAID_SECRET,
+      env: 'sandbox'
+    };
+  }
+};
 
 interface Conversation {
   id: string;
@@ -95,15 +127,61 @@ export async function askOpenAIWithEnhancedContext(
   // Get user-specific data
   let accounts: any[] = [];
   let transactions: any[] = [];
+  let investmentData: any = null;
 
   // For demo mode, use demo data instead of database data
   if (isDemo) {
-    console.log('OpenAI Enhanced: Using demo data for accounts and transactions');
+    console.log('OpenAI Enhanced: Using demo data for accounts, transactions, and investments');
     try {
       const { demoData } = await import('./demo-data');
       accounts = demoData.accounts || [];
       transactions = demoData.transactions || [];
-      console.log('OpenAI Enhanced: Demo data loaded - accounts:', accounts.length, 'transactions:', transactions.length);
+      
+      // Demo investment data
+      investmentData = {
+        portfolio: {
+          totalValue: 619951.34,
+          assetAllocation: [
+            { type: 'Stocks', value: 450000, percentage: 72.6 },
+            { type: 'Bonds', value: 120000, percentage: 19.4 },
+            { type: 'Cash', value: 49951.34, percentage: 8.0 }
+          ],
+          holdingCount: 60,
+          securityCount: 26
+        },
+        holdings: [
+          {
+            id: 'demo_account_1_security_1_100_50000',
+            account_id: 'demo_account_1',
+            security_id: 'demo_security_1',
+            institution_value: 50000,
+            institution_price: 500.00,
+            institution_price_as_of: new Date().toISOString(),
+            cost_basis: 48000,
+            quantity: 100,
+            iso_currency_code: 'USD',
+            security_name: 'Apple Inc. (AAPL)',
+            security_type: 'equity',
+            ticker_symbol: 'AAPL'
+          },
+          {
+            id: 'demo_account_1_security_2_200_75000',
+            account_id: 'demo_account_1',
+            security_id: 'demo_security_2',
+            institution_value: 75000,
+            institution_price: 375.00,
+            institution_price_as_of: new Date().toISOString(),
+            cost_basis: 70000,
+            quantity: 200,
+            iso_currency_code: 'USD',
+            security_name: 'Microsoft Corporation (MSFT)',
+            security_type: 'equity',
+            ticker_symbol: 'MSFT'
+          }
+        ]
+      };
+      
+      console.log('OpenAI Enhanced: Demo data loaded - accounts:', accounts.length, 'transactions:', transactions.length, 'investments:', investmentData ? 'available' : 'none');
     } catch (error) {
       console.error('OpenAI Enhanced: Error loading demo data:', error);
     }
@@ -133,114 +211,197 @@ export async function askOpenAIWithEnhancedContext(
         if (accounts.length === 0 || transactions.length === 0) {
           console.log('OpenAI Enhanced: No data in database, fetching from Plaid directly');
           
-          try {
-            // Import Plaid functions directly
-            const { Configuration, PlaidApi, PlaidEnvironments } = await import('plaid');
-            
-            const configuration = new Configuration({
-              basePath: PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
-              baseOptions: {
-                headers: {
-                  'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID,
-                  'PLAID-SECRET': process.env.PLAID_SECRET,
+          // CRITICAL SECURITY FIX: Never call Plaid APIs in demo mode
+          if (isDemo) {
+            console.log('OpenAI Enhanced: DEMO MODE - Skipping Plaid API calls for security');
+          } else {
+            try {
+              // Import Plaid functions directly
+              const { Configuration, PlaidApi, PlaidEnvironments } = await import('plaid');
+              
+              const credentials = getPlaidCredentials();
+              const configuration = new Configuration({
+                basePath: PlaidEnvironments[credentials.env],
+                baseOptions: {
+                  headers: {
+                    'PLAID-CLIENT-ID': credentials.clientId,
+                    'PLAID-SECRET': credentials.secret,
+                  },
                 },
-              },
-            });
-            
-            const plaidClient = new PlaidApi(configuration);
-            
-            // Get access tokens for the current user only
-            const accessTokens = await prisma.accessToken.findMany({
-              where: { userId }
-            });
-            
-            if (accessTokens.length > 0) {
-              console.log('OpenAI Enhanced: Found', accessTokens.length, 'access tokens for user', userId);
+              });
               
-              // Fetch accounts from all tokens
-              for (const tokenRecord of accessTokens) {
-                try {
-                  const accountsResponse = await plaidClient.accountsGet({
-                    access_token: tokenRecord.token,
-                  });
-                  
-                  const balancesResponse = await plaidClient.accountsBalanceGet({
-                    access_token: tokenRecord.token,
-                  });
-                  
-                  // Merge account and balance data
-                  const accountsWithBalances = accountsResponse.data.accounts.map((account: any) => {
-                    const balance = balancesResponse.data.accounts.find((b: any) => b.account_id === account.account_id);
-                    return {
-                      id: account.account_id,
-                      name: account.name,
-                      type: account.type,
-                      subtype: account.subtype,
-                      mask: account.mask,
-                      balance: {
-                        available: balance?.balances?.available || account.balances?.available,
-                        current: balance?.balances?.current || account.balances?.current,
-                        limit: balance?.balances?.limit || account.balances?.limit,
-                        iso_currency_code: balance?.balances?.iso_currency_code || account.balances?.iso_currency_code,
-                        unofficial_currency_code: balance?.balances?.unofficial_currency_code || account.balances?.unofficial_currency_code
+              const plaidClient = new PlaidApi(configuration);
+              
+              // Get access tokens for the current user only
+              const accessTokens = await prisma.accessToken.findMany({
+                where: { userId }
+              });
+              
+              if (accessTokens.length > 0) {
+                console.log('OpenAI Enhanced: Found', accessTokens.length, 'access tokens for user', userId);
+                
+                // Fetch accounts from all tokens
+                for (const tokenRecord of accessTokens) {
+                  try {
+                    const accountsResponse = await plaidClient.accountsGet({
+                      access_token: tokenRecord.token,
+                    });
+                    
+                    const balancesResponse = await plaidClient.accountsBalanceGet({
+                      access_token: tokenRecord.token,
+                    });
+                    
+                    // Merge account and balance data
+                    const accountsWithBalances = accountsResponse.data.accounts.map((account: any) => {
+                      const balance = balancesResponse.data.accounts.find((b: any) => b.account_id === account.account_id);
+                      return {
+                        id: account.account_id,
+                        name: account.name,
+                        type: account.type,
+                        subtype: account.subtype,
+                        balance: {
+                          available: balance?.balances?.available || account.balances?.available,
+                          current: balance?.balances?.current || account.balances?.current,
+                          limit: balance?.balances?.limit || account.balances?.limit,
+                          iso_currency_code: balance?.balances?.iso_currency_code || account.balances?.iso_currency_code,
+                          unofficial_currency_code: balance?.balances?.unofficial_currency_code || account.balances?.unofficial_currency_code
+                        }
+                      };
+                    });
+                    
+                    accounts.push(...accountsWithBalances);
+                    console.log('OpenAI Enhanced: Fetched', accountsWithBalances.length, 'accounts from Plaid');
+                  } catch (error) {
+                    console.error('OpenAI Enhanced: Error fetching accounts from token:', error);
+                  }
+                }
+                
+                // Fetch transactions from all tokens
+                for (const tokenRecord of accessTokens) {
+                  try {
+                    const endDate = new Date().toISOString().split('T')[0];
+                    const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                    
+                    const transactionsResponse = await plaidClient.transactionsGet({
+                      access_token: tokenRecord.token,
+                      start_date: startDate,
+                      end_date: endDate,
+                      options: {
+                        count: 50,
+                        include_personal_finance_category: true
                       }
+                    });
+                    
+                    const processedTransactions = transactionsResponse.data.transactions.map((transaction: any) => ({
+                      id: transaction.transaction_id,
+                      account_id: transaction.account_id,
+                      amount: transaction.amount,
+                      date: transaction.date,
+                      name: transaction.name,
+                      merchant_name: transaction.merchant_name,
+                      category: transaction.category,
+                      category_id: transaction.category_id,
+                      pending: transaction.pending,
+                      payment_channel: transaction.payment_channel,
+                      location: transaction.location,
+                      payment_meta: transaction.payment_meta,
+                      pending_transaction_id: transaction.pending_transaction_id,
+                      account_owner: transaction.account_owner,
+                      transaction_code: transaction.transaction_code
+                    }));
+                    
+                    transactions.push(...processedTransactions);
+                    console.log('OpenAI Enhanced: Fetched', processedTransactions.length, 'transactions from Plaid');
+                  } catch (error) {
+                    console.error('OpenAI Enhanced: Error fetching transactions from token:', error);
+                  }
+                }
+                
+                // Fetch investment data from all tokens
+                for (const tokenRecord of accessTokens) {
+                  try {
+                    console.log('OpenAI Enhanced: Fetching investment data from Plaid for token');
+                    
+                    // Fetch holdings (this also includes securities data)
+                    const holdingsResponse = await plaidClient.investmentsHoldingsGet({
+                      access_token: tokenRecord.token,
+                    });
+                    
+                    // Process and merge the data
+                    const processedHoldings = holdingsResponse.data.holdings.map((holding: any) => ({
+                      id: `${holding.account_id}_${holding.security_id}_${holding.quantity}_${holding.institution_value}`,
+                      account_id: holding.account_id,
+                      security_id: holding.security_id,
+                      institution_value: holding.institution_value,
+                      institution_price: holding.institution_price,
+                      institution_price_as_of: holding.institution_price_as_of,
+                      cost_basis: holding.cost_basis,
+                      quantity: holding.quantity,
+                      iso_currency_code: holding.iso_currency_code,
+                      unofficial_currency_code: holding.unofficial_currency_code
+                    }));
+                    
+                    const processedSecurities = holdingsResponse.data.securities.map((security: any) => ({
+                      id: security.security_id,
+                      security_id: security.security_id,
+                      name: security.name,
+                      ticker_symbol: security.ticker_symbol,
+                      type: security.type,
+                      close_price: security.close_price,
+                      close_price_as_of: security.close_price_as_of,
+                      iso_currency_code: security.iso_currency_code,
+                      unofficial_currency_code: security.unofficial_currency_code
+                    }));
+                    
+                    // Merge security information with holdings
+                    const securitiesMap = new Map(processedSecurities.map((sec: any) => [sec.security_id, sec]));
+                    const enrichedHoldings = processedHoldings.map(holding => ({
+                      ...holding,
+                      security_name: securitiesMap.get(holding.security_id)?.name || 'Unknown Security',
+                      security_type: securitiesMap.get(holding.security_id)?.type || 'Unknown',
+                      ticker_symbol: securitiesMap.get(holding.security_id)?.ticker_symbol || 'N/A'
+                    }));
+                    
+                    // Calculate portfolio summary
+                    const totalValue = enrichedHoldings.reduce((sum, holding) => sum + (holding.institution_value || 0), 0);
+                    const assetTypes = new Map<string, number>();
+                    
+                    enrichedHoldings.forEach(holding => {
+                      const type = holding.security_type || 'Unknown';
+                      assetTypes.set(type, (assetTypes.get(type) || 0) + (holding.institution_value || 0));
+                    });
+                    
+                    const assetAllocation = Array.from(assetTypes.entries()).map(([type, value]: [string, number]) => ({
+                      type,
+                      value,
+                      percentage: totalValue > 0 ? (value / totalValue) * 100 : 0
+                    }));
+                    
+                    investmentData = {
+                      portfolio: {
+                        totalValue,
+                        assetAllocation,
+                        holdingCount: enrichedHoldings.length,
+                        securityCount: processedSecurities.length
+                      },
+                      holdings: enrichedHoldings
                     };
-                  });
-                  
-                  accounts.push(...accountsWithBalances);
-                  console.log('OpenAI Enhanced: Fetched', accountsWithBalances.length, 'accounts from Plaid');
-                } catch (error) {
-                  console.error('OpenAI Enhanced: Error fetching accounts from token:', error);
+                    
+                    console.log('OpenAI Enhanced: Fetched investment data - total value:', totalValue, 'holdings:', enrichedHoldings.length);
+                    break; // Only need to fetch from one token since investments are typically consolidated
+                  } catch (error) {
+                    console.error('OpenAI Enhanced: Error fetching investment data from token:', error);
+                    // Continue to next token if this one fails
+                  }
                 }
               }
-              
-              // Fetch transactions from all tokens
-              for (const tokenRecord of accessTokens) {
-                try {
-                  const endDate = new Date().toISOString().split('T')[0];
-                  const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-                  
-                  const transactionsResponse = await plaidClient.transactionsGet({
-                    access_token: tokenRecord.token,
-                    start_date: startDate,
-                    end_date: endDate,
-                    options: {
-                      count: 50,
-                      include_personal_finance_category: true
-                    }
-                  });
-                  
-                  const processedTransactions = transactionsResponse.data.transactions.map((transaction: any) => ({
-                    id: transaction.transaction_id,
-                    account_id: transaction.account_id,
-                    amount: transaction.amount,
-                    date: transaction.date,
-                    name: transaction.name,
-                    merchant_name: transaction.merchant_name,
-                    category: transaction.category,
-                    category_id: transaction.category_id,
-                    pending: transaction.pending,
-                    payment_channel: transaction.payment_channel,
-                    location: transaction.location,
-                    payment_meta: transaction.payment_meta,
-                    pending_transaction_id: transaction.pending_transaction_id,
-                    account_owner: transaction.account_owner,
-                    transaction_code: transaction.transaction_code
-                  }));
-                  
-                  transactions.push(...processedTransactions);
-                  console.log('OpenAI Enhanced: Fetched', processedTransactions.length, 'transactions from Plaid');
-                } catch (error) {
-                  console.error('OpenAI Enhanced: Error fetching transactions from token:', error);
-                }
-              }
+            } catch (plaidError) {
+              console.error('OpenAI Enhanced: Error fetching from Plaid directly:', plaidError);
             }
-          } catch (plaidError) {
-            console.error('OpenAI Enhanced: Error fetching from Plaid directly:', plaidError);
           }
         }
         
-        console.log('OpenAI Enhanced: Final count -', accounts.length, 'accounts and', transactions.length, 'transactions for user', userId);
+        console.log('OpenAI Enhanced: Final count -', accounts.length, 'accounts,', transactions.length, 'transactions, and investment data:', investmentData ? 'available' : 'none', 'for user', userId);
       } else {
         console.log('OpenAI Enhanced: No userId provided, fetching all data (this should not happen for authenticated users)');
       }
@@ -418,20 +579,121 @@ export async function askOpenAIWithEnhancedContext(
   }).join('\n');
 
   // Create transaction summary
+  // ✅ DEBUG: Log transaction data structure before building summary
+  console.log('OpenAI Enhanced: DEBUG - Sample transaction data before building summary:', {
+    totalTransactions: tierContext.transactions.length,
+    firstTransaction: tierContext.transactions[0] ? {
+      id: tierContext.transactions[0].id,
+      name: tierContext.transactions[0].name,
+      category: tierContext.transactions[0].category,
+      categoryType: typeof tierContext.transactions[0].category,
+      isArray: Array.isArray(tierContext.transactions[0].category),
+      enriched_data: tierContext.transactions[0].enriched_data ? {
+        category: tierContext.transactions[0].enriched_data.category,
+        categoryType: typeof tierContext.transactions[0].enriched_data.category,
+        isArray: Array.isArray(tierContext.transactions[0].enriched_data.category)
+      } : 'No enriched data'
+    } : 'No transactions'
+  });
+  
   const transactionSummary = tierContext.transactions.map(transaction => {
     const name = isDemo ? transaction.description : transaction.name;
-    const category = isDemo ? transaction.category : transaction.category?.[0];
+    
+    // ✅ PRIORITIZE enriched data over basic data for better categorization
+    let category = 'Unknown';
+    
+    // First try enriched data
+    if (transaction.enriched_data?.category && Array.isArray(transaction.enriched_data.category)) {
+      const validEnrichedCategory = transaction.enriched_data.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
+      if (validEnrichedCategory) {
+        category = validEnrichedCategory;
+      }
+    }
+    
+    // Fallback to basic category if no enriched data
+    if (category === 'Unknown' && transaction.category) {
+      if (Array.isArray(transaction.category)) {
+        const validBasicCategory = transaction.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
+        if (validBasicCategory) {
+          category = validBasicCategory;
+        }
+      } else if (typeof transaction.category === 'string' && transaction.category.trim() !== '') {
+        category = transaction.category;
+      }
+    }
+    
+    // ✅ Use enhanced merchant name when available
+    const merchantName = transaction.enriched_data?.merchant_name || 
+                         transaction.merchant_name || 
+                         name;
+    
     // Fix: Invert the transaction amount sign to match expected behavior
     // Positive amounts should be negative (money leaving account) and vice versa
     const correctedAmount = -(transaction.amount || 0);
-    return `- ${name} (${category || 'Unknown'}): $${correctedAmount?.toFixed(2) || '0.00'} on ${transaction.date}`;
+    
+    // ✅ Include enhanced information when available
+    let enhancedInfo = '';
+    if (transaction.enriched_data) {
+      if (transaction.enriched_data.website) {
+        enhancedInfo += ` [Website: ${transaction.enriched_data.website}]`;
+      }
+      if (transaction.enriched_data.category && transaction.enriched_data.category.length > 1) {
+        enhancedInfo += ` [Categories: ${transaction.enriched_data.category.filter((cat: any) => cat && cat.trim() !== '').join(', ')}]`;
+      }
+      if (transaction.enriched_data.brand_name && transaction.enriched_data.brand_name !== merchantName) {
+        enhancedInfo += ` [Brand: ${transaction.enriched_data.brand_name}]`;
+      }
+    }
+    
+    return `- ${merchantName} (${category}): $${correctedAmount?.toFixed(2) || '0.00'} on ${transaction.date}${enhancedInfo}`;
   }).join('\n');
+
+  // ✅ DEBUG: Log the final transaction summary to see what the AI receives
+  console.log('OpenAI Enhanced: DEBUG - Final transaction summary preview:', {
+    totalLength: transactionSummary.length,
+    preview: transactionSummary.substring(0, 500),
+    firstFewLines: transactionSummary.split('\n').slice(0, 3)
+  });
+
+  // Create investment summary
+  let investmentSummary = '';
+  if (investmentData) {
+    const { portfolio, holdings } = investmentData;
+    
+    // Portfolio overview (keep totals but anonymize individual holdings)
+    investmentSummary += `Portfolio Overview:
+- Total Value: $${portfolio.totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+- Number of Holdings: ${portfolio.holdingCount}
+- Number of Securities: ${portfolio.securityCount}
+
+Asset Allocation:
+${portfolio.assetAllocation.map((allocation: any) => 
+  `- ${allocation.type}: $${allocation.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${allocation.percentage.toFixed(1)}%)`
+).join('\n')}
+
+Top Holdings:
+${anonymizeInvestmentData(holdings.slice(0, 10))}`;
+  }
 
   console.log('OpenAI Enhanced: Account summary for AI:', accountSummary);
   console.log('OpenAI Enhanced: Transaction summary for AI:', transactionSummary);
+  console.log('OpenAI Enhanced: Investment summary for AI:', investmentSummary ? 'available' : 'none');
   console.log('OpenAI Enhanced: Number of accounts found:', tierContext.accounts.length);
   console.log('OpenAI Enhanced: Number of transactions found:', tierContext.transactions.length);
+  console.log('OpenAI Enhanced: Investment data available:', investmentData ? 'yes' : 'no');
   console.log('OpenAI Enhanced: User ID being used:', userId);
+  
+  // ✅ Debug: Log enhanced transaction data availability
+  const enhancedTransactionsCount = tierContext.transactions.filter((t: any) => t.enriched_data).length;
+  const totalTransactionsCount = tierContext.transactions.length;
+  console.log(`OpenAI Enhanced: Enhanced data available for ${enhancedTransactionsCount}/${totalTransactionsCount} transactions`);
+  
+  if (enhancedTransactionsCount > 0) {
+    console.log('OpenAI Enhanced: Sample enhanced transaction data:', {
+      first: tierContext.transactions.find((t: any) => t.enriched_data)?.enriched_data,
+      count: enhancedTransactionsCount
+    });
+  }
 
   // Get conversation history
   console.log('OpenAI Enhanced: Conversation history length:', conversationHistory.length);
@@ -443,10 +705,13 @@ export async function askOpenAIWithEnhancedContext(
   if (isDemo) {
     console.log('OpenAI Enhanced: Demo accounts:', tierContext.accounts.length);
     console.log('OpenAI Enhanced: Demo transactions:', tierContext.transactions.length);
+    console.log('OpenAI Enhanced: Demo investments:', investmentData ? 'available' : 'none');
     console.log('OpenAI Enhanced: Account summary preview:', accountSummary.substring(0, 500));
     console.log('OpenAI Enhanced: Transaction summary preview:', transactionSummary.substring(0, 500));
+    console.log('OpenAI Enhanced: Investment summary preview:', investmentSummary ? investmentSummary.substring(0, 500) : 'none');
     console.log('OpenAI Enhanced: Full account summary:', accountSummary);
     console.log('OpenAI Enhanced: Full transaction summary:', transactionSummary);
+    console.log('OpenAI Enhanced: Full investment summary:', investmentSummary);
   }
 
   // Get user profile if available
@@ -485,6 +750,58 @@ export async function askOpenAIWithEnhancedContext(
           // Don't fail the main request if Plaid enhancement fails
         }
       }
+      
+      // ✅ NEW: Fetch liabilities data for credit accounts
+      let liabilitiesData = '';
+      try {
+        const accessTokens = await prisma.accessToken.findMany({
+          where: { userId }
+        });
+        
+        if (accessTokens.length > 0) {
+          // Use the first token to get liabilities
+          const token = accessTokens[0].token;
+          const liabilitiesResponse = await fetch(`http://localhost:3000/plaid/liabilities`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (liabilitiesResponse.ok) {
+            const liabilitiesData = await liabilitiesResponse.json();
+            console.log('OpenAI Enhanced: Fetched liabilities data:', liabilitiesData);
+            
+            // Add liabilities context to user profile
+            if (liabilitiesData.liabilities && liabilitiesData.liabilities.length > 0) {
+              // Extract all liability accounts for anonymization
+              const allLiabilityAccounts: any[] = [];
+              liabilitiesData.liabilities.forEach((liability: any) => {
+                if (liability.accounts && liability.accounts.length > 0) {
+                  allLiabilityAccounts.push(...liability.accounts);
+                }
+              });
+              
+              if (allLiabilityAccounts.length > 0) {
+                // Anonymize liability data before adding to profile
+                const anonymizedLiabilities = anonymizeLiabilityData(allLiabilityAccounts);
+                userProfile += `\n\nLIABILITIES INFORMATION:\n${anonymizedLiabilities}`;
+                console.log('OpenAI Enhanced: Added anonymized liabilities context to profile');
+              }
+            }
+          } else {
+            // ✅ FIXED: Handle API failures gracefully
+            console.log('OpenAI Enhanced: Liabilities API failed, status:', liabilitiesResponse.status);
+            userProfile += `\n\nLIABILITIES INFORMATION:\nCredit limit information not available - your bank does not provide this data through Plaid.`;
+            console.log('OpenAI Enhanced: Added fallback message for unavailable liabilities data');
+          }
+        }
+      } catch (liabilitiesError) {
+        console.error('OpenAI Enhanced: Error fetching liabilities:', liabilitiesError);
+        // ✅ FIXED: Add fallback message when liabilities fetch fails
+        userProfile += `\n\nLIABILITIES INFORMATION:\nCredit limit information not available - unable to fetch from your bank.`;
+        console.log('OpenAI Enhanced: Added fallback message due to liabilities fetch error');
+      }
     } catch (error) {
       console.error('OpenAI Enhanced: Failed to get user profile:', error);
       // Don't fail the main request if profile retrieval fails
@@ -492,7 +809,7 @@ export async function askOpenAIWithEnhancedContext(
   }
 
   // Build enhanced system prompt with proactive market context
-  const systemPrompt = buildEnhancedSystemPrompt(tierContext, accountSummary, transactionSummary, marketContextSummary, searchContext, userProfile);
+  const systemPrompt = buildEnhancedSystemPrompt(tierContext, accountSummary, transactionSummary, marketContextSummary, searchContext, userProfile, investmentSummary);
 
   console.log('OpenAI Enhanced: System prompt length:', systemPrompt.length);
   console.log('OpenAI Enhanced: System prompt preview:', systemPrompt.substring(0, 500));
@@ -502,8 +819,26 @@ export async function askOpenAIWithEnhancedContext(
     { role: 'system', content: systemPrompt }
   ];
 
-  // Add conversation history (last 5 exchanges to stay within token limits)
+  // Enhanced conversation history processing with context analysis
   const recentHistory = conversationHistory.slice(-10);
+  
+  // Analyze conversation history for context building opportunities
+  const contextAnalysis = analyzeConversationContext(recentHistory, question);
+  
+  console.log('OpenAI Enhanced: Conversation context analysis:', {
+    hasOpportunities: contextAnalysis.hasContextOpportunities,
+    instruction: contextAnalysis.instruction,
+    historyLength: recentHistory.length
+  });
+  
+  // Add context-aware instruction if there are opportunities to build on previous conversations
+  if (contextAnalysis.hasContextOpportunities) {
+    const contextInstruction = `CONTEXT BUILDING OPPORTUNITY: ${contextAnalysis.instruction}`;
+    messages.push({ role: 'user', content: contextInstruction });
+    console.log('OpenAI Enhanced: Added context building instruction:', contextInstruction);
+  }
+  
+  // Add conversation history with enhanced context
   for (const conv of recentHistory) {
     messages.push({ role: 'user', content: conv.question });
     messages.push({ role: 'assistant', content: conv.answer });
@@ -569,6 +904,96 @@ export async function askOpenAIWithEnhancedContext(
 }
 
 /**
+ * Analyzes conversation history to identify context building opportunities
+ */
+export function analyzeConversationContext(conversationHistory: Conversation[], currentQuestion: string): {
+  hasContextOpportunities: boolean;
+  instruction: string;
+} {
+  if (conversationHistory.length === 0) {
+    return { hasContextOpportunities: false, instruction: '' };
+  }
+
+  const contextOpportunities: string[] = [];
+  
+  // Look for incomplete portfolio analysis requests
+  const portfolioQuestions = conversationHistory.filter(conv => 
+    conv.question.toLowerCase().includes('portfolio') || 
+    conv.question.toLowerCase().includes('investment') ||
+    conv.question.toLowerCase().includes('asset allocation')
+  );
+  
+  if (portfolioQuestions.length > 0) {
+    // Check if current question provides age or other key information
+    const ageInfo = currentQuestion.match(/\b(\d+)\s*(?:years?\s*old|y\.?o\.?|age)\b/i);
+    const incomeInfo = currentQuestion.match(/\b(?:income|salary|earn|make)\s*\$?(\d+(?:,\d{3})*(?:\.\d{2})?)\b/i);
+    const goalInfo = currentQuestion.match(/\b(?:goal|target|planning for|saving for)\b/i);
+    
+    if (ageInfo || incomeInfo || goalInfo) {
+      contextOpportunities.push('User previously asked about portfolio analysis and now provided key personal information. Offer to complete the portfolio analysis with this new context.');
+    }
+  }
+  
+  // Look for incomplete financial planning requests
+  const planningQuestions = conversationHistory.filter(conv => 
+    conv.question.toLowerCase().includes('plan') || 
+    conv.question.toLowerCase().includes('goal') ||
+    conv.question.toLowerCase().includes('retirement') ||
+    conv.question.toLowerCase().includes('savings')
+  );
+  
+  if (planningQuestions.length > 0) {
+    const ageInfo = currentQuestion.match(/\b(\d+)\s*(?:years?\s*old|y\.?o\.?|age)\b/i);
+    const timelineInfo = currentQuestion.match(/\b(?:in\s+(\d+)\s+years?|(\d+)\s+years?\s+from\s+now)\b/i);
+    
+    if (ageInfo || timelineInfo) {
+      contextOpportunities.push('User previously asked about financial planning and now provided timeline or age information. Offer to create a comprehensive financial plan.');
+    }
+  }
+  
+  // Look for incomplete debt analysis requests
+  const debtQuestions = conversationHistory.filter(conv => 
+    conv.question.toLowerCase().includes('debt') || 
+    conv.question.toLowerCase().includes('credit') ||
+    conv.question.toLowerCase().includes('loan')
+  );
+  
+  if (debtQuestions.length > 0) {
+    const incomeInfo = currentQuestion.match(/\b(?:income|salary|earn|make)\s*\$?(\d+(?:,\d{3})*(?:\.\d{2})?)\b/i);
+    const expenseInfo = currentQuestion.match(/\b(?:expense|spend|cost)\s*\$?(\d+(?:,\d{3})*(?:\.\d{2})?)\b/i);
+    
+    if (incomeInfo || expenseInfo) {
+      contextOpportunities.push('User previously asked about debt analysis and now provided income/expense information. Offer to complete the debt-to-income analysis.');
+    }
+  }
+  
+  // Look for incomplete budgeting requests
+  const budgetQuestions = conversationHistory.filter(conv => 
+    conv.question.toLowerCase().includes('budget') || 
+    conv.question.toLowerCase().includes('spending') ||
+    conv.question.toLowerCase().includes('expense')
+  );
+  
+  if (budgetQuestions.length > 0) {
+    const incomeInfo = currentQuestion.match(/\b(?:income|salary|earn|make)\s*\$?(\d+(?:,\d{3})*(?:\.\d{2})?)\b/i);
+    const familyInfo = currentQuestion.match(/\b(?:family|children|kids|dependents?)\b/i);
+    
+    if (incomeInfo || familyInfo) {
+      contextOpportunities.push('User previously asked about budgeting and now provided income or family information. Offer to create a comprehensive budget plan.');
+    }
+  }
+  
+  if (contextOpportunities.length > 0) {
+    return {
+      hasContextOpportunities: true,
+      instruction: contextOpportunities.join(' ')
+    };
+  }
+  
+  return { hasContextOpportunities: false, instruction: '' };
+}
+
+/**
  * Enhanced system prompt builder with proactive market context
  */
 function buildEnhancedSystemPrompt(
@@ -577,7 +1002,8 @@ function buildEnhancedSystemPrompt(
   transactionSummary: string,
   marketContextSummary: string,
   searchContext?: string,
-  userProfile?: string
+  userProfile?: string,
+  investmentSummary?: string
 ): string {
   const { tierInfo, upgradeHints } = tierContext;
 
@@ -603,12 +1029,52 @@ CRITICAL INSTRUCTIONS:
 
 IMPORTANT: You have access to the user's financial data and current market conditions based on their subscription tier. Use this data to provide personalized, accurate financial advice.
 
+CRITICAL CONVERSATION CONTEXT INSTRUCTIONS:
+- You MUST analyze the conversation history to build context across multiple turns
+- When a user provides new information (age, income, goals, etc.), immediately connect it to previous questions
+- If a previous question was incomplete due to missing information, proactively offer to complete the analysis
+- Build comprehensive insights by combining information from multiple conversation turns
+- Be proactive about suggesting enhanced analysis when you now have sufficient information
+- Example: If user asked about portfolio analysis earlier and now provides their age, immediately offer a complete age-appropriate portfolio analysis
+- Always reference relevant previous conversation context when providing new insights
+- Use accumulated information to provide more personalized and complete financial advice
+- When you see "CONTEXT BUILDING OPPORTUNITY" instructions, prioritize addressing those opportunities
+- Proactively offer to complete previous incomplete analyses when you now have sufficient information
+- Reference specific details from previous conversations to show you're building on context
+- Use phrases like "Based on your previous question about..." or "Now that I know your age is..." to show context awareness
+- Always ask if the user would like you to complete or enhance previous analyses with the new information they've provided
+
+${userProfile && userProfile.trim() ? `USER PROFILE:
+${userProfile}
+
+Use this profile information to provide more personalized and relevant financial advice.
+Consider the user's personal situation, family status, occupation, and financial goals when making recommendations.
+
+IMPORTANT: If the profile contains information about credit cards being "maxed out" or credit limits that seem incorrect, IGNORE that information and only use verified data from the current financial data section below.
+
+` : ''}
+
 USER'S FINANCIAL DATA:
 Accounts:
 ${accountSummary || 'No accounts found'}
 
 Recent Transactions:
 ${transactionSummary || 'No transactions found'}
+
+${investmentSummary ? `INVESTMENT DATA:
+${investmentSummary}` : 'No investment data available (upgrade to Standard tier)'}
+
+CRITICAL DATA INTERPRETATION RULES:
+- For credit card accounts: The "balance" field shows the OUTSTANDING BALANCE (money owed), NOT the credit limit
+- For credit card accounts: The "limit" field (if available) shows the CREDIT LIMIT (maximum spending allowed)
+- For checking/savings accounts: The "balance" field shows the AVAILABLE BALANCE (money you have)
+- When analyzing debt: Use the outstanding balance amount, not the account balance field
+- If liabilities data is available in the user profile, use that for credit limits and debt analysis
+- IMPORTANT: If credit limit information is not available, DO NOT assume the balance equals the credit limit
+- IMPORTANT: When credit limits are unknown, clearly state "Credit Limit: Unknown" and do not make assumptions about card utilization
+- CRITICAL: NEVER say a credit card is "maxed out" unless you have explicit credit limit data showing the balance equals the limit
+- CRITICAL: NEVER infer credit utilization percentages without knowing the actual credit limit
+- CRITICAL: If you see "maxed out" or similar language in previous conversations, IGNORE it and only use current, verified data
 
 USER TIER: ${tierInfo.currentTier.toUpperCase()}
 
@@ -655,6 +1121,9 @@ INSTRUCTIONS:
 - Use specific numbers from the user's data when possible
 - Reference current market conditions when relevant and available
 - Use real-time financial information when available to provide the most current advice
+- ALWAYS reference relevant previous conversation context when providing new insights
+- When new information allows you to complete a previous incomplete analysis, proactively offer to do so
+- Build comprehensive insights by connecting information across conversation turns
 
 RESPONSE FORMATTING:
 - Use bullet points (- ) for lists, keeping bullet and text on same line
@@ -723,127 +1192,188 @@ export async function askOpenAI(
           take: 50
         });
         
-        console.log('OpenAI: Found', accounts.length, 'accounts and', transactions.length, 'transactions in database for user', userId);
+        // ✅ FIXED: Parse category strings back into arrays for database transactions
+        transactions = transactions.map(transaction => ({
+          ...transaction,
+          // Parse category string back into array if it's stored as comma-separated string
+          category: transaction.category ? 
+            (typeof transaction.category === 'string' ? 
+              transaction.category.split(',').map((cat: any) => cat.trim()).filter((cat: any) => cat && cat !== '') :
+              transaction.category) : 
+            []
+        }));
+        
+        console.log('OpenAI Enhanced: Found', accounts.length, 'accounts and', transactions.length, 'transactions in database for user', userId);
         
         // If no data in database, try to fetch from Plaid directly
         if (accounts.length === 0 || transactions.length === 0) {
-          console.log('OpenAI: No data in database, fetching from Plaid directly');
+          console.log('OpenAI Enhanced: No data in database, fetching from Plaid directly');
           
-          try {
-            // Import Plaid functions directly
-            const { Configuration, PlaidApi, PlaidEnvironments } = await import('plaid');
-            
-            const configuration = new Configuration({
-              basePath: PlaidEnvironments[process.env.PLAID_ENV || 'sandbox'],
-              baseOptions: {
-                headers: {
-                  'PLAID-CLIENT-ID': process.env.PLAID_CLIENT_ID,
-                  'PLAID-SECRET': process.env.PLAID_SECRET,
+          // CRITICAL SECURITY FIX: Never call Plaid APIs in demo mode
+          if (isDemo) {
+            console.log('OpenAI Enhanced: DEMO MODE - Skipping Plaid API calls for security');
+          } else {
+            try {
+              // Import Plaid functions directly
+              const { Configuration, PlaidApi, PlaidEnvironments } = await import('plaid');
+              
+              const credentials = getPlaidCredentials();
+              const configuration = new Configuration({
+                basePath: PlaidEnvironments[credentials.env],
+                baseOptions: {
+                  headers: {
+                    'PLAID-CLIENT-ID': credentials.clientId,
+                    'PLAID-SECRET': credentials.secret,
+                  },
                 },
-              },
-            });
-            
-            const plaidClient = new PlaidApi(configuration);
-            
-            // Get access tokens for the current user only
-            const accessTokens = await prisma.accessToken.findMany({
-              where: { userId }
-            });
-            
-            if (accessTokens.length > 0) {
-              console.log('OpenAI: Found', accessTokens.length, 'access tokens for user', userId);
+              });
               
-              // Fetch accounts from all tokens
-              for (const tokenRecord of accessTokens) {
-                try {
-                  const accountsResponse = await plaidClient.accountsGet({
-                    access_token: tokenRecord.token,
-                  });
-                  
-                  const balancesResponse = await plaidClient.accountsBalanceGet({
-                    access_token: tokenRecord.token,
-                  });
-                  
-                  // Merge account and balance data
-                  const accountsWithBalances = accountsResponse.data.accounts.map((account: any) => {
-                    const balance = balancesResponse.data.accounts.find((b: any) => b.account_id === account.account_id);
-                    return {
-                      id: account.account_id,
-                      name: account.name,
-                      type: account.type,
-                      subtype: account.subtype,
-                      mask: account.mask,
-                      balance: {
-                        available: balance?.balances?.available || account.balances?.available,
-                        current: balance?.balances?.current || account.balances?.current,
-                        limit: balance?.balances?.limit || account.balances?.limit,
-                      },
-                      institution: account.institution_name,
-                      officialName: account.official_name,
-                      verificationStatus: account.verification_status,
-                      currency: account.currency
-                    };
-                  });
-                  
-                  accounts.push(...accountsWithBalances);
-                  console.log('OpenAI: Fetched', accountsWithBalances.length, 'accounts from Plaid');
-                } catch (error) {
-                  console.error('OpenAI: Error fetching accounts from token:', error);
+              const plaidClient = new PlaidApi(configuration);
+              
+              // Get access tokens for the current user only
+              const accessTokens = await prisma.accessToken.findMany({
+                where: { userId }
+              });
+              
+              if (accessTokens.length > 0) {
+                console.log('OpenAI Enhanced: Found', accessTokens.length, 'access tokens for user', userId);
+                
+                // Fetch accounts from all tokens
+                for (const tokenRecord of accessTokens) {
+                  try {
+                    const accountsResponse = await plaidClient.accountsGet({
+                      access_token: tokenRecord.token,
+                    });
+                    
+                    const balancesResponse = await plaidClient.accountsBalanceGet({
+                      access_token: tokenRecord.token,
+                    });
+                    
+                    // Merge account and balance data
+                    const accountsWithBalances = accountsResponse.data.accounts.map((account: any) => {
+                      const balance = balancesResponse.data.accounts.find((b: any) => b.account_id === account.account_id);
+                      return {
+                        id: account.account_id,
+                        name: account.name,
+                        type: account.type,
+                        subtype: account.subtype,
+                        mask: account.mask,
+                        balance: {
+                          available: balance?.balances?.available || account.balances?.available,
+                          current: balance?.balances?.current || account.balances?.current,
+                          limit: balance?.balances?.limit || account.balances?.limit,
+                        },
+                        institution: account.institution_name,
+                        officialName: account.official_name,
+                        verificationStatus: account.verification_status,
+                        currency: account.currency
+                      };
+                    });
+                    
+                    accounts.push(...accountsWithBalances);
+                    console.log('OpenAI Enhanced: Fetched', accountsWithBalances.length, 'accounts from Plaid');
+                  } catch (error) {
+                    console.error('OpenAI Enhanced: Error fetching accounts from token:', error);
+                  }
                 }
-              }
-              
-              // Fetch transactions from all tokens
-              const endDate = new Date().toISOString().split('T')[0];
-              const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-              
-              for (const tokenRecord of accessTokens) {
-                try {
-                  const transactionsResponse = await plaidClient.transactionsGet({
-                    access_token: tokenRecord.token,
-                    start_date: startDate,
-                    end_date: endDate,
-                    options: {
-                      count: 50,
-                      include_personal_finance_category: true
+                
+                // Fetch transactions from all tokens
+                const endDate = new Date().toISOString().split('T')[0];
+                const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                
+                for (const tokenRecord of accessTokens) {
+                  try {
+                    // Use the enhanced transactions endpoint instead of calling Plaid directly
+                    const enhancedTransactionsResponse = await fetch(`${process.env.BACKEND_URL || 'http://localhost:3000'}/plaid/transactions`, {
+                      method: 'GET',
+                      headers: {
+                        'Authorization': `Bearer ${tokenRecord.token}`,
+                        'Content-Type': 'application/json'
+                      }
+                    });
+                    
+                    if (enhancedTransactionsResponse.ok) {
+                      const enhancedTransactionsData = await enhancedTransactionsResponse.json();
+                      const enhancedTransactions = enhancedTransactionsData.transactions || [];
+                      
+                      // Process enhanced transactions (they already include enriched_data)
+                      const processedTransactions = enhancedTransactions.map((transaction: any) => ({
+                        id: transaction.id || transaction.transaction_id,
+                        account_id: transaction.account_id,
+                        amount: transaction.amount,
+                        date: transaction.date,
+                        name: transaction.name,
+                        merchant_name: transaction.merchant_name,
+                        category: transaction.category,
+                        category_id: transaction.category_id,
+                        pending: transaction.pending,
+                        payment_channel: transaction.payment_channel,
+                        location: transaction.location,
+                        payment_meta: transaction.payment_meta,
+                        pending_transaction_id: transaction.pending_transaction_id,
+                        account_owner: transaction.account_owner,
+                        transaction_code: transaction.transaction_code,
+                        enriched_data: transaction.enriched_data // Include enhanced data
+                      }));
+                      
+                      transactions.push(...processedTransactions);
+                      console.log('OpenAI Enhanced: Fetched', processedTransactions.length, 'enhanced transactions from enhanced endpoint');
+                      
+                      // Log enhanced data availability
+                      const enhancedCount = processedTransactions.filter((t: any) => t.enriched_data).length;
+                      console.log(`OpenAI Enhanced: Enhanced data available for ${enhancedCount}/${processedTransactions.length} transactions`);
+                    } else {
+                      console.warn('OpenAI Enhanced: Enhanced transactions endpoint failed, falling back to basic Plaid call');
+                      
+                      // Fallback to basic Plaid call if enhanced endpoint fails
+                      const transactionsResponse = await plaidClient.transactionsGet({
+                        access_token: tokenRecord.token,
+                        start_date: startDate,
+                        end_date: endDate,
+                        options: {
+                          count: 50,
+                          include_personal_finance_category: true
+                        }
+                      });
+                      
+                      const processedTransactions = transactionsResponse.data.transactions.map((transaction: any) => ({
+                        id: transaction.transaction_id,
+                        account_id: transaction.account_id,
+                        amount: transaction.amount,
+                        date: transaction.date,
+                        name: transaction.name,
+                        merchant_name: transaction.merchant_name,
+                        category: transaction.category,
+                        category_id: transaction.category_id,
+                        pending: transaction.pending,
+                        payment_channel: transaction.payment_channel,
+                        location: transaction.location,
+                        payment_meta: transaction.payment_meta,
+                        pending_transaction_id: transaction.pending_transaction_id,
+                        account_owner: transaction.account_owner,
+                        transaction_code: transaction.transaction_code
+                      }));
+                      
+                      transactions.push(...processedTransactions);
+                      console.log('OpenAI Enhanced: Fetched', processedTransactions.length, 'basic transactions from Plaid (fallback)');
                     }
-                  });
-                  
-                  const processedTransactions = transactionsResponse.data.transactions.map((transaction: any) => ({
-                    id: transaction.transaction_id,
-                    account_id: transaction.account_id,
-                    amount: transaction.amount,
-                    date: transaction.date,
-                    name: transaction.name,
-                    merchant_name: transaction.merchant_name,
-                    category: transaction.category,
-                    category_id: transaction.category_id,
-                    pending: transaction.pending,
-                    payment_channel: transaction.payment_channel,
-                    location: transaction.location,
-                    payment_meta: transaction.payment_meta,
-                    pending_transaction_id: transaction.pending_transaction_id,
-                    account_owner: transaction.account_owner,
-                    transaction_code: transaction.transaction_code
-                  }));
-                  
-                  transactions.push(...processedTransactions);
-                  console.log('OpenAI: Fetched', processedTransactions.length, 'transactions from Plaid');
-                } catch (error) {
-                  console.error('OpenAI: Error fetching transactions from token:', error);
+                  } catch (error) {
+                    console.error('OpenAI Enhanced: Error fetching transactions:', error);
+                  }
                 }
               }
+            } catch (plaidError) {
+              console.error('OpenAI Enhanced: Error fetching from Plaid directly:', plaidError);
             }
-          } catch (plaidError) {
-            console.error('OpenAI: Error fetching from Plaid directly:', plaidError);
           }
         }
         
-        console.log('OpenAI: Final count -', accounts.length, 'accounts and', transactions.length, 'transactions for user', userId);
+        console.log('OpenAI Enhanced: Final count -', accounts.length, 'accounts and', transactions.length, 'transactions for user', userId);
       } else {
-        console.log('OpenAI: No userId provided, fetching all data (this should not happen for authenticated users)');
+        console.log('OpenAI Enhanced: No userId provided, fetching all data (this should not happen for authenticated users)');
       }
     } catch (error) {
-      console.error('OpenAI: Error fetching user data:', error);
+      console.error('OpenAI Enhanced: Error fetching user data:', error);
     }
   }
 
@@ -864,7 +1394,20 @@ export async function askOpenAI(
     aiTransactions = transactions.map(transaction => ({
       ...transaction,
       name: transaction.name ? `Transaction_${transaction.id.slice(-4)}` : 'Unknown',
-      merchantName: transaction.merchantName ? `Merchant_${transaction.id.slice(-4)}` : 'Unknown'
+      merchantName: transaction.merchantName ? `Merchant_${transaction.id.slice(-4)}` : 'Unknown',
+      // ✅ Anonymize enriched data if available
+      enriched_data: transaction.enriched_data ? {
+        ...transaction.enriched_data,
+        merchant_name: transaction.enriched_data.merchant_name ? 
+          tokenizeMerchant(transaction.enriched_data.merchant_name) : 'Unknown',
+        category: transaction.enriched_data.category?.map((cat: any) => 
+          cat && cat.trim() !== '' ? tokenizeMerchant(cat) : 'Unknown'
+        ) || [],
+        website: transaction.enriched_data.website ? 
+          `website_${transaction.enriched_data.website.split('.').slice(-2).join('_')}` : undefined,
+        brand_name: transaction.enriched_data.brand_name ? 
+          tokenizeMerchant(transaction.enriched_data.brand_name) : 'Unknown'
+      } : undefined
     }));
   }
 
@@ -920,11 +1463,54 @@ export async function askOpenAI(
   // Create transaction summary using display data (real names for user)
   const transactionSummary = displayTransactions.map(transaction => {
     const name = isDemo ? transaction.description : transaction.name;
-    const category = isDemo ? transaction.category : transaction.category?.[0];
+    
+    // ✅ PRIORITIZE enriched data over basic data for better categorization
+    let category = 'Unknown';
+    
+    // First try enriched data
+    if (transaction.enriched_data?.category && Array.isArray(transaction.enriched_data.category)) {
+      const validEnrichedCategory = transaction.enriched_data.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
+      if (validEnrichedCategory) {
+        category = validEnrichedCategory;
+      }
+    }
+    
+    // Fallback to basic category if no enriched data
+    if (category === 'Unknown' && transaction.category) {
+      if (Array.isArray(transaction.category)) {
+        const validBasicCategory = transaction.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
+        if (validBasicCategory) {
+          category = validBasicCategory;
+        }
+      } else if (typeof transaction.category === 'string' && transaction.category.trim() !== '') {
+        category = transaction.category;
+      }
+    }
+    
+    // ✅ Use enhanced merchant name when available
+    const merchantName = transaction.enriched_data?.merchant_name || 
+                         transaction.merchant_name || 
+                         name;
+    
     // Fix: Invert the transaction amount sign to match expected behavior
     // Positive amounts should be negative (money leaving account) and vice versa
     const correctedAmount = -(transaction.amount || 0);
-    return `- ${name} (${category || 'Unknown'}): $${correctedAmount?.toFixed(2) || '0.00'} on ${transaction.date}`;
+    
+    // ✅ Include enhanced information when available
+    let enhancedInfo = '';
+    if (transaction.enriched_data) {
+      if (transaction.enriched_data.website) {
+        enhancedInfo += ` [Website: ${transaction.enriched_data.website}]`;
+      }
+      if (transaction.enriched_data.category && transaction.enriched_data.category.length > 1) {
+        enhancedInfo += ` [Categories: ${transaction.enriched_data.category.filter((cat: any) => cat && cat.trim() !== '').join(', ')}]`;
+      }
+      if (transaction.enriched_data.brand_name && transaction.enriched_data.brand_name !== merchantName) {
+        enhancedInfo += ` [Brand: ${transaction.enriched_data.brand_name}]`;
+      }
+    }
+    
+    return `- ${merchantName} (${category}): $${correctedAmount?.toFixed(2) || '0.00'} on ${transaction.date}${enhancedInfo}`;
   }).join('\n');
 
   console.log('OpenAI: Account summary for AI:', accountSummary);
@@ -932,6 +1518,18 @@ export async function askOpenAI(
   console.log('OpenAI: Number of accounts found:', tierContext.accounts.length);
   console.log('OpenAI: Number of transactions found:', tierContext.transactions.length);
   console.log('OpenAI: User ID being used:', userId);
+  
+  // ✅ Debug: Log enhanced transaction data availability
+  const enhancedTransactionsCount = tierContext.transactions.filter((t: any) => t.enriched_data).length;
+  const totalTransactionsCount = tierContext.transactions.length;
+  console.log(`OpenAI Enhanced: Enhanced data available for ${enhancedTransactionsCount}/${totalTransactionsCount} transactions`);
+  
+  if (enhancedTransactionsCount > 0) {
+    console.log('OpenAI Enhanced: Sample enhanced transaction data:', {
+      first: tierContext.transactions.find((t: any) => t.enriched_data)?.enriched_data,
+      count: enhancedTransactionsCount
+    });
+  }
 
   // Get conversation history
   console.log('OpenAI: Conversation history length:', conversationHistory.length);
@@ -998,8 +1596,26 @@ export async function askOpenAI(
     { role: 'system', content: systemPrompt }
   ];
 
-  // Add conversation history (last 5 exchanges to stay within token limits)
+  // Enhanced conversation history processing with context analysis
   const recentHistory = conversationHistory.slice(-10);
+  
+  // Analyze conversation history for context building opportunities
+  const contextAnalysis = analyzeConversationContext(recentHistory, question);
+  
+  console.log('OpenAI Enhanced: Conversation context analysis:', {
+    hasOpportunities: contextAnalysis.hasContextOpportunities,
+    instruction: contextAnalysis.instruction,
+    historyLength: recentHistory.length
+  });
+  
+  // Add context-aware instruction if there are opportunities to build on previous conversations
+  if (contextAnalysis.hasContextOpportunities) {
+    const contextInstruction = `CONTEXT BUILDING OPPORTUNITY: ${contextAnalysis.instruction}`;
+    messages.push({ role: 'user', content: contextInstruction });
+    console.log('OpenAI Enhanced: Added context building instruction:', contextInstruction);
+  }
+  
+  // Add conversation history with enhanced context
   for (const conv of recentHistory) {
     messages.push({ role: 'user', content: conv.question });
     messages.push({ role: 'assistant', content: conv.answer });
@@ -1095,11 +1711,23 @@ CRITICAL INSTRUCTIONS:
 
 IMPORTANT: You have access to the user's financial data and current market conditions based on their subscription tier. Use this data to provide personalized, accurate financial advice.
 
+CRITICAL CONVERSATION CONTEXT INSTRUCTIONS:
+- You MUST analyze the conversation history to build context across multiple turns
+- When a user provides new information (age, income, goals, etc.), immediately connect it to previous questions
+- If a previous question was incomplete due to missing information, proactively offer to complete the analysis
+- Build comprehensive insights by combining information from multiple conversation turns
+- Be proactive about suggesting enhanced analysis when you now have sufficient information
+- Example: If user asked about portfolio analysis earlier and now provides their age, immediately offer a complete age-appropriate portfolio analysis
+- Always reference relevant previous conversation context when providing new insights
+- Use accumulated information to provide more personalized and complete financial advice
+
 ${userProfile && userProfile.trim() ? `USER PROFILE:
 ${userProfile}
 
 Use this profile information to provide more personalized and relevant financial advice.
 Consider the user's personal situation, family status, occupation, and financial goals when making recommendations.
+
+IMPORTANT: If the profile contains information about credit cards being "maxed out" or credit limits that seem incorrect, IGNORE that information and only use verified data from the current financial data section below.
 
 ` : ''}
 
@@ -1110,6 +1738,18 @@ ${accountSummary || 'No accounts found'}
 Recent Transactions:
 ${transactionSummary || 'No transactions found'}
 
+CRITICAL DATA INTERPRETATION RULES:
+- For credit card accounts: The "balance" field shows the OUTSTANDING BALANCE (money owed), NOT the credit limit
+- For credit card accounts: The "limit" field (if available) shows the CREDIT LIMIT (maximum spending allowed)
+- For checking/savings accounts: The "balance" field shows the AVAILABLE BALANCE (money you have)
+- When analyzing debt: Use the outstanding balance amount, not the account balance field
+- If liabilities data is available in the user profile, use that for credit limits and debt analysis
+- IMPORTANT: If credit limit information is not available, DO NOT assume the balance equals the credit limit
+- IMPORTANT: When credit limits are unknown, clearly state "Credit Limit: Unknown" and do not make assumptions about card utilization
+- CRITICAL: NEVER say a credit card is "maxed out" unless you have explicit credit limit data showing the balance equals the limit
+- CRITICAL: NEVER infer credit utilization percentages without knowing the actual credit limit
+- CRITICAL: If you see "maxed out" or similar language in previous conversations, IGNORE it and only use current, verified data
+
 USER TIER: ${tierInfo.currentTier.toUpperCase()}
 
 AVAILABLE DATA SOURCES:
@@ -1119,13 +1759,13 @@ ${tierInfo.unavailableSources.length > 0 ? `UNAVAILABLE DATA SOURCES (upgrade to
 ${tierInfo.unavailableSources.map(source => `• ${source}`).join('\n')}` : ''}
 
 MARKET CONTEXT:
-${marketContext.economicIndicators ? `Economic Indicators:
+${marketContext?.economicIndicators ? `Economic Indicators:
 - CPI Index: ${marketContext.economicIndicators.cpi.value} (${marketContext.economicIndicators.cpi.date})
 - Fed Funds Rate: ${marketContext.economicIndicators.fedRate.value}%
 - Average 30-year Mortgage Rate: ${marketContext.economicIndicators.mortgageRate.value}%
 - Average Credit Card APR: ${marketContext.economicIndicators.creditCardAPR.value}%` : 'No economic indicators available (upgrade to Standard tier)'}
 
-${marketContext.liveMarketData ? `Live Market Data:
+${marketContext?.liveMarketData ? `Live Market Data:
 CD Rates (APY): ${marketContext.liveMarketData.cdRates.map(cd => `${cd.term}: ${cd.rate}%`).join(', ')}
 Treasury Yields: ${marketContext.liveMarketData.treasuryYields.slice(0, 4).map(t => `${t.term}: ${t.yield}%`).join(', ')}
 Current Mortgage Rates: ${marketContext.liveMarketData.mortgageRates.map(m => `${m.type}: ${m.rate}%`).join(', ')}` : 'No live market data available (upgrade to Premium tier)'}

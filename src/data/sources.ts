@@ -46,6 +46,28 @@ export const dataSourceRegistry: Record<string, DataSourceConfig> = {
     isLive: false
   },
 
+  // Investment Data (All tiers - Plaid data should be available to everyone)
+  'plaid-investments': {
+    id: 'plaid-investments',
+    name: 'Investment Holdings',
+    description: 'Investment portfolio holdings and securities information',
+    tiers: [UserTier.STARTER, UserTier.STANDARD, UserTier.PREMIUM],
+    category: 'account',
+    provider: 'plaid',
+    cacheDuration: 15 * 60 * 1000, // 15 minutes
+    isLive: true
+  },
+  'plaid-investment-transactions': {
+    id: 'plaid-investment-transactions',
+    name: 'Investment Transactions',
+    description: 'Buy/sell transactions and portfolio activity history',
+    tiers: [UserTier.STARTER, UserTier.STANDARD, UserTier.PREMIUM],
+    category: 'account',
+    provider: 'plaid',
+    cacheDuration: 15 * 60 * 1000, // 15 minutes
+    isLive: true
+  },
+
   // Economic Indicators (Standard+)
   'fred-cpi': {
     id: 'fred-cpi',

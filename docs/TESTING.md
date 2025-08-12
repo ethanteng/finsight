@@ -210,6 +210,206 @@ npm run test:dual-data
 - **API Mocks**: External API responses
 - **User Data**: Test user profiles and accounts
 
+## 🔒 API Safety in Testing
+
+### ⚠️ Critical: Preventing Real API Calls During Testing
+
+**Problem**: Tests were previously using real API keys which could hit live endpoints, causing:
+- Unintended API usage and costs
+- Rate limiting issues
+- Test failures due to external service availability
+- Security risks from exposing real API keys
+
+**Solution**: Comprehensive API mocking and environment isolation for all test scenarios.
+
+### 🛡️ Safety Implementation
+
+#### 1. **Environment Detection & Isolation**
+```typescript
+// Multiple safety checks prevent real API calls
+const isTestEnvironment = 
+  process.env.NODE_ENV === 'test' || 
+  process.env.GITHUB_ACTIONS ||
+  process.env.CI;
+
+if (isTestEnvironment) {
+  // Return mock data, never make real API calls
+  return getMockData();
+}
+```
+
+#### 2. **Provider-Level Safety Checks**
+
+**FRED Provider**:
+```typescript
+// Enhanced safety check
+if (this.apiKey === 'test_fred_key' || 
+    this.apiKey.startsWith('test_') || 
+    process.env.GITHUB_ACTIONS) {
+  console.log('FRED: Using mock data in test/CI environment');
+  return this.getMockFredData();
+}
+```
+
+**Alpha Vantage Provider**:
+```typescript
+// CI/CD safety check
+if (this.apiKey === 'your_alpha_vantage_api_key' || 
+    process.env.GITHUB_ACTIONS) {
+  console.log('Alpha Vantage: Using mock data in test/CI environment');
+  return this.getMockMarketData();
+}
+```
+
+**Search Provider**:
+```typescript
+// All search methods protected
+if (this.config.apiKey === 'test_search_key' || 
+    this.config.apiKey.startsWith('test_') || 
+    process.env.GITHUB_ACTIONS) {
+  return this.getMockSearchResults();
+}
+```
+
+#### 3. **Market News Aggregator Safety**
+```typescript
+// Enhanced API key handling
+if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
+  return process.env.POLYGON_API_KEY; // Fake key for tests and CI/CD
+}
+
+// Added FRED API safety check
+if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
+  console.log('MarketNewsAggregator: Using mock data for FRED in test/CI environment');
+  return [/* mock data */];
+}
+```
+
+#### 4. **AI Service Safety**
+```typescript
+// OpenAI Module safety
+if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
+  console.log('OpenAI: Test/CI environment detected - using mock responses');
+  return 'Mocked AI response for testing';
+}
+
+// Plaid Module safety
+if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
+  console.log('Plaid: Test/CI environment detected - using mock responses');
+  return mockPlaidResponse;
+}
+```
+
+### 🧪 Test Environment Mocking
+
+#### Integration Test Setup
+```typescript
+// Comprehensive mocking prevents any real API calls
+jest.mock('../../openai', () => ({
+  askOpenAI: jest.fn().mockResolvedValue('Mocked AI response for integration tests'),
+  askOpenAIWithEnhancedContext: jest.fn().mockResolvedValue('Mocked enhanced AI response for integration tests'),
+  // ... other mocks
+}));
+
+jest.mock('../../plaid', () => ({
+  setupPlaidRoutes: jest.fn(),
+  getPlaidClient: jest.fn().mockReturnValue({
+    // ... mock Plaid responses
+  })
+}));
+```
+
+#### Mock Data Consistency
+- **All providers** return consistent mock data in test/CI environments
+- **No network calls** to external APIs in CI/CD
+- **Mock data follows** real API response structure
+- **Predictable responses** for reliable testing
+
+### 🔐 API Key Management
+
+#### Environment Variable Strategy
+```bash
+# Test Environment (.env.test)
+FRED_API_KEY=test_fred_key
+ALPHA_VANTAGE_API_KEY=test_alpha_vantage_key
+POLYGON_API_KEY=test_polygon_key
+
+# CI/CD Environment (GitHub Actions)
+FRED_API_KEY: ${{ secrets.FRED_API_KEY }}           # Test key
+ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}  # Test key
+
+# Production Environment (Render)
+FRED_API_KEY: ${{ secrets.FRED_API_KEY_REAL }}      # Real key
+ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY_REAL }}  # Real key
+```
+
+#### Key Validation Rules
+1. **Test keys** must start with `test_` or be specific test values
+2. **CI/CD environment** (`GITHUB_ACTIONS`) always uses test keys
+3. **Production environment** only uses keys ending in `_REAL`
+4. **Development environment** uses real keys (only on localhost)
+
+### 📋 Safety Verification Checklist
+
+#### Before Running Tests
+- [ ] **Environment variables** set to test values
+- [ ] **NODE_ENV** set to `test`
+- [ ] **Test API keys** configured (not real keys)
+- [ ] **Mock implementations** up to date
+
+#### During Test Execution
+- [ ] **No network requests** to external APIs
+- [ ] **Mock data returned** consistently
+- [ ] **Console logs** show test environment detection
+- [ ] **API rate limits** not hit
+
+#### After Test Completion
+- [ ] **API usage logs** show no real calls
+- [ ] **Test results** consistent and reliable
+- [ ] **No unexpected costs** from API usage
+- [ ] **All mocks** working correctly
+
+### 🚨 Common Safety Issues & Solutions
+
+#### Issue: Tests Still Hitting Real APIs
+**Solution**: Check environment variables and add explicit CI/CD detection
+```typescript
+// Add this check to all providers
+if (process.env.GITHUB_ACTIONS || process.env.CI) {
+  console.log('CI/CD detected - using mock data');
+  return mockData;
+}
+```
+
+#### Issue: Mock Data Inconsistent
+**Solution**: Centralize mock data and ensure consistency
+```typescript
+// Create shared mock data constants
+export const MOCK_FRED_DATA = { /* consistent structure */ };
+export const MOCK_ALPHA_VANTAGE_DATA = { /* consistent structure */ };
+```
+
+#### Issue: Environment Detection Failing
+**Solution**: Use multiple detection methods
+```typescript
+const isTestEnvironment = 
+  process.env.NODE_ENV === 'test' || 
+  process.env.GITHUB_ACTIONS ||
+  process.env.CI ||
+  process.env.NODE_ENV === 'development' && process.env.USE_MOCKS === 'true';
+```
+
+### 🎯 Best Practices for API Safety
+
+1. **Always mock external APIs** in tests
+2. **Use environment detection** for automatic safety
+3. **Validate API keys** before making requests
+4. **Log safety decisions** for debugging
+5. **Test safety mechanisms** regularly
+6. **Document mock data** structures
+7. **Monitor API usage** in CI/CD logs
+8. **Fail safe** - default to mock data when uncertain
+
 ## Coverage Requirements
 
 ### Unit Tests

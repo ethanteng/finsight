@@ -1,5 +1,66 @@
 import { PrismaClient } from '@prisma/client';
 
+// Mock external dependencies for integration tests to prevent real API calls
+jest.mock('../../openai', () => ({
+  askOpenAI: jest.fn().mockResolvedValue('Mocked AI response for integration tests'),
+  askOpenAIWithEnhancedContext: jest.fn().mockResolvedValue('Mocked enhanced AI response for integration tests'),
+  askOpenAIForTests: jest.fn().mockResolvedValue('Mocked AI response for integration tests'),
+  openai: {
+    chat: {
+      completions: {
+        create: jest.fn().mockResolvedValue({
+          choices: [{ message: { content: 'Mocked OpenAI response' } }]
+        })
+      }
+    }
+  }
+}));
+
+jest.mock('../../plaid', () => ({
+  setupPlaidRoutes: jest.fn(),
+  getPlaidClient: jest.fn().mockReturnValue({
+    accountsGet: jest.fn().mockResolvedValue({
+      data: {
+        accounts: [
+          {
+            account_id: 'test-account-1',
+            name: 'Test Checking',
+            type: 'depository',
+            subtype: 'checking',
+            balances: { current: 1000.00 }
+          }
+        ]
+      }
+    }),
+    transactionsGet: jest.fn().mockResolvedValue({
+      data: {
+        transactions: [
+          {
+            transaction_id: 'test-transaction-1',
+            account_id: 'test-account-1',
+            amount: 100.00,
+            name: 'Test Transaction',
+            date: '2024-01-01'
+          }
+        ]
+      }
+    }),
+    linkTokenCreate: jest.fn().mockResolvedValue({
+      data: { link_token: 'test-link-token' }
+    }),
+    itemPublicTokenExchange: jest.fn().mockResolvedValue({
+      data: { access_token: 'test-access-token' }
+    })
+  })
+}));
+
+jest.mock('../../market-news/synthesizer', () => ({
+  MarketNewsSynthesizer: jest.fn().mockImplementation(() => ({
+    synthesizeNews: jest.fn().mockResolvedValue('Mocked market news synthesis'),
+    generateEmailContent: jest.fn().mockResolvedValue('Mocked email content')
+  }))
+}));
+
 const prisma = new PrismaClient();
 
 beforeAll(async () => {
