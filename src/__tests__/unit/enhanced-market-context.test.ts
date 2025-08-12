@@ -203,9 +203,14 @@ describe('Enhanced Market Context System', () => {
     });
 
     test('should handle different search providers', () => {
-      // Test with different provider
-      const searchProvider = new SearchProvider('test_key', 'google');
-      expect(searchProvider).toBeDefined();
+      // Test with mocked provider - NEVER create real instances in tests
+      expect(MockSearchProvider).toHaveBeenCalled();
+      // Verify the mock was called with the expected parameters
+      expect(MockSearchProvider.mock.calls).toEqual(
+        expect.arrayContaining([
+          ['test_search_key', 'brave']
+        ])
+      );
     });
   });
 
