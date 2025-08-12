@@ -838,10 +838,11 @@ export const setupPlaidRoutes = (app: any) => {
         }
       }
 
-      // Deduplicate accounts by name and institution to avoid counting the same account multiple times
+      // Deduplicate accounts by account_id to avoid counting the same account multiple times
+      // Note: Using account_id instead of name-type-subtype because some institutions 
+      // may have multiple accounts with identical names (e.g., multiple "Adv Plus Banking" accounts)
       const uniqueAccounts = allAccounts.reduce((acc: any[], account: any) => {
-        const key = `${account.name}-${account.type}-${account.subtype}`;
-        const existing = acc.find(a => `${a.name}-${a.type}-${a.subtype}` === key);
+        const existing = acc.find(a => a.account_id === account.account_id);
         if (!existing) {
           acc.push(account);
         }
