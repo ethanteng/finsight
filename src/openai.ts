@@ -816,8 +816,26 @@ ${holdings.slice(0, 10).map((holding: any) =>
     { role: 'system', content: systemPrompt }
   ];
 
-  // Add conversation history (last 5 exchanges to stay within token limits)
+  // Enhanced conversation history processing with context analysis
   const recentHistory = conversationHistory.slice(-10);
+  
+  // Analyze conversation history for context building opportunities
+  const contextAnalysis = analyzeConversationContext(recentHistory, question);
+  
+  console.log('OpenAI Enhanced: Conversation context analysis:', {
+    hasOpportunities: contextAnalysis.hasContextOpportunities,
+    instruction: contextAnalysis.instruction,
+    historyLength: recentHistory.length
+  });
+  
+  // Add context-aware instruction if there are opportunities to build on previous conversations
+  if (contextAnalysis.hasContextOpportunities) {
+    const contextInstruction = `CONTEXT BUILDING OPPORTUNITY: ${contextAnalysis.instruction}`;
+    messages.push({ role: 'user', content: contextInstruction });
+    console.log('OpenAI Enhanced: Added context building instruction:', contextInstruction);
+  }
+  
+  // Add conversation history with enhanced context
   for (const conv of recentHistory) {
     messages.push({ role: 'user', content: conv.question });
     messages.push({ role: 'assistant', content: conv.answer });
@@ -883,6 +901,96 @@ ${holdings.slice(0, 10).map((holding: any) =>
 }
 
 /**
+ * Analyzes conversation history to identify context building opportunities
+ */
+export function analyzeConversationContext(conversationHistory: Conversation[], currentQuestion: string): {
+  hasContextOpportunities: boolean;
+  instruction: string;
+} {
+  if (conversationHistory.length === 0) {
+    return { hasContextOpportunities: false, instruction: '' };
+  }
+
+  const contextOpportunities: string[] = [];
+  
+  // Look for incomplete portfolio analysis requests
+  const portfolioQuestions = conversationHistory.filter(conv => 
+    conv.question.toLowerCase().includes('portfolio') || 
+    conv.question.toLowerCase().includes('investment') ||
+    conv.question.toLowerCase().includes('asset allocation')
+  );
+  
+  if (portfolioQuestions.length > 0) {
+    // Check if current question provides age or other key information
+    const ageInfo = currentQuestion.match(/\b(\d+)\s*(?:years?\s*old|y\.?o\.?|age)\b/i);
+    const incomeInfo = currentQuestion.match(/\b(?:income|salary|earn|make)\s*\$?(\d+(?:,\d{3})*(?:\.\d{2})?)\b/i);
+    const goalInfo = currentQuestion.match(/\b(?:goal|target|planning for|saving for)\b/i);
+    
+    if (ageInfo || incomeInfo || goalInfo) {
+      contextOpportunities.push('User previously asked about portfolio analysis and now provided key personal information. Offer to complete the portfolio analysis with this new context.');
+    }
+  }
+  
+  // Look for incomplete financial planning requests
+  const planningQuestions = conversationHistory.filter(conv => 
+    conv.question.toLowerCase().includes('plan') || 
+    conv.question.toLowerCase().includes('goal') ||
+    conv.question.toLowerCase().includes('retirement') ||
+    conv.question.toLowerCase().includes('savings')
+  );
+  
+  if (planningQuestions.length > 0) {
+    const ageInfo = currentQuestion.match(/\b(\d+)\s*(?:years?\s*old|y\.?o\.?|age)\b/i);
+    const timelineInfo = currentQuestion.match(/\b(?:in\s+(\d+)\s+years?|(\d+)\s+years?\s+from\s+now)\b/i);
+    
+    if (ageInfo || timelineInfo) {
+      contextOpportunities.push('User previously asked about financial planning and now provided timeline or age information. Offer to create a comprehensive financial plan.');
+    }
+  }
+  
+  // Look for incomplete debt analysis requests
+  const debtQuestions = conversationHistory.filter(conv => 
+    conv.question.toLowerCase().includes('debt') || 
+    conv.question.toLowerCase().includes('credit') ||
+    conv.question.toLowerCase().includes('loan')
+  );
+  
+  if (debtQuestions.length > 0) {
+    const incomeInfo = currentQuestion.match(/\b(?:income|salary|earn|make)\s*\$?(\d+(?:,\d{3})*(?:\.\d{2})?)\b/i);
+    const expenseInfo = currentQuestion.match(/\b(?:expense|spend|cost)\s*\$?(\d+(?:,\d{3})*(?:\.\d{2})?)\b/i);
+    
+    if (incomeInfo || expenseInfo) {
+      contextOpportunities.push('User previously asked about debt analysis and now provided income/expense information. Offer to complete the debt-to-income analysis.');
+    }
+  }
+  
+  // Look for incomplete budgeting requests
+  const budgetQuestions = conversationHistory.filter(conv => 
+    conv.question.toLowerCase().includes('budget') || 
+    conv.question.toLowerCase().includes('spending') ||
+    conv.question.toLowerCase().includes('expense')
+  );
+  
+  if (budgetQuestions.length > 0) {
+    const incomeInfo = currentQuestion.match(/\b(?:income|salary|earn|make)\s*\$?(\d+(?:,\d{3})*(?:\.\d{2})?)\b/i);
+    const familyInfo = currentQuestion.match(/\b(?:family|children|kids|dependents?)\b/i);
+    
+    if (incomeInfo || familyInfo) {
+      contextOpportunities.push('User previously asked about budgeting and now provided income or family information. Offer to create a comprehensive budget plan.');
+    }
+  }
+  
+  if (contextOpportunities.length > 0) {
+    return {
+      hasContextOpportunities: true,
+      instruction: contextOpportunities.join(' ')
+    };
+  }
+  
+  return { hasContextOpportunities: false, instruction: '' };
+}
+
+/**
  * Enhanced system prompt builder with proactive market context
  */
 function buildEnhancedSystemPrompt(
@@ -917,6 +1025,21 @@ CRITICAL INSTRUCTIONS:
   systemPrompt += `You are Linc, an AI-powered financial analyst. You help users understand their finances by analyzing their account data and providing clear, actionable insights.
 
 IMPORTANT: You have access to the user's financial data and current market conditions based on their subscription tier. Use this data to provide personalized, accurate financial advice.
+
+CRITICAL CONVERSATION CONTEXT INSTRUCTIONS:
+- You MUST analyze the conversation history to build context across multiple turns
+- When a user provides new information (age, income, goals, etc.), immediately connect it to previous questions
+- If a previous question was incomplete due to missing information, proactively offer to complete the analysis
+- Build comprehensive insights by combining information from multiple conversation turns
+- Be proactive about suggesting enhanced analysis when you now have sufficient information
+- Example: If user asked about portfolio analysis earlier and now provides their age, immediately offer a complete age-appropriate portfolio analysis
+- Always reference relevant previous conversation context when providing new insights
+- Use accumulated information to provide more personalized and complete financial advice
+- When you see "CONTEXT BUILDING OPPORTUNITY" instructions, prioritize addressing those opportunities
+- Proactively offer to complete previous incomplete analyses when you now have sufficient information
+- Reference specific details from previous conversations to show you're building on context
+- Use phrases like "Based on your previous question about..." or "Now that I know your age is..." to show context awareness
+- Always ask if the user would like you to complete or enhance previous analyses with the new information they've provided
 
 ${userProfile && userProfile.trim() ? `USER PROFILE:
 ${userProfile}
@@ -995,6 +1118,9 @@ INSTRUCTIONS:
 - Use specific numbers from the user's data when possible
 - Reference current market conditions when relevant and available
 - Use real-time financial information when available to provide the most current advice
+- ALWAYS reference relevant previous conversation context when providing new insights
+- When new information allows you to complete a previous incomplete analysis, proactively offer to do so
+- Build comprehensive insights by connecting information across conversation turns
 
 RESPONSE FORMATTING:
 - Use bullet points (- ) for lists, keeping bullet and text on same line
@@ -1467,8 +1593,26 @@ export async function askOpenAI(
     { role: 'system', content: systemPrompt }
   ];
 
-  // Add conversation history (last 5 exchanges to stay within token limits)
+  // Enhanced conversation history processing with context analysis
   const recentHistory = conversationHistory.slice(-10);
+  
+  // Analyze conversation history for context building opportunities
+  const contextAnalysis = analyzeConversationContext(recentHistory, question);
+  
+  console.log('OpenAI Enhanced: Conversation context analysis:', {
+    hasOpportunities: contextAnalysis.hasContextOpportunities,
+    instruction: contextAnalysis.instruction,
+    historyLength: recentHistory.length
+  });
+  
+  // Add context-aware instruction if there are opportunities to build on previous conversations
+  if (contextAnalysis.hasContextOpportunities) {
+    const contextInstruction = `CONTEXT BUILDING OPPORTUNITY: ${contextAnalysis.instruction}`;
+    messages.push({ role: 'user', content: contextInstruction });
+    console.log('OpenAI Enhanced: Added context building instruction:', contextInstruction);
+  }
+  
+  // Add conversation history with enhanced context
   for (const conv of recentHistory) {
     messages.push({ role: 'user', content: conv.question });
     messages.push({ role: 'assistant', content: conv.answer });
@@ -1563,6 +1707,16 @@ CRITICAL INSTRUCTIONS:
   systemPrompt += `You are Linc, an AI-powered financial analyst. You help users understand their finances by analyzing their account data and providing clear, actionable insights.
 
 IMPORTANT: You have access to the user's financial data and current market conditions based on their subscription tier. Use this data to provide personalized, accurate financial advice.
+
+CRITICAL CONVERSATION CONTEXT INSTRUCTIONS:
+- You MUST analyze the conversation history to build context across multiple turns
+- When a user provides new information (age, income, goals, etc.), immediately connect it to previous questions
+- If a previous question was incomplete due to missing information, proactively offer to complete the analysis
+- Build comprehensive insights by combining information from multiple conversation turns
+- Be proactive about suggesting enhanced analysis when you now have sufficient information
+- Example: If user asked about portfolio analysis earlier and now provides their age, immediately offer a complete age-appropriate portfolio analysis
+- Always reference relevant previous conversation context when providing new insights
+- Use accumulated information to provide more personalized and complete financial advice
 
 ${userProfile && userProfile.trim() ? `USER PROFILE:
 ${userProfile}

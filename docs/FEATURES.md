@@ -2,7 +2,17 @@
 
 ## 🎯 **Overview**
 
-This document covers the core features of the Ask Linc platform, including the tier-based access control system, enhanced market context capabilities, comprehensive authentication system, and admin dashboard functionality.
+This document covers the core features of the Ask Linc platform, including the tier-based access control system, enhanced market context capabilities, **AI conversation context enhancement**, comprehensive authentication system, and admin dashboard functionality.
+
+## 📋 **Table of Contents**
+
+- [🏗️ Tier-Based Access Control System](#-tier-based-access-control-system)
+- [🔐 Authentication & Security System](#-authentication--security-system)
+- [🧠 Enhanced Market Context System](#-enhanced-market-context-system)
+- [🤖 AI Conversation Context Enhancement System](#-ai-conversation-context-enhancement-system)
+- [📰 Financial Market News Context System](#-financial-market-news-context-system)
+- [🎭 Demo Profile System](#-demo-profile-system)
+- [🛠️ Admin Dashboard & Management System](#️-admin-dashboard--management-system)
 
 ## 🏗️ **Tier-Based Access Control System**
 
@@ -757,6 +767,183 @@ TEST_USER_TIER=starter|standard|premium
 ✅ **Easy testing and debugging**  
 
 The Enhanced Market Context System successfully transforms the reactive data fetching approach into a proactive, cached system that delivers faster, more informed AI responses while reducing external API dependencies and improving overall system reliability.
+
+## 🤖 **AI Conversation Context Enhancement System**
+
+### **Overview**
+
+The AI Conversation Context Enhancement System enables the AI to build context across multiple conversation turns, providing more complete and personalized financial analysis. This system solves the critical issue of AI treating each question in isolation by implementing intelligent context building and proactive analysis completion.
+
+### **Key Features**
+
+#### **1. Intelligent Context Building**
+- **Conversation History Analysis**: AI analyzes conversation history to identify context building opportunities
+- **Pattern Recognition**: Detects when users provide key information that completes previous requests
+- **Cross-Reference Capability**: Connects new information to previous questions automatically
+- **Contextual Memory**: Maintains awareness of incomplete analyses across conversation turns
+
+#### **2. Proactive Analysis Completion**
+- **Automatic Detection**: Identifies when sufficient information is available to complete previous analyses
+- **Proactive Offers**: AI automatically suggests completing incomplete analyses with new context
+- **Enhanced Responses**: Provides comprehensive analysis using accumulated information
+- **User Experience**: Seamless transition from incomplete to complete financial advice
+
+#### **3. Context Detection Scenarios**
+- **Portfolio Analysis**: Recognizes when age/income/goals are provided after portfolio questions
+- **Financial Planning**: Identifies timeline/age information for retirement/savings planning
+- **Debt Analysis**: Detects income/expense information for debt-to-income analysis
+- **Budgeting**: Recognizes income/family information for comprehensive budget planning
+
+### **Implementation Details**
+
+#### **Context Analysis Engine**
+
+```typescript
+// Real-time pattern matching for financial keywords and personal information
+function analyzeConversationContext(conversationHistory: Conversation[], currentQuestion: string): {
+  hasContextOpportunities: boolean;
+  instruction: string;
+} {
+  // Look for incomplete portfolio analysis requests
+  const portfolioQuestions = conversationHistory.filter(conv => 
+    conv.question.toLowerCase().includes('portfolio') || 
+    conv.question.toLowerCase().includes('investment') ||
+    conv.question.toLowerCase().includes('asset allocation')
+  );
+  
+  if (portfolioQuestions.length > 0) {
+    // Check if current question provides age or other key information
+    const ageInfo = currentQuestion.match(/\b(\d+)\s*(?:years?\s*old|y\.?o\.?|age)\b/i);
+    const incomeInfo = currentQuestion.match(/\b(?:income|salary|earn|make)\s*\$?(\d+(?:,\d{3})*(?:\.\d{2})?)\b/i);
+    
+    if (ageInfo || incomeInfo) {
+      return {
+        hasContextOpportunities: true,
+        instruction: 'User previously asked about portfolio analysis and now provided key personal information. Offer to complete the portfolio analysis with this new context.'
+      };
+    }
+  }
+  
+  return { hasContextOpportunities: false, instruction: '' };
+}
+```
+
+#### **Enhanced System Prompts**
+
+The AI system now includes explicit conversation context instructions:
+
+```typescript
+const systemPrompt = `You are Linc, an AI-powered financial analyst.
+
+CRITICAL CONVERSATION CONTEXT INSTRUCTIONS:
+- You MUST analyze the conversation history to build context across multiple turns
+- When a user provides new information (age, income, goals, etc.), immediately connect it to previous questions
+- If a previous question was incomplete due to missing information, proactively offer to complete the analysis
+- Build comprehensive insights by combining information from multiple conversation turns
+- Be proactive about suggesting enhanced analysis when you now have sufficient information
+- Always reference relevant previous conversation context when providing new insights
+- Use accumulated information to provide more personalized and complete financial advice`;
+```
+
+#### **Enhanced Conversation History Processing**
+
+- **Increased Context**: Conversation history retrieval increased from 5 to 10 exchanges
+- **Context-Aware Instructions**: Dynamic instructions sent to OpenAI API when opportunities detected
+- **Proactive Suggestions**: AI automatically offers enhanced analysis when context opportunities exist
+
+### **User Experience Examples**
+
+#### **Portfolio Analysis Flow**
+
+```
+User: "Can you analyze my investment portfolio?"
+AI: "I can help analyze your portfolio, but I need more information about your age and financial goals."
+User: "I am 35 years old"
+AI: "Perfect! Now that I know your age is 35, I can provide a complete age-appropriate portfolio analysis. 
+Based on your previous question about portfolio analysis, would you like me to create a comprehensive 
+investment strategy tailored to your situation?"
+```
+
+#### **Financial Planning Flow**
+
+```
+User: "I want to plan for retirement"
+AI: "Retirement planning requires knowing your current age and timeline."
+User: "I want to retire in 20 years"
+AI: "Excellent! Now that I know your retirement timeline is 20 years, I can create a comprehensive 
+financial plan. Based on your previous retirement planning question, would you like me to develop a 
+detailed roadmap to achieve your retirement goals?"
+```
+
+### **Technical Benefits**
+
+- **Seamless Context Building**: AI maintains conversation context across multiple turns
+- **Proactive Assistance**: Automatically offers to complete analyses when sufficient information available
+- **Personalized Responses**: More relevant and contextual financial advice
+- **Natural Conversation Flow**: Feels like talking to a financial advisor who remembers your situation
+- **Enhanced User Satisfaction**: Users receive complete analysis without having to repeat information
+
+### **API Endpoints**
+
+#### **Enhanced Ask Endpoints**
+
+1. **`POST /ask/tier-aware`** - Enhanced AI responses with conversation context
+2. **`POST /ask`** - Standard AI responses with conversation context
+3. **`POST /demo/ask`** - Demo AI responses with conversation context
+
+#### **Conversation History**
+
+- **Enhanced Retrieval**: Last 10 conversation exchanges (increased from 5)
+- **Context Analysis**: Real-time analysis of conversation history for context opportunities
+- **Dynamic Instructions**: Context-aware instructions sent to OpenAI API
+
+### **Configuration**
+
+#### **Environment Variables**
+
+```bash
+# Conversation context settings
+CONVERSATION_HISTORY_LIMIT=10  # Number of conversation exchanges to analyze
+ENABLE_CONTEXT_ANALYSIS=true    # Enable conversation context enhancement
+```
+
+#### **Feature Flags**
+
+```typescript
+// src/config/features.ts
+export const ENABLE_CONVERSATION_CONTEXT = process.env.ENABLE_CONVERSATION_CONTEXT === 'true';
+export const CONVERSATION_HISTORY_LIMIT = parseInt(process.env.CONVERSATION_HISTORY_LIMIT || '10');
+```
+
+### **Monitoring & Metrics**
+
+#### **Key Metrics**
+
+- Context opportunities detected per conversation
+- Context-aware instruction generation rate
+- User satisfaction with contextual responses
+- Conversation completion rate improvement
+- AI response quality scores
+
+#### **Logging**
+
+The system logs conversation context analysis:
+
+```typescript
+console.log('OpenAI Enhanced: Conversation context analysis:', {
+  hasOpportunities: contextAnalysis.hasContextOpportunities,
+  instruction: contextAnalysis.instruction,
+  historyLength: recentHistory.length
+});
+```
+
+### **Future Enhancements**
+
+1. **Advanced Pattern Recognition**: Machine learning-based context detection
+2. **Multi-Modal Context**: Integration with voice and image inputs
+3. **Contextual Memory**: Long-term memory for user preferences and goals
+4. **Predictive Context**: Anticipate user needs based on conversation patterns
+5. **Cross-Session Context**: Maintain context across different user sessions
 
 ## 📰 **Financial Market News Context System**
 

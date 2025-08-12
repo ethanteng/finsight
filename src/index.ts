@@ -395,11 +395,11 @@ const handleDemoRequest = async (req: Request, res: Response) => {
       return res.status(500).json({ error: 'Failed to create or find demo session' });
     }
     
-    // Get recent conversation history for this demo session (last 5 Q&A pairs)
+    // Get recent conversation history for this demo session (last 10 Q&A pairs for better context)
     const recentConversations = await getPrismaClient().demoConversation.findMany({
       where: { sessionId: demoSession.id },
       orderBy: { createdAt: 'desc' },
-      take: 5,
+      take: 10,
     });
     
     // Use userTier from request body, fallback to environment variable
@@ -513,11 +513,11 @@ const handleUserRequest = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
     
-    // Get recent conversation history for this user (last 5 Q&A pairs)
+    // Get recent conversation history for this user (last 10 Q&A pairs for better context)
     const recentConversations = await getPrismaClient().conversation.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: 'desc' },
-      take: 5,
+      take: 10,
     });
     
     // Use user's tier
@@ -561,11 +561,11 @@ const handleTierAwareUserRequest = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
     
-    // Get recent conversation history for this user (last 5 Q&A pairs)
+    // Get recent conversation history for this user (last 10 Q&A pairs for better context)
     const recentConversations = await getPrismaClient().conversation.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: 'desc' },
-      take: 5,
+      take: 10,
     });
     
     // Use user's tier
@@ -662,11 +662,11 @@ const handleTierAwareDemoRequest = async (req: Request, res: Response) => {
       return res.status(500).json({ error: 'Failed to create or find demo session' });
     }
     
-    // Get recent conversation history for this demo session (last 5 Q&A pairs)
+    // Get recent conversation history for this demo session (last 10 Q&A pairs for better context)
     const recentConversations = await getPrismaClient().demoConversation.findMany({
       where: { sessionId: demoSession.id },
       orderBy: { createdAt: 'desc' },
-      take: 5,
+      take: 10,
     });
     
     // Use userTier from request body, fallback to environment variable
