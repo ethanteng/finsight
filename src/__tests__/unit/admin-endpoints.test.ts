@@ -45,6 +45,16 @@ describe('Admin Endpoints', () => {
     app.put('/admin/update-user-tier', mockAdminAuth, async (req, res) => {
       res.json({ success: true });
     });
+
+    app.get('/admin/user-financial-data/:userId', mockAdminAuth, async (req, res) => {
+      res.json({ 
+        profile: { text: 'Test profile', lastUpdated: '2025-01-01T00:00:00Z' },
+        institutions: [],
+        accessTokens: 0,
+        totalAccounts: 0,
+        lastSync: null
+      });
+    });
   });
 
   describe('Admin Authentication', () => {
@@ -130,6 +140,20 @@ describe('Admin Endpoints', () => {
 
       expect(response.body).toHaveProperty('success');
       expect(response.body.success).toBe(true);
+    });
+
+    it('should return user financial data', async () => {
+      const response = await request(app)
+        .get('/admin/user-financial-data/test-user-id')
+        .expect(200);
+
+      expect(response.body).toHaveProperty('profile');
+      expect(response.body).toHaveProperty('institutions');
+      expect(response.body).toHaveProperty('accessTokens');
+      expect(response.body).toHaveProperty('totalAccounts');
+      expect(response.body).toHaveProperty('lastSync');
+      expect(response.body.profile).toHaveProperty('text');
+      expect(response.body.profile).toHaveProperty('lastUpdated');
     });
   });
 }); 

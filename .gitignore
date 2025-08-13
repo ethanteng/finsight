@@ -83,3 +83,6 @@ public
 tmp/
 temp/
 .vercel
+
+# MacOS
+.DS_Store

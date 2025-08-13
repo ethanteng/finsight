@@ -39,6 +39,27 @@ interface ProductionUser {
   lastLoginAt?: string;
 }
 
+interface UserFinancialData {
+  profile: {
+    text: string;
+    lastUpdated: string | null;
+  };
+  institutions: Array<{
+    name: string;
+    accounts: Array<{
+      id: string;
+      name: string;
+      type: string;
+      subtype: string;
+      balance: number | null;
+      lastSynced: string | null;
+    }>;
+  }>;
+  accessTokens: number;
+  totalAccounts: number;
+  lastSync: number | null;
+}
+
 interface ProductionConversation {
   id: string;
   question: string;
@@ -85,6 +106,8 @@ export default function AdminPage() {
   // Production data state
   const [productionUsers, setProductionUsers] = useState<ProductionUser[]>([]);
   const [productionConversations, setProductionConversations] = useState<ProductionConversation[]>([]);
+  const [userFinancialData, setUserFinancialData] = useState<Record<string, UserFinancialData>>({});
+  const [loadingFinancialData, setLoadingFinancialData] = useState<Record<string, boolean>>({});
   
   // User management state
   const [usersForManagement, setUsersForManagement] = useState<UserForManagement[]>([]);
@@ -232,6 +255,33 @@ export default function AdminPage() {
       console.error('Users data refresh error:', err);
     } finally {
       setRefreshingUsers(false);
+    }
+  };
+
+  const loadUserFinancialData = async (userId: string) => {
+    if (userFinancialData[userId]) {
+      return; // Already loaded
+    }
+
+    setLoadingFinancialData(prev => ({ ...prev, [userId]: true }));
+    
+    try {
+      const response = await fetch(`${API_URL}/admin/user-financial-data/${userId}`, {
+        headers: getAuthHeaders()
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setUserFinancialData(prev => ({ ...prev, [userId]: data }));
+      } else if (response.status === 401 || response.status === 403) {
+        setError('Authentication required for admin access');
+      } else {
+        console.error('Failed to fetch financial data for user:', userId);
+      }
+    } catch (err) {
+      console.error('Error fetching financial data for user:', userId, err);
+    } finally {
+      setLoadingFinancialData(prev => ({ ...prev, [userId]: false }));
     }
   };
 
@@ -868,34 +918,108 @@ export default function AdminPage() {
                     </div>
                   </div>
                   
-                  {/* Show conversations for this user when expanded */}
+                  {/* Show expanded view when clicked */}
                   {selectedSession === user.userId && (
-                    <div className="mt-4 space-y-3">
-                      {/* Check if there are conversations with missing user data */}
-                      {productionConversations.some(conv => !conv.user) && (
-                        <div className="bg-yellow-900 border border-yellow-700 rounded-lg p-2 mb-3">
-                          <div className="text-yellow-200 text-xs">
-                            ⚠️ Some conversations have missing user data
-                          </div>
+                    <div className="mt-4 space-y-4">
+                      {/* Financial Profile Section */}
+                      <div className="bg-gray-600 rounded-lg p-4">
+                        <div className="flex justify-between items-center mb-3">
+                          <h3 className="text-lg font-semibold text-white">Financial Profile</h3>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              loadUserFinancialData(user.userId);
+                            }}
+                            disabled={loadingFinancialData[user.userId]}
+                            className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                          >
+                            {loadingFinancialData[user.userId] ? 'Loading...' : 'Load Financial Data'}
+                          </button>
                         </div>
-                      )}
-                      
-                      {productionConversations
-                        .filter(conv => conv.user && conv.user.id === user.userId)
-                        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                        .map((conv) => (
-                          <div key={conv.id} className="bg-gray-600 rounded p-3 ml-4">
-                            <div className="text-sm font-medium text-blue-300 mb-1">Q:</div>
-                            <div className="text-sm text-gray-300 mb-2">{conv.question}</div>
-                            <div className="text-sm font-medium text-green-300 mb-1">A:</div>
-                            <div className="text-sm text-gray-300">
-                              <MarkdownRenderer>{truncateText(conv.answer, 200)}</MarkdownRenderer>
+                        
+                        {userFinancialData[user.userId] ? (
+                          <div className="space-y-3">
+                            <div className="bg-gray-700 rounded p-3">
+                              <div className="text-sm font-medium text-blue-300 mb-2">Profile Summary</div>
+                              <div className="text-sm text-gray-300 mb-2">
+                                {userFinancialData[user.userId].profile.text || 'No profile available'}
+                              </div>
+                              {userFinancialData[user.userId].profile.lastUpdated && (
+                                <div className="text-xs text-gray-500">
+                                  Last updated: {formatDate(userFinancialData[user.userId].profile.lastUpdated!)}
+                                </div>
+                              )}
                             </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              {formatDate(conv.createdAt)}
+                            
+                            <div className="bg-gray-700 rounded p-3">
+                              <div className="text-sm font-medium text-green-300 mb-2">Linked Financial Institutions</div>
+                              <div className="text-sm text-gray-400 mb-2">
+                                {userFinancialData[user.userId].accessTokens} access tokens • {userFinancialData[user.userId].totalAccounts} total accounts
+                              </div>
+                              
+                              {userFinancialData[user.userId].institutions.length > 0 ? (
+                                <div className="space-y-2">
+                                  {userFinancialData[user.userId].institutions.map((institution, idx) => (
+                                    <div key={idx} className="bg-gray-800 rounded p-2">
+                                      <div className="font-medium text-white text-sm mb-1">{institution.name}</div>
+                                      <div className="space-y-1">
+                                        {institution.accounts.map((account) => (
+                                          <div key={account.id} className="text-xs text-gray-400">
+                                            <span>{account.name} ({account.type}/{account.subtype})</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-sm text-gray-500 italic">No financial institutions linked</div>
+                              )}
+                              
+                              {userFinancialData[user.userId].lastSync && (
+                                <div className="text-xs text-gray-500 mt-2">
+                                  Last sync: {formatDate(new Date(userFinancialData[user.userId].lastSync!).toISOString())}
+                                </div>
+                              )}
                             </div>
                           </div>
-                        ))}
+                        ) : (
+                          <div className="text-sm text-gray-500 italic">
+                            Click "Load Financial Data" to view user's financial profile and linked institutions
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Conversations Section */}
+                      <div className="bg-gray-600 rounded-lg p-4">
+                        <h3 className="text-lg font-semibold text-white mb-3">Conversations</h3>
+                        
+                        {/* Check if there are conversations with missing user data */}
+                        {productionConversations.some(conv => !conv.user) && (
+                          <div className="bg-yellow-900 border border-yellow-700 rounded-lg p-2 mb-3">
+                            <div className="text-yellow-200 text-xs">
+                              ⚠️ Some conversations have missing user data
+                            </div>
+                          </div>
+                        )}
+                        
+                        {productionConversations
+                          .filter(conv => conv.user && conv.user.id === user.userId)
+                          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                          .map((conv) => (
+                            <div key={conv.id} className="bg-gray-700 rounded p-3 ml-4">
+                              <div className="text-sm font-medium text-blue-300 mb-1">Q:</div>
+                              <div className="text-sm text-gray-300 mb-2">{conv.question}</div>
+                              <div className="text-sm font-medium text-green-300 mb-1">A:</div>
+                              <div className="text-sm text-gray-300">
+                                <MarkdownRenderer>{truncateText(conv.answer, 200)}</MarkdownRenderer>
+                              </div>
+                              <div className="text-xs text-gray-500 mt-1">
+                                {formatDate(conv.createdAt)}
+                              </div>
+                            </div>
+                          ))}
+                      </div>
                     </div>
                   )}
                 </div>

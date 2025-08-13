@@ -1552,6 +1552,275 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
+    // Admin endpoint to get user financial profile and linked institutions
+    app.get('/admin/user-financial-data/:userId', adminAuth, async (req: Request, res: Response) => {
+      try {
+        const { getPrismaClient } = await import('./prisma-client');
+        const prisma = getPrismaClient();
+        
+        const { userId } = req.params;
+        
+        if (!userId) {
+          return res.status(400).json({ error: 'Missing userId' });
+        }
+
+        console.log('Admin: Fetching financial data for user:', userId);
+        
+        // Get user profile
+        const userProfile = await prisma.userProfile.findUnique({
+          where: { userId },
+          select: {
+            profileText: true,
+            lastUpdated: true
+          }
+        });
+
+        // Get user's linked financial institutions through access tokens
+        const accessTokens = await prisma.accessToken.findMany({
+          where: { userId },
+          select: {
+            id: true,
+            token: true,
+            createdAt: true,
+            lastRefreshed: true
+          }
+        });
+
+        console.log('Admin: Found access tokens:', accessTokens.length, 'for user:', userId);
+
+        // Get accounts associated with this user from database
+        const accounts = await prisma.account.findMany({
+          where: { userId },
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            subtype: true,
+            institution: true,
+            currentBalance: true,
+            lastSynced: true
+          },
+          orderBy: [
+            { institution: 'asc' },
+            { name: 'asc' }
+          ]
+        });
+
+        console.log('Admin: Found accounts in database:', accounts.length, 'for user:', userId);
+        if (accounts.length > 0) {
+          console.log('Admin: Account details from database:', accounts.map(a => ({
+            name: a.name,
+            institution: a.institution,
+            type: a.type
+          })));
+        }
+
+        // If no accounts in database but user has access tokens, try to fetch live from Plaid
+        let liveAccounts: any[] = [];
+        if (accounts.length === 0 && accessTokens.length > 0) {
+          console.log('Admin: No accounts in database, attempting to fetch live from Plaid...');
+          try {
+            const { Configuration, PlaidApi, PlaidEnvironments } = await import('plaid');
+            
+            // Determine Plaid environment from the access token ONLY
+            const firstToken = accessTokens[0];
+            const isProductionToken = firstToken.token.startsWith('access-production-');
+            const plaidEnv = isProductionToken ? 'production' : 'sandbox';
+            
+            console.log('Admin: Detected Plaid environment from token:', plaidEnv, '(token starts with:', firstToken.token.substring(0, 20) + '...)');
+            
+            // Use appropriate Plaid credentials based on environment
+            let plaidClientId, plaidSecret;
+            if (plaidEnv === 'production') {
+              plaidClientId = process.env.PLAID_CLIENT_ID_PROD;
+              plaidSecret = process.env.PLAID_SECRET_PROD;
+              console.log('Admin: Using production Plaid credentials (*_PROD)');
+            } else {
+              plaidClientId = process.env.PLAID_CLIENT_ID;
+              plaidSecret = process.env.PLAID_SECRET;
+              console.log('Admin: Using sandbox Plaid credentials (regular)');
+            }
+            
+            const plaidClient = new PlaidApi(
+              new Configuration({
+                basePath: PlaidEnvironments[plaidEnv],
+                baseOptions: {
+                  headers: {
+                    'PLAID-CLIENT-ID': plaidClientId,
+                    'PLAID-SECRET': plaidSecret,
+                  },
+                },
+              })
+            );
+
+            // Try to get live account data from the first access token
+            console.log('Admin: Fetching live accounts from Plaid using token:', firstToken.id);
+            
+            const accountsResponse = await plaidClient.accountsGet({
+              access_token: firstToken.token,
+            });
+
+            if (accountsResponse.data.accounts && accountsResponse.data.accounts.length > 0) {
+              console.log('Admin: Successfully fetched live accounts from Plaid:', accountsResponse.data.accounts.length);
+              
+              // Debug: Log the first account to see what fields are available
+              console.log('Admin: First account structure:', JSON.stringify(accountsResponse.data.accounts[0], null, 2));
+              
+              // Create account objects from Plaid response (without balances)
+              liveAccounts = accountsResponse.data.accounts.map((account: any) => {
+                // Extract institution name from account name if institution_name is not available
+                let institutionName = account.institution_name;
+                if (!institutionName && account.name) {
+                  // Try to extract institution from account name patterns
+                  if (account.name.includes('Robinhood')) {
+                    institutionName = 'Robinhood';
+                  } else if (account.name.includes('Chase')) {
+                    institutionName = 'Chase';
+                  } else if (account.name.includes('Bank of America')) {
+                    institutionName = 'Bank of America';
+                  } else if (account.name.includes('Betterment')) {
+                    institutionName = 'Betterment';
+                  } else if (account.name.includes('Vanguard')) {
+                    institutionName = 'Vanguard';
+                  } else if (account.name.includes('Fidelity')) {
+                    institutionName = 'Fidelity';
+                  } else {
+                    // Extract first word as institution if no pattern matches
+                    institutionName = account.name.split(' ')[0];
+                  }
+                }
+                
+                return {
+                  id: account.account_id,
+                  name: account.name,
+                  type: account.type,
+                  subtype: account.subtype,
+                  institution: institutionName || 'Unknown Institution',
+                  balance: null, // Don't show balances
+                  lastSynced: new Date().toISOString(),
+                  isLiveData: true
+                };
+              });
+            }
+          } catch (error) {
+            console.log('Admin: Failed to fetch live Plaid data:', error);
+          }
+        }
+
+        // Debug: Check if there are any accounts without userId that might belong to this user
+        const allAccountsInDb = await prisma.account.findMany({
+          select: {
+            id: true,
+            name: true,
+            institution: true,
+            userId: true
+          }
+        });
+        console.log('Admin: Total accounts in database:', allAccountsInDb.length);
+        console.log('Admin: Accounts without userId:', allAccountsInDb.filter(a => !a.userId).length);
+        if (allAccountsInDb.filter(a => !a.userId).length > 0) {
+          console.log('Admin: Orphaned accounts:', allAccountsInDb.filter(a => !a.userId).map(a => ({
+            name: a.name,
+            institution: a.institution
+          })));
+        }
+
+        // Check if user might be using demo mode or has other financial data sources
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: {
+            email: true,
+            tier: true
+          }
+        });
+        
+        console.log('Admin: User details:', user);
+        
+        // Check if there are any transactions that might indicate real financial data
+        const transactions = await prisma.transaction.findMany({
+          where: {
+            account: {
+              userId: userId
+            }
+          },
+          select: {
+            id: true,
+            amount: true,
+            date: true
+          }
+        });
+        
+        console.log('Admin: Found transactions:', transactions.length, 'for user:', userId);
+
+        // Combine database accounts with live Plaid accounts
+        const allAccounts = [...accounts, ...liveAccounts];
+        
+        // Group accounts by institution
+        const institutions = allAccounts.reduce((acc: any[], account) => {
+          const institutionName = account.institution || 'Unknown Institution';
+          const existingInstitution = acc.find(inst => inst.name === institutionName);
+          
+          if (existingInstitution) {
+            existingInstitution.accounts.push({
+              id: account.id,
+              name: account.name,
+              type: account.type,
+              subtype: account.subtype,
+              balance: account.balance || account.currentBalance,
+              lastSynced: account.lastSynced,
+              isLiveData: account.isLiveData || false
+            });
+          } else {
+            acc.push({
+              name: institutionName,
+              accounts: [{
+                id: account.id,
+                name: account.name,
+                type: account.type,
+                subtype: account.subtype,
+                balance: account.balance || account.currentBalance,
+                lastSynced: account.lastSynced,
+                isLiveData: account.isLiveData || false
+              }]
+            });
+          }
+          
+          return acc;
+        }, []);
+
+        const financialData = {
+          profile: {
+            text: userProfile?.profileText || 'No profile available',
+            lastUpdated: userProfile?.lastUpdated || null
+          },
+          institutions: institutions,
+          accessTokens: accessTokens.length,
+          totalAccounts: allAccounts.length,
+          lastSync: allAccounts.length > 0 ? Math.max(...allAccounts.map(a => {
+            if (a.lastSynced instanceof Date) {
+              return a.lastSynced.getTime();
+            } else if (typeof a.lastSynced === 'string') {
+              return new Date(a.lastSynced).getTime();
+            }
+            return 0;
+          })) : null
+        };
+
+        console.log('Admin: Returning financial data for user:', userId, {
+          profileLength: financialData.profile.text.length,
+          institutions: financialData.institutions.length,
+          accounts: financialData.totalAccounts,
+          databaseAccounts: accounts.length,
+          liveAccounts: liveAccounts.length
+        });
+
+        res.json(financialData);
+      } catch (error) {
+        console.error('Error fetching user financial data:', error);
+        res.status(500).json({ error: 'Failed to fetch user financial data' });
+      }
+    });
+
     // Test database connection
     app.get('/test-db', async (req: Request, res: Response) => {
       try {
