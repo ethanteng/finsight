@@ -66,6 +66,31 @@ ADMIN_EMAILS= admin@example.com , manager@example.com , owner@example.com
 - List all production users
 - Update user tiers (Starter/Standard/Premium)
 - View user conversation counts and activity
+- **View user financial profiles** - See the financial profile text that users see on their profile page
+- **View linked financial institutions** - See real-time data of users' connected financial institutions and accounts
+- **Account details** - View account names, types, and subtypes without sensitive balance information
+
+## Financial Data Access
+
+### Real-Time Financial Institution Data
+The admin dashboard provides access to users' linked financial institutions through live Plaid API integration:
+
+- **Live Data Fetching**: When users don't have accounts stored in the database, the system automatically fetches live data from Plaid
+- **Environment Detection**: Automatically detects production vs sandbox Plaid tokens and uses appropriate credentials
+- **Institution Grouping**: Groups accounts by financial institution for clear organization
+- **Account Details**: Shows account names, types (investment, credit, etc.), and subtypes (ira, brokerage, etc.)
+- **Privacy-First**: **No balance information** is displayed or fetched, respecting user privacy
+
+### Supported Financial Institutions
+The system intelligently detects institution names from account data:
+- **Pattern Matching**: Recognizes common institutions like Robinhood, Chase, Bank of America, Betterment, Vanguard, Fidelity
+- **Smart Extraction**: Falls back to extracting institution names from account naming patterns
+- **Dynamic Detection**: Works with any financial institution without hardcoded limitations
+
+### Data Sources
+- **Database Accounts**: Stored account information from previous syncs
+- **Live Plaid Data**: Real-time account information for active connections
+- **Combined View**: Merges both sources for comprehensive user financial overview
 
 ## Security Features
 
@@ -108,6 +133,13 @@ Please log in with an admin account to access this dashboard.
 - `src/__tests__/unit/admin-auth.test.ts`: Tests admin authentication middleware
 - `src/__tests__/unit/admin-endpoints.test.ts`: Tests admin endpoint functionality
 
+### New Admin Endpoints
+- **`GET /admin/user-financial-data/:userId`**: Fetches user's financial profile and linked institutions
+  - Returns financial profile text and last updated timestamp
+  - Returns linked financial institutions with account details
+  - Automatically fetches live Plaid data when database accounts are unavailable
+  - Groups accounts by institution for organized display
+
 ### Test Coverage
 - Authentication requirement validation
 - Email-based access control
@@ -123,6 +155,12 @@ Please log in with an admin account to access this dashboard.
 2. **Limit Admin Emails**: Only add necessary email addresses to `ADMIN_EMAILS`
 3. **Regular Review**: Periodically review and update the admin email list
 4. **Environment Separation**: Use different admin emails for development vs production
+
+### Financial Data Privacy
+1. **No Balance Display**: Financial balances are never shown in the admin dashboard
+2. **Minimal Data Access**: Only account metadata (names, types, institutions) is accessible
+3. **Live Data Only**: Real-time data is fetched but not stored permanently
+4. **User Consent**: Data access is limited to users who have connected their financial accounts
 
 ### Configuration
 1. **Environment Variables**: Always use environment variables, never hardcode admin emails
