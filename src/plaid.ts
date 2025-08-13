@@ -84,6 +84,9 @@ const getSubtypeForType = (type: string): string => {
 
 // Enhanced data processing for production Plaid data
 const processAccountData = (account: any) => {
+  // Ensure we have valid balance data
+  const balances = account.balances || {};
+  
   return {
     id: account.account_id,
     name: account.name,
@@ -91,11 +94,11 @@ const processAccountData = (account: any) => {
     subtype: account.subtype,
     mask: account.mask,
     balance: {
-      available: account.balances.available,
-      current: account.balances.current,
-      limit: account.balances.limit,
-      iso_currency_code: account.balances.iso_currency_code,
-      unofficial_currency_code: account.balances.unofficial_currency_code
+      available: balances.available ?? 0,
+      current: balances.current ?? 0,
+      limit: balances.limit ?? null,
+      iso_currency_code: balances.iso_currency_code ?? 'USD',
+      unofficial_currency_code: balances.unofficial_currency_code ?? null
     },
     // Enhanced metadata for production
     verification_status: account.verification_status,
@@ -799,26 +802,50 @@ export const setupPlaidRoutes = (app: any) => {
       const accessTokens = await getPrismaClient().accessToken.findMany({
         where: { userId: req.user.id }
       });
+
+      console.log(`🔍 Fetching accounts for user ${req.user.id} with ${accessTokens.length} access tokens`);
+
       const allAccounts: any[] = [];
       const seenAccountIds = new Set<string>();
+      let successfulTokens = 0;
+      let failedTokens = 0;
 
       for (const tokenRecord of accessTokens) {
         try {
+          console.log(`🔍 Processing access token ${tokenRecord.id} (${tokenRecord.token.substring(0, 8)}...)`);
+          
           // Get accounts
           const accountsResponse = await plaidClient.accountsGet({
             access_token: tokenRecord.token,
           });
+
+          console.log(`✅ Token ${tokenRecord.id}: Found ${accountsResponse.data.accounts.length} accounts`);
 
           // Get balances for each account
           const balancesResponse = await plaidClient.accountsBalanceGet({
             access_token: tokenRecord.token,
           });
 
+          console.log(`✅ Token ${tokenRecord.id}: Found ${balancesResponse.data.accounts.length} balance records`);
+
+          // Validate that we have accounts data
+          if (!accountsResponse.data.accounts || accountsResponse.data.accounts.length === 0) {
+            console.log(`⚠️ Token ${tokenRecord.id}: No accounts found, skipping`);
+            continue;
+          }
+
           // Merge account and balance data, deduplicating by account_id
           const accountsWithBalances = accountsResponse.data.accounts
             .filter((account: any) => {
+              // Validate account data
+              if (!account.account_id || !account.name) {
+                console.log(`⚠️ Token ${tokenRecord.id}: Skipping invalid account:`, account);
+                return false;
+              }
+              
               // Only include accounts we haven't seen before
               if (seenAccountIds.has(account.account_id)) {
+                console.log(`🔄 Skipping duplicate account: ${account.name} (${account.account_id})`);
                 return false;
               }
               seenAccountIds.add(account.account_id);
@@ -826,28 +853,49 @@ export const setupPlaidRoutes = (app: any) => {
             })
             .map((account: any) => {
               const balance = balancesResponse.data.accounts.find((b: any) => b.account_id === account.account_id);
-              return processAccountData({
+              const processedAccount = processAccountData({
                 ...account,
                 balances: balance?.balances || account.balances
               });
+              console.log(`✅ Processed account: ${processedAccount.name} (${processedAccount.id}) - Type: ${processedAccount.type}/${processedAccount.subtype}`);
+              return processedAccount;
             });
 
           allAccounts.push(...accountsWithBalances);
-        } catch (error) {
-          console.error(`Error fetching accounts for token ${tokenRecord.id}:`, error);
+          successfulTokens++;
+          console.log(`✅ Token ${tokenRecord.id}: Successfully processed ${accountsWithBalances.length} accounts`);
+          
+        } catch (error: any) {
+          console.error(`❌ Error fetching accounts for token ${tokenRecord.id}:`, error);
+          failedTokens++;
+          
+          // Log more details about the error
+          if (error.response?.data) {
+            console.error(`❌ Plaid error details:`, {
+              error_code: error.response.data.error_code,
+              error_message: error.response.data.error_message,
+              error_type: error.response.data.error_type,
+              request_id: error.response.data.request_id
+            });
+          }
         }
       }
+
+      console.log(`📊 Account fetching summary: ${successfulTokens} successful tokens, ${failedTokens} failed tokens, ${allAccounts.length} total accounts found`);
 
       // Deduplicate accounts by account_id to avoid counting the same account multiple times
       // Note: Using account_id instead of name-type-subtype because some institutions 
       // may have multiple accounts with identical names (e.g., multiple "Adv Plus Banking" accounts)
       const uniqueAccounts = allAccounts.reduce((acc: any[], account: any) => {
-        const existing = acc.find(a => a.account_id === account.account_id);
+        const existing = acc.find(a => a.id === account.id);
         if (!existing) {
           acc.push(account);
         }
         return acc;
       }, []);
+
+      console.log(`📤 Sending ${uniqueAccounts.length} unique accounts to frontend:`, 
+        uniqueAccounts.map(a => `${a.name} (${a.type}/${a.subtype})`));
 
       res.json({ accounts: uniqueAccounts });
     } catch (error) {
