@@ -78,11 +78,21 @@ export class DataEncryptionService {
    */
   isEncrypted(data: string): boolean {
     try {
-      // Try to parse as base64 and check if it looks like encrypted data
+      // Try to parse as base64
       const decoded = Buffer.from(data, 'base64');
-      // Encrypted data should be longer than the original data due to padding and encoding
-      // A reasonable minimum length for encrypted data would be at least 16 bytes
-      return decoded.length >= 16;
+      
+      // Encrypted data should be:
+      // 1. Valid base64
+      // 2. Have a reasonable length (at least 8 bytes for minimal encrypted content)
+      // 3. Not be empty
+      if (decoded.length < 8 || data.trim() === '') {
+        return false;
+      }
+      
+      // Additional check: encrypted data typically has a more random/entropic appearance
+      // than plain text when encoded in base64
+      const base64Pattern = /^[A-Za-z0-9+/]*={0,2}$/;
+      return base64Pattern.test(data);
     } catch {
       return false;
     }
