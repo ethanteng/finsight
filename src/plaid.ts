@@ -2553,8 +2553,9 @@ export const setupPlaidRoutes = (app: any) => {
       const combinedSecurities = allInvestments.flatMap(inv => inv.securities);
       const combinedTransactions = allInvestments.flatMap(inv => inv.investment_transactions);
       
-      // Get the first portfolio analysis (or combine if multiple)
-      const portfolioAnalysis = allInvestments.length > 0 ? allInvestments[0].analysis.portfolio : null;
+      // ✅ FIXED: Recalculate portfolio analysis using combined data from all tokens
+      // This ensures Robinhood + Betterment data is properly aggregated
+      const portfolioAnalysis = analyzePortfolio(combinedHoldings, combinedSecurities);
       
       res.json({
         portfolio: portfolioAnalysis,
@@ -2967,14 +2968,21 @@ export const setupPlaidRoutes = (app: any) => {
         }
       }
       
+      // ✅ FIXED: Calculate combined portfolio analysis for accurate totals
+      const combinedHoldings = allHoldings.flatMap(h => h.holdings);
+      const combinedSecurities = allHoldings.flatMap(h => h.securities);
+      const combinedPortfolioAnalysis = analyzePortfolio(combinedHoldings, combinedSecurities);
+      
       res.json({ 
         holdings: allHoldings,
         summary: {
           totalAccounts: allHoldings.length,
-          totalHoldings: allHoldings.reduce((sum, h) => sum + h.holdings.length, 0),
-          totalSecurities: allHoldings.reduce((sum, h) => sum + h.securities.length, 0),
-          totalPortfolioValue: allHoldings.reduce((sum, h) => sum + (h.analysis?.totalValue || 0), 0)
-        }
+          totalHoldings: combinedHoldings.length,
+          totalSecurities: combinedSecurities.length,
+          totalPortfolioValue: combinedPortfolioAnalysis.totalValue
+        },
+        // ✅ NEW: Add combined portfolio analysis for frontend consistency
+        combinedPortfolio: combinedPortfolioAnalysis
       });
     } catch (error) {
       const errorResponse = handlePlaidError(error, 'get investment holdings');
