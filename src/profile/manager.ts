@@ -1,8 +1,10 @@
 import { PrismaClient } from '@prisma/client';
 import { ProfileEncryptionService } from './encryption';
+import { ProfileExtractor } from './extractor';
 
 export class ProfileManager {
   private encryptionService: ProfileEncryptionService;
+  private profileExtractor: ProfileExtractor;
 
   constructor() {
     const encryptionKey = process.env.PROFILE_ENCRYPTION_KEY;
@@ -16,6 +18,7 @@ export class ProfileManager {
     }
     
     this.encryptionService = new ProfileEncryptionService(encryptionKey);
+    this.profileExtractor = new ProfileExtractor();
   }
 
   async getOrCreateProfile(userId: string): Promise<string> {
@@ -185,43 +188,34 @@ export class ProfileManager {
   }
 
   async updateProfileFromConversation(userId: string, conversation: any): Promise<void> {
-    // Get existing profile first to preserve it
-    const existingProfile = await this.getOrCreateProfile(userId);
+    // Use the intelligent ProfileExtractor to analyze the conversation
+    // and intelligently update the profile instead of dumb appending
+    const currentProfile = await this.getOrCreateProfile(userId);
     
-    // Extract new information from conversation
-    const newProfileText = this.extractProfileFromConversation(conversation);
+    const updatedProfile = await this.profileExtractor.extractAndUpdateProfile(
+      userId,
+      conversation,
+      currentProfile
+    );
     
-    // Combine existing + new profile data intelligently
-    const combinedProfile = this.combineProfileData(existingProfile, newProfileText);
-    
-    // Update with combined data (preserving existing information)
-    await this.updateProfile(userId, combinedProfile);
+    // Only update if the profile actually changed
+    if (updatedProfile !== currentProfile) {
+      await this.updateProfile(userId, updatedProfile);
+      console.log(`Profile intelligently updated for user: ${userId}`);
+    } else {
+      console.log(`No new profile information found for user: ${userId}`);
+    }
   }
 
   private extractProfileFromConversation(conversation: any): string {
-    // Extract profile-relevant information from conversation
+    // This method is now deprecated - use ProfileExtractor instead
+    // Keeping for backward compatibility but it should not be used
+    console.warn('extractProfileFromConversation is deprecated - use ProfileExtractor instead');
+    
     if (conversation.question && conversation.answer) {
       return `Q: ${conversation.question}\nA: ${conversation.answer}`;
     }
     return conversation.question || conversation.answer || '';
-  }
-
-  private combineProfileData(existing: string, newData: string): string {
-    // If no existing profile, just return new data
-    if (!existing.trim()) return newData;
-    
-    // If no new data, return existing profile unchanged
-    if (!newData.trim()) return existing;
-    
-    // Check if the new information is already in the existing profile
-    if (existing.includes(newData.trim())) {
-      console.log('Profile already contains this information, skipping duplicate');
-      return existing;
-    }
-    
-    // Combine existing and new data with clear separation
-    const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
-    return `${existing}\n\n--- New Information (${timestamp}) ---\n${newData}`;
   }
 
   /**
