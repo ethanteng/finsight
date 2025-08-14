@@ -12,6 +12,7 @@ import { isFeatureEnabled } from './config/features';
 import authRoutes from './auth/routes';
 import { optionalAuth, requireAuth, adminAuth } from './auth/middleware';
 import { UserTier } from './data/types';
+import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid';
 
 // Extend Express Request type to include user
 declare global {
