@@ -38,7 +38,8 @@
     "dev:production": "concurrently \"npm run dev:backend:production\" \"npm run dev:frontend\"",
     "test:token-scope": "node scripts/test-token-scope.js",
     "test:production-investments": "node scripts/test-production-investments.js",
-    "check:access-tokens": "node scripts/check-access-tokens.js"
+    "check:access-tokens": "node scripts/check-access-tokens.js",
+    "migrate:profiles-to-encryption": "ts-node scripts/migrate-profiles-to-encryption.ts"
   },
   "keywords": [],
   "author": "",

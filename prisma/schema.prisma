@@ -168,10 +168,16 @@ model UserProfile {
 model encrypted_profile_data {
   id            String      @id
   profileHash   String      @unique
-  encryptedData String
+  encryptedData String      // Base64 encoded encrypted profile data
+  iv            String      // Base64 encoded initialization vector
+  keyVersion    Int         @default(1)  // For key rotation
+  algorithm     String      @default("aes-256-gcm")
+  tag           String      // Base64 encoded authentication tag
   createdAt     DateTime    @default(now())
   updatedAt     DateTime
   user_profiles UserProfile @relation(fields: [profileHash], references: [profileHash])
+
+  @@map("encrypted_profile_data")
 }
 
 model PasswordResetToken {

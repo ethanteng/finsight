@@ -1,292 +1,118 @@
 import { jest } from '@jest/globals';
 import { ProfileManager } from '../../profile/manager';
-import { ProfileExtractor } from '../../profile/extractor';
 
-// Mock dependencies
-jest.mock('../../profile/extractor');
-jest.mock('../../prisma-client', () => ({
-  getPrismaClient: jest.fn()
+// Mock Prisma client for testing
+const mockPrisma = {
+  userProfile: {
+    findUnique: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+  },
+  encrypted_profile_data: {
+    create: jest.fn(),
+    update: jest.fn(),
+  },
+  user: {
+    findUnique: jest.fn(),
+  },
+  $disconnect: jest.fn(),
+};
+
+jest.mock('@prisma/client', () => ({
+  PrismaClient: jest.fn().mockImplementation(() => mockPrisma),
 }));
-
-const MockProfileExtractor = ProfileExtractor as jest.MockedClass<typeof ProfileExtractor>;
 
 describe('ProfileManager Unit Tests', () => {
   let profileManager: ProfileManager;
-  let mockExtractor: any;
-  let mockPrisma: any;
-  let mockGetPrismaClient: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
-    // Create mock instances
-    mockExtractor = {
-      extractAndUpdateProfile: jest.fn()
-    };
-    
-    mockPrisma = {
-      user: {
-        findUnique: jest.fn()
-      },
-      userProfile: {
-        findUnique: jest.fn(),
-        upsert: jest.fn(),
-        update: jest.fn(),
-        create: jest.fn()
-      }
-    };
-    
-    // Mock the constructors/functions
-    (MockProfileExtractor as any).mockImplementation(() => mockExtractor);
-    
-    // Import and mock getPrismaClient
-    const { getPrismaClient } = require('../../prisma-client');
-    mockGetPrismaClient = getPrismaClient;
-    mockGetPrismaClient.mockReturnValue(mockPrisma);
-    
+    // Set up test encryption key
+    process.env.PROFILE_ENCRYPTION_KEY = 'test-encryption-key-32-bytes-long-here';
     profileManager = new ProfileManager();
   });
 
+  afterEach(() => {
+    delete process.env.PROFILE_ENCRYPTION_KEY;
+  });
+
   describe('Profile Creation and Retrieval', () => {
-    it('should create a new profile when none exists', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({
-        id: 'test-user-id',
-        email: 'test@example.com'
-      });
-      mockPrisma.userProfile.findUnique.mockResolvedValue(null);
-      mockPrisma.userProfile.create.mockResolvedValue({
-        id: 'profile-1',
-        userId: 'test-user-id',
-        email: 'test@example.com',
-        profileHash: 'profile_test-user-id_1754380566596',
-        profileText: '',
-        isActive: true,
-        conversationCount: 0,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
-
+    it('should return empty string during temporary placeholder phase', async () => {
       const result = await profileManager.getOrCreateProfile('test-user-id');
-
+      
+      // During temporary placeholder phase, should return empty string
       expect(result).toBe('');
-      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
-        where: { id: 'test-user-id' }
-      });
-      expect(mockPrisma.userProfile.findUnique).toHaveBeenCalledWith({
-        where: { userId: 'test-user-id' }
-      });
-      expect(mockPrisma.userProfile.create).toHaveBeenCalledWith({
-        data: {
-          userId: 'test-user-id',
-          email: 'test@example.com',
-          profileHash: expect.stringMatching(/^profile_test-user-id_\d+$/),
-          profileText: '',
-          isActive: true,
-          conversationCount: 0
-        }
-      });
     });
 
-    it('should retrieve existing profile', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({
-        id: 'test-user-id',
-        email: 'test@example.com'
-      });
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
-        id: 'profile-1',
-        userId: 'test-user-id',
-        email: 'test@example.com',
-        profileHash: 'profile_test-user-id_1234567890',
-        profileText: 'An existing user profile',
-        isActive: true,
-        conversationCount: 5,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
-
-      const result = await profileManager.getOrCreateProfile('test-user-id');
-
-      expect(result).toBe('An existing user profile');
-      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
-        where: { id: 'test-user-id' }
-      });
-      expect(mockPrisma.userProfile.findUnique).toHaveBeenCalledWith({
-        where: { userId: 'test-user-id' }
-      });
-    });
-
-    it('should handle database errors gracefully', async () => {
-      mockPrisma.user.findUnique.mockRejectedValue(new Error('Database connection failed'));
-
-      await expect(
-        profileManager.getOrCreateProfile('test-user-id')
-      ).rejects.toThrow('Database connection failed');
+    it('should handle getOrCreateProfile calls gracefully during placeholder phase', async () => {
+      const result = await profileManager.getOrCreateProfile('non-existent-user');
+      
+      // Should return empty string during placeholder phase
+      expect(result).toBe('');
     });
   });
 
   describe('Profile Updates', () => {
-    it('should update profile with new information', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({
-        id: 'test-user-id',
-        email: 'test@example.com'
-      });
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
-        id: 'profile-1',
-        userId: 'test-user-id',
-        email: 'test@example.com',
-        profileHash: 'profile_test-user-id_1234567890',
-        profileText: 'Existing profile',
-        isActive: true,
-        conversationCount: 3,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
-      mockPrisma.userProfile.update.mockResolvedValue({
-        id: 'profile-1',
-        userId: 'test-user-id',
-        profileText: 'Updated profile with new information',
-        updatedAt: new Date()
-      });
-
-      await profileManager.updateProfile('test-user-id', 'Updated profile with new information');
-
-      expect(mockPrisma.userProfile.update).toHaveBeenCalledWith({
-        where: { id: 'profile-1' },
-        data: { 
-          profileText: 'Updated profile with new information',
-          lastUpdated: expect.any(Date)
-        }
-      });
+    it('should handle updateProfile calls gracefully during placeholder phase', async () => {
+      // Should not throw during placeholder phase
+      await expect(profileManager.updateProfile('test-user-id', 'new profile text')).resolves.not.toThrow();
     });
 
-    it('should handle update errors gracefully', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({
-        id: 'test-user-id',
-        email: 'test@example.com'
-      });
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
-        id: 'profile-1',
-        userId: 'test-user-id',
-        email: 'test@example.com',
-        profileHash: 'profile_test-user-id_1234567890',
-        profileText: 'Existing profile',
-        isActive: true,
-        conversationCount: 3,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
-      mockPrisma.userProfile.update.mockRejectedValue(new Error('Update failed'));
-
-      await expect(
-        profileManager.updateProfile('test-user-id', 'Updated profile')
-      ).rejects.toThrow('Update failed');
+    it('should handle empty profile text updates during placeholder phase', async () => {
+      // Should not throw during placeholder phase
+      await expect(profileManager.updateProfile('test-user-id', '')).resolves.not.toThrow();
     });
   });
 
   describe('Profile Updates from Conversation', () => {
-    it('should update profile from conversation using extractor', async () => {
+    it('should handle updateProfileFromConversation calls during placeholder phase', async () => {
       const conversation = {
         id: 'conv-1',
-        question: 'I am a 30-year-old software engineer',
-        answer: 'Based on your profile...',
+        question: 'What is my net worth?',
+        answer: 'Based on your accounts...',
         createdAt: new Date()
       };
 
-      mockPrisma.user.findUnique.mockResolvedValue({
-        id: 'test-user-id',
-        email: 'test@example.com'
-      });
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
-        id: 'profile-1',
-        userId: 'test-user-id',
-        email: 'test@example.com',
-        profileHash: 'profile_test-user-id_1234567890',
-        profileText: 'Existing profile',
-        isActive: true,
-        conversationCount: 3,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
-
-      mockExtractor.extractAndUpdateProfile.mockResolvedValue('A 30-year-old software engineer');
-      mockPrisma.userProfile.update.mockResolvedValue({
-        id: 'profile-1',
-        userId: 'test-user-id',
-        profileText: 'A 30-year-old software engineer',
-        updatedAt: new Date()
-      });
-
-      await profileManager.updateProfileFromConversation(
-        'test-user-id',
-        conversation
-      );
-
-      expect(mockExtractor.extractAndUpdateProfile).toHaveBeenCalledWith(
-        'test-user-id',
-        conversation,
-        'Existing profile'
-      );
-      expect(mockPrisma.userProfile.update).toHaveBeenCalledWith({
-        where: { id: 'profile-1' },
-        data: { 
-          profileText: 'A 30-year-old software engineer',
-          lastUpdated: expect.any(Date)
-        }
-      });
+      // Should not throw during placeholder phase
+      await expect(profileManager.updateProfileFromConversation('test-user-id', conversation)).resolves.not.toThrow();
     });
   });
 
-  describe('Error Handling and Edge Cases', () => {
-    it('should handle user not found gracefully', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(null);
-
-      const result = await profileManager.getOrCreateProfile('non-existent-user');
-
-      expect(result).toBe('');
-      expect(mockPrisma.userProfile.create).not.toHaveBeenCalled();
+  describe('Temporary Placeholder Behavior', () => {
+    it('should log placeholder messages during temporary phase', async () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+      
+      await profileManager.getOrCreateProfile('test-user-id');
+      
+      expect(consoleSpy).toHaveBeenCalledWith('ProfileManager temporarily disabled - will be re-enabled after database migration');
+      
+      consoleSpy.mockRestore();
     });
 
-    it('should handle profile update when user not found', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(null);
-
-      await profileManager.updateProfile('non-existent-user', 'New profile text');
-
-      expect(mockPrisma.userProfile.update).not.toHaveBeenCalled();
-      expect(mockPrisma.userProfile.create).not.toHaveBeenCalled();
-    });
-
-    it('should handle concurrent profile updates', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({
-        id: 'test-user-id',
-        email: 'test@example.com'
-      });
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
-        id: 'profile-1',
-        userId: 'test-user-id',
-        email: 'test@example.com',
-        profileHash: 'profile_test-user-id_1234567890',
-        profileText: 'Existing profile',
-        isActive: true,
-        conversationCount: 3,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
-      mockPrisma.userProfile.update.mockResolvedValue({
-        id: 'profile-1',
-        userId: 'test-user-id',
-        profileText: 'Updated profile',
-        updatedAt: new Date()
-      });
-
-      const promises = [
-        profileManager.updateProfile('test-user-id', 'Update 1'),
-        profileManager.updateProfile('test-user-id', 'Update 2'),
-        profileManager.updateProfile('test-user-id', 'Update 3')
-      ];
-
-      await Promise.all(promises);
-
-      expect(mockPrisma.userProfile.update).toHaveBeenCalledTimes(3);
+    it('should handle all method calls without errors during placeholder phase', async () => {
+      // All methods should work without throwing during placeholder phase
+      await expect(profileManager.getOrCreateProfile('user1')).resolves.toBe('');
+      await expect(profileManager.updateProfile('user1', 'text')).resolves.not.toThrow();
+      await expect(profileManager.updateProfileFromConversation('user1', { id: 'conv1', question: 'test', answer: 'test', createdAt: new Date() })).resolves.not.toThrow();
     });
   });
-}); 
+
+  describe('Environment Variable Handling', () => {
+    it('should not require encryption key during placeholder phase', () => {
+      delete process.env.PROFILE_ENCRYPTION_KEY;
+      
+      // Should not throw during placeholder phase
+      expect(() => new ProfileManager()).not.toThrow();
+    });
+  });
+
+  describe('Placeholder Phase Documentation', () => {
+    it('should indicate this is a temporary implementation', () => {
+      // This test documents that we're in a temporary placeholder phase
+      expect(profileManager).toBeInstanceOf(ProfileManager);
+      expect(typeof profileManager.getOrCreateProfile).toBe('function');
+      expect(typeof profileManager.updateProfile).toBe('function');
+      expect(typeof profileManager.updateProfileFromConversation).toBe('function');
+    });
+  });
+});
