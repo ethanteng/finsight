@@ -5,8 +5,8 @@
  * This script encrypts existing email addresses, verification codes, and reset tokens
  */
 
-const { PrismaClient } = require('../src/prisma-client');
-const { DataEncryptionService } = require('../src/auth/encryption');
+const { PrismaClient } = require('@prisma/client');
+const { DataEncryptionService } = require('../dist/auth/encryption');
 
 const prisma = new PrismaClient();
 

@@ -514,16 +514,13 @@ const handleDemoRequest = async (req: Request, res: Response) => {
       // Log demo interactions for analytics (disabled in test environment)
       if (process.env.NODE_ENV !== 'test') {
         try {
-          await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/log-demo`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              question: questionString,
-              answer,
-              timestamp: new Date().toISOString(),
-              sessionId,
-              userAgent
-            })
+          // Log directly instead of making HTTP request to self
+          console.log('📊 DEMO INTERACTION:', {
+            timestamp: new Date().toISOString(),
+            sessionId,
+            question: questionString.substring(0, 100) + (questionString.length > 100 ? '...' : ''),
+            answerLength: answer.length,
+            userAgent: userAgent?.substring(0, 50) + (userAgent?.length > 50 ? '...' : '')
           });
         } catch (logError) {
           console.error('Failed to log demo interaction:', logError);

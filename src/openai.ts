@@ -761,7 +761,7 @@ ${anonymizeInvestmentData(holdings.slice(0, 10))}`;
         if (accessTokens.length > 0) {
           // Use the first token to get liabilities
           const token = accessTokens[0].token;
-          const liabilitiesResponse = await fetch(`http://localhost:3000/plaid/liabilities`, {
+          const liabilitiesResponse = await fetch(`${process.env.BACKEND_URL || 'http://localhost:3000'}/plaid/liabilities`, {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
