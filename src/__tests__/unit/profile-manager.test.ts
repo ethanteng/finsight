@@ -1,5 +1,11 @@
 import { jest } from '@jest/globals';
 import { ProfileManager } from '../../profile/manager';
+import { ProfileExtractor } from '../../profile/extractor';
+
+// Mock the ProfileExtractor
+jest.mock('../../profile/extractor');
+
+const MockProfileExtractor = ProfileExtractor as jest.MockedClass<typeof ProfileExtractor>;
 
 // Mock Prisma client for testing
 const mockPrisma: any = {
@@ -24,11 +30,22 @@ jest.mock('@prisma/client', () => ({
 
 describe('ProfileManager Unit Tests', () => {
   let profileManager: ProfileManager;
+  let mockExtractor: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // Set up test encryption key
+    
+    // Create mock extractor instance
+    mockExtractor = {
+      extractAndUpdateProfile: jest.fn()
+    };
+    
+    // Mock the ProfileExtractor constructor
+    (MockProfileExtractor as any).mockImplementation(() => mockExtractor);
+    
+    // Set up environment variable for testing
     process.env.PROFILE_ENCRYPTION_KEY = 'test-encryption-key-32-bytes-long-here';
+    
     profileManager = new ProfileManager();
   });
 
@@ -149,7 +166,7 @@ describe('ProfileManager Unit Tests', () => {
   });
 
   describe('updateProfileFromConversation', () => {
-    it('should extract profile from conversation and update', async () => {
+    it('should extract profile from conversation and update when profile changes', async () => {
       const mockUser = { id: 'user1', email: 'test@example.com' };
       const mockProfile = {
         id: 'profile1',
@@ -161,6 +178,9 @@ describe('ProfileManager Unit Tests', () => {
         answer: 'Based on your data, your net worth is $100,000.'
       };
       
+      // Mock the ProfileExtractor to return a different profile (indicating change)
+      mockExtractor.extractAndUpdateProfile.mockResolvedValue('Updated profile with net worth information');
+      
       mockPrisma.user.findUnique.mockResolvedValue(mockUser);
       mockPrisma.userProfile.findUnique.mockResolvedValue(mockProfile);
       mockPrisma.userProfile.update.mockResolvedValue(mockProfile);
@@ -168,8 +188,34 @@ describe('ProfileManager Unit Tests', () => {
       
       await profileManager.updateProfileFromConversation('user1', conversation);
       
+      // Should call updateProfile because the profile changed
       expect(mockPrisma.userProfile.update).toHaveBeenCalled();
       expect(mockPrisma.encrypted_profile_data.create).toHaveBeenCalled();
+    });
+
+    it('should not update profile when no new information is found', async () => {
+      const mockUser = { id: 'user1', email: 'test@example.com' };
+      const mockProfile = {
+        id: 'profile1',
+        profileHash: 'hash1',
+        encrypted_profile_data: null
+      };
+      const conversation = {
+        question: 'What is my net worth?',
+        answer: 'Based on your data, your net worth is $100,000.'
+      };
+      
+      // Mock the ProfileExtractor to return the same profile (no change)
+      mockExtractor.extractAndUpdateProfile.mockResolvedValue(''); // No change
+      
+      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockPrisma.userProfile.findUnique.mockResolvedValue(mockProfile);
+      
+      await profileManager.updateProfileFromConversation('user1', conversation);
+      
+      // Should NOT call updateProfile because no change was detected
+      expect(mockPrisma.userProfile.update).not.toHaveBeenCalled();
+      expect(mockPrisma.encrypted_profile_data.create).not.toHaveBeenCalled();
     });
   });
 });
