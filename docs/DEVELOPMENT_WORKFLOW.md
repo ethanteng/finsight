@@ -72,6 +72,137 @@ npx prisma db push
 # DON'T: Forget to commit migration files
 ```
 
+### ⚠️ CRITICAL: Migration Order & Deployment Sequence
+
+**This is the #1 cause of production schema drift and deployment failures.**
+
+#### 🚨 The Golden Rule: Schema First, Code Second
+
+**❌ WRONG ORDER (Causes Schema Drift):**
+```bash
+# 1. Deploy code that expects new schema
+git push origin main  # Code deployed with new expectations
+
+# 2. Database still has old schema
+# 3. Code fails with "Column 'xyz' does not exist"
+# 4. Emergency manual intervention required
+```
+
+**✅ CORRECT ORDER (Prevents Schema Drift):**
+```bash
+# 1. Create and test migration locally
+npx prisma migrate dev --name add_new_columns
+npx prisma migrate reset  # Test full migration cycle
+npx prisma migrate deploy  # Verify deployment works
+
+# 2. Commit migration files WITH code changes
+git add prisma/migrations/
+git add src/
+git commit -m "feat: add new columns + migration"
+git push origin main
+
+# 3. CI/CD handles the rest
+# - Code deployment happens
+# - npx prisma migrate deploy runs automatically
+# - Database schema updated
+# - Everything works!
+```
+
+#### 🔍 Migration Validation Checklist
+
+**Before ANY deployment, verify:**
+
+```bash
+# 1. Check migration status
+npx prisma migrate status
+# Should show: "Database schema is up to date"
+
+# 2. Preview what will happen in production
+npx prisma migrate deploy --preview-feature
+# Should show: "No pending migrations to apply"
+
+# 3. Verify schema matches locally
+npx prisma db pull
+npx prisma generate
+# Should show: "No changes detected"
+
+# 4. Test migration locally
+npx prisma migrate reset
+npx prisma migrate deploy
+# Should complete without errors
+```
+
+#### 🚨 Common Schema Drift Scenarios
+
+**Scenario 1: Deployed Code Before Migration**
+```bash
+# ❌ What happened to us:
+1. Updated schema.prisma locally
+2. Deployed code expecting new columns
+3. Production database still had old schema
+4. Result: "Column 'iv' does not exist" errors
+
+# ✅ How to prevent:
+1. ALWAYS test migrations locally first
+2. NEVER deploy code before migration is ready
+3. Commit migration files with code changes
+```
+
+**Scenario 2: Missing Migration Files**
+```bash
+# ❌ What causes this:
+1. Used `npx prisma db push` instead of migrations
+2. Forgot to commit migration files
+3. Production database schema differs from local
+
+# ✅ How to prevent:
+1. ALWAYS use `npx prisma migrate dev`
+2. ALWAYS commit migration files
+3. NEVER use `db push` in production
+```
+
+**Scenario 3: Incomplete Migration Testing**
+```bash
+# ❌ What causes this:
+1. Created migration but didn't test it
+2. Assumed migration would work in production
+3. Production migration fails
+
+# ✅ How to prevent:
+1. ALWAYS test full migration cycle locally
+2. Use `npx prisma migrate reset` to test from scratch
+3. Verify migration works before committing
+```
+
+#### 🛡️ Deployment Safety Measures
+
+**Pre-Deployment Checklist:**
+- [ ] **Migration created and tested locally** ✅
+- [ ] **Migration files committed to git** ✅
+- [ ] **Local migration reset/deploy tested** ✅
+- [ ] **Schema status shows "up to date"** ✅
+- [ ] **No pending migrations detected** ✅
+- [ ] **All tests passing with new schema** ✅
+
+**Emergency Recovery (If Schema Drift Occurs):**
+```bash
+# 1. Identify the drift
+npx prisma migrate status
+npx prisma db pull
+
+# 2. Apply missing migrations
+npx prisma migrate deploy
+
+# 3. If manual intervention needed:
+npx prisma db execute --stdin --schema=./prisma/schema.prisma
+# Paste SQL commands manually
+
+# 4. Regenerate client
+npx prisma generate
+
+# 5. Clear build cache and redeploy
+```
+
 ### 3. Development Process
 ```bash
 # Make your changes
@@ -331,6 +462,11 @@ These changes are safe to deploy immediately as they:
 
 ### Pre-Deployment Checklist
 - [ ] All tests passing locally
+- [ ] **Migration created and tested locally** ✅
+- [ ] **Full migration cycle tested** (reset + deploy) ✅
+- [ ] **Migration files committed to git** ✅
+- [ ] **Schema status shows "up to date"** ✅
+- [ ] **No pending migrations detected** ✅
 - [ ] Migrations tested with `--preview-feature`
 - [ ] Schema synced with production
 - [ ] No breaking changes
@@ -345,9 +481,21 @@ git push origin main
 
 # CI/CD will automatically:
 # 1. Run tests
-# 2. Apply migrations
+# 2. Apply migrations (CRITICAL: This happens BEFORE code deployment)
 # 3. Deploy to production
 ```
+
+### ⚠️ CRITICAL: Deployment Order Matters
+
+**The CI/CD pipeline follows this exact sequence:**
+1. **Tests run** - Ensure code quality
+2. **Migrations applied** - Update database schema FIRST
+3. **Code deployed** - Deploy code that expects new schema
+
+**This is why committing migration files is critical:**
+- Migration files tell CI/CD what schema changes to apply
+- Without migration files, CI/CD can't update the schema
+- Code deployment fails because schema doesn't match expectations
 
 ## 🔧 Troubleshooting
 
@@ -448,3 +596,90 @@ echo $DATABASE_URL
 - [Environment Variables](../.env.example)
 
 This workflow ensures consistent, reliable development and deployment while preventing common issues like schema drift. 
+
+## 🚨 **Schema Drift Prevention - Real Example**
+
+### **The Profile Encryption Incident (August 2025)**
+
+**What Happened:**
+We experienced a critical schema drift issue when implementing profile encryption at rest. Here's the exact sequence that caused the problem:
+
+#### **❌ The Wrong Sequence (What We Did)**
+
+```bash
+# 1. Updated schema.prisma locally
+# Added: iv, tag, keyVersion, algorithm columns to encrypted_profile_data
+
+# 2. Created migration file
+npx prisma migrate dev --name add_encryption_columns_to_profile_data
+
+# 3. ❌ DEPLOYED CODE BEFORE MIGRATION
+git push origin main  # Code deployed expecting new columns
+
+# 4. ❌ Production database still had old schema
+# - Code expected: iv, tag, keyVersion, algorithm columns
+# - Database had: Only encryptedData column
+# - Result: "Column 'iv' does not exist" errors
+```
+
+#### **✅ The Correct Sequence (What We Should Have Done)**
+
+```bash
+# 1. Updated schema.prisma locally
+# Added: iv, tag, keyVersion, algorithm columns
+
+# 2. Created migration file
+npx prisma migrate dev --name add_encryption_columns_to_profile_data
+
+# 3. ✅ TESTED MIGRATION LOCALLY FIRST
+npx prisma migrate reset  # Test from scratch
+npx prisma migrate deploy  # Verify it works
+
+# 4. ✅ COMMITTED MIGRATION FILES WITH CODE
+git add prisma/migrations/
+git add src/
+git commit -m "feat: add encryption columns + migration"
+git push origin main
+
+# 5. ✅ CI/CD would have handled migration automatically
+# - Code deployment
+# - npx prisma migrate deploy
+# - Database schema updated
+# - Everything works!
+```
+
+#### **🚨 The Emergency Recovery (What We Had to Do)**
+
+```bash
+# 1. Identified the drift
+npx prisma migrate status  # Showed pending migration
+npx prisma db pull  # Showed missing columns
+
+# 2. Manual SQL execution in production
+npx prisma db execute --stdin --schema=./prisma/schema.prisma
+# Pasted ALTER TABLE statements manually
+
+# 3. Regenerated Prisma client
+npx prisma generate
+
+# 4. Cleared build cache and redeployed
+```
+
+#### **💡 Key Lessons Learned**
+
+1. **Migration Order is Critical**: Schema must be updated before code deployment
+2. **Local Testing is Mandatory**: Never assume migrations will work in production
+3. **Commit Everything Together**: Migration files must be committed with code changes
+4. **CI/CD Integration**: Let the deployment pipeline handle production migrations
+
+#### **🛡️ Prevention Checklist for Future**
+
+- [ ] **Migration created and tested locally** ✅
+- [ ] **Full migration cycle tested** (reset + deploy) ✅
+- [ ] **Migration files committed to git** ✅
+- [ ] **Schema status verified** ✅
+- [ ] **No pending migrations detected** ✅
+- [ ] **All tests passing with new schema** ✅
+- [ ] **Migration and code deployed together** ✅
+
+**Remember**: Schema drift is expensive to fix and can cause production outages. Always follow the correct sequence: **Schema First, Code Second**. 
