@@ -172,7 +172,7 @@ export default function AppPage() {
 
   const handleLogout = () => {
     localStorage.removeItem('auth_token');
-    router.push('/');
+    router.push('/login');
   };
 
   // Show loading state while checking authentication

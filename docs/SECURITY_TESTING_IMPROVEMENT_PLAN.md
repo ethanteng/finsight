@@ -6,7 +6,181 @@ This document outlines the specific technical improvements needed to prevent sec
 
 ## **Immediate Improvements (Next 2 Weeks)**
 
-### **1. Fix Over-Mocked Security Tests**
+### **1. Re-enable Encryption Tests**
+
+#### **Current Status**
+The email encryption tests in `encrypted-user-service.test.ts` are temporarily disabled due to database connection issues during CI/CD deployment. These tests are critical for validating the encryption implementation.
+
+#### **What Needs to be Done**
+
+1. **Test Environment Setup**
+   - Configure Jest to use a test database instead of production
+   - Set up test database connection with proper environment variables
+   - Ensure test database is isolated from production data
+
+2. **Database Schema for Testing**
+   - Create test database migrations that mirror production schema
+   - Include encrypted data tables: `encryptedUserData`, `encryptedPasswordResetToken`, `encryptedEmailVerificationCode`
+   - Set up test data factories for consistent test scenarios
+
+3. **Encryption Service Mocking Strategy**
+   - Mock the encryption service for unit tests that don't need real encryption
+   - Use real encryption for integration tests that validate the full flow
+   - Ensure encryption keys are properly configured for test environment
+
+4. **Test Data Management**
+   - Create test users with encrypted email addresses
+   - Generate test tokens and verification codes with proper encryption
+   - Clean up test data between test runs
+
+#### **Recommended Approach: Test Database vs Production**
+
+**❌ NOT RECOMMENDED: Testing against production database**
+- Risk of data corruption or accidental modifications
+- Performance impact on production systems
+- Security concerns with test data in production
+- Violates testing best practices and separation of concerns
+
+**✅ RECOMMENDED: Dedicated test database**
+- Use a local test database for development
+- Use a CI/CD test database for automated testing
+- Mirror production schema but with test data
+- Fast, isolated, and safe for testing
+
+#### **Implementation Steps**
+
+1. **Create Test Database Configuration**
+```typescript
+// src/__tests__/config/test-database.ts
+export const testDatabaseConfig = {
+  url: process.env.TEST_DATABASE_URL || 'postgresql://test:test@localhost:5432/finsight_test',
+  schema: 'test',
+  logging: false
+};
+```
+
+2. **Update Jest Configuration**
+```javascript
+// jest.config.js
+module.exports = {
+  // ... existing config
+  setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup/test-database.ts'],
+  testEnvironment: 'node',
+  testTimeout: 30000, // Allow time for database operations
+};
+```
+
+3. **Create Test Database Setup**
+```typescript
+// src/__tests__/setup/test-database.ts
+import { PrismaClient } from '@prisma/client';
+import { testDatabaseConfig } from '../config/test-database';
+
+let testPrisma: PrismaClient;
+
+beforeAll(async () => {
+  // Connect to test database
+  testPrisma = new PrismaClient({
+    datasources: {
+      db: { url: testDatabaseConfig.url }
+    }
+  });
+  
+  // Run test migrations
+  await testPrisma.$executeRaw`CREATE SCHEMA IF NOT EXISTS test`;
+  await testPrisma.$executeRaw`SET search_path TO test`;
+  
+  // Apply test schema
+  await testPrisma.$executeRawFile('./prisma/test-schema.sql');
+});
+
+afterAll(async () => {
+  await testPrisma.$disconnect();
+});
+
+beforeEach(async () => {
+  // Clean test data before each test
+  await testPrisma.encryptedEmailVerificationCode.deleteMany();
+  await testPrisma.encryptedPasswordResetToken.deleteMany();
+  await testPrisma.encryptedUserData.deleteMany();
+  await testPrisma.emailVerificationCode.deleteMany();
+  await testPrisma.passwordResetToken.deleteMany();
+  await testPrisma.user.deleteMany();
+});
+```
+
+4. **Update Test Files**
+```typescript
+// src/__tests__/unit/encrypted-user-service.test.ts
+import { testPrisma } from '../setup/test-database';
+
+describe('EncryptedUserService', () => {
+  let service: EncryptedUserService;
+  
+  beforeEach(() => {
+    service = new EncryptedUserService(process.env.TEST_ENCRYPTION_KEY);
+  });
+  
+  it('should create user with encrypted email', async () => {
+    const userData = {
+      email: 'test@example.com',
+      passwordHash: 'hashed-password',
+      tier: 'starter' as const,
+      isActive: true,
+      emailVerified: false
+    };
+    
+    const result = await service.createUser(testPrisma, userData);
+    
+    expect(result).toBeDefined();
+    expect(result.email).not.toBe(userData.email); // Should be encrypted
+    
+    // Verify encrypted data was created
+    const encryptedData = await testPrisma.encryptedUserData.findFirst({
+      where: { userId: result.id }
+    });
+    
+    expect(encryptedData).toBeDefined();
+    expect(encryptedData.encryptedEmail).toBeDefined();
+    expect(encryptedData.iv).toBeDefined();
+    expect(encryptedData.tag).toBeDefined();
+  });
+});
+```
+
+#### **Alternative: In-Memory Database for Unit Tests**
+
+For faster unit tests that don't need full database integration:
+
+```typescript
+// Use SQLite in-memory database for unit tests
+import { PrismaClient } from '@prisma/client';
+import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
+
+let mockPrisma: DeepMockProxy<PrismaClient>;
+
+beforeEach(() => {
+  mockPrisma = mockDeep<PrismaClient>();
+  
+  // Mock successful database operations
+  mockPrisma.user.create.mockResolvedValue({
+    id: 'test-user-id',
+    email: 'encrypted-email',
+    // ... other fields
+  });
+  
+  mockPrisma.encryptedUserData.create.mockResolvedValue({
+    id: 'test-encrypted-id',
+    userId: 'test-user-id',
+    encryptedEmail: 'encrypted-email',
+    iv: 'test-iv',
+    tag: 'test-tag',
+    keyVersion: 1
+  });
+});
+```
+
+### **2. Fix Over-Mocked Security Tests**
 
 #### **Current Problem**
 ```typescript
