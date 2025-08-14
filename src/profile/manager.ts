@@ -1,6 +1,3 @@
-// TEMPORARILY COMMENTED OUT - Will be re-enabled after database migration
-// This allows us to deploy the infrastructure first, then apply the database changes
-/*
 import { PrismaClient } from '@prisma/client';
 import { ProfileEncryptionService } from './encryption';
 
@@ -58,7 +55,7 @@ export class ProfileManager {
             email: user.email,
             profileHash,
             userId,
-            profileText: '',
+            profileText: '', // Keep for backward compatibility
             isActive: true,
             conversationCount: 0
           },
@@ -83,10 +80,6 @@ export class ProfileManager {
       
       // Fallback to plain text for backward compatibility
       return profile.profileText || '';
-      
-    } catch (error) {
-      console.error('Error in getOrCreateProfile:', error);
-      return '';
     } finally {
       await prisma.$disconnect();
     }
@@ -186,31 +179,22 @@ export class ProfileManager {
           }
         });
       }
-      
-      console.log(`Profile updated successfully for user: ${user.email}`);
-      
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      throw error;
     } finally {
       await prisma.$disconnect();
     }
   }
-}
-*/
-
-// Temporary placeholder - will be re-enabled after database migration
-export class ProfileManager {
-  async getOrCreateProfile(userId: string): Promise<string> {
-    console.log('ProfileManager temporarily disabled - will be re-enabled after database migration');
-    return '';
-  }
-
-  async updateProfile(userId: string, newProfileText: string): Promise<void> {
-    console.log('ProfileManager temporarily disabled - will be re-enabled after database migration');
-  }
 
   async updateProfileFromConversation(userId: string, conversation: any): Promise<void> {
-    console.log('ProfileManager temporarily disabled - will be re-enabled after database migration');
+    // Extract profile-relevant information from conversation
+    const profileText = this.extractProfileFromConversation(conversation);
+    await this.updateProfile(userId, profileText);
+  }
+
+  private extractProfileFromConversation(conversation: any): string {
+    // Simple extraction - can be enhanced based on your needs
+    if (conversation.question && conversation.answer) {
+      return `Q: ${conversation.question}\nA: ${conversation.answer}`;
+    }
+    return conversation.question || conversation.answer || '';
   }
 } 

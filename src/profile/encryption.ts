@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 
 export class ProfileEncryptionService {
   private readonly algorithm = 'aes-256-gcm';

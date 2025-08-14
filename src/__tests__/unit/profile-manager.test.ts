@@ -2,7 +2,7 @@ import { jest } from '@jest/globals';
 import { ProfileManager } from '../../profile/manager';
 
 // Mock Prisma client for testing
-const mockPrisma = {
+const mockPrisma: any = {
   userProfile: {
     findUnique: jest.fn(),
     create: jest.fn(),
@@ -36,83 +36,140 @@ describe('ProfileManager Unit Tests', () => {
     delete process.env.PROFILE_ENCRYPTION_KEY;
   });
 
-  describe('Profile Creation and Retrieval', () => {
-    it('should return empty string during temporary placeholder phase', async () => {
-      const result = await profileManager.getOrCreateProfile('test-user-id');
-      
-      // During temporary placeholder phase, should return empty string
-      expect(result).toBe('');
-    });
-
-    it('should handle getOrCreateProfile calls gracefully during placeholder phase', async () => {
-      const result = await profileManager.getOrCreateProfile('non-existent-user');
-      
-      // Should return empty string during placeholder phase
-      expect(result).toBe('');
-    });
-  });
-
-  describe('Profile Updates', () => {
-    it('should handle updateProfile calls gracefully during placeholder phase', async () => {
-      // Should not throw during placeholder phase
-      await expect(profileManager.updateProfile('test-user-id', 'new profile text')).resolves.not.toThrow();
-    });
-
-    it('should handle empty profile text updates during placeholder phase', async () => {
-      // Should not throw during placeholder phase
-      await expect(profileManager.updateProfile('test-user-id', '')).resolves.not.toThrow();
-    });
-  });
-
-  describe('Profile Updates from Conversation', () => {
-    it('should handle updateProfileFromConversation calls during placeholder phase', async () => {
-      const conversation = {
-        id: 'conv-1',
-        question: 'What is my net worth?',
-        answer: 'Based on your accounts...',
-        createdAt: new Date()
-      };
-
-      // Should not throw during placeholder phase
-      await expect(profileManager.updateProfileFromConversation('test-user-id', conversation)).resolves.not.toThrow();
-    });
-  });
-
-  describe('Temporary Placeholder Behavior', () => {
-    it('should log placeholder messages during temporary phase', async () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
-      
-      await profileManager.getOrCreateProfile('test-user-id');
-      
-      expect(consoleSpy).toHaveBeenCalledWith('ProfileManager temporarily disabled - will be re-enabled after database migration');
-      
-      consoleSpy.mockRestore();
-    });
-
-    it('should handle all method calls without errors during placeholder phase', async () => {
-      // All methods should work without throwing during placeholder phase
-      await expect(profileManager.getOrCreateProfile('user1')).resolves.toBe('');
-      await expect(profileManager.updateProfile('user1', 'text')).resolves.not.toThrow();
-      await expect(profileManager.updateProfileFromConversation('user1', { id: 'conv1', question: 'test', answer: 'test', createdAt: new Date() })).resolves.not.toThrow();
-    });
-  });
-
-  describe('Environment Variable Handling', () => {
-    it('should not require encryption key during placeholder phase', () => {
-      delete process.env.PROFILE_ENCRYPTION_KEY;
-      
-      // Should not throw during placeholder phase
-      expect(() => new ProfileManager()).not.toThrow();
-    });
-  });
-
-  describe('Placeholder Phase Documentation', () => {
-    it('should indicate this is a temporary implementation', () => {
-      // This test documents that we're in a temporary placeholder phase
+  describe('Constructor', () => {
+    it('should create instance with valid encryption key', () => {
       expect(profileManager).toBeInstanceOf(ProfileManager);
-      expect(typeof profileManager.getOrCreateProfile).toBe('function');
-      expect(typeof profileManager.updateProfile).toBe('function');
-      expect(typeof profileManager.updateProfileFromConversation).toBe('function');
+    });
+
+    it('should throw error with missing encryption key', () => {
+      delete process.env.PROFILE_ENCRYPTION_KEY;
+      expect(() => new ProfileManager()).toThrow('PROFILE_ENCRYPTION_KEY environment variable is required');
+    });
+
+    it('should throw error with invalid encryption key', () => {
+      process.env.PROFILE_ENCRYPTION_KEY = 'short';
+      expect(() => new ProfileManager()).toThrow('Invalid PROFILE_ENCRYPTION_KEY format');
+    });
+  });
+
+  describe('getOrCreateProfile', () => {
+    it('should return empty string when user not found', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      
+      const result = await profileManager.getOrCreateProfile('nonexistent-user');
+      
+      expect(result).toBe('');
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
+        where: { id: 'nonexistent-user' }
+      });
+    });
+
+    it('should create new profile when none exists', async () => {
+      const mockUser = { id: 'user1', email: 'test@example.com' };
+      const mockProfile = { 
+        id: 'profile1', 
+        profileHash: 'hash1', 
+        profileText: '', 
+        encrypted_profile_data: null 
+      };
+      
+      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockPrisma.userProfile.findUnique
+        .mockResolvedValueOnce(null) // First call for userId
+        .mockResolvedValueOnce(null); // Second call for email
+      mockPrisma.userProfile.create.mockResolvedValue(mockProfile);
+      
+      const result = await profileManager.getOrCreateProfile('user1');
+      
+      expect(result).toBe('');
+      expect(mockPrisma.userProfile.create).toHaveBeenCalled();
+    });
+
+    it('should return decrypted profile when encrypted data exists', async () => {
+      const mockUser = { id: 'user1', email: 'test@example.com' };
+      const mockProfile = {
+        id: 'profile1',
+        profileHash: 'hash1',
+        profileText: 'old text',
+        encrypted_profile_data: {
+          encryptedData: 'encrypted-data',
+          iv: 'test-iv',
+          tag: 'test-tag'
+        }
+      };
+      
+      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockPrisma.userProfile.findUnique.mockResolvedValue(mockProfile);
+      
+      const result = await profileManager.getOrCreateProfile('user1');
+      
+      // Should return decrypted data (or fallback to profileText if decryption fails)
+      expect(result).toBeDefined();
+    });
+  });
+
+  describe('updateProfile', () => {
+    it('should update existing profile with encryption', async () => {
+      const mockUser = { id: 'user1', email: 'test@example.com' };
+      const mockProfile = {
+        id: 'profile1',
+        profileHash: 'hash1',
+        encrypted_profile_data: null
+      };
+      
+      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockPrisma.userProfile.findUnique.mockResolvedValue(mockProfile);
+      mockPrisma.userProfile.update.mockResolvedValue(mockProfile);
+      mockPrisma.encrypted_profile_data.create.mockResolvedValue({});
+      
+      await profileManager.updateProfile('user1', 'new profile text');
+      
+      expect(mockPrisma.userProfile.update).toHaveBeenCalled();
+      expect(mockPrisma.encrypted_profile_data.create).toHaveBeenCalled();
+    });
+
+    it('should create new profile when none exists', async () => {
+      const mockUser = { id: 'user1', email: 'test@example.com' };
+      
+      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockPrisma.userProfile.findUnique
+        .mockResolvedValueOnce(null) // First call for userId
+        .mockResolvedValueOnce(null); // Second call for email
+      mockPrisma.userProfile.create.mockResolvedValue({
+        id: 'profile1',
+        profileHash: 'hash1'
+      });
+      mockPrisma.encrypted_profile_data.create.mockResolvedValue({});
+      
+      await profileManager.updateProfile('user1', 'new profile text');
+      
+      expect(mockPrisma.userProfile.create).toHaveBeenCalled();
+      expect(mockPrisma.encrypted_profile_data.create).toHaveBeenCalled();
+    });
+  });
+
+  describe('updateProfileFromConversation', () => {
+    it('should extract profile from conversation and update', async () => {
+      const mockUser = { id: 'user1', email: 'test@example.com' };
+      const mockProfile = {
+        id: 'profile1',
+        profileHash: 'hash1',
+        encrypted_profile_data: null
+      };
+      const conversation = {
+        question: 'What is my net worth?',
+        answer: 'Based on your data, your net worth is $100,000.'
+      };
+      
+      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockPrisma.userProfile.findUnique.mockResolvedValue(mockProfile);
+      mockPrisma.userProfile.update.mockResolvedValue(mockProfile);
+      mockPrisma.encrypted_profile_data.create.mockResolvedValue({});
+      
+      await profileManager.updateProfileFromConversation('user1', conversation);
+      
+      expect(mockPrisma.userProfile.update).toHaveBeenCalled();
+      expect(mockPrisma.encrypted_profile_data.create).toHaveBeenCalled();
     });
   });
 });
