@@ -4,6 +4,93 @@
 
 This document outlines the specific technical improvements needed to prevent security vulnerabilities like the one we just discovered. It provides actionable steps and code examples for implementing proper security testing.
 
+## **Future Improvements (Next 1-2 Months)**
+
+### **2. Re-enable Profile Encryption Integration Tests**
+
+#### **Current Status**
+The profile encryption integration tests in `profile-encryption-integration.test.ts` were temporarily disabled during the profile encryption implementation to prevent CI/CD build failures. These tests are essential for validating the complete encryption workflow.
+
+#### **What Needs to be Done**
+
+1. **Test Database Setup for Profile Encryption**
+   - Configure dedicated test database for integration testing
+   - Set up test environment with `PROFILE_ENCRYPTION_KEY`
+   - Create test schema that mirrors production encryption tables
+
+2. **Profile Encryption Integration Test Restoration**
+   - Re-enable `src/__tests__/integration/profile-encryption-integration.test.ts`
+   - Test complete encryption/decryption workflow
+   - Validate ProfileManager integration with encryption
+   - Test profile migration and backward compatibility
+
+3. **Test Data Management for Profiles**
+   - Create test user profiles with encrypted data
+   - Test both new encrypted profiles and legacy plain-text profiles
+   - Validate migration script functionality
+   - Test error handling and fallback scenarios
+
+#### **Implementation Steps**
+
+1. **Set Up Test Database**
+```bash
+# Create test database
+createdb finsight_test
+
+# Set test environment variables
+export TEST_DATABASE_URL="postgresql://test:test@localhost:5432/finsight_test"
+export PROFILE_ENCRYPTION_KEY="test-encryption-key-32-bytes-long-here"
+```
+
+2. **Restore Integration Tests**
+```typescript
+// src/__tests__/integration/profile-encryption-integration.test.ts
+describe('Profile Encryption Integration', () => {
+  test('should create and retrieve encrypted profiles', async () => {
+    const profileManager = new ProfileManager();
+    const testProfileText = 'Test encrypted profile data';
+    
+    await profileManager.updateProfile('test-user-id', testProfileText);
+    const retrieved = await profileManager.getOrCreateProfile('test-user-id');
+    
+    expect(retrieved).toBe(testProfileText);
+  });
+  
+  test('should handle profile migration from plain text', async () => {
+    // Test migration of existing plain-text profiles
+  });
+  
+  test('should maintain backward compatibility', async () => {
+    // Test fallback to plain text if decryption fails
+  });
+});
+```
+
+3. **Update CI/CD Configuration**
+```yaml
+# .github/workflows/ci.yml
+- name: Set up test database
+  run: |
+    # Set up test database for integration tests
+    export TEST_DATABASE_URL="postgresql://test:test@localhost:5432/finsight_test"
+    export PROFILE_ENCRYPTION_KEY="test-encryption-key-32-bytes-long-here"
+```
+
+#### **Benefits of Re-enabling Integration Tests**
+
+- **Complete Validation**: Test the full encryption workflow end-to-end
+- **Migration Testing**: Validate profile migration script functionality
+- **Error Handling**: Test encryption/decryption failure scenarios
+- **Performance Testing**: Ensure encryption doesn't impact response times
+- **Security Validation**: Verify encryption implementation is secure
+
+#### **Timeline for Re-enabling**
+
+- **Week 1**: Set up test database infrastructure
+- **Week 2**: Restore and update integration tests
+- **Week 3**: Integrate with CI/CD pipeline
+- **Week 4**: Monitor and validate test results
+
 ## **Immediate Improvements (Next 2 Weeks)**
 
 ### **1. Re-enable Encryption Tests**
