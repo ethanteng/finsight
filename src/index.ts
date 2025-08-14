@@ -1633,23 +1633,40 @@ app.get('/sync/status', async (req: Request, res: Response) => {
               plaidClientId = process.env.PLAID_CLIENT_ID_PROD;
               plaidSecret = process.env.PLAID_SECRET_PROD;
               console.log('Admin: Using production Plaid credentials (*_PROD)');
+              console.log('Admin: PLAID_CLIENT_ID_PROD length:', plaidClientId ? plaidClientId.length : 'undefined');
+              console.log('Admin: PLAID_SECRET_PROD length:', plaidSecret ? plaidSecret.length : 'undefined');
             } else {
               plaidClientId = process.env.PLAID_CLIENT_ID;
               plaidSecret = process.env.PLAID_SECRET;
               console.log('Admin: Using sandbox Plaid credentials (regular)');
+              console.log('Admin: PLAID_CLIENT_ID length:', plaidClientId ? plaidClientId.length : 'undefined');
+              console.log('Admin: PLAID_SECRET length:', plaidSecret ? plaidSecret.length : 'undefined');
             }
             
-            const plaidClient = new PlaidApi(
-              new Configuration({
-                basePath: PlaidEnvironments[plaidEnv],
-                baseOptions: {
-                  headers: {
-                    'PLAID-CLIENT-ID': plaidClientId,
-                    'PLAID-SECRET': plaidSecret,
-                  },
+            console.log('Admin: Final plaidClientId:', plaidClientId ? plaidClientId.substring(0, 8) + '...' : 'undefined');
+            console.log('Admin: Final plaidSecret:', plaidSecret ? plaidSecret.substring(0, 8) + '...' : 'undefined');
+            
+            console.log('Admin: PlaidEnvironments[plaidEnv]:', PlaidEnvironments[plaidEnv]);
+            console.log('Admin: plaidEnv value:', plaidEnv);
+            
+            const configuration = new Configuration({
+              basePath: PlaidEnvironments[plaidEnv],
+              baseOptions: {
+                headers: {
+                  'PLAID-CLIENT-ID': plaidClientId,
+                  'PLAID-SECRET': plaidSecret,
                 },
-              })
-            );
+              },
+            });
+            
+            console.log('Admin: Configuration object:', {
+              basePath: configuration.basePath,
+              hasHeaders: !!configuration.baseOptions?.headers,
+              clientIdHeader: configuration.baseOptions?.headers?.['PLAID-CLIENT-ID'] ? 'set' : 'missing',
+              secretHeader: configuration.baseOptions?.headers?.['PLAID-SECRET'] ? 'set' : 'missing'
+            });
+            
+            const plaidClient = new PlaidApi(configuration);
 
             // Try to get live account data from the first access token
             console.log('Admin: Fetching live accounts from Plaid using token:', firstToken.id);
