@@ -14,7 +14,7 @@ import {
   sendPasswordResetEmail, 
   generateRandomCode, 
   generateRandomToken 
-} from './email';
+} from './resend-email';
 import { sendContactEmail } from './resend-email';
 
 const router = Router();
