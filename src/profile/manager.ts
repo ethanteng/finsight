@@ -185,16 +185,75 @@ export class ProfileManager {
   }
 
   async updateProfileFromConversation(userId: string, conversation: any): Promise<void> {
-    // Extract profile-relevant information from conversation
-    const profileText = this.extractProfileFromConversation(conversation);
-    await this.updateProfile(userId, profileText);
+    // Get existing profile first to preserve it
+    const existingProfile = await this.getOrCreateProfile(userId);
+    
+    // Extract new information from conversation
+    const newProfileText = this.extractProfileFromConversation(conversation);
+    
+    // Combine existing + new profile data intelligently
+    const combinedProfile = this.combineProfileData(existingProfile, newProfileText);
+    
+    // Update with combined data (preserving existing information)
+    await this.updateProfile(userId, combinedProfile);
   }
 
   private extractProfileFromConversation(conversation: any): string {
-    // Simple extraction - can be enhanced based on your needs
+    // Extract profile-relevant information from conversation
     if (conversation.question && conversation.answer) {
       return `Q: ${conversation.question}\nA: ${conversation.answer}`;
     }
     return conversation.question || conversation.answer || '';
+  }
+
+  private combineProfileData(existing: string, newData: string): string {
+    // If no existing profile, just return new data
+    if (!existing.trim()) return newData;
+    
+    // If no new data, return existing profile unchanged
+    if (!newData.trim()) return existing;
+    
+    // Check if the new information is already in the existing profile
+    if (existing.includes(newData.trim())) {
+      console.log('Profile already contains this information, skipping duplicate');
+      return existing;
+    }
+    
+    // Combine existing and new data with clear separation
+    const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    return `${existing}\n\n--- New Information (${timestamp}) ---\n${newData}`;
+  }
+
+  /**
+   * Emergency recovery method for profiles that may have been overwritten
+   * This can help restore profile data from backup or other sources
+   */
+  async recoverProfile(userId: string, backupProfileText: string): Promise<void> {
+    console.log(`Attempting to recover profile for user: ${userId}`);
+    
+    const currentProfile = await this.getOrCreateProfile(userId);
+    
+    if (currentProfile.trim() && currentProfile !== backupProfileText) {
+      // If current profile exists and is different, append backup as recovery
+      const recoveredProfile = `${currentProfile}\n\n--- RECOVERED DATA ---\n${backupProfileText}`;
+      await this.updateProfile(userId, recoveredProfile);
+      console.log(`Profile recovered and appended for user: ${userId}`);
+    } else if (!currentProfile.trim()) {
+      // If no current profile, restore from backup
+      await this.updateProfile(userId, backupProfileText);
+      console.log(`Profile fully restored from backup for user: ${userId}`);
+    } else {
+      console.log(`Profile recovery not needed for user: ${userId}`);
+    }
+  }
+
+  /**
+   * Get profile history to help with recovery
+   */
+  async getProfileHistory(userId: string): Promise<string[]> {
+    // This could be enhanced to actually track profile history
+    // For now, return current profile as single history item
+    const currentProfile = await this.getOrCreateProfile(userId);
+    return currentProfile ? [currentProfile] : [];
   }
 } 
