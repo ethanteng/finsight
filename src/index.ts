@@ -12,7 +12,7 @@ import { isFeatureEnabled } from './config/features';
 import authRoutes from './auth/routes';
 import { optionalAuth, requireAuth, adminAuth } from './auth/middleware';
 import { UserTier } from './data/types';
-import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid';
+
 
 // Extend Express Request type to include user
 declare global {
@@ -1627,51 +1627,16 @@ app.get('/sync/status', async (req: Request, res: Response) => {
             
             console.log('Admin: Detected Plaid environment from token:', plaidEnv, '(token starts with:', firstToken.token.substring(0, 20) + '...)');
             
-            // Use appropriate Plaid credentials based on environment
-            let plaidClientId, plaidSecret;
-            if (plaidEnv === 'production') {
-              plaidClientId = process.env.PLAID_CLIENT_ID_PROD;
-              plaidSecret = process.env.PLAID_SECRET_PROD;
-              console.log('Admin: Using production Plaid credentials (*_PROD)');
-              console.log('Admin: PLAID_CLIENT_ID_PROD length:', plaidClientId ? plaidClientId.length : 'undefined');
-              console.log('Admin: PLAID_SECRET_PROD length:', plaidSecret ? plaidSecret.length : 'undefined');
-            } else {
-              plaidClientId = process.env.PLAID_CLIENT_ID;
-              plaidSecret = process.env.PLAID_SECRET;
-              console.log('Admin: Using sandbox Plaid credentials (regular)');
-              console.log('Admin: PLAID_CLIENT_ID length:', plaidClientId ? plaidClientId.length : 'undefined');
-              console.log('Admin: PLAID_SECRET length:', plaidSecret ? plaidSecret.length : 'undefined');
-            }
-            
-            console.log('Admin: Final plaidClientId:', plaidClientId ? plaidClientId.substring(0, 8) + '...' : 'undefined');
-            console.log('Admin: Final plaidSecret:', plaidSecret ? plaidSecret.substring(0, 8) + '...' : 'undefined');
-            
-            console.log('Admin: PlaidEnvironments[plaidEnv]:', PlaidEnvironments[plaidEnv]);
-            console.log('Admin: plaidEnv value:', plaidEnv);
-            
-            const configuration = new Configuration({
-              basePath: PlaidEnvironments[plaidEnv],
-              baseOptions: {
-                headers: {
-                  'PLAID-CLIENT-ID': plaidClientId,
-                  'PLAID-SECRET': plaidSecret,
-                },
-              },
-            });
-            
-            console.log('Admin: Configuration object:', {
-              basePath: configuration.basePath,
-              hasHeaders: !!configuration.baseOptions?.headers,
-              clientIdHeader: configuration.baseOptions?.headers?.['PLAID-CLIENT-ID'] ? 'set' : 'missing',
-              secretHeader: configuration.baseOptions?.headers?.['PLAID-SECRET'] ? 'set' : 'missing'
-            });
-            
-            const plaidClient = new PlaidApi(configuration);
+            // Use the shared Plaid client from plaid.ts instead of creating a new one
+            console.log('Admin: Using shared Plaid client from plaid.ts module');
 
             // Try to get live account data from the first access token
             console.log('Admin: Fetching live accounts from Plaid using token:', firstToken.id);
             
-            const accountsResponse = await plaidClient.accountsGet({
+            // Import and use the working Plaid client from plaid.ts instead of creating a new one
+            const { plaidClient: workingPlaidClient } = await import('./plaid');
+            
+            const accountsResponse = await workingPlaidClient.accountsGet({
               access_token: firstToken.token,
             });
 

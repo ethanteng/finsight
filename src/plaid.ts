@@ -59,6 +59,9 @@ console.log('Plaid Configuration:', {
 
 const plaidClient = new PlaidApi(configuration);
 
+// Export the plaidClient for use in other modules
+export { plaidClient };
+
 // Safety check: Prevent real Plaid API calls in test/CI environments
 if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
   console.log('Plaid: Test/CI environment detected - using mock responses');
