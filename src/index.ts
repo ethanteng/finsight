@@ -1564,11 +1564,15 @@ app.get('/sync/status', async (req: Request, res: Response) => {
 
         console.log('Admin: Fetching financial data for user:', userId);
         
-        // Get user profile
+        // Get user profile using ProfileManager to get the current encrypted profile
+        const { ProfileManager } = await import('./profile/manager');
+        const profileManager = new ProfileManager();
+        const currentProfileText = await profileManager.getOrCreateProfile(userId);
+        
+        // Get user profile metadata for lastUpdated
         const userProfile = await prisma.userProfile.findUnique({
           where: { userId },
           select: {
-            profileText: true,
             lastUpdated: true
           }
         });
@@ -1770,7 +1774,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
 
         const financialData = {
           profile: {
-            text: userProfile?.profileText || 'No profile available',
+            text: currentProfileText || 'No profile available - user has not had any conversations yet',
             lastUpdated: userProfile?.lastUpdated || null
           },
           institutions: institutions,
