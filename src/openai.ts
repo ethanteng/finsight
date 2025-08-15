@@ -1076,7 +1076,7 @@ CRITICAL DATA INTERPRETATION RULES:
 - CRITICAL: NEVER infer credit utilization percentages without knowing the actual credit limit
 - CRITICAL: If you see "maxed out" or similar language in previous conversations, IGNORE it and only use current, verified data
 
-USER TIER: ${tierInfo.currentTier.toUpperCase()}
+USER TIER: ${String(tierInfo.currentTier).toUpperCase()}
 
 AVAILABLE DATA SOURCES:
 ${tierInfo.availableSources.length > 0 ? tierInfo.availableSources.map(source => `• ${source}`).join('\n') : '• Account data only'}
@@ -1139,6 +1139,47 @@ RESPONSE FORMATTING:
 - Focus on the user's specific financial situation and goals
 - Use the enhanced market context to provide more informed recommendations
 - When using search results, prioritize the most recent and relevant information
+
+CALCULATION AND MATHEMATICAL FORMATTING:
+- For financial calculations, use clear step-by-step breakdowns with numbered steps
+- Display mathematical formulas in \`code blocks\` for clarity
+- Use **bold** for final calculated values and key percentages
+- Show intermediate calculation steps for complex ratios (e.g., "Step 1: Calculate monthly income", "Step 2: Sum monthly debt payments")
+- Format currency values consistently: $X,XXX.XX
+- Format percentages with 2 decimal places when appropriate (e.g., 15.67%)
+- For ratios and percentages, show both the calculation and the result clearly
+- Use structured formatting for multi-step calculations:
+  \`\`\`
+  Step 1: [Calculation description]
+  Step 2: [Calculation description]
+  Final Result: [Bold final value]
+  \`\`\`
+- Always verify calculations by showing the math: "Verification: $X ÷ $Y = Z%"
+- For debt-to-income ratios, clearly separate numerator (debt) and denominator (income)
+- Use bullet points to list individual debt components before summing
+- Show both the raw calculation and the percentage result
+
+VISUAL CALCULATION ENHANCEMENTS:
+- Use "Step 1:", "Step 2:", etc. to trigger calculation block styling
+- Include "Verification:" text to trigger verification block styling
+- Use mathematical expressions with = signs and currency/percentage symbols to trigger math expression styling
+- Structure debt-to-income calculations as:
+  Step 1: Calculate monthly debt payments
+  - Credit card balance: $X.XX
+  - Other debts: $Y.YY
+  Total monthly debt: $Z.ZZ
+  
+  Step 2: Calculate monthly income
+  Annual income: $X,XXX.XX
+  Monthly income: $X,XXX.XX ÷ 12 = $Y,YYY.YY
+  
+  Step 3: Calculate DTI ratio
+  DTI = ($Z.ZZ ÷ $Y,YYY.YY) × 100 = X.XX%
+  
+  Final Result: Your DTI ratio is **X.XX%**
+  
+  Verification: $Z.ZZ ÷ $Y,YYY.YY = X.XX%
+
 ${!searchContext && tierInfo.unavailableSources.length > 0 ? `
 - Be helpful with current tier limitations
 - When relevant, mention upgrade benefits for unavailable features` : ''}`;
@@ -1750,7 +1791,7 @@ CRITICAL DATA INTERPRETATION RULES:
 - CRITICAL: NEVER infer credit utilization percentages without knowing the actual credit limit
 - CRITICAL: If you see "maxed out" or similar language in previous conversations, IGNORE it and only use current, verified data
 
-USER TIER: ${tierInfo.currentTier.toUpperCase()}
+USER TIER: ${String(tierInfo.currentTier).toUpperCase()}
 
 AVAILABLE DATA SOURCES:
 ${tierInfo.availableSources.length > 0 ? tierInfo.availableSources.map(source => `• ${source}`).join('\n') : '• Account data only'}

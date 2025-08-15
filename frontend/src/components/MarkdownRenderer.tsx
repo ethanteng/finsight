@@ -15,7 +15,7 @@ interface MarkdownRendererProps {
 
 interface CodeComponentProps {
   className?: string;
-  children?: React.ReactNode;
+  children: React.ReactNode;
 }
 
 export default function MarkdownRenderer({ children, className = '' }: MarkdownRendererProps) {
@@ -65,24 +65,20 @@ export default function MarkdownRenderer({ children, className = '' }: MarkdownR
       // Check if this part looks like LaTeX (starts and ends with [])
       if (part.startsWith('[') && part.endsWith(']')) {
         try {
-          // Extract the LaTeX content (remove the brackets)
-          const latexContent = part.slice(1, -1);
-          
-          // Check if it contains display math indicators
-          if (latexContent.includes('\\text{') || latexContent.includes('\\left(') || latexContent.includes('\\right(')) {
-            // This looks like display math
+          const mathContent = part.slice(1, -1);
+          // Check if it's a block math expression (contains \frac, \text, etc.)
+          if (mathContent.includes('\\frac') || mathContent.includes('\\text') || mathContent.includes('\\left') || mathContent.includes('\\right')) {
             return (
               <div key={index} className="math-block">
-                <BlockMath math={latexContent} />
+                <BlockMath math={mathContent} />
               </div>
             );
           } else {
-            // This looks like inline math
-            return <InlineMath key={index} math={latexContent} />;
+            // Inline math
+            return <InlineMath key={index} math={mathContent} />;
           }
         } catch (error) {
-          // If KaTeX can't parse it, return as regular text
-          console.warn('Failed to parse LaTeX:', part, error);
+          // If KaTeX fails, fall back to regular text
           return <span key={index}>{part}</span>;
         }
       }
@@ -131,6 +127,47 @@ export default function MarkdownRenderer({ children, className = '' }: MarkdownR
                   {children}
                 </blockquote>
               ),
+              // Enhanced calculation display
+              p: ({ children, ...props }) => {
+                const content = children?.toString() || '';
+                
+                // Check if this paragraph contains calculation patterns
+                if (content.includes('Step 1:') || content.includes('Step 2:') || content.includes('Final Result:')) {
+                  return (
+                    <div className="calculation-block bg-gray-800 border border-gray-600 rounded-lg p-4 my-4" {...props}>
+                      {children}
+                    </div>
+                  );
+                }
+                
+                // Check if this paragraph contains mathematical expressions
+                if (content.includes('=') && (content.includes('$') || content.includes('%'))) {
+                  return (
+                    <div className="math-expression bg-gray-800 border border-gray-600 rounded-lg p-3 my-3" {...props}>
+                      {children}
+                    </div>
+                  );
+                }
+                
+                // Check if this paragraph contains verification text
+                if (content.includes('Verification:') || content.includes('verification:')) {
+                  return (
+                    <div className="verification-block bg-green-900/20 border border-green-500/50 rounded-lg p-3 my-3" {...props}>
+                      <span className="text-green-400 font-medium">✓ </span>
+                      {children}
+                    </div>
+                  );
+                }
+                
+                // Regular paragraph
+                return <p className="text-gray-300" {...props}>{children}</p>;
+              },
+              // Enhanced strong/bold text for financial values
+              strong: ({ children, ...props }) => (
+                <strong className="text-white font-semibold bg-blue-900/30 px-1 py-0.5 rounded" {...props}>
+                  {children}
+                </strong>
+              ),
             }}
           >
             {part}
@@ -141,7 +178,7 @@ export default function MarkdownRenderer({ children, className = '' }: MarkdownR
   };
 
   return (
-    <div className={`text-gray-300 ${className}`}>
+    <div className="markdown-renderer">
       {processMathExpressions(processedText)}
     </div>
   );
