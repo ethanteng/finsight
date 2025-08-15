@@ -18,6 +18,9 @@ model User {
   lastLoginAt            DateTime?
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
+  stripeCustomerId       String?
+  subscriptionExpiresAt  DateTime?
+  subscriptionStatus     String                  @default("inactive")
   accessTokens           AccessToken[]
   accounts               Account[]
   conversations          Conversation[]
@@ -26,6 +29,7 @@ model User {
   emailVerificationCodes EmailVerificationCode[]
   encryptedUserData      EncryptedUserData?
   passwordResetTokens    PasswordResetToken[]
+  subscriptions          subscriptions[]
   profile                UserProfile?
 
   @@map("users")
@@ -293,4 +297,30 @@ model EncryptedEmailVerificationCode {
   code          EmailVerificationCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
 
   @@map("encrypted_email_verification_codes")
+}
+
+model subscription_events {
+  id             String         @id
+  subscriptionId String?
+  stripeEventId  String         @unique
+  eventType      String
+  eventData      Json
+  processedAt    DateTime       @default(now())
+  subscriptions  subscriptions? @relation(fields: [subscriptionId], references: [id])
+}
+
+model subscriptions {
+  id                   String                @id
+  userId               String
+  stripeCustomerId     String
+  stripeSubscriptionId String                @unique
+  tier                 String
+  status               String
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean               @default(false)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime
+  subscription_events  subscription_events[]
+  users                User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
