@@ -269,6 +269,7 @@ export class StripeService {
     console.log(`Subscription paused: ${subscriptionId}`);
 
     // Update subscription status
+    const prisma = getPrismaClient();
     await prisma.subscription.update({
       where: { stripeSubscriptionId: subscriptionId },
       data: {
@@ -305,6 +306,7 @@ export class StripeService {
       console.log(`Payment succeeded for subscription: ${subscriptionId}`);
 
       // Update subscription status to active
+      const prisma = getPrismaClient();
       await prisma.subscription.update({
         where: { stripeSubscriptionId: subscriptionId },
         data: {
@@ -340,6 +342,7 @@ export class StripeService {
       console.log(`Payment failed for subscription: ${subscriptionId}`);
 
       // Update subscription status to past_due
+      const prisma = getPrismaClient();
       await prisma.subscription.update({
         where: { stripeSubscriptionId: subscriptionId },
         data: {
@@ -375,6 +378,7 @@ export class StripeService {
       console.log(`Payment action required for subscription: ${subscriptionId}`);
 
       // Update subscription status to incomplete
+      const prisma = getPrismaClient();
       await prisma.subscription.update({
         where: { stripeSubscriptionId: subscriptionId },
         data: {
@@ -422,6 +426,7 @@ export class StripeService {
     subscriptionId?: string
   ): Promise<void> {
     try {
+      const prisma = getPrismaClient();
       await prisma.subscriptionEvent.create({
         data: {
           stripeEventId,
