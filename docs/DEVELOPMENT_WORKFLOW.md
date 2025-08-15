@@ -597,9 +597,9 @@ echo $DATABASE_URL
 
 This workflow ensures consistent, reliable development and deployment while preventing common issues like schema drift. 
 
-## 🚨 **Schema Drift Prevention - Real Example**
+## 🚨 **Schema Drift Prevention - Real Examples**
 
-### **The Profile Encryption Incident (August 2025)**
+### **Example 1: The Profile Encryption Incident (August 2025)**
 
 **What Happened:**
 We experienced a critical schema drift issue when implementing profile encryption at rest. Here's the exact sequence that caused the problem:
@@ -648,38 +648,160 @@ git push origin main
 # - Everything works!
 ```
 
-#### **🚨 The Emergency Recovery (What We Had to Do)**
+### **Example 2: The Stripe Integration Incident (August 2025)**
+
+**What Happened:**
+We experienced a critical schema drift issue when working on Stripe subscription integration in a feature branch. Here's exactly how it happened:
+
+#### **❌ The Wrong Sequence (What We Did)**
 
 ```bash
-# 1. Identified the drift
-npx prisma migrate status  # Showed pending migration
-npx prisma db pull  # Showed missing columns
+# 1. Started working on Stripe integration in feature branch
+git checkout -b feature/stripe-integration
 
-# 2. Manual SQL execution in production
-npx prisma db execute --stdin --schema=./prisma/schema.prisma
-# Pasted ALTER TABLE statements manually
+# 2. Added Stripe models to schema.prisma locally
+# - subscription_events table
+# - subscriptions table  
+# - Stripe fields in User model
 
-# 3. Regenerated Prisma client
-npx prisma generate
+# 3. ❌ Created migrations locally but never committed them
+npx prisma migrate dev --name add_stripe_models
+# This created tables in LOCAL database only
 
-# 4. Cleared build cache and redeployed
+# 4. ❌ Somehow production database got Stripe tables
+# (Possibly from manual deployment, different branch, or database restore)
+
+# 5. ❌ Merged feature branch to main WITHOUT migrations
+git checkout main
+git merge feature/stripe-integration
+# Code had Stripe models, but no migration files
+
+# 6. ❌ Production deployment failed
+# Error: "relation 'encrypted_user_data' already exists"
+# Migration conflict between local and production
 ```
 
-#### **💡 Key Lessons Learned**
+#### **✅ The Correct Sequence (What We Should Have Done)**
 
-1. **Migration Order is Critical**: Schema must be updated before code deployment
-2. **Local Testing is Mandatory**: Never assume migrations will work in production
-3. **Commit Everything Together**: Migration files must be committed with code changes
-4. **CI/CD Integration**: Let the deployment pipeline handle production migrations
+```bash
+# 1. Start feature branch
+git checkout -b feature/stripe-integration
 
-#### **🛡️ Prevention Checklist for Future**
+# 2. Sync with production schema FIRST
+npx prisma db pull  # Get latest production schema
+npx prisma generate
 
-- [ ] **Migration created and tested locally** ✅
-- [ ] **Full migration cycle tested** (reset + deploy) ✅
-- [ ] **Migration files committed to git** ✅
-- [ ] **Schema status verified** ✅
-- [ ] **No pending migrations detected** ✅
-- [ ] **All tests passing with new schema** ✅
-- [ ] **Migration and code deployed together** ✅
+# 3. Add Stripe models to schema.prisma
 
-**Remember**: Schema drift is expensive to fix and can cause production outages. Always follow the correct sequence: **Schema First, Code Second**. 
+# 4. Create and test migration locally
+npx prisma migrate dev --name add_stripe_subscription_models
+npx prisma migrate reset  # Test full migration cycle
+npx prisma migrate deploy  # Verify it works
+
+# 5. ✅ COMMIT MIGRATION FILES WITH CODE
+git add prisma/migrations/
+git add prisma/schema.prisma
+git add src/
+git commit -m "feat: add Stripe subscription models + migration"
+git push origin feature/stripe-integration
+
+# 6. ✅ Merge everything together
+git checkout main
+git merge feature/stripe-integration
+# Now main has: code + schema + migrations
+
+# 7. ✅ Deploy with everything in sync
+git push origin main
+# CI/CD will: apply migrations first, then deploy code
+```
+
+#### **🚨 How Feature Branch Database Conflicts Happen**
+
+**Common Scenarios:**
+
+1. **Local Development Without Committing Migrations**
+   ```bash
+   # ❌ WRONG: Create migration locally, never commit
+   npx prisma migrate dev --name add_stripe_models
+   # Tables created in local DB, but migration files not in git
+   
+   # ❌ WRONG: Deploy code expecting tables that don't exist in production
+   git push origin main  # Code deployed, but no migration files
+   ```
+
+2. **Production Database Gets Out of Sync**
+   ```bash
+   # ❌ WRONG: Someone deploys from wrong branch
+   git checkout feature/stripe-integration
+   # Deploy from feature branch (with Stripe models)
+   # Then merge to main without the migrations
+   ```
+
+3. **Manual Database Changes**
+   ```bash
+   # ❌ WRONG: Manual SQL execution in production
+   CREATE TABLE subscription_events (...);
+   # But no migration file in git
+   # Result: Schema drift
+   ```
+
+4. **Database Restore/Backup Issues**
+   ```bash
+   # ❌ WRONG: Restore database with different schema
+   # Production DB has Stripe tables from backup
+   # But migration history doesn't match
+   ```
+
+#### **🛡️ Prevention Checklist for Feature Branches**
+
+**Before Starting Feature Development:**
+- [ ] **Sync with production schema**: `npx prisma db pull` ✅
+- [ ] **Generate Prisma client**: `npx prisma generate` ✅
+- [ ] **Verify clean state**: `npx prisma migrate status` ✅
+
+**During Feature Development:**
+- [ ] **Create migrations for schema changes**: `npx prisma migrate dev` ✅
+- [ ] **Test migrations locally**: `npx prisma migrate reset` ✅
+- [ ] **Verify migration works**: `npx prisma migrate deploy` ✅
+- [ ] **Commit migration files**: Always commit `prisma/migrations/` ✅
+
+**Before Merging Feature Branch:**
+- [ ] **Migration files committed**: Check `git status` shows migration files ✅
+- [ ] **Schema changes committed**: Check `git status` shows schema changes ✅
+- [ ] **All tests passing**: Run tests with new schema ✅
+- [ ] **Migration history clean**: `npx prisma migrate status` shows "up to date" ✅
+
+**After Merging to Main:**
+- [ ] **Migration files in main branch**: Verify `prisma/migrations/` contains new files ✅
+- [ ] **Schema changes in main branch**: Verify `schema.prisma` has new models ✅
+- [ ] **Deployment includes migrations**: CI/CD should run `npx prisma migrate deploy` ✅
+
+#### **💡 Key Lessons from Stripe Incident**
+
+1. **Feature Branch Isolation**: Database changes in feature branches must be committed
+2. **Migration File Commitment**: Never develop without committing migration files
+3. **Production Schema Sync**: Always sync with production before starting new features
+4. **Complete Feature Delivery**: Code + Schema + Migrations must be delivered together
+5. **CI/CD Integration**: Let deployment pipeline handle production migrations
+
+#### **🔧 Recovery Steps (If It Happens Again)**
+
+```bash
+# 1. Identify the drift
+npx prisma migrate status
+npx prisma db pull
+
+# 2. Create missing migration files
+npx prisma migrate dev --name fix_missing_tables
+
+# 3. Test migration locally
+npx prisma migrate reset
+npx prisma migrate deploy
+
+# 4. Commit and deploy
+git add prisma/migrations/
+git commit -m "fix: add missing migration for existing tables"
+git push origin main
+```
+
+**Remember**: Feature branch development requires extra care with database changes. Always commit migrations with code changes to prevent schema drift! 
