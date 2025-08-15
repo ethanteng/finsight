@@ -35,7 +35,8 @@ describe('StripeService', () => {
     mockPrisma = {
       user: {
         findFirst: jest.fn(),
-        update: jest.fn()
+        update: jest.fn(),
+        findUnique: jest.fn()
       },
       subscription: {
         create: jest.fn(),
@@ -251,6 +252,143 @@ describe('StripeService', () => {
           subscriptionExpiresAt: null
         }
       });
+    });
+  });
+
+  describe('getUserSubscriptionStatus', () => {
+    it('should return active subscription status', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user123',
+        tier: 'premium',
+        subscriptionStatus: 'active',
+        subscriptionExpiresAt: new Date('2025-12-31'),
+        subscriptions: [{
+          id: 'sub123',
+          status: 'active'
+        }]
+      });
+
+      const result = await stripeService.getUserSubscriptionStatus('user123');
+
+      expect(result).toEqual({
+        tier: 'premium',
+        status: 'active',
+        expiresAt: new Date('2025-12-31'),
+        gracePeriodDays: undefined,
+        accessLevel: 'full',
+        upgradeRequired: false,
+        message: 'Active premium subscription'
+      });
+    });
+
+    it('should handle past due subscription with grace period', async () => {
+      const gracePeriodEnd = new Date(Date.now() + (5 * 24 * 60 * 60 * 1000)); // 5 days from now
+      
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user123',
+        tier: 'standard',
+        subscriptionStatus: 'past_due',
+        subscriptionExpiresAt: gracePeriodEnd,
+        subscriptions: [{
+          id: 'sub123',
+          status: 'past_due'
+        }]
+      });
+
+      const result = await stripeService.getUserSubscriptionStatus('user123');
+
+      expect(result.accessLevel).toBe('limited');
+      expect(result.upgradeRequired).toBe(true);
+      expect(result.gracePeriodDays).toBeGreaterThan(0);
+      expect(result.message).toContain('Limited access for');
+    });
+
+    it('should handle expired subscription', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user123',
+        tier: 'premium',
+        subscriptionStatus: 'canceled',
+        subscriptionExpiresAt: new Date('2024-01-01'),
+        subscriptions: []
+      });
+
+      const result = await stripeService.getUserSubscriptionStatus('user123');
+
+      expect(result.accessLevel).toBe('none');
+      expect(result.upgradeRequired).toBe(true);
+      expect(result.message).toContain('Subscription expired');
+    });
+
+    it('should handle inactive subscription', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user123',
+        tier: 'starter',
+        subscriptionStatus: 'inactive',
+        subscriptionExpiresAt: null,
+        subscriptions: []
+      });
+
+      const result = await stripeService.getUserSubscriptionStatus('user123');
+
+      expect(result.accessLevel).toBe('limited');
+      expect(result.upgradeRequired).toBe(false);
+      expect(result.message).toContain('Basic features available');
+    });
+  });
+
+  describe('canAccessFeature', () => {
+    it('should allow access for sufficient tier and active subscription', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user123',
+        tier: 'premium',
+        subscriptionStatus: 'active',
+        subscriptionExpiresAt: new Date('2025-12-31'),
+        subscriptions: [{
+          id: 'sub123',
+          status: 'active'
+        }]
+      });
+
+      const result = await stripeService.canAccessFeature('user123', 'standard');
+
+      expect(result.canAccess).toBe(true);
+      expect(result.reason).toBe('Access granted');
+      expect(result.upgradeRequired).toBe(false);
+    });
+
+    it('should deny access for insufficient tier', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user123',
+        tier: 'starter',
+        subscriptionStatus: 'active',
+        subscriptionExpiresAt: new Date('2025-12-31'),
+        subscriptions: [{
+          id: 'sub123',
+          status: 'active'
+        }]
+      });
+
+      const result = await stripeService.canAccessFeature('user123', 'premium');
+
+      expect(result.canAccess).toBe(false);
+      expect(result.reason).toContain('requires premium tier');
+      expect(result.upgradeRequired).toBe(true);
+    });
+
+    it('should deny access for inactive subscription', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user123',
+        tier: 'premium',
+        subscriptionStatus: 'canceled',
+        subscriptionExpiresAt: new Date('2024-01-01'),
+        subscriptions: []
+      });
+
+      const result = await stripeService.canAccessFeature('user123', 'starter');
+
+      expect(result.canAccess).toBe(false);
+      expect(result.reason).toContain('Subscription expired');
+      expect(result.upgradeRequired).toBe(true);
     });
   });
 });

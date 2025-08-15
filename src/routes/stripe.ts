@@ -169,6 +169,70 @@ router.get('/plans', async (req, res) => {
 });
 
 /**
+ * GET /api/stripe/subscription-status
+ * Get current user's subscription status and access level
+ */
+router.get('/subscription-status', async (req, res) => {
+  try {
+    // This endpoint requires authentication
+    // The actual user ID should come from the auth middleware
+    const userId = req.body.userId || req.query.userId;
+    
+    if (!userId) {
+      return res.status(400).json({
+        error: 'User ID required',
+        code: 'USER_ID_REQUIRED'
+      });
+    }
+
+    // Get subscription status from Stripe service
+    const subscriptionStatus = await stripeService.getUserSubscriptionStatus(userId);
+    
+    res.json({
+      success: true,
+      subscription: subscriptionStatus
+    });
+  } catch (error) {
+    console.error('Error getting subscription status:', error);
+    res.status(500).json({
+      error: 'Failed to get subscription status',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * POST /api/stripe/check-feature-access
+ * Check if user can access a specific feature
+ */
+router.post('/check-feature-access', async (req, res) => {
+  try {
+    const { userId, requiredTier } = req.body;
+    
+    if (!userId || !requiredTier) {
+      return res.status(400).json({
+        error: 'Missing required fields: userId, requiredTier',
+        code: 'MISSING_REQUIRED_FIELDS'
+      });
+    }
+
+    // Check feature access
+    const accessResult = await stripeService.canAccessFeature(userId, requiredTier);
+    
+    res.json({
+      success: true,
+      access: accessResult
+    });
+  } catch (error) {
+    console.error('Error checking feature access:', error);
+    res.status(500).json({
+      error: 'Failed to check feature access',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
  * GET /api/stripe/config
  * Get Stripe configuration for frontend
  */

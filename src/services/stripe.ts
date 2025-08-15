@@ -368,12 +368,24 @@ export class StripeService {
       });
 
       if (subscriptionRecord?.user) {
+        // Calculate grace period dates
+        const now = new Date();
+        const gracePeriodDays = 7; // Default grace period
+        const gracePeriodEnd = new Date(now.getTime() + (gracePeriodDays * 24 * 60 * 60 * 1000));
+        
         await prisma.user.update({
           where: { id: subscriptionRecord.user.id },
           data: {
             subscriptionStatus: 'past_due',
+            // Store grace period information for access control
+            subscriptionExpiresAt: gracePeriodEnd,
           }
         });
+
+        console.log(`User ${subscriptionRecord.user.id} entered grace period until ${gracePeriodEnd.toISOString()}`);
+        
+        // TODO: Send notification to user about payment failure
+        // This could be an email notification or in-app alert
       }
     }
   }
@@ -403,14 +415,19 @@ export class StripeService {
         include: { user: true }
       });
 
-        if (subscriptionRecord?.user) {
-          await prisma.user.update({
-            where: { id: subscriptionRecord.user.id },
-            data: {
-              subscriptionStatus: 'incomplete',
-            }
-          });
-        }
+      if (subscriptionRecord?.user) {
+        await prisma.user.update({
+          where: { id: subscriptionRecord.user.id },
+          data: {
+            subscriptionStatus: 'incomplete',
+          }
+        });
+
+        console.log(`User ${subscriptionRecord.user.id} requires payment action`);
+        
+        // TODO: Send notification to user about required payment action
+        // This could be an email notification or in-app alert
+      }
     }
   }
 
@@ -425,6 +442,9 @@ export class StripeService {
 
     // This is just a notification event, no action needed
     // The subscription will automatically transition to active when the trial ends
+    
+    // TODO: Send notification to user about trial ending
+    // This could be an email notification or in-app alert
   }
 
   /**
@@ -449,6 +469,146 @@ export class StripeService {
     } catch (error) {
       console.error('Error logging webhook event:', error);
       // Don't throw here as this is just logging
+    }
+  }
+
+  /**
+   * Get user's current subscription status and access level
+   */
+  async getUserSubscriptionStatus(userId: string): Promise<{
+    tier: string;
+    status: string;
+    expiresAt?: Date;
+    gracePeriodDays?: number;
+    accessLevel: 'full' | 'limited' | 'none';
+    upgradeRequired: boolean;
+    message: string;
+  }> {
+    try {
+      const prisma = getPrismaClient();
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+          subscriptions: {
+            where: {
+              status: { in: ['active', 'trialing', 'past_due'] }
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 1
+          }
+        }
+      });
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      const currentTier = user.tier;
+      const subscriptionStatus = user.subscriptionStatus;
+      const subscriptionExpiresAt = user.subscriptionExpiresAt;
+      const hasActiveSubscription = user.subscriptions.length > 0;
+
+      // Determine access level and status
+      let accessLevel: 'full' | 'limited' | 'none' = 'none';
+      let upgradeRequired = false;
+      let message = '';
+      let gracePeriodDays: number | undefined;
+
+      if (subscriptionStatus === 'active' && subscriptionExpiresAt && new Date() < subscriptionExpiresAt) {
+        accessLevel = 'full';
+        message = `Active ${currentTier} subscription`;
+      } else if (subscriptionStatus === 'past_due') {
+        accessLevel = 'limited';
+        upgradeRequired = true;
+        
+        if (subscriptionExpiresAt) {
+          const now = new Date();
+          const daysRemaining = Math.ceil((subscriptionExpiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          gracePeriodDays = Math.max(0, daysRemaining);
+          
+          if (gracePeriodDays > 0) {
+            message = `Payment past due. Limited access for ${gracePeriodDays} more days.`;
+          } else {
+            message = 'Payment past due. Access will be revoked soon.';
+            accessLevel = 'none';
+          }
+        } else {
+          message = 'Payment past due. Please update payment method.';
+        }
+      } else if (subscriptionStatus === 'canceled' || (subscriptionExpiresAt && new Date() > subscriptionExpiresAt)) {
+        accessLevel = 'none';
+        upgradeRequired = true;
+        message = 'Subscription expired. Please renew to continue.';
+      } else if (subscriptionStatus === 'inactive' || !hasActiveSubscription) {
+        accessLevel = currentTier === 'starter' ? 'limited' : 'none';
+        upgradeRequired = currentTier !== 'starter';
+        message = currentTier === 'starter' 
+          ? 'No active subscription. Basic features available.'
+          : 'No active subscription. Please subscribe to continue.';
+      } else {
+        accessLevel = 'limited';
+        message = `Subscription status: ${subscriptionStatus}`;
+      }
+
+      return {
+        tier: currentTier,
+        status: subscriptionStatus,
+        expiresAt: subscriptionExpiresAt || undefined,
+        gracePeriodDays,
+        accessLevel,
+        upgradeRequired,
+        message
+      };
+    } catch (error) {
+      console.error('Error getting user subscription status:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if user can access a specific feature based on tier and subscription status
+   */
+  async canAccessFeature(userId: string, requiredTier: string): Promise<{
+    canAccess: boolean;
+    reason: string;
+    upgradeRequired: boolean;
+    currentTier: string;
+    requiredTier: string;
+    subscriptionStatus: string;
+  }> {
+    try {
+      const subscriptionStatus = await this.getUserSubscriptionStatus(userId);
+      
+      // Check tier access
+      const tierHierarchy = ['starter', 'standard', 'premium'];
+      const userTierIndex = tierHierarchy.indexOf(subscriptionStatus.tier);
+      const requiredTierIndex = tierHierarchy.indexOf(requiredTier);
+      
+      const hasTierAccess = userTierIndex >= requiredTierIndex;
+      const hasSubscriptionAccess = subscriptionStatus.accessLevel !== 'none';
+      
+      const canAccess = hasTierAccess && hasSubscriptionAccess;
+      
+      let reason = '';
+      if (!hasTierAccess) {
+        reason = `Feature requires ${requiredTier} tier or higher. Current tier: ${subscriptionStatus.tier}`;
+      } else if (!hasSubscriptionAccess) {
+        reason = subscriptionStatus.message;
+      } else {
+        reason = 'Access granted';
+      }
+
+      return {
+        canAccess,
+        reason,
+        upgradeRequired: subscriptionStatus.upgradeRequired || !hasTierAccess,
+        currentTier: subscriptionStatus.tier,
+        requiredTier,
+        subscriptionStatus: subscriptionStatus.status
+      };
+    } catch (error) {
+      console.error('Error checking feature access:', error);
+      throw error;
     }
   }
 }
