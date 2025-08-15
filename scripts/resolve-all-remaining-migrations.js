@@ -12,15 +12,6 @@ console.log('🔧 Resolving ALL remaining failed migrations...');
 // List of migrations that need to be resolved
 const migrationsToResolve = [
   {
-    name: '20250815073301_init_after_reset',
-    description: 'Redundant - columns already exist in encrypted_profile_data table',
-    content: [
-      '-- Temporary migration for resolution',
-      '-- This migration is redundant - columns already exist',
-      '-- algorithm, iv, keyVersion, and tag columns are already in the table'
-    ]
-  },
-  {
     name: '20250815081729_add_stripe_subscription_models',
     description: 'Redundant - Stripe subscription tables already exist',
     content: [

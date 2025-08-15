@@ -4,13 +4,13 @@
 The deployment is failing because of **MULTIPLE failed migrations** that are blocking new migrations from being applied. This is a cascading failure pattern:
 
 1. `20250805183315_add_encrypted_data_tables` - Failed during previous deployment ✅ **RESOLVED**
-2. `20250815073301_init_after_reset` - Failed because it's trying to add columns that already exist
+2. `20250815073301_init_after_reset` - Failed because it's trying to add columns that already exist ✅ **RESOLVED**
 3. `20250815081729_add_stripe_subscription_models` - Failed because tables already exist
 4. `20250815081800_add_stripe_user_fields` - Failed because fields already exist
 5. **And potentially more...**
 
 ## The Solution
-We need to mark **ALL failed migrations** as resolved in production so that new migrations can be applied.
+We need to mark **ALL remaining failed migrations** as resolved in production so that new migrations can be applied.
 
 ## 🚀 **QUICK FIX: Use the Comprehensive Script (Recommended)**
 
@@ -28,22 +28,7 @@ This script will automatically resolve ALL remaining failed migrations!
 
 ### **Option 2: Manual Resolution (One by One)**
 
-#### **Step 1: Resolve init_after_reset migration**
-```bash
-# Create temporary migration file
-mkdir -p prisma/migrations/20250815073301_init_after_reset
-echo "-- Temporary migration for resolution" > prisma/migrations/20250815073301_init_after_reset/migration.sql
-echo "-- This migration is redundant - columns already exist" >> prisma/migrations/20250815073301_init_after_reset/migration.sql
-echo "-- algorithm, iv, keyVersion, and tag columns are already in the table" >> prisma/migrations/20250815073301_init_after_reset/migration.sql
-
-# Mark migration as resolved
-npx prisma migrate resolve --applied 20250815073301_init_after_reset
-
-# Clean up
-rm -rf prisma/migrations/20250815073301_init_after_reset
-```
-
-#### **Step 2: Resolve Stripe subscription models migration**
+#### **Step 1: Resolve Stripe subscription models migration**
 ```bash
 # Create temporary migration file
 mkdir -p prisma/migrations/20250815081729_add_stripe_subscription_models
@@ -58,7 +43,7 @@ npx prisma migrate resolve --applied 20250815081729_add_stripe_subscription_mode
 rm -rf prisma/migrations/20250815081729_add_stripe_subscription_models
 ```
 
-#### **Step 3: Resolve Stripe user fields migration**
+#### **Step 2: Resolve Stripe user fields migration**
 ```bash
 # Create temporary migration file
 mkdir -p prisma/migrations/20250815081800_add_stripe_user_fields
