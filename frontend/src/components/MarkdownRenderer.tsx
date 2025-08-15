@@ -15,7 +15,7 @@ interface MarkdownRendererProps {
 
 interface CodeComponentProps {
   className?: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 export default function MarkdownRenderer({ children, className = '' }: MarkdownRendererProps) {
@@ -107,7 +107,7 @@ export default function MarkdownRenderer({ children, className = '' }: MarkdownR
                 </li>
               ),
               // Better code block rendering
-              code: ({ className, children }: CodeComponentProps) => {
+              code: ({ className, children, ...props }: CodeComponentProps) => {
                 const isInline = !className?.includes('language-');
                 return !isInline ? (
                   <pre className="bg-gray-800 rounded-lg p-4 overflow-x-auto">
