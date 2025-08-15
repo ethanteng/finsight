@@ -1745,8 +1745,24 @@ app.get('/sync/status', async (req: Request, res: Response) => {
                       } else if (account.name.includes('American Express')) {
                         institutionName = 'American Express';
                       } else {
-                        // Extract first word as institution if no pattern matches
-                        institutionName = account.name.split(' ')[0];
+                        // Betterment accounts often have goal-based names like "Retirement - Roth IRA", "Mortgage Payoff Fund", etc.
+                        // Check for common Betterment account patterns
+                        const accountName = account.name.toLowerCase();
+                        if (accountName.includes('retirement') || 
+                            accountName.includes('mortgage') || 
+                            accountName.includes('travel') || 
+                            accountName.includes('healthcare') ||
+                            accountName.includes('bridge fund') ||
+                            (accountName.includes('fund') && accountName.includes('$')) ||
+                            accountName.includes('traditional ira') ||
+                            accountName.includes('roth ira') ||
+                            accountName.includes('taxable')) {
+                          // This looks like a Betterment account based on naming patterns
+                          institutionName = 'Betterment';
+                        } else {
+                          // Extract first word as institution if no pattern matches
+                          institutionName = account.name.split(' ')[0];
+                        }
                       }
                     }
                     
