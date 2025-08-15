@@ -1246,20 +1246,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
-    app.delete('/privacy/delete-all', async (req: Request, res: Response) => {
-      try {
-        // Delete all user data
-        await getPrismaClient().conversation.deleteMany();
-        await getPrismaClient().transaction.deleteMany();
-        await getPrismaClient().account.deleteMany();
-        await getPrismaClient().accessToken.deleteMany();
-        await getPrismaClient().syncStatus.deleteMany();
 
-        res.json({ success: true, message: 'All data deleted successfully' });
-      } catch (err) {
-        res.status(500).json({ error: 'Failed to delete data' });
-      }
-    });
 
     app.delete('/privacy/delete-all-data', requireAuth, async (req: Request, res: Response) => {
       try {
@@ -1267,29 +1254,98 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         if (!userId) {
           return res.status(401).json({ error: 'Authentication required' });
         }
+
+        const { getPrismaClient } = await import('./prisma-client');
+        const prisma = getPrismaClient();
         
-        // Delete only the authenticated user's data
-        await getPrismaClient().conversation.deleteMany({
+        // Get user info before deletion for logging
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { id: true, email: true }
+        });
+        
+        if (!user) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+        
+        console.log('User deleting all data:', user.email);
+        
+        // Delete user data in the correct order (respecting foreign key constraints)
+        // 1. Delete conversations (references users)
+        await prisma.conversation.deleteMany({
           where: { userId }
         });
-        await getPrismaClient().transaction.deleteMany({
+        
+        // 2. Delete transactions (references accounts)
+        await prisma.transaction.deleteMany({
           where: { account: { userId } }
         });
-        await getPrismaClient().account.deleteMany({
+        
+        // 3. Delete accounts (references users)
+        await prisma.account.deleteMany({
           where: { userId }
         });
-        await getPrismaClient().accessToken.deleteMany({
+        
+        // 4. Delete access tokens (references users)
+        await prisma.accessToken.deleteMany({
           where: { userId }
         });
-        await getPrismaClient().syncStatus.deleteMany({
+        
+        // 5. Delete sync statuses (references users)
+        await prisma.syncStatus.deleteMany({
           where: { userId }
         });
-        await getPrismaClient().userProfile.deleteMany({
+        
+        // 6. Delete privacy settings (references users)
+        await prisma.privacySettings.deleteMany({
           where: { userId }
         });
+        
+        // 7. Delete encrypted profile data first (references userProfile)
+        await prisma.encrypted_profile_data.deleteMany({
+          where: { 
+            profileHash: {
+              in: await prisma.userProfile.findMany({
+                where: { userId },
+                select: { profileHash: true }
+              }).then(profiles => profiles.map(p => p.profileHash))
+            }
+          }
+        });
+        
+        // 8. Delete user profile (references users)
+        await prisma.userProfile.deleteMany({
+          where: { userId }
+        });
+        
+        // 9. Delete encrypted user data (references users)
+        await prisma.encryptedUserData.deleteMany({
+          where: { userId }
+        });
+        
+        // 10. Delete password reset tokens (references users)
+        await prisma.passwordResetToken.deleteMany({
+          where: { userId }
+        });
+        
+        // 11. Delete email verification codes (references users)
+        await prisma.emailVerificationCode.deleteMany({
+          where: { userId }
+        });
+        
+        // 12. Finally, delete the user themselves (including login/email)
+        await prisma.user.delete({
+          where: { id: userId }
+        });
+        
+        console.log('Successfully deleted all data and account for user:', user.email);
 
-        res.json({ success: true, message: 'All data deleted successfully' });
+        res.json({ 
+          success: true, 
+          message: 'All data and account deleted successfully. You will need to create a new account to use the service again.' 
+        });
       } catch (err) {
+        console.error('Error deleting user data:', err);
         res.status(500).json({ error: 'Failed to delete data' });
       }
     });
@@ -1500,6 +1556,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
             id: true,
             email: true,
             tier: true,
+            isActive: true,
             createdAt: true,
             lastLoginAt: true,
             _count: {
@@ -2071,6 +2128,208 @@ if (require.main === module) {
     console.log('Cron job scheduled: market news context refresh every 4 hours');
   });
 }
+
+// Admin: Revoke user access (prevent login)
+app.put('/admin/revoke-user-access/:userId', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'Missing userId' });
+    }
+
+    const { getPrismaClient } = await import('./prisma-client');
+    const prisma = getPrismaClient();
+    
+    console.log('Admin: Revoking access for user:', userId);
+    
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, isActive: true }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Deactivate user account
+    await prisma.user.update({
+      where: { id: userId },
+      data: { isActive: false }
+    });
+    
+    console.log('Admin: Successfully revoked access for user:', user.email);
+    
+    res.json({ 
+      success: true, 
+      message: `Access revoked for user ${user.email}`,
+      user: {
+        id: user.id,
+        email: user.email,
+        isActive: false
+      }
+    });
+  } catch (error) {
+    console.error('Error revoking user access:', error);
+    res.status(500).json({ error: 'Failed to revoke user access' });
+  }
+});
+
+// Admin: Restore user access (re-enable login)
+app.put('/admin/restore-user-access/:userId', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'Missing userId' });
+    }
+
+    const { getPrismaClient } = await import('./prisma-client');
+    const prisma = getPrismaClient();
+    
+    console.log('Admin: Restoring access for user:', userId);
+    
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, isActive: true }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Reactivate user account
+    await prisma.user.update({
+      where: { id: userId },
+      data: { isActive: true }
+    });
+    
+    console.log('Admin: Successfully restored access for user:', user.email);
+    
+    res.json({ 
+      success: true, 
+      message: `Access restored for user ${user.email}`,
+      user: {
+        id: user.id,
+        email: user.email,
+        isActive: true
+      }
+    });
+  } catch (error) {
+    console.error('Error restoring user access:', error);
+    res.status(500).json({ error: 'Failed to restore user access' });
+  }
+});
+
+// Admin: Delete user account completely (including login/email)
+app.delete('/admin/delete-user-account/:userId', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'Missing userId' });
+    }
+
+    const { getPrismaClient } = await import('./prisma-client');
+    const prisma = getPrismaClient();
+    
+    console.log('Admin: Deleting account for user:', userId);
+    
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Delete user data in the correct order (respecting foreign key constraints)
+    // 1. Delete conversations (references users)
+    await prisma.conversation.deleteMany({
+      where: { userId }
+    });
+    
+    // 2. Delete transactions (references accounts)
+    await prisma.transaction.deleteMany({
+      where: { account: { userId } }
+    });
+    
+    // 3. Delete accounts (references users)
+    await prisma.account.deleteMany({
+      where: { userId }
+    });
+    
+    // 4. Delete access tokens (references users)
+    await prisma.accessToken.deleteMany({
+      where: { userId }
+    });
+    
+    // 5. Delete sync statuses (references users)
+    await prisma.syncStatus.deleteMany({
+      where: { userId }
+    });
+    
+    // 6. Delete privacy settings (references users)
+    await prisma.privacySettings.deleteMany({
+      where: { userId }
+    });
+    
+    // 7. Delete encrypted profile data first (references userProfile)
+    await prisma.encrypted_profile_data.deleteMany({
+      where: { 
+        profileHash: {
+          in: await prisma.userProfile.findMany({
+            where: { userId },
+            select: { profileHash: true }
+          }).then(profiles => profiles.map(p => p.profileHash))
+        }
+      }
+    });
+    
+    // 8. Delete user profile (references users)
+    await prisma.userProfile.deleteMany({
+      where: { userId }
+    });
+    
+    // 9. Delete encrypted user data (references users)
+    await prisma.encryptedUserData.deleteMany({
+      where: { userId }
+    });
+    
+    // 10. Delete password reset tokens (references users)
+    await prisma.passwordResetToken.deleteMany({
+      where: { userId }
+    });
+    
+    // 11. Delete email verification codes (references users)
+    await prisma.emailVerificationCode.deleteMany({
+      where: { userId }
+    });
+    
+    // 12. Finally, delete the user themselves
+    await prisma.user.delete({
+      where: { id: userId }
+    });
+    
+    console.log('Admin: Successfully deleted account for user:', user.email);
+    
+    res.json({ 
+      success: true, 
+      message: `Account completely deleted for user ${user.email}`,
+      deletedUser: {
+        id: user.id,
+        email: user.email
+      }
+    });
+  } catch (error) {
+    console.error('Error deleting user account:', error);
+    res.status(500).json({ error: 'Failed to delete user account' });
+  }
+});
 
 // Export app for testing
 export { app };

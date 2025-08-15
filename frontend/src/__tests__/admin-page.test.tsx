@@ -281,3 +281,484 @@ describe('AdminPage', () => {
     });
   });
 }); 
+
+describe('Admin User Management', () => {
+  beforeEach(() => {
+    // Mock all API calls to return appropriate data based on the URL
+    global.fetch = jest.fn().mockImplementation((url: string) => {
+      if (url.includes('/admin/production-users')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            users: [
+              {
+                id: 'user1',
+                email: 'test@example.com',
+                tier: 'starter',
+                createdAt: '2024-01-01T00:00:00Z',
+                lastLoginAt: '2024-01-02T00:00:00Z',
+                isActive: true,
+                _count: { conversations: 5 }
+              },
+              {
+                id: 'user2',
+                email: 'test2@example.com',
+                tier: 'premium',
+                createdAt: '2024-01-01T00:00:00Z',
+                lastLoginAt: null,
+                isActive: false,
+                _count: { conversations: 0 }
+              }
+            ]
+          })
+        });
+      } else if (url.includes('/admin/demo-sessions') || url.includes('/admin/production-sessions')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ sessions: [] })
+        });
+      } else if (url.includes('/admin/demo-conversations') || url.includes('/admin/production-conversations')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ conversations: [] })
+        });
+      } else if (url.includes('/market-news/context/')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            contextText: '',
+            dataSources: [],
+            keyEvents: [],
+            lastUpdate: '',
+            tier: 'starter'
+          })
+        });
+      } else {
+        // Default fallback
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({})
+        });
+      }
+    });
+  });
+
+  it('should display user management tab with user information', async () => {
+    // Mock all the API calls that happen on component mount
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ sessions: [] }) }) // demo-sessions
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ conversations: [] }) }) // demo-conversations
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ users: [] }) }) // production-sessions
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ conversations: [] }) }) // production-conversations
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ users: [] }) }) // production-users
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'starter' }) }) // market-news/context/starter
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'standard' }) }) // market-news/context/standard
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'premium' }) }); // market-news/context/premium
+
+    render(<AdminPage />);
+    
+    // Wait for data to load
+    await waitFor(() => {
+      expect(screen.queryByText('Loading admin data...')).not.toBeInTheDocument();
+    });
+
+    // Click on User Management tab
+    const userTab = screen.getByText('User Management');
+    fireEvent.click(userTab);
+
+    // Wait for user data to load
+    await waitFor(() => {
+      expect(screen.getByText('test@example.com')).toBeInTheDocument();
+      expect(screen.getByText('test2@example.com')).toBeInTheDocument();
+    });
+
+    // Check that active/inactive status is displayed
+    expect(screen.getByText('Active')).toBeInTheDocument();
+    expect(screen.getByText('Access Revoked')).toBeInTheDocument();
+  });
+
+  it('should allow revoking user access', async () => {
+    // Mock all the API calls that happen on component mount
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ sessions: [] }) }) // demo-sessions
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ conversations: [] }) }) // demo-conversations
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ users: [] }) }) // production-sessions
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ conversations: [] }) }) // production-conversations
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ 
+        users: [
+          {
+            id: 'user1',
+            email: 'test@example.com',
+            tier: 'starter',
+            createdAt: '2024-01-01T00:00:00Z',
+            lastLoginAt: '2024-01-02T00:00:00Z',
+            isActive: true,
+            _count: { conversations: 5 }
+          }
+        ]
+      }) }) // production-users
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'starter' }) }) // market-news/context/starter
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'standard' }) }) // market-news/context/standard
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], lastUpdate: '', tier: 'premium' }) }) // market-news/context/premium
+      // Mock the specific user data for this test
+      .mockResolvedValueOnce({ ok: true, json: async () => ({
+        users: [
+          {
+            id: 'user1',
+            email: 'test@example.com',
+            tier: 'starter',
+            createdAt: '2024-01-01T00:00:00Z',
+            lastLoginAt: '2024-01-02T00:00:00Z',
+            isActive: true,
+            _count: { conversations: 5 }
+          }
+        ]
+      }) })
+      // Mock the revoke access response
+      .mockResolvedValueOnce({ ok: true, json: async () => ({
+        success: true,
+        message: 'Access revoked for user test@example.com'
+      }) })
+      // Mock the updated user data after revoking (this will be called by loadUsersForManagement)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({
+        users: [
+          {
+            id: 'user1',
+            email: 'test@example.com',
+            tier: 'starter',
+            createdAt: '2024-01-01T00:00:00Z',
+            lastLoginAt: '2024-01-02T00:00:00Z',
+            isActive: false,
+            _count: { conversations: 5 }
+          }
+        ]
+      }) })
+      // Mock the production data refresh (this will be called by loadProductionData)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ users: [] }) }) // production-sessions
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ conversations: [] }) }); // production-conversations
+
+    render(<AdminPage />);
+    
+    // Wait for data to load
+    await waitFor(() => {
+      expect(screen.queryByText('Loading admin data...')).not.toBeInTheDocument();
+    });
+
+    // Navigate to User Management tab
+    const userTab = screen.getByText('User Management');
+    fireEvent.click(userTab);
+
+    // Wait for user data to load
+    await waitFor(() => {
+      expect(screen.getByText('test@example.com')).toBeInTheDocument();
+    });
+
+    // Click revoke access button
+    const revokeButton = screen.getByText('Revoke Access');
+    fireEvent.click(revokeButton);
+
+    // Verify the API call was made
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/admin/revoke-user-access/user1'),
+        expect.objectContaining({
+          method: 'PUT',
+          headers: expect.objectContaining({
+            'Authorization': 'Bearer test-token'
+          })
+        })
+      );
+    });
+
+    // Verify the user status changed
+    await waitFor(() => {
+      expect(screen.getByText('Access Revoked')).toBeInTheDocument();
+    });
+  });
+
+  it('should allow restoring user access', async () => {
+    // Mock all the API calls that happen on component mount
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ sessions: [] }) }) // demo-sessions
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ conversations: [] }) }) // demo-conversations
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ users: [] }) }) // production-sessions
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ conversations: [] }) }) // production-conversations
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ users: [] }) }) // production-users
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'starter' }) }) // market-news/context/starter
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'standard' }) }) // market-news/context/standard
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'premium' }) }) // market-news/context/premium
+      // Mock the specific user data for this test
+      .mockResolvedValueOnce({ ok: true, json: async () => ({
+        users: [
+          {
+            id: 'user1',
+            email: 'test@example.com',
+            tier: 'starter',
+            createdAt: '2024-01-01T00:00:00Z',
+            lastLoginAt: '2024-01-02T00:00:00Z',
+            isActive: false,
+            _count: { conversations: 5 }
+          }
+        ]
+      }) })
+      // Mock the restore access response
+      .mockResolvedValueOnce({ ok: true, json: async () => ({
+        success: true,
+        message: 'Access restored for user test@example.com'
+      }) })
+      // Mock the updated user data after restoring (this will be called by loadUsersForManagement)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({
+        users: [
+          {
+            id: 'user1',
+            email: 'test@example.com',
+            tier: 'starter',
+            createdAt: '2024-01-01T00:00:00Z',
+            lastLoginAt: '2024-01-02T00:00:00Z',
+            isActive: true,
+            _count: { conversations: 5 }
+          }
+        ]
+      }) })
+      // Mock the production data refresh (this will be called by loadProductionData)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ users: [] }) }) // production-sessions
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ conversations: [] }) }); // production-conversations
+
+    render(<AdminPage />);
+    
+    // Wait for data to load
+    await waitFor(() => {
+      expect(screen.queryByText('Loading admin data...')).not.toBeInTheDocument();
+    });
+
+    // Navigate to User Management tab
+    const userTab = screen.getByText('User Management');
+    fireEvent.click(userTab);
+
+    // Wait for user data to load
+    await waitFor(() => {
+      expect(screen.getByText('test@example.com')).toBeInTheDocument();
+    });
+
+    // Click restore access button
+    const restoreButton = screen.getByText('Restore Access');
+    fireEvent.click(restoreButton);
+
+    // Verify the API call was made
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/admin/restore-user-access/user1'),
+        expect.objectContaining({
+          method: 'PUT',
+          headers: expect.objectContaining({
+            'Authorization': 'Bearer test-token'
+          })
+        })
+      );
+    });
+
+    // Verify the user status changed
+    await waitFor(() => {
+      expect(screen.getByText('Active')).toBeInTheDocument();
+    });
+  });
+
+  it('should show delete confirmation modal', async () => {
+    // Mock all the API calls that happen on component mount
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ sessions: [] }) }) // demo-sessions
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ conversations: [] }) }) // demo-conversations
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ users: [] }) }) // production-sessions
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ conversations: [] }) }) // production-conversations
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ users: [] }) }) // production-users
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'starter' }) }) // market-news/context/starter
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'standard' }) }) // market-news/context/standard
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'premium' }) }) // market-news/context/premium
+      // Mock the specific user data for this test
+      .mockResolvedValueOnce({ ok: true, json: async () => ({
+        users: [
+          {
+            id: 'user1',
+            email: 'test@example.com',
+            tier: 'starter',
+            createdAt: '2024-01-01T00:00:00Z',
+            lastLoginAt: '2024-01-02T00:00:00Z',
+            isActive: true,
+            _count: { conversations: 5 }
+          }
+        ]
+      }) });
+
+    render(<AdminPage />);
+    
+    // Wait for data to load
+    await waitFor(() => {
+      expect(screen.queryByText('Loading admin data...')).not.toBeInTheDocument();
+    });
+
+    // Navigate to User Management tab
+    const userTab = screen.getByText('User Management');
+    fireEvent.click(userTab);
+
+    // Wait for user data to load
+    await waitFor(() => {
+      expect(screen.getByText('test@example.com')).toBeInTheDocument();
+    });
+
+    // Click delete account button for the specific user (use getAllByText to get the first one)
+    const deleteButtons = screen.getAllByText('Delete Account');
+    const deleteButton = deleteButtons[0]; // Get the first delete button
+    fireEvent.click(deleteButton);
+
+    // Verify confirmation modal is shown
+    expect(screen.getByText(/⚠️ Warning:/)).toBeInTheDocument();
+    expect(screen.getByText(/This will permanently delete the user account/)).toBeInTheDocument();
+    expect(screen.getByText(/This action cannot be undone/)).toBeInTheDocument();
+    expect(screen.getByText('Yes, Delete Account')).toBeInTheDocument();
+    expect(screen.getByText('Cancel')).toBeInTheDocument();
+  });
+
+  it('should allow deleting user account', async () => {
+    // Mock all the API calls that happen on component mount
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ sessions: [] }) }) // demo-sessions
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ conversations: [] }) }) // demo-conversations
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ users: [] }) }) // production-sessions
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ conversations: [] }) }) // production-conversations
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ users: [] }) }) // production-users
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'starter' }) }) // market-news/context/starter
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'standard' }) }) // market-news/context/standard
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'premium' }) }) // market-news/context/premium
+      // Mock the specific user data for this test
+      .mockResolvedValueOnce({ ok: true, json: async () => ({
+        users: [
+          {
+            id: 'user1',
+            email: 'test@example.com',
+            tier: 'starter',
+            createdAt: '2024-01-01T00:00:00Z',
+            lastLoginAt: '2024-01-02T00:00:00Z',
+            isActive: true,
+            _count: { conversations: 5 }
+          }
+        ]
+      }) })
+      // Mock the delete account response
+      .mockResolvedValueOnce({ ok: true, json: async () => ({
+        success: true,
+        message: 'Account completely deleted for user test@example.com'
+      }) })
+      // Mock the updated user data after deletion (this will be called by loadUsersForManagement)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({
+        users: []
+      }) })
+      // Mock the production data refresh (this will be called by loadProductionData)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ users: [] }) }) // production-sessions
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ conversations: [] }) }); // production-conversations
+
+    render(<AdminPage />);
+    
+    // Wait for data to load
+    await waitFor(() => {
+      expect(screen.queryByText('Loading admin data...')).not.toBeInTheDocument();
+    });
+
+    // Navigate to User Management tab
+    const userTab = screen.getByText('User Management');
+    fireEvent.click(userTab);
+
+    // Wait for user data to load
+    await waitFor(() => {
+      expect(screen.getByText('test@example.com')).toBeInTheDocument();
+    });
+
+    // Click delete account button to show confirmation (use getAllByText to get the first one)
+    const deleteButtons = screen.getAllByText('Delete Account');
+    const deleteButton = deleteButtons[0]; // Get the first delete button
+    fireEvent.click(deleteButton);
+
+    // Wait for confirmation modal
+    await waitFor(() => {
+      expect(screen.getByText('Yes, Delete Account')).toBeInTheDocument();
+    });
+
+    // Click confirm delete
+    const confirmDeleteButton = screen.getByText('Yes, Delete Account');
+    fireEvent.click(confirmDeleteButton);
+
+    // Verify the API call was made
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/admin/delete-user-account/user1'),
+        expect.objectContaining({
+          method: 'DELETE',
+          headers: expect.objectContaining({
+            'Authorization': 'Bearer test-token'
+          })
+        })
+      );
+    });
+  });
+
+  it('should allow canceling delete confirmation', async () => {
+    // Mock all the API calls that happen on component mount
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ sessions: [] }) }) // demo-sessions
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ conversations: [] }) }) // demo-conversations
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ users: [] }) }) // production-sessions
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ conversations: [] }) }) // production-conversations
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ users: [] }) }) // production-users
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'starter' }) }) // market-news/context/starter
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'standard' }) }) // market-news/context/standard
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'premium' }) }) // market-news/context/premium
+      // Mock the specific user data for this test
+      .mockResolvedValueOnce({ ok: true, json: async () => ({
+        users: [
+          {
+            id: 'user1',
+            email: 'test@example.com',
+            tier: 'starter',
+            createdAt: '2024-01-01T00:00:00Z',
+            lastLoginAt: '2024-01-02T00:00:00Z',
+            isActive: true,
+            _count: { conversations: 5 }
+          }
+        ]
+      }) });
+
+    render(<AdminPage />);
+    
+    // Wait for data to load
+    await waitFor(() => {
+      expect(screen.queryByText('Loading admin data...')).not.toBeInTheDocument();
+    });
+
+    // Navigate to User Management tab
+    const userTab = screen.getByText('User Management');
+    fireEvent.click(userTab);
+
+    // Wait for user data to load
+    await waitFor(() => {
+      expect(screen.getByText('test@example.com')).toBeInTheDocument();
+    });
+
+    // Click delete account button to show confirmation (use getAllByText to get the first one)
+    const deleteButtons = screen.getAllByText('Delete Account');
+    const deleteButton = deleteButtons[0]; // Get the first delete button
+    fireEvent.click(deleteButton);
+
+    // Wait for confirmation modal
+    await waitFor(() => {
+      expect(screen.getByText('Cancel')).toBeInTheDocument();
+    });
+
+    // Click cancel
+    const cancelButton = screen.getByText('Cancel');
+    fireEvent.click(cancelButton);
+
+    // Verify confirmation modal is hidden
+    await waitFor(() => {
+      expect(screen.queryByText(/⚠️ Warning:/)).not.toBeInTheDocument();
+    });
+  });
+}); 

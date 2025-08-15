@@ -83,6 +83,7 @@ interface UserForManagement {
   tier: string;
   createdAt: string;
   lastLoginAt?: string;
+  isActive: boolean;
   _count: {
     conversations: number;
   };
@@ -112,6 +113,9 @@ export default function AdminPage() {
   // User management state
   const [usersForManagement, setUsersForManagement] = useState<UserForManagement[]>([]);
   const [updatingTier, setUpdatingTier] = useState<string | null>(null);
+  const [revokingAccess, setRevokingAccess] = useState<string | null>(null);
+  const [deletingAccount, setDeletingAccount] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   
   // Market news state
   const [marketNewsContexts, setMarketNewsContexts] = useState<Record<string, MarketNewsContext>>({});
@@ -441,6 +445,82 @@ export default function AdminPage() {
     }
   };
 
+  const revokeUserAccess = async (userId: string) => {
+    setRevokingAccess(userId);
+    try {
+      const response = await fetch(`${API_URL}/admin/revoke-user-access/${userId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+      });
+
+      if (response.ok) {
+        // Refresh the users list
+        await loadUsersForManagement();
+        // Also refresh production data
+        await loadProductionData();
+      } else if (response.status === 401 || response.status === 403) {
+        setError('Authentication required for admin access');
+      } else {
+        console.error('Failed to revoke user access');
+      }
+    } catch (err) {
+      console.error('Error revoking user access:', err);
+    } finally {
+      setRevokingAccess(null);
+    }
+  };
+
+  const restoreUserAccess = async (userId: string) => {
+    setRevokingAccess(userId);
+    try {
+      const response = await fetch(`${API_URL}/admin/restore-user-access/${userId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+      });
+
+      if (response.ok) {
+        // Refresh the users list
+        await loadUsersForManagement();
+        // Also refresh production data
+        await loadProductionData();
+      } else if (response.status === 401 || response.status === 403) {
+        setError('Authentication required for admin access');
+      } else {
+        console.error('Failed to restore user access');
+      }
+    } catch (err) {
+      console.error('Error restoring user access:', err);
+    } finally {
+      setRevokingAccess(null);
+    }
+  };
+
+  const deleteUserAccount = async (userId: string) => {
+    setDeletingAccount(userId);
+    try {
+      const response = await fetch(`${API_URL}/admin/delete-user-account/${userId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+
+      if (response.ok) {
+        // Refresh the users list
+        await loadUsersForManagement();
+        // Also refresh production data
+        await loadProductionData();
+        setShowDeleteConfirm(null);
+      } else if (response.status === 401 || response.status === 403) {
+        setError('Authentication required for admin access');
+      } else {
+        console.error('Failed to delete user account');
+      }
+    } catch (err) {
+      console.error('Error deleting user account:', err);
+    } finally {
+      setDeletingAccount(null);
+    }
+  };
+
   const refreshMarketContext = async (tier: string) => {
     setRefreshingContext(tier);
     try {
@@ -526,8 +606,10 @@ export default function AdminPage() {
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
   };
 
-  const getQuestionCategories = (conversations: (DemoConversation | ProductionConversation)[]) => {
+  const getQuestionCategories = (conversations: (DemoConversation | ProductionConversation)[] | undefined) => {
     const categories: { [key: string]: number } = {};
+    
+    if (!conversations) return categories;
     
     conversations.forEach(conv => {
       const question = conv.question.toLowerCase();
@@ -575,34 +657,55 @@ export default function AdminPage() {
         </div>
 
         {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-gray-800 rounded-lg p-4">
-            <div className="text-2xl font-bold text-blue-400">{demoSessions.length}</div>
-            <div className="text-gray-400 text-sm">Active Sessions</div>
-          </div>
-          <div className="bg-gray-800 rounded-lg p-4">
-            <div className="text-2xl font-bold text-green-400">{demoConversations.length}</div>
-            <div className="text-gray-400 text-sm">Total Conversations</div>
-          </div>
-          <div className="bg-gray-800 rounded-lg p-4">
-            <div className="text-2xl font-bold text-yellow-400">
-              {demoConversations.length > 0 ? Math.round(demoConversations.length / demoSessions.length) : 0}
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div className="bg-gray-800 rounded-lg p-4">
+              <div className="text-2xl font-bold text-blue-400">...</div>
+              <div className="text-gray-400 text-sm">Active Sessions</div>
             </div>
-            <div className="text-gray-400 text-sm">Avg Conversations/Session</div>
-          </div>
-          <div className="bg-gray-800 rounded-lg p-4">
-            <div className="text-2xl font-bold text-purple-400">
-              {demoSessions.length > 0 ? Math.round(demoSessions.filter(s => s.conversationCount > 1).length / demoSessions.length * 100) : 0}%
+            <div className="bg-gray-800 rounded-lg p-4">
+              <div className="text-2xl font-bold text-green-400">...</div>
+              <div className="text-gray-400 text-sm">Total Conversations</div>
             </div>
-            <div className="text-gray-400 text-sm">Multi-Question Sessions</div>
+            <div className="bg-gray-800 rounded-lg p-4">
+              <div className="text-2xl font-bold text-yellow-400">...</div>
+              <div className="text-gray-400 text-sm">Avg Conversations/Session</div>
+            </div>
+            <div className="bg-gray-800 rounded-lg p-4">
+              <div className="text-2xl font-bold text-purple-400">...</div>
+              <div className="text-gray-400 text-sm">Multi-Question Sessions</div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div className="bg-gray-800 rounded-lg p-4">
+              <div className="text-2xl font-bold text-blue-400">{demoSessions?.length || 0}</div>
+              <div className="text-gray-400 text-sm">Active Sessions</div>
+            </div>
+            <div className="bg-gray-800 rounded-lg p-4">
+              <div className="text-2xl font-bold text-green-400">{demoConversations?.length || 0}</div>
+              <div className="text-gray-400 text-sm">Total Conversations</div>
+            </div>
+            <div className="bg-gray-800 rounded-lg p-4">
+              <div className="text-2xl font-bold text-yellow-400">
+                {demoConversations?.length > 0 && demoSessions?.length > 0 ? Math.round(demoConversations.length / demoSessions.length) : 0}
+              </div>
+              <div className="text-gray-400 text-sm">Avg Conversations/Session</div>
+            </div>
+            <div className="bg-gray-800 rounded-lg p-4">
+              <div className="text-2xl font-bold text-purple-400">
+                {demoSessions?.length > 0 ? Math.round(demoSessions.filter(s => s.conversationCount > 1).length / demoSessions.length * 100) : 0}%
+              </div>
+              <div className="text-gray-400 text-sm">Multi-Question Sessions</div>
+            </div>
+          </div>
+        )}
 
         {/* Question Categories */}
         <div className="bg-gray-800 rounded-lg p-6 mb-8">
           <h2 className="text-xl font-semibold mb-4">Question Categories</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {Object.entries(questionCategories)
+            {questionCategories && Object.entries(questionCategories)
               .sort(([,a], [,b]) => b - a)
               .map(([category, count]) => (
                 <div key={category} className="bg-gray-700 rounded p-3">
@@ -642,7 +745,7 @@ export default function AdminPage() {
           <div className="bg-gray-800 rounded-lg p-6">
             <h2 className="text-xl font-semibold mb-4">Demo Sessions</h2>
             <div className="space-y-4">
-              {demoSessions.map((session) => (
+              {demoSessions?.map((session) => (
                 <div 
                   key={session.sessionId}
                   className="bg-gray-700 rounded-lg p-4 cursor-pointer hover:bg-gray-600 transition-colors"
@@ -676,9 +779,9 @@ export default function AdminPage() {
                   {selectedSession === session.sessionId && (
                     <div className="mt-4 space-y-3">
                       {demoConversations
-                        .filter(conv => conv.session.sessionId === session.sessionId)
-                        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                        .map((conv) => (
+                        ?.filter(conv => conv.session.sessionId === session.sessionId)
+                        ?.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                        ?.map((conv) => (
                           <div key={conv.id} className="bg-gray-600 rounded p-3 ml-4">
                             <div className="text-sm font-medium text-blue-300 mb-1">Q:</div>
                             <div className="text-sm text-gray-300 mb-2">{conv.question}</div>
@@ -729,8 +832,8 @@ export default function AdminPage() {
             <h2 className="text-xl font-semibold mb-4">All Demo Conversations</h2>
             <div className="space-y-4">
               {demoConversations
-                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                .map((conv) => (
+                ?.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                ?.map((conv) => (
                   <div key={conv.id} className="bg-gray-700 rounded-lg p-4">
                     <div className="flex justify-between items-start mb-3">
                       <div className="text-sm text-gray-400">
@@ -1130,12 +1233,21 @@ export default function AdminPage() {
         <div className="bg-gray-800 rounded-lg p-6">
           <h2 className="text-xl font-semibold mb-4">User Management</h2>
           <div className="space-y-4">
-            {usersForManagement.map((user) => (
+            {usersForManagement?.map((user) => (
               <div key={user.id} className="bg-gray-700 rounded-lg p-4">
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-start">
                   <div className="flex-1">
-                    <div className="font-medium text-white mb-2">
-                      {user.email}
+                    <div className="flex items-center space-x-2 mb-2">
+                      <div className="font-medium text-white">
+                        {user.email}
+                      </div>
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        user.isActive 
+                          ? 'bg-green-600 text-white' 
+                          : 'bg-red-600 text-white'
+                      }`}>
+                        {user.isActive ? 'Active' : 'Access Revoked'}
+                      </span>
                     </div>
                     <div className="text-sm text-gray-400 mb-2">
                       Conversations: {user._count.conversations} • Created: {formatDate(user.createdAt)}
@@ -1146,25 +1258,93 @@ export default function AdminPage() {
                       </div>
                     )}
                   </div>
-                  <div className="flex items-center space-x-4">
-                    <div className="text-sm text-gray-400">
-                      Current: {user.tier}
+                  <div className="flex flex-col items-end space-y-3">
+                    {/* Tier Management */}
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-gray-400">Tier:</span>
+                      <select
+                        value={user.tier}
+                        onChange={(e) => updateUserTier(user.id, e.target.value)}
+                        disabled={updatingTier === user.id}
+                        className="bg-gray-600 text-white px-3 py-1 rounded text-sm border border-gray-500 focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="starter">Starter</option>
+                        <option value="standard">Standard</option>
+                        <option value="premium">Premium</option>
+                      </select>
+                      {updatingTier === user.id && (
+                        <div className="text-xs text-yellow-400">Updating...</div>
+                      )}
                     </div>
-                    <select
-                      value={user.tier}
-                      onChange={(e) => updateUserTier(user.id, e.target.value)}
-                      disabled={updatingTier === user.id}
-                      className="bg-gray-600 text-white px-3 py-1 rounded text-sm border border-gray-500 focus:outline-none focus:border-blue-500"
+                    
+                    {/* Access Management */}
+                    <div className="flex items-center space-x-2">
+                      {user.isActive ? (
+                        <button
+                          onClick={() => revokeUserAccess(user.id)}
+                          disabled={revokingAccess === user.id}
+                          className="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                          title="Revoke user access (prevent login)"
+                        >
+                          {revokingAccess === user.id ? 'Revoking...' : 'Revoke Access'}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => restoreUserAccess(user.id)}
+                          disabled={revokingAccess === user.id}
+                          className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                          title="Restore user access (allow login)"
+                        >
+                          {revokingAccess === user.id ? 'Restoring...' : 'Restore Access'}
+                        </button>
+                      )}
+                    </div>
+                    
+                    {/* Account Deletion */}
+                    <button
+                      onClick={() => setShowDeleteConfirm(user.id)}
+                      disabled={deletingAccount === user.id}
+                      className="px-3 py-1 bg-red-800 text-white text-xs rounded hover:bg-red-900 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                      title="Delete user account completely (including login/email)"
                     >
-                      <option value="starter">Starter</option>
-                      <option value="standard">Standard</option>
-                      <option value="premium">Premium</option>
-                    </select>
-                    {updatingTier === user.id && (
-                      <div className="text-xs text-yellow-400">Updating...</div>
-                    )}
+                      {deletingAccount === user.id ? 'Deleting...' : 'Delete Account'}
+                    </button>
                   </div>
                 </div>
+                
+                {/* Delete Confirmation Modal */}
+                {showDeleteConfirm === user.id && (
+                  <div className="mt-4 p-4 bg-red-900 border border-red-700 rounded-lg">
+                    <div className="text-red-200 text-sm mb-3">
+                      <strong>⚠️ Warning:</strong> This will permanently delete the user account for <strong>{user.email}</strong>, including:
+                    </div>
+                    <ul className="text-red-200 text-sm mb-4 ml-4 space-y-1">
+                      <li>• All conversations and financial data</li>
+                      <li>• Linked financial accounts and transactions</li>
+                      <li>• User profile and settings</li>
+                      <li>• Login credentials and email address</li>
+                    </ul>
+                    <div className="text-red-200 text-sm mb-4">
+                      <strong>This action cannot be undone.</strong> The user will need to create a new account to use the service again.
+                    </div>
+                    <div className="flex space-x-3">
+                      <button
+                        onClick={() => deleteUserAccount(user.id)}
+                        disabled={deletingAccount === user.id}
+                        className="px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                      >
+                        {deletingAccount === user.id ? 'Deleting...' : 'Yes, Delete Account'}
+                      </button>
+                      <button
+                        onClick={() => setShowDeleteConfirm(null)}
+                        disabled={deletingAccount === user.id}
+                        className="px-4 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 disabled:bg-gray-500 disabled:cursor-not-allowed"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
