@@ -34,7 +34,8 @@ config({ path: '.env.local' });
 import { getPrismaClient } from './prisma-client';
 
 const app: Application = express();
-app.use(express.json({ limit: '10mb' }));
+
+// CORS setup
 app.use(cors({
   origin: [
     'https://asklinc.com', // your Vercel frontend URL
@@ -44,7 +45,11 @@ app.use(cors({
   credentials: true
 }));
 
-// Increase response size limit
+// IMPORTANT: Register Stripe webhook route BEFORE JSON middleware
+// This ensures raw body is available for signature verification
+app.use('/api/stripe/webhooks', express.raw({ type: 'application/json' }), stripeRoutes);
+
+// Global JSON middleware for all other routes
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
@@ -114,7 +119,7 @@ setupPlaidRoutes(app);
 // Setup Auth routes
 app.use('/auth', authRoutes);
 
-// Setup Stripe routes
+// Setup Stripe routes (webhook route already registered above)
 app.use('/api/stripe', stripeRoutes);
 
 // OpenAI Q&A endpoint with tier-aware system
