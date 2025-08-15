@@ -18,6 +18,11 @@ model User {
   lastLoginAt            DateTime?
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
+  // Subscription-related fields
+  stripeCustomerId       String?
+  subscriptionStatus     String                  @default("inactive")
+  subscriptionExpiresAt  DateTime?
+  // Existing relations
   accessTokens           AccessToken[]
   accounts               Account[]
   conversations          Conversation[]
@@ -27,6 +32,8 @@ model User {
   encryptedUserData      EncryptedUserData?
   passwordResetTokens    PasswordResetToken[]
   profile                UserProfile?
+  // New subscription relation
+  subscriptions          Subscription[]
 
   @@map("users")
 }
@@ -169,12 +176,12 @@ model encrypted_profile_data {
   id            String      @id
   profileHash   String      @unique
   encryptedData String
-  iv            String
-  keyVersion    Int         @default(1)
-  algorithm     String      @default("aes-256-gcm")
-  tag           String
   createdAt     DateTime    @default(now())
   updatedAt     DateTime
+  algorithm     String      @default("aes-256-gcm")
+  iv            String
+  keyVersion    Int         @default(1)
+  tag           String
   user_profiles UserProfile @relation(fields: [profileHash], references: [profileHash])
 
   @@map("encrypted_profile_data")
@@ -293,4 +300,36 @@ model EncryptedEmailVerificationCode {
   code          EmailVerificationCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
 
   @@map("encrypted_email_verification_codes")
+}
+
+model Subscription {
+  id                    String               @id @default(cuid())
+  userId                String
+  stripeCustomerId      String
+  stripeSubscriptionId  String               @unique
+  tier                  String
+  status                String
+  currentPeriodStart    DateTime
+  currentPeriodEnd      DateTime
+  cancelAtPeriodEnd     Boolean              @default(false)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  // Relations
+  user                  User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events                SubscriptionEvent[]
+  
+  @@map("subscriptions")
+}
+
+model SubscriptionEvent {
+  id              String        @id @default(cuid())
+  subscriptionId  String?
+  stripeEventId   String        @unique
+  eventType       String
+  eventData       Json
+  processedAt     DateTime      @default(now())
+  // Relations
+  subscription    Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  
+  @@map("subscription_events")
 }
