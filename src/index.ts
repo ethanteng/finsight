@@ -10,6 +10,7 @@ import { PrismaClient } from '@prisma/client';
 import { dataOrchestrator } from './data/orchestrator';
 import { isFeatureEnabled } from './config/features';
 import authRoutes from './auth/routes';
+import stripeRoutes from './routes/stripe';
 import { optionalAuth, requireAuth, adminAuth } from './auth/middleware';
 import { UserTier } from './data/types';
 
@@ -112,6 +113,9 @@ setupPlaidRoutes(app);
 
 // Setup Auth routes
 app.use('/auth', authRoutes);
+
+// Setup Stripe routes
+app.use('/api/stripe', stripeRoutes);
 
 // OpenAI Q&A endpoint with tier-aware system
 app.post('/ask', async (req: Request, res: Response) => {

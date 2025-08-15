@@ -228,6 +228,7 @@ export class StripeService {
     console.log(`Subscription deleted: ${subscriptionId}`);
 
     // Find and update subscription record
+    const prisma = getPrismaClient();
     const subscriptionRecord = await prisma.subscription.findUnique({
       where: { stripeSubscriptionId: subscriptionId },
       include: { user: true }
