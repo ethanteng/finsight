@@ -50,12 +50,31 @@ export function getStripePriceId(tier: SubscriptionTier): string {
 
 // Get subscription tier from Stripe price ID
 export function getTierFromPriceId(priceId: string): SubscriptionTier | null {
+  // First check against static plans
   const plans = getSubscriptionPlans();
   for (const [tier, plan] of Object.entries(plans)) {
     if (plan.stripePriceId === priceId) {
       return tier as SubscriptionTier;
     }
   }
+  
+  // If not found in static plans, try to determine tier from Stripe API
+  // This handles cases where price IDs are real Stripe IDs
+  if (priceId.startsWith('price_')) {
+    try {
+      // For now, return a default tier based on common patterns
+      // You can enhance this by making an API call to Stripe to get product details
+      console.log(`Price ID ${priceId} not found in static plans, using default tier mapping`);
+      
+      // You could make this configurable via environment variables
+      // For now, we'll need to add the real price IDs to the environment
+      return null;
+    } catch (error) {
+      console.error('Error determining tier from Stripe price ID:', error);
+      return null;
+    }
+  }
+  
   return null;
 }
 

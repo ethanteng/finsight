@@ -65,11 +65,18 @@ router.post('/webhooks', express.raw({ type: 'application/json' }), async (req, 
     console.log(`Received webhook event: ${event.type}`);
 
     // Log the webhook event
+    // Extract subscription ID safely from different event types
+    let subscriptionId: string | undefined;
+    if (event.data.object && typeof event.data.object === 'object') {
+      const eventObject = event.data.object as any;
+      subscriptionId = eventObject.subscription || eventObject.id;
+    }
+    
     await stripeService.logWebhookEvent(
       event.id,
       event.type,
       event.data,
-      event.data.object?.subscription || undefined
+      subscriptionId
     );
 
     // Process the webhook event
@@ -118,13 +125,16 @@ router.post('/create-portal-session', async (req, res) => {
  * GET /api/stripe/plans
  * Get available subscription plans
  */
-router.get('/plans', (req, res) => {
+router.get('/plans', async (req, res) => {
   try {
     // Import here to avoid circular dependency issues
-    const { SUBSCRIPTION_PLANS } = require('../types/stripe');
+    const { getLiveSubscriptionPlans } = require('../types/stripe');
+    
+    // Get live pricing from Stripe API
+    const plans = await getLiveSubscriptionPlans();
     
     res.json({
-      plans: SUBSCRIPTION_PLANS,
+      plans: plans,
       success: true
     });
   } catch (error) {

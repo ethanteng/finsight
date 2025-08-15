@@ -120,7 +120,7 @@ export interface SubscriptionPlan {
   name: string;
   price: number;
   currency: string;
-  interval: 'month' | 'year';
+  interval: 'day' | 'week' | 'month' | 'year';
   features: string[];
   stripePriceId: string;
 }
@@ -172,3 +172,43 @@ export function getSubscriptionPlans(): Record<SubscriptionTier, SubscriptionPla
 }
 
 export const SUBSCRIPTION_PLANS = getSubscriptionPlans();
+
+// Function to fetch live pricing from Stripe API
+export async function getLiveSubscriptionPlans(): Promise<Record<SubscriptionTier, SubscriptionPlan>> {
+  try {
+    // Import Stripe client dynamically to avoid circular dependencies
+    const { stripe } = await import('../config/stripe');
+    
+    const plans = getSubscriptionPlans();
+    const livePlans: Record<SubscriptionTier, SubscriptionPlan> = {} as Record<SubscriptionTier, SubscriptionPlan>;
+    
+    // Fetch live pricing for each plan
+    for (const [tier, plan] of Object.entries(plans)) {
+      try {
+        if (plan.stripePriceId && plan.stripePriceId.startsWith('price_')) {
+          const price = await stripe.prices.retrieve(plan.stripePriceId);
+          
+          livePlans[tier as SubscriptionTier] = {
+            ...plan,
+            price: (price.unit_amount || 0) / 100, // Convert from cents
+            currency: price.currency,
+            interval: price.recurring?.interval || 'month'
+          };
+        } else {
+          // Fallback to static plan if no valid Stripe price ID
+          livePlans[tier as SubscriptionTier] = plan;
+        }
+      } catch (error) {
+        console.warn(`Failed to fetch live pricing for ${tier}:`, error);
+        // Fallback to static plan
+        livePlans[tier as SubscriptionTier] = plan;
+      }
+    }
+    
+    return livePlans;
+  } catch (error) {
+    console.error('Failed to fetch live subscription plans:', error);
+    // Fallback to static plans
+    return getSubscriptionPlans();
+  }
+}

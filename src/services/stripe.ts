@@ -5,7 +5,8 @@ import {
   CreatePortalSessionRequest,
   CreatePortalSessionResponse,
   StripeWebhookEventType,
-  SubscriptionTier
+  SubscriptionTier,
+  getSubscriptionPlans
 } from '../types/stripe';
 import { getPrismaClient } from '../prisma-client';
 
@@ -17,9 +18,19 @@ export class StripeService {
     request: CreateCheckoutSessionRequest
   ): Promise<CreateCheckoutSessionResponse> {
     try {
+      console.log(`Creating checkout session for price ID: ${request.priceId}`);
+      
       // Validate the price ID and get the tier
       const tier = getTierFromPriceId(request.priceId);
+      console.log(`Tier determined: ${tier}`);
+      
       if (!tier) {
+        console.error(`Price ID ${request.priceId} could not be mapped to a tier`);
+        console.log('Available price IDs in static plans:');
+        const plans = getSubscriptionPlans();
+        Object.entries(plans).forEach(([tier, plan]) => {
+          console.log(`  - ${tier}: ${plan.stripePriceId}`);
+        });
         throw new Error(`Invalid price ID: ${request.priceId}`);
       }
 
