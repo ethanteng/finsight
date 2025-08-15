@@ -87,20 +87,20 @@ beforeAll(async () => {
     console.error('Integration tests require API keys to be set (even test keys)');
     throw new Error(`Missing required API keys for integration tests: ${missingKeys.join(', ')}`);
   } else {
-    console.log('✅ All required API keys available for integration tests');
+    // console.log('✅ All required API keys available for integration tests');
   }
 
   // ✅ Verify database connection
   try {
     await prisma.$queryRaw`SELECT 1`;
-    console.log('✅ Database connection verified for integration tests');
+    // console.log('✅ Database connection verified for integration tests');
   } catch (error) {
     console.error('❌ Database connection failed for integration tests:', error);
     
     // Check if we're running placeholder tests that don't need a database
     const testName = expect.getState().currentTestName || '';
     if (testName.includes('temporarily disabled') || testName.includes('placeholder')) {
-      console.log('ℹ️  Skipping database connection for placeholder test');
+      // console.log('ℹ️  Skipping database connection for placeholder test');
       return;
     }
     
@@ -131,7 +131,7 @@ beforeEach(async () => {
     await prisma.syncStatus.deleteMany();
     await prisma.privacySettings?.deleteMany();
     await prisma.user.deleteMany();
-    console.log('✅ Test data cleaned up');
+    // console.log('✅ Test data cleaned up');
   } catch (error) {
     console.warn('⚠️  Test data cleanup failed:', error);
   }
@@ -164,10 +164,10 @@ afterEach(async () => {
     const conversationCount = await prisma.demoConversation.count();
     
     if (sessionCount > 0 || conversationCount > 0) {
-      console.warn(`⚠️  Test data not fully cleaned up: ${sessionCount} sessions, ${conversationCount} conversations`);
+      // console.warn(`⚠️  Test data not fully cleaned up: ${sessionCount} sessions, ${conversationCount} conversations`);
     }
   } catch (error) {
-    console.warn('⚠️  Test cleanup failed:', error);
+    // console.warn('⚠️  Test cleanup failed:', error);
   }
 });
 

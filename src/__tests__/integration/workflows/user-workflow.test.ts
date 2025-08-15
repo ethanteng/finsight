@@ -121,7 +121,7 @@ describe('User Workflow Integration Tests', () => {
 
       // Plaid API will fail in tests, so we expect 500 but handle gracefully
       if (plaidResponse.status === 500) {
-        console.log('Plaid API call failed (expected in test environment)');
+        // console.log('Plaid API call failed (expected in test environment)');
         // Create a mock access token for testing
         await prisma.accessToken.create({
           data: {
@@ -143,7 +143,7 @@ describe('User Workflow Integration Tests', () => {
 
       // Handle Plaid API failure or authentication failure gracefully
       if (syncAccountsResponse.status === 500 || syncAccountsResponse.status === 401) {
-        console.log('Plaid sync accounts failed (expected in test environment)');
+        // console.log('Plaid sync accounts failed (expected in test environment)');
         // Create mock account data
         await prisma.account.create({
           data: {
@@ -167,7 +167,7 @@ describe('User Workflow Integration Tests', () => {
 
       // Handle Plaid API failure gracefully
       if (syncTransactionsResponse.status === 500) {
-        console.log('Plaid sync transactions failed (expected in test environment)');
+        // console.log('Plaid sync transactions failed (expected in test environment)');
         // Create mock transaction data
         const account = await prisma.account.findFirst();
         if (account) {
@@ -283,7 +283,7 @@ describe('User Workflow Integration Tests', () => {
 
       // Step 9: Skip authentication-required endpoints for workflow testing
       // Note: Privacy endpoints require proper authentication which is tested in privacy-security-integration.test.ts
-      console.log('Skipping privacy endpoints in workflow test - authentication tested separately');
+      // console.log('Skipping privacy endpoints in workflow test - authentication tested separately');
 
       // Step 10: Delete All Data (using endpoint that doesn't require auth for testing)
       const deleteDataResponse = await request(app)
@@ -563,7 +563,7 @@ describe('User Workflow Integration Tests', () => {
 
       // Skip authentication-required endpoints for workflow testing
       // Note: Privacy endpoints require proper authentication which is tested in privacy-security-integration.test.ts
-      console.log('Skipping privacy endpoints in workflow test - authentication tested separately');
+      // console.log('Skipping privacy endpoints in workflow test - authentication tested separately');
 
       // For testing purposes, manually delete the tokens to simulate disconnection
       await prisma.accessToken.deleteMany();

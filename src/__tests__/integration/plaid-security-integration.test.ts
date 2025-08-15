@@ -29,7 +29,7 @@ describe('Plaid Security Integration Tests', () => {
     });
     
     // Verify user1 was created
-    console.log('User1 created with ID:', user1.id);
+    // console.log('User1 created with ID:', user1.id);
     
     user2 = await prisma.user.create({
       data: createTestUser({ 
@@ -39,7 +39,7 @@ describe('Plaid Security Integration Tests', () => {
     });
     
     // Verify user2 was created
-    console.log('User2 created with ID:', user2.id);
+    // console.log('User2 created with ID:', user2.id);
 
     // Verify users exist before creating access tokens
     let verifyUser1 = null;
@@ -55,7 +55,7 @@ describe('Plaid Security Integration Tests', () => {
         break;
       }
       
-      console.log(`Retry ${retryCount + 1}: User1 exists: ${!!verifyUser1}, User2 exists: ${!!verifyUser2}`);
+      // console.log(`Retry ${retryCount + 1}: User1 exists: ${!!verifyUser1}, User2 exists: ${!!verifyUser2}`);
       retryCount++;
       
       if (retryCount < maxRetries) {
@@ -81,7 +81,7 @@ describe('Plaid Security Integration Tests', () => {
         })
       });
       
-      console.log('User1 token created for user:', user1Token.userId);
+      // console.log('User1 token created for user:', user1Token.userId);
       
       user2Token = await prisma.accessToken.create({
         data: createTestAccessToken({ 
@@ -91,7 +91,7 @@ describe('Plaid Security Integration Tests', () => {
         })
       });
       
-      console.log('User2 token created for user:', user2Token.userId);
+      // console.log('User2 token created for user:', user2Token.userId);
     } catch (error) {
       console.error('Error creating access tokens:', error);
       throw error;
@@ -112,16 +112,16 @@ describe('Plaid Security Integration Tests', () => {
         password: 'password123'
       });
 
-    console.log('User1 login response status:', user1LoginResponse.status);
-    console.log('User1 login response body:', user1LoginResponse.body);
-    console.log('User2 login response status:', user2LoginResponse.status);
-    console.log('User2 login response body:', user2LoginResponse.body);
+    // console.log('User1 login response status:', user1LoginResponse.status);
+    // console.log('User1 login response body:', user1LoginResponse.body);
+    // console.log('User2 login response status:', user2LoginResponse.status);
+    // console.log('User2 login response body:', user2LoginResponse.body);
 
     user1JWT = user1LoginResponse.body.token;
     user2JWT = user2LoginResponse.body.token;
     
-    console.log('User1 JWT length:', user1JWT?.length);
-    console.log('User2 JWT length:', user2JWT?.length);
+    // console.log('User1 JWT length:', user1JWT?.length);
+    // console.log('User2 JWT length:', user2JWT?.length);
   });
 
   afterEach(async () => {

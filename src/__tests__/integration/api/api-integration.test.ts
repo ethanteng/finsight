@@ -20,11 +20,11 @@ describe('API Integration Tests', () => {
       expect(response.body).toHaveProperty('isTestKey');
 
       // Log the API key status for debugging
-      console.log('FRED API Key Status:', {
-        key: response.body.fredApiKey,
-        length: response.body.fredApiKeyLength,
-        isTestKey: response.body.isTestKey
-      });
+      // console.log('FRED API Key Status:', {
+      //   key: response.body.fredApiKey,
+      //   length: response.body.fredApiKeyLength,
+      //   isTestKey: response.body.isTestKey
+      // });
     });
 
     it('should test FRED economic indicators for different tiers', async () => {
@@ -59,14 +59,14 @@ describe('API Integration Tests', () => {
             expect(creditCardAPR).toHaveProperty('value');
 
             // Log data for debugging
-            console.log(`${tier} tier FRED data:`, {
-              cpi: cpi.value,
-              fedRate: fedRate.value,
-              mortgageRate: mortgageRate.value,
-              creditCardAPR: creditCardAPR.value,
-              cpiSource: cpi.source,
-              creditCardSource: creditCardAPR.source
-            });
+            // console.log(`${tier} tier FRED data:`, {
+            //   cpi: cpi.value,
+            //   fedRate: fedRate.value,
+            //   mortgageRate: mortgageRate.value,
+            //   creditCardAPR: creditCardAPR.value,
+            //   cpiSource: cpi.source,
+            //   creditCardSource: creditCardAPR.source
+            // });
 
             // Verify data types
             expect(typeof cpi.value).toBe('number');
@@ -99,7 +99,7 @@ describe('API Integration Tests', () => {
         
         if (response.status === 200) {
           expect(response.body).toHaveProperty('answer');
-          console.log(`Question: "${question}" - Answer: ${response.body.answer.substring(0, 100)}...`);
+          // console.log(`Question: "${question}" - Answer: ${response.body.answer.substring(0, 100)}...`);
         } else {
           expect(response.body).toHaveProperty('error');
         }
@@ -118,11 +118,11 @@ describe('API Integration Tests', () => {
       expect(response.body).toHaveProperty('isTestKey');
 
       // Log the API key status for debugging
-      console.log('Alpha Vantage API Key Status:', {
-        key: response.body.alphaVantageApiKey,
-        length: response.body.alphaVantageApiKeyLength,
-        isTestKey: response.body.isTestKey
-      });
+      // console.log('Alpha Vantage API Key Status:', {
+      //   key: response.body.alphaVantageApiKey,
+      //   length: response.body.alphaVantageApiKeyLength,
+      //   isTestKey: response.body.isTestKey
+      // });
     });
 
     it('should test Alpha Vantage live market data for Premium tier', async () => {
@@ -177,14 +177,14 @@ describe('API Integration Tests', () => {
         });
 
         // Log data for debugging
-        console.log('Premium tier Alpha Vantage data:', {
-          cdRatesCount: cdRates.length,
-          treasuryYieldsCount: treasuryYields.length,
-          mortgageRatesCount: mortgageRates.length,
-          sampleCDRate: cdRates[0],
-          sampleTreasuryYield: treasuryYields[0],
-          sampleMortgageRate: mortgageRates[0]
-        });
+        // console.log('Premium tier Alpha Vantage data:', {
+        //   cdRatesCount: cdRates.length,
+        //   treasuryYieldsCount: treasuryYields.length,
+        //   mortgageRatesCount: mortgageRates.length,
+        //   sampleCDRate: cdRates[0],
+        //   sampleTreasuryYield: treasuryYields[0],
+        //   sampleMortgageRate: mortgageRates[0]
+        // });
       }
     });
 
@@ -209,7 +209,7 @@ describe('API Integration Tests', () => {
         
         if (response.status === 200) {
           expect(response.body).toHaveProperty('answer');
-          console.log(`Premium Question: "${question}" - Answer: ${response.body.answer.substring(0, 100)}...`);
+          // console.log(`Premium Question: "${question}" - Answer: ${response.body.answer.substring(0, 100)}...`);
         } else {
           expect(response.body).toHaveProperty('error');
         }
@@ -247,12 +247,12 @@ describe('API Integration Tests', () => {
           expect(marketContext.liveMarketData).toBeUndefined();
         }
 
-        console.log(`${test.tier} tier access:`, {
-          hasEconomicData: !!marketContext.economicIndicators,
-          hasLiveData: !!marketContext.liveMarketData,
-          expectedEconomicData: test.shouldHaveEconomicData,
-          expectedLiveData: test.shouldHaveLiveData
-        });
+        // console.log(`${test.tier} tier access:`, {
+        //   hasEconomicData: !!marketContext.economicIndicators,
+        //   hasLiveData: !!marketContext.liveMarketData,
+        //   expectedEconomicData: test.shouldHaveEconomicData,
+        //   expectedLiveData: test.shouldHaveLiveData
+        // });
       }
     });
   });
@@ -274,7 +274,7 @@ describe('API Integration Tests', () => {
       // Both responses should be identical (cached)
       expect(response1.body).toEqual(response2.body);
 
-      console.log('Cache test: Both responses identical (cached)');
+      // console.log('Cache test: Both responses identical (cached)');
     });
 
     it('should test cache invalidation', async () => {
@@ -297,7 +297,7 @@ describe('API Integration Tests', () => {
 
       expect(response2.status).toBe(200);
 
-      console.log('Cache invalidation test: Cache cleared and data refreshed');
+      // console.log('Cache invalidation test: Cache cleared and data refreshed');
     });
   });
 
@@ -343,7 +343,7 @@ describe('API Integration Tests', () => {
           
     //       expect(shouldNotProvideData).toBe(true);
           
-    //       console.log(`Starter tier "${question}": ${answer.substring(0, 100)}...`);
+    //       // console.log(`Starter tier "${question}": ${answer.substring(0, 100)}...`);
     //     }
     //   }
     // });
@@ -387,7 +387,7 @@ describe('API Integration Tests', () => {
           
     //       expect(shouldHaveSourceAttribution).toBe(true);
           
-    //       console.log(`Premium tier "${question}": ${answer.substring(0, 100)}...`);
+    //       // console.log(`Premium tier "${question}": ${answer.substring(0, 100)}...`);
     //     }
     //   }
     // });
@@ -431,7 +431,7 @@ describe('API Integration Tests', () => {
           
     //       expect(shouldHaveSourceAttribution).toBe(true);
           
-    //       console.log(`Standard tier "${question}": ${answer.substring(0, 100)}...`);
+    //       // console.log(`Standard tier "${question}": ${answer.substring(0, 100)}...`);
     //     }
     //   }
     // });
@@ -473,7 +473,7 @@ describe('API Integration Tests', () => {
           
     //       expect(shouldNotProvideLiveData).toBe(true);
           
-    //       console.log(`Standard tier "${question}": ${answer.substring(0, 100)}...`);
+    //       // console.log(`Standard tier "${question}": ${answer.substring(0, 100)}...`);
     //     }
     //   }
     // });
@@ -501,7 +501,7 @@ describe('API Integration Tests', () => {
         expect(typeof answer).toBe('string');
         expect(answer.length).toBeGreaterThan(0);
         
-        console.log(`Source attribution test: ${answer.substring(0, 100)}...`);
+        // console.log(`Source attribution test: ${answer.substring(0, 100)}...`);
         
         // Note: In a real environment, the AI would include source attribution
         // This test verifies the system is working, not the AI response content
@@ -529,7 +529,7 @@ describe('API Integration Tests', () => {
         expect(typeof answer).toBe('string');
         expect(answer.length).toBeGreaterThan(0);
         
-        console.log(`Alpha Vantage source attribution test: ${answer.substring(0, 100)}...`);
+        // console.log(`Alpha Vantage source attribution test: ${answer.substring(0, 100)}...`);
         
         // Note: In a real environment, the AI would include source attribution
         // This test verifies the system is working, not the AI response content
@@ -568,7 +568,7 @@ describe('API Integration Tests', () => {
         
     //     expect(shouldNotHaveSourceAttribution).toBe(true);
         
-    //     console.log(`Upgrade suggestion test: ${answer.substring(0, 100)}...`);
+    //     // console.log(`Upgrade suggestion test: ${answer.substring(0, 100)}...`);
     //   }
     // });
 
@@ -593,7 +593,7 @@ describe('API Integration Tests', () => {
         expect(typeof answer).toBe('string');
         expect(answer.length).toBeGreaterThan(0);
         
-        console.log(`Both sources test: ${answer.substring(0, 100)}...`);
+        // console.log(`Both sources test: ${answer.substring(0, 100)}...`);
         
         // Note: In a real environment, the AI would include source attribution
         // This test verifies the system is working, not the AI response content

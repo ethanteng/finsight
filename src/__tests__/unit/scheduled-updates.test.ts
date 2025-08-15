@@ -32,30 +32,30 @@ const MockDataOrchestrator = dataOrchestrator as jest.Mocked<typeof dataOrchestr
 
 // Helper function to execute market context refresh job
 const executeMarketContextRefreshJob = async () => {
-  console.log('🔄 Starting hourly market context refresh...');
+  // console.log('🔄 Starting hourly market context refresh...');
   const startTime = Date.now();
   
   try {
     await dataOrchestrator.forceRefreshAllContext();
     const duration = Date.now() - startTime;
     
-    console.log(`✅ Market context refresh completed successfully in ${duration}ms`);
-    console.log(`📊 Market Context Metrics: duration=${duration}ms`);
+    // console.log(`✅ Market context refresh completed successfully in ${duration}ms`);
+    // console.log(`📊 Market Context Metrics: duration=${duration}ms`);
     
     // Log cache stats for monitoring
     const cacheStats = await dataOrchestrator.getCacheStats();
-    console.log(`📊 Cache Stats: marketContextCache.size=${cacheStats.marketContextCache.size}`);
+    // console.log(`📊 Cache Stats: marketContextCache.size=${cacheStats.marketContextCache.size}`);
     
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`❌ Error in market context refresh after ${duration}ms:`, error);
-    console.error(`📊 Market Context Error: duration=${duration}ms, error=${error}`);
+    // console.error(`❌ Error in market context refresh after ${duration}ms:`, error);
+    // console.error(`📊 Market Context Error: duration=${duration}ms, error=${error}`);
   }
 };
 
 // Helper function to execute daily sync job
 const executeDailySyncJob = async () => {
-  console.log('Starting daily sync job...');
+  // console.log('Starting daily sync job...');
   const startTime = Date.now();
   
   try {
@@ -64,16 +64,16 @@ const executeDailySyncJob = async () => {
     const duration = Date.now() - startTime;
     
     if (result.success) {
-      console.log(`✅ Daily sync completed successfully in ${duration}ms: ${result.accountsSynced} accounts, ${result.transactionsSynced} transactions synced`);
-      console.log(`📊 Sync Metrics: duration=${duration}ms, accounts=${result.accountsSynced}, transactions=${result.transactionsSynced}`);
+      // console.log(`✅ Daily sync completed successfully in ${duration}ms: ${result.accountsSynced} accounts, ${result.transactionsSynced} transactions synced`);
+      // console.log(`📊 Sync Metrics: duration=${duration}ms, accounts=${result.accountsSynced}, transactions=${result.transactionsSynced}`);
     } else {
-      console.error(`❌ Daily sync failed after ${duration}ms:`, result.error);
-      console.error(`📊 Sync Failure: duration=${duration}ms, error=${result.error}`);
+      // console.error(`❌ Daily sync failed after ${duration}ms:`, result.error);
+      // console.error(`📊 Sync Failure: duration=${duration}ms, error=${result.error}`);
     }
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`❌ Error in daily sync job after ${duration}ms:`, error);
-    console.error(`📊 Sync Error: duration=${duration}ms, error=${error}`);
+    // console.error(`❌ Error in daily sync job after ${duration}ms:`, error);
+    // console.error(`📊 Sync Error: duration=${duration}ms, error=${error}`);
   }
 };
 
@@ -100,7 +100,7 @@ describe('Scheduled Market Context Updates', () => {
         name: 'market-context-refresh'
       });
       
-      console.log('Cron job scheduled: market context refresh every hour');
+      // console.log('Cron job scheduled: market context refresh every hour');
       
       // Check that the cron job was scheduled
       const tasks = cron.getTasks();
@@ -176,7 +176,7 @@ describe('Scheduled Market Context Updates', () => {
         name: 'daily-sync'
       });
       
-      console.log('Cron job scheduled: daily sync at 2 AM EST');
+      // console.log('Cron job scheduled: daily sync at 2 AM EST');
       
       // Check that the cron job was scheduled
       const tasks = cron.getTasks();

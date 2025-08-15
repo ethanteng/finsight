@@ -30,7 +30,7 @@ describe('Privacy Logic Tests', () => {
       // Verify user was created
       expect(user.id).toBeDefined();
       expect(user.email).toBe('test-delete-all@example.com');
-      console.log('Created user with ID:', user.id);
+      // console.log('Created user with ID:', user.id);
 
       // Create test data for the user
       await prisma.accessToken.create({
@@ -110,7 +110,7 @@ describe('Privacy Logic Tests', () => {
       expect(user2.id).toBeDefined();
       expect(user1.email).toBe('user1-specific@example.com');
       expect(user2.email).toBe('user2-specific@example.com');
-      console.log('Created users with IDs:', user1.id, user2.id);
+      // console.log('Created users with IDs:', user1.id, user2.id);
 
       // Create data for both users
       await prisma.accessToken.createMany({
@@ -273,7 +273,7 @@ describe('Privacy Logic Tests', () => {
       // Verify user was created
       expect(user.id).toBeDefined();
       expect(user.email).toBe('test-disconnect@example.com');
-      console.log('Created user with ID:', user.id);
+      // console.log('Created user with ID:', user.id);
 
       // Create multiple access tokens
       await prisma.accessToken.createMany({
@@ -420,7 +420,7 @@ describe('Privacy Logic Tests', () => {
       // Verify user was created
       expect(user.id).toBeDefined();
       expect(user.email).toBe('test-cascade@example.com');
-      console.log('Created user with ID:', user.id);
+      // console.log('Created user with ID:', user.id);
 
       // Create account first
       const account = await prisma.account.create({
@@ -438,7 +438,7 @@ describe('Privacy Logic Tests', () => {
       expect(account).toBeTruthy();
       expect(account.id).toBeDefined();
       expect(account.userId).toBe(user.id);
-      console.log('Created account with ID:', account.id);
+      // console.log('Created account with ID:', account.id);
 
       // Create transaction for the account
       const transaction = await prisma.transaction.create({
@@ -455,7 +455,7 @@ describe('Privacy Logic Tests', () => {
       // Verify transaction was created
       expect(transaction).toBeTruthy();
       expect(transaction.accountId).toBe(account.id);
-      console.log('Created transaction with ID:', transaction.id);
+      // console.log('Created transaction with ID:', transaction.id);
 
       // Verify data exists before deletion
       const initialAccounts = await prisma.account.findMany({

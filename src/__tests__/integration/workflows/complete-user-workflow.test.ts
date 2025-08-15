@@ -17,7 +17,7 @@ describe('Complete User Workflow Tests', () => {
     // Test database connection
     try {
       await prisma.$queryRaw`SELECT 1`;
-      console.log('Test database connection verified');
+      // console.log('Test database connection verified');
     } catch (dbError) {
       console.error('Test database connection failed:', dbError);
       throw dbError;
@@ -73,11 +73,11 @@ describe('Complete User Workflow Tests', () => {
       });
       
       if (!createdUser) {
-        console.log('User not found in database, skipping account creation');
+        // console.log('User not found in database, skipping account creation');
         return; // Skip the rest of the test if user creation failed
       }
 
-      console.log('User verified in database:', { id: createdUser.id, email: createdUser.email });
+      // console.log('User verified in database:', { id: createdUser.id, email: createdUser.email });
 
       // Step 2: Login (verify token works)
       const loginResponse = await request(app)
@@ -109,7 +109,7 @@ describe('Complete User Workflow Tests', () => {
       // Handle Plaid API failure gracefully in test environment
       let uniqueToken: string;
       if (plaidResponse.status === 500) {
-        console.log('Plaid API call failed (expected in test environment)');
+        // console.log('Plaid API call failed (expected in test environment)');
         
         // Verify user still exists before creating access token
         const userForToken = await prisma.user.findUnique({
@@ -117,11 +117,11 @@ describe('Complete User Workflow Tests', () => {
         });
         
         if (!userForToken) {
-          console.log('User not found before access token creation, skipping');
+          // console.log('User not found before access token creation, skipping');
           return; // Skip the rest of the test if user doesn't exist
         }
         
-        console.log('User verified before access token creation:', { id: userForToken.id, email: userForToken.email });
+        // console.log('User verified before access token creation:', { id: userForToken.id, email: userForToken.email });
         
         // Create mock access token for testing
         uniqueToken = `test-access-token-${Date.now()}-${Math.random()}`;
@@ -147,7 +147,7 @@ describe('Complete User Workflow Tests', () => {
 
       // Handle authentication or API failure gracefully
       if (syncAccountsResponse.status === 401 || syncAccountsResponse.status === 500) {
-        console.log('Sync accounts failed (expected in test environment)');
+        // console.log('Sync accounts failed (expected in test environment)');
         // Create mock account data
         const uniqueAccountId = `test-account-${Date.now()}-${Math.random()}`;
         await prisma.account.create({
@@ -273,19 +273,19 @@ describe('Complete User Workflow Tests', () => {
       });
 
       // Should have at least the questions we asked
-      console.log('Demo conversations check:', { 
-        expected: questions.length, 
-        actual: demoConversations.length,
-        questions: questions,
-        conversations: demoConversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
-      });
+      // console.log('Demo conversations check:', { 
+      //   expected: questions.length, 
+      //   actual: demoConversations.length,
+      //   questions: questions,
+      //   conversations: demoConversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
+      // });
       
       // Add retry mechanism for CI environment
       let retryCount = 0;
       let finalDemoConversations = demoConversations;
       
       while (finalDemoConversations.length === 0 && retryCount < 3) {
-        console.log(`Retry ${retryCount + 1}: Waiting for demo conversations to be available...`);
+        // console.log(`Retry ${retryCount + 1}: Waiting for demo conversations to be available...`);
         await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
         
         // Re-query the demo conversations
@@ -294,10 +294,10 @@ describe('Complete User Workflow Tests', () => {
           orderBy: { createdAt: 'asc' }
         });
         
-        console.log(`Retry ${retryCount + 1} result:`, { 
-          count: finalDemoConversations.length,
-          conversations: finalDemoConversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
-        });
+        // console.log(`Retry ${retryCount + 1} result:`, { 
+        //   count: finalDemoConversations.length,
+        //   conversations: finalDemoConversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
+        // });
         
         retryCount++;
       }
@@ -360,11 +360,11 @@ describe('Complete User Workflow Tests', () => {
         where: { sessionId: sessionId }
       });
       
-      console.log('Demo session lookup result:', { 
-        found: !!demoSession, 
-        sessionId: sessionId,
-        demoSessionId: demoSession?.id 
-      });
+      // console.log('Demo session lookup result:', { 
+      //   found: !!demoSession, 
+      //   sessionId: sessionId,
+      //   demoSessionId: demoSession?.id 
+      // });
       
       expect(demoSession).toBeTruthy();
       
@@ -374,18 +374,18 @@ describe('Complete User Workflow Tests', () => {
         orderBy: { createdAt: 'asc' }
       });
 
-      console.log('Demo conversations lookup result:', { 
-        count: conversations.length, 
-        sessionId: demoSession!.id,
-        conversations: conversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
-      });
+      // console.log('Demo conversations lookup result:', { 
+      //   count: conversations.length, 
+      //   sessionId: demoSession!.id,
+      //   conversations: conversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
+      // });
 
       // Add retry mechanism for CI environment
       let retryCount = 0;
       let finalConversations = conversations;
       
       while (finalConversations.length === 0 && retryCount < 3) {
-        console.log(`Retry ${retryCount + 1}: Waiting for demo conversations to be available...`);
+        // console.log(`Retry ${retryCount + 1}: Waiting for demo conversations to be available...`);
         await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
         
         // Re-query the demo conversations
@@ -394,10 +394,10 @@ describe('Complete User Workflow Tests', () => {
           orderBy: { createdAt: 'asc' }
         });
         
-        console.log(`Retry ${retryCount + 1} result:`, { 
-          count: finalConversations.length,
-          conversations: finalConversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
-        });
+        // console.log(`Retry ${retryCount + 1} result:`, { 
+        //   count: finalConversations.length,
+        //   conversations: finalConversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
+        // });
         
         retryCount++;
       }
@@ -476,19 +476,19 @@ describe('Complete User Workflow Tests', () => {
       });
 
       // Demo and user conversations should be separate
-      console.log('Mixed mode demo conversations check:', { 
-        demoConversationsCount: demoConversations.length,
-        userConversationsCount: userConversations.length,
-        demoSessionId: demoSession?.id,
-        userId: (await prisma.user.findFirst({ where: { email: 'mixed-test@example.com' } }))?.id
-      });
+      // console.log('Mixed mode demo conversations check:', { 
+      //   demoConversationsCount: demoConversations.length,
+      //   userConversationsCount: userConversations.length,
+      //   demoSessionId: demoSession?.id,
+      //   userId: (await prisma.user.findFirst({ where: { email: 'mixed-test@example.com' } }))?.id
+      // });
       
       // Add retry mechanism for CI environment
       let retryCount = 0;
       let finalDemoConversations = demoConversations;
       
       while (finalDemoConversations.length === 0 && retryCount < 3) {
-        console.log(`Retry ${retryCount + 1}: Waiting for demo conversations to be available...`);
+        // console.log(`Retry ${retryCount + 1}: Waiting for demo conversations to be available...`);
         await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
         
         // Re-query the demo conversations
@@ -496,10 +496,10 @@ describe('Complete User Workflow Tests', () => {
           where: { sessionId: demoSession!.id }
         });
         
-        console.log(`Retry ${retryCount + 1} result:`, { 
-          count: finalDemoConversations.length,
-          conversations: finalDemoConversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
-        });
+        // console.log(`Retry ${retryCount + 1} result:`, { 
+        //   count: finalDemoConversations.length,
+        //   conversations: finalDemoConversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
+        // });
         
         retryCount++;
       }

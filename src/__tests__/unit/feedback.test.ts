@@ -47,7 +47,7 @@ describe('Feedback System Tests', () => {
           });
         }
         
-        console.log('Feedback saved:', { id: feedback.id, score, isDemo });
+        // console.log('Feedback saved:', { id: feedback.id, score, isDemo });
         res.json({ success: true, feedbackId: feedback.id });
         
       } catch (error) {
