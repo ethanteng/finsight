@@ -2,7 +2,7 @@
 
 ## **Overview**
 
-This specification outlines the implementation of user profile anonymization to protect user privacy when profile data is included in AI prompts, aligning with the platform's existing dual-data privacy system.
+This specification outlines the implementation of user profile anonymization to protect user privacy when profile data is included in AI prompts, aligning with the platform's existing dual-data privacy system and **integrating with the newly implemented profile encryption at rest**.
 
 ## **Current State Analysis**
 
@@ -12,11 +12,17 @@ This specification outlines the implementation of user profile anonymization to 
 - **Inconsistent with platform privacy approach**: Other data types use comprehensive anonymization
 - **Direct inclusion in AI prompts**: Profiles bypass the existing anonymization system
 
+### **Profile Encryption Status**
+- ✅ **Profile encryption at rest is implemented** using AES-256-GCM
+- ✅ **Profiles are stored encrypted** in the `encrypted_profile_data` table
+- ✅ **ProfileManager handles encryption/decryption** automatically
+- ❌ **Profiles are still sent to AI without anonymization** after decryption
+
 ### **Current Profile Data Flow**
 ```typescript
 // Current implementation in src/openai.ts
 ${userProfile && userProfile.trim() ? `USER PROFILE:
-${userProfile}  // Raw profile data sent directly to GPT
+${userProfile}  // Raw profile data sent directly to GPT (after decryption)
 
 Use this profile information to provide more personalized and relevant financial advice.
 Consider the user's personal situation, family status, occupation, and financial goals when making recommendations.
@@ -24,7 +30,7 @@ Consider the user's personal situation, family status, occupation, and financial
 ` : ''}
 ```
 
-### **Example of Exposed Data**
+### **Example of Exposed Data (After Decryption)**
 ```
 I am Sarah Chen, a 35-year-old software engineer living in Austin, TX with my husband Michael (37, Marketing Manager) and our two children (ages 5 and 8). 
 
@@ -47,6 +53,45 @@ We own our home with a $485,000 mortgage at 3.25% interest rate, and we're focus
 4. **Session Consistency**: Maintain anonymization maps across requests
 5. **Demo Mode Support**: Handle demo profiles appropriately
 6. **Backward Compatibility**: Support existing profile enhancement features
+7. **Encryption Integration**: Work seamlessly with existing profile encryption system
+
+### **Critical Preservation Requirements**
+
+**⚠️ CRITICAL: The following existing functionality MUST be preserved exactly as-is:**
+
+1. **Intelligent Profile Building**: 
+   - **ProfileExtractor** must continue to intelligently analyze conversations and update profiles
+   - **NO dumb appending** - profiles must be intelligently enhanced, not concatenated
+   - **updateProfileFromConversation()** must use ProfileExtractor for intelligent updates
+   - Preserve the AI-powered profile enhancement that analyzes conversations and extracts relevant information
+
+2. **User Profile Editing**:
+   - Users must continue to be able to edit their profiles directly via the frontend
+   - **PUT /profile** endpoint must work exactly as before
+   - Frontend UserProfile component must maintain all editing capabilities
+   - Profile updates must trigger proper encryption and anonymization
+
+3. **Admin Interface Display**:
+   - **GET /admin/user-financial-data/:userId** must continue to show user profiles
+   - Admin interface must display the current user profile information
+   - Profile data must be accessible to admins for support purposes
+   - Admin view must show the same profile data that users see
+
+4. **Profile Enhancement Features**:
+   - **enhanceProfileWithInvestmentData()** must continue to work
+   - **enhanceProfileWithLiabilityData()** must continue to work
+   - **enhanceProfileWithSpendingData()** must continue to work
+   - All profile enhancement functions must maintain their intelligent analysis capabilities
+
+5. **Profile Recovery and History**:
+   - **recoverProfile()** method must continue to work
+   - **getProfileHistory()** method must continue to work
+   - Emergency recovery mechanisms must remain functional
+
+6. **Profile Synchronization**:
+   - Profile updates must be immediately reflected across all interfaces
+   - Real-time profile synchronization must be maintained
+   - Profile consistency between user view and admin view must be preserved
 
 ### **Privacy Requirements**
 
@@ -64,8 +109,58 @@ We own our home with a $485,000 mortgage at 3.25% interest rate, and we're focus
 3. **No Data Leakage**: Ensure no raw data reaches AI models
 4. **Audit Trail**: Log anonymization operations for security monitoring
 5. **Error Handling**: Graceful fallback if anonymization fails
+6. **Encryption Compliance**: Maintain encryption at rest while adding anonymization
+
+## **What MUST NOT Change**
+
+**🚫 CRITICAL: The following aspects of the current system MUST remain exactly the same:**
+
+### **API Endpoints**
+- **PUT /profile** - Must work exactly as before for user profile updates
+- **GET /profile** - Must return user profiles for frontend display
+- **GET /admin/user-financial-data/:userId** - Must continue to show profiles to admins
+
+### **ProfileManager Methods**
+- **updateProfile()** - Must continue to encrypt and store profiles
+- **updateProfileFromConversation()** - Must continue to use ProfileExtractor intelligently
+- **getOrCreateProfile()** - Must continue to work for AI requests (now with anonymization)
+- **recoverProfile()** - Must continue to work for emergency recovery
+- **getProfileHistory()** - Must continue to work for profile history
+
+### **Profile Enhancement Logic**
+- **ProfileExtractor.extractAndUpdateProfile()** - Must continue to intelligently analyze conversations
+- **enhanceProfileWithInvestmentData()** - Must continue to enhance profiles with investment insights
+- **enhanceProfileWithLiabilityData()** - Must continue to enhance profiles with liability insights
+- **enhanceProfileWithSpendingData()** - Must continue to enhance profiles with spending insights
+
+### **Frontend Components**
+- **UserProfile.tsx** - Must maintain all editing capabilities
+- Profile editing interface must work exactly as before
+- Profile display must show the same information
+
+### **Data Flow Patterns**
+- Profile updates must trigger encryption (existing)
+- Profile retrieval for AI must trigger anonymization (new)
+- Profile retrieval for users/admins must NOT trigger anonymization (preserved)
+- All existing profile enhancement triggers must continue to work
+
+### **Database Operations**
+- **encrypted_profile_data** table operations must remain unchanged
+- **user_profiles** table operations must remain unchanged
+- All existing database queries must continue to work
+- Profile relationships and foreign keys must remain intact
 
 ## **Technical Design**
+
+### **Updated Architecture with Encryption Integration**
+
+```
+User Profile Data → ProfileManager → ProfileEncryptionService → Encrypted Storage
+                    ↓
+                Decrypted Profile → ProfileAnonymizer → Anonymized Profile → AI Models
+                    ↓
+                Original Profile (for user display)
+```
 
 ### **Profile Anonymization Service**
 
@@ -261,62 +356,247 @@ export class ProfileAnonymizer {
 }
 ```
 
-### **Updated Profile Manager**
+### **Updated Profile Manager with Anonymization**
 
 ```typescript
 // src/profile/manager.ts
+import { PrismaClient } from '@prisma/client';
+import { ProfileEncryptionService } from './encryption';
+import { ProfileExtractor } from './extractor';
 import { ProfileAnonymizer } from './anonymizer';
 
 export class ProfileManager {
+  private encryptionService: ProfileEncryptionService;
+  private profileExtractor: ProfileExtractor;
   private anonymizer: ProfileAnonymizer;
 
-  constructor(sessionId: string) {
-    this.anonymizer = new ProfileAnonymizer(sessionId);
+  constructor(sessionId?: string) {
+    const encryptionKey = process.env.PROFILE_ENCRYPTION_KEY;
+    if (!encryptionKey) {
+      throw new Error('PROFILE_ENCRYPTION_KEY environment variable is required');
+    }
+    
+    // Validate encryption key format
+    if (!ProfileEncryptionService.validateKey(encryptionKey)) {
+      throw new Error('Invalid PROFILE_ENCRYPTION_KEY format');
+    }
+    
+    this.encryptionService = new ProfileEncryptionService(encryptionKey);
+    this.profileExtractor = new ProfileExtractor();
+    this.anonymizer = new ProfileAnonymizer(sessionId || 'default-session');
   }
 
   async getOrCreateProfile(userId: string): Promise<string> {
-    const prisma = getPrismaClient();
+    const prisma = new PrismaClient();
     
-    // ... existing profile retrieval logic ...
-    
-    let profileText = '';
-    if (profile) {
-      profileText = profile.profileText || '';
+    try {
+      // First check if the user exists
+      const user = await prisma.user.findUnique({
+        where: { id: userId }
+      });
+      
+      if (!user) {
+        console.log('User not found, cannot create profile for userId:', userId);
+        return '';
+      }
+      
+      // Try to find profile by userId first, then by email
+      let profile = await prisma.userProfile.findUnique({
+        where: { userId },
+        include: { encrypted_profile_data: true }
+      });
+      
+      if (!profile) {
+        // Try to find by email as fallback
+        profile = await prisma.userProfile.findUnique({
+          where: { email: user.email },
+          include: { encrypted_profile_data: true }
+        });
+      }
+      
+      if (!profile) {
+        // Generate a unique profile hash
+        const profileHash = `profile_${userId}_${Date.now()}`;
+        
+        profile = await prisma.userProfile.create({
+          data: {
+            email: user.email,
+            profileHash,
+            userId,
+            profileText: '', // Keep for backward compatibility
+            isActive: true,
+            conversationCount: 0
+          },
+          include: { encrypted_profile_data: true }
+        });
+      }
+      
+      // Get decrypted profile text if available
+      let profileText = '';
+      if (profile.encrypted_profile_data) {
+        try {
+          profileText = this.encryptionService.decrypt(
+            profile.encrypted_profile_data.encryptedData,
+            profile.encrypted_profile_data.iv,
+            profile.encrypted_profile_data.tag
+          );
+        } catch (error) {
+          console.error('Failed to decrypt profile data:', error);
+          // Fallback to plain text if decryption fails
+          profileText = profile.profileText || '';
+        }
+      } else {
+        // Fallback to plain text for backward compatibility
+        profileText = profile.profileText || '';
+      }
+      
+      // Anonymize the profile before returning for AI use
+      const anonymizationResult = this.anonymizer.anonymizeProfile(profileText);
+      
+      console.log('ProfileManager: Profile anonymized, original length:', profileText.length, 'anonymized length:', anonymizationResult.anonymizedProfile.length);
+      
+      return anonymizationResult.anonymizedProfile;
+    } finally {
+      await prisma.$disconnect();
     }
+  }
+
+  // Method to get original (non-anonymized) profile for user display
+  async getOriginalProfile(userId: string): Promise<string> {
+    const prisma = new PrismaClient();
     
-    // Anonymize the profile before returning
-    const anonymizationResult = this.anonymizer.anonymizeProfile(profileText);
-    
-    console.log('ProfileManager: Anonymized profile, original length:', profileText.length, 'anonymized length:', anonymizationResult.anonymizedProfile.length);
-    
-    return anonymizationResult.anonymizedProfile;
+    try {
+      const profile = await prisma.userProfile.findUnique({
+        where: { userId },
+        include: { encrypted_profile_data: true }
+      });
+      
+      if (!profile) {
+        return '';
+      }
+      
+      // Return decrypted profile text if available
+      if (profile.encrypted_profile_data) {
+        try {
+          return this.encryptionService.decrypt(
+            profile.encrypted_profile_data.encryptedData,
+            profile.encrypted_profile_data.iv,
+            profile.encrypted_profile_data.tag
+          );
+        } catch (error) {
+          console.error('Failed to decrypt profile data:', error);
+          // Fallback to plain text if decryption fails
+          return profile.profileText || '';
+        }
+      }
+      
+      // Fallback to plain text for backward compatibility
+      return profile.profileText || '';
+    } finally {
+      await prisma.$disconnect();
+    }
   }
 
   async updateProfile(userId: string, newProfileText: string): Promise<void> {
-    const prisma = getPrismaClient();
+    const prisma = new PrismaClient();
     
-    // ... existing profile update logic ...
-    
-    // Store the original (non-anonymized) profile text
-    await prisma.userProfile.update({
-      where: { id: profile.id },
-      data: { 
-        profileText: newProfileText, // Store original text
-        lastUpdated: new Date()
+    try {
+      // Get user to include email in create operation
+      const user = await prisma.user.findUnique({
+        where: { id: userId }
+      });
+      
+      if (!user) {
+        console.log('User not found, cannot update profile for userId:', userId);
+        return;
       }
-    });
+      
+      // Try to find existing profile
+      let profile = await prisma.userProfile.findUnique({
+        where: { userId },
+        include: { encrypted_profile_data: true }
+      });
+      
+      if (!profile) {
+        // Try to find by email as fallback
+        profile = await prisma.userProfile.findUnique({
+          where: { email: user.email },
+          include: { encrypted_profile_data: true }
+        });
+      }
+      
+      // Encrypt the profile data
+      const encrypted = this.encryptionService.encrypt(newProfileText);
+      
+      if (profile) {
+        // Update existing profile
+        await prisma.userProfile.update({
+          where: { id: profile.id },
+          data: { 
+            lastUpdated: new Date()
+          }
+        });
+        
+        // Update or create encrypted data
+        if (profile.encrypted_profile_data) {
+          await prisma.encrypted_profile_data.update({
+            where: { profileHash: profile.profileHash },
+            data: {
+              encryptedData: encrypted.encryptedData,
+              iv: encrypted.iv,
+              tag: encrypted.tag,
+              keyVersion: encrypted.keyVersion,
+              updatedAt: new Date()
+            }
+          });
+        } else {
+          await prisma.encrypted_profile_data.create({
+            data: {
+              id: profile.profileHash,
+              profileHash: profile.profileHash,
+              encryptedData: encrypted.encryptedData,
+              iv: encrypted.iv,
+              tag: encrypted.tag,
+              keyVersion: encrypted.keyVersion,
+              algorithm: 'aes-256-gcm',
+              updatedAt: new Date()
+            }
+          });
+        }
+      } else {
+        // Create new profile
+        const profileHash = `profile_${userId}_${Date.now()}`;
+        const newProfile = await prisma.userProfile.create({
+          data: { 
+            email: user.email,
+            profileHash,
+            userId,
+            profileText: '', // Keep for backward compatibility
+            isActive: true,
+            conversationCount: 0
+          }
+        });
+        
+        // Create encrypted data
+        await prisma.encrypted_profile_data.create({
+          data: {
+            id: profileHash,
+            profileHash,
+            encryptedData: encrypted.encryptedData,
+            iv: encrypted.iv,
+            tag: encrypted.tag,
+            keyVersion: encrypted.keyVersion,
+            algorithm: 'aes-256-gcm',
+            updatedAt: new Date()
+          }
+        });
+      }
+    } finally {
+      await prisma.$disconnect();
+    }
   }
 
-  // Method to get original profile for user display
-  async getOriginalProfile(userId: string): Promise<string> {
-    const prisma = getPrismaClient();
-    
-    const profile = await prisma.userProfile.findUnique({
-      where: { userId }
-    });
-    
-    return profile?.profileText || '';
-  }
+  // ... rest of existing methods remain the same ...
 }
 ```
 
@@ -324,7 +604,7 @@ export class ProfileManager {
 
 ```typescript
 // src/openai.ts
-import { ProfileAnonymizer } from './profile/anonymizer';
+import { ProfileManager } from './profile/manager';
 
 export async function askOpenAIWithEnhancedContext(
   question: string, 
@@ -344,7 +624,7 @@ export async function askOpenAIWithEnhancedContext(
     userProfile = demoProfile;
     console.log('OpenAI Enhanced: Using provided demo profile, length:', userProfile.length);
   } else if (userId && !isDemo) {
-    // Get and anonymize user profile
+    // Get and anonymize user profile (ProfileManager now handles anonymization automatically)
     const profileManager = new ProfileManager(userId); // Use userId as sessionId
     userProfile = await profileManager.getOrCreateProfile(userId);
     console.log('OpenAI Enhanced: User profile retrieved and anonymized, length:', userProfile.length);
@@ -354,9 +634,47 @@ export async function askOpenAIWithEnhancedContext(
 }
 ```
 
+## **Data Flow with Encryption and Anonymization**
+
+### **Complete Data Flow**
+```
+1. User Input → Profile Creation/Update
+2. ProfileManager.updateProfile() → ProfileEncryptionService.encrypt()
+3. Encrypted data stored in encrypted_profile_data table
+4. Profile retrieval: ProfileManager.getOrCreateProfile()
+5. ProfileEncryptionService.decrypt() → ProfileAnonymizer.anonymizeProfile()
+6. Anonymized profile sent to AI models
+7. Original profile available via ProfileManager.getOriginalProfile() for user display
+```
+
+### **Preserved Data Flow for Existing Features**
+```
+1. User Profile Editing:
+   Frontend Edit → PUT /profile → ProfileManager.updateProfile() → Encryption → Storage
+
+2. Intelligent Profile Building:
+   Conversation → ProfileExtractor.analyze() → ProfileManager.updateProfile() → Encryption → Storage
+
+3. Profile Enhancement:
+   Investment/Liability/Spending Data → Profile Enhancement Logic → ProfileManager.updateProfile() → Encryption → Storage
+
+4. Admin Interface:
+   Admin Request → ProfileManager.getOriginalProfile() → Decryption → Display (non-anonymized)
+
+5. AI Processing:
+   AI Request → ProfileManager.getOrCreateProfile() → Decryption → Anonymization → AI Models
+```
+
+### **Security Layers**
+1. **Layer 1**: Encryption at rest (AES-256-GCM)
+2. **Layer 2**: Anonymization before AI processing
+3. **Layer 3**: Session-based tokenization consistency
+4. **Layer 4**: No raw data reaches external AI models
+5. **Layer 5**: Preserved functionality for all existing features
+
 ## **Anonymization Examples**
 
-### **Before Anonymization**
+### **Before Anonymization (After Decryption)**
 ```
 I am Sarah Chen, a 35-year-old software engineer living in Austin, TX with my husband Michael (37, Marketing Manager) and our two children (ages 5 and 8). 
 
@@ -367,8 +685,6 @@ We own our home with a $485,000 mortgage at 3.25% interest rate, and we're focus
 - Saving for a family vacation to Europe ($8,000 target, currently at $3,200)
 - Building a house down payment fund ($100,000 target, currently at $45,000)
 - Long-term retirement planning (currently have $246,200 in retirement accounts)
-
-Our investment strategy is conservative with a mix of index funds in our 401(k) and Roth IRA. We prioritize saving and are working to increase our monthly savings rate. We're also focused on paying down our credit card debt and maintaining good credit scores.
 ```
 
 ### **After Anonymization**
@@ -382,31 +698,119 @@ We own our home with a AMOUNT_485000 mortgage at RATE_3.25 interest rate, and we
 - Saving for a family vacation to Europe (GOAL_8000 target, currently at AMOUNT_3200)
 - Building a house down payment fund (GOAL_100000 target, currently at AMOUNT_45000)
 - Long-term retirement planning (currently have AMOUNT_246200 in retirement accounts)
-
-Our investment strategy is conservative with a mix of index funds in our 401(k) and Roth IRA. We prioritize saving and are working to increase our monthly savings rate. We're also focused on paying down our credit card debt and maintaining good credit scores.
 ```
 
 ## **Implementation Strategy**
 
-### **Phase 1: Core Anonymization**
-1. **Implement ProfileAnonymizer**: Create the anonymization service
-2. **Update ProfileManager**: Integrate anonymization into profile retrieval
-3. **Update OpenAI Integration**: Use anonymized profiles in AI prompts
-4. **Testing**: Create comprehensive tests for anonymization
+### **Phase 0: Preservation Planning (CRITICAL)**
+1. **Audit Current Functionality**: Document all existing profile features and data flows
+2. **Create Preservation Tests**: Write tests that verify existing functionality continues to work
+3. **Backup Current Implementation**: Ensure rollback capability if issues arise
+4. **Feature Flag Preparation**: Prepare flags to enable/disable anonymization independently
 
-### **Phase 2: Enhanced Features**
+### **Phase 1: Core Anonymization with Encryption Integration**
+1. **Implement ProfileAnonymizer**: Create the anonymization service
+2. **Update ProfileManager**: Integrate anonymization into profile retrieval while maintaining encryption
+3. **Preserve Existing Methods**: Ensure all existing ProfileManager methods work exactly as before
+4. **Update OpenAI Integration**: Use anonymized profiles in AI prompts
+5. **Testing**: Create comprehensive tests for anonymization with encryption AND existing functionality
+
+### **Phase 2: Enhanced Features with Preservation**
 1. **Session Management**: Implement proper session-based tokenization maps
 2. **Demo Mode Support**: Handle demo profile anonymization
-3. **Error Handling**: Robust fallback mechanisms
+3. **Error Handling**: Robust fallback mechanisms for both encryption and anonymization
 4. **Performance Optimization**: Caching and optimization
+5. **Functionality Validation**: Verify all existing features continue to work
 
-### **Phase 3: Validation & Monitoring**
+### **Phase 3: Validation & Monitoring with Preservation**
 1. **Privacy Validation**: Verify no personal data reaches AI models
-2. **Performance Monitoring**: Track anonymization performance
-3. **User Experience**: Ensure personalization still works effectively
-4. **Documentation**: Update privacy documentation
+2. **Encryption Validation**: Ensure encryption continues to work properly
+3. **Functionality Validation**: Ensure ALL existing profile features work exactly as before
+4. **Performance Monitoring**: Track anonymization and encryption performance
+5. **User Experience**: Ensure personalization still works effectively
+6. **Admin Interface**: Verify admin profile display continues to work
+7. **Profile Editing**: Verify user profile editing continues to work
+8. **Intelligent Building**: Verify ProfileExtractor continues to work intelligently
 
 ## **Testing Strategy**
+
+### **Preservation Testing (CRITICAL)**
+Before implementing any anonymization, the following tests MUST pass to ensure existing functionality is preserved:
+
+```typescript
+// src/__tests__/unit/profile-functionality-preservation.test.ts
+describe('Profile Functionality Preservation', () => {
+  test('ProfileExtractor must continue to work intelligently', async () => {
+    const extractor = new ProfileExtractor();
+    const conversation = {
+      id: 'test',
+      question: 'I am a 30-year-old software engineer earning $100,000',
+      answer: 'That sounds like a good income for your age and profession.',
+      createdAt: new Date()
+    };
+    
+    const result = await extractor.extractAndUpdateProfile('test-user', conversation);
+    
+    // Must NOT be dumb concatenation
+    expect(result).not.toContain('Q: I am a 30-year-old software engineer earning $100,000');
+    expect(result).not.toContain('A: That sounds like a good income for your age and profession.');
+    
+    // Must be intelligent extraction
+    expect(result).toContain('30-year-old');
+    expect(result).toContain('software engineer');
+    expect(result).toContain('$100,000');
+  });
+
+  test('ProfileManager.updateProfileFromConversation must use ProfileExtractor', async () => {
+    const profileManager = new ProfileManager();
+    const conversation = { /* test conversation */ };
+    
+    // Mock ProfileExtractor to verify it's called
+    const mockExtractor = jest.spyOn(profileManager.profileExtractor, 'extractAndUpdateProfile');
+    
+    await profileManager.updateProfileFromConversation('test-user', conversation);
+    
+    expect(mockExtractor).toHaveBeenCalled();
+  });
+
+  test('User profile editing must continue to work', async () => {
+    const profileManager = new ProfileManager();
+    const testProfile = 'I am John Doe, a software engineer';
+    
+    await profileManager.updateProfile('test-user', testProfile);
+    const retrievedProfile = await profileManager.getOriginalProfile('test-user');
+    
+    expect(retrievedProfile).toContain('John Doe');
+    expect(retrievedProfile).toContain('software engineer');
+  });
+
+  test('Admin interface must continue to show profiles', async () => {
+    const profileManager = new ProfileManager();
+    const testProfile = 'I am Jane Smith, earning $80,000';
+    
+    await profileManager.updateProfile('test-user', testProfile);
+    const adminProfile = await profileManager.getOriginalProfile('test-user');
+    
+    expect(adminProfile).toContain('Jane Smith');
+    expect(adminProfile).toContain('$80,000');
+  });
+
+  test('Profile enhancement functions must continue to work', async () => {
+    const profileManager = new ProfileManager();
+    const initialProfile = 'I am a software engineer';
+    
+    await profileManager.updateProfile('test-user', initialProfile);
+    
+    // Test investment enhancement
+    await enhanceProfileWithInvestmentData('test-user', [], []);
+    const enhancedProfile = await profileManager.getOriginalProfile('test-user');
+    
+    // Profile should be enhanced, not just concatenated
+    expect(enhancedProfile).toContain('software engineer');
+    // Additional investment insights should be present
+  });
+});
+```
 
 ### **Unit Tests**
 ```typescript
@@ -442,23 +846,97 @@ describe('ProfileAnonymizer', () => {
 });
 ```
 
-### **Integration Tests**
+### **Integration Tests with Encryption and Preservation**
 ```typescript
-// src/__tests__/integration/profile-anonymization-integration.test.ts
-describe('Profile Anonymization Integration', () => {
-  test('should anonymize profiles before sending to AI', async () => {
+// src/__tests__/integration/profile-anonymization-encryption-preservation.test.ts
+describe('Profile Anonymization with Encryption and Preservation', () => {
+  test('should encrypt, decrypt, and anonymize profiles while preserving functionality', async () => {
     const profileManager = new ProfileManager('test-session');
     const testProfile = 'I am John Doe, earning $100,000 in New York, NY';
     
+    // Update profile (should encrypt)
     await profileManager.updateProfile('test-user', testProfile);
+    
+    // Get profile for AI (should decrypt and anonymize)
     const anonymizedProfile = await profileManager.getOrCreateProfile('test-user');
     
+    // Get original profile for user display (should decrypt without anonymization)
+    const originalProfile = await profileManager.getOriginalProfile('test-user');
+    
+    // Verify anonymization
     expect(anonymizedProfile).not.toContain('John Doe');
     expect(anonymizedProfile).not.toContain('$100,000');
     expect(anonymizedProfile).not.toContain('New York, NY');
     expect(anonymizedProfile).toContain('PERSON_');
     expect(anonymizedProfile).toContain('INCOME_');
     expect(anonymizedProfile).toContain('LOCATION_');
+    
+    // Verify original profile is preserved
+    expect(originalProfile).toContain('John Doe');
+    expect(originalProfile).toContain('$100,000');
+    expect(originalProfile).toContain('New York, NY');
+  });
+
+  test('should preserve intelligent profile building', async () => {
+    const profileManager = new ProfileManager('test-session');
+    const conversation = {
+      id: 'test',
+      question: 'I am a 25-year-old teacher earning $45,000',
+      answer: 'That is a typical salary for a teacher in your area.',
+      createdAt: new Date()
+    };
+    
+    // This should use ProfileExtractor intelligently
+    await profileManager.updateProfileFromConversation('test-user', conversation);
+    
+    const profile = await profileManager.getOriginalProfile('test-user');
+    
+    // Must NOT be dumb concatenation
+    expect(profile).not.toContain('Q: I am a 25-year-old teacher earning $45,000');
+    expect(profile).not.toContain('A: That is a typical salary for a teacher in your area.');
+    
+    // Must be intelligent extraction
+    expect(profile).toContain('25-year-old');
+    expect(profile).toContain('teacher');
+    expect(profile).toContain('$45,000');
+  });
+});
+```
+
+### **End-to-End Tests**
+```typescript
+// src/__tests__/integration/profile-end-to-end.test.ts
+describe('Profile End-to-End Functionality', () => {
+  test('complete profile workflow must work', async () => {
+    // 1. User creates profile
+    const profileManager = new ProfileManager('test-session');
+    await profileManager.updateProfile('test-user', 'I am a software engineer');
+    
+    // 2. Profile is enhanced through conversation
+    const conversation = {
+      id: 'test',
+      question: 'I earn $120,000 annually',
+      answer: 'That is a good salary for your profession.',
+      createdAt: new Date()
+    };
+    await profileManager.updateProfileFromConversation('test-user', conversation);
+    
+    // 3. Profile is enhanced with investment data
+    await enhanceProfileWithInvestmentData('test-user', [], []);
+    
+    // 4. User can view their profile
+    const userProfile = await profileManager.getOriginalProfile('test-user');
+    expect(userProfile).toContain('software engineer');
+    expect(userProfile).toContain('$120,000');
+    
+    // 5. Admin can view the same profile
+    const adminProfile = await profileManager.getOriginalProfile('test-user');
+    expect(adminProfile).toBe(userProfile);
+    
+    // 6. AI gets anonymized version
+    const aiProfile = await profileManager.getOrCreateProfile('test-user');
+    expect(aiProfile).not.toContain('$120,000');
+    expect(aiProfile).toContain('INCOME_');
   });
 });
 ```
@@ -466,16 +944,17 @@ describe('Profile Anonymization Integration', () => {
 ## **Privacy Validation**
 
 ### **Data Flow Verification**
-1. **Profile Storage**: Original profiles stored in database
-2. **Profile Retrieval**: Anonymized profiles retrieved for AI
+1. **Profile Storage**: Original profiles encrypted and stored in database
+2. **Profile Retrieval**: Profiles decrypted and then anonymized for AI
 3. **AI Processing**: Only anonymized data reaches OpenAI
-4. **User Display**: Original profiles shown to users
+4. **User Display**: Original profiles shown to users via getOriginalProfile()
 
 ### **Security Checks**
 1. **No Personal Data**: Verify no names, amounts, or locations in AI prompts
 2. **Token Consistency**: Ensure consistent tokenization across sessions
-3. **Error Handling**: Verify graceful fallback if anonymization fails
-4. **Audit Trail**: Log anonymization operations for monitoring
+3. **Encryption Integrity**: Verify encryption/decryption continues to work
+4. **Error Handling**: Verify graceful fallback if either encryption or anonymization fails
+5. **Audit Trail**: Log both encryption and anonymization operations for monitoring
 
 ## **Performance Considerations**
 
@@ -484,26 +963,28 @@ describe('Profile Anonymization Integration', () => {
 2. **Batch Processing**: Process multiple anonymization operations efficiently
 3. **Regex Optimization**: Use efficient regex patterns for text processing
 4. **Memory Management**: Proper cleanup of tokenization maps
+5. **Encryption Efficiency**: Maintain existing encryption performance
 
 ### **Expected Performance Impact**
 - **Anonymization Overhead**: ~1-2ms per profile anonymization
+- **Encryption Overhead**: ~1-2ms per profile encryption/decryption (existing)
+- **Total Overhead**: ~2-4ms per profile operation
 - **Memory Usage**: Minimal increase for tokenization maps
-- **Storage Impact**: No additional storage requirements
-- **User Experience**: No impact on response times
+- **Storage Impact**: No additional storage requirements (encryption already implemented)
 
 ## **Migration Plan**
 
 ### **Backward Compatibility**
-1. **Gradual Rollout**: Implement anonymization without breaking existing features
+1. **Gradual Rollout**: Implement anonymization without breaking existing encryption
 2. **Feature Flag**: Add flag to enable/disable anonymization
 3. **Fallback Mechanism**: Use original profiles if anonymization fails
 4. **User Notification**: Inform users about enhanced privacy protection
 
 ### **Deployment Strategy**
-1. **Staging Testing**: Test anonymization in staging environment
+1. **Staging Testing**: Test anonymization with encryption in staging environment
 2. **Production Deployment**: Deploy with monitoring and rollback capability
-3. **Monitoring**: Track anonymization success rates and performance
-4. **Validation**: Verify privacy protection in production
+3. **Monitoring**: Track both encryption and anonymization success rates
+4. **Validation**: Verify privacy protection and encryption integrity in production
 
 ## **Success Metrics**
 
@@ -513,8 +994,14 @@ describe('Profile Anonymization Integration', () => {
 - [ ] Consistent tokenization across sessions
 - [ ] Successful privacy validation
 
+### **Security Metrics**
+- [ ] 100% of profiles encrypted at rest (existing)
+- [ ] Zero encryption/decryption failures (existing)
+- [ ] Successful anonymization implementation
+- [ ] No data leakage in AI prompts
+
 ### **Performance Metrics**
-- [ ] <5ms anonymization overhead
+- [ ] <5ms total overhead (encryption + anonymization)
 - [ ] <1% impact on AI response times
 - [ ] Zero impact on user experience
 - [ ] Successful caching implementation
@@ -522,7 +1009,7 @@ describe('Profile Anonymization Integration', () => {
 ### **Functional Metrics**
 - [ ] Maintained personalization quality
 - [ ] Successful demo mode support
-- [ ] Robust error handling
+- [ ] Robust error handling for both systems
 - [ ] Comprehensive test coverage
 
 ## **Future Enhancements**
@@ -539,6 +1026,120 @@ describe('Profile Anonymization Integration', () => {
 3. **Data Retention**: Automatic anonymization of old profile data
 4. **Compliance**: Enhanced GDPR and privacy compliance features
 
+### **Encryption Enhancements**
+1. **Key Rotation**: Automated key rotation for enhanced security
+2. **Performance Optimization**: Further encryption performance improvements
+3. **Audit Logging**: Enhanced encryption audit trails
+4. **Compliance**: Additional encryption compliance features
+
+## **Rollback Plan**
+
+### **Emergency Rollback Triggers**
+The following conditions will trigger immediate rollback of anonymization:
+
+1. **ProfileExtractor stops working intelligently** - Any regression to dumb concatenation
+2. **User profile editing breaks** - Users cannot edit their profiles
+3. **Admin interface cannot display profiles** - Admins lose access to user profile data
+4. **Profile enhancement functions break** - Investment/liability/spending enhancement fails
+5. **Profile recovery mechanisms fail** - Emergency recovery no longer works
+6. **Performance degradation** - Profile operations become significantly slower
+7. **Data inconsistency** - User view and admin view show different profile data
+
+### **Rollback Procedures**
+
+#### **Immediate Rollback (Feature Flag)**
+```typescript
+// Add feature flag to ProfileManager
+const ENABLE_PROFILE_ANONYMIZATION = process.env.ENABLE_PROFILE_ANONYMIZATION === 'true';
+
+async getOrCreateProfile(userId: string): Promise<string> {
+  // ... existing logic ...
+  
+  if (ENABLE_PROFILE_ANONYMIZATION) {
+    // New anonymization logic
+    const anonymizationResult = this.anonymizer.anonymizeProfile(profileText);
+    return anonymizationResult.anonymizedProfile;
+  } else {
+    // Fallback to original behavior (no anonymization)
+    return profileText;
+  }
+}
+```
+
+#### **Database Rollback**
+If database changes are needed:
+```sql
+-- Revert any schema changes if necessary
+-- Note: No schema changes are planned for anonymization
+-- All changes are application-level only
+```
+
+#### **Code Rollback**
+```bash
+# Quick rollback to previous working version
+git revert HEAD --no-edit
+git push origin main
+
+# Or rollback to specific commit
+git revert <commit-hash>
+git push origin main
+```
+
+### **Rollback Validation**
+After rollback, verify these functions work exactly as before:
+
+1. **ProfileExtractor.extractAndUpdateProfile()** - Intelligent analysis
+2. **ProfileManager.updateProfileFromConversation()** - Uses ProfileExtractor
+3. **User profile editing** - Frontend editing works
+4. **Admin interface** - Can display user profiles
+5. **Profile enhancement** - Investment/liability/spending enhancement works
+6. **Profile recovery** - Emergency recovery mechanisms work
+7. **Performance** - Profile operations return to previous speed
+
+### **Rollback Communication**
+1. **Immediate**: Notify development team of rollback
+2. **Within 1 hour**: Update stakeholders on rollback status
+3. **Within 4 hours**: Provide detailed analysis of what went wrong
+4. **Within 24 hours**: Provide timeline for fixing and re-implementation
+
+### **Post-Rollback Analysis**
+1. **Root Cause Analysis**: Identify why existing functionality was broken
+2. **Test Gap Analysis**: Identify which tests failed to catch the regression
+3. **Implementation Review**: Review the anonymization implementation approach
+4. **Re-implementation Plan**: Create safer implementation plan with better preservation testing
+
 ---
 
-**This specification provides a comprehensive plan for implementing user profile anonymization to align with the platform's privacy-first approach and protect user data when profiles are included in AI prompts.** 
+## **Summary**
+
+**This specification provides a comprehensive plan for implementing user profile anonymization that seamlessly integrates with the existing profile encryption system, ensuring both data security at rest and privacy protection during AI processing.**
+
+### **Key Implementation Principles**
+
+1. **Preservation First**: All existing profile functionality must be preserved exactly as-is
+2. **Intelligent Enhancement**: Maintain the AI-powered intelligent profile building system
+3. **User Experience**: Users must continue to edit and view their profiles exactly as before
+4. **Admin Access**: Admins must continue to access user profile data for support
+5. **Performance**: Maintain existing performance characteristics
+6. **Security**: Add anonymization layer without compromising encryption
+
+### **Critical Success Factors**
+
+- ✅ **ProfileExtractor continues to work intelligently** (no dumb concatenation)
+- ✅ **User profile editing continues to work** (PUT /profile endpoint)
+- ✅ **Admin interface continues to show profiles** (GET /admin/user-financial-data/:userId)
+- ✅ **Profile enhancement functions continue to work** (investment, liability, spending)
+- ✅ **Profile recovery mechanisms continue to work** (emergency recovery)
+- ✅ **Profile synchronization is maintained** (user view = admin view)
+- ✅ **Encryption continues to work** (AES-256-GCM at rest)
+- ✅ **Anonymization is added** (privacy protection for AI)
+
+### **Implementation Approach**
+
+1. **Start with preservation testing** - Ensure all existing functionality works before changes
+2. **Implement with feature flags** - Enable quick rollback if issues arise
+3. **Test comprehensively** - Unit, integration, and end-to-end tests for both new and existing features
+4. **Monitor closely** - Track performance and functionality during implementation
+5. **Rollback quickly** - Immediate rollback if any existing functionality breaks
+
+**The goal is to add profile anonymization as a new security layer while maintaining 100% backward compatibility with all existing profile features.** 
