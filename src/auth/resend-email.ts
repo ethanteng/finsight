@@ -274,3 +274,91 @@ export async function testEmailConfiguration(): Promise<boolean> {
     return false;
   }
 } 
+
+// Send admin notification for user account actions
+export async function sendAdminNotification(
+  action: 'account_disconnected' | 'account_deactivated',
+  userEmail: string
+): Promise<boolean> {
+  try {
+    // Get admin emails from environment variable
+    const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(email => email.trim()).filter(email => email.length > 0) || [];
+    
+    // Check if admin emails are configured first
+    if (adminEmails.length === 0) {
+      console.warn('No admin emails configured for admin notifications');
+      return false;
+    }
+    
+    // Get Resend client
+    const resend = getResendClient();
+    
+    // Check if Resend is available
+    if (!resend) {
+      console.log('Resend not configured, skipping admin notification email send');
+      return true; // Return true for testing purposes
+    }
+
+    const actionText = action === 'account_disconnected' ? 'disconnected their accounts' : 'deactivated their account';
+    const subject = `User ${actionText} - Ask Linc`;
+    const timestamp = new Date().toLocaleString();
+
+    const { data, error } = await resend.emails.send({
+      from: 'Ask Linc Admin Notifications <noreply@asklinc.com>',
+      to: adminEmails,
+      subject: subject,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; color: white;">
+            <h1 style="margin: 0; font-size: 28px;">Ask Linc</h1>
+            <p style="margin: 10px 0 0 0; opacity: 0.9;">Admin Notification</p>
+          </div>
+          
+          <div style="padding: 30px; background: #f8f9fa;">
+            <h2 style="color: #333; margin-bottom: 20px;">User Account Action</h2>
+            
+            <div style="background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+              <p style="color: #666; margin-bottom: 10px;"><strong>User Email:</strong> ${userEmail}</p>
+              <p style="color: #666; margin-bottom: 10px;"><strong>Action:</strong> ${actionText}</p>
+              <p style="color: #666; margin-bottom: 10px;"><strong>Timestamp:</strong> ${timestamp}</p>
+            </div>
+            
+            <div style="text-align: center; margin-top: 30px;">
+              <a href="${process.env.FRONTEND_URL || 'https://asklinc.com'}/admin" 
+                 style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                View Admin Dashboard
+              </a>
+            </div>
+          </div>
+          
+          <div style="background: #333; color: #999; padding: 20px; text-align: center; font-size: 12px;">
+            <p style="margin: 0;">© 2025 Ask Linc. All rights reserved.</p>
+            <p style="margin: 5px 0 0 0;">This email was sent to admin team</p>
+          </div>
+        </div>
+      `,
+      text: `Ask Linc Admin Notification
+
+User Account Action
+
+User Email: ${userEmail}
+Action: ${actionText}
+Timestamp: ${timestamp}
+
+View Admin Dashboard: ${process.env.FRONTEND_URL || 'https://asklinc.com'}/admin
+
+© 2025 Ask Linc. All rights reserved.`
+    });
+
+    if (error) {
+      console.error('Resend error:', error);
+      return false;
+    }
+
+    console.log(`Admin notification email sent successfully for ${action}: ${userEmail}`);
+    return true;
+  } catch (error) {
+    console.error('Error sending admin notification email:', error);
+    return false;
+  }
+} 

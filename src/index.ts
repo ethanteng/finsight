@@ -1270,6 +1270,15 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         
         console.log('User deleting all data:', user.email);
         
+        // Send admin notification before deleting user data
+        try {
+          const { sendAdminNotification } = await import('./auth/resend-email');
+          await sendAdminNotification('account_deactivated', user.email);
+        } catch (notificationError) {
+          console.error('Failed to send admin notification:', notificationError);
+          // Don't fail the main operation if notification fails
+        }
+        
         // Delete user data in the correct order (respecting foreign key constraints)
         // 1. Delete conversations (references users)
         await prisma.conversation.deleteMany({
@@ -1356,20 +1365,42 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         if (!userId) {
           return res.status(401).json({ error: 'Authentication required' });
         }
+
+        const { getPrismaClient } = await import('./prisma-client');
+        const prisma = getPrismaClient();
+        
+        // Get user info before disconnection for admin notification
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { id: true, email: true }
+        });
+        
+        if (!user) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+        
+        // Send admin notification before disconnecting accounts
+        try {
+          const { sendAdminNotification } = await import('./auth/resend-email');
+          await sendAdminNotification('account_disconnected', user.email);
+        } catch (notificationError) {
+          console.error('Failed to send admin notification:', notificationError);
+          // Don't fail the main operation if notification fails
+        }
         
         // Remove only the authenticated user's Plaid access tokens
-        await getPrismaClient().accessToken.deleteMany({
+        await prisma.accessToken.deleteMany({
           where: { userId }
         });
         
         // Clear only the authenticated user's account and transaction data
-        await getPrismaClient().transaction.deleteMany({
+        await prisma.transaction.deleteMany({
           where: { account: { userId } }
         });
-        await getPrismaClient().account.deleteMany({
+        await prisma.account.deleteMany({
           where: { userId }
         });
-        await getPrismaClient().syncStatus.deleteMany({
+        await prisma.syncStatus.deleteMany({
           where: { userId }
         });
 
