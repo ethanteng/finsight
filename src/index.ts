@@ -1707,73 +1707,69 @@ app.get('/sync/status', async (req: Request, res: Response) => {
 
         // If no accounts in database but user has access tokens, try to fetch live from Plaid
         let liveAccounts: any[] = [];
-        if (accounts.length === 0 && accessTokens.length > 0) {
-          console.log('Admin: No accounts in database, attempting to fetch live from Plaid...');
+        if (accessTokens.length > 0) {
+          console.log('Admin: Fetching live accounts from Plaid for all access tokens...');
           try {
-            const { Configuration, PlaidApi, PlaidEnvironments } = await import('plaid');
-            
-            // Determine Plaid environment from the access token ONLY
-            const firstToken = accessTokens[0];
-            const isProductionToken = firstToken.token.startsWith('access-production-');
-            const plaidEnv = isProductionToken ? 'production' : 'sandbox';
-            
-            console.log('Admin: Detected Plaid environment from token:', plaidEnv, '(token starts with:', firstToken.token.substring(0, 20) + '...)');
-            
-            // Use the shared Plaid client from plaid.ts instead of creating a new one
-            console.log('Admin: Using shared Plaid client from plaid.ts module');
-
-            // Try to get live account data from the first access token
-            console.log('Admin: Fetching live accounts from Plaid using token:', firstToken.id);
-            
-            // Import and use the working Plaid client from plaid.ts instead of creating a new one
             const { plaidClient: workingPlaidClient } = await import('./plaid');
             
-            const accountsResponse = await workingPlaidClient.accountsGet({
-              access_token: firstToken.token,
-            });
-
-            if (accountsResponse.data.accounts && accountsResponse.data.accounts.length > 0) {
-              console.log('Admin: Successfully fetched live accounts from Plaid:', accountsResponse.data.accounts.length);
-              
-              // Debug: Log the first account to see what fields are available
-              console.log('Admin: First account structure:', JSON.stringify(accountsResponse.data.accounts[0], null, 2));
-              
-              // Create account objects from Plaid response (without balances)
-              liveAccounts = accountsResponse.data.accounts.map((account: any) => {
-                // Extract institution name from account name if institution_name is not available
-                let institutionName = account.institution_name;
-                if (!institutionName && account.name) {
-                  // Try to extract institution from account name patterns
-                  if (account.name.includes('Robinhood')) {
-                    institutionName = 'Robinhood';
-                  } else if (account.name.includes('Chase')) {
-                    institutionName = 'Chase';
-                  } else if (account.name.includes('Bank of America')) {
-                    institutionName = 'Bank of America';
-                  } else if (account.name.includes('Betterment')) {
-                    institutionName = 'Betterment';
-                  } else if (account.name.includes('Vanguard')) {
-                    institutionName = 'Vanguard';
-                  } else if (account.name.includes('Fidelity')) {
-                    institutionName = 'Fidelity';
-                  } else {
-                    // Extract first word as institution if no pattern matches
-                    institutionName = account.name.split(' ')[0];
-                  }
-                }
+            // Fetch accounts from ALL access tokens, not just the first one
+            for (const tokenRecord of accessTokens) {
+              try {
+                console.log('Admin: Fetching accounts from token:', tokenRecord.id);
                 
-                return {
-                  id: account.account_id,
-                  name: account.name,
-                  type: account.type,
-                  subtype: account.subtype,
-                  institution: institutionName || 'Unknown Institution',
-                  balance: null, // Don't show balances
-                  lastSynced: new Date().toISOString(),
-                  isLiveData: true
-                };
-              });
+                const accountsResponse = await workingPlaidClient.accountsGet({
+                  access_token: tokenRecord.token,
+                });
+
+                if (accountsResponse.data.accounts && accountsResponse.data.accounts.length > 0) {
+                  console.log('Admin: Found accounts from token:', tokenRecord.id, ':', accountsResponse.data.accounts.length);
+                  
+                  // Create account objects from Plaid response (without balances)
+                  const tokenAccounts = accountsResponse.data.accounts.map((account: any) => {
+                    // Extract institution name from account name if institution_name is not available
+                    let institutionName = account.institution_name;
+                    if (!institutionName && account.name) {
+                      // Try to extract institution from account name patterns
+                      if (account.name.includes('Robinhood')) {
+                        institutionName = 'Robinhood';
+                      } else if (account.name.includes('Chase')) {
+                        institutionName = 'Chase';
+                      } else if (account.name.includes('Bank of America')) {
+                        institutionName = 'Bank of America';
+                      } else if (account.name.includes('Betterment')) {
+                        institutionName = 'Betterment';
+                      } else if (account.name.includes('Vanguard')) {
+                        institutionName = 'Vanguard';
+                      } else if (account.name.includes('Fidelity')) {
+                        institutionName = 'Fidelity';
+                      } else if (account.name.includes('American Express')) {
+                        institutionName = 'American Express';
+                      } else {
+                        // Extract first word as institution if no pattern matches
+                        institutionName = account.name.split(' ')[0];
+                      }
+                    }
+                    
+                    return {
+                      id: account.account_id,
+                      name: account.name,
+                      type: account.type,
+                      subtype: account.subtype,
+                      institution: institutionName || 'Unknown Institution',
+                      balance: null, // Don't show balances
+                      lastSynced: new Date().toISOString(),
+                      isLiveData: true
+                    };
+                  });
+                  
+                  liveAccounts.push(...tokenAccounts);
+                }
+              } catch (error) {
+                console.log('Admin: Failed to fetch accounts from token:', tokenRecord.id, ':', error);
+              }
             }
+            
+            console.log('Admin: Total live accounts fetched from all tokens:', liveAccounts.length);
           } catch (error) {
             console.log('Admin: Failed to fetch live Plaid data:', error);
           }

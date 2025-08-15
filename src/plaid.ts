@@ -886,13 +886,21 @@ export const setupPlaidRoutes = (app: any) => {
 
       console.log(`📊 Account fetching summary: ${successfulTokens} successful tokens, ${failedTokens} failed tokens, ${allAccounts.length} total accounts found`);
 
+      // Debug: Log all accounts before deduplication
+      console.log('🔍 All accounts before deduplication:');
+      allAccounts.forEach((account, index) => {
+        console.log(`  ${index + 1}. ${account.name} (${account.type}/${account.subtype}) - ID: ${account.id}`);
+      });
+
       // Deduplicate accounts by account_id to avoid counting the same account multiple times
       // Note: Using account_id instead of name-type-subtype because some institutions 
       // may have multiple accounts with identical names (e.g., multiple "Adv Plus Banking" accounts)
-      const uniqueAccounts = allAccounts.reduce((acc: any[], account: any) => {
+      const uniqueAccounts = allAccounts.reduce((acc: any[], account) => {
         const existing = acc.find(a => a.id === account.id);
         if (!existing) {
           acc.push(account);
+        } else {
+          console.log(`🔄 DEDUPLICATED: ${account.name} (${account.type}/${account.subtype}) - ID: ${account.id} - Already exists as: ${existing.name} (${existing.type}/${existing.subtype})`);
         }
         return acc;
       }, []);
