@@ -717,15 +717,15 @@ ${anonymizeInvestmentData(holdings.slice(0, 10))}`;
   // Get user profile if available
   let userProfile: string = '';
   if (isDemo && demoProfile) {
-    // Use provided demo profile
+    // Use provided demo profile (already anonymized)
     userProfile = demoProfile;
     console.log('OpenAI Enhanced: Using provided demo profile, length:', userProfile.length);
   } else if (userId && !isDemo) {
     try {
       const { ProfileManager } = await import('./profile/manager');
-      const profileManager = new ProfileManager();
+      const profileManager = new ProfileManager(userId); // Use userId as sessionId
       userProfile = await profileManager.getOrCreateProfile(userId);
-      console.log('OpenAI Enhanced: User profile retrieved, length:', userProfile.length);
+      console.log('OpenAI Enhanced: User profile retrieved and anonymized, length:', userProfile.length);
       
       // Enhance profile with Plaid data if available
       if (accounts.length > 0 || transactions.length > 0) {
@@ -1593,9 +1593,9 @@ export async function askOpenAI(
   if (userId && !isDemo) {
     try {
       const { ProfileManager } = await import('./profile/manager');
-      const profileManager = new ProfileManager();
+      const profileManager = new ProfileManager(userId); // Use userId as sessionId
       userProfile = await profileManager.getOrCreateProfile(userId);
-      console.log('OpenAI: User profile retrieved, length:', userProfile.length);
+      console.log('OpenAI: User profile retrieved and anonymized, length:', userProfile.length);
       
       // Enhance profile with Plaid data if available
       if (accounts.length > 0 || transactions.length > 0) {
@@ -1620,8 +1620,60 @@ export async function askOpenAI(
           // Don't fail the main request if Plaid enhancement fails
         }
       }
+      
+      // ✅ NEW: Fetch liabilities data for credit accounts
+      let liabilitiesData = '';
+      try {
+        const accessTokens = await prisma.accessToken.findMany({
+          where: { userId }
+        });
+        
+        if (accessTokens.length > 0) {
+          // Use the first token to get liabilities
+          const token = accessTokens[0].token;
+          const liabilitiesResponse = await fetch(`${process.env.BACKEND_URL || 'http://localhost:3000'}/plaid/liabilities`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (liabilitiesResponse.ok) {
+            const liabilitiesData = await liabilitiesResponse.json();
+            console.log('OpenAI Enhanced: Fetched liabilities data:', liabilitiesData);
+            
+            // Add liabilities context to user profile
+            if (liabilitiesData.liabilities && liabilitiesData.liabilities.length > 0) {
+              // Extract all liability accounts for anonymization
+              const allLiabilityAccounts: any[] = [];
+              liabilitiesData.liabilities.forEach((liability: any) => {
+                if (liability.accounts && liability.accounts.length > 0) {
+                  allLiabilityAccounts.push(...liability.accounts);
+                }
+              });
+              
+              if (allLiabilityAccounts.length > 0) {
+                // Anonymize liability data before adding to profile
+                const anonymizedLiabilities = anonymizeLiabilityData(allLiabilityAccounts);
+                userProfile += `\n\nLIABILITIES INFORMATION:\n${anonymizedLiabilities}`;
+                console.log('OpenAI Enhanced: Added anonymized liabilities context to profile');
+              }
+            }
+          } else {
+            // ✅ FIXED: Handle API failures gracefully
+            console.log('OpenAI Enhanced: Liabilities API failed, status:', liabilitiesResponse.status);
+            userProfile += `\n\nLIABILITIES INFORMATION:\nCredit limit information not available - your bank does not provide this data through Plaid.`;
+            console.log('OpenAI Enhanced: Added fallback message for unavailable liabilities data');
+          }
+        }
+      } catch (liabilitiesError) {
+        console.error('OpenAI Enhanced: Error fetching liabilities:', liabilitiesError);
+        // ✅ FIXED: Add fallback message when liabilities fetch fails
+        userProfile += `\n\nLIABILITIES INFORMATION:\nCredit limit information not available - unable to fetch from your bank.`;
+        console.log('OpenAI Enhanced: Added fallback message due to liabilities fetch error');
+      }
     } catch (error) {
-      console.error('OpenAI: Failed to get user profile:', error);
+      console.error('OpenAI Enhanced: Failed to get user profile:', error);
       // Don't fail the main request if profile retrieval fails
     }
   }

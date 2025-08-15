@@ -1,12 +1,14 @@
 import { PrismaClient } from '@prisma/client';
 import { ProfileEncryptionService } from './encryption';
 import { ProfileExtractor } from './extractor';
+import { ProfileAnonymizer } from './anonymizer';
 
 export class ProfileManager {
   private encryptionService: ProfileEncryptionService;
   private profileExtractor: ProfileExtractor;
+  private anonymizer: ProfileAnonymizer;
 
-  constructor() {
+  constructor(sessionId?: string) {
     const encryptionKey = process.env.PROFILE_ENCRYPTION_KEY;
     if (!encryptionKey) {
       throw new Error('PROFILE_ENCRYPTION_KEY environment variable is required');
@@ -19,6 +21,7 @@ export class ProfileManager {
     
     this.encryptionService = new ProfileEncryptionService(encryptionKey);
     this.profileExtractor = new ProfileExtractor();
+    this.anonymizer = new ProfileAnonymizer(sessionId || 'default-session');
   }
 
   async getOrCreateProfile(userId: string): Promise<string> {
@@ -66,10 +69,11 @@ export class ProfileManager {
         });
       }
       
-      // Return decrypted profile text if available
+      // Get decrypted profile text if available
+      let profileText = '';
       if (profile.encrypted_profile_data) {
         try {
-          return this.encryptionService.decrypt(
+          profileText = this.encryptionService.decrypt(
             profile.encrypted_profile_data.encryptedData,
             profile.encrypted_profile_data.iv,
             profile.encrypted_profile_data.tag
@@ -77,15 +81,116 @@ export class ProfileManager {
         } catch (error) {
           console.error('Failed to decrypt profile data:', error);
           // Fallback to plain text if decryption fails
-          return profile.profileText || '';
+          profileText = profile.profileText || '';
         }
+      } else {
+        // Fallback to plain text for backward compatibility
+        profileText = profile.profileText || '';
       }
       
-      // Fallback to plain text for backward compatibility
-      return profile.profileText || '';
+      // Anonymize the profile before returning for AI use
+      const anonymizationResult = this.anonymizer.anonymizeProfile(profileText);
+      
+      console.log('ProfileManager: Profile anonymized, original length:', profileText.length, 'anonymized length:', anonymizationResult.anonymizedProfile.length);
+      
+      return anonymizationResult.anonymizedProfile;
     } finally {
       await prisma.$disconnect();
     }
+  }
+
+  // Method to get original (non-anonymized) profile for user display
+  async getOriginalProfile(userId: string): Promise<string> {
+    const prisma = new PrismaClient();
+    
+    try {
+      const profile = await prisma.userProfile.findUnique({
+        where: { userId },
+        include: { encrypted_profile_data: true }
+      });
+      
+      if (!profile) {
+        return '';
+      }
+      
+      // Get decrypted profile text if available
+      let profileText = '';
+      if (profile.encrypted_profile_data) {
+        try {
+          profileText = this.encryptionService.decrypt(
+            profile.encrypted_profile_data.encryptedData,
+            profile.encrypted_profile_data.iv,
+            profile.encrypted_profile_data.tag
+          );
+        } catch (error) {
+          console.error('Failed to decrypt profile data:', error);
+          // Fallback to plain text if decryption fails
+          profileText = profile.profileText || '';
+        }
+      } else {
+        // Fallback to plain text for backward compatibility
+        profileText = profile.profileText || '';
+      }
+      
+      // If the profile contains anonymized tokens, deanonymize it
+      if (this.containsAnonymizedTokens(profileText)) {
+        console.log('ProfileManager: Deanonymizing profile for user display');
+        const deanonymizedProfile = this.deanonymizeProfile(profileText);
+        return deanonymizedProfile;
+      }
+      
+      return profileText;
+    } finally {
+      await prisma.$disconnect();
+    }
+  }
+
+  // Check if profile contains anonymized tokens
+  private containsAnonymizedTokens(profileText: string): boolean {
+    return /(\$?AMOUNT_|INCOME_|GOAL_|RATE_|LOCATION_|PERSON_|SPOUSE_|AGE_|AGES_|INSTITUTION_|CHILDREN_)/.test(profileText);
+  }
+
+  // Deanonymize profile by replacing tokens with readable values
+  private deanonymizeProfile(profileText: string): string {
+    // For now, we'll replace tokens with generic readable values
+    // In a production system, you might want to store the original values and restore them
+    
+    let deanonymizedProfile = profileText;
+    
+    // Replace amount tokens with generic readable values (handle both $AMOUNT_ and AMOUNT_ formats)
+    deanonymizedProfile = deanonymizedProfile.replace(/\$?AMOUNT_[^\s]+/g, '[Amount]');
+    
+    // Replace income tokens with generic readable values
+    deanonymizedProfile = deanonymizedProfile.replace(/INCOME_[^\s]+/g, '[Income]');
+    
+    // Replace goal tokens with generic readable values
+    deanonymizedProfile = deanonymizedProfile.replace(/GOAL_[^\s]+/g, '[Goal]');
+    
+    // Replace rate tokens with generic readable values
+    deanonymizedProfile = deanonymizedProfile.replace(/RATE_[^\s%]+/g, '[Rate]');
+    
+    // Replace location tokens with generic readable values
+    deanonymizedProfile = deanonymizedProfile.replace(/LOCATION_[^\s]+/g, '[Location]');
+    
+    // Replace person tokens with generic readable values
+    deanonymizedProfile = deanonymizedProfile.replace(/PERSON_[^\s]+/g, '[Name]');
+    
+    // Replace spouse tokens with generic readable values
+    deanonymizedProfile = deanonymizedProfile.replace(/SPOUSE_[^\s]+/g, '[Spouse]');
+    
+    // Replace age tokens with generic readable values
+    deanonymizedProfile = deanonymizedProfile.replace(/AGE_[^\s]+/g, '[Age]');
+    
+    // Replace ages tokens with generic readable values
+    deanonymizedProfile = deanonymizedProfile.replace(/AGES_[^\s]+/g, '[Ages]');
+    
+    // Replace institution tokens with generic readable values
+    deanonymizedProfile = deanonymizedProfile.replace(/INSTITUTION_[^\s]+/g, '[Institution]');
+    
+    // Replace children tokens with generic readable values
+    deanonymizedProfile = deanonymizedProfile.replace(/CHILDREN_[^\s]+/g, '[Children]');
+    
+    return deanonymizedProfile;
   }
 
   async updateProfile(userId: string, newProfileText: string): Promise<void> {
@@ -190,7 +295,7 @@ export class ProfileManager {
   async updateProfileFromConversation(userId: string, conversation: any): Promise<void> {
     // Use the intelligent ProfileExtractor to analyze the conversation
     // and intelligently update the profile instead of dumb appending
-    const currentProfile = await this.getOrCreateProfile(userId);
+    const currentProfile = await this.getOriginalProfile(userId); // Use original profile for enhancement
     
     const updatedProfile = await this.profileExtractor.extractAndUpdateProfile(
       userId,
@@ -225,7 +330,7 @@ export class ProfileManager {
   async recoverProfile(userId: string, backupProfileText: string): Promise<void> {
     console.log(`Attempting to recover profile for user: ${userId}`);
     
-    const currentProfile = await this.getOrCreateProfile(userId);
+    const currentProfile = await this.getOriginalProfile(userId);
     
     if (currentProfile.trim() && currentProfile !== backupProfileText) {
       // If current profile exists and is different, append backup as recovery
@@ -247,7 +352,7 @@ export class ProfileManager {
   async getProfileHistory(userId: string): Promise<string[]> {
     // This could be enhanced to actually track profile history
     // For now, return current profile as single history item
-    const currentProfile = await this.getOrCreateProfile(userId);
+    const currentProfile = await this.getOriginalProfile(userId);
     return currentProfile ? [currentProfile] : [];
   }
 } 

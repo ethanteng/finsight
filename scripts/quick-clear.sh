@@ -31,8 +31,8 @@ pkill -f "npm run dev" 2>/dev/null || true
 sleep 1
 
 print_status "Clearing database..."
-npx prisma db push --force-reset > /dev/null 2>&1
-print_success "Database reset complete"
+npx prisma migrate reset --force > /dev/null 2>&1
+print_success "Database reset complete (with migration history preserved)"
 
 print_status "Clearing Next.js cache..."
 rm -rf frontend/.next 2>/dev/null || true
@@ -41,6 +41,10 @@ print_success "Next.js cache cleared"
 print_status "Regenerating Prisma client..."
 npx prisma generate > /dev/null 2>&1
 print_success "Prisma client regenerated"
+
+print_status "Applying database migrations..."
+npx prisma migrate dev --name init_after_reset > /dev/null 2>&1
+print_success "Database migrations applied"
 
 echo ""
 print_success "Quick cleanup complete! 🚀"

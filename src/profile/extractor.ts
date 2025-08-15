@@ -1,4 +1,9 @@
-import { openai } from '../openai';
+import OpenAI from 'openai';
+
+// Create a separate OpenAI client for profile extraction to avoid circular dependencies
+const openaiClient = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 interface Conversation {
   id: string;
@@ -41,7 +46,7 @@ export class ProfileExtractor {
     `;
     
     try {
-      const response = await openai.chat.completions.create({
+      const response = await openaiClient.chat.completions.create({
         model: 'gpt-4o',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.1

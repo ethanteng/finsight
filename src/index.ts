@@ -1655,7 +1655,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         // Get user profile using ProfileManager to get the current encrypted profile
         const { ProfileManager } = await import('./profile/manager');
         const profileManager = new ProfileManager();
-        const currentProfileText = await profileManager.getOrCreateProfile(userId);
+        const currentProfileText = await profileManager.getOriginalProfile(userId);
         
         // Get user profile metadata for lastUpdated
         const userProfile = await prisma.userProfile.findUnique({
@@ -1959,7 +1959,7 @@ app.get('/profile', requireAuth, async (req: Request, res: Response) => {
   try {
     const { ProfileManager } = await import('./profile/manager');
     const profileManager = new ProfileManager();
-    const profileText = await profileManager.getOrCreateProfile(req.user!.id);
+    const profileText = await profileManager.getOriginalProfile(req.user!.id);
     
     res.json({ profile: { profileText } });
   } catch (error) {
