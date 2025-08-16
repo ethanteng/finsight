@@ -12,12 +12,35 @@ export const STRIPE_CONFIG = {
   // Webhook endpoint secret for signature verification
   webhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
   
-  // Success and cancel URLs for checkout
-  successUrl: process.env.STRIPE_SUCCESS_URL || 'https://yourapp.com/register?session_id={CHECKOUT_SESSION_ID}',
-  cancelUrl: process.env.STRIPE_CANCEL_URL || 'https://yourapp.com/pricing',
+  // Checkout session URLs
+  checkout: {
+    successUrl: process.env.STRIPE_CHECKOUT_SUCCESS_URL || '/api/stripe/payment-success',
+    cancelUrl: process.env.STRIPE_CHECKOUT_CANCEL_URL || '/pricing',
+    // Add query parameters for better tracking
+    successUrlWithParams: (tier: string, email?: string) => {
+      const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+      let url = `${baseUrl}/api/stripe/payment-success?tier=${encodeURIComponent(tier)}`;
+      if (email) {
+        url += `&customer_email=${encodeURIComponent(email)}`;
+      }
+      return url;
+    }
+  },
   
-  // Customer portal return URL
-  portalReturnUrl: process.env.STRIPE_PORTAL_RETURN_URL || 'https://yourapp.com/profile',
+  // Customer portal URLs
+  portal: {
+    returnUrl: process.env.STRIPE_PORTAL_RETURN_URL || '/profile',
+    // URL after subscription cancellation
+    cancelReturnUrl: process.env.STRIPE_PORTAL_CANCEL_RETURN_URL || '/profile?subscription=canceled',
+    // URL after subscription update
+    updateReturnUrl: process.env.STRIPE_PORTAL_UPDATE_RETURN_URL || '/profile?subscription=updated'
+  },
+  
+  // Account link URLs (for Connect accounts if needed)
+  account: {
+    refreshUrl: process.env.STRIPE_ACCOUNT_REFRESH_URL || '/stripe/account/refresh',
+    returnUrl: process.env.STRIPE_ACCOUNT_RETURN_URL || '/stripe/account/return'
+  },
   
   // Billing settings
   billingSettings: {

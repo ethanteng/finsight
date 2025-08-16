@@ -2,8 +2,85 @@ import express from 'express';
 import { stripeService } from '../services/stripe';
 import { constructWebhookEvent } from '../config/stripe';
 import { CreateCheckoutSessionRequest, CreatePortalSessionRequest } from '../types/stripe';
+import { getPrismaClient } from '../prisma-client';
+import { stripe } from '../config/stripe'; // Added for payment success endpoint
 
 const router = express.Router();
+
+/**
+ * GET /api/stripe/payment-success
+ * Handle successful payment completion and redirect to signup
+ * This endpoint is called by Stripe after successful payment
+ */
+router.get('/payment-success', async (req, res) => {
+  try {
+    const { session_id, subscription_id, customer_email, tier } = req.query;
+    
+    console.log('🎉 Payment success callback received:', {
+      sessionId: session_id,
+      subscriptionId: subscription_id,
+      customerEmail: customer_email,
+      tier
+    });
+
+    // Validate required parameters
+    if (!session_id || !subscription_id) {
+      console.error('Missing required parameters for payment success');
+      return res.status(400).json({
+        error: 'Missing required parameters',
+        code: 'MISSING_PARAMETERS'
+      });
+    }
+
+    // Verify the session with Stripe to ensure it's legitimate
+    try {
+      const session = await stripe.checkout.sessions.retrieve(session_id as string);
+      
+      if (session.payment_status !== 'paid') {
+        console.error('Session payment status is not paid:', session.payment_status);
+        return res.status(400).json({
+          error: 'Payment not completed',
+          code: 'PAYMENT_NOT_COMPLETED'
+        });
+      }
+
+      // Check if user already exists
+      const prisma = getPrismaClient();
+      let existingUser = null;
+      
+      if (customer_email) {
+        existingUser = await prisma.user.findUnique({
+          where: { email: customer_email as string }
+        });
+      }
+
+      if (existingUser) {
+        // User exists - redirect to dashboard or profile
+        console.log('User already exists, redirecting to dashboard');
+        const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/profile?subscription=active&tier=${tier || 'standard'}`;
+        return res.redirect(redirectUrl);
+      } else {
+        // New user - redirect to register with subscription context
+        console.log('New user, redirecting to register with subscription context');
+        const registerUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/register?` + 
+          `subscription=success&tier=${tier || 'standard'}&email=${encodeURIComponent(customer_email as string)}&session_id=${session_id}`;
+        return res.redirect(registerUrl);
+      }
+
+    } catch (stripeError) {
+      console.error('Error verifying Stripe session:', stripeError);
+      // Fallback: redirect to register anyway
+      const registerUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/register?subscription=success&tier=${tier || 'standard'}`;
+      return res.redirect(registerUrl);
+    }
+
+  } catch (error) {
+    console.error('Error handling payment success:', error);
+    // Fallback: redirect to register
+    const registerUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/register?subscription=success`;
+    return res.redirect(registerUrl);
+  }
+});
 
 /**
  * POST /api/stripe/create-checkout-session
@@ -89,9 +166,37 @@ router.post('/webhooks', async (req, res) => {
     // Log the webhook event
     // Extract subscription ID safely from different event types
     let subscriptionId: string | undefined;
+    let stripeSubscriptionId: string | undefined;
+    
     if (event.data.object && typeof event.data.object === 'object') {
       const eventObject = event.data.object as any;
-      subscriptionId = eventObject.subscription || eventObject.id;
+      
+      // For invoice events, get the subscription ID from the invoice
+      if (event.type.startsWith('invoice.')) {
+        stripeSubscriptionId = eventObject.subscription;
+      } else if (event.type.startsWith('customer.subscription.')) {
+        // For subscription events, use the subscription ID
+        stripeSubscriptionId = eventObject.id;
+      }
+      
+      // Only try to find our internal subscription ID if we have a Stripe subscription ID
+      if (stripeSubscriptionId) {
+        try {
+          const prisma = getPrismaClient();
+          const existingSubscription = await prisma.subscription.findUnique({
+            where: { stripeSubscriptionId: stripeSubscriptionId },
+            select: { id: true }
+          });
+          
+          if (existingSubscription) {
+            subscriptionId = existingSubscription.id;
+          } else {
+            console.log(`Stripe subscription ${stripeSubscriptionId} not found in our database yet, logging event without subscription reference`);
+          }
+        } catch (dbError) {
+          console.log(`Error looking up subscription ${stripeSubscriptionId}, logging event without subscription reference:`, dbError);
+        }
+      }
     }
     
     await stripeService.logWebhookEvent(

@@ -12,6 +12,23 @@ import { getPrismaClient } from '../prisma-client';
 
 export class StripeService {
   /**
+   * Generate success URL for checkout session
+   * This URL will handle post-payment flow and redirect to register
+   */
+  private generateSuccessUrl(tier: string, customerEmail?: string): string {
+    // Use the new config helper
+    return STRIPE_CONFIG.checkout.successUrlWithParams(tier, customerEmail);
+  }
+
+  /**
+   * Generate cancel URL for checkout session
+   */
+  private generateCancelUrl(): string {
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+    return `${baseUrl}${STRIPE_CONFIG.checkout.cancelUrl}`;
+  }
+
+  /**
    * Create a Stripe Checkout session for subscription
    */
   async createCheckoutSession(
@@ -44,8 +61,8 @@ export class StripeService {
             quantity: 1,
           },
         ],
-        success_url: request.successUrl,
-        cancel_url: request.cancelUrl,
+        success_url: this.generateSuccessUrl(tier, request.customerEmail),
+        cancel_url: this.generateCancelUrl(),
         customer_email: request.customerEmail,
         metadata: {
           tier: tier,
@@ -458,13 +475,35 @@ export class StripeService {
   ): Promise<void> {
     try {
       const prisma = getPrismaClient();
-      await prisma.subscriptionEvent.create({
-        data: {
-          stripeEventId,
-          eventType,
-          eventData,
-          subscriptionId,
+      
+      // Only include subscriptionId if it's provided and valid
+      const eventDataToSave: any = {
+        stripeEventId,
+        eventType,
+        eventData,
+      };
+      
+      // Only add subscriptionId if it's provided and we can verify it exists
+      if (subscriptionId) {
+        try {
+          // Check if the subscription exists before trying to reference it
+          const existingSubscription = await prisma.subscription.findUnique({
+            where: { id: subscriptionId },
+            select: { id: true }
+          });
+          
+          if (existingSubscription) {
+            eventDataToSave.subscriptionId = subscriptionId;
+          } else {
+            console.log(`Subscription ${subscriptionId} not found, logging event without subscription reference`);
+          }
+        } catch (checkError) {
+          console.log(`Error checking subscription ${subscriptionId}, logging event without subscription reference:`, checkError);
         }
+      }
+      
+      await prisma.subscriptionEvent.create({
+        data: eventDataToSave
       });
     } catch (error) {
       console.error('Error logging webhook event:', error);
