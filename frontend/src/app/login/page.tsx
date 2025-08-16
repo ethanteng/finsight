@@ -1,14 +1,45 @@
 "use client";
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+
+interface SubscriptionContext {
+  subscription: string;
+  tier: string;
+  email: string | null;
+  sessionId: string | null;
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [subscriptionContext, setSubscriptionContext] = useState<SubscriptionContext | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Check if user came from subscription context
+  useEffect(() => {
+    const subscriptionParam = searchParams.get('subscription');
+    const tierParam = searchParams.get('tier');
+    const emailParam = searchParams.get('email');
+    const sessionIdParam = searchParams.get('session_id');
+
+    if (subscriptionParam && tierParam) {
+      setSubscriptionContext({
+        subscription: subscriptionParam,
+        tier: tierParam,
+        email: emailParam,
+        sessionId: sessionIdParam
+      });
+      
+      // Pre-fill email if provided
+      if (emailParam) {
+        setEmail(emailParam);
+      }
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,6 +60,9 @@ export default function LoginPage() {
 
       if (res.ok && data.token) {
         localStorage.setItem('auth_token', data.token);
+        
+        // Always redirect to /app after successful login
+        // Users can access their profile from within the app
         router.push('/app');
       } else {
         setError(data.error || 'Login failed');
@@ -46,6 +80,17 @@ export default function LoginPage() {
         <div className="text-center">
           <h1 className="text-3xl font-bold">Welcome Back</h1>
           <p className="text-gray-400 mt-2">Sign in to your Ask Linc account</p>
+          
+          {subscriptionContext && (
+            <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-md">
+              <p className="text-green-400 text-sm">
+                🎉 Your subscription is ready!
+              </p>
+              <p className="text-green-400 text-xs mt-1">
+                Sign in to access your subscription.
+              </p>
+            </div>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">

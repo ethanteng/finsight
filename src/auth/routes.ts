@@ -73,7 +73,7 @@ router.get('/verify', async (req: Request, res: Response) => {
 // Register new user
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { email, password, tier = 'starter' } = req.body;
+    const { email, password, tier = 'starter', stripeSessionId } = req.body;
 
     // Validate input
     if (!email || !password) {
@@ -106,7 +106,8 @@ router.post('/register', async (req: Request, res: Response) => {
       data: {
         email: email.toLowerCase(),
         passwordHash,
-        tier
+        tier,
+        subscriptionStatus: stripeSessionId ? 'active' : 'inactive'
       },
       select: {
         id: true,
@@ -115,6 +116,37 @@ router.post('/register', async (req: Request, res: Response) => {
         createdAt: true
       }
     });
+
+    // If coming from Stripe checkout, try to link to existing subscription
+    if (stripeSessionId) {
+      try {
+        // First, find the Stripe session to get the subscription ID
+        const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+        const session = await stripe.checkout.sessions.retrieve(stripeSessionId);
+        
+        if (session.subscription) {
+          // Find the subscription by Stripe subscription ID
+          const subscription = await prisma.subscription.findFirst({
+            where: {
+              stripeSubscriptionId: session.subscription
+            }
+          });
+
+          if (subscription) {
+            // Link the user to the subscription
+            await prisma.subscription.update({
+              where: { id: subscription.id },
+              data: { userId: user.id }
+            });
+
+            console.log(`Linked user ${user.email} to subscription ${subscription.id}`);
+          }
+        }
+      } catch (subscriptionError) {
+        console.error('Error linking user to subscription:', subscriptionError);
+        // Don't fail registration if subscription linking fails
+      }
+    }
 
     // Create default privacy settings
     await prisma.privacySettings.create({

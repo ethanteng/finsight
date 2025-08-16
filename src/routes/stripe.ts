@@ -24,11 +24,11 @@ router.get('/payment-success', async (req, res) => {
     });
 
     // Validate required parameters
-    if (!session_id || !subscription_id) {
-      console.error('Missing required parameters for payment success');
+    if (!session_id) {
+      console.error('Missing required session_id parameter for payment success');
       return res.status(400).json({
-        error: 'Missing required parameters',
-        code: 'MISSING_PARAMETERS'
+        error: 'Missing required session_id parameter',
+        code: 'MISSING_SESSION_ID'
       });
     }
 
@@ -44,40 +44,44 @@ router.get('/payment-success', async (req, res) => {
         });
       }
 
+      // Get customer email from the session
+      const customerEmail = session.customer_details?.email || (customer_email as string);
+      console.log('Customer email from session:', customerEmail);
+
       // Check if user already exists
       const prisma = getPrismaClient();
       let existingUser = null;
       
-      if (customer_email) {
+      if (customerEmail) {
         existingUser = await prisma.user.findUnique({
-          where: { email: customer_email as string }
+          where: { email: customerEmail }
         });
       }
 
       if (existingUser) {
         // User exists - redirect to dashboard or profile
         console.log('User already exists, redirecting to dashboard');
-        const redirectUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/profile?subscription=active&tier=${tier || 'standard'}`;
+        const redirectUrl = `http://localhost:3001/profile?subscription=active&tier=${tier || 'standard'}`;
         return res.redirect(redirectUrl);
       } else {
         // New user - redirect to register with subscription context
         console.log('New user, redirecting to register with subscription context');
-        const registerUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/register?` + 
-          `subscription=success&tier=${tier || 'standard'}&email=${encodeURIComponent(customer_email as string)}&session_id=${session_id}`;
+        const registerUrl = `http://localhost:3001/register?` + 
+          `subscription=success&tier=${tier || 'standard'}&email=${encodeURIComponent(customerEmail as string)}&session_id=${session_id}`;
         return res.redirect(registerUrl);
       }
 
     } catch (stripeError) {
       console.error('Error verifying Stripe session:', stripeError);
       // Fallback: redirect to register anyway
-      const registerUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/register?subscription=success&tier=${tier || 'standard'}`;
+      const registerUrl = `http://localhost:3001/register?subscription=success&tier=${tier || 'standard'}`;
       return res.redirect(registerUrl);
     }
 
   } catch (error) {
     console.error('Error handling payment success:', error);
     // Fallback: redirect to register
-    const registerUrl = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/register?subscription=success`;
+    const registerUrl = `http://localhost:3001/register?subscription=success`;
     return res.redirect(registerUrl);
   }
 });

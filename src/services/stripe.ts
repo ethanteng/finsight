@@ -61,8 +61,8 @@ export class StripeService {
             quantity: 1,
           },
         ],
-        success_url: this.generateSuccessUrl(tier, request.customerEmail),
-        cancel_url: this.generateCancelUrl(),
+        success_url: request.successUrl, // Use the URL from the request
+        cancel_url: request.cancelUrl,   // Use the URL from the request
         customer_email: request.customerEmail,
         metadata: {
           tier: tier,

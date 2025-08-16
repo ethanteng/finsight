@@ -1,7 +1,13 @@
 "use client";
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+
+interface SubscriptionContext {
+  subscription: string;
+  tier: string;
+  sessionId: string | null;
+}
 
 export default function RegisterPage() {
   const [email, setEmail] = useState('');
@@ -9,7 +15,29 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [subscriptionContext, setSubscriptionContext] = useState<SubscriptionContext | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Read URL parameters on component mount
+  useEffect(() => {
+    const emailParam = searchParams.get('email');
+    const subscriptionParam = searchParams.get('subscription');
+    const tierParam = searchParams.get('tier');
+    const sessionIdParam = searchParams.get('session_id');
+
+    if (emailParam) {
+      setEmail(emailParam);
+    }
+
+    if (subscriptionParam && tierParam) {
+      setSubscriptionContext({
+        subscription: subscriptionParam,
+        tier: tierParam,
+        sessionId: sessionIdParam
+      });
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,20 +52,37 @@ export default function RegisterPage() {
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL;
+      
+      // Prepare registration data
+      const registrationData: any = { email, password };
+      
+      // If coming from successful subscription, include tier and session info
+      if (subscriptionContext) {
+        registrationData.tier = subscriptionContext.tier;
+        registrationData.stripeSessionId = subscriptionContext.sessionId;
+      }
+      
       const res = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(registrationData),
       });
 
       const data = await res.json();
 
       if (res.ok && data.token) {
         localStorage.setItem('auth_token', data.token);
-        // Redirect to email verification
-        router.push('/verify-email');
+        
+        // Always go through email verification for security
+        // The subscription context will be preserved in the URL for after verification
+        if (subscriptionContext) {
+          const verifyUrl = `/verify-email?subscription=${subscriptionContext.subscription}&tier=${subscriptionContext.tier}&email=${encodeURIComponent(email)}&session_id=${subscriptionContext.sessionId || ''}`;
+          router.push(verifyUrl);
+        } else {
+          router.push('/verify-email');
+        }
       } else {
         setError(data.error || 'Registration failed');
       }
@@ -54,6 +99,17 @@ export default function RegisterPage() {
         <div className="text-center">
           <h1 className="text-3xl font-bold">Create Account</h1>
           <p className="text-gray-400 mt-2">Join Ask Linc to get started</p>
+          
+          {subscriptionContext && (
+            <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-md">
+              <p className="text-green-400 text-sm">
+                🎉 Welcome! Your subscription is ready.
+              </p>
+              <p className="text-green-400 text-xs mt-1">
+                Complete registration and verify your email to activate your subscription.
+              </p>
+            </div>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
