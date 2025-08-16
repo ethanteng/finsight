@@ -527,14 +527,15 @@ export class StripeService {
       const prisma = getPrismaClient();
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        include: {
-          subscriptions: {
-            where: {
-              status: { in: ['active', 'trialing', 'past_due'] }
-            },
-            orderBy: { createdAt: 'desc' },
-            take: 1
-          }
+        select: {
+          id: true,
+          tier: true,
+          subscriptionStatus: true,
+          subscriptionExpiresAt: true,
+                  subscriptions: {
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        }
         }
       });
 
@@ -546,54 +547,86 @@ export class StripeService {
       const subscriptionStatus = user.subscriptionStatus;
       const subscriptionExpiresAt = user.subscriptionExpiresAt;
       const hasActiveSubscription = user.subscriptions.length > 0;
+      
+      // Debug logging
+      console.log(`🔍 Stripe Service - User ${user.id}:`);
+      console.log(`  - Tier: ${currentTier}`);
+      console.log(`  - User.subscriptionStatus: ${subscriptionStatus}`);
+      console.log(`  - User.subscriptions.length: ${user.subscriptions.length}`);
+      console.log(`  - User.subscriptions:`, user.subscriptions);
+      console.log(`  - User.subscriptionExpiresAt:`, subscriptionExpiresAt);
+      console.log(`  - Has active subscription:`, hasActiveSubscription);
 
       // Determine access level and status
-      let accessLevel: 'full' | 'limited' | 'none' = 'none';
+      let accessLevel: 'full' | 'none' = 'none';
       let upgradeRequired = false;
       let message = '';
-      let gracePeriodDays: number | undefined;
+      
+      // Get the actual subscription status from the subscription record if it exists
+      let actualSubscriptionStatus = subscriptionStatus;
+      if (user.subscriptions.length > 0) {
+        const latestSubscription = user.subscriptions[0];
+        actualSubscriptionStatus = latestSubscription.status;
+        console.log(`  - Actual subscription status from record: ${actualSubscriptionStatus}`);
+      }
 
-      if (subscriptionStatus === 'active' && subscriptionExpiresAt && new Date() < subscriptionExpiresAt) {
+      // Simple logic: Only active subscriptions get access, everything else is revoked
+      if (actualSubscriptionStatus === 'active' && subscriptionExpiresAt && new Date() < subscriptionExpiresAt) {
+        // Active subscription - full access
         accessLevel = 'full';
+        upgradeRequired = false;
         message = `Active ${currentTier} subscription`;
-      } else if (subscriptionStatus === 'past_due') {
-        accessLevel = 'limited';
-        upgradeRequired = true;
-        
-        if (subscriptionExpiresAt) {
-          const now = new Date();
-          const daysRemaining = Math.ceil((subscriptionExpiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-          gracePeriodDays = Math.max(0, daysRemaining);
-          
-          if (gracePeriodDays > 0) {
-            message = `Payment past due. Limited access for ${gracePeriodDays} more days.`;
-          } else {
-            message = 'Payment past due. Access will be revoked soon.';
-            accessLevel = 'none';
-          }
-        } else {
-          message = 'Payment past due. Please update payment method.';
-        }
-      } else if (subscriptionStatus === 'canceled' || (subscriptionExpiresAt && new Date() > subscriptionExpiresAt)) {
+      } else if (subscriptionStatus === 'active' && user.subscriptions.length === 0 && !subscriptionExpiresAt) {
+        // Payment completed but account setup incomplete
+        accessLevel = 'none';
+        upgradeRequired = false; // Not an upgrade issue
+        message = 'Payment completed but account setup incomplete. Please complete your account setup to access Ask Linc.';
+      } else if (user.subscriptions.length === 0 && !subscriptionExpiresAt && subscriptionStatus === 'inactive') {
+        // Admin-created user - no Stripe subscription records exist AND no subscription history
+        accessLevel = 'full';
+        upgradeRequired = false;
+        message = `Admin-created ${currentTier} user. Full access granted.`;
+      } else {
+        // User has subscription history or subscription records but status is not active - access revoked
         accessLevel = 'none';
         upgradeRequired = true;
-        message = 'Subscription expired. Please renew to continue.';
-      } else if (subscriptionStatus === 'inactive' || !hasActiveSubscription) {
-        accessLevel = currentTier === 'starter' ? 'limited' : 'none';
-        upgradeRequired = currentTier !== 'starter';
-        message = currentTier === 'starter' 
-          ? 'No active subscription. Basic features available.'
-          : 'No active subscription. Please subscribe to continue.';
-      } else {
-        accessLevel = 'limited';
-        message = `Subscription status: ${subscriptionStatus}`;
+        
+        // Generate appropriate message based on status
+        switch (actualSubscriptionStatus) {
+          case 'past_due':
+            message = 'Payment past due. Please update payment method to restore access.';
+            break;
+          case 'canceled':
+            message = 'Subscription canceled. Please renew to restore access.';
+            break;
+          case 'incomplete':
+            message = 'Subscription setup incomplete. Please complete setup to restore access.';
+            break;
+          case 'incomplete_expired':
+            message = 'Subscription setup expired. Please start over to restore access.';
+            break;
+          case 'trialing':
+            message = 'Trial period ended. Please subscribe to restore access.';
+            break;
+          case 'unpaid':
+            message = 'Payment failed. Please update payment method to restore access.';
+            break;
+          default:
+            message = `Subscription status: ${actualSubscriptionStatus}. Please contact support to restore access.`;
+        }
       }
+
+      // Final debug logging
+      console.log(`  - Final decision:`);
+      console.log(`    - accessLevel: ${accessLevel}`);
+      console.log(`    - upgradeRequired: ${upgradeRequired}`);
+      console.log(`    - message: ${message}`);
+      console.log(`    - actualStatus: ${actualSubscriptionStatus}`);
 
       return {
         tier: currentTier,
-        status: subscriptionStatus,
+        status: actualSubscriptionStatus, // Use the actual status from subscription record
         expiresAt: subscriptionExpiresAt || undefined,
-        gracePeriodDays,
         accessLevel,
         upgradeRequired,
         message

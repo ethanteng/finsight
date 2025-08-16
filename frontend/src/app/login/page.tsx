@@ -19,12 +19,13 @@ export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Check if user came from subscription context
+  // Check if user came from subscription context or has access denied message
   useEffect(() => {
     const subscriptionParam = searchParams.get('subscription');
     const tierParam = searchParams.get('tier');
     const emailParam = searchParams.get('email');
     const sessionIdParam = searchParams.get('session_id');
+    const messageParam = searchParams.get('message');
 
     if (subscriptionParam && tierParam) {
       setSubscriptionContext({
@@ -38,6 +39,11 @@ export default function LoginPage() {
       if (emailParam) {
         setEmail(emailParam);
       }
+    }
+
+    // Show subscription access denied message if present
+    if (messageParam) {
+      setError(messageParam);
     }
   }, [searchParams]);
 

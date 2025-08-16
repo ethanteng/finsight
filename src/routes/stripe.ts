@@ -4,6 +4,7 @@ import { constructWebhookEvent } from '../config/stripe';
 import { CreateCheckoutSessionRequest, CreatePortalSessionRequest } from '../types/stripe';
 import { getPrismaClient } from '../prisma-client';
 import { stripe } from '../config/stripe'; // Added for payment success endpoint
+import { requireAuth } from '../auth/middleware';
 
 const router = express.Router();
 
@@ -281,11 +282,10 @@ router.get('/plans', async (req, res) => {
  * GET /api/stripe/subscription-status
  * Get current user's subscription status and access level
  */
-router.get('/subscription-status', async (req, res) => {
+router.get('/subscription-status', requireAuth, async (req, res) => {
   try {
-    // This endpoint requires authentication
-    // The actual user ID should come from the auth middleware
-    const userId = req.body.userId || req.query.userId;
+    // Get user ID from auth middleware
+    const userId = req.user?.id;
     
     if (!userId) {
       return res.status(400).json({
@@ -297,9 +297,12 @@ router.get('/subscription-status', async (req, res) => {
     // Get subscription status from Stripe service
     const subscriptionStatus = await stripeService.getUserSubscriptionStatus(userId);
     
+    console.log('🔍 Subscription status response for user:', userId);
+    console.log('🔍 Full subscription status object:', JSON.stringify(subscriptionStatus, null, 2));
+    
     res.json({
       success: true,
-      subscription: subscriptionStatus
+      ...subscriptionStatus
     });
   } catch (error) {
     console.error('Error getting subscription status:', error);
