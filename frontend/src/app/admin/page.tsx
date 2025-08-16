@@ -1014,8 +1014,7 @@ export default function AdminPage() {
                         Tier: {user.tier} • First question: {truncateText(user.firstQuestion)}
                       </div>
                       <div className="text-xs text-gray-600">
-                        Created: {formatDate(user.createdAt)}
-                        {user.lastLoginAt && ` • Last login: ${formatDate(user.lastLoginAt)}`}
+                        Created: {formatDate(user.createdAt)} • Last login: {user.lastLoginAt ? formatDate(user.lastLoginAt) : 'Never'}
                       </div>
                     </div>
                     <div className="text-right">
@@ -1318,6 +1317,7 @@ export default function AdminPage() {
                     </div>
                     <div className="text-sm text-gray-400 mb-2">
                       Conversations: {user._count.conversations} • Created: {formatDate(user.createdAt)}
+                      {user.lastLoginAt && ` • Last login: ${formatDate(user.lastLoginAt)}`}
                     </div>
                     <div className="text-xs text-gray-500 mb-2">
                       Subscription: {user.subscriptionStatus} • Access: {user.accessLevel}
@@ -1326,11 +1326,6 @@ export default function AdminPage() {
                     {user.subscriptionMessage && (
                       <div className="text-xs text-gray-300 mb-2 bg-gray-700 px-2 py-1 rounded">
                         {user.subscriptionMessage}
-                      </div>
-                    )}
-                    {user.lastLoginAt && (
-                      <div className="text-xs text-gray-600">
-                        Last login: {formatDate(user.lastLoginAt)}
                       </div>
                     )}
                   </div>
