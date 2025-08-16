@@ -196,7 +196,6 @@ export class StripeService {
       data: {
         subscriptionStatus: subscription.status,
         tier: tier,
-        subscriptionExpiresAt: new Date(subscription.current_period_end * 1000),
       }
     });
 
@@ -236,9 +235,8 @@ export class StripeService {
       await prisma.user.update({
         where: { id: subscriptionRecord.user.id },
         data: {
-          subscriptionStatus: subscription.status,
-          tier: tier,
-          subscriptionExpiresAt: new Date(subscription.current_period_end * 1000),
+                  subscriptionStatus: subscription.status,
+        tier: tier,
         }
       });
     }
@@ -278,7 +276,6 @@ export class StripeService {
           data: {
             subscriptionStatus: 'canceled',
             tier: 'starter', // Reset to starter tier
-            subscriptionExpiresAt: null,
           }
         });
       }
@@ -394,8 +391,7 @@ export class StripeService {
           where: { id: subscriptionRecord.user.id },
           data: {
             subscriptionStatus: 'past_due',
-            // Store grace period information for access control
-            subscriptionExpiresAt: gracePeriodEnd,
+            // Grace period handled by Stripe status
           }
         });
 
@@ -531,11 +527,10 @@ export class StripeService {
           id: true,
           tier: true,
           subscriptionStatus: true,
-          subscriptionExpiresAt: true,
-                  subscriptions: {
-          orderBy: { createdAt: 'desc' },
-          take: 1
-        }
+          subscriptions: {
+            orderBy: { createdAt: 'desc' },
+            take: 1
+          }
         }
       });
 
@@ -545,7 +540,6 @@ export class StripeService {
 
       const currentTier = user.tier;
       const subscriptionStatus = user.subscriptionStatus;
-      const subscriptionExpiresAt = user.subscriptionExpiresAt;
       const hasActiveSubscription = user.subscriptions.length > 0;
       
       // Debug logging
@@ -554,7 +548,6 @@ export class StripeService {
       console.log(`  - User.subscriptionStatus: ${subscriptionStatus}`);
       console.log(`  - User.subscriptions.length: ${user.subscriptions.length}`);
       console.log(`  - User.subscriptions:`, user.subscriptions);
-      console.log(`  - User.subscriptionExpiresAt:`, subscriptionExpiresAt);
       console.log(`  - Has active subscription:`, hasActiveSubscription);
 
       // Determine access level and status
@@ -570,24 +563,24 @@ export class StripeService {
         console.log(`  - Actual subscription status from record: ${actualSubscriptionStatus}`);
       }
 
-      // Simple logic: Only active subscriptions get access, everything else is revoked
-      if (actualSubscriptionStatus === 'active' && subscriptionExpiresAt && new Date() < subscriptionExpiresAt) {
-        // Active subscription - full access
+      // Simplified logic: Trust Stripe status, no complex date logic
+      if (actualSubscriptionStatus === 'active') {
+        // Active subscription - full access (Stripe handles expiration)
         accessLevel = 'full';
         upgradeRequired = false;
         message = `Active ${currentTier} subscription`;
-      } else if (subscriptionStatus === 'active' && user.subscriptions.length === 0 && !subscriptionExpiresAt) {
+      } else if (subscriptionStatus === 'active' && user.subscriptions.length === 0) {
         // Payment completed but account setup incomplete
         accessLevel = 'none';
         upgradeRequired = false; // Not an upgrade issue
         message = 'Payment completed but account setup incomplete. Please complete your account setup to access Ask Linc.';
-      } else if (user.subscriptions.length === 0 && !subscriptionExpiresAt && subscriptionStatus === 'inactive') {
-        // Admin-created user - no Stripe subscription records exist AND no subscription history
+      } else if (user.subscriptions.length === 0 && subscriptionStatus === 'inactive') {
+        // Admin-created user - no Stripe subscription records exist
         accessLevel = 'full';
         upgradeRequired = false;
         message = `Admin-created ${currentTier} user. Full access granted.`;
       } else {
-        // User has subscription history or subscription records but status is not active - access revoked
+        // User has subscription history but status is not active - access revoked
         accessLevel = 'none';
         upgradeRequired = true;
         
@@ -623,14 +616,13 @@ export class StripeService {
       console.log(`    - message: ${message}`);
       console.log(`    - actualStatus: ${actualSubscriptionStatus}`);
 
-      return {
-        tier: currentTier,
-        status: actualSubscriptionStatus, // Use the actual status from subscription record
-        expiresAt: subscriptionExpiresAt || undefined,
-        accessLevel,
-        upgradeRequired,
-        message
-      };
+              return {
+          tier: currentTier,
+          status: actualSubscriptionStatus, // Use the actual status from subscription record
+          accessLevel,
+          upgradeRequired,
+          message
+        };
     } catch (error) {
       console.error('Error getting user subscription status:', error);
       throw error;

@@ -1247,7 +1247,10 @@ export default function AdminPage() {
               <div className="text-sm text-gray-400">Admin Created</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-orange-400">{usersForManagement?.filter(u => u.subscriptionStatus === 'active' && u.subscriptionMessage.includes('account setup incomplete')).length || 0}</div>
+              <div className="text-2xl font-bold text-orange-400">{usersForManagement?.filter(u => 
+                (u.subscriptionStatus === 'active' && u.subscriptionMessage.includes('account setup incomplete')) ||
+                (u.subscriptionStatus === 'incomplete' && u.subscriptionMessage.includes('setup incomplete'))
+              ).length || 0}</div>
               <div className="text-sm text-gray-400">Setup Required</div>
             </div>
             <div className="text-center">
@@ -1256,16 +1259,25 @@ export default function AdminPage() {
             </div>
           </div>
           
-          {usersForManagement && usersForManagement.filter(u => u.subscriptionStatus === 'active' && u.subscriptionMessage.includes('account setup incomplete')).length > 0 && (
+          {usersForManagement && usersForManagement.filter(u => 
+            (u.subscriptionStatus === 'active' && u.subscriptionMessage.includes('account setup incomplete')) ||
+            (u.subscriptionStatus === 'incomplete' && u.subscriptionMessage.includes('setup incomplete'))
+          ).length > 0 && (
             <div className="mt-4 p-3 bg-orange-900/20 border border-orange-700 rounded">
               <h4 className="font-medium text-orange-300 mb-2">
-                ⚠️ Payment Completed, Account Setup Required ({usersForManagement.filter(u => u.subscriptionStatus === 'active' && u.subscriptionMessage.includes('account setup incomplete')).length} users)
+                ⚠️ Setup Required ({usersForManagement.filter(u => 
+                  (u.subscriptionStatus === 'active' && u.subscriptionMessage.includes('account setup incomplete')) ||
+                  (u.subscriptionStatus === 'incomplete' && u.subscriptionMessage.includes('setup incomplete'))
+                ).length} users)
               </h4>
               <div className="text-sm text-gray-300">
-                These users completed payment but never finished account setup:
+                These users need to complete setup to access Ask Linc:
               </div>
               <div className="mt-2 text-xs text-gray-400">
-                {usersForManagement.filter(u => u.subscriptionStatus === 'active' && u.subscriptionMessage.includes('account setup incomplete')).map(user => user.email).join(', ')}
+                {usersForManagement.filter(u => 
+                  (u.subscriptionStatus === 'active' && u.subscriptionMessage.includes('account setup incomplete')) ||
+                  (u.subscriptionStatus === 'incomplete' && u.subscriptionMessage.includes('setup incomplete'))
+                ).map(user => user.email).join(', ')}
               </div>
             </div>
           )}
@@ -1288,7 +1300,8 @@ export default function AdminPage() {
                             ? user.subscriptionStatus === 'active'
                               ? 'bg-green-600 text-white'
                               : 'bg-blue-600 text-white'
-                            : user.subscriptionStatus === 'active' && user.subscriptionMessage.includes('account setup incomplete')
+                            : (user.subscriptionStatus === 'active' && user.subscriptionMessage.includes('account setup incomplete')) ||
+                              (user.subscriptionStatus === 'incomplete' && user.subscriptionMessage.includes('setup incomplete'))
                               ? 'bg-orange-600 text-white'
                               : 'bg-red-600 text-white'
                         }`}>
@@ -1296,21 +1309,11 @@ export default function AdminPage() {
                             ? user.subscriptionStatus === 'active'
                               ? 'Active'
                               : 'Admin Created'
-                            : user.subscriptionStatus === 'active' && user.subscriptionMessage.includes('account setup incomplete')
+                            : (user.subscriptionStatus === 'active' && user.subscriptionMessage.includes('account setup incomplete')) ||
+                              (user.subscriptionStatus === 'incomplete' && user.subscriptionMessage.includes('setup incomplete'))
                               ? 'Setup Required'
                               : 'Access Revoked'}
                         </span>
-                        {user.subscriptionMessage && (
-                          <div className="relative group">
-                            <span className="text-gray-400 hover:text-white cursor-help text-xs">
-                              ℹ️
-                            </span>
-                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
-                              {user.subscriptionMessage}
-                              <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </div>
                     <div className="text-sm text-gray-400 mb-2">
@@ -1320,6 +1323,11 @@ export default function AdminPage() {
                       Subscription: {user.subscriptionStatus} • Access: {user.accessLevel}
                       {user.upgradeRequired && <span className="text-yellow-400"> • Upgrade Required</span>}
                     </div>
+                    {user.subscriptionMessage && (
+                      <div className="text-xs text-gray-300 mb-2 bg-gray-700 px-2 py-1 rounded">
+                        {user.subscriptionMessage}
+                      </div>
+                    )}
                     {user.lastLoginAt && (
                       <div className="text-xs text-gray-600">
                         Last login: {formatDate(user.lastLoginAt)}

@@ -19,7 +19,6 @@ model User {
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
   stripeCustomerId       String?
-  subscriptionExpiresAt  DateTime?
   subscriptionStatus     String                  @default("inactive")
   accessTokens           AccessToken[]
   accounts               Account[]
