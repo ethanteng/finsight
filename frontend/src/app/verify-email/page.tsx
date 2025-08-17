@@ -1,7 +1,14 @@
 "use client";
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+
+interface SubscriptionContext {
+  subscription: string;
+  tier: string;
+  email: string | null;
+  sessionId: string | null;
+}
 
 export default function VerifyEmailPage() {
   const [code, setCode] = useState('');
@@ -9,7 +16,26 @@ export default function VerifyEmailPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isResending, setIsResending] = useState(false);
+  const [subscriptionContext, setSubscriptionContext] = useState<SubscriptionContext | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Check if user came from subscription context
+  useEffect(() => {
+    const subscriptionParam = searchParams.get('subscription');
+    const tierParam = searchParams.get('tier');
+    const emailParam = searchParams.get('email');
+    const sessionIdParam = searchParams.get('session_id');
+
+    if (subscriptionParam && tierParam) {
+      setSubscriptionContext({
+        subscription: subscriptionParam,
+        tier: tierParam,
+        email: emailParam,
+        sessionId: sessionIdParam
+      });
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,10 +60,19 @@ export default function VerifyEmailPage() {
 
       if (res.ok) {
         setSuccess('Email verified successfully! Redirecting to login...');
-        // Clear the auth token and redirect to login
+        
+        // Clear the auth token
         localStorage.removeItem('auth_token');
+        
+        // Always redirect to login after email verification
+        // Users must authenticate properly to access the app
         setTimeout(() => {
-          router.push('/login');
+          if (subscriptionContext) {
+            const loginUrl = `/login?subscription=${subscriptionContext.subscription}&tier=${subscriptionContext.tier}&email=${encodeURIComponent(subscriptionContext.email || '')}&session_id=${subscriptionContext.sessionId || ''}`;
+            router.push(loginUrl);
+          } else {
+            router.push('/login');
+          }
         }, 2000);
       } else {
         setError(data.error || 'Failed to verify email');
@@ -115,6 +150,17 @@ export default function VerifyEmailPage() {
         <div className="text-center">
           <h1 className="text-3xl font-bold">Verify Your Email</h1>
           <p className="text-gray-400 mt-2">Enter the verification code sent to your email</p>
+          
+          {subscriptionContext && (
+            <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-md">
+              <p className="text-green-400 text-sm">
+                🎉 Your subscription is waiting!
+              </p>
+              <p className="text-green-400 text-xs mt-1">
+                Verify your email to activate your subscription.
+              </p>
+            </div>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">

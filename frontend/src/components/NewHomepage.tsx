@@ -431,7 +431,7 @@ const NewHomepage = () => {
           <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
             {[{
               name: "Starter",
-              price: "$5",
+              price: "$9",
               period: "/month",
               description: "Perfect for simple financial clarity — without giving up your privacy.",
               features: ["Ask anything about your spending — get real answers, instantly", "Connect up to 3 accounts — like checking, savings, and your 401(k)", "Automatically categorize spending and highlight patterns","No ads. No upsells. No selling your data."],
@@ -439,7 +439,7 @@ const NewHomepage = () => {
               popular: false
             }, {
               name: "Standard",
-              price: "$12",
+              price: "$18",
               period: "/month",
               description: "Level up with real-world context.",
               features: ["Everything in Starter","Connect all your accounts — banks, cards, investments, and more. Ask anything, anytime.", "Factor in key economic indicators like CPI, Fed rates, APRs & more", "Searches the web for current financial headlines from trusted sites"],
@@ -447,7 +447,7 @@ const NewHomepage = () => {
               popular: true
             }, {
               name: "Premium",
-              price: "$25",
+              price: "$28",
               period: "/month",
               description: "Get advisor-level insights without the fees.",
               features: ["Everything in Standard", "Live market data (CDs, Treasuries, stocks, crypto, mortgage rates)", "Real-time news feeds from 60+ trusted sources like Bloomberg and Reuters", "What-if scenario modeling", "Portfolio analysis & retirement planning", "Get notified when markets move — instantly"],

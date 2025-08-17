@@ -11,6 +11,16 @@ interface PromptHistory {
   timestamp: number;
 }
 
+interface SubscriptionStatus {
+  status: string;
+  tier: string;
+  message: string;
+  isActive: boolean;
+  accessLevel: 'full' | 'none';
+  upgradeRequired: boolean;
+  expiresAt?: string;
+}
+
 export default function AppPage() {
   const [promptHistory, setPromptHistory] = useState<PromptHistory[]>([]);
   const [selectedPrompt, setSelectedPrompt] = useState<PromptHistory | null>(null);
@@ -18,6 +28,7 @@ export default function AppPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('');
+  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
   const router = useRouter();
 
   // Check authentication on mount
@@ -45,6 +56,9 @@ export default function AppPage() {
           setIsAuthenticated(true);
           setUserEmail(data.user.email);
           setIsLoading(false);
+          
+          // Check subscription status after authentication
+          checkSubscriptionStatus(token);
         } else {
           // Token invalid, redirect to login
           localStorage.removeItem('auth_token');
@@ -60,13 +74,69 @@ export default function AppPage() {
     checkAuth();
   }, [router]);
 
+  // Check subscription status
+  const checkSubscriptionStatus = async (token: string) => {
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      console.log('🔍 API_URL:', API_URL);
+      console.log('🔍 Full URL:', `${API_URL}/api/stripe/subscription-status`);
+      
+      const res = await fetch(`${API_URL}/api/stripe/subscription-status`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        console.log('🔍 Frontend received subscription status response:', data);
+        
+        // Check if user has access
+        if (data.accessLevel !== 'full') {
+          // Access denied - redirect to login with message
+          localStorage.removeItem('auth_token');
+          router.push(`/login?message=${encodeURIComponent(data.message)}`);
+          return;
+        }
+        
+        setSubscriptionStatus({
+          status: data.status,
+          tier: data.tier,
+          message: data.message || '',
+          isActive: data.status === 'active',
+          accessLevel: data.accessLevel || 'none',
+          upgradeRequired: data.upgradeRequired || false,
+          expiresAt: data.expiresAt
+        });
+        console.log('🔍 Frontend set subscription status:', {
+          status: data.status,
+          tier: data.tier,
+          message: data.message || '',
+          isActive: data.status === 'active',
+          accessLevel: data.accessLevel || 'none',
+          upgradeRequired: data.upgradeRequired || false,
+          expiresAt: data.expiresAt
+        });
+      } else if (res.status === 403) {
+        // Access denied - redirect to login
+        const errorData = await res.json();
+        localStorage.removeItem('auth_token');
+        router.push(`/login?message=${encodeURIComponent(errorData.message)}`);
+      } else {
+        console.error('Failed to check subscription status:', res.status);
+      }
+    } catch (error) {
+      console.error('Failed to check subscription status:', error);
+    }
+  };
+
   // Load prompt history from backend on mount
   useEffect(() => {
     if (!isAuthenticated) return;
     
     const loadConversationHistory = async () => {
       try {
-        const API_URL = process.env.NEXT_PUBLIC_API_URL;
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
         const token = localStorage.getItem('auth_token');
         const res = await fetch(`${API_URL}/conversations`, {
           headers: {
@@ -110,7 +180,7 @@ export default function AppPage() {
     
     const loadConversationHistory = async () => {
       try {
-        const API_URL = process.env.NEXT_PUBLIC_API_URL;
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
         const token = localStorage.getItem('auth_token');
         const res = await fetch(`${API_URL}/conversations`, {
           headers: {
@@ -175,6 +245,8 @@ export default function AppPage() {
     router.push('/login');
   };
 
+  // No subscription warning banner needed - access is controlled at login level
+
   // Show loading state while checking authentication
   if (isLoading) {
     return (
@@ -191,6 +263,8 @@ export default function AppPage() {
   if (!isAuthenticated) {
     return null;
   }
+
+  // No subscription warning needed
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -232,6 +306,8 @@ export default function AppPage() {
           </div>
         </div>
       </div>
+
+      {/* No subscription warning banner - access controlled at login level */}
 
       <div className="flex h-[calc(100vh-80px)]">
         {/* Sidebar - Hidden on mobile, visible on desktop */}

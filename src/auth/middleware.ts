@@ -18,33 +18,44 @@ export async function authenticateUser(
   next: NextFunction
 ): Promise<void> {
   try {
+    console.log('🔐 authenticateUser called');
     const token = extractTokenFromHeader(req.headers.authorization);
+    console.log('🔐 Token extracted:', token ? 'yes' : 'no');
     
     if (!token) {
+      console.log('🔐 No token provided');
       res.status(401).json({ error: 'No token provided' });
       return;
     }
 
     const payload = verifyToken(token);
+    console.log('🔐 Token verified:', payload ? 'yes' : 'no');
     if (!payload) {
+      console.log('🔐 Invalid or expired token');
       res.status(401).json({ error: 'Invalid or expired token' });
       return;
     }
 
+    console.log('🔐 Payload userId:', payload.userId);
+
     // Verify user still exists and is active
     const prisma = getPrismaClient();
     const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
-      select: {
-        id: true,
-        email: true,
-        tier: true,
-        isActive: true
-      }
+      where: { id: payload.userId }
     });
 
+    console.log('🔐 User found:', user ? 'yes' : 'no');
+
     if (!user || !user.isActive) {
+      console.log('🔐 User not found or deactivated');
       res.status(401).json({ error: 'User not found or account deactivated' });
+      return;
+    }
+
+    // Check if subscription has expired (same treatment as failed payments)
+    if (user.subscriptionStatus === 'canceled') {
+      console.log('🔐 User subscription expired - blocking access');
+      res.status(401).json({ error: 'Subscription expired. Please renew to continue.' });
       return;
     }
 
@@ -55,23 +66,23 @@ export async function authenticateUser(
       tier: user.tier
     };
 
+    console.log('🔐 req.user set:', req.user);
+
     next();
   } catch (error) {
-    console.error('Authentication middleware error:', error);
+    console.error('🔐 Authentication middleware error:', error);
     res.status(500).json({ error: 'Authentication error' });
   }
 }
 
-export function requireAuth(
+export async function requireAuth(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
-): void {
-  if (!req.user) {
-    res.status(401).json({ error: 'Authentication required' });
-    return;
-  }
-  next();
+): Promise<void> {
+  console.log('🔒 requireAuth called');
+  // authenticateUser is async, so we need to await it
+  await authenticateUser(req, res, next);
 }
 
 export function optionalAuth(
@@ -138,4 +149,37 @@ export function adminAuth(
 
   console.log(`Admin access granted for email: ${req.user.email}`);
   next();
+}
+
+export async function requireSubscriptionAccess(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    // First, ensure user is authenticated
+    if (!req.user) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    // Check subscription status using Stripe service
+    const { stripeService } = await import('../services/stripe');
+    const subscriptionStatus = await stripeService.getUserSubscriptionStatus(req.user.id);
+    
+    if (subscriptionStatus.accessLevel !== 'full') {
+      res.status(403).json({ 
+        error: 'Access denied',
+        message: subscriptionStatus.message,
+        status: subscriptionStatus.status,
+        upgradeRequired: subscriptionStatus.upgradeRequired
+      });
+      return;
+    }
+
+    next();
+  } catch (error) {
+    console.error('Subscription access check error:', error);
+    res.status(500).json({ error: 'Failed to verify subscription access' });
+  }
 } 

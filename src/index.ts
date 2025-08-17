@@ -10,6 +10,7 @@ import { PrismaClient } from '@prisma/client';
 import { dataOrchestrator } from './data/orchestrator';
 import { isFeatureEnabled } from './config/features';
 import authRoutes from './auth/routes';
+import stripeRoutes from './routes/stripe';
 import { optionalAuth, requireAuth, adminAuth } from './auth/middleware';
 import { UserTier } from './data/types';
 
@@ -33,7 +34,8 @@ config({ path: '.env.local' });
 import { getPrismaClient } from './prisma-client';
 
 const app: Application = express();
-app.use(express.json({ limit: '10mb' }));
+
+// CORS setup
 app.use(cors({
   origin: [
     'https://asklinc.com', // your Vercel frontend URL
@@ -43,7 +45,11 @@ app.use(cors({
   credentials: true
 }));
 
-// Increase response size limit
+// IMPORTANT: Register Stripe webhook route BEFORE JSON middleware
+// This ensures raw body is available for signature verification
+app.use('/api/stripe/webhooks', express.raw({ type: 'application/json' }), stripeRoutes);
+
+// Global JSON middleware for all other routes
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
@@ -112,6 +118,9 @@ setupPlaidRoutes(app);
 
 // Setup Auth routes
 app.use('/auth', authRoutes);
+
+// Setup Stripe routes (webhook route already registered above)
+app.use('/api/stripe', stripeRoutes);
 
 // OpenAI Q&A endpoint with tier-aware system
 app.post('/ask', async (req: Request, res: Response) => {
@@ -1597,8 +1606,42 @@ app.get('/sync/status', async (req: Request, res: Response) => {
           orderBy: { createdAt: 'desc' }
         });
 
+        console.log('Admin: Raw users from database:', users.map(u => ({ email: u.email, id: u.id, tier: u.tier })));
+
+        // Enhance users with subscription status from Stripe service
+        console.log('Admin: Starting subscription status enhancement...');
+        const { stripeService } = await import('./services/stripe');
+        console.log('Admin: Stripe service imported successfully');
+        
+        const enhancedUsers = await Promise.all(
+          users.map(async (user) => {
+            try {
+              console.log(`Admin: Processing user ${user.email} (${user.id}) with tier ${user.tier}`);
+              const subscriptionStatus = await stripeService.getUserSubscriptionStatus(user.id);
+              console.log(`Admin: User ${user.email} - Status: ${subscriptionStatus.status}, Access: ${subscriptionStatus.accessLevel}, Message: ${subscriptionStatus.message}`);
+              return {
+                ...user,
+                subscriptionStatus: subscriptionStatus.status,
+                accessLevel: subscriptionStatus.accessLevel,
+                upgradeRequired: subscriptionStatus.upgradeRequired,
+                subscriptionMessage: subscriptionStatus.message
+              };
+            } catch (error) {
+              console.error(`Error getting subscription status for user ${user.id}:`, error);
+              return {
+                ...user,
+                subscriptionStatus: 'unknown',
+                accessLevel: 'unknown',
+                upgradeRequired: false,
+                subscriptionMessage: 'Error fetching subscription status'
+              };
+            }
+          })
+        );
+        console.log('Admin: Subscription status enhancement completed');
+
         console.log('Admin: Found users:', users.length);
-        res.json({ users });
+        res.json({ users: enhancedUsers });
       } catch (error) {
         console.error('Error fetching production users:', error);
         res.status(500).json({ error: 'Failed to fetch production users' });

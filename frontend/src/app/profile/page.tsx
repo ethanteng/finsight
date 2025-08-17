@@ -65,8 +65,55 @@ export default function ProfilePage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('');
   const [demoStatusDetermined, setDemoStatusDetermined] = useState(false); // Start as false
+  const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
+  const [isManagingSubscription, setIsManagingSubscription] = useState(false);
+  const [subscriptionMessage, setSubscriptionMessage] = useState<string>('');
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+  // Load subscription status for non-demo users
+  const loadSubscriptionStatus = useCallback(async () => {
+    if (isDemo) return;
+    
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+      
+      const response = await fetch(`${API_URL}/api/stripe/subscription-status`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setSubscriptionStatus(data);
+      }
+    } catch (error) {
+      console.error('Failed to load subscription status:', error);
+    }
+  }, [API_URL, isDemo]);
+
+  // Handle subscription management
+  const handleManageSubscription = async () => {
+    if (isDemo) return;
+    
+    setIsManagingSubscription(true);
+    try {
+      // Use environment variable for Stripe customer portal URL
+      const portalUrl = process.env.NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL_URL;
+      if (!portalUrl) {
+        throw new Error('Stripe customer portal URL not configured');
+      }
+      window.location.href = portalUrl;
+    } catch (error) {
+      console.error('Error opening subscription management:', error);
+      setError('Failed to open subscription management');
+    } finally {
+      setIsManagingSubscription(false);
+    }
+  };
 
   // Helper functions that take demo mode as parameter
   const loadConnectedAccountsWithDemoMode = useCallback(async (demoMode: boolean) => {
@@ -167,6 +214,24 @@ export default function ProfilePage() {
     const urlParams = new URLSearchParams(window.location.search);
     const isFromDemo = urlParams.get('demo') === 'true';
     
+    // Check for subscription-related URL parameters
+    const subscriptionParam = urlParams.get('subscription');
+    if (subscriptionParam) {
+      switch (subscriptionParam) {
+        case 'updated':
+          setSubscriptionMessage('✅ Your subscription has been updated successfully!');
+          break;
+        case 'canceled':
+          setSubscriptionMessage('ℹ️ Your subscription has been canceled. You can still access your data.');
+          break;
+        case 'active':
+          setSubscriptionMessage('✅ Your subscription is now active!');
+          break;
+      }
+      // Clear the message after 5 seconds
+      setTimeout(() => setSubscriptionMessage(''), 5000);
+    }
+    
     // Also check if we have an auth token (indicates real user)
     const hasAuthToken = !!localStorage.getItem('auth_token');
     
@@ -198,32 +263,36 @@ export default function ProfilePage() {
     }
   }, [loadConnectedAccountsWithDemoMode, loadInvestmentData, API_URL]);
 
-  // Fetch user email when not in demo mode
+  // Fetch user email and subscription status when not in demo mode
   useEffect(() => {
     if (!isDemo) {
-      const fetchUserEmail = async () => {
+      const fetchUserData = async () => {
         try {
           const token = localStorage.getItem('auth_token');
           if (token) {
-            const res = await fetch(`${API_URL}/auth/verify`, {
+            // Fetch user email
+            const userRes = await fetch(`${API_URL}/auth/verify`, {
               headers: {
                 'Authorization': `Bearer ${token}`
               }
             });
             
-            if (res.ok) {
-              const data = await res.json();
-              setUserEmail(data.user.email);
+            if (userRes.ok) {
+              const userData = await userRes.json();
+              setUserEmail(userData.user.email);
             }
+            
+            // Fetch subscription status
+            await loadSubscriptionStatus();
           }
         } catch (error) {
-          console.error('Failed to fetch user email:', error);
+          console.error('Failed to fetch user data:', error);
         }
       };
       
-      fetchUserEmail();
+      fetchUserData();
     }
-  }, [isDemo, API_URL]);
+  }, [isDemo, API_URL, loadSubscriptionStatus]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -442,6 +511,93 @@ export default function ProfilePage() {
         <div className="mb-6">
           <TransactionHistory isDemo={isDemo} />
         </div>
+
+        {/* Subscription Management Section */}
+        {!isDemo && (
+          <div className="mb-6">
+            <div className="bg-gray-800 rounded-lg p-6">
+              <h2 className="text-xl font-semibold mb-4">Subscription Management</h2>
+              
+              {/* Subscription Message */}
+              {subscriptionMessage && (
+                <div className="mb-4 p-3 bg-green-900/20 border border-green-700 rounded-lg">
+                  <div className="text-sm text-green-400">
+                    {subscriptionMessage}
+                  </div>
+                </div>
+              )}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-medium text-white mb-2">Current Plan</h3>
+                    <p className="text-gray-400 text-sm">
+                      Manage your subscription, update payment methods, and view billing history
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <button
+                      onClick={handleManageSubscription}
+                      disabled={isManagingSubscription}
+                      className="px-4 py-2 rounded text-sm transition-colors text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800"
+                      title="Open Stripe customer portal"
+                    >
+                      {isManagingSubscription ? 'Opening...' : 'Manage Subscription'}
+                    </button>
+                    <div className="text-xs text-gray-400 mt-1">
+                      Opens Stripe customer portal
+                    </div>
+                  </div>
+                </div>
+                
+                {subscriptionStatus ? (
+                  <div className="border border-gray-600 rounded-lg p-4 bg-gray-700">
+                    <div className="mb-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-sm font-medium text-gray-300">Status</span>
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          subscriptionStatus.stripeCustomerId && subscriptionStatus.status === 'active'
+                            ? 'bg-green-600 text-white' 
+                            : subscriptionStatus.accessLevel === 'full'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-yellow-600 text-white'
+                        }`}>
+                          {subscriptionStatus.stripeCustomerId && subscriptionStatus.status === 'active'
+                            ? 'Active Subscription'
+                            : subscriptionStatus.accessLevel === 'full'
+                            ? 'Admin Access'
+                            : subscriptionStatus.status}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-400">
+                      Plan: {subscriptionStatus.tier} • Access: {subscriptionStatus.accessLevel}
+                    </div>
+                    {!subscriptionStatus.stripeCustomerId && (
+                      <div className="mt-2 text-xs text-blue-400">
+                        ℹ️ No active subscription found. You can still access the customer portal to view billing options.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="border border-gray-600 rounded-lg p-4 bg-gray-700">
+                    <div className="text-sm text-gray-400">
+                      Loading subscription status...
+                    </div>
+                  </div>
+                )}
+                
+                {/* Error Display */}
+                {error && (
+                  <div className="border border-red-600 rounded-lg p-4 bg-red-900/20">
+                    <div className="text-sm text-red-400">
+                      ⚠️ {error}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Account Settings */}
         <div className="bg-gray-800 rounded-lg p-6">
