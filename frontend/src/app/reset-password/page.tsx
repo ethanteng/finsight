@@ -3,7 +3,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-function ResetPasswordContent() {
+function ResetPasswordPageContent() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -176,7 +176,7 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     }>
-      <ResetPasswordContent />
+      <ResetPasswordPageContent />
     </Suspense>
   );
 } 

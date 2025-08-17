@@ -65,7 +65,14 @@ export default function ProfilePage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('');
   const [demoStatusDetermined, setDemoStatusDetermined] = useState(false); // Start as false
-  const [subscriptionStatus, setSubscriptionStatus] = useState<any>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<{
+    status?: string;
+    tier?: string;
+    currentPeriodEnd?: string;
+    cancelAtPeriodEnd?: boolean;
+    stripeCustomerId?: string;
+    accessLevel?: string;
+  } | null>(null);
   const [isManagingSubscription, setIsManagingSubscription] = useState(false);
   const [subscriptionMessage, setSubscriptionMessage] = useState<string>('');
 

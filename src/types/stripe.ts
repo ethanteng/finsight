@@ -186,7 +186,7 @@ export async function getLiveSubscriptionPlans(): Promise<Record<SubscriptionTie
     for (const [tier, plan] of Object.entries(plans)) {
       try {
         if (plan.stripePriceId && plan.stripePriceId.startsWith('price_')) {
-          const price = await stripe.prices.retrieve(plan.stripePriceId);
+          const price = await stripe.client.prices.retrieve(plan.stripePriceId);
           
           livePlans[tier as SubscriptionTier] = {
             ...plan,

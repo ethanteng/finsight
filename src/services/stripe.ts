@@ -54,7 +54,7 @@ export class StripeService {
       }
 
       // Create checkout session
-      const session = await stripe.checkout.sessions.create({
+      const session = await stripe.client.checkout.sessions.create({
         mode: 'subscription',
         payment_method_types: ['card'],
         line_items: [
@@ -98,7 +98,7 @@ export class StripeService {
     customerId: string
   ): Promise<CreatePortalSessionResponse> {
     try {
-      const session = await stripe.billingPortal.sessions.create({
+      const session = await stripe.client.billingPortal.sessions.create({
         customer: customerId,
         return_url: request.returnUrl,
       });
@@ -859,8 +859,7 @@ export class StripeService {
    */
   private async getCurrentTierFromStripe(subscriptionId: string): Promise<string> {
     try {
-      const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-      const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+      const stripeSubscription = await stripe.client.subscriptions.retrieve(subscriptionId);
       
       const currentPrice = stripeSubscription.items.data[0]?.price?.id;
       
@@ -900,8 +899,7 @@ export class StripeService {
       }
 
       // Get current Stripe subscription to check price
-      const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-      const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+      const stripeSubscription = await stripe.client.subscriptions.retrieve(subscriptionId);
       
       const currentPrice = stripeSubscription.items.data[0]?.price?.id;
       const correctTier = PRICE_TO_TIER[currentPrice] || 'starter';
@@ -929,7 +927,7 @@ export class StripeService {
         console.log(`Auto-sync: ${action} from ${currentMetadataTier} to ${correctTier}`);
         
         // Update Stripe metadata
-        await stripe.subscriptions.update(subscriptionId, {
+        await stripe.client.subscriptions.update(subscriptionId, {
           metadata: {
             source: 'web_checkout',
             tier: correctTier

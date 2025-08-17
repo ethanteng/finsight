@@ -4,14 +4,20 @@ import { getPrismaClient } from '../../prisma-client';
 // Mock Stripe
 jest.mock('../../config/stripe', () => ({
   stripe: {
-    checkout: {
-      sessions: {
-        create: jest.fn()
-      }
-    },
-    billingPortal: {
-      sessions: {
-        create: jest.fn()
+    client: {
+      checkout: {
+        sessions: {
+          create: jest.fn()
+        }
+      },
+      billingPortal: {
+        sessions: {
+          create: jest.fn()
+        }
+      },
+      subscriptions: {
+        retrieve: jest.fn(),
+        update: jest.fn()
       }
     }
   },
@@ -59,7 +65,7 @@ describe('StripeService', () => {
         url: 'https://checkout.stripe.com/test'
       };
       
-      mockStripe.stripe.checkout.sessions.create.mockResolvedValue(mockSession);
+      mockStripe.stripe.client.checkout.sessions.create.mockResolvedValue(mockSession);
       mockStripe.getTierFromPriceId.mockReturnValue('standard');
 
       const request = {
@@ -75,7 +81,7 @@ describe('StripeService', () => {
         sessionId: 'cs_test_123',
         url: 'https://checkout.stripe.com/test'
       });
-      expect(mockStripe.stripe.checkout.sessions.create).toHaveBeenCalledWith(
+      expect(mockStripe.stripe.client.checkout.sessions.create).toHaveBeenCalledWith(
         expect.objectContaining({
           mode: 'subscription',
           payment_method_types: ['card'],
@@ -110,7 +116,7 @@ describe('StripeService', () => {
         url: 'https://billing.stripe.com/test'
       };
       
-      mockStripe.stripe.billingPortal.sessions.create.mockResolvedValue(mockSession);
+      mockStripe.stripe.client.billingPortal.sessions.create.mockResolvedValue(mockSession);
 
       const request = {
         returnUrl: 'https://example.com/return'
@@ -121,7 +127,7 @@ describe('StripeService', () => {
       expect(result).toEqual({
         url: 'https://billing.stripe.com/test'
       });
-      expect(mockStripe.stripe.billingPortal.sessions.create).toHaveBeenCalledWith({
+      expect(mockStripe.stripe.client.billingPortal.sessions.create).toHaveBeenCalledWith({
         customer: 'cus_test_123',
         return_url: 'https://example.com/return'
       });

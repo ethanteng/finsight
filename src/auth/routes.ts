@@ -16,6 +16,7 @@ import {
   generateRandomToken 
 } from './resend-email';
 import { sendContactEmail } from './resend-email';
+import { stripe } from '../config/stripe';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -124,15 +125,14 @@ router.post('/register', async (req: Request, res: Response) => {
     if (stripeSessionIdToUse) {
       try {
         // First, find the Stripe session to get the subscription ID
-        const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-        const session = await stripe.checkout.sessions.retrieve(stripeSessionIdToUse);
+        const session = await stripe.client.checkout.sessions.retrieve(stripeSessionIdToUse);
         
         if (session.subscription && session.customer) {
           // Create or get Stripe customer
           let customer;
           if (typeof session.customer === 'string') {
             // Customer ID already exists
-            customer = await stripe.customers.retrieve(session.customer);
+            customer = await stripe.client.customers.retrieve(session.customer);
           } else {
             // Customer object from session
             customer = session.customer;
@@ -150,22 +150,28 @@ router.post('/register', async (req: Request, res: Response) => {
           console.log(`Linked user ${user.email} to Stripe customer ${customer.id}`);
           
           // Find the subscription by Stripe subscription ID
-          const subscription = await prisma.subscription.findFirst({
-            where: {
-              stripeSubscriptionId: session.subscription
-            }
-          });
-
-          if (subscription) {
-            // Link the user to the subscription
-            await prisma.subscription.update({
-              where: { id: subscription.id },
-              data: { userId: user.id }
+          const subscriptionId = typeof session.subscription === 'string' 
+            ? session.subscription 
+            : session.subscription?.id;
+            
+          if (subscriptionId) {
+            const subscription = await prisma.subscription.findFirst({
+              where: {
+                stripeSubscriptionId: subscriptionId
+              }
             });
 
-            console.log(`Linked user ${user.email} to subscription ${subscription.id}`);
-          } else {
-            console.log(`Subscription ${session.subscription} not found yet, will be created by webhook`);
+            if (subscription) {
+              // Link the user to the subscription
+              await prisma.subscription.update({
+                where: { id: subscription.id },
+                data: { userId: user.id }
+              });
+
+              console.log(`Linked user ${user.email} to subscription ${subscription.id}`);
+            } else {
+              console.log(`Subscription ${subscriptionId} not found yet, will be created by webhook`);
+            }
           }
         }
       } catch (subscriptionError) {

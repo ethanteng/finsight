@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import FinanceQA from '../../components/FinanceQA';
 import TierBanner from '../../components/TierBanner';
@@ -31,51 +31,8 @@ export default function AppPage() {
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
   const router = useRouter();
 
-  // Check authentication on mount
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const API_URL = process.env.NEXT_PUBLIC_API_URL;
-        const token = localStorage.getItem('auth_token');
-        
-        if (!token) {
-          // No token, redirect to login
-          router.push('/login');
-          return;
-        }
-
-        // Verify token with backend
-        const res = await fetch(`${API_URL}/auth/verify`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          setIsAuthenticated(true);
-          setUserEmail(data.user.email);
-          setIsLoading(false);
-          
-          // Check subscription status after authentication
-          checkSubscriptionStatus(token);
-        } else {
-          // Token invalid, redirect to login
-          localStorage.removeItem('auth_token');
-          router.push('/login');
-        }
-      } catch (error) {
-        console.error('Auth check failed:', error);
-        localStorage.removeItem('auth_token');
-        router.push('/login');
-      }
-    };
-
-    checkAuth();
-  }, [router]);
-
   // Check subscription status
-  const checkSubscriptionStatus = async (token: string) => {
+  const checkSubscriptionStatus = useCallback(async (token: string) => {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
       console.log('🔍 API_URL:', API_URL);
@@ -128,7 +85,50 @@ export default function AppPage() {
     } catch (error) {
       console.error('Failed to check subscription status:', error);
     }
-  };
+  }, [router]);
+
+  // Check authentication on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+        const token = localStorage.getItem('auth_token');
+        
+        if (!token) {
+          // No token, redirect to login
+          router.push('/login');
+          return;
+        }
+
+        // Verify token with backend
+        const res = await fetch(`${API_URL}/auth/verify`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setIsAuthenticated(true);
+          setUserEmail(data.user.email);
+          setIsLoading(false);
+          
+          // Check subscription status after authentication
+          checkSubscriptionStatus(token);
+        } else {
+          // Token invalid, redirect to login
+          localStorage.removeItem('auth_token');
+          router.push('/login');
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        localStorage.removeItem('auth_token');
+        router.push('/login');
+      }
+    };
+
+    checkAuth();
+  }, [router, checkSubscriptionStatus]);
 
   // Load prompt history from backend on mount
   useEffect(() => {

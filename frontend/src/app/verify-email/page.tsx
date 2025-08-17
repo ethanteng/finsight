@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
@@ -10,7 +10,7 @@ interface SubscriptionContext {
   sessionId: string | null;
 }
 
-export default function VerifyEmailPage() {
+function VerifyEmailPageContent() {
   const [code, setCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -53,7 +53,7 @@ export default function VerifyEmailPage() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({ code: code }),
       });
 
       const data = await res.json();
@@ -230,5 +230,13 @@ export default function VerifyEmailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <VerifyEmailPageContent />
+    </Suspense>
   );
 } 

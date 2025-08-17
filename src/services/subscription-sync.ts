@@ -1,4 +1,5 @@
 import { getPrismaClient } from '../prisma-client';
+import { stripe } from '../config/stripe';
 
 export class SubscriptionSyncService {
   /**
@@ -14,8 +15,7 @@ export class SubscriptionSyncService {
       console.log(`Auto-sync: Starting sync for subscription ${subscriptionId}`);
       
       // Get current Stripe subscription to check price
-      const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-      const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+      const stripeSubscription = await stripe.client.subscriptions.retrieve(subscriptionId);
       
       const currentPrice = stripeSubscription.items.data[0]?.price?.id;
       
@@ -39,7 +39,7 @@ export class SubscriptionSyncService {
         console.log(`Auto-sync: Tier mismatch detected. Updating from ${metadataTier} to ${correctTier}`);
         
         // Update Stripe metadata
-        await stripe.subscriptions.update(subscriptionId, {
+        await stripe.client.subscriptions.update(subscriptionId, {
           metadata: {
             source: 'web_checkout',
             tier: correctTier

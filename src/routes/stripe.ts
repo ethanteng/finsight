@@ -35,7 +35,7 @@ router.get('/payment-success', async (req, res) => {
 
     // Verify the session with Stripe to ensure it's legitimate
     try {
-      const session = await stripe.checkout.sessions.retrieve(session_id as string);
+      const session = await stripe.client.checkout.sessions.retrieve(session_id as string);
       
       if (session.payment_status !== 'paid') {
         console.error('Session payment status is not paid:', session.payment_status);

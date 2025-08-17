@@ -1,11 +1,29 @@
 import Stripe from 'stripe';
 import { getSubscriptionPlans, SubscriptionTier } from '../types/stripe';
 
-// Initialize Stripe client
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-07-30.basil',
-  typescript: true,
-});
+// Lazy initialization of Stripe client to avoid issues in test environments
+let stripeClient: Stripe | null = null;
+
+function getStripeClient(): Stripe {
+  if (!stripeClient) {
+    const secretKey = process.env.STRIPE_SECRET_KEY;
+    if (!secretKey) {
+      throw new Error('STRIPE_SECRET_KEY is not configured');
+    }
+    stripeClient = new Stripe(secretKey, {
+      apiVersion: '2025-07-30.basil',
+      typescript: true,
+    });
+  }
+  return stripeClient;
+}
+
+// Export a getter function instead of the client directly
+export const stripe = {
+  get client() {
+    return getStripeClient();
+  }
+};
 
 // Stripe configuration constants
 export const STRIPE_CONFIG = {
@@ -108,7 +126,7 @@ export function constructWebhookEvent(
   secret: string
 ): Stripe.Event {
   try {
-    return stripe.webhooks.constructEvent(payload, signature, secret);
+    return stripe.client.webhooks.constructEvent(payload, signature, secret);
   } catch (err) {
     throw new Error(`Webhook signature verification failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
   }

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
@@ -9,7 +9,7 @@ interface SubscriptionContext {
   sessionId: string | null;
 }
 
-export default function RegisterPage() {
+function RegisterPageContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -54,12 +54,19 @@ export default function RegisterPage() {
       const API_URL = process.env.NEXT_PUBLIC_API_URL;
       
       // Prepare registration data
-      const registrationData: any = { email, password };
+      const registrationData: {
+        email: string;
+        password: string;
+        tier?: string;
+        stripeSessionId?: string;
+      } = { email, password };
       
       // If coming from successful subscription, include tier and session info
       if (subscriptionContext) {
         registrationData.tier = subscriptionContext.tier;
-        registrationData.stripeSessionId = subscriptionContext.sessionId;
+        if (subscriptionContext.sessionId) {
+          registrationData.stripeSessionId = subscriptionContext.sessionId;
+        }
       }
       
       const res = await fetch(`${API_URL}/auth/register`, {
@@ -190,5 +197,13 @@ export default function RegisterPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <RegisterPageContent />
+    </Suspense>
   );
 } 
