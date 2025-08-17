@@ -9,6 +9,7 @@ import {
   getSubscriptionPlans
 } from '../types/stripe';
 import { getPrismaClient } from '../prisma-client';
+import { sendWelcomeEmail, sendTierChangeEmail } from './stripe-email';
 
 export class StripeService {
   /**
@@ -171,7 +172,8 @@ export class StripeService {
     // Find user by Stripe customer ID
     const prisma = getPrismaClient();
     const user = await prisma.user.findFirst({
-      where: { stripeCustomerId: customerId }
+      where: { stripeCustomerId: customerId },
+      include: { profile: true }
     });
 
     if (!user) {
@@ -210,6 +212,15 @@ export class StripeService {
       }
     });
 
+    // Send welcome email for new subscription
+    try {
+      await sendWelcomeEmail(user.email, tier, user.profile?.firstName || undefined);
+      console.log(`Welcome email sent to ${user.email} for ${tier} plan`);
+    } catch (emailError) {
+      console.error(`Failed to send welcome email to ${user.email}:`, emailError);
+      // Don't fail the webhook if email fails
+    }
+
     console.log(`Subscription ${subscriptionId} activated for user ${user.id}`);
   }
 
@@ -238,7 +249,7 @@ export class StripeService {
     // Check if subscription exists, if not create it
     let subscriptionRecord = await prisma.subscription.findUnique({
       where: { stripeSubscriptionId: subscriptionId },
-      include: { user: true }
+      include: { user: { include: { profile: true } } }
     });
 
     if (!subscriptionRecord) {
@@ -302,6 +313,7 @@ export class StripeService {
 
     // Update user tier and subscription status
     if (subscriptionRecord?.user) {
+      const oldTier = subscriptionRecord.user.tier;
       await prisma.user.update({
         where: { id: subscriptionRecord.user.id },
         data: {
@@ -309,6 +321,22 @@ export class StripeService {
           tier: tier,
         }
       });
+
+      // Send tier change email if tier actually changed
+      if (oldTier !== tier) {
+        try {
+          await sendTierChangeEmail(
+            subscriptionRecord.user.email, 
+            tier, 
+            oldTier, 
+            subscriptionRecord.user.profile?.firstName || undefined
+          );
+          console.log(`Tier change email sent to ${subscriptionRecord.user.email}: ${oldTier} → ${tier}`);
+        } catch (emailError) {
+          console.error(`Failed to send tier change email to ${subscriptionRecord.user.email}:`, emailError);
+          // Don't fail the webhook if email fails
+        }
+      }
     }
 
     console.log(`Subscription ${subscriptionId} updated successfully`);
