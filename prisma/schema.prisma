@@ -174,10 +174,10 @@ model encrypted_profile_data {
   encryptedData String
   createdAt     DateTime    @default(now())
   updatedAt     DateTime
-  iv            String
-  tag           String
-  keyVersion    Int         @default(1)
   algorithm     String      @default("aes-256-gcm")
+  iv            String
+  keyVersion    Int         @default(1)
+  tag           String
   user_profiles UserProfile @relation(fields: [profileHash], references: [profileHash])
 
   @@map("encrypted_profile_data")

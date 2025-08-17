@@ -322,5 +322,23 @@ jobs:
 
       - name: Deploy to Render
         run: |
-          echo "Render deployment is handled automatically via GitHub integration"
-          echo "Deployment status will be available in Render dashboard" 
+          echo "Deploying to Render..."
+          
+          # Option 1: Use Render webhook (requires RENDER_DEPLOY_HOOK secret)
+          if [ -n "${{ secrets.RENDER_DEPLOY_HOOK }}" ]; then
+            echo "Triggering Render deployment via webhook..."
+            curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+            echo "Render deployment triggered successfully"
+          else
+            echo "No RENDER_DEPLOY_HOOK secret found"
+          fi
+          
+          # Option 2: Direct deployment with Render CLI (alternative approach)
+          # if [ -n "${{ secrets.RENDER_API_KEY }}" ]; then
+          #   echo "Installing Render CLI..."
+          #   npm install -g @render/cli
+          #   echo "Deploying to Render via CLI..."
+          #   render deploy --service-id ${{ secrets.RENDER_SERVICE_ID }}
+          # else
+          #   echo "No RENDER_API_KEY secret found, skipping CLI deployment"
+          # fi 
