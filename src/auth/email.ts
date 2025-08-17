@@ -50,42 +50,222 @@ export async function sendEmailVerificationCode(
       to: email,
       subject: 'Verify your Ask Linc account',
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; color: white;">
-            <h1 style="margin: 0; font-size: 28px;">Ask Linc</h1>
-            <p style="margin: 10px 0 0 0; opacity: 0.9;">Verify your email address</p>
-          </div>
-          
-          <div style="padding: 30px; background: #f8f9fa;">
-            <h2 style="color: #333; margin-bottom: 20px;">Hello${userName ? ` ${userName}` : ''}!</h2>
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Verify your Ask Linc account</title>
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+              line-height: 1.6;
+              color: #1a1a1a;
+              margin: 0;
+              padding: 0;
+              background-color: #f8f9fa;
+            }
+            .container {
+              max-width: 600px;
+              margin: 0 auto;
+              background-color: #ffffff;
+              border-radius: 12px;
+              overflow: hidden;
+              box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            }
+            .header {
+              background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+              padding: 40px 30px;
+              text-align: center;
+              color: white;
+            }
+            .logo {
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              margin-bottom: 20px;
+            }
+            .logo-icon {
+              width: 40px;
+              height: 40px;
+              background-color: rgba(255, 255, 255, 0.2);
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              margin-right: 16px;
+            }
+            .logo-text {
+              font-size: 28px;
+              font-weight: 700;
+              letter-spacing: -0.5px;
+            }
+            .header-subtitle {
+              font-size: 18px;
+              opacity: 0.9;
+              margin: 0;
+              font-weight: 500;
+            }
+            .content {
+              padding: 40px 30px;
+              background-color: #ffffff;
+            }
+            .welcome-message {
+              font-size: 24px;
+              font-weight: 600;
+              color: #1a1a1a;
+              margin-bottom: 24px;
+            }
+            .description {
+              font-size: 16px;
+              color: #4b5563;
+              line-height: 1.7;
+              margin-bottom: 32px;
+            }
+            .verification-code {
+              background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+              border: 2px solid #10b981;
+              border-radius: 12px;
+              padding: 24px;
+              text-align: center;
+              margin: 32px 0;
+            }
+            .code-display {
+              font-size: 36px;
+              font-weight: 700;
+              color: #10b981;
+              letter-spacing: 12px;
+              font-family: 'Courier New', monospace;
+              margin: 16px 0;
+            }
+            .cta-button {
+              display: inline-block;
+              background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+              color: white;
+              text-decoration: none;
+              padding: 16px 32px;
+              border-radius: 8px;
+              font-weight: 600;
+              font-size: 16px;
+              margin: 24px 0;
+              transition: all 0.2s ease;
+            }
+            .cta-button:hover {
+              transform: translateY(-2px);
+              box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
+            }
+            .security-note {
+              background-color: #f0f9ff;
+              border-left: 4px solid #0ea5e9;
+              padding: 16px;
+              margin: 24px 0;
+              border-radius: 4px;
+            }
+            .footer {
+              background-color: #1f2937;
+              color: #9ca3af;
+              padding: 30px;
+              text-align: center;
+              font-size: 14px;
+            }
+            .footer-links {
+              margin-bottom: 20px;
+            }
+            .footer-link {
+              color: #9ca3af;
+              text-decoration: none;
+              margin: 0 12px;
+            }
+            .footer-link:hover {
+              color: #10b981;
+            }
+            @media (max-width: 600px) {
+              .container {
+                margin: 20px;
+                border-radius: 8px;
+              }
+              .header, .content, .footer {
+                padding: 30px 20px;
+              }
+              .logo-text {
+                font-size: 24px;
+              }
+              .welcome-message {
+                font-size: 20px;
+              }
+              .code-display {
+                font-size: 28px;
+                letter-spacing: 8px;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <div class="logo">
+                <div class="logo-icon">
+                  <span style="color: white; font-size: 20px; font-weight: bold;">🧠</span>
+                </div>
+                <div class="logo-text">Ask Linc</div>
+              </div>
+              <p class="header-subtitle">Your AI Financial Assistant</p>
+            </div>
             
-            <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-              Thanks for signing up for Ask Linc! To complete your registration, please enter the verification code below:
-            </p>
-            
-            <div style="background: #fff; border: 2px solid #667eea; border-radius: 8px; padding: 20px; text-align: center; margin: 25px 0;">
-              <div style="font-size: 32px; font-weight: bold; color: #667eea; letter-spacing: 8px; font-family: 'Courier New', monospace;">
-                ${code}
+            <div class="content">
+              <div class="welcome-message">
+                Welcome to Ask Linc! 🎉
+              </div>
+              
+              <div class="description">
+                Hi${userName ? ` ${userName}` : ''}! Thank you for signing up for Ask Linc. 
+                To complete your registration and start getting intelligent financial insights, 
+                please enter the verification code below:
+              </div>
+              
+              <div class="verification-code">
+                <div style="color: #0c4a6e; font-weight: 600; margin-bottom: 16px;">
+                  Your Verification Code
+                </div>
+                <div class="code-display">
+                  ${code}
+                </div>
+                <div style="color: #64748b; font-size: 14px;">
+                  This code will expire in 15 minutes
+                </div>
+              </div>
+              
+              <div style="text-align: center;">
+                <a href="${isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'https://asklinc.com')}" 
+                   class="cta-button">
+                  Visit Ask Linc →
+                </a>
+              </div>
+              
+              <div class="security-note">
+                <p style="margin: 0; color: #0c4a6e; font-size: 14px;">
+                  <strong>🔒 Security Note:</strong> If you didn't create an account with Ask Linc, 
+                  you can safely ignore this email. Your email address will not be used for any other purpose.
+                </p>
               </div>
             </div>
             
-            <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-              This code will expire in 15 minutes. If you didn't create an account with Ask Linc, you can safely ignore this email.
-            </p>
-            
-            <div style="text-align: center; margin-top: 30px;">
-              <a href="${isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'https://asklinc.com')}" 
-                 style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block;">
-                Visit Ask Linc
-              </a>
+            <div class="footer">
+              <div class="footer-links">
+                <a href="${isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'https://asklinc.com')}" class="footer-link">Home</a>
+                <a href="${isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'https://asklinc.com')}/pricing" class="footer-link">Pricing</a>
+                <a href="${isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'https://asklinc.com')}/how-we-protect-your-data" class="footer-link">Privacy</a>
+                <a href="https://ask-linc-blog.ghost.io/" class="footer-link">Blog</a>
+              </div>
+              
+              <p style="margin: 0; color: #6b7280;">© 2024 Ask Linc. All rights reserved.</p>
+              <p style="margin: 5px 0 0 0; color: #6b7280; font-size: 12px;">
+                This email was sent to ${email} to verify your account.
+              </p>
             </div>
           </div>
-          
-          <div style="background: #333; color: #999; padding: 20px; text-align: center; font-size: 12px;">
-            <p style="margin: 0;">© 2024 Ask Linc. All rights reserved.</p>
-            <p style="margin: 5px 0 0 0;">This email was sent to ${email}</p>
-          </div>
-        </div>
+        </body>
+        </html>
       `,
     };
 
@@ -120,44 +300,212 @@ export async function sendPasswordResetEmail(
       to: email,
       subject: 'Reset your Ask Linc password',
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; color: white;">
-            <h1 style="margin: 0; font-size: 28px;">Ask Linc</h1>
-            <p style="margin: 10px 0 0 0; opacity: 0.9;">Password Reset Request</p>
-          </div>
-          
-          <div style="padding: 30px; background: #f8f9fa;">
-            <h2 style="color: #333; margin-bottom: 20px;">Hello${userName ? ` ${userName}` : ''}!</h2>
-            
-            <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-              We received a request to reset your password for your Ask Linc account. Click the button below to create a new password:
-            </p>
-            
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${resetUrl}" 
-                 style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
-                Reset Password
-              </a>
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Reset your Ask Linc password</title>
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+              line-height: 1.6;
+              color: #1a1a1a;
+              margin: 0;
+              padding: 0;
+              background-color: #f8f9fa;
+            }
+            .container {
+              max-width: 600px;
+              margin: 0 auto;
+              background-color: #ffffff;
+              border-radius: 12px;
+              overflow: hidden;
+              box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            }
+            .header {
+              background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+              padding: 40px 30px;
+              text-align: center;
+              color: white;
+            }
+            .logo {
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              margin-bottom: 20px;
+            }
+            .logo-icon {
+              width: 40px;
+              height: 40px;
+              background-color: rgba(255, 255, 255, 0.2);
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              margin-right: 16px;
+            }
+            .logo-text {
+              font-size: 28px;
+              font-weight: 700;
+              letter-spacing: -0.5px;
+            }
+            .header-subtitle {
+              font-size: 18px;
+              opacity: 0.9;
+              margin: 0;
+              font-weight: 500;
+            }
+            .content {
+              padding: 40px 30px;
+              background-color: #ffffff;
+            }
+            .welcome-message {
+              font-size: 24px;
+              font-weight: 600;
+              color: #1a1a1a;
+              margin-bottom: 24px;
+            }
+            .description {
+              font-size: 16px;
+              color: #4b5563;
+              line-height: 1.7;
+              margin-bottom: 32px;
+            }
+            .cta-button {
+              display: inline-block;
+              background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+              color: white;
+              text-decoration: none;
+              padding: 16px 32px;
+              border-radius: 8px;
+              font-weight: 600;
+              font-size: 16px;
+              margin: 24px 0;
+              transition: all 0.2s ease;
+            }
+            .cta-button:hover {
+              transform: translateY(-2px);
+              box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
+            }
+            .security-note {
+              background-color: #f0f9ff;
+              border-left: 4px solid #0ea5e9;
+              padding: 16px;
+              margin: 24px 0;
+              border-radius: 4px;
+            }
+            .fallback-link {
+              background-color: #f8f9fa;
+              border: 1px solid #e5e7eb;
+              border-radius: 8px;
+              padding: 16px;
+              margin: 24px 0;
+              word-break: break-all;
+            }
+            .fallback-link a {
+              color: #10b981;
+              text-decoration: none;
+              font-family: 'Courier New', monospace;
+              font-size: 12px;
+            }
+            .footer {
+              background-color: #1f2937;
+              color: #9ca3af;
+              padding: 30px;
+              text-align: center;
+              font-size: 14px;
+            }
+            .footer-links {
+              margin-bottom: 20px;
+            }
+            .footer-link {
+              color: #9ca3af;
+              text-decoration: none;
+              margin: 0 12px;
+            }
+            .footer-link:hover {
+              color: #10b981;
+            }
+            @media (max-width: 600px) {
+              .container {
+                margin: 20px;
+                border-radius: 8px;
+              }
+              .header, .content, .footer {
+                padding: 30px 20px;
+              }
+              .logo-text {
+                font-size: 24px;
+              }
+              .welcome-message {
+                font-size: 20px;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <div class="logo">
+                <div class="logo-icon">
+                  <span style="color: white; font-size: 20px; font-weight: bold;">🧠</span>
+                </div>
+                <div class="logo-text">Ask Linc</div>
+              </div>
+              <p class="header-subtitle">Your AI Financial Assistant</p>
             </div>
             
-            <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-              This link will expire in 1 hour. If you didn't request a password reset, you can safely ignore this email.
-            </p>
+            <div class="content">
+              <div class="welcome-message">
+                Password Reset Request 🔐
+              </div>
+              
+              <div class="description">
+                Hi${userName ? ` ${userName}` : ''}! We received a request to reset your password 
+                for your Ask Linc account. Click the button below to create a new password and 
+                regain access to your financial insights.
+              </div>
+              
+              <div style="text-align: center;">
+                <a href="${resetUrl}" class="cta-button">
+                  Reset Password →
+                </a>
+              </div>
+              
+              <div class="security-note">
+                <p style="margin: 0; color: #0c4a6e; font-size: 14px;">
+                  <strong>⏰ Time Limit:</strong> This link will expire in 1 hour for security reasons. 
+                  If you didn't request a password reset, you can safely ignore this email.
+                </p>
+              </div>
+              
+              <div style="margin: 24px 0;">
+                <p style="color: #4b5563; font-size: 14px; margin-bottom: 12px;">
+                  <strong>Having trouble with the button?</strong> Copy and paste this link into your browser:
+                </p>
+                <div class="fallback-link">
+                  <a href="${resetUrl}">${resetUrl}</a>
+                </div>
+              </div>
+            </div>
             
-            <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-              If the button doesn't work, copy and paste this link into your browser:
-            </p>
-            
-            <p style="color: #667eea; word-break: break-all; font-size: 12px;">
-              ${resetUrl}
-            </p>
+            <div class="footer">
+              <div class="footer-links">
+                <a href="${baseUrl}" class="footer-link">Home</a>
+                <a href="${baseUrl}/pricing" class="footer-link">Pricing</a>
+                <a href="${baseUrl}/how-we-protect-your-data" class="footer-link">Privacy</a>
+                <a href="https://ask-linc-blog.ghost.io/" class="footer-link">Blog</a>
+              </div>
+              
+              <p style="margin: 0; color: #6b7280;">© 2024 Ask Linc. All rights reserved.</p>
+              <p style="margin: 5px 0 0 0; color: #6b7280; font-size: 12px;">
+                This email was sent to ${email} to reset your password.
+              </p>
+            </div>
           </div>
-          
-          <div style="background: #333; color: #999; padding: 20px; text-align: center; font-size: 12px;">
-            <p style="margin: 0;">© 2024 Ask Linc. All rights reserved.</p>
-            <p style="margin: 5px 0 0 0;">This email was sent to ${email}</p>
-          </div>
-        </div>
+        </body>
+        </html>
       `,
     };
 
