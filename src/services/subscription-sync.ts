@@ -1,12 +1,5 @@
 import { getPrismaClient } from '../prisma-client';
 
-// Price to tier mapping
-const PRICE_TO_TIER: Record<string, string> = {
-  'price_1RwVHYB0fNhwjxZIorwBKpVN': 'starter',
-  'price_1RwVJqB0fNhwjxZIV4ORHT6H': 'standard', 
-  'price_1RwVKKB0fNhwjxZIT7P4laDk': 'premium'
-};
-
 export class SubscriptionSyncService {
   /**
    * Auto-sync a specific subscription's tier based on its current Stripe price
@@ -25,6 +18,17 @@ export class SubscriptionSyncService {
       const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
       
       const currentPrice = stripeSubscription.items.data[0]?.price?.id;
+      
+      // Use environment-aware price ID mapping
+      const { getSubscriptionPlans } = await import('../types/stripe');
+      const plans = getSubscriptionPlans();
+      
+      // Create reverse mapping from price ID to tier
+      const PRICE_TO_TIER: Record<string, string> = {};
+      for (const [tier, plan] of Object.entries(plans)) {
+        PRICE_TO_TIER[plan.stripePriceId] = tier;
+      }
+      
       const correctTier = PRICE_TO_TIER[currentPrice] || 'starter';
       const metadataTier = stripeSubscription.metadata?.tier || 'unknown';
       

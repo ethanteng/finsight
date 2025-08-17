@@ -3,11 +3,11 @@ require('dotenv').config({ path: '.env.local' });
 
 const prisma = new PrismaClient();
 
-// Price to tier mapping
+// Environment-aware price to tier mapping
 const PRICE_TO_TIER = {
-  'price_1RwVHYB0fNhwjxZIorwBKpVN': 'starter',
-  'price_1RwVJqB0fNhwjxZIV4ORHT6H': 'standard', 
-  'price_1RwVKKB0fNhwjxZIT7P4laDk': 'premium'
+  [process.env.STRIPE_PRICE_STARTER || 'price_starter']: 'starter',
+  [process.env.STRIPE_PRICE_STANDARD || 'price_standard']: 'standard',
+  [process.env.STRIPE_PRICE_PREMIUM || 'price_premium']: 'premium'
 };
 
 async function syncSubscription(subscriptionId) {

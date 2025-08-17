@@ -863,14 +863,19 @@ export class StripeService {
       
       const currentPrice = stripeSubscription.items.data[0]?.price?.id;
       
-      // Price to tier mapping
-      const PRICE_TO_TIER: Record<string, string> = {
-        'price_1RwVHYB0fNhwjxZIorwBKpVN': 'starter',
-        'price_1RwVJqB0fNhwjxZIV4ORHT6H': 'standard', 
-        'price_1RwVKKB0fNhwjxZIT7P4laDk': 'premium'
-      };
+      // Use environment-aware price ID mapping
+      const { getSubscriptionPlans } = await import('../types/stripe');
+      const plans = getSubscriptionPlans();
       
-      return PRICE_TO_TIER[currentPrice] || 'starter';
+      // Find tier by price ID
+      for (const [tier, plan] of Object.entries(plans)) {
+        if (plan.stripePriceId === currentPrice) {
+          return tier;
+        }
+      }
+      
+      // Fallback to starter if no match found
+      return 'starter';
     } catch (error) {
       console.error('Error getting current tier from Stripe:', error);
       return 'starter'; // fallback
@@ -883,12 +888,15 @@ export class StripeService {
    */
   private async autoSyncSubscriptionTier(subscriptionId: string, metadataTier: string): Promise<void> {
     try {
-      // Price to tier mapping
-      const PRICE_TO_TIER: Record<string, string> = {
-        'price_1RwVHYB0fNhwjxZIorwBKpVN': 'starter',
-        'price_1RwVJqB0fNhwjxZIV4ORHT6H': 'standard', 
-        'price_1RwVKKB0fNhwjxZIT7P4laDk': 'premium'
-      };
+      // Use environment-aware price ID mapping
+      const { getSubscriptionPlans } = await import('../types/stripe');
+      const plans = getSubscriptionPlans();
+      
+      // Create reverse mapping from price ID to tier
+      const PRICE_TO_TIER: Record<string, string> = {};
+      for (const [tier, plan] of Object.entries(plans)) {
+        PRICE_TO_TIER[plan.stripePriceId] = tier;
+      }
 
       // Get current Stripe subscription to check price
       const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);

@@ -130,11 +130,22 @@ private async autoSyncSubscriptionTier(
 
 #### **Price Mapping System**
 ```typescript
-const PRICE_TO_TIER: Record<string, string> = {
-  'price_1RwVHYB0fNhwjxZIorwBKpVN': 'starter',
-  'price_1RwVJqB0fNhwjxZIV4ORHT6H': 'standard', 
-  'price_1RwVKKB0fNhwjxZIT7P4laDk': 'premium'
-};
+// Environment-aware price ID mapping
+const { getSubscriptionPlans } = await import('../types/stripe');
+const plans = getSubscriptionPlans();
+
+// Create reverse mapping from price ID to tier
+const PRICE_TO_TIER: Record<string, string> = {};
+for (const [tier, plan] of Object.entries(plans)) {
+  PRICE_TO_TIER[plan.stripePriceId] = tier;
+}
+```
+
+**Environment Variables Required:**
+```bash
+STRIPE_PRICE_STARTER=price_1RwVHYB0fNhwjxZIorwBKpVN
+STRIPE_PRICE_STANDARD=price_1RwVJqB0fNhwjxZIV4ORHT6H
+STRIPE_PRICE_PREMIUM=price_1RwVKKB0fNhwjxZIT7P4laDk
 ```
 
 #### **Integration Points**
@@ -268,14 +279,14 @@ EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
 EMAIL_USER=your-email@gmail.com
 EMAIL_PASS=your-app-password
-EMAIL_FROM=noreply@asklinc.com
+EMAIL_FROM=noreply@yourdomain.com
 
 # Frontend URL
-FRONTEND_URL=https://asklinc.com
+FRONTEND_URL=https://yourdomain.com
 ```
 
 #### **Development vs Production**
-- **Development**: Uses `http://localhost:3001`
+- **Development**: Uses `http://localhost:3001` (default fallback)
 - **Production**: Uses `FRONTEND_URL` environment variable
 - **Automatic Detection**: Based on `NODE_ENV` and URL patterns
 

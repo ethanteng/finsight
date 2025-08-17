@@ -62,12 +62,14 @@ router.get('/payment-success', async (req, res) => {
       if (existingUser) {
         // User exists - redirect to dashboard or profile
         console.log('User already exists, redirecting to dashboard');
-        const redirectUrl = `http://localhost:3001/profile?subscription=active&tier=${tier || 'standard'}`;
+        const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+        const redirectUrl = `${baseUrl}/profile?subscription=active&tier=${tier || 'standard'}`;
         return res.redirect(redirectUrl);
       } else {
         // New user - redirect to register with subscription context
         console.log('New user, redirecting to register with subscription context');
-        const registerUrl = `http://localhost:3001/register?` + 
+        const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+        const registerUrl = `${baseUrl}/register?` + 
           `subscription=success&tier=${tier || 'standard'}&email=${encodeURIComponent(customerEmail as string)}&session_id=${session_id}`;
         return res.redirect(registerUrl);
       }
@@ -75,14 +77,16 @@ router.get('/payment-success', async (req, res) => {
     } catch (stripeError) {
       console.error('Error verifying Stripe session:', stripeError);
       // Fallback: redirect to register anyway
-      const registerUrl = `http://localhost:3001/register?subscription=success&tier=${tier || 'standard'}`;
+      const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+      const registerUrl = `${baseUrl}/register?subscription=success&tier=${tier || 'standard'}`;
       return res.redirect(registerUrl);
     }
 
   } catch (error) {
     console.error('Error handling payment success:', error);
     // Fallback: redirect to register
-    const registerUrl = `http://localhost:3001/register?subscription=success`;
+    const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
+    const registerUrl = `${baseUrl}/register?subscription=success`;
     return res.redirect(registerUrl);
   }
 });

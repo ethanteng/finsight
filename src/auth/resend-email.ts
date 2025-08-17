@@ -75,7 +75,7 @@ export async function sendEmailVerificationCode(
             </p>
             
             <div style="text-align: center; margin-top: 30px;">
-              <a href="${isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'https://asklinc.com')}" 
+              <a href="${isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'http://localhost:3001')}" 
                  style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block;">
                 Visit Ask Linc
               </a>
@@ -123,7 +123,7 @@ export async function sendPasswordResetEmail(
     const isDevelopment = !process.env.NODE_ENV || 
                          process.env.NODE_ENV === 'development' || 
                          process.env.FRONTEND_URL?.includes('localhost');
-    const baseUrl = isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'https://asklinc.com');
+    const baseUrl = isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'http://localhost:3001');
     const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
     
     const { data, error } = await resend.emails.send({
@@ -230,9 +230,9 @@ export async function sendContactEmail(
             </div>
             
             <div style="text-align: center; margin-top: 30px;">
-              <a href="${process.env.FRONTEND_URL || 'https://asklinc.com'}" 
+              <a href="${process.env.FRONTEND_URL || 'http://localhost:3001'}" 
                  style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block;">
-                View Ask Linc
+                Contact Support →
               </a>
             </div>
           </div>
@@ -324,9 +324,9 @@ export async function sendAdminNotification(
             </div>
             
             <div style="text-align: center; margin-top: 30px;">
-              <a href="${process.env.FRONTEND_URL || 'https://asklinc.com'}/admin" 
+              <a href="${process.env.FRONTEND_URL || 'http://localhost:3001'}/admin" 
                  style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block;">
-                View Admin Dashboard
+                View Admin Dashboard →
               </a>
             </div>
           </div>
@@ -345,7 +345,7 @@ User Email: ${userEmail}
 Action: ${actionText}
 Timestamp: ${timestamp}
 
-View Admin Dashboard: ${process.env.FRONTEND_URL || 'https://asklinc.com'}/admin
+View Admin Dashboard: ${process.env.FRONTEND_URL || 'http://localhost:3001'}/admin
 
 © 2025 Ask Linc. All rights reserved.`
     });

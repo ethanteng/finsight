@@ -15,10 +15,10 @@ async function createTestCheckout() {
 
     // Test checkout session data - using real Stripe price IDs
     const checkoutData = {
-      priceId: process.env.STRIPE_PRICE_STANDARD || 'price_1RwVJqB0fNhwjxZIV4ORHT6H', // Real Stripe price ID
+      priceId: process.env.STRIPE_PRICE_STANDARD || 'price_standard', // Use environment variable or fallback
       customerEmail: 'ethanteng+test17@gmail.com',
-      successUrl: `http://localhost:3000/api/stripe/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=standard`, // Use Stripe placeholder
-      cancelUrl: `http://localhost:3001/pricing` // Use frontend URL for cancel
+      successUrl: `${baseUrl}/api/stripe/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=standard`,
+      cancelUrl: `${baseUrl}/pricing`
     };
 
     console.log('📋 Checkout Session Data:');

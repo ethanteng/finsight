@@ -236,7 +236,7 @@ export async function sendEmailVerificationCode(
               </div>
               
               <div style="text-align: center;">
-                <a href="${isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'https://asklinc.com')}" 
+                <a href="${isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'http://localhost:3001')}" 
                    class="cta-button">
                   Visit Ask Linc →
                 </a>
@@ -252,9 +252,9 @@ export async function sendEmailVerificationCode(
             
             <div class="footer">
               <div class="footer-links">
-                <a href="${isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'https://asklinc.com')}" class="footer-link">Home</a>
-                <a href="${isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'https://asklinc.com')}/pricing" class="footer-link">Pricing</a>
-                <a href="${isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'https://asklinc.com')}/how-we-protect-your-data" class="footer-link">Privacy</a>
+                <a href="${isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'http://localhost:3001')}" class="footer-link">Home</a>
+                <a href="${isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'http://localhost:3001')}/pricing" class="footer-link">Pricing</a>
+                <a href="${isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'http://localhost:3001')}/how-we-protect-your-data" class="footer-link">Privacy</a>
                 <a href="https://ask-linc-blog.ghost.io/" class="footer-link">Blog</a>
               </div>
               
@@ -292,7 +292,7 @@ export async function sendPasswordResetEmail(
     const isDevelopment = !process.env.NODE_ENV || 
                          process.env.NODE_ENV === 'development' || 
                          process.env.FRONTEND_URL?.includes('localhost');
-    const baseUrl = isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'https://asklinc.com');
+    const baseUrl = isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'http://localhost:3001');
     const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
     
     const mailOptions = {

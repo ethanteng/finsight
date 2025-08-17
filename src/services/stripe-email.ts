@@ -26,7 +26,7 @@ const getBaseUrl = (): string => {
   const isDevelopment = !process.env.NODE_ENV || 
                        process.env.NODE_ENV === 'development' || 
                        process.env.FRONTEND_URL?.includes('localhost');
-  return isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'https://asklinc.com');
+  return isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'http://localhost:3001');
 };
 
 // Generate the complete setup link for new users
@@ -484,7 +484,7 @@ export async function sendCancellationEmail(
     const isDevelopment = !process.env.NODE_ENV || 
                          process.env.NODE_ENV === 'development' || 
                          process.env.FRONTEND_URL?.includes('localhost');
-    const baseUrl = isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'https://asklinc.com');
+    const baseUrl = isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'http://localhost:3001');
     
     const content = `
       <div class="welcome-message">
