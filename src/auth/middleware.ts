@@ -41,13 +41,7 @@ export async function authenticateUser(
     // Verify user still exists and is active
     const prisma = getPrismaClient();
     const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
-      select: {
-        id: true,
-        email: true,
-        tier: true,
-        isActive: true
-      }
+      where: { id: payload.userId }
     });
 
     console.log('🔐 User found:', user ? 'yes' : 'no');
@@ -55,6 +49,13 @@ export async function authenticateUser(
     if (!user || !user.isActive) {
       console.log('🔐 User not found or deactivated');
       res.status(401).json({ error: 'User not found or account deactivated' });
+      return;
+    }
+
+    // Check if subscription has expired (same treatment as failed payments)
+    if (user.subscriptionStatus === 'canceled') {
+      console.log('🔐 User subscription expired - blocking access');
+      res.status(401).json({ error: 'Subscription expired. Please renew to continue.' });
       return;
     }
 

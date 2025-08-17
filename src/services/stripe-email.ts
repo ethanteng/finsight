@@ -471,6 +471,88 @@ export async function sendTierChangeEmail(
   }
 }
 
+// Send subscription cancellation email
+export async function sendCancellationEmail(
+  email: string,
+  oldTier: string,
+  customerName?: string
+): Promise<boolean> {
+  try {
+    const transporter = createTransporter();
+    
+    // Use localhost for development, production URL for production
+    const isDevelopment = !process.env.NODE_ENV || 
+                         process.env.NODE_ENV === 'development' || 
+                         process.env.FRONTEND_URL?.includes('localhost');
+    const baseUrl = isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'https://asklinc.com');
+    
+    const content = `
+      <div class="welcome-message">
+        Your Ask Linc Subscription Has Been Cancelled 📋
+      </div>
+      
+      <div class="description">
+        Hi${customerName ? ` ${customerName}` : ''}! We're sorry to see you go. Your Ask Linc subscription 
+        has been successfully cancelled as requested.
+      </div>
+      
+      <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 16px; margin: 24px 0; border-radius: 4px;">
+        <p style="margin: 0; color: #7f1d1d; font-size: 14px;">
+          <strong>⚠️ Important:</strong> Your subscription has been cancelled and you will lose access to 
+          your <strong>${oldTier}</strong> plan features at the end of your current billing period.
+        </p>
+      </div>
+      
+      <div class="description">
+        <strong>What happens next:</strong><br>
+        1. You'll continue to have access to your current plan until the end of your billing period<br>
+        2. After that, your account will be downgraded to the starter tier<br>
+        3. You can reactivate your subscription at any time by visiting your account settings
+      </div>
+      
+      <div style="text-align: center;">
+        <a href="${baseUrl}/app" class="cta-button">
+          Access Your Account →
+        </a>
+      </div>
+      
+      <div style="text-align: center; margin-top: 24px;">
+        <a href="${baseUrl}/pricing" class="cta-button" style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);">
+          View Plans Again →
+        </a>
+      </div>
+      
+      <div style="background-color: #f0f9ff; border-left: 4px solid #0ea5e9; padding: 16px; margin: 24px 0; border-radius: 4px;">
+        <p style="margin: 0; color: #0c4a6e; font-size: 14px;">
+          <strong>💡 Change your mind?</strong> You can reactivate your subscription at any time by visiting 
+          your account settings. We'd love to have you back!
+        </p>
+      </div>
+      
+      <div style="background-color: #fefce8; border-left: 4px solid #eab308; padding: 16px; margin: 24px 0; border-radius: 4px;">
+        <p style="margin: 0; color: #713f12; font-size: 14px;">
+          <strong>📧 Need help?</strong> If you have any questions or if this cancellation was made in error, 
+          please contact our support team. We're here to help!
+        </p>
+      </div>
+    `;
+
+    const mailOptions = {
+      from: EMAIL_FROM,
+      to: email,
+      subject: `Ask Linc Subscription Cancelled`,
+      html: createEmailTemplate(content, 'Subscription Cancelled'),
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`Cancellation email sent to ${email} for ${oldTier} plan`);
+    return true;
+  } catch (error) {
+    console.error('Error sending cancellation email:', error);
+    return false;
+  }
+}
+
 // Test email configuration
 export async function testStripeEmailConfiguration(): Promise<boolean> {
   try {

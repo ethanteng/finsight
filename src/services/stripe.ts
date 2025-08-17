@@ -9,7 +9,7 @@ import {
   getSubscriptionPlans
 } from '../types/stripe';
 import { getPrismaClient } from '../prisma-client';
-import { sendWelcomeEmail, sendTierChangeEmail } from './stripe-email';
+import { sendWelcomeEmail, sendTierChangeEmail, sendCancellationEmail } from './stripe-email';
 
 export class StripeService {
   /**
@@ -172,8 +172,7 @@ export class StripeService {
     // Find user by Stripe customer ID
     const prisma = getPrismaClient();
     const user = await prisma.user.findFirst({
-      where: { stripeCustomerId: customerId },
-      include: { profile: true }
+      where: { stripeCustomerId: customerId }
     });
 
     if (!user) {
@@ -212,14 +211,14 @@ export class StripeService {
       }
     });
 
-    // Send welcome email for new subscription
-    try {
-      await sendWelcomeEmail(user.email, tier, user.profile?.firstName || undefined);
-      console.log(`Welcome email sent to ${user.email} for ${tier} plan`);
-    } catch (emailError) {
-      console.error(`Failed to send welcome email to ${user.email}:`, emailError);
-      // Don't fail the webhook if email fails
-    }
+          // Send welcome email for new subscription
+      try {
+        await sendWelcomeEmail(user.email, tier);
+        console.log(`Welcome email sent to ${user.email} for ${tier} plan`);
+      } catch (emailError) {
+        console.error(`Failed to send welcome email to ${user.email}:`, emailError);
+        // Don't fail the webhook if email fails
+      }
 
     console.log(`Subscription ${subscriptionId} activated for user ${user.id}`);
   }
@@ -241,15 +240,12 @@ export class StripeService {
       metadata: subscription.metadata
     });
 
-    // Auto-sync tier based on current price if metadata tier doesn't match
-    await this.autoSyncSubscriptionTier(subscriptionId, tier);
-
     const prisma = getPrismaClient();
     
     // Check if subscription exists, if not create it
     let subscriptionRecord = await prisma.subscription.findUnique({
       where: { stripeSubscriptionId: subscriptionId },
-      include: { user: { include: { profile: true } } }
+      include: { user: true }
     });
 
     if (!subscriptionRecord) {
@@ -311,31 +307,88 @@ export class StripeService {
       });
     }
 
-    // Update user tier and subscription status
-    if (subscriptionRecord?.user) {
-      const oldTier = subscriptionRecord.user.tier;
-      await prisma.user.update({
-        where: { id: subscriptionRecord.user.id },
-        data: {
-          subscriptionStatus: subscription.status,
-          tier: tier,
-        }
-      });
+    // Check if subscription was just cancelled (cancel_at_period_end set to true)
+    const wasJustCancelled = subscription.cancel_at_period_end === true && 
+                             subscriptionRecord.cancelAtPeriodEnd !== true;
 
-      // Send tier change email if tier actually changed
-      if (oldTier !== tier) {
+    // Store the original tier before any auto-sync operations
+    const originalTier = subscriptionRecord?.user?.tier || tier;
+
+    // Auto-sync tier based on current price if metadata tier doesn't match
+    // This will update the tier if needed, but we'll use the original tier for email comparison
+    await this.autoSyncSubscriptionTier(subscriptionId, tier);
+
+    // Get the final tier after auto-sync
+    const finalTier = await this.getCurrentTierFromStripe(subscriptionId);
+
+    // Update user tier and subscription status with the final tier
+    if (subscriptionRecord?.user) {
+      if (wasJustCancelled) {
+        // For cancelled subscriptions, only update the tier, not the status
+        await prisma.user.update({
+          where: { id: subscriptionRecord.user.id },
+          data: {
+            tier: finalTier,
+          }
+        });
+        console.log(`✅ Updated user ${subscriptionRecord.user.email} tier to ${finalTier} (subscription cancelled)`);
+      } else {
+        // For non-cancelled subscriptions, update both tier and status
+        await prisma.user.update({
+          where: { id: subscriptionRecord.user.id },
+          data: {
+            subscriptionStatus: subscription.status,
+            tier: finalTier,
+          }
+        });
+        console.log(`✅ Updated user ${subscriptionRecord.user.email} tier to ${finalTier} and status to ${subscription.status}`);
+      }
+      
+      console.log(`🔍 Cancellation check for subscription ${subscriptionId}:`);
+      console.log(`   - Webhook cancel_at_period_end: ${subscription.cancel_at_period_end}`);
+      console.log(`   - Database cancelAtPeriodEnd: ${subscriptionRecord.cancelAtPeriodEnd}`);
+      console.log(`   - Was just cancelled: ${wasJustCancelled}`);
+      
+      if (wasJustCancelled) {
+        // Update the subscription record to reflect the cancellation
+        console.log(`💾 Updating subscription ${subscriptionId} to mark as cancelled at period end`);
+        await prisma.subscription.update({
+          where: { stripeSubscriptionId: subscriptionId },
+          data: {
+            cancelAtPeriodEnd: true,
+          }
+        });
+        console.log(`✅ Successfully updated subscription ${subscriptionId} cancelAtPeriodEnd to true`);
+        
+        // Send cancellation email when subscription is cancelled but still active until period end
+        try {
+          await sendCancellationEmail(
+            subscriptionRecord.user.email,
+            finalTier
+          );
+          console.log(`Cancellation email sent to ${subscriptionRecord.user.email} for ${finalTier} plan (cancelled at period end)`);
+        } catch (emailError) {
+          console.error(`Failed to send cancellation email to ${subscriptionRecord.user.email}:`, emailError);
+          // Don't fail the webhook if email fails
+        }
+        
+        // Skip tier change email since we just sent a cancellation email
+        console.log(`Skipping tier change email - cancellation email was sent instead`);
+      } else if (originalTier !== finalTier) {
+        // Send tier change email if the tier actually changed (and no cancellation email was sent)
         try {
           await sendTierChangeEmail(
             subscriptionRecord.user.email, 
-            tier, 
-            oldTier, 
-            subscriptionRecord.user.profile?.firstName || undefined
+            finalTier, 
+            originalTier
           );
-          console.log(`Tier change email sent to ${subscriptionRecord.user.email}: ${oldTier} → ${tier}`);
+          console.log(`Tier change email sent to ${subscriptionRecord.user.email}: ${originalTier} → ${finalTier}`);
         } catch (emailError) {
           console.error(`Failed to send tier change email to ${subscriptionRecord.user.email}:`, emailError);
           // Don't fail the webhook if email fails
         }
+      } else {
+        console.log(`Skipping tier change email - no tier change detected`);
       }
     }
 
@@ -359,6 +412,9 @@ export class StripeService {
     });
 
     if (subscriptionRecord) {
+      // Store the old tier before updating
+      const oldTier = subscriptionRecord.tier;
+      
       // Update subscription status
       await prisma.subscription.update({
         where: { stripeSubscriptionId: subscriptionId },
@@ -373,9 +429,23 @@ export class StripeService {
           where: { id: subscriptionRecord.user.id },
           data: {
             subscriptionStatus: 'canceled',
-            tier: 'starter', // Reset to starter tier
+            // Keep the user's tier - they paid for it and should retain access
           }
         });
+
+        console.log(`✅ Updated user ${subscriptionRecord.user.email} subscription status to 'canceled' (tier remains: ${subscriptionRecord.user.tier})`);
+
+        // Send cancellation email
+        try {
+          await sendCancellationEmail(
+            subscriptionRecord.user.email,
+            oldTier
+          );
+          console.log(`Cancellation email sent to ${subscriptionRecord.user.email} for ${oldTier} plan`);
+        } catch (emailError) {
+          console.error(`Failed to send cancellation email to ${subscriptionRecord.user.email}:`, emailError);
+          // Don't fail the webhook if email fails
+        }
       }
     }
 
@@ -780,6 +850,30 @@ export class StripeService {
     } catch (error) {
       console.error('Error checking feature access:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Get the current tier from Stripe based on the subscription's price
+   */
+  private async getCurrentTierFromStripe(subscriptionId: string): Promise<string> {
+    try {
+      const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+      const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+      
+      const currentPrice = stripeSubscription.items.data[0]?.price?.id;
+      
+      // Price to tier mapping
+      const PRICE_TO_TIER: Record<string, string> = {
+        'price_1RwVHYB0fNhwjxZIorwBKpVN': 'starter',
+        'price_1RwVJqB0fNhwjxZIV4ORHT6H': 'standard', 
+        'price_1RwVKKB0fNhwjxZIT7P4laDk': 'premium'
+      };
+      
+      return PRICE_TO_TIER[currentPrice] || 'starter';
+    } catch (error) {
+      console.error('Error getting current tier from Stripe:', error);
+      return 'starter'; // fallback
     }
   }
 
