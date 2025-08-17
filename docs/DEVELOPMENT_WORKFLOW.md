@@ -4,6 +4,78 @@
 
 This document outlines the development workflow for the Finsight project, including best practices for feature development, testing, and deployment to prevent common issues like schema drift.
 
+## 🚨 CRITICAL: PREVENTING DATABASE WIPES DURING DEPLOYMENTS
+
+**⚠️ PRODUCTION DATABASE WIPE PREVENTION - READ THIS FIRST!**
+
+### **What Happened (Production Incident):**
+- **Date**: August 17, 2025
+- **Issue**: Production database was completely wiped during deployment
+- **Root Cause**: `npx prisma migrate deploy` was running in build scripts during deployment
+- **Impact**: All production data lost
+
+### **The Problem:**
+The original `package.json` build script included:
+```json
+"build": "npm install && npx prisma generate && npx prisma migrate deploy && npx tsc --project tsconfig.build.json --outDir dist"
+```
+
+**This is EXTREMELY DANGEROUS because:**
+1. **Build scripts run during every deployment**
+2. **Database migrations execute automatically**
+3. **Destructive migrations can wipe production data**
+4. **No manual control over when migrations run**
+
+### **The Fix Applied:**
+
+#### **1. Fixed Package.json Scripts:**
+```json
+// ❌ DANGEROUS (REMOVED):
+"build": "npm install && npx prisma generate && npx prisma migrate deploy && npx tsc --project tsconfig.build.json --outDir dist"
+
+// ✅ SAFE (NEW):
+"build": "npm install && npx prisma generate && npx tsc --project tsconfig.build.json --outDir dist",
+"build:render": "NODE_OPTIONS='--max-old-space-size=2048' prisma generate && npm run build:backend && echo 'Build completed' && ls -la dist/ && echo 'Verifying index.js exists:' && ls -la dist/index.js",
+"migrate:deploy": "npx prisma migrate deploy",
+"migrate:status": "npx prisma migrate status"
+```
+
+#### **2. Render Configuration Requirements:**
+- **Pre-Deploy Command**: MUST be `$ npm run build:render` (NOT `$ npm run build`)
+- **Build Command**: `$ npm run build:render`
+- **Start Command**: `$ npm run start`
+
+#### **3. Key Safety Principles:**
+- **NEVER include `npx prisma migrate deploy` in build scripts**
+- **NEVER include `npx prisma migrate deploy` in pre-deploy commands**
+- **ALWAYS separate build operations from database operations**
+- **ALWAYS run migrations manually using `npm run migrate:deploy`**
+
+### **Safe Deployment Workflow:**
+```bash
+# 1. Build (SAFE - no database operations)
+npm run build:render
+
+# 2. Check migration status (optional)
+npm run migrate:status
+
+# 3. Run migrations manually when needed (controlled)
+npm run migrate:deploy
+```
+
+### **Emergency Recovery (If Database Gets Wiped Again):**
+```bash
+# 1. IMMEDIATELY stop all deployments
+# 2. Check Render configuration - ensure pre-deploy is NOT running migrations
+# 3. Check package.json - ensure no build scripts include migrate deploy
+# 4. Restore from backup if available
+# 5. Fix configuration before any redeployment
+```
+
+**🚨 REMEMBER: Build scripts should NEVER touch your database! 🚨**
+
+---
+
 ## 🏗️ Development Setup
 
 ### Prerequisites
@@ -458,6 +530,60 @@ These changes are safe to deploy immediately as they:
 - Maintain backward compatibility
 - Improve security and reliability
 
+## 🚨 CRITICAL: RENDER DEPLOYMENT CONFIGURATION
+
+**⚠️ PRODUCTION DATABASE WIPE PREVENTION - RENDER SETTINGS**
+
+### **Required Render Configuration (SAFETY FIRST):**
+
+#### **1. Pre-Deploy Command:**
+```
+$ npm run build:render
+```
+**❌ NEVER use:**
+```
+$ npm run build  # DANGEROUS - includes database migrations!
+```
+
+#### **2. Build Command:**
+```
+$ npm run build:render
+```
+
+#### **3. Start Command:**
+```
+$ npm run start
+```
+
+#### **4. Auto-Deploy:**
+```
+Off  # Manual control prevents accidental deployments
+```
+
+### **Why This Configuration is Critical:**
+
+1. **`npm run build:render` is SAFE** - only compiles code, generates Prisma client
+2. **`npm run build` is DANGEROUS** - includes `npx prisma migrate deploy` which can wipe database
+3. **Manual control** prevents accidental deployments that could trigger migrations
+4. **Separate migration control** - you decide when to run `npm run migrate:deploy`
+
+### **Verification Checklist:**
+- [ ] **Pre-Deploy Command**: `$ npm run build:render` ✅
+- [ ] **Build Command**: `$ npm run build:render` ✅  
+- [ ] **Start Command**: `$ npm run start` ✅
+- [ ] **Auto-Deploy**: `Off` ✅
+- [ ] **No build scripts include `migrate deploy`** ✅
+
+### **Emergency Recovery (If Configuration is Wrong):**
+```bash
+# 1. IMMEDIATELY stop the service in Render
+# 2. Check package.json - ensure no build scripts include migrations
+# 3. Fix Render configuration
+# 4. Only restart after configuration is verified safe
+```
+
+---
+
 ## 🚀 Deployment Workflow
 
 ### Pre-Deployment Checklist
@@ -479,10 +605,39 @@ git checkout main
 git merge feature/your-feature-name
 git push origin main
 
-# CI/CD will automatically:
-# 1. Run tests
-# 2. Apply migrations (CRITICAL: This happens BEFORE code deployment)
-# 3. Deploy to production
+# Render deployment process (SAFE):
+# 1. Pre-deploy: npm run build:render (SAFE - no database operations)
+# 2. Build: npm run build:render (SAFE - compiles code only)
+# 3. Start: npm run start (runs the compiled app)
+
+# ⚠️ IMPORTANT: Database migrations are NOT automatic!
+# You must run migrations manually when needed:
+npm run migrate:deploy
+```
+
+### ⚠️ CRITICAL: New Safe Deployment Workflow
+
+**The NEW safe deployment process:**
+1. **Code deployment** - Render builds and deploys your code (SAFE)
+2. **Manual migration control** - You decide when to run migrations
+3. **No automatic database changes** - Build scripts never touch your database
+
+**Why this is safer:**
+- **Build scripts are safe** - only compile code and generate Prisma client
+- **Migrations are controlled** - you run them manually when ready
+- **No accidental database wipes** - build process cannot modify database
+- **Clear separation** - build operations vs database operations
+
+**Migration workflow (separate from deployment):**
+```bash
+# 1. Check migration status
+npm run migrate:status
+
+# 2. Run migrations when ready (manual control)
+npm run migrate:deploy
+
+# 3. Verify migration success
+npm run migrate:status
 ```
 
 ### ⚠️ CRITICAL: Deployment Order Matters
