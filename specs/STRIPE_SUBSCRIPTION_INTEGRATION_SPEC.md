@@ -274,12 +274,8 @@ testStripeEmailConfiguration(): Promise<boolean>
 
 #### **Environment Variables**
 ```bash
-# Email Configuration
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_USER=your-email@gmail.com
-EMAIL_PASS=your-app-password
-EMAIL_FROM=noreply@yourdomain.com
+# Email Configuration (Resend)
+RESEND_API_KEY=re_...                              # Your Resend API key
 
 # Frontend URL
 FRONTEND_URL=https://yourdomain.com
@@ -696,6 +692,159 @@ model Subscription {
 - **SMTP Configuration**: Check email credentials and settings
 - **Network Issues**: Verify internet connectivity
 - **Rate Limiting**: Respect email provider limits
+
+## 🔧 Environment Variables Configuration
+
+### **Overview**
+This section details all environment variables required for the Stripe subscription integration, organized by deployment environment and file location.
+
+### **Frontend Environment Variables**
+
+#### **Localhost Development** (`frontend/.env.local`)
+```bash
+# API Configuration
+NEXT_PUBLIC_API_URL=http://localhost:3000
+
+# Stripe Customer Portal
+NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL_URL=https://billing.stripe.com/p/login/test_9B63cueur9GTcpU0s18og00
+```
+
+#### **Production Frontend** (Vercel Environment Variables)
+```bash
+# API Configuration
+NEXT_PUBLIC_API_URL=https://your-backend-domain.com
+
+# Stripe Customer Portal (Production)
+NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL_URL=https://billing.stripe.com/p/login/prod_your_production_portal_id
+```
+
+### **Backend Environment Variables**
+
+#### **Localhost Development** (`.env`)
+```bash
+# Stripe API Credentials
+STRIPE_SECRET_KEY=sk_test_your_test_secret_key
+STRIPE_PUBLISHABLE_KEY=pk_test_your_test_publishable_key
+STRIPE_WEBHOOK_SECRET=whsec_your_test_webhook_secret
+
+# Stripe Price IDs
+STRIPE_PRICE_STARTER=price_your_starter_price_id
+STRIPE_PRICE_STANDARD=price_your_standard_price_id
+STRIPE_PRICE_PREMIUM=price_your_premium_price_id
+
+# Frontend URL
+FRONTEND_URL=http://localhost:3001
+
+# Customer Portal URLs
+STRIPE_PORTAL_RETURN_URL=/profile
+STRIPE_PORTAL_CANCEL_RETURN_URL=/profile?subscription=canceled
+STRIPE_PORTAL_UPDATE_RETURN_URL=/profile?subscription=updated
+
+# Checkout URLs
+STRIPE_CHECKOUT_SUCCESS_URL=/api/stripe/payment-success
+STRIPE_CHECKOUT_CANCEL_URL=/pricing
+
+# Account Link URLs
+STRIPE_ACCOUNT_REFRESH_URL=/stripe/account/refresh
+STRIPE_ACCOUNT_RETURN_URL=/stripe/account/return
+```
+
+#### **Production Backend** (Render Environment Variables)
+```bash
+# Stripe API Credentials (Production)
+STRIPE_SECRET_KEY=sk_live_your_production_secret_key
+STRIPE_PUBLISHABLE_KEY=pk_live_your_production_publishable_key
+STRIPE_WEBHOOK_SECRET=whsec_your_production_webhook_secret
+
+# Stripe Price IDs (Production)
+STRIPE_PRICE_STARTER=price_your_prod_starter_price_id
+STRIPE_PRICE_STANDARD=price_your_prod_standard_price_id
+STRIPE_PRICE_PREMIUM=price_your_prod_premium_price_id
+
+# Frontend URL (Production)
+FRONTEND_URL=https://your-frontend-domain.com
+
+# Customer Portal URLs (Production)
+STRIPE_PORTAL_RETURN_URL=/profile
+STRIPE_PORTAL_CANCEL_RETURN_URL=/profile?subscription=canceled
+STRIPE_PORTAL_UPDATE_RETURN_URL=/profile?subscription=updated
+
+# Checkout URLs (Production)
+STRIPE_CHECKOUT_SUCCESS_URL=/api/stripe/payment-success
+STRIPE_CHECKOUT_CANCEL_URL=/pricing
+
+# Account Link URLs (Production)
+STRIPE_ACCOUNT_REFRESH_URL=/stripe/account/refresh
+STRIPE_ACCOUNT_RETURN_URL=/stripe/account/return
+```
+
+### **CI/CD Environment Variables**
+
+#### **GitHub Actions** (`.github/workflows/ci.yml` secrets)
+```bash
+# Test Environment (for CI/CD tests)
+STRIPE_SECRET_KEY=sk_test_fake_key_for_tests
+STRIPE_PUBLISHABLE_KEY=pk_test_fake_key_for_tests
+STRIPE_WEBHOOK_SECRET=whsec_fake_webhook_secret
+
+# Test Price IDs
+STRIPE_PRICE_STARTER=price_test_starter
+STRIPE_PRICE_STANDARD=price_test_standard
+STRIPE_PRICE_PREMIUM=price_test_premium
+
+# Test Frontend URL
+FRONTEND_URL=http://localhost:3001
+```
+
+### **Environment-Specific Configuration**
+
+#### **Test vs Production Keys**
+- **Localhost**: Uses test keys from `.env`
+- **CI/CD**: Uses fake test keys for automated testing
+- **Production**: Uses live keys from Render environment variables
+
+#### **URL Configuration**
+- **Localhost**: `http://localhost:3001` (frontend) + `http://localhost:3000` (backend)
+- **Production**: Production domain URLs for both frontend and backend
+- **CI/CD**: Localhost URLs for test environment
+
+### **Security Considerations**
+
+#### **Key Management**
+- **Never commit** real API keys to version control
+- **Use environment variables** for all sensitive configuration
+- **Rotate keys** regularly in production
+- **Monitor key usage** for suspicious activity
+
+#### **Webhook Security**
+- **Verify webhook signatures** in production
+- **Use unique webhook secrets** for each environment
+- **HTTPS only** for production webhook endpoints
+
+### **Configuration Validation**
+
+#### **Required Variables Check**
+The system validates these environment variables on startup:
+```typescript
+// Backend validation
+if (!process.env.STRIPE_SECRET_KEY) {
+  throw new Error('STRIPE_SECRET_KEY is required');
+}
+
+// Frontend validation
+if (!process.env.NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL_URL) {
+  console.warn('NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL_URL not configured');
+}
+```
+
+#### **Environment Detection**
+```typescript
+const isProduction = process.env.NODE_ENV === 'production';
+const isCI = process.env.GITHUB_ACTIONS === 'true';
+const isLocalhost = process.env.FRONTEND_URL?.includes('localhost');
+```
+
+---
 
 ## 📝 Implementation Notes
 

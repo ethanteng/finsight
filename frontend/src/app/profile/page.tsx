@@ -101,9 +101,12 @@ export default function ProfilePage() {
     
     setIsManagingSubscription(true);
     try {
-      // For testing: redirect directly to Stripe customer portal
-      // TODO: Replace with proper portal session creation once configured
-      window.location.href = 'https://billing.stripe.com/p/login/test_9B63cueur9GTcpU0s18og00';
+      // Use environment variable for Stripe customer portal URL
+      const portalUrl = process.env.NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL_URL;
+      if (!portalUrl) {
+        throw new Error('Stripe customer portal URL not configured');
+      }
+      window.location.href = portalUrl;
     } catch (error) {
       console.error('Error opening subscription management:', error);
       setError('Failed to open subscription management');

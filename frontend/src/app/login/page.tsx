@@ -172,7 +172,7 @@ export default function LoginPage() {
                     If you're locked out due to payment problems, you can resolve them directly with Stripe.
                   </p>
                   <a
-                    href="https://billing.stripe.com/p/login/test_9B63cueur9GTcpU0s18og00"
+                    href={process.env.NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL_URL || '#'}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-colors"

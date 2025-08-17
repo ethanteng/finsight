@@ -1,25 +1,19 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import { getPrismaClient } from '../prisma-client';
 
-// Email configuration
-const EMAIL_HOST = process.env.EMAIL_HOST || 'smtp.gmail.com';
-const EMAIL_PORT = parseInt(process.env.EMAIL_PORT || '587');
-const EMAIL_USER = process.env.EMAIL_USER || '';
-const EMAIL_PASS = process.env.EMAIL_PASS || '';
-const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@asklinc.com';
-
-// Create transporter
-const createTransporter = () => {
-  return nodemailer.createTransport({
-    host: EMAIL_HOST,
-    port: EMAIL_PORT,
-    secure: EMAIL_PORT === 465,
-    auth: {
-      user: EMAIL_USER,
-      pass: EMAIL_PASS,
-    },
-  });
-};
+// Initialize Resend client function
+function getResendClient(): Resend | null {
+  try {
+    if (process.env.RESEND_API_KEY) {
+      return new Resend(process.env.RESEND_API_KEY);
+    }
+    console.log('Resend not configured, skipping email send');
+    return null;
+  } catch (error) {
+    console.error('Error initializing Resend client:', error);
+    return null;
+  }
+}
 
 // Get base URL for development vs production
 const getBaseUrl = (): string => {
@@ -122,59 +116,51 @@ const createEmailTemplate = (content: string, subject: string): string => {
           border-radius: 20px;
           font-weight: 600;
           font-size: 14px;
-          text-transform: capitalize;
           margin-bottom: 24px;
+        }
+        .feature-list {
+          background-color: #f8f9fa;
+          border-radius: 8px;
+          padding: 24px;
+          margin: 24px 0;
+        }
+        .feature-item {
+          display: flex;
+          align-items: center;
+          margin-bottom: 12px;
+          font-size: 14px;
+          color: #4b5563;
+        }
+        .feature-item:last-child {
+          margin-bottom: 0;
+        }
+        .feature-check {
+          color: #10b981;
+          margin-right: 12px;
+          font-size: 16px;
         }
         .cta-button {
           display: inline-block;
           background: linear-gradient(135deg, #10b981 0%, #059669 100%);
           color: white;
-          text-decoration: none;
           padding: 16px 32px;
+          text-decoration: none;
           border-radius: 8px;
           font-weight: 600;
           font-size: 16px;
           margin: 24px 0;
-          transition: all 0.2s ease;
+          text-align: center;
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
         .cta-button:hover {
           transform: translateY(-2px);
           box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
-        }
-        .features {
-          background-color: #f8f9fa;
-          border-radius: 8px;
-          padding: 24px;
-          margin: 32px 0;
-        }
-        .feature-item {
-          display: flex;
-          align-items: center;
-          margin-bottom: 16px;
-        }
-        .feature-item:last-child {
-          margin-bottom: 0;
-        }
-        .feature-icon {
-          width: 20px;
-          height: 20px;
-          background-color: #10b981;
-          border-radius: 50%;
-          margin-right: 12px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .feature-text {
-          color: #4b5563;
-          font-size: 14px;
         }
         .footer {
           background-color: #1f2937;
           color: #9ca3af;
           padding: 30px;
           text-align: center;
-          font-size: 14px;
         }
         .footer-links {
           margin-bottom: 20px;
@@ -183,43 +169,41 @@ const createEmailTemplate = (content: string, subject: string): string => {
           color: #9ca3af;
           text-decoration: none;
           margin: 0 12px;
+          font-size: 14px;
         }
         .footer-link:hover {
-          color: #10b981;
+          color: #d1d5db;
         }
         .social-links {
-          margin-bottom: 20px;
+          margin-top: 20px;
         }
-        .social-link {
+        .social-icon {
           display: inline-block;
           width: 32px;
           height: 32px;
           background-color: #374151;
           border-radius: 50%;
           margin: 0 8px;
-          text-decoration: none;
-          color: #9ca3af;
-          line-height: 32px;
           text-align: center;
-          transition: background-color 0.2s ease;
+          line-height: 32px;
+          color: #9ca3af;
+          text-decoration: none;
         }
-        .social-link:hover {
-          background-color: #10b981;
-          color: white;
+        .social-icon:hover {
+          background-color: #4b5563;
+          color: #d1d5db;
         }
         @media (max-width: 600px) {
           .container {
-            margin: 20px;
-            border-radius: 8px;
+            margin: 0;
+            border-radius: 0;
           }
           .header, .content, .footer {
-            padding: 30px 20px;
+            padding: 20px;
           }
-          .logo-text {
-            font-size: 24px;
-          }
-          .welcome-message {
-            font-size: 20px;
+          .cta-button {
+            display: block;
+            margin: 20px 0;
           }
         }
       </style>
@@ -228,9 +212,7 @@ const createEmailTemplate = (content: string, subject: string): string => {
       <div class="container">
         <div class="header">
           <div class="logo">
-            <div class="logo-icon">
-              <span style="color: white; font-size: 20px; font-weight: bold;">🧠</span>
-            </div>
+            <div class="logo-icon">🧠</div>
             <div class="logo-text">Ask Linc</div>
           </div>
           <p class="header-subtitle">Your AI Financial Assistant</p>
@@ -248,16 +230,16 @@ const createEmailTemplate = (content: string, subject: string): string => {
             <a href="https://ask-linc-blog.ghost.io/" class="footer-link">Blog</a>
           </div>
           
-          <div class="social-links">
-            <a href="#" class="social-link">📧</a>
-            <a href="#" class="social-link">🐦</a>
-            <a href="#" class="social-link">💼</a>
-          </div>
-          
           <p style="margin: 0; color: #6b7280;">© 2024 Ask Linc. All rights reserved.</p>
           <p style="margin: 5px 0 0 0; color: #6b7280; font-size: 12px;">
-            This email was sent to you because you completed a payment with Ask Linc.
+            This email was sent to you as part of your Ask Linc subscription.
           </p>
+          
+          <div class="social-links">
+            <a href="#" class="social-icon">📧</a>
+            <a href="#" class="social-icon">🐦</a>
+            <a href="#" class="social-icon">💼</a>
+          </div>
         </div>
       </div>
     </body>
@@ -267,38 +249,25 @@ const createEmailTemplate = (content: string, subject: string): string => {
 
 // Send welcome email for new users
 export async function sendWelcomeEmail(
-  email: string,
-  tier: string,
+  email: string, 
+  tier: string, 
   customerName?: string
 ): Promise<boolean> {
   try {
-    const transporter = createTransporter();
+    // Get Resend client
+    const resend = getResendClient();
+    
+    // Check if Resend is available
+    if (!resend) {
+      console.log('Resend not configured, skipping welcome email send');
+      return true; // Return true to not break webhook processing
+    }
+
+    const baseUrl = getBaseUrl();
     const setupLink = generateSetupLink(email, tier);
     
-    const tierFeatures = {
-      starter: [
-        'Basic financial analysis and insights',
-        'Account balance monitoring',
-        'Transaction categorization',
-        'Basic financial questions answered'
-      ],
-      standard: [
-        'Everything in Starter, plus:',
-        'Economic context and market insights',
-        'Advanced financial analysis',
-        'RAG-powered intelligent responses',
-        'Enhanced data visualization'
-      ],
-      premium: [
-        'Everything in Standard, plus:',
-        'Live market data and news',
-        'Real-time portfolio tracking',
-        'Advanced investment insights',
-        'Priority support and features'
-      ]
-    };
-
-    const features = tierFeatures[tier as keyof typeof tierFeatures] || tierFeatures.starter;
+    // Get tier-specific features
+    const tierFeatures = getTierFeatures(tier);
     
     const content = `
       <div class="welcome-message">
@@ -306,7 +275,7 @@ export async function sendWelcomeEmail(
       </div>
       
       <div class="tier-badge">
-        ${tier} Plan
+        ${tier.charAt(0).toUpperCase() + tier.slice(1)} Plan
       </div>
       
       <div class="description">
@@ -315,12 +284,15 @@ export async function sendWelcomeEmail(
         and start getting intelligent financial insights.
       </div>
       
-      <div class="features">
-        <h3 style="margin-top: 0; color: #1a1a1a; font-size: 18px;">Your ${tier} plan includes:</h3>
-        ${features.map(feature => `
+      <div class="feature-list">
+        <div class="feature-item">
+          <span class="feature-check">✓</span>
+          Your ${tier} plan includes:
+        </div>
+        ${tierFeatures.map(feature => `
           <div class="feature-item">
-            <div class="feature-icon">✓</div>
-            <div class="feature-text">${feature}</div>
+            <span class="feature-check">✓</span>
+            ${feature}
           </div>
         `).join('')}
       </div>
@@ -331,7 +303,7 @@ export async function sendWelcomeEmail(
         </a>
       </div>
       
-      <div class="description" style="text-align: center; margin-top: 24px;">
+      <div class="description">
         <strong>Next Steps:</strong><br>
         1. Click the button above to set up your account<br>
         2. Connect your financial accounts securely<br>
@@ -340,20 +312,23 @@ export async function sendWelcomeEmail(
       
       <div style="background-color: #f0f9ff; border-left: 4px solid #0ea5e9; padding: 16px; margin: 24px 0; border-radius: 4px;">
         <p style="margin: 0; color: #0c4a6e; font-size: 14px;">
-          <strong>🔒 Security Note:</strong> Your financial data is protected with bank-grade encryption. 
-          We never store your banking credentials and use industry-standard security protocols.
+          <strong>🔒 Security Note:</strong> Your financial data is protected with bank-grade encryption.
         </p>
       </div>
     `;
 
-    const mailOptions = {
-      from: EMAIL_FROM,
+    const { data, error } = await resend.emails.send({
+      from: 'Ask Linc <noreply@asklinc.com>',
       to: email,
       subject: `Welcome to Ask Linc! Complete Your ${tier.charAt(0).toUpperCase() + tier.slice(1)} Account Setup`,
       html: createEmailTemplate(content, 'Welcome to Ask Linc'),
-    };
+    });
 
-    await transporter.sendMail(mailOptions);
+    if (error) {
+      console.error('Resend error:', error);
+      return false;
+    }
+
     console.log(`Welcome email sent to ${email} for ${tier} plan`);
     return true;
   } catch (error) {
@@ -362,64 +337,51 @@ export async function sendWelcomeEmail(
   }
 }
 
-// Send tier upgrade/downgrade confirmation email for existing users
+// Send tier change confirmation email
 export async function sendTierChangeEmail(
-  email: string,
-  newTier: string,
-  oldTier: string,
+  email: string, 
+  newTier: string, 
+  oldTier: string, 
   customerName?: string
 ): Promise<boolean> {
   try {
-    const transporter = createTransporter();
+    // Get Resend client
+    const resend = getResendClient();
+    
+    // Check if Resend is available
+    if (!resend) {
+      console.log('Resend not configured, skipping tier change email send');
+      return true; // Return true to not break webhook processing
+    }
+
     const baseUrl = getBaseUrl();
     
-    const tierFeatures = {
-      starter: [
-        'Basic financial analysis and insights',
-        'Account balance monitoring',
-        'Transaction categorization',
-        'Basic financial questions answered'
-      ],
-      standard: [
-        'Everything in Starter, plus:',
-        'Economic context and market insights',
-        'Advanced financial analysis',
-        'RAG-powered intelligent responses',
-        'Enhanced data visualization'
-      ],
-      premium: [
-        'Everything in Standard, plus:',
-        'Live market data and news',
-        'Real-time portfolio tracking',
-        'Advanced investment insights',
-        'Priority support and features'
-      ]
-    };
-
-    const features = tierFeatures[newTier as keyof typeof tierFeatures] || tierFeatures.starter;
-    const isUpgrade = ['starter', 'standard', 'premium'].indexOf(newTier) > ['starter', 'standard', 'premium'].indexOf(oldTier);
+    // Get tier-specific features
+    const tierFeatures = getTierFeatures(newTier);
     
     const content = `
       <div class="welcome-message">
-        Your Ask Linc Plan Has Been Updated! ${isUpgrade ? '🚀' : '✅'}
+        Your Ask Linc Plan Has Been Updated! 🚀
       </div>
       
       <div class="tier-badge">
-        ${newTier} Plan
+        ${newTier.charAt(0).toUpperCase() + newTier.slice(1)} Plan
       </div>
       
       <div class="description">
         Hi${customerName ? ` ${customerName}` : ''}! Your Ask Linc subscription has been successfully updated 
-        from <strong>${oldTier}</strong> to <strong>${newTier}</strong>. 
-        ${isUpgrade ? 'Welcome to your enhanced experience!' : 'Your plan has been adjusted as requested.'}
+        from ${oldTier} to ${newTier}. Welcome to your enhanced experience!
       </div>
       
-      <div class="features">
-        <h3 style="margin-top: 0; color: #1a1a1a; font-size: 18px;">Your new ${newTier} plan includes:</h3>
-        ${features.map(feature => `
+      <div class="feature-list">
+        <div class="feature-item">
+          <span class="feature-check">✓</span>
+          Your new ${newTier} plan includes:
+        </div>
+        ${tierFeatures.map(feature => `
           <div class="feature-item">
-            <div class="feature-icon">✓</div>
-            <div class="feature-text">${feature}</div>
+            <span class="feature-check">✓</span>
+            ${feature}
           </div>
         `).join('')}
       </div>
@@ -430,40 +392,33 @@ export async function sendTierChangeEmail(
         </a>
       </div>
       
-      <div class="description" style="text-align: center; margin-top: 24px;">
+      <div class="description">
         <strong>What's Next:</strong><br>
-        ${isUpgrade ? 
-          '1. Log in to your account to access new features<br>2. Explore your enhanced capabilities<br>3. Start using your new ${newTier} features!' :
-          '1. Log in to your account to continue using Ask Linc<br>2. Your access has been adjusted to match your new plan<br>3. Contact support if you have any questions'
-        }
+        1. Log in to your account to access new features<br>
+        2. Explore your enhanced capabilities<br>
+        3. Start using your new ${newTier} features!
       </div>
       
-      ${isUpgrade ? `
-        <div style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 16px; margin: 24px 0; border-radius: 4px;">
-          <p style="margin: 0; color: #064e3b; font-size: 14px;">
-            <strong>🎉 Upgrade Bonus:</strong> You now have access to more powerful features and insights. 
-            Make the most of your enhanced Ask Linc experience!
-          </p>
-        </div>
-      ` : ''}
-      
-      <div style="background-color: #f0f9ff; border-left: 4px solid #0ea5e9; padding: 16px; margin: 24px 0; border-radius: 4px;">
-        <p style="margin: 0; color: #0c4a6e; font-size: 14px;">
-          <strong>💳 Billing Note:</strong> Your subscription has been updated and billing will reflect your new plan. 
-          If you have any questions about your billing, please contact our support team.
+      <div style="background-color: #fefce8; border-left: 4px solid #eab308; padding: 16px; margin: 24px 0; border-radius: 4px;">
+        <p style="margin: 0; color: #713f12; font-size: 14px;">
+          <strong>🎉 Upgrade Bonus:</strong> You now have access to more powerful features and insights.
         </p>
       </div>
     `;
 
-    const mailOptions = {
-      from: EMAIL_FROM,
+    const { data, error } = await resend.emails.send({
+      from: 'Ask Linc <noreply@asklinc.com>',
       to: email,
       subject: `Ask Linc Plan Updated: ${oldTier.charAt(0).toUpperCase() + oldTier.slice(1)} → ${newTier.charAt(0).toUpperCase() + newTier.slice(1)}`,
-      html: createEmailTemplate(content, 'Ask Linc Plan Updated'),
-    };
+      html: createEmailTemplate(content, 'Plan Updated'),
+    });
 
-    await transporter.sendMail(mailOptions);
-    console.log(`Tier change email sent to ${email}: ${oldTier} → ${newTier}`);
+    if (error) {
+      console.error('Resend error:', error);
+      return false;
+    }
+
+    console.log(`Tier change email sent to ${email} from ${oldTier} to ${newTier}`);
     return true;
   } catch (error) {
     console.error('Error sending tier change email:', error);
@@ -478,7 +433,14 @@ export async function sendCancellationEmail(
   customerName?: string
 ): Promise<boolean> {
   try {
-    const transporter = createTransporter();
+    // Get Resend client
+    const resend = getResendClient();
+    
+    // Check if Resend is available
+    if (!resend) {
+      console.log('Resend not configured, skipping cancellation email send');
+      return true; // Return true to not break webhook processing
+    }
     
     // Use localhost for development, production URL for production
     const isDevelopment = !process.env.NODE_ENV || 
@@ -537,14 +499,18 @@ export async function sendCancellationEmail(
       </div>
     `;
 
-    const mailOptions = {
-      from: EMAIL_FROM,
+    const { data, error } = await resend.emails.send({
+      from: 'Ask Linc <noreply@asklinc.com>',
       to: email,
       subject: `Ask Linc Subscription Cancelled`,
       html: createEmailTemplate(content, 'Subscription Cancelled'),
-    };
+    });
 
-    await transporter.sendMail(mailOptions);
+    if (error) {
+      console.error('Resend error:', error);
+      return false;
+    }
+
     console.log(`Cancellation email sent to ${email} for ${oldTier} plan`);
     return true;
   } catch (error) {
@@ -553,11 +519,58 @@ export async function sendCancellationEmail(
   }
 }
 
+// Helper function to get tier-specific features
+function getTierFeatures(tier: string): string[] {
+  switch (tier) {
+    case 'starter':
+      return [
+        'Basic financial analysis',
+        'Account balances',
+        'Transaction history'
+      ];
+    case 'standard':
+      return [
+        'Everything in Starter, plus:',
+        'Economic indicators',
+        'RAG system access',
+        'Enhanced insights'
+      ];
+    case 'premium':
+      return [
+        'Everything in Standard, plus:',
+        'Live market data and news',
+        'Real-time portfolio tracking',
+        'Advanced investment insights',
+        'Priority support and features'
+      ];
+    default:
+      return ['Basic financial analysis'];
+  }
+}
+
 // Test email configuration
 export async function testStripeEmailConfiguration(): Promise<boolean> {
   try {
-    const transporter = createTransporter();
-    await transporter.verify();
+    const resend = getResendClient();
+    if (!resend) {
+      console.log('Resend not configured');
+      return false;
+    }
+    
+    // Test by sending a test email to yourself
+    const testEmail = process.env.TEST_EMAIL || 'test@example.com';
+    const { data, error } = await resend.emails.send({
+      from: 'Ask Linc <noreply@asklinc.com>',
+      to: testEmail,
+      subject: 'Stripe Email System Test',
+      html: '<p>This is a test email to verify the Stripe email system is working.</p>',
+    });
+
+    if (error) {
+      console.error('Resend test error:', error);
+      return false;
+    }
+
     console.log('Stripe email configuration is valid');
     return true;
   } catch (error) {
