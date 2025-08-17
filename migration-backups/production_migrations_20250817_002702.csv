@@ -1,0 +1,55 @@
+id,checksum,finished_at,migration_name,logs,rolled_back_at,started_at,applied_steps_count
+bf00bb2a-a7eb-4ece-a8ec-340da0abe000,6c76f965fc0f7346e0b6df614560aa78ff0ee196f27e9a8fc6f81adca7821795,2025-07-25 07:12:22.642017+00,20250725062232_init,,,2025-07-25 07:12:22.489938+00,1
+dafa70c8-bf49-481c-a237-547881209f8b,6421b5e72d2a93debb792eb38596bf66b3ce68c6fded4e8de24486527ee67816,2025-07-27 02:28:16.678906+00,20250727021917_add_sync_models,,,2025-07-27 02:28:16.490566+00,1
+1faff47b-3e53-44ea-afce-69573d541010,b04dcb1f512163d679114af9ebc3dd6ca75795e65248f1b2046cb5de3fa6fdb3,2025-07-27 02:39:17.584182+00,20250727023531_add_access_token_fields,,,2025-07-27 02:39:17.458573+00,1
+966357e9-5866-40d7-a140-91134b9ae758,d1507ab300829f71a1a212d02fb2927afe6aba62f38972b06399007318572065,2025-07-27 17:21:34.642743+00,20250727171632_add_conversation_model,,,2025-07-27 17:21:34.434658+00,1
+a58a297a-b2dc-4ad4-b740-8a0178c670ab,dded86ee151fa131fe4fd8db752196028dceff048ffd31a11585222a4acd3162,2025-07-27 17:24:29.932911+00,20250727172025_add_rich_plaid_metadata,,,2025-07-27 17:24:29.784765+00,1
+e6d009c4-be2a-4ad1-96cc-a8ef1b41c01a,2aef36f23feba46b7b76eacc0b60712c4dca194cef605f75514510c44ddea2fe,2025-07-27 17:40:08.047036+00,20250727173620_add_privacy_features,,,2025-07-27 17:40:07.896043+00,1
+f43e97e0-6817-4979-af1b-1aae7ad2de45,6082f9214d7f700129fc22c1f765fd00c95b0f21820b301f440031738e45bb1a,2025-07-30 01:35:25.551966+00,20250730012827_add_user_system,,,2025-07-30 01:35:25.382708+00,1
+d9590d78-3dc9-4241-819d-662ea13ca522,79dff4e8b4233aa2faf80057dddddf72f702d321cf63b99d7a506793095ba0c4,2025-07-30 07:45:01.161779+00,20250730025245_add_user_relationships,,,2025-07-30 07:45:00.983656+00,1
+cd434986-38e7-48aa-9152-8d71b11a10b0,8a616e02f83ffd5738bca0fce2646502c2094b57899db6a03051a34b2a224c85,2025-07-30 07:45:01.44388+00,20250730025703_add_demo_session_models,,,2025-07-30 07:45:01.227731+00,1
+6d4a38e2-b105-4bb4-98d2-146f699a7aaf,888f4b2c2f692c715243af520253ac05a9152b6afd80a9776e5689b3c6dfe75c,2025-07-30 07:45:01.688413+00,20250730053324_add_user_to_sync_status,,,2025-07-30 07:45:01.51249+00,1
+43d67592-3845-4333-8b31-d8053438766b,manual_resolution,2025-08-06 01:11:56.813107+00,20250805085029_add_user_profile_model,Manually resolved - user_profiles table already exists,,2025-08-06 01:11:56.813107+00,1
+c770404d-1efc-4250-84ae-2bc214843778,2e5866c45112be5405f0b4122061f4258c8a9f24df01fad11fbaf6e8a6b46b3a,2025-08-06 01:13:00.380115+00,20250805183314_add_password_reset_and_email_verification,,,2025-08-06 01:13:00.218528+00,1
+fbbcc325-2ee0-4755-a849-341b8bfeac47,ca862c7fe353ae7106a084572cff1ad3b07ce753dbee075e5d8c3f63a0c40bad,2025-08-08 06:12:53.940252+00,20250807011701_add_market_news_context_models,,,2025-08-08 06:12:53.786191+00,1
+d8a211e6-a1b2-4b50-8114-e0de522ea23d,a383422d2e94e93386e186059daf51528062988c171c7e0387e5c55c012978fe,2025-08-12 23:37:31.082982+00,20250812221155_add_feedback_system,,,2025-08-12 23:37:30.946788+00,1
+0370091f-9810-4ee8-b686-d07081384b75,2e141ec0c0a75a77a9fa2014e398df0d77ddd66e8faf7c91a6fe13e9a3215ba1,2025-08-17 07:11:44.805352+00,20250815073301_init_after_reset,"A migration failed to apply. New migrations cannot be applied before the error is recovered from. Read more about how to resolve migration issues in a production database: https://pris.ly/d/migrate-resolve
+
+Migration name: 20250815073301_init_after_reset
+
+Database error code: 42701
+
+Database error:
+ERROR: column ""algorithm"" of relation ""encrypted_profile_data"" already exists
+
+DbError { severity: ""ERROR"", parsed_severity: Some(Error), code: SqlState(E42701), message: ""column \""algorithm\"" of relation \""encrypted_profile_data\"" already exists"", detail: None, hint: None, position: None, where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some(""tablecmds.c""), line: Some(7347), routine: Some(""check_for_column_name_collision"") }
+
+   0: sql_schema_connector::apply_migration::apply_script
+           with migration_name=""20250815073301_init_after_reset""
+             at schema-engine/connectors/sql-schema-connector/src/apply_migration.rs:113
+   1: schema_commands::commands::apply_migrations::Applying migration
+           with migration_name=""20250815073301_init_after_reset""
+             at schema-engine/commands/src/commands/apply_migrations.rs:91
+   2: schema_core::state::ApplyMigrations
+             at schema-engine/core/src/state.rs:236",2025-08-15 09:06:24.709139+00,2025-08-15 09:03:08.69252+00,0
+41f188e8-2471-4f4b-b5a8-de490005e0e6,06ea4f207c0721cdcf8a58428f190ffb4ac92a09ec8b5658620d85fe1fb1414b,2025-08-17 07:12:01.065698+00,20250815081729_add_stripe_subscription_models,"A migration failed to apply. New migrations cannot be applied before the error is recovered from. Read more about how to resolve migration issues in a production database: https://pris.ly/d/migrate-resolve
+
+Migration name: 20250815081729_add_stripe_subscription_models
+
+Database error code: 42P07
+
+Database error:
+ERROR: relation ""subscription_events"" already exists
+
+DbError { severity: ""ERROR"", parsed_severity: Some(Error), code: SqlState(E42P07), message: ""relation \""subscription_events\"" already exists"", detail: None, hint: None, position: None, where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some(""heap.c""), line: Some(1150), routine: Some(""heap_create_with_catalog"") }
+
+   0: sql_schema_connector::apply_migration::apply_script
+           with migration_name=""20250815081729_add_stripe_subscription_models""
+             at schema-engine/connectors/sql-schema-connector/src/apply_migration.rs:113
+   1: schema_commands::commands::apply_migrations::Applying migration
+           with migration_name=""20250815081729_add_stripe_subscription_models""
+             at schema-engine/commands/src/commands/apply_migrations.rs:91
+   2: schema_core::state::ApplyMigrations
+             at schema-engine/core/src/state.rs:236",2025-08-15 09:21:06.583735+00,2025-08-15 09:07:36.907219+00,0
+e433d6f4-3c7b-4c1c-bd41-a565707117e4,aaaa6e9e1e8f3a88a4819dcc4473eb3dd47b8f5976a2b2fc4eeccdc40db2e820,2025-08-15 09:21:48.186625+00,20250815081800_add_stripe_user_fields,"",,2025-08-15 09:21:48.186625+00,0
+189be758-e632-4146-b2f7-888400b42f8f,5a3f86d147cd988e2ae1e04f70eb3b2319e4fea1cbf813bd98439e50a23f39db,2025-08-17 07:16:04.154302+00,20250817000005_fix_migration_history_final,,,2025-08-17 07:16:03.966146+00,1

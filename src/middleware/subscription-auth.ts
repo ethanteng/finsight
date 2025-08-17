@@ -7,7 +7,6 @@ export interface AuthenticatedRequest extends Request {
     email: string;
     tier: string;
     subscriptionStatus: string;
-    subscriptionExpiresAt?: Date;
   };
 }
 
@@ -119,8 +118,7 @@ export const subscriptionAuthMiddleware = (requiredTier: string, requiredStatus:
           currentTier,
           requiredTier,
           subscriptionStatus,
-          upgradeRequired,
-          subscriptionExpiresAt: activeSubscription?.currentPeriodEnd
+          upgradeRequired
         });
       }
 
@@ -128,8 +126,7 @@ export const subscriptionAuthMiddleware = (requiredTier: string, requiredStatus:
       req.user = {
         ...req.user,
         tier: currentTier,
-        subscriptionStatus,
-        subscriptionExpiresAt: activeSubscription?.currentPeriodEnd || undefined
+        subscriptionStatus
       };
 
       next();
@@ -182,16 +179,13 @@ export const requireActiveSubscription = async (req: AuthenticatedRequest, res: 
     }
 
     const activeSubscription = user.subscriptions[0];
-    const isActive = user.subscriptionStatus === 'active' && 
-                    activeSubscription?.currentPeriodEnd && 
-                    new Date() < activeSubscription.currentPeriodEnd;
+    const isActive = user.subscriptionStatus === 'active' && activeSubscription;
 
     if (!isActive) {
       return res.status(403).json({
         error: 'Active subscription required',
         code: 'ACTIVE_SUBSCRIPTION_REQUIRED',
-        subscriptionStatus: user.subscriptionStatus,
-        subscriptionExpiresAt: activeSubscription?.currentPeriodEnd
+        subscriptionStatus: user.subscriptionStatus
       });
     }
 
@@ -233,8 +227,7 @@ export const addSubscriptionContext = async (req: AuthenticatedRequest, res: Res
       req.user = {
         ...req.user,
         tier: user.tier,
-        subscriptionStatus: user.subscriptionStatus,
-        subscriptionExpiresAt: activeSubscription?.currentPeriodEnd || undefined
+        subscriptionStatus: user.subscriptionStatus
       };
     }
 

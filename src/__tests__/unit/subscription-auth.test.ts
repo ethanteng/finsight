@@ -29,8 +29,7 @@ describe('Subscription Auth Middleware', () => {
         id: 'user123',
         email: 'test@example.com',
         tier: 'standard',
-        subscriptionStatus: 'active',
-        subscriptionExpiresAt: new Date('2025-12-31')
+        subscriptionStatus: 'active'
       }
     } as AuthenticatedRequest;
     
@@ -57,7 +56,6 @@ describe('Subscription Auth Middleware', () => {
         id: 'user123',
         tier: 'premium',
         subscriptionStatus: 'active',
-        subscriptionExpiresAt: new Date('2025-12-31'),
         subscriptions: [{
           id: 'sub123',
           status: 'active'
@@ -76,7 +74,6 @@ describe('Subscription Auth Middleware', () => {
         id: 'user123',
         tier: 'starter',
         subscriptionStatus: 'active',
-        subscriptionExpiresAt: new Date('2025-12-31'),
         subscriptions: [{
           id: 'sub123',
           status: 'active'
@@ -104,7 +101,6 @@ describe('Subscription Auth Middleware', () => {
         id: 'user123',
         tier: 'standard',
         subscriptionStatus: 'past_due',
-        subscriptionExpiresAt: gracePeriodEnd,
         subscriptions: [{
           id: 'sub123',
           status: 'past_due'
@@ -123,7 +119,7 @@ describe('Subscription Auth Middleware', () => {
         id: 'user123',
         tier: 'premium',
         subscriptionStatus: 'canceled',
-        subscriptionExpiresAt: new Date('2024-01-01'), // Past date
+
         subscriptions: []
       });
 
@@ -161,7 +157,6 @@ describe('Subscription Auth Middleware', () => {
         id: 'user123',
         tier: 'starter',
         subscriptionStatus: 'active',
-        subscriptionExpiresAt: new Date('2025-12-31'),
         subscriptions: [{
           id: 'sub123',
           status: 'active'
@@ -178,7 +173,6 @@ describe('Subscription Auth Middleware', () => {
         id: 'user123',
         tier: 'standard',
         subscriptionStatus: 'active',
-        subscriptionExpiresAt: new Date('2025-12-31'),
         subscriptions: [{
           id: 'sub123',
           status: 'active'
@@ -195,7 +189,6 @@ describe('Subscription Auth Middleware', () => {
         id: 'user123',
         tier: 'premium',
         subscriptionStatus: 'active',
-        subscriptionExpiresAt: new Date('2025-12-31'),
         subscriptions: [{
           id: 'sub123',
           status: 'active'
@@ -212,7 +205,10 @@ describe('Subscription Auth Middleware', () => {
     it('should allow active subscriptions', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({
         subscriptionStatus: 'active',
-        subscriptionExpiresAt: new Date('2025-12-31')
+        subscriptions: [{
+          id: 'sub123',
+          status: 'active'
+        }]
       });
 
       await requireActiveSubscription(mockRequest, mockResponse, mockNext);
@@ -223,7 +219,7 @@ describe('Subscription Auth Middleware', () => {
     it('should deny inactive subscriptions', async () => {
       mockPrisma.user.findUnique.mockResolvedValue({
         subscriptionStatus: 'canceled',
-        subscriptionExpiresAt: new Date('2024-01-01')
+        subscriptions: []
       });
 
       await requireActiveSubscription(mockRequest, mockResponse, mockNext);
@@ -243,7 +239,6 @@ describe('Subscription Auth Middleware', () => {
       mockPrisma.user.findUnique.mockResolvedValue({
         tier: 'premium',
         subscriptionStatus: 'active',
-        subscriptionExpiresAt: new Date('2025-12-31'),
         subscriptions: [{
           id: 'sub123',
           status: 'active'

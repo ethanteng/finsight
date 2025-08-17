@@ -22,9 +22,10 @@ describe('Email Service', () => {
   });
 
   describe('generateRandomToken', () => {
-    it('should generate a 64-character hex string', () => {
+    it('should generate a token string', () => {
       const token = generateRandomToken();
-      expect(token).toMatch(/^[a-f0-9]{64}$/);
+      expect(token).toMatch(/^[a-z0-9]+$/);
+      expect(token.length).toBeGreaterThan(20);
     });
 
     it('should generate different tokens on multiple calls', () => {

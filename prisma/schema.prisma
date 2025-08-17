@@ -174,10 +174,10 @@ model encrypted_profile_data {
   encryptedData String
   createdAt     DateTime    @default(now())
   updatedAt     DateTime
-  algorithm     String      @default("aes-256-gcm")
   iv            String
-  keyVersion    Int         @default(1)
   tag           String
+  keyVersion    Int         @default(1)
+  algorithm     String      @default("aes-256-gcm")
   user_profiles UserProfile @relation(fields: [profileHash], references: [profileHash])
 
   @@map("encrypted_profile_data")
@@ -298,7 +298,6 @@ model EncryptedEmailVerificationCode {
   @@map("encrypted_email_verification_codes")
 }
 
-
 model Subscription {
   id                   String              @id @default(cuid())
   userId               String
@@ -308,7 +307,6 @@ model Subscription {
   status               String
   currentPeriodStart   DateTime
   currentPeriodEnd     DateTime
-
   cancelAtPeriodEnd    Boolean             @default(false)
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt

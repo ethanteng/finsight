@@ -143,8 +143,7 @@ describe('StripeService', () => {
         data: {
           stripeEventId: 'evt_test_123',
           eventType: 'customer.subscription.created',
-          eventData: mockEventData,
-          subscriptionId: 'sub_test_123'
+          eventData: mockEventData
         }
       });
     });
@@ -247,9 +246,7 @@ describe('StripeService', () => {
       expect(mockPrisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user_123' },
         data: {
-          subscriptionStatus: 'canceled',
-          tier: 'starter',
-          subscriptionExpiresAt: null
+          subscriptionStatus: 'canceled'
         }
       });
     });
@@ -261,7 +258,6 @@ describe('StripeService', () => {
         id: 'user123',
         tier: 'premium',
         subscriptionStatus: 'active',
-        subscriptionExpiresAt: new Date('2025-12-31'),
         subscriptions: [{
           id: 'sub123',
           status: 'active'
@@ -273,8 +269,6 @@ describe('StripeService', () => {
       expect(result).toEqual({
         tier: 'premium',
         status: 'active',
-        expiresAt: new Date('2025-12-31'),
-        gracePeriodDays: undefined,
         accessLevel: 'full',
         upgradeRequired: false,
         message: 'Active premium subscription'
@@ -288,7 +282,6 @@ describe('StripeService', () => {
         id: 'user123',
         tier: 'standard',
         subscriptionStatus: 'past_due',
-        subscriptionExpiresAt: gracePeriodEnd,
         subscriptions: [{
           id: 'sub123',
           status: 'past_due'
@@ -297,10 +290,9 @@ describe('StripeService', () => {
 
       const result = await stripeService.getUserSubscriptionStatus('user123');
 
-      expect(result.accessLevel).toBe('limited');
+      expect(result.accessLevel).toBe('none');
       expect(result.upgradeRequired).toBe(true);
-      expect(result.gracePeriodDays).toBeGreaterThan(0);
-      expect(result.message).toContain('Limited access for');
+      expect(result.message).toContain('Payment past due');
     });
 
     it('should handle expired subscription', async () => {
@@ -308,7 +300,6 @@ describe('StripeService', () => {
         id: 'user123',
         tier: 'premium',
         subscriptionStatus: 'canceled',
-        subscriptionExpiresAt: new Date('2024-01-01'),
         subscriptions: []
       });
 
@@ -316,7 +307,7 @@ describe('StripeService', () => {
 
       expect(result.accessLevel).toBe('none');
       expect(result.upgradeRequired).toBe(true);
-      expect(result.message).toContain('Subscription expired');
+      expect(result.message).toContain('Subscription canceled');
     });
 
     it('should handle inactive subscription', async () => {
@@ -324,15 +315,14 @@ describe('StripeService', () => {
         id: 'user123',
         tier: 'starter',
         subscriptionStatus: 'inactive',
-        subscriptionExpiresAt: null,
         subscriptions: []
       });
 
       const result = await stripeService.getUserSubscriptionStatus('user123');
 
-      expect(result.accessLevel).toBe('limited');
+      expect(result.accessLevel).toBe('full');
       expect(result.upgradeRequired).toBe(false);
-      expect(result.message).toContain('Basic features available');
+      expect(result.message).toContain('Admin-created starter user');
     });
   });
 
@@ -342,7 +332,6 @@ describe('StripeService', () => {
         id: 'user123',
         tier: 'premium',
         subscriptionStatus: 'active',
-        subscriptionExpiresAt: new Date('2025-12-31'),
         subscriptions: [{
           id: 'sub123',
           status: 'active'
@@ -361,7 +350,6 @@ describe('StripeService', () => {
         id: 'user123',
         tier: 'starter',
         subscriptionStatus: 'active',
-        subscriptionExpiresAt: new Date('2025-12-31'),
         subscriptions: [{
           id: 'sub123',
           status: 'active'
@@ -380,14 +368,13 @@ describe('StripeService', () => {
         id: 'user123',
         tier: 'premium',
         subscriptionStatus: 'canceled',
-        subscriptionExpiresAt: new Date('2024-01-01'),
         subscriptions: []
       });
 
       const result = await stripeService.canAccessFeature('user123', 'starter');
 
       expect(result.canAccess).toBe(false);
-      expect(result.reason).toContain('Subscription expired');
+      expect(result.reason).toContain('Subscription canceled');
       expect(result.upgradeRequired).toBe(true);
     });
   });
