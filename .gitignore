@@ -86,3 +86,6 @@ temp/
 
 # MacOS
 .DS_Store
+
+# Migration backups
+migration-backups/

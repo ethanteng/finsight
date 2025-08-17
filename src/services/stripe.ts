@@ -212,14 +212,14 @@ export class StripeService {
       }
     });
 
-          // Send welcome email for new subscription
-      try {
-        await sendWelcomeEmail(user.email, tier);
-        console.log(`Welcome email sent to ${user.email} for ${tier} plan`);
-      } catch (emailError) {
-        console.error(`Failed to send welcome email to ${user.email}:`, emailError);
-        // Don't fail the webhook if email fails
-      }
+    // Send welcome email for new subscription
+    try {
+      await sendWelcomeEmail(user.email, tier);
+      console.log(`Welcome email sent to ${user.email} for ${tier} plan`);
+    } catch (emailError) {
+      console.error(`Failed to send welcome email to ${user.email}:`, emailError);
+      // Don't fail the webhook if email fails
+    }
 
     console.log(`Subscription ${subscriptionId} activated for user ${user.id}`);
   }

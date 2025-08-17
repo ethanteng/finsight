@@ -17,6 +17,7 @@ import {
 } from './resend-email';
 import { sendContactEmail } from './resend-email';
 import { stripe } from '../config/stripe';
+import { sendWelcomeEmail } from '../services/stripe-email';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -171,6 +172,15 @@ router.post('/register', async (req: Request, res: Response) => {
               console.log(`Linked user ${user.email} to subscription ${subscription.id}`);
             } else {
               console.log(`Subscription ${subscriptionId} not found yet, will be created by webhook`);
+            }
+            
+            // Send welcome email for new Stripe users (regardless of webhook status)
+            try {
+              await sendWelcomeEmail(user.email, tier);
+              console.log(`Welcome email sent to ${user.email} for ${tier} plan during registration`);
+            } catch (emailError) {
+              console.error(`Failed to send welcome email to ${user.email} during registration:`, emailError);
+              // Don't fail registration if email fails
             }
           }
         }

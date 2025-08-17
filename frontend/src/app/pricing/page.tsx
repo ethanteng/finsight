@@ -64,7 +64,7 @@ export default function PricingPage() {
         },
         body: JSON.stringify({
           tier: planId,
-          successUrl: `${API_URL}/api/stripe/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=${planId}`,
+          successUrl: `${window.location.origin}/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=${planId}`,
           cancelUrl: `${window.location.origin}/pricing`
         })
       });
