@@ -1,4 +1,5 @@
 import { Resend } from 'resend';
+import crypto from 'crypto';
 
 // Initialize Resend client function
 function getResendClient(): Resend | null {
@@ -20,7 +21,7 @@ export function generateRandomCode(length: number = 6): string {
 }
 
 export function generateRandomToken(): string {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  return crypto.randomBytes(32).toString('hex');
 }
 
 // Send email verification code

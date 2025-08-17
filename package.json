@@ -21,8 +21,6 @@
     "test:lint": "eslint src/ --ext .ts",
     "lint:fix": "eslint src/ --ext .ts --fix",
     "type-check": "tsc --noEmit",
-    "postinstall": "if [ -n \"$DATABASE_URL\" ]; then npx prisma generate && npx prisma migrate deploy; else npx prisma generate; fi && npx tsc --project tsconfig.build.json --outDir dist",
-    "prepare": "if [ -n \"$DATABASE_URL\" ]; then npx prisma generate && npx prisma migrate deploy; else npx prisma generate; fi && npx tsc --project tsconfig.build.json --outDir dist",
     "build": "npm install && npx prisma generate && npx prisma migrate deploy && npx tsc --project tsconfig.build.json --outDir dist",
     "build:backend": "NODE_OPTIONS='--max-old-space-size=4096' npx tsc --project tsconfig.build.json --outDir ./dist && echo 'TypeScript compilation completed' && ls -la dist/",
     "build:prisma": "prisma generate",
