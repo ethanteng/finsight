@@ -10,7 +10,7 @@ export default function PricingPage() {
     {
       id: 'starter',
       name: "Starter",
-      price: "$3",
+      price: "$9",
       period: "/month",
       description: "Start making more informed financial decisions.",
       features: [
@@ -24,7 +24,7 @@ export default function PricingPage() {
     {
       id: 'standard',
       name: "Standard",
-      price: "$9",
+      price: "$18",
       period: "/month",
       description: "For people growing their money and making goal-oriented decisions.",
       features: [
@@ -37,7 +37,7 @@ export default function PricingPage() {
     {
       id: 'premium',
       name: "Premium",
-      price: "$29",
+      price: "$28",
       period: "/month",
       description: "For people actively planning for retirement or major financial moves.",
       features: [
