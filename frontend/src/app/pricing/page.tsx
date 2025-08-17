@@ -1,10 +1,8 @@
 "use client";
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 export default function PricingPage() {
   const [isLoading, setIsLoading] = useState<string | null>(null);
-  const router = useRouter();
 
   const plans = [
     {
