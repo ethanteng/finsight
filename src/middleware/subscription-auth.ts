@@ -52,10 +52,12 @@ export const subscriptionAuthMiddleware = (requiredTier: string, requiredStatus:
       const hasActiveSubscription = user.subscriptions.length > 0;
       const currentTier = user.tier;
       const subscriptionStatus = user.subscriptionStatus;
-      const subscriptionExpiresAt = user.subscriptionExpiresAt;
-
-      // Check if subscription has expired
-      const isExpired = subscriptionExpiresAt && new Date() > subscriptionExpiresAt;
+      
+      // Check if subscription has expired by looking at the subscription record
+      const activeSubscription = user.subscriptions.find(sub => sub.status === 'active');
+      const isExpired = activeSubscription ? 
+        (activeSubscription.currentPeriodEnd && new Date() > activeSubscription.currentPeriodEnd) : 
+        false;
 
       // Determine access level
       let hasAccess = false;
@@ -118,7 +120,7 @@ export const subscriptionAuthMiddleware = (requiredTier: string, requiredStatus:
           requiredTier,
           subscriptionStatus,
           upgradeRequired,
-          subscriptionExpiresAt: subscriptionExpiresAt?.toISOString()
+          subscriptionExpiresAt: activeSubscription?.currentPeriodEnd
         });
       }
 
@@ -127,7 +129,7 @@ export const subscriptionAuthMiddleware = (requiredTier: string, requiredStatus:
         ...req.user,
         tier: currentTier,
         subscriptionStatus,
-        subscriptionExpiresAt: subscriptionExpiresAt || undefined
+        subscriptionExpiresAt: activeSubscription?.currentPeriodEnd || undefined
       };
 
       next();
@@ -163,9 +165,12 @@ export const requireActiveSubscription = async (req: AuthenticatedRequest, res: 
     const prisma = getPrismaClient();
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: {
-        subscriptionStatus: true,
-        subscriptionExpiresAt: true
+      include: {
+        subscriptions: {
+          where: { status: 'active' },
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        }
       }
     });
 
@@ -176,16 +181,17 @@ export const requireActiveSubscription = async (req: AuthenticatedRequest, res: 
       });
     }
 
+    const activeSubscription = user.subscriptions[0];
     const isActive = user.subscriptionStatus === 'active' && 
-                    user.subscriptionExpiresAt && 
-                    new Date() < user.subscriptionExpiresAt;
+                    activeSubscription?.currentPeriodEnd && 
+                    new Date() < activeSubscription.currentPeriodEnd;
 
     if (!isActive) {
       return res.status(403).json({
         error: 'Active subscription required',
         code: 'ACTIVE_SUBSCRIPTION_REQUIRED',
         subscriptionStatus: user.subscriptionStatus,
-        subscriptionExpiresAt: user.subscriptionExpiresAt?.toISOString()
+        subscriptionExpiresAt: activeSubscription?.currentPeriodEnd
       });
     }
 
@@ -223,11 +229,12 @@ export const addSubscriptionContext = async (req: AuthenticatedRequest, res: Res
     });
 
     if (user) {
+      const activeSubscription = user.subscriptions[0];
       req.user = {
         ...req.user,
         tier: user.tier,
         subscriptionStatus: user.subscriptionStatus,
-        subscriptionExpiresAt: user.subscriptionExpiresAt || undefined
+        subscriptionExpiresAt: activeSubscription?.currentPeriodEnd || undefined
       };
     }
 

@@ -165,6 +165,9 @@ export class StripeService {
 
     console.log(`New subscription created: ${subscriptionId} for customer: ${customerId} with tier: ${tier}`);
 
+    // Auto-sync tier based on current price if metadata tier doesn't match
+    await this.autoSyncSubscriptionTier(subscriptionId, tier);
+
     // Find user by Stripe customer ID
     const prisma = getPrismaClient();
     const user = await prisma.user.findFirst({
@@ -176,6 +179,14 @@ export class StripeService {
       return;
     }
 
+    // Validate and convert dates safely
+    const currentPeriodStart = subscription.current_period_start 
+      ? new Date(subscription.current_period_start * 1000)
+      : new Date();
+    const currentPeriodEnd = subscription.current_period_end 
+      ? new Date(subscription.current_period_end * 1000)
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // Default to 30 days from now
+
     // Create subscription record
     await prisma.subscription.create({
       data: {
@@ -184,8 +195,8 @@ export class StripeService {
         stripeSubscriptionId: subscriptionId,
         tier: tier,
         status: subscription.status,
-        currentPeriodStart: new Date(subscription.current_period_start * 1000),
-        currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+        currentPeriodStart: currentPeriodStart,
+        currentPeriodEnd: currentPeriodEnd,
         cancelAtPeriodEnd: subscription.cancel_at_period_end,
       }
     });
@@ -209,34 +220,93 @@ export class StripeService {
     const subscription = eventData.object;
     const subscriptionId = subscription.id;
     const tier = subscription.metadata?.tier as SubscriptionTier || 'starter';
+    const customerId = subscription.customer as string;
 
-    console.log(`Subscription updated: ${subscriptionId} with tier: ${tier}`);
-
-    // Update subscription record
-    const prisma = getPrismaClient();
-    await prisma.subscription.update({
-      where: { stripeSubscriptionId: subscriptionId },
-      data: {
-        tier: tier,
-        status: subscription.status,
-        currentPeriodStart: new Date(subscription.current_period_start * 1000),
-        currentPeriodEnd: new Date(subscription.current_period_end * 1000),
-        cancelAtPeriodEnd: subscription.cancel_at_period_end,
-      }
+    console.log(`Subscription updated: ${subscriptionId} with tier: ${tier} for customer: ${customerId}`);
+    console.log(`Subscription data:`, {
+      current_period_start: subscription.current_period_start,
+      current_period_end: subscription.current_period_end,
+      status: subscription.status,
+      metadata: subscription.metadata
     });
 
-    // Update user tier and subscription status
-    const subscriptionRecord = await prisma.subscription.findUnique({
+    // Auto-sync tier based on current price if metadata tier doesn't match
+    await this.autoSyncSubscriptionTier(subscriptionId, tier);
+
+    const prisma = getPrismaClient();
+    
+    // Check if subscription exists, if not create it
+    let subscriptionRecord = await prisma.subscription.findUnique({
       where: { stripeSubscriptionId: subscriptionId },
       include: { user: true }
     });
 
+    if (!subscriptionRecord) {
+      console.log(`Subscription ${subscriptionId} not found, creating new record`);
+      
+      // Find user by Stripe customer ID
+      const user = await prisma.user.findFirst({
+        where: { stripeCustomerId: customerId }
+      });
+
+      if (!user) {
+        console.warn(`User not found for Stripe customer: ${customerId}`);
+        return;
+      }
+
+      // Validate and convert dates safely
+      const currentPeriodStart = subscription.current_period_start 
+        ? new Date(subscription.current_period_start * 1000)
+        : new Date();
+      const currentPeriodEnd = subscription.current_period_end 
+        ? new Date(subscription.current_period_end * 1000)
+        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // Default to 30 days from now
+
+      // Create new subscription record
+      subscriptionRecord = await prisma.subscription.create({
+        data: {
+          userId: user.id,
+          stripeCustomerId: customerId,
+          stripeSubscriptionId: subscriptionId,
+          tier: tier,
+          status: subscription.status,
+          currentPeriodStart: currentPeriodStart,
+          currentPeriodEnd: currentPeriodEnd,
+          cancelAtPeriodEnd: subscription.cancel_at_period_end,
+        },
+        include: { user: true }
+      });
+
+      console.log(`Created new subscription record: ${subscriptionRecord.id}`);
+    } else {
+      // Validate and convert dates safely for update
+      const currentPeriodStart = subscription.current_period_start 
+        ? new Date(subscription.current_period_start * 1000)
+        : new Date();
+      const currentPeriodEnd = subscription.current_period_end 
+        ? new Date(subscription.current_period_end * 1000)
+        : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // Default to 30 days from now
+
+      // Update existing subscription record
+      await prisma.subscription.update({
+        where: { stripeSubscriptionId: subscriptionId },
+        data: {
+          tier: tier,
+          status: subscription.status,
+          currentPeriodStart: currentPeriodStart,
+          currentPeriodEnd: currentPeriodEnd,
+          cancelAtPeriodEnd: subscription.cancel_at_period_end,
+        }
+      });
+    }
+
+    // Update user tier and subscription status
     if (subscriptionRecord?.user) {
       await prisma.user.update({
         where: { id: subscriptionRecord.user.id },
         data: {
-                  subscriptionStatus: subscription.status,
-        tier: tier,
+          subscriptionStatus: subscription.status,
+          tier: tier,
         }
       });
     }
@@ -293,6 +363,9 @@ export class StripeService {
 
     console.log(`Subscription paused: ${subscriptionId}`);
 
+    // Auto-sync tier to ensure it's correct even when paused
+    await this.autoSyncSubscriptionTier(subscriptionId, 'unknown');
+
     // Update subscription status
     const prisma = getPrismaClient();
     await prisma.subscription.update({
@@ -329,6 +402,9 @@ export class StripeService {
 
     if (subscriptionId) {
       console.log(`Payment succeeded for subscription: ${subscriptionId}`);
+
+      // Auto-sync tier to ensure it's correct after payment
+      await this.autoSyncSubscriptionTier(subscriptionId, 'unknown');
 
       // Update subscription status to active
       const prisma = getPrismaClient();
@@ -452,6 +528,9 @@ export class StripeService {
     const subscriptionId = subscription.id;
 
     console.log(`Trial ending for subscription: ${subscriptionId}`);
+
+    // Auto-sync tier to ensure it's correct before trial ends
+    await this.autoSyncSubscriptionTier(subscriptionId, 'unknown');
 
     // This is just a notification event, no action needed
     // The subscription will automatically transition to active when the trial ends
@@ -673,6 +752,88 @@ export class StripeService {
     } catch (error) {
       console.error('Error checking feature access:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Auto-sync subscription tier based on current Stripe price
+   * This ensures the tier stays in sync even when metadata is out of date
+   */
+  private async autoSyncSubscriptionTier(subscriptionId: string, metadataTier: string): Promise<void> {
+    try {
+      // Price to tier mapping
+      const PRICE_TO_TIER: Record<string, string> = {
+        'price_1RwVHYB0fNhwjxZIorwBKpVN': 'starter',
+        'price_1RwVJqB0fNhwjxZIV4ORHT6H': 'standard', 
+        'price_1RwVKKB0fNhwjxZIT7P4laDk': 'premium'
+      };
+
+      // Get current Stripe subscription to check price
+      const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+      const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+      
+      const currentPrice = stripeSubscription.items.data[0]?.price?.id;
+      const correctTier = PRICE_TO_TIER[currentPrice] || 'starter';
+      
+      // If metadata is unknown, try to get the current tier from the database
+      let currentMetadataTier = metadataTier;
+      if (metadataTier === 'unknown') {
+        try {
+          const prisma = getPrismaClient();
+          const dbSubscription = await prisma.subscription.findUnique({
+            where: { stripeSubscriptionId: subscriptionId },
+            select: { tier: true }
+          });
+          currentMetadataTier = dbSubscription?.tier || 'unknown';
+        } catch (dbError) {
+          console.log(`Auto-sync: Could not fetch current tier from database: ${dbError}`);
+        }
+      }
+      
+      console.log(`Auto-sync: Price ${currentPrice} maps to tier: ${correctTier}, metadata shows: ${currentMetadataTier}`);
+      
+      // If there's a mismatch or metadata is unknown, update both Stripe metadata and database
+      if (correctTier !== currentMetadataTier || currentMetadataTier === 'unknown') {
+        const action = currentMetadataTier === 'unknown' ? 'syncing' : 'fixing mismatch';
+        console.log(`Auto-sync: ${action} from ${currentMetadataTier} to ${correctTier}`);
+        
+        // Update Stripe metadata
+        await stripe.subscriptions.update(subscriptionId, {
+          metadata: {
+            source: 'web_checkout',
+            tier: correctTier
+          }
+        });
+        
+        // Update database subscription
+        const prisma = getPrismaClient();
+        await prisma.subscription.update({
+          where: { stripeSubscriptionId: subscriptionId },
+          data: { tier: correctTier }
+        });
+        
+        // Update user tier
+        const subscription = await prisma.subscription.findUnique({
+          where: { stripeSubscriptionId: subscriptionId },
+          include: { user: true }
+        });
+        
+        if (subscription?.user) {
+          await prisma.user.update({
+            where: { id: subscription.user.id },
+            data: { tier: correctTier }
+          });
+          
+          console.log(`Auto-sync: Updated user ${subscription.user.email} tier to ${correctTier}`);
+        }
+        
+        console.log(`Auto-sync: Successfully synced subscription ${subscriptionId} to tier ${correctTier}`);
+      } else {
+        console.log(`Auto-sync: Tier already in sync (${correctTier})`);
+      }
+    } catch (error) {
+      console.error('Error in auto-sync:', error);
+      // Don't throw - this is a background sync operation
     }
   }
 }

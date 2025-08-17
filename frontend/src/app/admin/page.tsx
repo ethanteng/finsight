@@ -1217,8 +1217,7 @@ export default function AdminPage() {
     return (
       <div>
         {/* Header with refresh button */}
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-semibold text-white">User Management</h2>
+        <div className="flex justify-end items-center mb-6">
           <button
             onClick={refreshUsersData}
             disabled={refreshingUsers}
@@ -1283,7 +1282,6 @@ export default function AdminPage() {
         </div>
 
         <div className="bg-gray-800 rounded-lg p-6">
-          <h2 className="text-xl font-semibold mb-4">User Management</h2>
           <div className="space-y-4">
             {usersForManagement?.map((user) => (
               <div key={user.id} className="bg-gray-700 rounded-lg p-4">

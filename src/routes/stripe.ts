@@ -93,17 +93,35 @@ router.get('/payment-success', async (req, res) => {
  */
 router.post('/create-checkout-session', async (req, res) => {
   try {
-    const request: CreateCheckoutSessionRequest = req.body;
+    const { tier, successUrl, cancelUrl, customerEmail } = req.body;
     
     // Validate required fields
-    if (!request.priceId || !request.successUrl || !request.cancelUrl) {
+    if (!tier || !successUrl || !cancelUrl) {
       return res.status(400).json({
-        error: 'Missing required fields: priceId, successUrl, cancelUrl'
+        error: 'Missing required fields: tier, successUrl, cancelUrl'
       });
     }
 
+    // Get the Stripe price ID for the tier
+    const { getStripePriceId } = await import('../config/stripe');
+    const priceId = getStripePriceId(tier as any);
+    
+    if (!priceId) {
+      return res.status(400).json({
+        error: `Invalid tier: ${tier}`
+      });
+    }
+
+    // Create checkout session request
+    const checkoutRequest = {
+      priceId,
+      successUrl,
+      cancelUrl,
+      customerEmail
+    };
+
     // Create checkout session
-    const response = await stripeService.createCheckoutSession(request);
+    const response = await stripeService.createCheckoutSession(checkoutRequest);
     
     res.json(response);
   } catch (error) {
@@ -148,10 +166,13 @@ router.post('/webhooks', async (req, res) => {
         return res.status(400).json({ error: 'Invalid JSON in webhook body' });
       }
       
+      // In development mode, reconstruct the proper event structure that handlers expect
       event = {
         id: parsedBody.id,
         type: parsedBody.type,
-        data: parsedBody.data
+        data: {
+          object: parsedBody.data.object || parsedBody.data
+        }
       };
     } else if (webhookSecret) {
       try {
@@ -297,12 +318,22 @@ router.get('/subscription-status', requireAuth, async (req, res) => {
     // Get subscription status from Stripe service
     const subscriptionStatus = await stripeService.getUserSubscriptionStatus(userId);
     
+    // Also get user's Stripe customer ID
+    const { getPrismaClient } = await import('../prisma-client');
+    const prisma = getPrismaClient();
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { stripeCustomerId: true }
+    });
+    
     console.log('🔍 Subscription status response for user:', userId);
     console.log('🔍 Full subscription status object:', JSON.stringify(subscriptionStatus, null, 2));
+    console.log('🔍 User stripeCustomerId:', user?.stripeCustomerId);
     
     res.json({
       success: true,
-      ...subscriptionStatus
+      ...subscriptionStatus,
+      stripeCustomerId: user?.stripeCustomerId || null
     });
   } catch (error) {
     console.error('Error getting subscription status:', error);

@@ -73,7 +73,10 @@ router.get('/verify', async (req: Request, res: Response) => {
 // Register new user
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { email, password, tier = 'starter', stripeSessionId } = req.body;
+    const { email, password, tier = 'starter', stripeSessionId, session_id } = req.body;
+    
+    // Handle both parameter names for Stripe session ID
+    const stripeSessionIdToUse = stripeSessionId || session_id;
 
     // Validate input
     if (!email || !password) {
@@ -107,7 +110,7 @@ router.post('/register', async (req: Request, res: Response) => {
         email: email.toLowerCase(),
         passwordHash,
         tier,
-        subscriptionStatus: stripeSessionId ? 'active' : 'inactive'
+        subscriptionStatus: stripeSessionIdToUse ? 'active' : 'inactive'
       },
       select: {
         id: true,
@@ -117,14 +120,35 @@ router.post('/register', async (req: Request, res: Response) => {
       }
     });
 
-    // If coming from Stripe checkout, try to link to existing subscription
-    if (stripeSessionId) {
+    // If coming from Stripe checkout, create Stripe customer and link subscription
+    if (stripeSessionIdToUse) {
       try {
         // First, find the Stripe session to get the subscription ID
         const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-        const session = await stripe.checkout.sessions.retrieve(stripeSessionId);
+        const session = await stripe.checkout.sessions.retrieve(stripeSessionIdToUse);
         
-        if (session.subscription) {
+        if (session.subscription && session.customer) {
+          // Create or get Stripe customer
+          let customer;
+          if (typeof session.customer === 'string') {
+            // Customer ID already exists
+            customer = await stripe.customers.retrieve(session.customer);
+          } else {
+            // Customer object from session
+            customer = session.customer;
+          }
+          
+          // Update user with Stripe customer ID
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { 
+              stripeCustomerId: customer.id,
+              subscriptionStatus: 'active'
+            }
+          });
+          
+          console.log(`Linked user ${user.email} to Stripe customer ${customer.id}`);
+          
           // Find the subscription by Stripe subscription ID
           const subscription = await prisma.subscription.findFirst({
             where: {
@@ -140,6 +164,8 @@ router.post('/register', async (req: Request, res: Response) => {
             });
 
             console.log(`Linked user ${user.email} to subscription ${subscription.id}`);
+          } else {
+            console.log(`Subscription ${session.subscription} not found yet, will be created by webhook`);
           }
         }
       } catch (subscriptionError) {

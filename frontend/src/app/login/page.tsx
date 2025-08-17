@@ -26,6 +26,7 @@ export default function LoginPage() {
     const emailParam = searchParams.get('email');
     const sessionIdParam = searchParams.get('session_id');
     const messageParam = searchParams.get('message');
+    const accessDeniedParam = searchParams.get('access_denied');
 
     if (subscriptionParam && tierParam) {
       setSubscriptionContext({
@@ -41,11 +42,65 @@ export default function LoginPage() {
       }
     }
 
-    // Show subscription access denied message if present
-    if (messageParam) {
-      setError(messageParam);
+          // Show subscription access denied message if present
+      if (messageParam) {
+        setError(messageParam);
+        
+        // Clear the message parameter to prevent showing it again on refresh
+        const url = new URL(window.location.href);
+        url.searchParams.delete('message');
+        window.history.replaceState({}, '', url.toString());
+      }
+
+    // Handle access denied redirects (prevents app screen flash)
+    if (accessDeniedParam) {
+      const reason = searchParams.get('reason') || 'Access denied';
+      setError(`Access denied: ${reason}. Please resolve any payment issues to continue.`);
+      
+      // Clear the URL parameters to prevent showing the error again on refresh
+      const url = new URL(window.location.href);
+      url.searchParams.delete('access_denied');
+      url.searchParams.delete('reason');
+      window.history.replaceState({}, '', url.toString());
     }
+
+    // Check if user was redirected back from app due to access issues
+    // This prevents the brief flash of the app screen
+    const redirectedFromApp = searchParams.get('redirected') === 'true';
+    if (redirectedFromApp) {
+      const redirectReason = searchParams.get('reason') || 'access issues';
+      setError(`You were redirected back to login due to ${redirectReason}. Please resolve any payment or subscription issues to continue.`);
+      
+      // Clear the redirect parameters
+      const url = new URL(window.location.href);
+      url.searchParams.delete('redirected');
+      url.searchParams.delete('reason');
+      window.history.replaceState({}, '', url.toString());
+    }
+
+
   }, [searchParams]);
+
+  // Helper function to detect payment-related errors
+  const isPaymentRelatedError = (errorMessage: string): boolean => {
+    const paymentKeywords = [
+      'payment',
+      'subscription',
+      'billing',
+      'card',
+      'stripe',
+      'past due',
+      'incomplete',
+      'canceled',
+      'unpaid',
+      'payment method',
+      'credit card',
+      'debit card'
+    ];
+    
+    const lowerError = errorMessage.toLowerCase();
+    return paymentKeywords.some(keyword => lowerError.includes(keyword));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,6 +158,29 @@ export default function LoginPage() {
           {error && (
             <div className="bg-red-500/10 border border-red-500/20 rounded-md p-3 text-red-400 text-sm">
               {error}
+            </div>
+          )}
+          
+          {/* Payment Issues Help Section - Only show for payment-related errors */}
+          {error && isPaymentRelatedError(error) && (
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-md p-4">
+              <div className="flex items-start space-x-3">
+                <div className="text-blue-400 text-lg">💳</div>
+                <div className="flex-1">
+                  <h3 className="text-blue-400 font-medium text-sm mb-2">Having payment issues?</h3>
+                  <p className="text-blue-300 text-xs mb-3">
+                    If you're locked out due to payment problems, you can resolve them directly with Stripe.
+                  </p>
+                  <a
+                    href="https://billing.stripe.com/p/login/test_9B63cueur9GTcpU0s18og00"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-colors"
+                  >
+                    Resolve Payment Issues →
+                  </a>
+                </div>
+              </div>
             </div>
           )}
 

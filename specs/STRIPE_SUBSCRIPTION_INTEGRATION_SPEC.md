@@ -225,7 +225,46 @@ const tierAccess = {
 - **Canceled**: No access, redirect to pricing
 - **Inactive**: No access, redirect to pricing
 
-### **6. Failed Payment Handling**
+### **6. Webhook Auto-Sync System**
+
+#### **Automatic Tier Synchronization**
+- **Purpose**: Real-time correction of tier mismatches between Stripe and database
+- **Trigger Events**: All subscription lifecycle webhooks
+- **Logic**: Price-driven tier detection with metadata validation
+- **Coverage**: Handles upgrades, downgrades, and any tier inconsistencies
+
+#### **Auto-Sync Implementation**
+```typescript
+// Price to tier mapping for accurate detection
+const PRICE_TO_TIER: Record<string, string> = {
+  'price_1RwVHYB0fNhwjxZIorwBKpVN': 'starter',
+  'price_1RwVJqB0fNhwjxZIV4ORHT6H': 'standard', 
+  'price_1RwVKKB0fNhwjxZIT7P4laDk': 'premium'
+};
+
+// Auto-sync method integrated into webhook handlers
+private async autoSyncSubscriptionTier(
+  subscriptionId: string, 
+  metadataTier: string
+): Promise<void>
+```
+
+#### **Sync Process Flow**
+1. **Webhook Received**: Stripe sends subscription event
+2. **Price Detection**: Extract current subscription price from Stripe
+3. **Tier Mapping**: Map price to correct tier using PRICE_TO_TIER
+4. **Mismatch Detection**: Compare with current metadata tier
+5. **Automatic Correction**: Update Stripe metadata, database subscription, and user tier
+6. **Real-Time Sync**: Changes reflected immediately in user experience
+
+#### **Supported Webhook Events**
+- **`customer.subscription.created`**: New subscription tier validation
+- **`customer.subscription.updated`**: Plan change detection and sync
+- **`invoice.payment_succeeded`**: Post-payment tier verification
+- **`customer.subscription.paused`**: Pause event tier consistency
+- **`customer.subscription.trial_will_end`**: Trial end tier validation
+
+### **7. Failed Payment Handling**
 
 #### **Grace Period System**
 - **Default Grace Period**: 7 days after failed payment
@@ -332,12 +371,27 @@ const tierAccess = {
 - ✅ **Admin Panel Enhancement**: COMPLETED - Status summary dashboard with user categorization
 - ✅ **Data Consistency & Recovery**: COMPLETED - Fixed data inconsistencies and restored Stripe user links
 - ✅ **Schema Simplification**: COMPLETED - Removed subscriptionExpiresAt column and streamlined logic
+- ✅ **Webhook Auto-Sync System**: COMPLETED - Real-time tier synchronization for upgrades/downgrades
 - 🔄 **Security Validation**: IN PROGRESS - Middleware security testing
 - 🔄 **Performance Optimization**: PLANNED - Load testing and optimization
 - 📋 **Production Deployment**: PLANNED - Final deployment and monitoring setup
 
-### **Latest Development Milestone: Data Consistency & System Recovery! 🎯**
-**✅ Critical System Issue Resolved:**
+### **Latest Development Milestone: Webhook Auto-Sync System! 🚀**
+**✅ Real-Time Tier Synchronization Completed:**
+- **Automatic Mismatch Detection**: System now automatically detects when Stripe price doesn't match metadata tier
+- **Bidirectional Support**: Handles both upgrades and downgrades automatically via webhooks
+- **Price-Driven Logic**: Compares actual Stripe subscription price with stored metadata for accurate tier detection
+- **Comprehensive Coverage**: Auto-sync triggers on all major subscription lifecycle events
+- **Zero Manual Intervention**: No more manual scripts needed for basic tier synchronization
+
+**✅ Technical Implementation:**
+- **Webhook Integration**: `autoSyncSubscriptionTier` method integrated into all major webhook handlers
+- **Price Mapping**: `PRICE_TO_TIER` constant maps Stripe price IDs to internal tiers
+- **Database Consistency**: Ensures user tier, subscription tier, and Stripe metadata are always synchronized
+- **Real-Time Updates**: Changes reflected immediately in both Stripe and local database
+- **Fallback Support**: Manual sync scripts still available as backup options
+
+**✅ Previous Milestone - Data Consistency & System Recovery:**
 - **Data Inconsistency Identified**: Discovered 10 users with real Stripe subscriptions incorrectly marked as inactive
 - **Emergency Recovery**: Successfully restored all Stripe user links and subscription records
 - **System Validation**: Verified webhook system is working correctly and creating proper subscriptions
@@ -363,6 +417,15 @@ const tierAccess = {
 - **Setup Required Warning**: Orange alert box listing all affected users with email addresses
 - **Smart Status Badges**: "Setup Required" (orange) for payment-without-setup users
 - **Business Metrics**: Clear visibility into user conversion funnel
+
+**✅ Latest Milestone - Webhook Auto-Sync System:**
+- **Real-Time Tier Synchronization**: Automatic detection and correction of tier mismatches between Stripe and database
+- **Bidirectional Support**: Handles both upgrades and downgrades automatically via webhooks
+- **Price-Driven Logic**: Compares Stripe subscription price with metadata tier for accurate synchronization
+- **Comprehensive Coverage**: Auto-sync triggers on subscription.created, subscription.updated, payment.succeeded, subscription.paused, and trial_will_end events
+- **Database Consistency**: Ensures user tier, subscription tier, and Stripe metadata are always in sync
+- **Zero Manual Intervention**: No more manual scripts or cron jobs needed for basic tier synchronization
+- **Fallback Support**: Manual sync scripts still available as backup options
 
 **✅ Previous Milestone - Complete Post-Payment User Experience:**
 - **Smart Success URLs**: Dynamic success URLs with tier and email context
