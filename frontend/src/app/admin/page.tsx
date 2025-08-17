@@ -130,6 +130,8 @@ export default function AdminPage() {
   const [refreshingProduction, setRefreshingProduction] = useState(false);
   const [refreshingUsers, setRefreshingUsers] = useState(false);
   const [refreshingAllContexts, setRefreshingAllContexts] = useState(false);
+  const [deletingSession, setDeletingSession] = useState<string | null>(null);
+  const [showDeleteSessionConfirm, setShowDeleteSessionConfirm] = useState<string | null>(null);
   
   const [loading, setLoading] = useState(true);
   const [refreshingAll, setRefreshingAll] = useState(false);
@@ -197,6 +199,35 @@ export default function AdminPage() {
       console.error('Demo data refresh error:', err);
     } finally {
       setRefreshingDemo(false);
+    }
+  };
+
+  const deleteDemoSession = async (sessionId: string) => {
+    setDeletingSession(sessionId);
+    try {
+      const response = await fetch(`${API_URL}/admin/demo-sessions/${sessionId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Demo session deleted:', result.message);
+        // Refresh demo data to reflect the deletion
+        await loadDemoData();
+        setShowDeleteSessionConfirm(null);
+      } else if (response.status === 401 || response.status === 403) {
+        setError('Authentication required for admin access');
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Failed to delete demo session:', errorData);
+        setError('Failed to delete demo session');
+      }
+    } catch (err) {
+      console.error('Error deleting demo session:', err);
+      setError('Failed to delete demo session');
+    } finally {
+      setDeletingSession(null);
     }
   };
 
@@ -772,10 +803,20 @@ export default function AdminPage() {
                         </div>
                       )}
                     </div>
-                    <div className="text-right">
+                    <div className="text-right flex flex-col items-end space-y-2">
                       <div className="text-sm text-gray-400">
                         {session.conversationCount} Q&A
                       </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowDeleteSessionConfirm(session.sessionId);
+                        }}
+                        className="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors"
+                        title="Delete this demo session and all its conversations"
+                      >
+                        Delete Session
+                      </button>
                     </div>
                   </div>
                   
@@ -887,6 +928,38 @@ export default function AdminPage() {
                     </div>
                   </div>
                 ))}
+            </div>
+          </div>
+        )}
+
+        {/* Delete Session Confirmation Modal */}
+        {showDeleteSessionConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-gray-800 rounded-lg p-6 max-w-md mx-4">
+              <div className="text-white text-lg font-semibold mb-4">
+                Delete Demo Session?
+              </div>
+              <div className="text-gray-300 text-sm mb-6">
+                This will permanently delete the demo session and all {demoSessions?.find(s => s.sessionId === showDeleteSessionConfirm)?.conversationCount || 0} conversations associated with it.
+                <br /><br />
+                <strong>This action cannot be undone.</strong>
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => deleteDemoSession(showDeleteSessionConfirm)}
+                  disabled={deletingSession === showDeleteSessionConfirm}
+                  className="px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                >
+                  {deletingSession === showDeleteSessionConfirm ? 'Deleting...' : 'Yes, Delete Session'}
+                </button>
+                <button
+                  onClick={() => setShowDeleteSessionConfirm(null)}
+                  disabled={deletingSession === showDeleteSessionConfirm}
+                  className="px-4 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 disabled:bg-gray-500 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         )}

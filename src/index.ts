@@ -1494,6 +1494,48 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
+    // Admin endpoint to delete demo session and all its conversations
+    app.delete('/admin/demo-sessions/:sessionId', adminAuth, async (req: Request, res: Response) => {
+      try {
+        const { getPrismaClient } = await import('./prisma-client');
+        const prisma = getPrismaClient();
+        
+        const { sessionId } = req.params;
+        console.log('Admin: Deleting demo session:', sessionId);
+        
+        // First check if the session exists
+        const session = await prisma.demoSession.findUnique({
+          where: { sessionId },
+          include: {
+            _count: {
+              select: { conversations: true }
+            }
+          }
+        });
+        
+        if (!session) {
+          return res.status(404).json({ error: 'Demo session not found' });
+        }
+        
+        console.log(`Admin: Deleting session with ${session._count.conversations} conversations`);
+        
+        // Delete the session (this will cascade delete conversations due to foreign key constraints)
+        await prisma.demoSession.delete({
+          where: { sessionId }
+        });
+        
+        console.log('Admin: Demo session deleted successfully');
+        res.json({ 
+          success: true, 
+          message: `Demo session deleted with ${session._count.conversations} conversations`,
+          deletedSessionId: sessionId
+        });
+      } catch (error) {
+        console.error('Error deleting demo session:', error);
+        res.status(500).json({ error: 'Failed to delete demo session' });
+      }
+    });
+
     // Admin endpoints for production data analysis
     app.get('/admin/production-sessions', adminAuth, async (req: Request, res: Response) => {
       try {

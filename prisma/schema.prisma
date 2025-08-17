@@ -145,7 +145,7 @@ model DemoConversation {
   sessionId String
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
-  session   DemoSession @relation(fields: [sessionId], references: [id])
+  session   DemoSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   feedback  Feedback[]
 }
 
