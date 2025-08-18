@@ -29,6 +29,10 @@ declare global {
 // Load environment variables from .env.local (for local development)
 config({ path: '.env.local' });
 
+// DEBUG: Log the actual DATABASE_URL being used
+console.log('🔍 DEBUG - DATABASE_URL:', process.env.DATABASE_URL);
+console.log('🔍 DEBUG - NODE_ENV:', process.env.NODE_ENV);
+
 // Now import Plaid after environment variables are loaded
 import { setupPlaidRoutes } from './plaid';
 import { askOpenAI, askOpenAIWithEnhancedContext } from './openai';
