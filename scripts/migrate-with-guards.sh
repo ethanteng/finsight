@@ -13,7 +13,7 @@ npx prisma generate
 # 2) Build migration SQL (diff prod vs migrations)
 echo "🔎 Computing migration diff"
 npx prisma migrate diff \
-  --from-url "$DATABASE_URL" \
+  --from-schema-datasource ./prisma/schema.prisma \
   --to-migrations ./prisma/migrations \
   --script > /tmp/migration.sql
 
