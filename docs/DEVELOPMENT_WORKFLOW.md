@@ -11,13 +11,15 @@ This document outlines the development workflow for the Finsight project, includ
 ### **What Happened (Production Incident):**
 - **Date**: August 17, 2025
 - **Issue**: Production database was completely wiped during deployment
-- **Root Cause**: `npx prisma migrate deploy` was running in build scripts during deployment
+- **Root Cause**: `npx prisma migrate deploy` was running in `deploy-build.sh` script during deployment
 - **Impact**: All production data lost
 
 ### **The Problem:**
-The original `package.json` build script included:
-```json
-"build": "npm install && npx prisma generate && npx prisma migrate deploy && npx tsc --project tsconfig.build.json --outDir dist"
+The `scripts/deploy-build.sh` script contained:
+```bash
+# Run database migrations
+echo "Running database migrations..."
+npx prisma migrate deploy
 ```
 
 **This is EXTREMELY DANGEROUS because:**
@@ -28,22 +30,21 @@ The original `package.json` build script included:
 
 ### **The Fix Applied:**
 
-#### **1. Fixed Package.json Scripts:**
-```json
-// ❌ DANGEROUS (REMOVED):
-"build": "npm install && npx prisma generate && npx prisma migrate deploy && npx tsc --project tsconfig.build.json --outDir dist"
+#### **1. Fixed Deploy-Build Script:**
+```bash
+# ❌ DANGEROUS (REMOVED):
+npx prisma migrate deploy
 
-// ✅ SAFE (NEW):
-"build": "npm install && npx prisma generate && npx tsc --project tsconfig.build.json --outDir dist",
-"build:render": "NODE_OPTIONS='--max-old-space-size=2048' prisma generate && npm run build:backend && echo 'Build completed' && ls -la dist/ && echo 'Verifying index.js exists:' && ls -la dist/index.js",
-"migrate:deploy": "npx prisma migrate deploy",
-"migrate:status": "npx prisma migrate status"
+# ✅ SAFE (NEW):
+# Database migrations are handled by CI/CD pipeline, not during build
+echo "Skipping database migrations during build (handled by CI/CD)..."
+# npx prisma migrate deploy  # REMOVED - DANGEROUS!
 ```
 
-#### **2. Render Configuration Requirements:**
-- **Pre-Deploy Command**: MUST be `$ npm run build:render` (NOT `$ npm run build`)
-- **Build Command**: `$ npm run build:render`
-- **Start Command**: `$ npm run start`
+#### **2. Fixed Render Configuration:**
+- **Build Command**: `$ npm run build:backend` (SAFE - TypeScript compilation only)
+- **Pre-Deploy Command**: `$ npm run build:prisma` (SAFE - Prisma client generation only)
+- **Start Command**: `$ npm run start` (SAFE - application startup only)
 
 #### **3. Key Safety Principles:**
 - **NEVER include `npx prisma migrate deploy` in build scripts**
@@ -54,7 +55,8 @@ The original `package.json` build script included:
 ### **Safe Deployment Workflow:**
 ```bash
 # 1. Build (SAFE - no database operations)
-npm run build:render
+npm run build:backend    # TypeScript compilation only
+npm run build:prisma     # Prisma client generation only
 
 # 2. Check migration status (optional)
 npm run migrate:status
@@ -66,13 +68,20 @@ npm run migrate:deploy
 ### **Emergency Recovery (If Database Gets Wiped Again):**
 ```bash
 # 1. IMMEDIATELY stop all deployments
-# 2. Check Render configuration - ensure pre-deploy is NOT running migrations
-# 3. Check package.json - ensure no build scripts include migrate deploy
-# 4. Restore from backup if available
-# 5. Fix configuration before any redeployment
+# 2. Check Render configuration - ensure NO commands run migrations
+# 3. Check deploy-build.sh - ensure no migrate deploy commands
+# 4. Check package.json - ensure no build scripts include migrate deploy
+# 5. Restore from backup if available
+# 6. Fix configuration before any redeployment
 ```
 
 **🚨 REMEMBER: Build scripts should NEVER touch your database! 🚨**
+
+## 📚 **Related Safety Documentation**
+
+- **[PRODUCTION_DATABASE_SAFETY.md](../PRODUCTION_DATABASE_SAFETY.md)** - Complete safety guide
+- **[RENDER_DEPLOYMENT_SETUP.md](RENDER_DEPLOYMENT_SETUP.md)** - Safe deployment configuration
+- **[MIGRATION_DRIFT_PREVENTION.md](MIGRATION_DRIFT_PREVENTION.md)** - Migration safety practices
 
 ---
 
