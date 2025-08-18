@@ -61,7 +61,7 @@ export default function ProfilePage() {
   const [error, setError] = useState('');
   const [isDemo, setIsDemo] = useState<boolean | undefined>(undefined); // Start as undefined to prevent premature rendering
   const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteMessage, setDeleteMessage] = useState('');
+  const [deleteMessage, setDeleteMessage] = useState<string>('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('');
   const [demoStatusDetermined, setDemoStatusDetermined] = useState(false); // Start as false
@@ -75,6 +75,9 @@ export default function ProfilePage() {
   } | null>(null);
   const [isManagingSubscription, setIsManagingSubscription] = useState(false);
   const [subscriptionMessage, setSubscriptionMessage] = useState<string>('');
+  const [retryCount, setRetryCount] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [retryMessage, setRetryMessage] = useState<string>('');
 
   // Ref for TransactionHistory component to trigger refresh
   const transactionHistoryRef = useRef<{ refresh: () => void }>(null);
@@ -219,14 +222,94 @@ export default function ProfilePage() {
     }
   }, [API_URL]);
 
-  // Function to refresh all data after successful Plaid connection
-  const refreshAllData = useCallback(() => {
+  // Function to refresh all data after successful Plaid connection with retry logic
+  const refreshAllData = useCallback(async (isRetry = false, currentRetryCount = 0) => {
     if (isDemo !== undefined) {
-      loadConnectedAccountsWithDemoMode(isDemo);
-      loadInvestmentData(isDemo);
-      // Trigger transaction history refresh
-      if (transactionHistoryRef.current?.refresh) {
-        transactionHistoryRef.current.refresh();
+      try {
+        // Show retry message if this is a retry attempt
+        if (isRetry) {
+          setRetryMessage(`🔄 Retrying data refresh (attempt ${currentRetryCount + 1}/5)...`);
+        } else {
+          setRetryMessage('🔄 Refreshing data after account linking...');
+        }
+        
+        // Load accounts and investment data
+        await loadConnectedAccountsWithDemoMode(isDemo);
+        await loadInvestmentData(isDemo);
+        
+        // Try to refresh transaction history
+        if (transactionHistoryRef.current?.refresh) {
+          try {
+            await transactionHistoryRef.current.refresh();
+            // Success! Clear retry state
+            setRetryCount(0);
+            setIsRetrying(false);
+            setRetryMessage('✅ Data refreshed successfully!');
+            // Clear success message after 3 seconds
+            setTimeout(() => setRetryMessage(''), 3000);
+          } catch (error) {
+            console.log('Transaction refresh failed:', error);
+            // Check if it's a PRODUCT_NOT_READY error
+            if (error instanceof Error && (
+                error.message.includes('PRODUCT_NOT_READY') || 
+                error.message.includes('not yet ready'))) {
+              // Handle retry inline to avoid circular dependency
+              if (currentRetryCount < 4) { // Max 5 attempts (0-4)
+                const newRetryCount = currentRetryCount + 1;
+                setRetryCount(newRetryCount);
+                setIsRetrying(true);
+                
+                // Exponential backoff: 10s, 20s, 40s, 80s
+                const delay = Math.pow(2, newRetryCount) * 10000;
+                
+                console.log(`Scheduling retry ${newRetryCount + 1}/5 in ${delay/1000} seconds...`);
+                
+                setTimeout(() => {
+                  refreshAllData(true, newRetryCount);
+                }, delay);
+              } else {
+                // Max retries reached
+                setIsRetrying(false);
+                setRetryMessage('⏰ Data is still processing. Please check back in a few minutes or refresh manually.');
+                setTimeout(() => setRetryMessage(''), 10000);
+              }
+            } else {
+              // Other error, don't retry
+              setRetryMessage('❌ Failed to refresh transactions. Please try again later.');
+              setTimeout(() => setRetryMessage(''), 5000);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error in refreshAllData:', error);
+        // Check if it's a PRODUCT_NOT_READY error
+        if (error instanceof Error && (
+            error.message.includes('PRODUCT_NOT_READY') || 
+            error.message.includes('not yet ready'))) {
+          // Handle retry inline to avoid circular dependency
+          if (currentRetryCount < 4) { // Max 5 attempts (0-4)
+            const newRetryCount = currentRetryCount + 1;
+            setRetryCount(newRetryCount);
+            setIsRetrying(true);
+            
+            // Exponential backoff: 10s, 20s, 40s, 80s
+            const delay = Math.pow(2, newRetryCount) * 10000;
+            
+            console.log(`Scheduling retry ${newRetryCount + 1}/5 in ${delay/1000} seconds...`);
+            
+            setTimeout(() => {
+              refreshAllData(true, newRetryCount);
+            }, delay);
+          } else {
+            // Max retries reached
+            setIsRetrying(false);
+            setRetryMessage('⏰ Data is still processing. Please check back in a few minutes or refresh manually.');
+            setTimeout(() => setRetryMessage(''), 10000);
+          }
+        } else {
+          setRetryMessage('❌ Failed to refresh data. Please try again later.');
+          setTimeout(() => setRetryMessage(''), 5000);
+        }
       }
     }
   }, [isDemo, loadConnectedAccountsWithDemoMode, loadInvestmentData]);
@@ -470,6 +553,31 @@ export default function ProfilePage() {
               }}
               isDemo={isDemo}
             />
+            
+            {/* Retry Status Messages */}
+            {retryMessage && (
+              <div className={`mt-3 p-3 rounded-lg text-sm ${
+                retryMessage.includes('✅') 
+                  ? 'bg-green-900/20 border border-green-700 text-green-300'
+                  : retryMessage.includes('❌') 
+                  ? 'bg-red-900/20 border border-red-700 text-red-300'
+                  : retryMessage.includes('⏰')
+                  ? 'bg-yellow-900/20 border border-yellow-700 text-yellow-300'
+                  : 'bg-blue-900/20 border border-blue-700 text-blue-300'
+              }`}>
+                {retryMessage}
+              </div>
+            )}
+            
+            {/* Retry Progress Indicator */}
+            {isRetrying && (
+              <div className="mt-3 p-3 bg-blue-900/20 border border-blue-700 rounded-lg">
+                <div className="flex items-center gap-2 text-blue-300 text-sm">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-300"></div>
+                  <span>Waiting for data to be ready... (Retry {retryCount + 1}/5)</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Connected Accounts List */}
