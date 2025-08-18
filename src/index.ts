@@ -1,8 +1,6 @@
 import 'dotenv/config';
 import { config } from 'dotenv';
 import express, { Application, Request, Response } from 'express';
-import { setupPlaidRoutes } from './plaid';
-import { askOpenAI, askOpenAIWithEnhancedContext } from './openai';
 import cors from 'cors';
 import cron from 'node-cron';
 // Removed syncAllAccounts import - keeping transactions real-time only
@@ -28,8 +26,12 @@ declare global {
   }
 }
 
-// Load environment variables from .env.local
+// Load environment variables from .env.local (for local development)
 config({ path: '.env.local' });
+
+// Now import Plaid after environment variables are loaded
+import { setupPlaidRoutes } from './plaid';
+import { askOpenAI, askOpenAIWithEnhancedContext } from './openai';
 
 import { getPrismaClient } from './prisma-client';
 
