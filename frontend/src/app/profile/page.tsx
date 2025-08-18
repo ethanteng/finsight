@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from 'react';
-import PlaidLinkButton from '../../components/PlaidLinkButton';
+import PlaidLinkButton, { PlaidLinkButtonRef } from '../../components/PlaidLinkButton';
 import TransactionHistory from '../../components/TransactionHistory';
 import UserProfile from '../../components/UserProfile';
 import InvestmentPortfolio from '../../components/InvestmentPortfolio';
@@ -81,6 +81,9 @@ export default function ProfilePage() {
 
   // Ref for TransactionHistory component to trigger refresh
   const transactionHistoryRef = useRef<{ refresh: () => void }>(null);
+  
+  // Ref for PlaidLinkButton component to auto-trigger
+  const plaidLinkButtonRef = useRef<PlaidLinkButtonRef>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -399,6 +402,43 @@ export default function ProfilePage() {
     }
   }, [isDemo, API_URL, loadSubscriptionStatus]);
 
+  // Auto-trigger Plaid Link when user has no accounts and came from app page
+  useEffect(() => {
+    console.log('Auto-trigger useEffect check:', {
+      isDemo,
+      loading,
+      connectedAccountsLength: connectedAccounts.length,
+      hasPlaidRef: !!plaidLinkButtonRef.current,
+      referrer: document.referrer
+    });
+    
+    // Only auto-trigger for real users (not demo mode) who have no accounts
+    if (!isDemo && !loading && connectedAccounts.length === 0 && plaidLinkButtonRef.current) {
+      // Check if user came from the app page (indicating they clicked "Add Your Accounts")
+      const referrer = document.referrer;
+      const isFromAppPage = referrer.includes('/app') || referrer.includes('localhost:3001/app');
+      
+      console.log('Auto-trigger conditions met:', {
+        isFromAppPage,
+        referrer,
+        willAutoTrigger: isFromAppPage
+      });
+      
+      if (isFromAppPage) {
+        console.log('Auto-triggering Plaid Link for user from app page');
+        // Add a small delay to ensure the component is fully mounted
+        setTimeout(() => {
+          if (plaidLinkButtonRef.current) {
+            console.log('Calling createLinkToken on PlaidLinkButton ref');
+            plaidLinkButtonRef.current.createLinkToken();
+          } else {
+            console.error('PlaidLinkButton ref is null when trying to auto-trigger');
+          }
+        }, 500);
+      }
+    }
+  }, [isDemo, loading, connectedAccounts.length]);
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -552,6 +592,7 @@ export default function ProfilePage() {
                 refreshAllData();
               }}
               isDemo={isDemo}
+              ref={plaidLinkButtonRef}
             />
             
             {/* Retry Status Messages */}

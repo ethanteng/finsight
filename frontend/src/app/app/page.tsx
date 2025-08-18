@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import FinanceQA from '../../components/FinanceQA';
 import TierBanner from '../../components/TierBanner';
+import FinancialOverview from '../../components/FinancialOverview';
 
 interface PromptHistory {
   id: string;
@@ -346,6 +347,9 @@ export default function AppPage() {
         {/* Main Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto p-4 md:p-6">
+            {/* Financial Overview */}
+            <FinancialOverview />
+            
             {/* Q&A Interface */}
             <div className="bg-gray-800 rounded-lg p-4 md:p-6">
               <FinanceQA 

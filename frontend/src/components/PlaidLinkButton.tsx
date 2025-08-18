@@ -1,8 +1,11 @@
 "use client";
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { usePlaidLink, PlaidLinkOnSuccess, PlaidLinkOnExit, PlaidLinkOnSuccessMetadata } from 'react-plaid-link';
 import { useAnalytics } from './Analytics';
+
+// Global flag to prevent multiple Plaid Link initializations
+let plaidLinkInitialized = false;
 
 interface PlaidLinkButtonProps {
   onSuccess?: (publicToken: string, metadata: PlaidLinkOnSuccessMetadata) => void;
@@ -10,10 +13,28 @@ interface PlaidLinkButtonProps {
   isDemo?: boolean;
 }
 
-export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: PlaidLinkButtonProps) {
+export interface PlaidLinkButtonRef {
+  createLinkToken: () => void;
+}
+
+const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ onSuccess, onExit, isDemo = false }, ref) => {
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
   const { trackEvent, trackConversion } = useAnalytics();
+
+  // Prevent multiple Plaid Link initializations
+  useEffect(() => {
+    if (plaidLinkInitialized) {
+      console.log('Plaid Link already initialized globally, skipping this instance');
+      return;
+    }
+    
+    console.log('Setting global Plaid Link initialization flag');
+    plaidLinkInitialized = true;
+    
+    // Don't reset the flag on unmount - keep it initialized for the session
+    // This prevents the "waiting" issue when manually connecting accounts
+  }, []);
 
   // Fetch link_token from backend
   const createLinkToken = useCallback(async () => {
@@ -34,21 +55,39 @@ export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: P
     }
     
     try {
+      console.log('Creating Plaid Link token...', { API_URL, isDemo, hasToken: !!token });
+      
       const res = await fetch(`${API_URL}/plaid/create_link_token`, { 
         method: 'POST',
         headers,
         body: JSON.stringify({ isDemo })
       });
+      
+      console.log('Plaid Link token response status:', res.status);
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('Plaid Link token creation failed:', res.status, errorText);
+        setStatus(`Failed to create link token: ${res.status} ${errorText}`);
+        return;
+      }
+      
       const data = await res.json();
+      console.log('Plaid Link token response data:', data);
+      
       if (data.link_token) {
         setLinkToken(data.link_token);
         setStatus('Connecting to your account...');
+        console.log('Plaid Link token created successfully:', data.link_token.substring(0, 20) + '...');
       } else if (data.error) {
+        console.error('Plaid Link token creation error:', data.error, data.details);
         setStatus(`${data.error}: ${data.details || 'Failed to create link token'}`);
       } else {
+        console.error('Plaid Link token creation failed - no link_token or error in response');
         setStatus('Failed to create link token.');
       }
-    } catch {
+    } catch (error) {
+      console.error('Plaid Link token creation network error:', error);
       setStatus('Network error. Please try again.');
     }
   }, [isDemo]);
@@ -138,7 +177,7 @@ export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: P
     }
   }, [trackEvent, isDemo, onExit]);
 
-  // Always call the hook, but only use it when linkToken is set
+  // Always call the hook, but the global flag prevents multiple library initializations
   const plaid = usePlaidLink(
     linkToken
       ? { token: linkToken, onSuccess: handleSuccess, onExit: handleExit }
@@ -147,10 +186,26 @@ export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: P
 
   // Automatically open Plaid Link when token is ready
   useEffect(() => {
-    if (linkToken && plaid.ready) {
-      plaid.open();
+    if (linkToken && plaid.ready && plaidLinkInitialized) {
+      console.log('Plaid Link ready, opening...', { linkToken: linkToken.substring(0, 20) + '...', ready: plaid.ready });
+      try {
+        plaid.open();
+        console.log('Plaid Link opened successfully');
+      } catch (error) {
+        console.error('Error opening Plaid Link:', error);
+        setStatus('Failed to open Plaid Link. Please try again.');
+      }
+    } else if (linkToken && !plaid.ready) {
+      console.log('Plaid Link token ready but not ready to open yet', { linkToken: linkToken.substring(0, 20) + '...', ready: plaid.ready });
+    } else if (!plaidLinkInitialized) {
+      console.log('Plaid Link not yet initialized globally, waiting...');
     }
   }, [linkToken, plaid.ready, plaid]);
+
+  // Expose createLinkToken to parent components
+  useImperativeHandle(ref, () => ({
+    createLinkToken: createLinkToken,
+  }));
 
   return (
     <div className="space-y-3">
@@ -184,4 +239,8 @@ export default function PlaidLinkButton({ onSuccess, onExit, isDemo = false }: P
       )}
     </div>
   );
-} 
+});
+
+PlaidLinkButton.displayName = 'PlaidLinkButton';
+
+export default PlaidLinkButton; 
