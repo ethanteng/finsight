@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import PlaidLinkButton from '../../components/PlaidLinkButton';
 import TransactionHistory from '../../components/TransactionHistory';
 import UserProfile from '../../components/UserProfile';
@@ -75,6 +75,9 @@ export default function ProfilePage() {
   } | null>(null);
   const [isManagingSubscription, setIsManagingSubscription] = useState(false);
   const [subscriptionMessage, setSubscriptionMessage] = useState<string>('');
+
+  // Ref for TransactionHistory component to trigger refresh
+  const transactionHistoryRef = useRef<{ refresh: () => void }>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -215,6 +218,18 @@ export default function ProfilePage() {
       // Don't set error here as this is optional data
     }
   }, [API_URL]);
+
+  // Function to refresh all data after successful Plaid connection
+  const refreshAllData = useCallback(() => {
+    if (isDemo !== undefined) {
+      loadConnectedAccountsWithDemoMode(isDemo);
+      loadInvestmentData(isDemo);
+      // Trigger transaction history refresh
+      if (transactionHistoryRef.current?.refresh) {
+        transactionHistoryRef.current.refresh();
+      }
+    }
+  }, [isDemo, loadConnectedAccountsWithDemoMode, loadInvestmentData]);
 
   useEffect(() => {
     // Check if demo mode is explicitly requested via URL parameter
@@ -449,10 +464,9 @@ export default function ProfilePage() {
           <div className="mb-6">
             <PlaidLinkButton 
               onSuccess={() => {
-                // Only reload accounts when an account is actually linked
-                console.log('Account linked, reloading accounts');
-                loadConnectedAccountsWithDemoMode(isDemo || false);
-                loadInvestmentData(isDemo || false);
+                // Refresh all data when an account is successfully linked
+                console.log('Account linked, refreshing all data');
+                refreshAllData();
               }}
               isDemo={isDemo}
             />
@@ -516,7 +530,7 @@ export default function ProfilePage() {
 
         {/* Transaction History - Show ALL transactions */}
         <div className="mb-6">
-          <TransactionHistory isDemo={isDemo} />
+          <TransactionHistory ref={transactionHistoryRef} isDemo={isDemo} />
         </div>
 
         {/* Subscription Management Section */}

@@ -28,6 +28,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   const [userTier, setUserTier] = useState<string>('starter');
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const { trackEvent } = useAnalytics();
 
   // Demo placeholder questions that rotate
@@ -35,6 +36,20 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     "How much am I saving each month? What's my emergency fund status? Should I move my savings to a higher-yield account?",
     "What's my current asset allocation? Am I on track for retirement? Should I rebalance my 401k?",
     "What's my debt-to-income ratio? How much am I spending on housing vs other expenses? Should I pay off my credit card first?"
+  ];
+
+  // Fun loading messages that rotate
+  const loadingMessages = [
+    "Crunching numbers",
+    "Consulting the financial oracle",
+    "Reading tea leaves",
+    "Asking my crystal ball",
+    "Channeling Warren Buffett",
+    "Doing the math",
+    "Consulting the money gods",
+    "Running the numbers",
+    "Summoning financial wisdom",
+    "Decoding your finances"
   ];
 
   // Rotate placeholder every 4 seconds for demo mode
@@ -47,6 +62,17 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
 
     return () => clearInterval(interval);
   }, [isDemo, demoPlaceholders.length]);
+
+  // Rotate loading messages every 2 seconds while loading
+  useEffect(() => {
+    if (!loading) return;
+    
+    const interval = setInterval(() => {
+      setLoadingMessageIndex((prev) => (prev + 1) % loadingMessages.length);
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [loading, loadingMessages.length]);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -88,6 +114,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     if (!question.trim()) return;
 
     setLoading(true);
+    setLoadingMessageIndex(0); // Reset to first message
     setError('');
     
     // Track question submission
@@ -203,7 +230,16 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
             disabled={loading || !question.trim()}
             className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
           >
-            {loading ? 'Analyzing...' : 'Ask Linc'}
+            {loading ? (
+              <span className="flex items-center justify-center">
+                <span>{loadingMessages[loadingMessageIndex]}</span>
+                <span className="ml-1 flex">
+                  <span className="animate-bounce" style={{ animationDelay: '0ms' }}>.</span>
+                  <span className="animate-bounce" style={{ animationDelay: '150ms' }}>.</span>
+                  <span className="animate-bounce" style={{ animationDelay: '300ms' }}>.</span>
+                </span>
+              </span>
+            ) : 'Ask Linc'}
           </button>
         </form>
       </div>

@@ -19,7 +19,7 @@ export default function SeamlessPlaidLink({
     <div className="space-y-4">
       {/* Seamless Connection Interface */}
       <div className="bg-gray-800 rounded-lg p-4">
-        <h3 className="text-lg font-semibold text-white mb-3">Connect Your Financial Account</h3>
+        <h3 className="text-lg font-semibold text-white mb-3">Connect Your Account</h3>
         <p className="text-gray-400 text-sm mb-4">
           Simply click connect and we'll automatically detect what financial data is available from your institution. 
           No need to specify what you want upfront - we'll intelligently gather everything available.

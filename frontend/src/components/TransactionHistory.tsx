@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 
 interface Transaction {
   id: string;
@@ -38,7 +38,7 @@ interface TransactionHistoryProps {
   isDemo?: boolean;
 }
 
-export default function TransactionHistory({ isDemo = false }: { isDemo?: boolean }) {
+export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(function TransactionHistory({ isDemo = false }, ref) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -123,6 +123,11 @@ export default function TransactionHistory({ isDemo = false }: { isDemo?: boolea
       setLoading(false);
     }
   }, [dateRange, isDemo, API_URL]);
+
+  // Expose refresh method to parent component
+  useImperativeHandle(ref, () => ({
+    refresh: loadTransactions
+  }), [loadTransactions]);
 
   useEffect(() => {
     loadTransactions();
@@ -354,4 +359,4 @@ export default function TransactionHistory({ isDemo = false }: { isDemo?: boolea
       )}
     </div>
   );
-} 
+}) 
