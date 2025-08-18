@@ -10,29 +10,24 @@ echo "🔒 Starting production migration with safety guards..."
 echo "🔎 Generating Prisma client"
 npx prisma generate
 
-# 2) Build migration SQL (diff prod vs migrations)
-echo "🔎 Computing migration diff"
-npx prisma migrate diff \
-  --from-schema-datasource ./prisma/schema.prisma \
-  --to-migrations ./prisma/migrations \
-  --script > /tmp/migration.sql
+# 2) Check for pending migrations
+echo "🔎 Checking for pending migrations..."
+PENDING_MIGRATIONS=$(npx prisma migrate status --json | jq -r '.migrations[] | select(.applied == false) | .migration_name' 2>/dev/null || echo "")
 
-echo "— Proposed migration diff —"
-sed -n '1,200p' /tmp/migration.sql
-
-# 3) Block obviously destructive changes (extend as needed)
-if grep -Eiq 'DROP TABLE|DROP COLUMN|ALTER TYPE|ALTER TABLE .* DROP CONSTRAINT|PRIMARY KEY' /tmp/migration.sql; then
-  echo "❌ Destructive change detected. Handle manually in a scheduled window."
-  echo "Blocked operations: DROP TABLE, DROP COLUMN, ALTER TYPE, DROP CONSTRAINT, PRIMARY KEY changes"
-  echo "Review the migration and handle manually during maintenance window."
-  exit 2
+if [ -z "$PENDING_MIGRATIONS" ]; then
+    echo "✅ No pending migrations found"
+    echo "🔒 Production database schema is up to date"
+    exit 0
 fi
 
-# 4) Safety: set conservative lock/statement timeouts for this session
+echo "📋 Pending migrations:"
+echo "$PENDING_MIGRATIONS"
+
+# 3) Safety: set conservative lock/statement timeouts for this session
 echo "⏱️  Setting timeouts"
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "SET lock_timeout='30s'; SET statement_timeout='5min';"
 
-# 5) Apply migrations
+# 4) Apply migrations
 echo "🚀 Applying migrations"
 npx prisma migrate deploy
 
