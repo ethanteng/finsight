@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from 'react';
-import PlaidLinkButton, { PlaidLinkButtonRef } from '../../components/PlaidLinkButton';
+import PlaidLinkButton, { PlaidLinkButtonRef, resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
 import TransactionHistory from '../../components/TransactionHistory';
 import UserProfile from '../../components/UserProfile';
 import InvestmentPortfolio from '../../components/InvestmentPortfolio';
@@ -78,12 +78,11 @@ export default function ProfilePage() {
   const [retryCount, setRetryCount] = useState(0);
   const [isRetrying, setIsRetrying] = useState(false);
   const [retryMessage, setRetryMessage] = useState<string>('');
+  const [forcePlaidReinitialize, setForcePlaidReinitialize] = useState(false);
+  const plaidLinkButtonRef = useRef<PlaidLinkButtonRef>(null);
 
   // Ref for TransactionHistory component to trigger refresh
   const transactionHistoryRef = useRef<{ refresh: () => void }>(null);
-  
-  // Ref for PlaidLinkButton component to auto-trigger
-  const plaidLinkButtonRef = useRef<PlaidLinkButtonRef>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -247,7 +246,7 @@ export default function ProfilePage() {
             // Success! Clear retry state
             setRetryCount(0);
             setIsRetrying(false);
-            setRetryMessage('✅ Data refreshed successfully!');
+            setRetryMessage('Data refreshed successfully!');
             // Clear success message after 3 seconds
             setTimeout(() => setRetryMessage(''), 3000);
           } catch (error) {
@@ -402,42 +401,84 @@ export default function ProfilePage() {
     }
   }, [isDemo, API_URL, loadSubscriptionStatus]);
 
-  // Auto-trigger Plaid Link when user has no accounts and came from app page
+  // Reset Plaid Link flag when forcePlaidReinitialize becomes true
+  useEffect(() => {
+    if (forcePlaidReinitialize) {
+      console.log('forcePlaidReinitialize is true, resetting Plaid Link flag');
+      resetPlaidLinkInitialization();
+    }
+  }, [forcePlaidReinitialize]);
+
+  // Log localStorage flag changes for debugging
+  useEffect(() => {
+    const checkFlag = () => {
+      const flag = localStorage.getItem('wants_to_connect_accounts');
+      console.log('localStorage wants_to_connect_accounts flag:', flag);
+    };
+    
+    // Check on mount
+    checkFlag();
+    
+    // Check when storage changes
+    window.addEventListener('storage', checkFlag);
+    
+    return () => window.removeEventListener('storage', checkFlag);
+  }, []);
+
+  // Auto-trigger Plaid Link when user wants to connect accounts (either first time or add more)
   useEffect(() => {
     console.log('Auto-trigger useEffect check:', {
       isDemo,
       loading,
       connectedAccountsLength: connectedAccounts.length,
       hasPlaidRef: !!plaidLinkButtonRef.current,
-      referrer: document.referrer
+      referrer: document.referrer,
+      forcePlaidReinitialize,
+      wantsToConnectAccounts: localStorage.getItem('wants_to_connect_accounts')
     });
     
-    // Only auto-trigger for real users (not demo mode) who have no accounts
-    if (!isDemo && !loading && connectedAccounts.length === 0 && plaidLinkButtonRef.current) {
-      // Check if user came from the app page (indicating they clicked "Add Your Accounts")
-      const referrer = document.referrer;
-      const isFromAppPage = referrer.includes('/app') || referrer.includes('localhost:3001/app');
+    // Auto-trigger for real users (not demo mode) who want to connect accounts
+    if (!isDemo && !loading && plaidLinkButtonRef.current) {
+      // Check if user wants to connect accounts (from localStorage flag set in app page)
+      const wantsToConnectAccounts = localStorage.getItem('wants_to_connect_accounts') === 'true';
       
       console.log('Auto-trigger conditions met:', {
-        isFromAppPage,
-        referrer,
-        willAutoTrigger: isFromAppPage
+        wantsToConnectAccounts,
+        referrer: document.referrer,
+        willAutoTrigger: wantsToConnectAccounts,
+        forcePlaidReinitialize,
+        hasAccounts: connectedAccounts.length > 0
       });
       
-      if (isFromAppPage) {
-        console.log('Auto-triggering Plaid Link for user from app page');
-        // Add a small delay to ensure the component is fully mounted
+      if (wantsToConnectAccounts) {
+        console.log('Auto-triggering Plaid Link for user who wants to connect accounts');
+        
+        // Clear the localStorage flag to prevent re-triggering
+        localStorage.removeItem('wants_to_connect_accounts');
+        
+        // Set the force flag first
+        setForcePlaidReinitialize(true);
+        
+        // Add a delay to ensure the component re-renders with the new prop
         setTimeout(() => {
+          console.log('Timeout executed, checking ref:', {
+            hasRef: !!plaidLinkButtonRef.current
+          });
+          
           if (plaidLinkButtonRef.current) {
             console.log('Calling createLinkToken on PlaidLinkButton ref');
-            plaidLinkButtonRef.current.createLinkToken();
+            try {
+              plaidLinkButtonRef.current.createLinkToken();
+            } catch (error) {
+              console.error('Error calling createLinkToken:', error);
+            }
           } else {
             console.error('PlaidLinkButton ref is null when trying to auto-trigger');
           }
-        }, 500);
+        }, 1000); // Increased delay to ensure state updates
       }
     }
-  }, [isDemo, loading, connectedAccounts.length]);
+  }, [isDemo, loading, connectedAccounts.length]); // Removed forcePlaidReinitialize dependency to avoid infinite loops
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -561,6 +602,8 @@ export default function ProfilePage() {
             {!isDemo && (
               <button 
                 onClick={() => {
+                  // Reset Plaid Link initialization flag when logging out
+                  resetPlaidLinkInitialization();
                   localStorage.removeItem('auth_token');
                   window.location.href = '/login';
                 }}
@@ -586,12 +629,16 @@ export default function ProfilePage() {
           {/* Connect New Account */}
           <div className="mb-6">
             <PlaidLinkButton 
+              key={forcePlaidReinitialize ? 'force-reinit' : 'normal'}
               onSuccess={() => {
                 // Refresh all data when an account is successfully linked
                 console.log('Account linked, refreshing all data');
                 refreshAllData();
+                // Reset the force flag after successful connection
+                setForcePlaidReinitialize(false);
               }}
               isDemo={isDemo}
+              forceReinitialize={forcePlaidReinitialize}
               ref={plaidLinkButtonRef}
             />
             

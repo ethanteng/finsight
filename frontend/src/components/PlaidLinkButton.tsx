@@ -7,37 +7,63 @@ import { useAnalytics } from './Analytics';
 // Global flag to prevent multiple Plaid Link initializations
 let plaidLinkInitialized = false;
 
+// Function to reset the global flag (useful for testing or when switching users)
+export const resetPlaidLinkInitialization = () => {
+  plaidLinkInitialized = false;
+  console.log('Global Plaid Link initialization flag reset');
+};
+
 interface PlaidLinkButtonProps {
   onSuccess?: (publicToken: string, metadata: PlaidLinkOnSuccessMetadata) => void;
   onExit?: () => void;
   isDemo?: boolean;
+  forceReinitialize?: boolean; // New prop to force re-initialization
 }
 
 export interface PlaidLinkButtonRef {
   createLinkToken: () => void;
 }
 
-const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ onSuccess, onExit, isDemo = false }, ref) => {
+const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ onSuccess, onExit, isDemo = false, forceReinitialize = false }, ref) => {
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
   const { trackEvent, trackConversion } = useAnalytics();
 
   // Prevent multiple Plaid Link initializations
   useEffect(() => {
-    if (plaidLinkInitialized) {
+    console.log('PlaidLinkButton useEffect triggered:', {
+      plaidLinkInitialized,
+      forceReinitialize,
+      isDemo
+    });
+    
+    // Allow re-initialization if forceReinitialize is true
+    if (plaidLinkInitialized && !forceReinitialize) {
       console.log('Plaid Link already initialized globally, skipping this instance');
       return;
+    }
+    
+    // Reset flag if forceReinitialize is true
+    if (forceReinitialize) {
+      console.log('Force reinitialize requested, resetting global flag');
+      plaidLinkInitialized = false;
     }
     
     console.log('Setting global Plaid Link initialization flag');
     plaidLinkInitialized = true;
     
-    // Don't reset the flag on unmount - keep it initialized for the session
-    // This prevents the "waiting" issue when manually connecting accounts
-  }, []);
+    // Reset the flag on unmount to allow re-initialization for new users
+    return () => {
+      // Only reset if this is the last instance (we could add a counter here if needed)
+      // For now, reset on unmount to allow new users to initialize
+      plaidLinkInitialized = false;
+      console.log('Plaid Link component unmounted, resetting global flag');
+    };
+  }, [forceReinitialize]);
 
   // Fetch link_token from backend
   const createLinkToken = useCallback(async () => {
+    console.log('createLinkToken called with props:', { isDemo, forceReinitialize });
     setStatus('Connecting to your account...');
     const API_URL = process.env.NEXT_PUBLIC_API_URL;
     const token = localStorage.getItem('auth_token');
@@ -90,7 +116,7 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
       console.error('Plaid Link token creation network error:', error);
       setStatus('Network error. Please try again.');
     }
-  }, [isDemo]);
+  }, [isDemo, forceReinitialize]);
 
   // Exchange public_token for access_token
   const handleSuccess: PlaidLinkOnSuccess = useCallback(async (publicToken, metadata) => {

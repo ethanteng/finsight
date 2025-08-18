@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import FinanceQA from '../../components/FinanceQA';
 import TierBanner from '../../components/TierBanner';
 import FinancialOverview from '../../components/FinancialOverview';
+import { resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
 
 interface PromptHistory {
   id: string;
@@ -241,7 +242,16 @@ export default function AppPage() {
     setSelectedPrompt(null);
   };
 
+  const handleAddAccounts = () => {
+    // Set a flag in localStorage to indicate user wants to connect accounts
+    localStorage.setItem('wants_to_connect_accounts', 'true');
+    // Navigate to profile page
+    router.push('/profile');
+  };
+
   const handleLogout = () => {
+    // Reset Plaid Link initialization flag when logging out
+    resetPlaidLinkInitialization();
     localStorage.removeItem('auth_token');
     router.push('/login');
   };

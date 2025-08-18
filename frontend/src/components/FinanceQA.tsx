@@ -38,6 +38,14 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     "What's my debt-to-income ratio? How much am I spending on housing vs other expenses? Should I pay off my credit card first?"
   ];
 
+  // Regular user placeholder questions that also rotate
+  const userPlaceholders = [
+    "How much did I spend on dining last month? What's my current asset allocation? Which accounts have the highest fees?",
+    "What's my debt-to-income ratio? How much am I saving each month? Should I refinance my mortgage?",
+    "Am I on track for retirement? What's my emergency fund status? Should I pay off my credit card first?",
+    "How much am I spending on housing vs other expenses? What's my current investment performance? Should I rebalance my portfolio?"
+  ];
+
   // Fun loading messages that rotate
   const loadingMessages = [
     "Crunching numbers",
@@ -52,16 +60,18 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     "Decoding your finances"
   ];
 
-  // Rotate placeholder every 4 seconds for demo mode
+  // Rotate placeholder every 4 seconds for all users
   useEffect(() => {
-    if (!isDemo) return;
-    
     const interval = setInterval(() => {
-      setPlaceholderIndex((prev) => (prev + 1) % demoPlaceholders.length);
+      if (isDemo) {
+        setPlaceholderIndex((prev) => (prev + 1) % demoPlaceholders.length);
+      } else {
+        setPlaceholderIndex((prev) => (prev + 1) % userPlaceholders.length);
+      }
     }, 4000);
 
     return () => clearInterval(interval);
-  }, [isDemo, demoPlaceholders.length]);
+  }, [isDemo, demoPlaceholders.length, userPlaceholders.length]);
 
   // Rotate loading messages every 2 seconds while loading
   useEffect(() => {
@@ -220,7 +230,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
               disabled={loading}
               placeholder={isDemo 
                 ? demoPlaceholders[placeholderIndex]
-                : "How much did I spend on dining last month? What's my current asset allocation? Which accounts have the highest fees?"
+                : userPlaceholders[placeholderIndex]
               }
               required
             />

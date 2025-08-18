@@ -148,6 +148,8 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
   };
 
   const handleAddAccounts = () => {
+    // Set a flag in localStorage to indicate user wants to connect accounts
+    localStorage.setItem('wants_to_connect_accounts', 'true');
     router.push('/profile');
   };
 
@@ -189,9 +191,21 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
 
   return (
     <div className="bg-blue-900 border border-blue-700 rounded-lg p-4 mb-6">
-      <div className="flex items-center space-x-2 mb-3">
-        <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-        <h3 className="text-lg font-semibold text-blue-100">Your Financial Overview</h3>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center space-x-2">
+          <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+          <h3 className="text-lg font-semibold text-blue-100">Your Financial Overview</h3>
+        </div>
+        
+        {/* Add More Accounts link - only show when user has accounts */}
+        {hasAccounts && (
+          <button
+            onClick={handleAddAccounts}
+            className="text-blue-300 hover:text-blue-200 text-sm transition-colors underline decoration-blue-400/30 hover:decoration-blue-400/60"
+          >
+            Add More Accounts
+          </button>
+        )}
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
