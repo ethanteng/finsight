@@ -2,11 +2,6 @@
   "name": "finsight",
   "version": "1.0.0",
   "main": "index.js",
-  /* 
-   * 🚨 PRODUCTION SAFETY: Build scripts should NEVER include database migrations
-   * 🚨 NEVER add "npx prisma migrate deploy" to any build script  
-   * 🚨 Database migrations must be run manually: npm run migrate:deploy
-   */
   "scripts": {
     "test": "jest",
     "test:watch": "jest --watch",
@@ -18,10 +13,10 @@
     "test:coverage:unit": "jest --coverage --testPathPattern=unit",
     "test:coverage:integration": "jest --config jest.integration.config.js --coverage",
     "test:coverage:all": "npm run test:coverage:unit && npm run test:coverage:integration",
-    "test:enhanced-market-context": "jest --testPathPattern='enhanced-market-context|scheduled-updates' --verbose",
-    "test:enhanced-market-context:watch": "jest --testPathPattern='enhanced-market-context|scheduled-updates' --watch",
-    "test:dual-data": "jest --testPathPattern='dual-data' --verbose",
-    "test:dual-data:watch": "jest --testPathPattern='dual-data' --watch",
+    "test:enhanced-market-context": "jest --testPathPattern=enhanced-market-context|scheduled-updates --verbose",
+    "test:enhanced-market-context:watch": "jest --testPathPattern=enhanced-market-context|scheduled-updates --watch",
+    "test:dual-data": "jest --testPathPattern=dual-data --verbose",
+    "test:dual-data:watch": "jest --testPathPattern=dual-data --watch",
     "test:lint": "eslint src/ --ext .ts",
     "lint:fix": "eslint src/ --ext .ts --fix",
     "type-check": "tsc --noEmit",
