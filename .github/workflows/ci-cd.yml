@@ -308,10 +308,46 @@ jobs:
           cd frontend
           npm run build
 
+  # Production Migration (only on main branch)
+  migrate-prod:
+    needs: [build-verification]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production   # requires manual approval in GitHub
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          # Retry npm ci with exponential backoff for network issues
+          for i in 1 2 3; do
+            echo "Attempt $i of 3: Installing dependencies..."
+            npm ci --prefer-offline --no-audit || {
+              if [ $i -eq 3 ]; then
+                echo "Failed to install dependencies after 3 attempts"
+                exit 1
+              fi
+              echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
+              sleep $((i * 10))
+            } && break
+          done
+
+      - name: Apply migrations with guards
+        run: bash scripts/migrate-with-guards.sh
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
+
   # Deployment (only on main branch)
   deploy:
     runs-on: ubuntu-latest
-    needs: [build-verification]
+    needs: [migrate-prod]
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout code
