@@ -19,8 +19,8 @@ echo "Generating Prisma client..."
 npx prisma generate
 
 # Run database migrations
-echo "Running database migrations..."
-npx prisma migrate deploy
+# echo "Running database migrations..."
+# npx prisma migrate deploy
 
 # Build TypeScript with memory optimization
 echo "Building TypeScript..."
