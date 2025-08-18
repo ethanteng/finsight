@@ -703,7 +703,7 @@ export default function ProfilePage() {
                     </div>
                     {!subscriptionStatus.stripeCustomerId && (
                       <div className="mt-2 text-xs text-blue-400">
-                        ℹ️ No active subscription found. You can still access the customer portal to view billing options.
+                        No active subscription found. You can still access the customer portal to view billing options.
                       </div>
                     )}
                   </div>
