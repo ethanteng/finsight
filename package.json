@@ -2,10 +2,12 @@
   "name": "finsight",
   "version": "1.0.0",
   "main": "index.js",
+  /* 
+   * 🚨 PRODUCTION SAFETY: Build scripts should NEVER include database migrations
+   * 🚨 NEVER add "npx prisma migrate deploy" to any build script  
+   * 🚨 Database migrations must be run manually: npm run migrate:deploy
+   */
   "scripts": {
-    // 🚨 PRODUCTION SAFETY: Build scripts should NEVER include database migrations
-    // 🚨 NEVER add "npx prisma migrate deploy" to any build script
-    // 🚨 Database migrations must be run manually: npm run migrate:deploy
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
