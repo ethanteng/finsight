@@ -117,7 +117,8 @@ jobs:
       - name: Setup test database
         run: |
           npx prisma generate
-          npx prisma db push --accept-data-loss
+          npx prisma migrate reset --force
+          npx prisma migrate deploy
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
 
@@ -226,7 +227,8 @@ jobs:
       - name: Setup test database
         run: |
           npx prisma generate
-          npx prisma db push --accept-data-loss
+          npx prisma migrate reset --force
+          npx prisma migrate deploy
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
 
@@ -292,6 +294,9 @@ jobs:
               sleep $((i * 10))
             } && break
           done
+
+      - name: Enforce no-migrate-in-build
+        run: bash scripts/check-no-migrate-in-build.sh
 
       - name: Verify backend build
         run: |
