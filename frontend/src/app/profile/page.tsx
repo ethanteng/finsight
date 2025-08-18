@@ -228,9 +228,9 @@ export default function ProfilePage() {
       try {
         // Show retry message if this is a retry attempt
         if (isRetry) {
-          setRetryMessage(`🔄 Retrying data refresh (attempt ${currentRetryCount + 1}/5)...`);
+          setRetryMessage(`Trying to get your transaction history (attempt ${currentRetryCount + 1}/5)...`);
         } else {
-          setRetryMessage('🔄 Refreshing data after account linking...');
+          setRetryMessage('Getting your transaction history...');
         }
         
         // Load accounts and investment data
