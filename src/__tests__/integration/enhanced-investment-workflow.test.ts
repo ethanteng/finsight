@@ -6,14 +6,24 @@ import { testApp } from './test-app-setup';
 const app = testApp;
 
 describe('Enhanced Investment Workflow Integration Tests', () => {
+  let testJWT: string;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Create a test JWT token for authentication
+    testJWT = require('jsonwebtoken').sign(
+      { userId: 'test-user-id', email: 'test@example.com', tier: 'starter' },
+      process.env.JWT_SECRET || 'test-secret',
+      { expiresIn: '24h' }
+    );
   });
 
   describe('Investment Holdings Endpoint', () => {
     it('should return enhanced portfolio analysis for investment holdings', async () => {
       const response = await request(app)
         .get('/plaid/investments/holdings')
+        .set('Authorization', `Bearer ${testJWT}`)
         .expect(200);
 
       expect(response.body).toHaveProperty('holdings');
@@ -39,6 +49,7 @@ describe('Enhanced Investment Workflow Integration Tests', () => {
     it('should return enhanced activity analysis for investment transactions', async () => {
       const response = await request(app)
         .get('/plaid/investments/transactions')
+        .set('Authorization', `Bearer ${testJWT}`)
         .expect(200);
 
       expect(response.body).toHaveProperty('transactions');
@@ -67,6 +78,7 @@ describe('Enhanced Investment Workflow Integration Tests', () => {
 
       const response = await request(app)
         .get(`/plaid/investments/transactions?start_date=${startDate}&end_date=${endDate}`)
+        .set('Authorization', `Bearer ${testJWT}`)
         .expect(200);
 
       const summary = response.body.summary;
@@ -79,6 +91,7 @@ describe('Enhanced Investment Workflow Integration Tests', () => {
     it('should return complete investment overview with analysis', async () => {
       const response = await request(app)
         .get('/plaid/investments')
+        .set('Authorization', `Bearer ${testJWT}`)
         .expect(200);
 
       expect(response.body).toHaveProperty('investments');

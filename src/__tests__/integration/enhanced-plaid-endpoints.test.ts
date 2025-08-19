@@ -6,14 +6,24 @@ import { testApp } from './test-app-setup';
 const app = testApp;
 
 describe('Enhanced Plaid Endpoints Integration Tests', () => {
+  let testJWT: string;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Create a test JWT token for authentication
+    testJWT = require('jsonwebtoken').sign(
+      { userId: 'test-user-id', email: 'test@example.com', tier: 'starter' },
+      process.env.JWT_SECRET || 'test-secret',
+      { expiresIn: '24h' }
+    );
   });
 
   describe('Liabilities Endpoint', () => {
     it('should return liability information for all accounts', async () => {
       const response = await request(app)
         .get('/plaid/liabilities')
+        .set('Authorization', `Bearer ${testJWT}`)
         .expect(200);
 
       expect(response.body).toHaveProperty('liabilities');
@@ -102,6 +112,7 @@ describe('Enhanced Plaid Endpoints Integration Tests', () => {
     it('should return income information with analysis', async () => {
       const response = await request(app)
         .get('/plaid/income')
+        .set('Authorization', `Bearer ${testJWT}`)
         .expect(200);
 
       expect(response.body).toHaveProperty('income');
@@ -140,6 +151,7 @@ describe('Enhanced Plaid Endpoints Integration Tests', () => {
     it('should return account information with balances', async () => {
       const response = await request(app)
         .get('/plaid/accounts')
+        .set('Authorization', `Bearer ${testJWT}`)
         .expect(200);
 
       expect(response.body).toHaveProperty('accounts');
@@ -167,6 +179,7 @@ describe('Enhanced Plaid Endpoints Integration Tests', () => {
     it('should return transaction information with categories', async () => {
       const response = await request(app)
         .get('/plaid/transactions')
+        .set('Authorization', `Bearer ${testJWT}`)
         .expect(200);
 
       expect(response.body).toHaveProperty('transactions');

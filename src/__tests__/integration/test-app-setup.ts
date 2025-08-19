@@ -255,9 +255,16 @@ export function createTestApp() {
               monthly_income: 5000,
               income_stream_type: 'primary',
               confidence: 0.95
+            },
+            {
+              name: 'Freelance',
+              monthly_income: 1000,
+              income_stream_type: 'secondary',
+              confidence: 0.75
             }
           ],
-          projectedYearlyIncome: 60000
+          last_year_income: 58000,
+          projected_yearly_income: 60000
         },
         {
           account_id: 'acc2',
@@ -272,9 +279,16 @@ export function createTestApp() {
               confidence: 0.85
             }
           ],
-          projectedYearlyIncome: 75000
+          last_year_income: 28000,
+          projected_yearly_income: 30000
         }
-      ]
+      ],
+      summary: {
+        totalIncomeStreams: 2,
+        totalMonthlyIncome: 7500,
+        totalYearlyIncome: 90000,
+        projectedYearlyIncome: 135000
+      }
     });
   });
   
