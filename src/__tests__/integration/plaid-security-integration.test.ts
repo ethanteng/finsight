@@ -1,21 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from '@jest/globals';
 import request from 'supertest';
-import express from 'express';
-import { setupPlaidRoutes } from '../../plaid';
-import { optionalAuth } from '../../auth/middleware';
+import { testApp } from './test-app-setup';
 import { createTestUser, createTestAccessToken } from '../unit/factories/user.factory';
 import { hashPassword } from '../../auth/utils';
 import { testPrisma } from '../setup/test-database-ci';
 
-// Create a test app instance specifically for Plaid security tests
-const app = express();
-app.use(express.json());
-
-// Add authentication middleware
-app.use(optionalAuth);
-
-// Set up Plaid routes on the test app
-setupPlaidRoutes(app);
+// Note: testApp already has all necessary endpoints and middleware
 
 describe('Plaid Security Integration Tests', () => {
   let user1: any;
@@ -119,7 +109,7 @@ describe('Plaid Security Integration Tests', () => {
       // but somehow sees User1's account data
 
       // User2 asks about their accounts (should see none since they haven't linked any banks)
-      const user2Response = await request(app)
+      const user2Response = await request(testApp)
         .get('/plaid/all-accounts')
         .set('Authorization', `Bearer ${user2JWT}`);
 
@@ -140,14 +130,14 @@ describe('Plaid Security Integration Tests', () => {
 
     it('should only return data for the authenticated user', async () => {
       // User1 asks about their accounts
-      const user1Response = await request(app)
+      const user1Response = await request(testApp)
         .get('/plaid/all-accounts')
         .set('Authorization', `Bearer ${user1JWT}`);
 
       expect(user1Response.status).toBe(200);
       
       // User2 asks about their accounts
-      const user2Response = await request(app)
+      const user2Response = await request(testApp)
         .get('/plaid/all-accounts')
         .set('Authorization', `Bearer ${user2JWT}`);
 
@@ -182,7 +172,7 @@ describe('Plaid Security Integration Tests', () => {
       );
 
       // User3 asks about accounts (has no linked banks)
-      const user3Response = await request(app)
+      const user3Response = await request(testApp)
         .get('/plaid/all-accounts')
         .set('Authorization', `Bearer ${user3JWT}`);
 
@@ -203,7 +193,7 @@ describe('Plaid Security Integration Tests', () => {
       // This verifies the real security implementation is working
       
       // User1 should only see their own data
-      const user1Response = await request(app)
+      const user1Response = await request(testApp)
         .get('/plaid/all-accounts')
         .set('Authorization', `Bearer ${user1JWT}`);
 
@@ -211,7 +201,7 @@ describe('Plaid Security Integration Tests', () => {
       expect(user1Response.body.accounts).toBeDefined();
       
       // User2 should only see their own data
-      const user2Response = await request(app)
+      const user2Response = await request(testApp)
         .get('/plaid/all-accounts')
         .set('Authorization', `Bearer ${user2JWT}`);
 
@@ -228,7 +218,7 @@ describe('Plaid Security Integration Tests', () => {
     // Test that API responses don't leak token information
     // it('should not allow cross-user token access in API responses', async () => {
     //   // Test that API responses don't leak token information
-    //   const response = await request(app)
+    //   const response = await request(testApp)
     //     .post('/ask')
     //     .set('Authorization', `Bearer ${user1JWT}`)
     //     .send({
@@ -249,14 +239,14 @@ describe('Plaid Security Integration Tests', () => {
 // Separate test suite for authentication tests that don't need user setup
 describe('Authentication Boundary Tests (Independent)', () => {
   it('should reject requests without valid authentication', async () => {
-    const response = await request(app)
+    const response = await request(testApp)
       .get('/plaid/all-accounts');
 
     expect(response.status).toBe(401);
   });
 
   it('should reject requests with invalid JWT', async () => {
-    const response = await request(app)
+    const response = await request(testApp)
       .get('/plaid/all-accounts')
       .set('Authorization', 'Bearer invalid-jwt-token');
 
@@ -267,7 +257,7 @@ describe('Authentication Boundary Tests (Independent)', () => {
     // Create an expired JWT (this would require JWT library mocking)
     const expiredJWT = 'expired.jwt.token';
     
-    const response = await request(app)
+    const response = await request(testApp)
       .get('/plaid/all-accounts')
       .set('Authorization', `Bearer ${expiredJWT}`);
 
@@ -278,7 +268,7 @@ describe('Authentication Boundary Tests (Independent)', () => {
 describe('Demo Mode Security Tests', () => {
   it.skip('should not expose real user data in demo mode', async () => {
     // Test that demo mode doesn't leak real user data
-    const demoResponse = await request(app)
+    const demoResponse = await request(testApp)
       .post('/ask')
       .set('x-session-id', 'test-demo-session')
       .send({
@@ -300,7 +290,7 @@ describe('Demo Mode Security Tests', () => {
 
   it.skip('should maintain demo mode isolation from real users', async () => {
     // Demo mode request
-    const demoResponse = await request(app)
+    const demoResponse = await request(testApp)
       .post('/ask')
       .set('x-session-id', 'test-demo-session-2')
       .send({
@@ -309,7 +299,7 @@ describe('Demo Mode Security Tests', () => {
       });
 
     // Real user request - skip this test since we don't have user setup
-    // const realUserResponse = await request(app)
+    // const realUserResponse = await request(testApp)
     //   .post('/ask')
     //   .set('Authorization', `Bearer ${user1JWT}`)
     //   .send({
@@ -327,7 +317,7 @@ describe('Demo Mode Security Tests', () => {
 describe('Error Handling Security Tests', () => {
   it('should not leak sensitive information in error messages', async () => {
     // Test error responses don't contain sensitive data
-    const response = await request(app)
+    const response = await request(testApp)
       .get('/plaid/all-accounts')
       .set('Authorization', 'Bearer invalid-token');
 
@@ -349,7 +339,7 @@ describe('Error Handling Security Tests', () => {
     
     testPrisma.accessToken.findMany = jest.fn().mockRejectedValue(mockError);
 
-    const response = await request(app)
+    const response = await request(testApp)
       .post('/ask')
       .set('Authorization', 'Bearer invalid-token')
       .send({
@@ -387,14 +377,14 @@ describe('GPT Context User Isolation Integration', () => {
     await testPrisma.account.create({ data: { name: 'User1 Savings', type: 'savings', plaidAccountId: 'acc2', userId: user1.id } });
     
     // Login users to get JWT tokens
-    const user1Login = await request(app).post('/auth/login').send({ email: 'user1@test.com', password: 'password123' });
-    const user2Login = await request(app).post('/auth/login').send({ email: 'user2@test.com', password: 'password123' });
+    const user1Login = await request(testApp).post('/auth/login').send({ email: 'user1@test.com', password: 'password123' });
+    const user2Login = await request(testApp).post('/auth/login').send({ email: 'user2@test.com', password: 'password123' });
     user1JWT = user1Login.body.token;
     user2JWT = user2Login.body.token;
   });
 
   it.skip('should not leak user1 data to user2 in /ask response', async () => {
-    const response = await request(app)
+    const response = await request(testApp)
       .post('/ask')
       .set('Authorization', `Bearer ${user2JWT}`)
       .send({ question: 'What accounts do I have?' });

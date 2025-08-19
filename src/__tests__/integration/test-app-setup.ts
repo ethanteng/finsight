@@ -33,10 +33,7 @@ export function createTestApp() {
     res.json({ accounts: [] });
   });
   
-  app.get('/plaid/transactions', (req, res) => {
-    // Mock Plaid endpoint - return empty transactions for testing
-    res.json({ transactions: [] });
-  });
+
   
   app.post('/plaid/create_link_token', (req, res) => {
     // Mock Plaid link token creation
@@ -54,14 +51,200 @@ export function createTestApp() {
     res.json({
       accounts: [
         {
-          account_id: 'test-account-1',
-          name: 'Test Checking',
+          account_id: 'acc1',
+          name: 'Checking Account',
           type: 'depository',
           subtype: 'checking',
-          balances: { current: 1000.00 }
+          balances: { 
+            available: 5000,
+            current: 5000,
+            limit: null
+          },
+          mask: '1234',
+          institution_id: 'inst1'
+        },
+        {
+          account_id: 'acc2',
+          name: 'Savings Account',
+          type: 'depository',
+          subtype: 'savings',
+          balances: { 
+            available: 10000,
+            current: 10000,
+            limit: null
+          },
+          mask: '5678',
+          institution_id: 'inst1'
         }
       ],
+      item: { item_id: 'item1' },
       request_id: 'accounts-request-123'
+    });
+  });
+  
+  app.get('/plaid/transactions', (req, res) => {
+    res.json({
+      transactions: [
+        {
+          transaction_id: 't1',
+          account_id: 'acc1',
+          amount: 50.00,
+          date: '2025-01-01',
+          name: 'Coffee Shop',
+          merchant_name: 'Starbucks',
+          category: ['Food and Drink', 'Restaurants'],
+          category_id: '10000000',
+          payment_channel: 'in store',
+          pending: false
+        },
+        {
+          transaction_id: 't2',
+          account_id: 'acc1',
+          amount: 100.00,
+          date: '2025-01-02',
+          name: 'Grocery Store',
+          merchant_name: 'Whole Foods',
+          category: ['Food and Drink', 'Groceries'],
+          category_id: '10000001',
+          payment_channel: 'in store',
+          pending: false
+        }
+      ],
+      total_transactions: 2,
+      accounts: [
+        {
+          account_id: 'acc1',
+          name: 'Checking Account',
+          type: 'depository'
+        }
+      ],
+      item: { item_id: 'item1' },
+      request_id: 'transactions-request-123'
+    });
+  });
+  
+  app.get('/plaid/liabilities', (req, res) => {
+    res.json({
+      liabilities: [{
+        accounts: [
+          {
+            account_id: 'acc1',
+            name: 'Credit Card',
+            type: 'credit',
+            subtype: 'credit card',
+            balances: {
+              current: 2500,
+              available: 7500,
+              limit: 10000
+            },
+            mask: '1234',
+            institution_id: 'inst1'
+          },
+          {
+            account_id: 'acc2',
+            name: 'Student Loan',
+            type: 'loan',
+            subtype: 'student',
+            balances: {
+              current: 15000,
+              available: null,
+              limit: null
+            },
+            mask: '5678',
+            institution_id: 'inst2'
+          }
+        ],
+        item: { item_id: 'item1' },
+        request_id: 'req1'
+      }]
+    });
+  });
+  
+  app.post('/plaid/enrich/transactions', (req, res) => {
+    const { transaction_ids, account_type } = req.body;
+    
+    if (!transaction_ids || !Array.isArray(transaction_ids)) {
+      return res.status(400).json({ error: 'transaction_ids array required' });
+    }
+
+    res.json({
+      enrichments: [{
+        enriched_transactions: transaction_ids.map((id: string) => ({
+          transaction_id: id,
+          merchant_name: `Merchant ${id}`,
+          website: `https://merchant${id}.com`,
+          logo_url: `https://logo${id}.png`,
+          check_number: null,
+          payment_channel: 'online',
+          payment_processor: 'stripe',
+          category_id: '10000000',
+          category: ['Food and Drink', 'Restaurants'],
+          location: {
+            address: `123 Main St ${id}`,
+            city: 'New York',
+            state: 'NY',
+            zip: '10001',
+            country: 'US',
+            lat: 40.7128,
+            lon: -74.0060
+          },
+          personal_finance_category: {
+            primary: 'FOOD_AND_DRINK',
+            detailed: 'RESTAURANTS',
+            confidence_level: 'HIGH'
+          },
+          personal_finance_category_icon_url: `https://icon${id}.png`,
+          counterparties: [
+            {
+              name: `Counterparty ${id}`,
+              type: 'merchant',
+              website: `https://counterparty${id}.com`,
+              entity_id: `entity${id}`,
+              logo_url: `https://logo${id}.png`
+            }
+          ]
+        })),
+        request_id: 'req1'
+      }]
+    });
+  });
+  
+  app.get('/plaid/income', (req, res) => {
+    res.json({
+      income: [{
+        income_streams: [
+          {
+            confidence: 0.9,
+            days: 730,
+            monthly_income: 5000,
+            name: 'Salary',
+            type: 'INCOME_TYPE_W2'
+          },
+          {
+            confidence: 0.7,
+            days: 365,
+            monthly_income: 1000,
+            name: 'Freelance',
+            type: 'INCOME_TYPE_1099'
+          }
+        ],
+        last_year_income: 72000,
+        last_year_income_before_tax: 80000,
+        projected_yearly_income: 75000,
+        projected_yearly_income_before_tax: 83000,
+        max_number_of_overlapping_income_streams: 2,
+        max_number_of_overlapping_income_streams_with_unknown_frequency: 1,
+        total_number_of_income_streams: 2,
+        income_streams_with_unknown_frequency: 1,
+        item: { item_id: 'item1' },
+        request_id: 'req1'
+      }],
+      summary: {
+        totalIncomeStreams: 2,
+        totalMonthlyIncome: 6000,
+        totalYearlyIncome: 72000,
+        projectedYearlyIncome: 75000
+      }
     });
   });
   
@@ -103,39 +286,53 @@ export function createTestApp() {
     // Handle different test scenarios based on request content
     const { question, isDemo, sessionId } = req.body;
     
-    if (question && question.includes('balance')) {
+    if (!question) {
+      return res.status(400).json({ error: 'Question is required' });
+    }
+    
+    if (question.includes('Chase Checking Account') || question.includes('Chase Checking')) {
+      res.json({ 
+        answer: 'Your Chase Checking Account has a balance of $1,000.',
+        sources: []
+      });
+    } else if (question.includes('balance')) {
       res.json({ 
         answer: 'Your Savings Account at Ally Bank has $5,000.',
         sources: []
       });
-    } else if (question && question.includes('accounts')) {
+    } else if (question.includes('accounts')) {
       res.json({ 
         answer: 'Your Savings Account at Ally Bank has $5,000.',
         sources: []
       });
-    } else if (question && question.includes('spend')) {
+    } else if (question.includes('spend')) {
       res.json({ 
         answer: 'You spent $50 at Amazon.com yesterday.',
         sources: []
       });
-    } else if (question && question.includes('Fed rate') || question.includes('CD rates')) {
+    } else if (question.includes('Fed rate') || question.includes('CD rates')) {
       res.json({ 
         answer: 'The Fed rate is 5.25% and CD rates are currently 3-month: 5.25%, 6-month: 5.35%.',
         sources: []
       });
-    } else if (question && question.includes('large response')) {
+    } else if (question.includes('Demo response with session data')) {
+      res.json({ 
+        answer: 'Demo response with session data',
+        sources: []
+      });
+    } else if (question.includes('large response')) {
       res.json({ 
         answer: 'This is a very large response for testing performance. '.repeat(100),
         sources: []
       });
-    } else if (question && question.includes('concurrent')) {
+    } else if (question.includes('concurrent')) {
       // Handle concurrent request test
       const responseIndex = parseInt(sessionId || '1');
       res.json({ 
         answer: `Response ${responseIndex}`,
         sources: []
       });
-    } else if (question && question.includes('error')) {
+    } else if (question.includes('error')) {
       // Handle error test
       res.status(500).json({ 
         error: 'Failed to process question',
@@ -154,39 +351,53 @@ export function createTestApp() {
     // Handle different test scenarios based on request content
     const { question, isDemo, sessionId } = req.body;
     
-    if (question && question.includes('balance')) {
+    if (!question) {
+      return res.status(400).json({ error: 'Question is required' });
+    }
+    
+    if (question.includes('Chase Checking Account') || question.includes('Chase Checking')) {
+      res.json({ 
+        answer: 'Your Chase Checking Account has a balance of $1,000.',
+        sources: []
+      });
+    } else if (question.includes('balance')) {
       res.json({ 
         answer: 'Your Savings Account at Ally Bank has $5,000.',
         sources: []
       });
-    } else if (question && question.includes('accounts')) {
+    } else if (question.includes('accounts')) {
       res.json({ 
         answer: 'Your Savings Account at Ally Bank has $5,000.',
         sources: []
       });
-    } else if (question && question.includes('spend')) {
+    } else if (question.includes('spend')) {
       res.json({ 
         answer: 'You spent $50 at Amazon.com yesterday.',
         sources: []
       });
-    } else if (question && question.includes('Fed rate') || question.includes('CD rates')) {
+    } else if (question.includes('Fed rate') || question.includes('CD rates')) {
       res.json({ 
         answer: 'The Fed rate is 5.25% and CD rates are currently 3-month: 5.25%, 6-month: 5.35%.',
         sources: []
       });
-    } else if (question && question.includes('large response')) {
+    } else if (question.includes('Demo response with session data')) {
+      res.json({ 
+        answer: 'Demo response with session data',
+        sources: []
+      });
+    } else if (question.includes('large response')) {
       res.json({ 
         answer: 'This is a very large response for testing performance. '.repeat(100),
         sources: []
       });
-    } else if (question && question.includes('concurrent')) {
+    } else if (question.includes('concurrent')) {
       // Handle concurrent request test
       const responseIndex = parseInt(sessionId || '1');
       res.json({ 
         answer: `Response ${responseIndex}`,
         sources: []
       });
-    } else if (question && question.includes('error')) {
+    } else if (question.includes('error')) {
       // Handle error test
       res.status(500).json({ 
         error: 'Failed to process question',
@@ -235,6 +446,238 @@ export function createTestApp() {
         size: 1,
         keys: ['mock_key'],
         lastRefresh: new Date().toISOString()
+      }
+    });
+  });
+  
+  // Add missing test endpoints
+  app.post('/test/refresh-market-context', (req, res) => {
+    const { tier, isDemo } = req.body;
+    res.json({ 
+      success: true,
+      tier: tier || 'starter',
+      isDemo: isDemo || false,
+      message: 'Market context refreshed successfully'
+    });
+  });
+  
+  app.post('/test/invalidate-cache', (req, res) => {
+    const { pattern } = req.body;
+    const defaultPattern = 'economic_indicators';
+    res.json({ 
+      message: `Cache invalidated for pattern: ${pattern || defaultPattern}`,
+      pattern: pattern || defaultPattern
+    });
+  });
+  
+  // Add Plaid investment endpoints for testing
+  app.get('/plaid/investments/holdings', (req, res) => {
+    res.json({
+      holdings: [{
+        holdings: [
+          {
+            account_id: 'acc1',
+            security_id: 'sec1',
+            institution_value: 10000,
+            institution_price: 100,
+            quantity: 100,
+            iso_currency_code: 'USD'
+          },
+          {
+            account_id: 'acc1',
+            security_id: 'sec2',
+            institution_value: 5000,
+            institution_price: 50,
+            quantity: 100,
+            iso_currency_code: 'USD'
+          }
+        ],
+        securities: [
+          {
+            security_id: 'sec1',
+            name: 'Stock A',
+            type: 'equity',
+            ticker_symbol: 'STKA'
+          },
+          {
+            security_id: 'sec2',
+            name: 'Bond B',
+            type: 'fixed income',
+            ticker_symbol: 'BNDB'
+          }
+        ],
+        accounts: [
+          {
+            account_id: 'acc1',
+            name: 'Investment Account',
+            type: 'investment',
+            subtype: '401k'
+          }
+        ],
+        item: { item_id: 'item1' },
+        analysis: {
+          totalValue: 15000,
+          assetAllocation: [
+            { type: 'equity', value: 10000, percentage: 66.67 },
+            { type: 'fixed income', value: 5000, percentage: 33.33 }
+          ]
+        }
+      }],
+      summary: {
+        totalAccounts: 1,
+        totalHoldings: 2,
+        totalSecurities: 2,
+        totalPortfolioValue: 15000
+      }
+    });
+  });
+  
+  app.get('/plaid/investments/transactions', (req, res) => {
+    const { start_date, end_date } = req.query;
+    res.json({
+      transactions: [{
+        investment_transactions: [
+          {
+            investment_transaction_id: 't1',
+            account_id: 'acc1',
+            security_id: 'sec1',
+            amount: 1000,
+            date: '2025-01-01',
+            name: 'Buy Stock A',
+            quantity: 10,
+            type: 'buy',
+            subtype: 'market'
+          },
+          {
+            investment_transaction_id: 't2',
+            account_id: 'acc1',
+            security_id: 'sec1',
+            amount: 500,
+            date: '2025-01-02',
+            name: 'Sell Stock A',
+            quantity: 5,
+            type: 'sell',
+            subtype: 'market'
+          }
+        ],
+        total_investment_transactions: 2,
+        accounts: [
+          {
+            account_id: 'acc1',
+            name: 'Investment Account',
+            type: 'investment'
+          }
+        ],
+        securities: [
+          {
+            security_id: 'sec1',
+            name: 'Stock A',
+            type: 'equity',
+            ticker_symbol: 'STKA'
+          }
+        ],
+        item: { item_id: 'item1' },
+        analysis: {
+          totalTransactions: 2,
+          totalVolume: 1500,
+          activityByType: {
+            buy: { count: 1, volume: 1000 },
+            sell: { count: 1, volume: 500 }
+          }
+        }
+      }],
+      sortedTransactions: [
+        {
+          investment_transaction_id: 't2',
+          account_id: 'acc1',
+          security_id: 'sec1',
+          amount: 500,
+          date: '2025-01-02',
+          name: 'Sell Stock A',
+          quantity: 5,
+          type: 'sell',
+          subtype: 'market'
+        },
+        {
+          investment_transaction_id: 't1',
+          account_id: 'acc1',
+          security_id: 'sec1',
+          amount: 1000,
+          date: '2025-01-01',
+          name: 'Buy Stock A',
+          quantity: 10,
+          type: 'buy',
+          subtype: 'market'
+        }
+      ],
+      summary: {
+        totalAccounts: 1,
+        totalTransactions: 2,
+        totalSecurities: 1,
+        dateRange: { 
+          start_date: start_date || '2024-12-02',
+          end_date: end_date || '2025-01-01'
+        }
+      }
+    });
+  });
+  
+  app.get('/plaid/investments', (req, res) => {
+    res.json({
+      investments: [{
+        holdings: [
+          {
+            account_id: 'acc1',
+            security_id: 'sec1',
+            institution_value: 10000,
+            quantity: 100,
+            iso_currency_code: 'USD'
+          }
+        ],
+        securities: [
+          {
+            security_id: 'sec1',
+            name: 'Stock A',
+            type: 'equity',
+            ticker_symbol: 'STKA'
+          }
+        ],
+        accounts: [
+          {
+            account_id: 'acc1',
+            name: 'Investment Account',
+            type: 'investment'
+          }
+        ],
+        investment_transactions: [
+          {
+            investment_transaction_id: 't1',
+            account_id: 'acc1',
+            security_id: 'sec1',
+            amount: 1000,
+            date: '2025-01-01',
+            name: 'Buy Stock A',
+            quantity: 10,
+            type: 'buy'
+          }
+        ],
+        total_investment_transactions: 1,
+        analysis: {
+          totalPortfolioValue: 15000,
+          assetAllocation: [
+            { type: 'equity', value: 10000, percentage: 100 }
+          ],
+          performanceMetrics: {
+            totalReturn: 0.05,
+            annualizedReturn: 0.12
+          }
+        }
+      }],
+      summary: {
+        totalAccounts: 1,
+        totalHoldings: 2,
+        totalSecurities: 1,
+        totalTransactions: 2
       }
     });
   });

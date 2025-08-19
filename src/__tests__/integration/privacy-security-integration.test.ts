@@ -1,12 +1,11 @@
 import request from 'supertest';
-import express from 'express';
+import { testApp } from './test-app-setup';
 import { PrismaClient } from '@prisma/client';
 import { getPrismaClient } from '../../prisma-client';
 import { requireAuth } from '../../auth/middleware';
 
-// Create a simple Express app for testing
-const app = express();
-app.use(express.json());
+// Use testApp which already has all necessary endpoints and middleware
+const app = testApp;
 
 // Mock authentication middleware for testing
 const mockRequireAuth = (req: any, res: any, next: any) => {
