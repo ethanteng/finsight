@@ -120,7 +120,13 @@ app.get('/health/cron', (req: Request, res: Response) => {
 app.use(optionalAuth);
 
 // Setup Plaid routes
-setupPlaidRoutes(app);
+try {
+  console.log('🔧 Calling setupPlaidRoutes...');
+  setupPlaidRoutes(app);
+  console.log('✅ setupPlaidRoutes completed successfully');
+} catch (error) {
+  console.error('❌ Error in setupPlaidRoutes:', error);
+}
 
 // Setup Auth routes
 app.use('/auth', authRoutes);

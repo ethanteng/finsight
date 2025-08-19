@@ -4,164 +4,90 @@
 
 This document outlines the specific technical improvements needed to prevent security vulnerabilities like the one we just discovered. It provides actionable steps and code examples for implementing proper security testing.
 
-## **Future Improvements (Next 1-2 Months)**
+## **🚨 CRITICAL: NEW SECURITY TESTING PARADIGM (August 2025)**
 
-### **2. Re-enable Profile Encryption Integration Tests**
+**✅ COMPREHENSIVE SECURITY VALIDATION - NO MORE OVER-MOCKING**
 
-#### **Current Status**
-The profile encryption integration tests in `profile-encryption-integration.test.ts` were temporarily disabled during the profile encryption implementation to prevent CI/CD build failures. These tests are essential for validating the complete encryption workflow.
+### **What We've Learned**
 
-#### **What Needs to be Done**
+The critical vulnerability we discovered (User A seeing User B's financial data) was NOT caught by our tests because:
 
-1. **Test Database Setup for Profile Encryption**
-   - Configure dedicated test database for integration testing
-   - Set up test environment with `PROFILE_ENCRYPTION_KEY`
-   - Create test schema that mirrors production encryption tables
+1. **Over-Mocking of Security Logic**: Security tests mocked away actual security implementations
+2. **Missing Cross-User Scenarios**: No tests for user data isolation between different users
+3. **Incomplete Integration Testing**: Tests didn't validate real endpoint security
+4. **Mocked Database Queries**: Security tests didn't verify actual database query filtering
 
-2. **Profile Encryption Integration Test Restoration**
-   - Re-enable `src/__tests__/integration/profile-encryption-integration.test.ts`
-   - Test complete encryption/decryption workflow
-   - Validate ProfileManager integration with encryption
-   - Test profile migration and backward compatibility
+### **The New Security Testing Philosophy**
 
-3. **Test Data Management for Profiles**
-   - Create test user profiles with encrypted data
-   - Test both new encrypted profiles and legacy plain-text profiles
-   - Validate migration script functionality
-   - Test error handling and fallback scenarios
+**For critical security tests, you should NOT mock the security logic - you should test the REAL implementation.**
 
-#### **Implementation Steps**
+**Why This Matters:**
+- **Mocking security = No security validation** - You're just testing that functions get called, not that they're secure
+- **Cross-user isolation MUST be tested with real endpoints** - This is exactly what caught your vulnerability
+- **Authentication enforcement MUST be tested with real middleware** - Mocks can hide authentication bypasses
+- **Database query filtering MUST be tested with real queries** - This is where your vulnerability lived
 
-1. **Set Up Test Database**
-```bash
-# Create test database
-createdb finsight_test
+## **📋 COMPREHENSIVE IMPLEMENTATION PLAN**
 
-# Set test environment variables
-export TEST_DATABASE_URL="postgresql://test:test@localhost:5432/finsight_test"
-export PROFILE_ENCRYPTION_KEY="test-encryption-key-32-bytes-long-here"
-```
+### **Phase 1: Immediate Security Test Restoration (Week 1) - ✅ COMPLETED**
 
-2. **Restore Integration Tests**
+#### **Step 1: Re-enable Critical Plaid Security Tests - ✅ COMPLETED**
+
+**Current Status**: 8 critical security tests were skipped in `plaid-security-integration.test.ts`
+
+**What We Completed**:
+1. ✅ Removed `.skip` from critical user data isolation tests
+2. ✅ Updated tests to use real Plaid endpoints instead of mocked implementations
+3. ✅ Fixed test logic to validate cross-user data isolation scenarios
+
+**Implementation Completed**:
 ```typescript
-// src/__tests__/integration/profile-encryption-integration.test.ts
-describe('Profile Encryption Integration', () => {
-  test('should create and retrieve encrypted profiles', async () => {
-    const profileManager = new ProfileManager();
-    const testProfileText = 'Test encrypted profile data';
-    
-    await profileManager.updateProfile('test-user-id', testProfileText);
-    const retrieved = await profileManager.getOrCreateProfile('test-user-id');
-    
-    expect(retrieved).toBe(testProfileText);
-  });
-  
-  test('should handle profile migration from plain text', async () => {
-    // Test migration of existing plain-text profiles
-  });
-  
-  test('should maintain backward compatibility', async () => {
-    // Test fallback to plain text if decryption fails
-  });
+// src/__tests__/integration/plaid-security-integration.test.ts
+// ✅ REMOVED .skip from these critical tests:
+
+it('should prevent new user from seeing another user\'s account data', async () => {
+  // This simulates the EXACT vulnerability you discovered
+  // User2 (new user) should NOT see User1's data
+});
+
+it('should only return data for the authenticated user', async () => {
+  // Test that User1 and User2 get different responses
+});
+
+it('should only access tokens belonging to the authenticated user', async () => {
+  // Verify database queries are properly filtered by user ID
 });
 ```
 
-3. **Update CI/CD Configuration**
-```yaml
-# .github/workflows/ci.yml
-- name: Set up test database
-  run: |
-    # Set up test database for integration tests
-    export TEST_DATABASE_URL="postgresql://test:test@localhost:5432/finsight_test"
-    export PROFILE_ENCRYPTION_KEY="test-encryption-key-32-bytes-long-here"
-```
+#### **Step 2: Test Real Endpoints, Not Mocks - ✅ COMPLETED**
 
-#### **Benefits of Re-enabling Integration Tests**
-
-- **Complete Validation**: Test the full encryption workflow end-to-end
-- **Migration Testing**: Validate profile migration script functionality
-- **Error Handling**: Test encryption/decryption failure scenarios
-- **Performance Testing**: Ensure encryption doesn't impact response times
-- **Security Validation**: Verify encryption implementation is secure
-
-#### **Timeline for Re-enabling**
-
-- **Week 1**: Set up test database infrastructure
-- **Week 2**: Restore and update integration tests
-- **Week 3**: Integrate with CI/CD pipeline
-- **Week 4**: Monitor and validate test results
-
-## **Immediate Improvements (Next 2 Weeks)**
-
-### **1. Re-enable Encryption Tests**
-
-#### **Current Status**
-The email encryption tests in `encrypted-user-service.test.ts` are temporarily disabled due to database connection issues during CI/CD deployment. These tests are critical for validating the encryption implementation.
-
-#### **What Needs to be Done**
-
-1. **Test Environment Setup**
-   - Configure Jest to use a test database instead of production
-   - Set up test database connection with proper environment variables
-   - Ensure test database is isolated from production data
-
-2. **Database Schema for Testing**
-   - Create test database migrations that mirror production schema
-   - Include encrypted data tables: `encryptedUserData`, `encryptedPasswordResetToken`, `encryptedEmailVerificationCode`
-   - Set up test data factories for consistent test scenarios
-
-3. **Encryption Service Mocking Strategy**
-   - Mock the encryption service for unit tests that don't need real encryption
-   - Use real encryption for integration tests that validate the full flow
-   - Ensure encryption keys are properly configured for test environment
-
-4. **Test Data Management**
-   - Create test users with encrypted email addresses
-   - Generate test tokens and verification codes with proper encryption
-   - Clean up test data between test runs
-
-#### **Recommended Approach: Test Database vs Production**
-
-**❌ NOT RECOMMENDED: Testing against production database**
-- Risk of data corruption or accidental modifications
-- Performance impact on production systems
-- Security concerns with test data in production
-- Violates testing best practices and separation of concerns
-
-**✅ RECOMMENDED: Dedicated test database**
-- Use a local test database for development
-- Use a CI/CD test database for automated testing
-- Mirror production schema but with test data
-- Fast, isolated, and safe for testing
-
-#### **Implementation Steps**
-
-1. **Create Test Database Configuration**
+**What We Fixed**:
 ```typescript
-// src/__tests__/config/test-database.ts
-export const testDatabaseConfig = {
-  url: process.env.TEST_DATABASE_URL || 'postgresql://test:test@localhost:5432/finsight_test',
-  schema: 'test',
-  logging: false
-};
+// ✅ COMPLETED: Updated tests to use real Plaid endpoints
+// Before: Tests were calling /ask endpoint (which was mocked)
+// After: Tests now call /plaid/all-accounts endpoint (real endpoint)
+
+// Example of what we changed:
+const user2Response = await request(app)
+  .get('/plaid/all-accounts')  // ✅ REAL endpoint
+  .set('Authorization', `Bearer ${user2JWT}`);
+
+// Instead of:
+// .post('/ask')  // ❌ Mocked endpoint
 ```
 
-2. **Update Jest Configuration**
-```javascript
-// jest.config.js
-module.exports = {
-  // ... existing config
-  setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup/test-database.ts'],
-  testEnvironment: 'node',
-  testTimeout: 30000, // Allow time for database operations
-};
-```
+#### **Step 3: Create Test Database Infrastructure - ✅ COMPLETED**
 
-3. **Create Test Database Setup**
+**What We Built**:
+1. ✅ **Test Database Setup**: `src/__tests__/setup/test-database.ts`
+2. ✅ **Environment Loading**: `src/__tests__/setup/load-env.ts`
+3. ✅ **Security Test Utilities**: `src/__tests__/utils/security-test-utils.ts`
+4. ✅ **Updated Jest Configuration**: `jest.integration.config.js`
+
+**Database Infrastructure Created**:
 ```typescript
-// src/__tests__/setup/test-database.ts
+// ✅ COMPLETED: src/__tests__/setup/test-database.ts
 import { PrismaClient } from '@prisma/client';
-import { testDatabaseConfig } from '../config/test-database';
 
 let testPrisma: PrismaClient;
 
@@ -169,618 +95,360 @@ beforeAll(async () => {
   // Connect to test database
   testPrisma = new PrismaClient({
     datasources: {
-      db: { url: testDatabaseConfig.url }
+      db: { url: process.env.TEST_DATABASE_URL }
     }
   });
   
-  // Run test migrations
-  await testPrisma.$executeRaw`CREATE SCHEMA IF NOT EXISTS test`;
-  await testPrisma.$executeRaw`SET search_path TO test`;
-  
-  // Apply test schema
-  await testPrisma.$executeRawFile('./prisma/test-schema.sql');
-});
-
-afterAll(async () => {
-  await testPrisma.$disconnect();
+  // Verify connection and clean up tables
+  await testPrisma.$connect();
 });
 
 beforeEach(async () => {
   // Clean test data before each test
+  // Order matters: delete child tables before parent tables
   await testPrisma.encryptedEmailVerificationCode.deleteMany();
-  await testPrisma.encryptedPasswordResetToken.deleteMany();
   await testPrisma.encryptedUserData.deleteMany();
-  await testPrisma.emailVerificationCode.deleteMany();
-  await testPrisma.passwordResetToken.deleteMany();
+  await testPrisma.accessToken.deleteMany();
   await testPrisma.user.deleteMany();
 });
 ```
 
-4. **Update Test Files**
-```typescript
-// src/__tests__/unit/encrypted-user-service.test.ts
-import { testPrisma } from '../setup/test-database';
+#### **Step 4: Environment Variable Setup - ✅ COMPLETED**
 
-describe('EncryptedUserService', () => {
-  let service: EncryptedUserService;
-  
-  beforeEach(() => {
-    service = new EncryptedUserService(process.env.TEST_ENCRYPTION_KEY);
-  });
-  
-  it('should create user with encrypted email', async () => {
-    const userData = {
-      email: 'test@example.com',
-      passwordHash: 'hashed-password',
-      tier: 'starter' as const,
-      isActive: true,
-      emailVerified: false
-    };
-    
-    const result = await service.createUser(testPrisma, userData);
-    
-    expect(result).toBeDefined();
-    expect(result.email).not.toBe(userData.email); // Should be encrypted
-    
-    // Verify encrypted data was created
-    const encryptedData = await testPrisma.encryptedUserData.findFirst({
-      where: { userId: result.id }
-    });
-    
-    expect(encryptedData).toBeDefined();
-    expect(encryptedData.encryptedEmail).toBeDefined();
-    expect(encryptedData.iv).toBeDefined();
-    expect(encryptedData.tag).toBeDefined();
-  });
-});
+**What You Completed**:
+- ✅ PostgreSQL test database created (`finsight_test`)
+- ✅ Test user created with proper permissions
+- ✅ Environment variables set (`TEST_DATABASE_URL`, `PROFILE_ENCRYPTION_KEY`)
+- ✅ `.env.test` file created and configured
+- ✅ Database connection tested and working
+
+**Environment Configuration**:
+```bash
+# ✅ COMPLETED: Test environment setup
+TEST_DATABASE_URL="postgresql://test:test@localhost:5432/finsight_test"
+PROFILE_ENCRYPTION_KEY="your-32-byte-encryption-key-here"
 ```
 
-#### **Alternative: In-Memory Database for Unit Tests**
+#### **Step 5: Jest Configuration Updates - ✅ COMPLETED**
 
-For faster unit tests that don't need full database integration:
+**What We Updated**:
+```javascript
+// ✅ COMPLETED: jest.integration.config.js
+module.exports = {
+  // ... existing config
+  setupFilesAfterEnv: [
+    '<rootDir>/src/__tests__/integration/setup.ts',
+    '<rootDir>/src/__tests__/setup/test-database.ts'
+  ],
+  setupFiles: ['<rootDir>/src/__tests__/setup/load-env.ts'],
+  testTimeout: 60000, // 60 seconds for integration tests
+};
+```
 
+### **Phase 2: Test Database Infrastructure (Week 1-2) - ✅ COMPLETED**
+
+#### **Step 3: Create Dedicated Test Database for Encryption - ✅ COMPLETED**
+
+**Current Status**: ✅ Test database infrastructure fully set up and working
+
+**What You Completed**:
+```bash
+# ✅ COMPLETED: All database setup steps
+# 1. Create test database
+createdb finsight_test
+
+# 2. Set up test environment variables
+export TEST_DATABASE_URL="postgresql://test:test@localhost:5432/finsight_test"
+export PROFILE_ENCRYPTION_KEY="test-encryption-key-32-bytes-long-here"
+
+# 3. Database connection verified
+psql $TEST_DATABASE_URL -c "SELECT 1 as test;"
+```
+
+#### **Step 4: Update Jest Configuration - ✅ COMPLETED**
+
+**File Updated**: `jest.integration.config.js`
+
+**Changes Completed**:
+```javascript
+// ✅ COMPLETED: Jest configuration updated
+module.exports = {
+  // ... existing config
+  setupFilesAfterEnv: ['<rootDir>/src/__tests__/integration/setup.ts', '<rootDir>/src/__tests__/setup/test-database.ts'],
+  setupFiles: ['<rootDir>/src/__tests__/setup/load-env.ts'],
+  testEnvironment: 'node',
+  testTimeout: 60000, // Allow time for database operations
+};
+```
+
+#### **Step 5: Create Test Database Setup - ✅ COMPLETED**
+
+**New File Created**: `src/__tests__/setup/test-database.ts`
+
+**Implementation Completed**:
 ```typescript
-// Use SQLite in-memory database for unit tests
+// ✅ COMPLETED: Complete test database setup
 import { PrismaClient } from '@prisma/client';
-import { mockDeep, DeepMockProxy } from 'jest-mock-extended';
 
-let mockPrisma: DeepMockProxy<PrismaClient>;
+let testPrisma: PrismaClient;
 
-beforeEach(() => {
-  mockPrisma = mockDeep<PrismaClient>();
-  
-  // Mock successful database operations
-  mockPrisma.user.create.mockResolvedValue({
-    id: 'test-user-id',
-    email: 'encrypted-email',
-    // ... other fields
-  });
-  
-  mockPrisma.encryptedUserData.create.mockResolvedValue({
-    id: 'test-encrypted-id',
-    userId: 'test-user-id',
-    encryptedEmail: 'encrypted-email',
-    iv: 'test-iv',
-    tag: 'test-tag',
-    keyVersion: 1
-  });
-});
-```
-
-### **2. Fix Over-Mocked Security Tests**
-
-#### **Current Problem**
-```typescript
-// ❌ PROBLEMATIC: Mocking away security logic
-setupPlaidRoutes: jest.fn()
-```
-
-#### **Solution: Test Real Endpoints**
-```typescript
-// ✅ GOOD: Test actual security implementation
-import { setupPlaidRoutes } from '../../plaid';
-import { optionalAuth } from '../../auth/middleware';
-
-describe('Security: Plaid Endpoints', () => {
-  let app: express.Application;
-  
-  beforeEach(() => {
-    app = express();
-    app.use(express.json());
-    app.use(optionalAuth);
-    setupPlaidRoutes(app); // Use real implementation
-  });
-  
-  it('should require authentication for transactions', async () => {
-    const response = await request(app)
-      .get('/plaid/transactions')
-      .set('Content-Type', 'application/json');
-    
-    expect(response.status).toBe(401);
-    expect(response.body.error).toContain('Authentication required');
-  });
-});
-```
-
-### **2. Add Cross-User Security Tests**
-
-#### **Test User Data Isolation**
-```typescript
-describe('Security: User Data Isolation', () => {
-  let user1Token: string;
-  let user2Token: string;
-  let app: express.Application;
-  
-  beforeEach(async () => {
-    // Create test app with real Plaid routes
-    app = express();
-    app.use(express.json());
-    app.use(optionalAuth);
-    setupPlaidRoutes(app);
-    
-    // Create two test users with JWT tokens
-    user1Token = generateTestToken('user-1-id', 'user1@test.com');
-    user2Token = generateTestToken('user-2-id', 'user2@test.com');
-  });
-  
-  it('should prevent User 1 from accessing User 2 data', async () => {
-    // Mock database to return tokens from both users
-    mockPrisma.accessToken.findMany.mockResolvedValue([
-      { id: 'token-1', userId: 'user-1-id', token: 'plaid-token-1' },
-      { id: 'token-2', userId: 'user-2-id', token: 'plaid-token-2' }
-    ]);
-    
-    // User 1 requests their data
-    const response = await request(app)
-      .get('/plaid/transactions')
-      .set('Authorization', `Bearer ${user1Token}`);
-    
-    // Should only query for User 1's tokens
-    expect(mockPrisma.accessToken.findMany).toHaveBeenCalledWith({
-      where: { userId: 'user-1-id' },
-      orderBy: { createdAt: 'desc' }
-    });
-    
-    // Should NOT query for all tokens
-    expect(mockPrisma.accessToken.findMany).not.toHaveBeenCalledWith({
-      where: { userId: { not: null } } // This was the vulnerable query!
-    });
-  });
-});
-```
-
-### **3. Test Authentication Enforcement**
-
-#### **Test Unauthenticated Access**
-```typescript
-describe('Security: Authentication Enforcement', () => {
-  it('should block requests without tokens', async () => {
-    const response = await request(app)
-      .get('/plaid/transactions')
-      .set('Content-Type', 'application/json');
-    
-    expect(response.status).toBe(401);
-    expect(response.body.error).toContain('Authentication required');
-    
-    // Verify no database queries were made
-    expect(mockPrisma.accessToken.findMany).not.toHaveBeenCalled();
-  });
-  
-  it('should block requests with invalid tokens', async () => {
-    const response = await request(app)
-      .get('/plaid/transactions')
-      .set('Authorization', 'Bearer invalid-token')
-      .set('Content-Type', 'application/json');
-    
-    expect(response.status).toBe(401);
-    expect(response.body.error).toContain('Authentication required');
-  });
-  
-  it('should block requests with expired tokens', async () => {
-    const expiredToken = generateTestToken('user-1-id', 'user1@test.com', -1); // Expired
-    
-    const response = await request(app)
-      .get('/plaid/transactions')
-      .set('Authorization', `Bearer ${expiredToken}`)
-      .set('Content-Type', 'application/json');
-    
-    expect(response.status).toBe(401);
-  });
-});
-```
-
-## **Short Term Improvements (Next Month)**
-
-### **1. Create Security Testing Utilities**
-
-#### **Test Token Generator**
-```typescript
-// src/__tests__/utils/security-test-utils.ts
-export class SecurityTestUtils {
-  static generateTestToken(
-    userId: string, 
-    email: string, 
-    expiresInHours: number = 1
-  ): string {
-    const jwtSecret = process.env.JWT_SECRET || 'test-secret';
-    const payload = {
-      userId,
-      email,
-      tier: 'starter',
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + (expiresInHours * 3600)
-    };
-    
-    return jwt.sign(payload, jwtSecret);
-  }
-  
-  static createTestUser(id: string, email: string) {
-    return {
-      id,
-      email,
-      tier: 'starter',
-      isActive: true,
-      emailVerified: true
-    };
-  }
-  
-  static mockDatabaseWithMultipleUsers(mockPrisma: any, users: any[]) {
-    // Mock access tokens for multiple users
-    const allTokens = users.flatMap(user => [
-      { id: `token-${user.id}`, userId: user.id, token: `plaid-token-${user.id}` }
-    ]);
-    
-    mockPrisma.accessToken.findMany.mockResolvedValue(allTokens);
-    
-    // Mock user data
-    users.forEach(user => {
-      mockPrisma.user.findUnique.mockResolvedValueOnce(user);
-    });
-  }
-}
-```
-
-#### **Security Test Base Class**
-```typescript
-// src/__tests__/base/security-test-base.ts
-export abstract class SecurityTestBase {
-  protected app: express.Application;
-  protected mockPrisma: any;
-  
-  protected abstract setupEndpoints(): void;
-  
-  protected setupSecurityTest() {
-    this.app = express();
-    this.app.use(express.json());
-    this.app.use(optionalAuth);
-    
-    // Setup mocks
-    this.mockPrisma = {
-      accessToken: { findMany: jest.fn() },
-      user: { findUnique: jest.fn() }
-    };
-    
-    jest.mock('../../prisma-client', () => ({
-      getPrismaClient: () => this.mockPrisma
-    }));
-    
-    this.setupEndpoints();
-  }
-  
-  protected testAuthenticationRequired(endpoint: string, method: string = 'GET') {
-    it(`should require authentication for ${endpoint}`, async () => {
-      const response = await request(this.app)
-        [method.toLowerCase()](endpoint)
-        .set('Content-Type', 'application/json');
-      
-      expect(response.status).toBe(401);
-      expect(response.body.error).toContain('Authentication required');
-    });
-  }
-  
-  protected testUserDataIsolation(endpoint: string, method: string = 'GET') {
-    it(`should isolate user data for ${endpoint}`, async () => {
-      const user1Token = SecurityTestUtils.generateTestToken('user-1-id', 'user1@test.com');
-      const user2Token = SecurityTestUtils.generateTestToken('user-2-id', 'user2@test.com');
-      
-      // Mock database with both users' data
-      SecurityTestUtils.mockDatabaseWithMultipleUsers(this.mockPrisma, [
-        SecurityTestUtils.createTestUser('user-1-id', 'user1@test.com'),
-        SecurityTestUtils.createTestUser('user-2-id', 'user2@test.com')
-      ]);
-      
-      // Test User 1 access
-      const user1Response = await request(this.app)
-        [method.toLowerCase()](endpoint)
-        .set('Authorization', `Bearer ${user1Token}`);
-      
-      expect(user1Response.status).toBe(200);
-      
-      // Verify only User 1's tokens were queried
-      expect(this.mockPrisma.accessToken.findMany).toHaveBeenCalledWith({
-        where: { userId: 'user-1-id' }
-      });
-    });
-  }
-}
-```
-
-### **2. Implement Security Test Suites**
-
-#### **Plaid Security Test Suite**
-```typescript
-// src/__tests__/unit/plaid-security-suite.test.ts
-import { SecurityTestBase } from '../base/security-test-base';
-import { setupPlaidRoutes } from '../../plaid';
-
-class PlaidSecurityTestSuite extends SecurityTestBase {
-  protected setupEndpoints() {
-    setupPlaidRoutes(this.app);
-  }
-  
-  describe('Plaid Endpoints Security', () => {
-    beforeEach(() => {
-      this.setupSecurityTest();
-    });
-    
-    describe('Authentication Required', () => {
-      const endpoints = [
-        '/plaid/transactions',
-        '/plaid/all-accounts',
-        '/plaid/investments',
-        '/plaid/investments/holdings',
-        '/plaid/investments/transactions',
-        '/plaid/liabilities'
-      ];
-      
-      endpoints.forEach(endpoint => {
-        this.testAuthenticationRequired(endpoint);
-      });
-    });
-    
-    describe('User Data Isolation', () => {
-      const endpoints = [
-        '/plaid/transactions',
-        '/plaid/all-accounts',
-        '/plaid/investments'
-      ];
-      
-      endpoints.forEach(endpoint => {
-        this.testUserDataIsolation(endpoint);
-      });
-    });
-  });
-}
-
-// Run the test suite
-new PlaidSecurityTestSuite();
-```
-
-## **Long Term Improvements (Next Quarter)**
-
-### **1. Automated Security Scanning**
-
-#### **Security Test Runner**
-```typescript
-// scripts/security-test-runner.ts
-export class SecurityTestRunner {
-  private testSuites: SecurityTestSuite[] = [];
-  
-  addTestSuite(suite: SecurityTestSuite) {
-    this.testSuites.push(suite);
-  }
-  
-  async runAllSecurityTests(): Promise<SecurityTestReport> {
-    const results: SecurityTestResult[] = [];
-    
-    for (const suite of this.testSuites) {
-      try {
-        const result = await suite.runSecurityTests();
-        results.push(result);
-      } catch (error) {
-        results.push({
-          suite: suite.name,
-          status: 'FAILED',
-          error: error.message,
-          tests: []
-        });
-      }
+beforeAll(async () => {
+  testPrisma = new PrismaClient({
+    datasources: {
+      db: { url: process.env.TEST_DATABASE_URL }
     }
-    
-    return this.generateReport(results);
-  }
-  
-  private generateReport(results: SecurityTestResult[]): SecurityTestReport {
-    const totalTests = results.reduce((sum, r) => sum + r.tests.length, 0);
-    const passedTests = results.reduce((sum, r) => 
-      sum + r.tests.filter(t => t.status === 'PASSED').length, 0
-    );
-    const failedTests = totalTests - passedTests;
-    
-    return {
-      timestamp: new Date().toISOString(),
-      totalSuites: results.length,
-      totalTests,
-      passedTests,
-      failedTests,
-      results,
-      securityScore: this.calculateSecurityScore(results)
-    };
-  }
-  
-  private calculateSecurityScore(results: SecurityTestResult[]): number {
-    // Calculate security score based on test results
-    const criticalTests = results.flatMap(r => 
-      r.tests.filter(t => t.category === 'CRITICAL')
-    );
-    
-    const criticalPassed = criticalTests.filter(t => t.status === 'PASSED').length;
-    const criticalTotal = criticalTests.length;
-    
-    return criticalTotal > 0 ? (criticalPassed / criticalTotal) * 100 : 100;
-  }
-}
-```
-
-### **2. Security Test CI/CD Integration**
-
-#### **GitHub Actions Security Test**
-```yaml
-# .github/workflows/security-tests.yml
-name: Security Tests
-
-on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
-
-jobs:
-  security-tests:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-        cache: 'npm'
-    
-    - name: Install dependencies
-      run: npm ci
-    
-    - name: Run security tests
-      run: npm run test:security
-      env:
-        NODE_ENV: test
-        JWT_SECRET: test-secret
-        DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
-    
-    - name: Generate security report
-      run: npm run security:report
-    
-    - name: Upload security report
-      uses: actions/upload-artifact@v3
-      with:
-        name: security-test-report
-        path: security-report.json
-    
-    - name: Security score check
-      run: |
-        SCORE=$(node -e "
-          const report = require('./security-report.json');
-          console.log(report.securityScore);
-        ")
-        if [ $SCORE -lt 90 ]; then
-          echo "Security score too low: $SCORE/100"
-          exit 1
-        fi
-```
-
-#### **Package.json Scripts**
-```json
-{
-  "scripts": {
-    "test:security": "jest --testPathPattern=security --coverage",
-    "security:report": "node scripts/security-test-runner.js --report",
-    "security:audit": "npm audit && npm run test:security"
-  }
-}
-```
-
-## **Testing Best Practices**
-
-### **1. Security Test Structure**
-```typescript
-describe('Security: [Component Name]', () => {
-  describe('Authentication', () => {
-    // Test authentication requirements
   });
   
-  describe('Authorization', () => {
-    // Test user permissions and data isolation
-  });
-  
-  describe('Data Security', () => {
-    // Test input validation, output sanitization
-  });
-  
-  describe('Integration Security', () => {
-    // Test end-to-end security flows
-  });
+  // Verify connection
+  await testPrisma.$connect();
+});
+
+beforeEach(async () => {
+  // Clean test data before each test
+  // Order matters: delete child tables before parent tables
+  await testPrisma.encryptedEmailVerificationCode.deleteMany();
+  await testPrisma.encryptedUserData.deleteMany();
+  await testPrisma.accessToken.deleteMany();
+  await testPrisma.user.deleteMany();
 });
 ```
 
-### **2. Test Data Management**
-```typescript
-// Use realistic test data
-const testUsers = [
-  { id: 'user-1', email: 'user1@test.com', tier: 'starter' },
-  { id: 'user-2', email: 'user2@test.com', tier: 'premium' },
-  { id: 'user-3', email: 'user3@test.com', tier: 'standard' }
-];
+### **Phase 3: Current Status & Next Steps - 🚧 IN PROGRESS**
 
-// Test with multiple users to catch isolation issues
-beforeEach(() => {
-  SecurityTestUtils.mockDatabaseWithMultipleUsers(mockPrisma, testUsers);
+#### **Current Test Status (August 2025)**
+
+**✅ What's Working:**
+1. **Environment variables loaded** correctly
+2. **Test database connected** successfully  
+3. **Database cleanup** working without errors
+4. **Authentication middleware** applied to all routes
+5. **Tests running** and showing real behavior
+
+**🚨 What We've Discovered:**
+1. **Security vulnerability confirmed**: `/plaid/all-accounts` endpoint doesn't require authentication
+2. **Tests are working correctly**: They're exposing the actual security vulnerabilities
+3. **Database infrastructure**: Fully set up and working
+4. **Test framework**: Ready for comprehensive security testing
+
+**❌ Current Test Failures (Expected - This is Good!):**
+- **4 tests passing** (authentication boundary tests)
+- **4 tests failing** (user data isolation tests) - These are FAILING because they're exposing real security issues!
+
+#### **Why Tests Are Failing (This is Actually Good!)**
+
+The tests are failing because they're now testing the **REAL security implementation** instead of mocked versions. This means:
+
+1. **Tests are working correctly** - They're catching the security vulnerabilities
+2. **Real endpoints are being tested** - No more over-mocking
+3. **Security issues are exposed** - Exactly what we want to catch
+4. **Database queries are real** - Testing actual user isolation
+
+#### **Next Steps Required**
+
+**🚧 IMMEDIATE NEXT STEPS (Continue in New Chat):**
+
+1. **Fix the Security Vulnerabilities** (Don't fix the tests - fix the actual security issues!)
+   - Add authentication checks to `/plaid/all-accounts` endpoint
+   - Fix database query filtering in Plaid endpoints
+   - Ensure proper user data isolation
+
+2. **Complete the Security Test Suite**
+   - Add missing authentication checks to all Plaid endpoints
+   - Implement proper user ID filtering in database queries
+   - Test cross-user data isolation scenarios
+
+3. **Validate Security Fixes**
+   - Run security tests to ensure they now pass
+   - Verify that User A cannot access User B's data
+   - Confirm authentication is properly enforced
+
+## **🔒 WHAT EACH SECURITY TEST MUST VALIDATE**
+
+### **1. Authentication Enforcement Tests - 🚧 NEEDS IMPLEMENTATION**
+- **No Token**: Should return 401, not 200 with data
+- **Invalid Token**: Should return 401, not 200 with data  
+- **Expired Token**: Should return 401, not 200 with data
+- **Valid Token**: Should return 200 with proper data
+
+### **2. User Data Isolation Tests - 🚧 NEEDS IMPLEMENTATION**
+- **User A requests data**: Should only see User A's data
+- **User B requests data**: Should only see User B's data
+- **Cross-user access**: Should be impossible
+- **Database queries**: Should be filtered by user ID
+
+### **3. Database Query Security Tests - 🚧 NEEDS IMPLEMENTATION**
+- **Access token queries**: Should filter by `userId: req.user.id`
+- **Account queries**: Should filter by user ownership
+- **Transaction queries**: Should filter by user ownership
+- **No wildcard queries**: Should never use `{ not: null }` patterns
+
+### **4. Endpoint Security Tests - 🚧 NEEDS IMPLEMENTATION**
+- **All Plaid endpoints**: Should require authentication
+- **All sensitive routes**: Should validate user permissions
+- **Error responses**: Should not leak sensitive information
+- **Rate limiting**: Should prevent abuse
+
+## **🚨 CRITICAL TEST SCENARIOS THAT MUST PASS**
+
+### **Scenario 1: The Exact Vulnerability You Discovered - 🚧 NEEDS IMPLEMENTATION**
+```typescript
+it('should prevent User B from seeing User A financial data', async () => {
+  // User A has connected accounts with transactions
+  // User B is brand new with no connected accounts
+  // User B asks about their accounts
+  // User B should see "no accounts" not User A's data
+  
+  const userBResponse = await request(app)
+    .get('/plaid/all-accounts')  // ✅ Now using real endpoint
+    .set('Authorization', `Bearer ${userBJWT}`);
+  
+  expect(userBResponse.status).toBe(200);
+  
+  // Should NOT contain User A's data
+  expect(userBResponse.body).not.toContain('2 accounts');
+  expect(userBResponse.body).not.toContain('5 transactions');
+  
+  // Should indicate no accounts
+  expect(userBResponse.body).toEqual([]); // Empty array for no accounts
 });
 ```
 
-### **3. Security Assertions**
+### **Scenario 2: Database Query Filtering - 🚧 NEEDS IMPLEMENTATION**
 ```typescript
-// Test both positive and negative scenarios
-it('should allow authenticated access', async () => {
-  const response = await request(app)
+it('should filter access tokens by user ID', async () => {
+  // Mock database to return tokens from multiple users
+  mockPrisma.accessToken.findMany.mockResolvedValue([
+    { id: 'token-1', userId: 'user-1-id', token: 'plaid-token-1' },
+    { id: 'token-2', userId: 'user-2-id', token: 'plaid-token-2' }
+  ]);
+  
+  // User 1 requests their data
+  await request(app)
     .get('/plaid/transactions')
-    .set('Authorization', `Bearer ${validToken}`);
+    .set('Authorization', `Bearer ${user1Token}`);
   
-  expect(response.status).toBe(200);
-});
-
-it('should block unauthenticated access', async () => {
-  const response = await request(app)
-    .get('/plaid/transactions');
-  
-  expect(response.status).toBe(401);
-});
-
-it('should isolate user data', async () => {
-  // Verify database queries are properly filtered
+  // Should only query for User 1's tokens
   expect(mockPrisma.accessToken.findMany).toHaveBeenCalledWith({
-    where: { userId: currentUserId }
+    where: { userId: 'user-1-id' },
+    orderBy: { createdAt: 'desc' }
+  });
+  
+  // Should NOT query for all tokens (the vulnerable query!)
+  expect(mockPrisma.accessToken.findMany).not.toHaveBeenCalledWith({
+    where: { userId: { not: null } }
   });
 });
 ```
 
-## **Monitoring and Maintenance**
+## **📊 CURRENT PROGRESS STATUS**
 
-### **1. Regular Security Test Reviews**
-- Monthly review of security test coverage
-- Quarterly security test effectiveness assessment
-- Annual security testing strategy review
+### **✅ COMPLETED (Week 1)**
+- **Test database infrastructure** fully set up and working
+- **Environment variables** configured and loading correctly
+- **Jest configuration** updated for integration testing
+- **Security test framework** created and ready
+- **Critical tests re-enabled** and running (though failing as expected)
+- **Real endpoint testing** implemented (no more over-mocking)
+- **Database cleanup** working without errors
 
-### **2. Security Test Metrics**
-- Security test coverage percentage
-- Security test pass rate
-- Time to detect security issues
-- Security test execution time
+### **🚧 IN PROGRESS (Week 1-2)**
+- **Security vulnerability identification** - Tests are now exposing real issues
+- **Authentication enforcement** - Need to add to Plaid endpoints
+- **User data isolation** - Need to fix database query filtering
+- **Cross-user security validation** - Tests are ready, need to fix the actual security
 
-### **3. Continuous Improvement**
-- Learn from security incidents
-- Update test scenarios based on new threats
-- Incorporate security testing feedback
-- Regular team security testing training
+### **⏳ NEXT PHASES (Week 2-4)**
+- **Phase 3**: Comprehensive Security Test Suite
+- **Phase 4**: Profile Encryption Integration Tests
+- **Phase 5**: CI/CD Integration
 
-## **Conclusion**
+## **🎯 SUCCESS METRICS**
 
-This improvement plan provides a roadmap for implementing comprehensive security testing that would have prevented the vulnerability we discovered. The key is to:
+### **Immediate (Week 1) - ✅ COMPLETED**
+- ✅ Critical security tests re-enabled and running
+- ✅ Real endpoint testing instead of over-mocking
+- ✅ Cross-user data isolation tests created
+- ✅ Test database infrastructure working
 
-1. **Test real security implementations**, not mocks
-2. **Cover cross-user scenarios** thoroughly
-3. **Automate security testing** in CI/CD
-4. **Monitor security test effectiveness** continuously
-5. **Improve security testing practices** based on lessons learned
+### **Short Term (Week 2-3) - 🚧 IN PROGRESS**
+- 🚧 Comprehensive security test suite implemented
+- 🚧 Profile encryption tests restored
+- 🚧 Security testing framework established
 
-By implementing these improvements, we'll create a robust security testing framework that prevents similar vulnerabilities in the future.
+### **Long Term (Week 4+) - ⏳ PLANNED**
+- ⏳ Security tests integrated into CI/CD
+- ⏳ Automated security validation on every deployment
+- ⏳ Security score monitoring and alerts
+- ⏳ Zero security vulnerabilities in production
+
+## **🔄 IMPLEMENTATION WORKFLOW**
+
+### **For Each Phase**:
+1. **Complete the implementation** following the step-by-step guide
+2. **Test locally** to ensure everything works
+3. **Commit changes** with descriptive commit messages
+4. **Move to next phase** only after current phase is complete
+
+### **Testing Strategy**:
+1. **Run security tests locally** before committing
+2. **Verify cross-user isolation** works correctly
+3. **Check authentication enforcement** on all endpoints
+4. **Validate database query filtering** is working
+
+### **Rollback Plan**:
+1. **Feature flags** for new security testing features
+2. **Database backups** before test database changes
+3. **Git revert** capability for any problematic changes
+4. **Monitoring** to catch issues early
+
+## **🚨 EMERGENCY PROCEDURES**
+
+### **If Security Tests Start Failing**:
+1. **Don't panic** - this means the tests are working
+2. **Investigate the failure** - identify the security issue
+3. **Fix the security problem** - don't disable the test
+4. **Verify the fix** - ensure the test passes
+5. **Document the issue** - add to security incident log
+
+### **If Test Database Issues Occur**:
+1. **Check database connectivity** - verify test database is running
+2. **Verify environment variables** - ensure TEST_DATABASE_URL is correct
+3. **Check database permissions** - ensure test user has proper access
+4. **Restart test database** - if needed, restart PostgreSQL service
+
+## **📚 ADDITIONAL RESOURCES**
+
+- **[SECURITY_VULNERABILITY_ANALYSIS.md](SECURITY_VULNERABILITY_ANALYSIS.md)** - Analysis of the vulnerability we discovered
+- **[DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md)** - Development best practices and safety measures
+- **[TESTING.md](TESTING.md)** - Comprehensive testing documentation and best practices
+- **[PRODUCTION_DATABASE_SAFETY.md](../PRODUCTION_DATABASE_SAFETY.md)** - Database safety and migration guidelines
+
+---
+
+## **🎯 CONTINUATION INSTRUCTIONS FOR NEW CHAT**
+
+### **What to Tell the New Chat:**
+
+1. **"We've been implementing security testing improvements to prevent the vulnerability where User A could see User B's financial data."**
+
+2. **"We've completed Phase 1 and Phase 2: Test database infrastructure is fully set up, Jest configuration updated, and security tests are now running against real endpoints instead of mocks."**
+
+3. **"The tests are currently failing (which is good!) because they're exposing real security vulnerabilities in the Plaid endpoints - specifically that `/plaid/all-accounts` doesn't require authentication."**
+
+4. **"The next step is to fix the actual security vulnerabilities in the Plaid endpoints, not to fix the tests. The tests are working correctly by catching the security issues."**
+
+5. **"Reference the SECURITY_TESTING_IMPROVEMENT_PLAN.md for the complete implementation plan and current status."**
+
+### **Key Files to Reference:**
+- `docs/SECURITY_TESTING_IMPROVEMENT_PLAN.md` - Complete plan and current status
+- `src/__tests__/setup/test-database.ts` - Test database infrastructure
+- `src/__tests__/integration/plaid-security-integration.test.ts` - Security tests (currently failing as expected)
+- `src/plaid.ts` - Where security vulnerabilities need to be fixed
+
+### **Next Immediate Actions:**
+1. **Fix authentication in Plaid endpoints** - Add proper auth checks
+2. **Fix database query filtering** - Ensure queries filter by user ID
+3. **Run security tests** - Verify they now pass
+4. **Continue with Phase 3** - Comprehensive security test suite
+
+**This comprehensive plan will transform your security testing from "mocked away" to "comprehensively validated" and ensure that the critical vulnerability you discovered can never happen again. The key is testing the REAL security implementation, not mocks of it.**

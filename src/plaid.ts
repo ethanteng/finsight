@@ -361,6 +361,9 @@ export {
 };
 
 export const setupPlaidRoutes = (app: any) => {
+  console.log('🔧 Setting up Plaid routes...');
+  console.log('🔧 App object:', typeof app);
+  console.log('🔧 App methods:', Object.keys(app));
   // Create link token with SEAMLESS approach - minimal products + additional consent
   app.post('/plaid/create_link_token', async (req: any, res: any) => {
     try {
@@ -406,6 +409,98 @@ export const setupPlaidRoutes = (app: any) => {
     } catch (error) {
       const errorInfo = handlePlaidError(error, 'creating link token');
       res.status(500).json(errorInfo);
+    }
+  });
+
+  // Get all accounts with enhanced data
+  app.get('/plaid/all-accounts', async (req: any, res: any) => {
+    try {
+      // Check for demo mode
+      const isDemo = req.headers['x-demo-mode'] === 'true';
+      
+      if (isDemo) {
+        // Return demo data for testing
+        const demoAccounts = [
+          {
+            id: "checking_1",
+            name: "Chase Checking",
+            type: "depository",
+            subtype: "checking",
+            mask: "1234",
+            balance: {
+              available: 12450.67,
+              current: 12450.67,
+              limit: null,
+              iso_currency_code: "USD",
+              unofficial_currency_code: null
+            }
+          }
+        ];
+        return res.json({ accounts: demoAccounts });
+      }
+
+      // 🔒 CRITICAL SECURITY: Require authentication for real user data
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Authentication required for accessing account data' });
+      }
+
+      // Real Plaid integration
+      const accessTokens = await getPrismaClient().accessToken.findMany({
+        where: { userId: req.user.id }
+      });
+
+      console.log(`🔍 Fetching accounts for user ${req.user.id} with ${accessTokens.length} access tokens`);
+
+      if (accessTokens.length === 0) {
+        // User has no linked accounts
+        return res.json({ accounts: [] });
+      }
+
+      const allAccounts: any[] = [];
+      const seenAccountIds = new Set<string>();
+
+      for (const tokenRecord of accessTokens) {
+        try {
+          // Get accounts
+          const accountsResponse = await plaidClient.accountsGet({
+            access_token: tokenRecord.token,
+          });
+
+          // Get balances for each account
+          const balancesResponse = await plaidClient.accountsBalanceGet({
+            access_token: tokenRecord.token,
+          });
+
+          // Process accounts
+          const accountsWithBalances = accountsResponse.data.accounts
+            .filter((account: any) => {
+              if (!account.account_id || !account.name) return false;
+              if (seenAccountIds.has(account.account_id)) return false;
+              seenAccountIds.add(account.account_id);
+              return true;
+            })
+            .map((account: any) => {
+              const balance = balancesResponse.data.accounts.find((b: any) => b.account_id === account.account_id);
+              return {
+                id: account.account_id,
+                name: account.name,
+                type: account.type,
+                subtype: account.subtype,
+                mask: account.mask,
+                balance: balance?.balances || account.balances
+              };
+            });
+
+          allAccounts.push(...accountsWithBalances);
+        } catch (error: any) {
+          console.error(`❌ Error fetching accounts for token ${tokenRecord.id}:`, error);
+        }
+      }
+
+      res.json({ accounts: allAccounts });
+    } catch (error) {
+      const errorResponse = handlePlaidError(error, 'get all accounts');
+      res.status(500).json(errorResponse);
     }
   });
 
@@ -557,17 +652,7 @@ export const setupPlaidRoutes = (app: any) => {
       });
 
       // If we get here, the token is still valid
-      // Update the last refreshed timestamp
-      await getPrismaClient().accessToken.update({
-        where: { token: access_token },
-        data: { lastRefreshed: new Date() }
-      });
-
-      res.json({ 
-        success: true, 
-        message: 'Token is still valid',
-        access_token: access_token
-      });
+      res.json({ valid: true, message: 'Token is still valid' });
     } catch (error) {
       // If the token is invalid, suggest reconnecting
       const errorInfo = handlePlaidError(error, 'refreshing token');

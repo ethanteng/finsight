@@ -36,6 +36,7 @@
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:sandbox": "concurrently \"npm run dev:backend:sandbox\" \"npm run dev:frontend\"",
     "dev:production": "concurrently \"npm run dev:backend:production\" \"npm run dev:frontend\"",
+    "dev:reset": "./scripts/dev-reset.sh",
     "test:token-scope": "node scripts/test-token-scope.js",
     "test:production-investments": "node scripts/test-production-investments.js",
     "check:access-tokens": "node scripts/check-access-tokens.js",

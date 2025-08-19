@@ -89,3 +89,6 @@ temp/
 
 # Migration backups
 migration-backups/
+
+#Test DB
+test-database-setup.log
