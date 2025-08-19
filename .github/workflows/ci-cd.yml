@@ -121,17 +121,32 @@ jobs:
           npx prisma migrate deploy
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          NODE_ENV: test
 
       - name: Run backend unit tests with coverage
         run: npm run test:coverage:unit
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
           PLAID_CLIENT_ID: test_client_id
           PLAID_SECRET: test_secret
+          PLAID_ENV: sandbox
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
+          FINNHUB_API_KEY: test_finnhub_key
+          POLYGON_API_KEY: test_polygon_key
+          PROFILE_ENCRYPTION_KEY: "QffTMJcTkYC8Nyk/T9jH83958GLtdei8YzgDQ0PDCaw="
+          JWT_SECRET: test-jwt-secret-for-security-tests
+          NODE_ENV: test
+          ENABLE_USER_AUTH: "true"
+          ENABLE_TIER_ENFORCEMENT: "true"
+          ADMIN_EMAILS: "admin@example.com,test@example.com"
+          RESEND_API_KEY: test-resend-key
+          STRIPE_PRICE_STARTER: price_starter_test
+          STRIPE_PRICE_STANDARD: price_standard_test
+          STRIPE_PRICE_PREMIUM: price_premium_test
 
       - name: Upload unit test coverage to Codecov
         uses: codecov/codecov-action@v3
@@ -231,17 +246,32 @@ jobs:
           npx prisma migrate deploy
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          NODE_ENV: test
 
       - name: Run integration tests with coverage
         run: npm run test:coverage:integration
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
           PLAID_CLIENT_ID: test_client_id
           PLAID_SECRET: test_secret
+          PLAID_ENV: sandbox
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
           SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
+          FINNHUB_API_KEY: test_finnhub_key
+          POLYGON_API_KEY: test_polygon_key
+          PROFILE_ENCRYPTION_KEY: "QffTMJcTkYC8Nyk/T9jH83958GLtdei8YzgDQ0PDCaw="
+          JWT_SECRET: test-jwt-secret-for-security-tests
+          NODE_ENV: test
+          ENABLE_USER_AUTH: "true"
+          ENABLE_TIER_ENFORCEMENT: "true"
+          ADMIN_EMAILS: "admin@example.com,test@example.com"
+          RESEND_API_KEY: test-resend-key
+          STRIPE_PRICE_STARTER: price_starter_test
+          STRIPE_PRICE_STANDARD: price_standard_test
+          STRIPE_PRICE_PREMIUM: price_premium_test
 
       - name: Upload integration test coverage to Codecov
         uses: codecov/codecov-action@v3
