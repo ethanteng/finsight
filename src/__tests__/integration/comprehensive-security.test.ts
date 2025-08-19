@@ -131,14 +131,14 @@ describe('Comprehensive Security Test Suite', () => {
     
     user1 = await testPrisma.user.create({
       data: createTestUser({ 
-        email: 'user1@test.com',
+        email: `user1_${Date.now()}@test.com`, // Make email unique
         passwordHash: passwordHash
       })
     });
     
     user2 = await testPrisma.user.create({
       data: createTestUser({ 
-        email: 'user2@test.com',
+        email: `user2_${Date.now()}@test.com`, // Make email unique
         passwordHash: passwordHash
       })
     });
@@ -175,16 +175,16 @@ describe('Comprehensive Security Test Suite', () => {
     await testPrisma.accessToken.create({
       data: createTestAccessToken({ 
         userId: user1.id,
-        token: 'user1_plaid_token',
-        itemId: 'user1_item_id'
+        token: `user1_plaid_token_${Date.now()}`, // Make token unique
+        itemId: `user1_item_id_${Date.now()}` // Make itemId unique
       })
     });
 
     await testPrisma.accessToken.create({
       data: createTestAccessToken({ 
         userId: user2.id,
-        token: 'user2_plaid_token',
-        itemId: 'user2_item_id'
+        token: `user2_plaid_token_${Date.now()}`, // Make token unique
+        itemId: `user2_item_id_${Date.now()}` // Make itemId unique
       })
     });
   });

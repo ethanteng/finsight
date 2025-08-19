@@ -20,7 +20,7 @@ describe('Plaid Security Integration Tests', () => {
   });
 
   beforeEach(async () => {
-    // Clean up before each test
+    // Clean up before each test - ORDER MATTERS for foreign key constraints
     await testPrisma.encryptedEmailVerificationCode.deleteMany();
     await testPrisma.encryptedUserData.deleteMany();
     await testPrisma.encrypted_profile_data.deleteMany();
@@ -29,20 +29,23 @@ describe('Plaid Security Integration Tests', () => {
     await testPrisma.accessToken.deleteMany();
     await testPrisma.userProfile.deleteMany();
     await testPrisma.user.deleteMany();
+    
+    // Ensure cleanup is complete by waiting a bit
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     // Create test users in database with proper password hash
     const passwordHash = await hashPassword('password123');
     
     user1 = await testPrisma.user.create({
       data: createTestUser({ 
-        email: 'user1@test.com',
+        email: `user1_${Date.now()}@test.com`, // Make email unique
         passwordHash: passwordHash
       })
     });
     
     user2 = await testPrisma.user.create({
       data: createTestUser({ 
-        email: 'user2@test.com',
+        email: `user2_${Date.now()}@test.com`, // Make email unique
         passwordHash: passwordHash
       })
     });
