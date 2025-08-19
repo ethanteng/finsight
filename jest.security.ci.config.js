@@ -28,7 +28,6 @@ module.exports = {
   moduleNameMapper: {
     // Only mock non-security dependencies
     '^../../openai$': '<rootDir>/src/__tests__/integration/security-test-setup.ts',
-    '^../../market-news/synthesizer$': '<rootDir>/src/__tests__/setup/security-test-setup.ts',
     // DO NOT mock Plaid or database - we need real security implementation
     // DO NOT mock Prisma - we need real database queries to test security filtering
   },

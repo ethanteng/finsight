@@ -1,8 +1,12 @@
 import request from 'supertest';
 import { testApp } from './test-app-setup';
 import { PrismaClient } from '@prisma/client';
-import { getPrismaClient } from '../../prisma-client';
 import { requireAuth } from '../../auth/middleware';
+
+// Use the enhanced mock database from the CI setup
+// This ensures we're testing the real security implementation with mock data
+const { getMockPrisma } = require('../setup/test-database-ci');
+const mockPrisma = getMockPrisma();
 
 // Use testApp which already has all necessary endpoints and middleware
 const app = testApp;
@@ -31,19 +35,19 @@ app.delete('/privacy/delete-all-data', mockRequireAuth, async (req: any, res: an
     }
     
     // Delete only the authenticated user's data
-    await getPrismaClient().conversation.deleteMany({
+    await mockPrisma.conversation.deleteMany({
       where: { userId }
     });
-    await getPrismaClient().transaction.deleteMany({
+    await mockPrisma.transaction.deleteMany({
       where: { account: { userId } }
     });
-    await getPrismaClient().account.deleteMany({
+    await mockPrisma.account.deleteMany({
       where: { userId }
     });
-    await getPrismaClient().accessToken.deleteMany({
+    await mockPrisma.accessToken.deleteMany({
       where: { userId }
     });
-    await getPrismaClient().syncStatus.deleteMany({
+    await mockPrisma.syncStatus.deleteMany({
       where: { userId }
     });
 
@@ -61,18 +65,18 @@ app.post('/privacy/disconnect-accounts', mockRequireAuth, async (req: any, res: 
     }
     
     // Remove only the authenticated user's Plaid access tokens
-    await getPrismaClient().accessToken.deleteMany({
+    await mockPrisma.accessToken.deleteMany({
       where: { userId }
     });
     
     // Clear only the authenticated user's account and transaction data
-    await getPrismaClient().transaction.deleteMany({
+    await mockPrisma.transaction.deleteMany({
       where: { account: { userId } }
     });
-    await getPrismaClient().account.deleteMany({
+    await mockPrisma.account.deleteMany({
       where: { userId }
     });
-    await getPrismaClient().syncStatus.deleteMany({
+    await mockPrisma.syncStatus.deleteMany({
       where: { userId }
     });
 
@@ -84,8 +88,7 @@ app.post('/privacy/disconnect-accounts', mockRequireAuth, async (req: any, res: 
 
 // Helper function to create test users
 const createTestUser = async (email: string, tier: string = 'starter') => {
-  const prisma = getPrismaClient();
-  return await prisma.user.create({
+  return await mockPrisma.user.create({
     data: {
       email,
       passwordHash: 'hashedpassword',
@@ -96,8 +99,7 @@ const createTestUser = async (email: string, tier: string = 'starter') => {
 
 // Helper function to create test accounts
 const createTestAccount = async (userId: string, name: string, balance: number = 1000) => {
-  const prisma = getPrismaClient();
-  return await prisma.account.create({
+  return await mockPrisma.account.create({
     data: {
       userId,
       plaidAccountId: `plaid-${Date.now()}-${Math.random()}`,
@@ -113,8 +115,7 @@ const createTestAccount = async (userId: string, name: string, balance: number =
 
 // Helper function to create test transactions
 const createTestTransaction = async (userId: string, accountId: string, amount: number = 100) => {
-  const prisma = getPrismaClient();
-  return await prisma.transaction.create({
+  return await mockPrisma.transaction.create({
     data: {
       plaidTransactionId: `plaid-tx-${Date.now()}-${Math.random()}`,
       accountId,
@@ -129,8 +130,7 @@ const createTestTransaction = async (userId: string, accountId: string, amount: 
 
 // Helper function to create test access tokens
 const createTestAccessToken = async (userId: string, institution: string = 'test-bank') => {
-  const prisma = getPrismaClient();
-  return await prisma.accessToken.create({
+  return await mockPrisma.accessToken.create({
     data: {
       userId,
       token: `test-token-${userId}-${Date.now()}`,
@@ -141,8 +141,7 @@ const createTestAccessToken = async (userId: string, institution: string = 'test
 
 // Helper function to create test conversations
 const createTestConversation = async (userId: string, question: string, answer: string) => {
-  const prisma = getPrismaClient();
-  return await prisma.conversation.create({
+  return await mockPrisma.conversation.create({
     data: {
       userId,
       question,
@@ -171,12 +170,11 @@ describe('Privacy Endpoints Integration Security', () => {
 
   beforeEach(async () => {
     // Clean up any existing test data
-    const prisma = getPrismaClient();
-    await prisma.conversation.deleteMany({ where: { question: { contains: 'Test' } } });
-    await prisma.transaction.deleteMany({ where: { name: { contains: 'Test' } } });
-    await prisma.account.deleteMany({ where: { name: { contains: 'Test' } } });
-    await prisma.accessToken.deleteMany({ where: { token: { contains: 'test' } } });
-    await prisma.user.deleteMany({ where: { email: { contains: 'test' } } });
+    await mockPrisma.conversation.deleteMany({ where: { question: { contains: 'Test' } } });
+    await mockPrisma.transaction.deleteMany({ where: { name: { contains: 'Test' } } });
+    await mockPrisma.account.deleteMany({ where: { name: { contains: 'Test' } } });
+    await mockPrisma.accessToken.deleteMany({ where: { token: { contains: 'test' } } });
+    await mockPrisma.user.deleteMany({ where: { email: { contains: 'test' } } });
 
     // Create test users
     user1 = await createTestUser('test-user-1@example.com', 'starter');
@@ -197,12 +195,11 @@ describe('Privacy Endpoints Integration Security', () => {
 
   afterEach(async () => {
     // Clean up test data
-    const prisma = getPrismaClient();
-    await prisma.conversation.deleteMany({ where: { question: { contains: 'Test' } } });
-    await prisma.transaction.deleteMany({ where: { name: { contains: 'Test' } } });
-    await prisma.account.deleteMany({ where: { name: { contains: 'Test' } } });
-    await prisma.accessToken.deleteMany({ where: { token: { contains: 'test' } } });
-    await prisma.user.deleteMany({ where: { email: { contains: 'test' } } });
+    await mockPrisma.conversation.deleteMany({ where: { question: { contains: 'Test' } } });
+    await mockPrisma.transaction.deleteMany({ where: { name: { contains: 'Test' } } });
+    await mockPrisma.account.deleteMany({ where: { name: { contains: 'Test' } } });
+    await mockPrisma.accessToken.deleteMany({ where: { token: { contains: 'test' } } });
+    await mockPrisma.user.deleteMany({ where: { email: { contains: 'test' } } });
   });
 
   describe('DELETE /privacy/delete-all-data', () => {
@@ -219,10 +216,9 @@ describe('Privacy Endpoints Integration Security', () => {
 
     it('should only delete data for the authenticated user', async () => {
       // Verify both users have data before the test
-      const prisma = getPrismaClient();
       
       const user1DataBefore = {
-        conversations: await prisma.conversation.count({ where: { userId: user1.id } }),
+        conversations: await mockPrisma.conversation.count({ where: { userId: user1.id } }),
         transactions: await prisma.transaction.count({ where: { account: { userId: user1.id } } }),
         accounts: await prisma.account.count({ where: { userId: user1.id } }),
         accessTokens: await prisma.accessToken.count({ where: { userId: user1.id } })

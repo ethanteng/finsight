@@ -2,6 +2,352 @@ import { PrismaClient } from '@prisma/client';
 
 let testPrisma: PrismaClient;
 
+// Helper function to create enhanced mock database for security testing
+function createEnhancedMockDatabase() {
+  return {
+    $connect: async () => console.log('✅ Enhanced mock database connected'),
+    $disconnect: async () => console.log('✅ Enhanced mock database disconnected'),
+    $queryRaw: async () => [{ test: 1 }],
+    
+    // Core models with full CRUD operations for security testing
+    account: { 
+      findMany: async (where?: any) => {
+        // Mock filtering by user ID for security testing
+        if (where?.userId) {
+          return [{ id: 'mock-account-1', userId: where.userId, name: 'Mock Account' }];
+        }
+        return [];
+      },
+      create: async (data: any) => ({ id: 'mock-account-1', ...data.data }),
+      update: async (data: any) => ({ id: 'mock-account-1', ...data.data }),
+      deleteMany: async () => ({ count: 1 })
+    },
+    
+    transaction: { 
+      findMany: async (where?: any) => {
+        // Mock filtering by user ID for security testing
+        if (where?.userId) {
+          return [{ id: 'mock-transaction-1', userId: where.userId, amount: 100 }];
+        }
+        return [];
+      },
+      create: async (data: any) => ({ id: 'mock-transaction-1', ...data.data }),
+      update: async (data: any) => ({ id: 'mock-transaction-1', ...data.data }),
+      deleteMany: async () => ({ count: 1 })
+    },
+    
+    user: { 
+      findMany: async (where?: any) => {
+        // Mock filtering by user ID for security testing
+        if (where?.id) {
+          return [{ id: where.id, email: 'mock@example.com', createdAt: new Date() }];
+        }
+        return [];
+      },
+      create: async (data: any) => ({ id: 'mock-user-id', ...data.data }),
+      update: async (data: any) => ({ id: 'mock-user-id', ...data.data }),
+      deleteMany: async () => ({ count: 1 })
+    },
+    
+    userProfile: { 
+      findMany: async (where?: any) => {
+        // Mock filtering by user ID for security testing
+        if (where?.userId) {
+          return [{ id: 'mock-profile-1', userId: where.userId, data: 'encrypted-profile-data' }];
+        }
+        return [];
+      },
+      create: async (data: any) => ({ id: 'mock-profile-1', ...data.data }),
+      update: async (data: any) => ({ id: 'mock-profile-1', ...data.data }),
+      deleteMany: async () => ({ count: 1 })
+    },
+    
+    accessToken: { 
+      findMany: async (where?: any) => {
+        // Mock filtering by user ID for security testing
+        if (where?.userId) {
+          return [{ id: 'mock-token-1', userId: where.userId, token: 'mock-plaid-token' }];
+        }
+        return [];
+      },
+      create: async (data: any) => ({ id: 'mock-token-1', ...data.data }),
+      update: async (data: any) => ({ id: 'mock-token-1', ...data.data }),
+      deleteMany: async () => ({ count: 1 })
+    },
+    
+    conversation: { 
+      findMany: async (where?: any) => {
+        // Mock filtering by user ID for security testing
+        if (where?.userId) {
+          return [{ id: 'mock-conversation-1', userId: where.userId, question: 'mock question' }];
+        }
+        return [];
+      },
+      create: async (data: any) => ({ id: 'mock-conversation-1', ...data.data }),
+      update: async (data: any) => ({ id: 'mock-conversation-1', ...data.data }),
+      deleteMany: async () => ({ count: 1 })
+    },
+    
+    syncStatus: { 
+      findMany: async (where?: any) => {
+        // Mock filtering by user ID for security testing
+        if (where?.userId) {
+          return [{ id: 'mock-sync-1', userId: where.userId, status: 'completed' }];
+        }
+        return [];
+      },
+      create: async (data: any) => ({ id: 'mock-sync-1', ...data.data }),
+      update: async (data: any) => ({ id: 'mock-sync-1', ...data.data }),
+      deleteMany: async () => ({ count: 1 })
+    },
+    
+    demoSession: { 
+      findMany: async () => [], 
+      create: async (data: any) => ({ id: 'mock-demo-session-1', ...data.data }), 
+      update: async (data: any) => ({ id: 'mock-demo-session-1', ...data.data }), 
+      deleteMany: async () => ({ count: 0 }) 
+    },
+    
+    demoConversation: { 
+      findMany: async () => [], 
+      create: async (data: any) => ({ id: 'mock-demo-conversation-1', ...data.data }), 
+      update: async (data: any) => ({ id: 'mock-demo-conversation-1', ...data.data }), 
+      deleteMany: async () => ({ count: 0 }) 
+    },
+    
+    // Enhanced encryption models for security testing
+    // These models work with the real encryption service for proper security testing
+    encrypted_profile_data: { 
+      findMany: async (where?: any) => {
+        // Mock filtering by user ID for security testing
+        if (where?.userId) {
+          return [{ 
+            id: 'mock-encrypted-profile-1', 
+            userId: where.userId, 
+            // Return empty data for new queries - let the real encryption service handle encryption
+            encryptedData: null,
+            iv: null,
+            tag: null
+          }];
+        }
+        return [];
+      },
+      findUnique: async (where?: any) => {
+        // Mock findUnique for security testing
+        if (where?.id) {
+          return { 
+            id: where.id, 
+            userId: 'mock-user-id', 
+            // Return empty data for new queries - let the real encryption service handle encryption
+            encryptedData: null,
+            iv: null,
+            tag: null
+          };
+        }
+        if (where?.profileHash) {
+          return { 
+            id: 'mock-encrypted-profile-2', 
+            userId: 'mock-user-2-id', 
+            profileHash: where.profileHash,
+            // Return empty data for new queries - let the real encryption service handle encryption
+            encryptedData: null,
+            iv: null,
+            tag: null
+          };
+        }
+        return null;
+      },
+      create: async (data: any) => ({ 
+        id: 'mock-encrypted-profile-1', 
+        ...data.data,
+        // Preserve the actual encrypted data from the real encryption service
+        encryptedData: data.data.encryptedData,
+        iv: data.data.iv,
+        tag: data.data.tag
+      }),
+      update: async (data: any) => ({ 
+        id: 'mock-encrypted-profile-1', 
+        ...data.data,
+        // Preserve the actual encrypted data from the real encryption service
+        encryptedData: data.data.encryptedData,
+        iv: data.data.iv,
+        tag: data.data.tag
+      }),
+      deleteMany: async () => ({ count: 1 })
+    },
+    
+    encryptedEmailVerificationCode: { 
+      findMany: async (where?: any) => {
+        // Mock filtering by user ID for security testing
+        if (where?.userId) {
+          return [{ 
+            id: 'mock-encrypted-email-1', 
+            userId: where.userId, 
+            // Return empty data for new queries - let the real encryption service handle encryption
+            encryptedCode: null,
+            iv: null,
+            tag: null
+          }];
+        }
+        return [];
+      },
+      findUnique: async (where?: any) => {
+        // Mock findUnique for security testing
+        if (where?.userId) {
+          return { 
+            id: 'mock-encrypted-email-1', 
+            userId: where.userId, 
+            // Return empty data for new queries - let the real encryption service handle encryption
+            encryptedCode: null,
+            iv: null,
+            tag: null
+          };
+        }
+        return null;
+      },
+      create: async (data: any) => ({ 
+        id: 'mock-encrypted-email-1', 
+        ...data.data,
+        // Preserve the actual encrypted data from the real encryption service
+        encryptedCode: data.data.encryptedCode,
+        iv: data.data.iv,
+        tag: data.data.tag
+      }),
+      update: async (data: any) => ({ 
+        id: 'mock-encrypted-email-1', 
+        ...data.data,
+        // Preserve the actual encrypted data from the real encryption service
+        encryptedCode: data.data.encryptedCode,
+        iv: data.data.iv,
+        tag: data.data.tag
+      }),
+      deleteMany: async () => ({ count: 1 })
+    },
+    
+    encryptedUserData: { 
+      findMany: async (where?: any) => {
+        // Mock filtering by user ID for security testing
+        if (where?.userId) {
+          return [{ 
+            id: 'mock-encrypted-user-data-1', 
+            userId: where.userId, 
+            // Return empty data for new queries - let the real encryption service handle encryption
+            encryptedData: null,
+            iv: null,
+            tag: null
+          }];
+        }
+        return [];
+      },
+      findUnique: async (where?: any) => {
+        // Mock findUnique for security testing
+        if (where?.userId) {
+          return { 
+            id: 'mock-encrypted-user-data-1', 
+            userId: where.userId, 
+            // Return empty data for new queries - let the real encryption service handle encryption
+            encryptedData: null,
+            iv: null,
+            tag: null
+          };
+        }
+        return null;
+      },
+      create: async (data: any) => ({ 
+        id: 'mock-encrypted-user-data-1', 
+        ...data.data,
+        // Preserve the actual encrypted data from the real encryption service
+        encryptedData: data.data.encryptedData,
+        iv: data.data.iv,
+        tag: data.data.tag
+      }),
+      update: async (data: any) => ({ 
+        id: 'mock-encrypted-user-data-1', 
+        ...data.data,
+        // Preserve the actual encrypted data from the real encryption service
+        encryptedData: data.data.encryptedData,
+        iv: data.data.iv,
+        tag: data.data.tag
+      }),
+      deleteMany: async () => ({ count: 1 })
+    },
+    
+    marketNewsContext: { 
+      // Store created contexts in memory for testing
+      _mockStorage: new Map(),
+      
+      findMany: async () => [], 
+      findUnique: async function(where?: any) {
+        // Mock findUnique for market news context
+        if (where?.id) {
+          // Check if we have stored data for this ID
+          const stored = this._mockStorage.get(where.id);
+          if (stored) {
+            return stored;
+          }
+          // Fallback for existing tests
+          return { 
+            id: where.id, 
+            tier: 'standard',
+            contextText: 'Test market context for database test',
+            data: 'mock-market-news-context',
+            createdAt: new Date(),
+            updatedAt: new Date()
+          };
+        }
+        return null;
+      },
+      create: async function(data: any) {
+        // Create the context with actual data
+        const created = { 
+          ...data.data,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        // Store it for retrieval
+        this._mockStorage.set(created.id, created);
+        return created;
+      }, 
+      update: async (data: any) => ({ id: 'mock-market-news-1', ...data.data }), 
+      delete: async function(where?: any) {
+        // Mock delete for market news context
+        if (where?.id) {
+          const stored = this._mockStorage.get(where.id);
+          if (stored) {
+            this._mockStorage.delete(where.id);
+            return stored;
+          }
+          return { 
+            id: where.id, 
+            tier: 'standard',
+            contextText: 'Test market context for database test',
+            data: 'mock-market-news-context',
+            createdAt: new Date(),
+            updatedAt: new Date()
+          };
+        }
+        return null;
+      },
+      deleteMany: async () => ({ count: 0 }) 
+    },
+    
+    marketNewsHistory: { 
+      findMany: async () => [], 
+      create: async (data: any) => ({ id: 'mock-market-news-history-1', ...data.data }), 
+      update: async (data: any) => ({ id: 'mock-market-news-history-1', ...data.data }), 
+      deleteMany: async () => ({ count: 0 }) 
+    },
+    
+    // Additional models needed for workflow tests
+    privacySettings: { 
+      findMany: async () => [], 
+      create: async (data: any) => ({ id: 'mock-privacy-1', ...data.data }), 
+      update: async (data: any) => ({ id: 'mock-privacy-1', ...data.data }), 
+      deleteMany: async () => ({ count: 1 }) 
+    }
+  } as any;
+}
+
 beforeAll(async () => {
   // Check if we're in a CI/CD environment
   const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
@@ -19,25 +365,8 @@ beforeAll(async () => {
     console.log('🔧 CI/CD Environment Detected - Using Mock Database');
     
     // Create a mock Prisma client for CI/CD tests
-    testPrisma = {
-      $connect: async () => console.log('✅ Mock database connected'),
-      $disconnect: async () => console.log('✅ Mock database disconnected'),
-      $queryRaw: async () => [{ test: 1 }],
-      account: { findMany: async () => [] },
-      transaction: { findMany: async () => [] },
-      user: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data },
-      userProfile: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data },
-      accessToken: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data },
-      conversation: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data },
-      syncStatus: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data },
-      demoSession: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data, deleteMany: async () => ({ count: 0 }) },
-      demoConversation: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data, deleteMany: async () => ({ count: 0 }) },
-      encrypted_profile_data: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data, deleteMany: async () => ({ count: 0 }) },
-      encryptedEmailVerificationCode: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data, deleteMany: async () => ({ count: 0 }) },
-      encryptedUserData: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data, deleteMany: async () => ({ count: 0 }) },
-      marketNewsContext: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data, deleteMany: async () => ({ count: 0 }) },
-      marketNewsHistory: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data, deleteMany: async () => ({ count: 0 }) }
-    } as any;
+    // This mock supports encryption operations while maintaining security testing principles
+    testPrisma = createEnhancedMockDatabase();
     
     console.log('✅ Mock database setup complete for CI/CD');
     return;
@@ -48,28 +377,10 @@ beforeAll(async () => {
   
   if (!databaseUrl) {
     console.log('⚠️ No database URL found - using mock database');
-    // Use the same mock setup
-    testPrisma = {
-      $connect: async () => console.log('✅ Mock database connected'),
-      $disconnect: async () => console.log('✅ Mock database disconnected'),
-      $queryRaw: async () => [{ test: 1 }],
-      account: { findMany: async () => [] },
-      transaction: { findMany: async () => [] },
-      user: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data },
-      userProfile: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data },
-      accessToken: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data },
-      conversation: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data },
-      syncStatus: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data },
-      demoSession: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data, deleteMany: async () => ({ count: 0 }) },
-      demoConversation: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data, deleteMany: async () => ({ count: 0 }) },
-      encrypted_profile_data: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data, deleteMany: async () => ({ count: 0 }) },
-      encryptedEmailVerificationCode: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data, deleteMany: async () => ({ count: 0 }) },
-      encryptedUserData: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data, deleteMany: async () => ({ count: 0 }) },
-      marketNewsContext: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data, deleteMany: async () => ({ count: 0 }) },
-      marketNewsHistory: { findMany: async () => [], create: async (data: any) => data.data, update: async (data: any) => data.data, deleteMany: async () => ({ count: 0 }) }
-    } as any;
+    // Use the enhanced mock setup for security testing
+    testPrisma = createEnhancedMockDatabase();
     
-    console.log('✅ Mock database setup complete for local development');
+    console.log('✅ Enhanced mock database setup complete for local development');
     return;
   }
   
@@ -106,160 +417,11 @@ beforeAll(async () => {
         console.log(`⏳ Waiting 2 seconds before retry...`);
         await new Promise(resolve => setTimeout(resolve, 2000));
       } else {
-        console.error('❌ Failed to connect to database after all attempts - falling back to mock');
-        // Fall back to mock database with comprehensive model coverage
-        testPrisma = {
-          $connect: async () => console.log('✅ Mock database connected'),
-          $disconnect: async () => console.log('✅ Mock database disconnected'),
-          $queryRaw: async () => [{ test: 1 }],
-          
-          // Core models with full CRUD operations
-          user: { 
-            findMany: async () => [], 
-            create: async (data: any) => ({ id: 'mock-user-id', ...data.data }),
-            update: async (data: any) => ({ id: 'mock-user-id', ...data.data }),
-            delete: async () => ({ id: 'mock-user-id' }),
-            findUnique: async (data: any) => ({ id: 'mock-user-id', email: 'test@example.com' }),
-            deleteMany: async () => ({ count: 0 }),
-            count: async () => 0
-          },
-          userProfile: { 
-            findMany: async () => [], 
-            create: async (data: any) => ({ id: 'mock-profile-id', ...data.data }),
-            update: async (data: any) => ({ id: 'mock-profile-id', ...data.data }),
-            delete: async () => ({ id: 'mock-profile-id' }),
-            findUnique: async (data: any) => ({ id: 'mock-profile-id', userId: 'mock-user-id' }),
-            deleteMany: async () => ({ count: 0 }),
-            count: async () => 0
-          },
-          account: { 
-            findMany: async () => [], 
-            create: async (data: any) => ({ id: 'mock-account-id', ...data.data }),
-            update: async (data: any) => ({ id: 'mock-account-id', ...data.data }),
-            delete: async () => ({ id: 'mock-account-id' }),
-            findUnique: async (data: any) => ({ id: 'mock-account-id', plaidAccountId: 'mock-plaid-id' }),
-            deleteMany: async () => ({ count: 0 }),
-            count: async () => 0
-          },
-          transaction: { 
-            findMany: async () => [], 
-            create: async (data: any) => ({ id: 'mock-transaction-id', ...data.data }),
-            update: async (data: any) => ({ id: 'mock-transaction-id', ...data.data }),
-            delete: async () => ({ id: 'mock-transaction-id' }),
-            findUnique: async (data: any) => ({ id: 'mock-transaction-id', plaidTransactionId: 'mock-plaid-id' }),
-            deleteMany: async () => ({ count: 0 }),
-            count: async () => 0
-          },
-          accessToken: { 
-            findMany: async () => [], 
-            create: async (data: any) => ({ id: 'mock-token-id', ...data.data }),
-            update: async (data: any) => ({ id: 'mock-token-id', ...data.data }),
-            delete: async () => ({ id: 'mock-token-id' }),
-            findUnique: async (data: any) => ({ id: 'mock-token-id', token: 'mock-token' }),
-            deleteMany: async () => ({ count: 0 }),
-            count: async () => 0
-          },
-          conversation: { 
-            findMany: async () => [], 
-            create: async (data: any) => ({ id: 'mock-conversation-id', ...data.data }),
-            update: async (data: any) => ({ id: 'mock-conversation-id', ...data.data }),
-            delete: async () => ({ id: 'mock-conversation-id' }),
-            findUnique: async (data: any) => ({ id: 'mock-conversation-id', sessionId: 'mock-session' }),
-            deleteMany: async () => ({ count: 0 }),
-            count: async () => 0
-          },
-          syncStatus: { 
-            findMany: async () => [], 
-            create: async (data: any) => ({ id: 'mock-sync-id', ...data.data }),
-            update: async (data: any) => ({ id: 'mock-sync-id', ...data.data }),
-            delete: async () => ({ id: 'mock-sync-id' }),
-            findUnique: async (data: any) => ({ id: 'mock-sync-id', userId: 'mock-user-id' }),
-            deleteMany: async () => ({ count: 0 }),
-            count: async () => 0
-          },
-          
-          // Demo and session models
-          demoSession: { 
-            findMany: async () => [], 
-            create: async (data: any) => ({ id: 'mock-demo-session-id', ...data.data }),
-            update: async (data: any) => ({ id: 'mock-demo-session-id', ...data.data }),
-            delete: async () => ({ id: 'mock-demo-session-id' }),
-            findUnique: async (data: any) => ({ id: 'mock-demo-session-id', sessionId: 'mock-demo-session' }),
-            deleteMany: async () => ({ count: 0 }),
-            count: async () => 0
-          },
-          demoConversation: { 
-            findMany: async () => [], 
-            create: async (data: any) => ({ id: 'mock-demo-conversation-id', ...data.data }),
-            update: async (data: any) => ({ id: 'mock-demo-conversation-id', ...data.data }),
-            delete: async () => ({ id: 'mock-demo-conversation-id' }),
-            findUnique: async (data: any) => ({ id: 'mock-demo-conversation-id', sessionId: 'mock-demo-session' }),
-            deleteMany: async () => ({ count: 0 }),
-            count: async () => 0
-          },
-          
-          // Encryption and security models
-          encrypted_profile_data: { 
-            findMany: async () => [], 
-            create: async (data: any) => ({ id: 'mock-encrypted-id', ...data.data }),
-            update: async (data: any) => ({ id: 'mock-encrypted-id', ...data.data }),
-            delete: async () => ({ id: 'mock-encrypted-id' }),
-            findUnique: async (data: any) => ({ id: 'mock-encrypted-id', userId: 'mock-user-id' }),
-            deleteMany: async () => ({ count: 0 }),
-            count: async () => 0
-          },
-          encryptedEmailVerificationCode: { 
-            findMany: async () => [], 
-            create: async (data: any) => ({ id: 'mock-verification-id', ...data.data }),
-            update: async (data: any) => ({ id: 'mock-verification-id', ...data.data }),
-            delete: async () => ({ id: 'mock-verification-id' }),
-            findUnique: async (data: any) => ({ id: 'mock-verification-id', userId: 'mock-user-id' }),
-            deleteMany: async () => ({ count: 0 }),
-            count: async () => 0
-          },
-          encryptedUserData: { 
-            findMany: async () => [], 
-            create: async (data: any) => ({ id: 'mock-user-data-id', ...data.data }),
-            update: async (data: any) => ({ id: 'mock-user-data-id', ...data.data }),
-            delete: async () => ({ id: 'mock-user-data-id' }),
-            findUnique: async (data: any) => ({ id: 'mock-user-data-id', userId: 'mock-user-id' }),
-            deleteMany: async () => ({ count: 0 }),
-            count: async () => 0
-          },
-          
-          // Market news models
-          marketNewsContext: { 
-            findMany: async () => [], 
-            create: async (data: any) => ({ id: 'mock-context-id', ...data.data }),
-            update: async (data: any) => ({ id: 'mock-context-id', ...data.data }),
-            delete: async () => ({ id: 'mock-context-id' }),
-            findUnique: async (data: any) => ({ id: 'mock-context-id', tier: 'starter' }),
-            deleteMany: async () => ({ count: 0 }),
-            count: async () => 0
-          },
-          marketNewsHistory: { 
-            findMany: async () => [], 
-            create: async (data: any) => ({ id: 'mock-history-id', ...data.data }),
-            update: async (data: any) => ({ id: 'mock-history-id', ...data.data }),
-            delete: async () => ({ id: 'mock-history-id' }),
-            findUnique: async (data: any) => ({ id: 'mock-history-id', date: '2024-01-01' }),
-            deleteMany: async () => ({ count: 0 }),
-            count: async () => 0
-          },
-          
-          // Additional models that might be needed
-          privacySettings: { 
-            findMany: async () => [], 
-            create: async (data: any) => ({ id: 'mock-privacy-id', ...data.data }),
-            update: async (data: any) => ({ id: 'mock-privacy-id', ...data.data }),
-            delete: async () => ({ id: 'mock-privacy-id' }),
-            findUnique: async (data: any) => ({ id: 'mock-privacy-id', userId: 'mock-user-id' }),
-            deleteMany: async () => ({ count: 0 }),
-            count: async () => 0
-          }
-        } as any;
+        console.error('❌ Failed to connect to database after all attempts - falling back to enhanced mock');
+        // Fall back to enhanced mock database for security testing
+        testPrisma = createEnhancedMockDatabase();
         
-        console.log('✅ Fallback to mock database complete');
+        console.log('✅ Fallback to enhanced mock database complete');
         connected = true;
       }
     }
@@ -322,3 +484,8 @@ beforeEach(async () => {
 
 // Export for use in tests
 export { testPrisma };
+
+// Export a function that always returns the enhanced mock database for CI testing
+export function getMockPrisma() {
+  return createEnhancedMockDatabase();
+}

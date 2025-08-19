@@ -253,41 +253,25 @@ export function createTestApp() {
             {
               name: 'Salary',
               monthly_income: 5000,
-              income_stream_type: 'primary',
-              confidence: 0.95
+              type: 'INCOME_TYPE_W2',
+              confidence: 0.9
             },
             {
               name: 'Freelance',
               monthly_income: 1000,
-              income_stream_type: 'secondary',
+              type: 'INCOME_TYPE_1099',
               confidence: 0.75
             }
           ],
           last_year_income: 58000,
           projected_yearly_income: 60000
-        },
-        {
-          account_id: 'acc2',
-          name: 'Savings Account',
-          type: 'depository',
-          subtype: 'savings',
-          income_streams: [
-            {
-              name: 'Freelance',
-              monthly_income: 2500,
-              income_stream_type: 'secondary',
-              confidence: 0.85
-            }
-          ],
-          last_year_income: 28000,
-          projected_yearly_income: 30000
         }
       ],
       summary: {
         totalIncomeStreams: 2,
-        totalMonthlyIncome: 7500,
-        totalYearlyIncome: 90000,
-        projectedYearlyIncome: 135000
+        totalMonthlyIncome: 6000,
+        totalYearlyIncome: 72000,
+        projectedYearlyIncome: 75000
       }
     });
   });

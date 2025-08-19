@@ -55,13 +55,15 @@ run_test "Database Fallback" "DATABASE_URL=postgresql://invalid:invalid@localhos
 
 # Test 4: Run specific problematic tests
 echo -e "\n${YELLOW}🎯 Running previously problematic tests...${NC}"
-CI=true GITHUB_ACTIONS=true npm run test:integration:ci -- --testPathPattern="plaid-security|profile-encryption|market-news" || exit 1
+CI=true GITHUB_ACTIONS=true npm run test:integration:ci -- --testPathPattern="plaid-security|market-news" || exit 1
 
-# Test 5: Security Tests (CRITICAL for CI/CD)
+# Test 5: Profile Encryption Tests (need real database)
+echo -e "\n${YELLOW}🔒 Running Profile Encryption Tests with real database...${NC}"
+echo -e "${YELLOW}   - Profile Encryption Security (real DB)${NC}"
+npm run test:security:ci -- --testPathPattern="profile-encryption-security" || exit 1
+
+# Test 6: Security Tests (CRITICAL for CI/CD)
 echo -e "\n${YELLOW}🔒 Running Security Tests...${NC}"
-echo -e "${YELLOW}   - Profile Encryption Security${NC}"
-CI=true GITHUB_ACTIONS=true npm run test:security:ci -- --testPathPattern="profile-encryption-security" || exit 1
-
 echo -e "${YELLOW}   - Complete Security Suite${NC}"
 CI=true GITHUB_ACTIONS=true npm run test:complete-security || exit 1
 

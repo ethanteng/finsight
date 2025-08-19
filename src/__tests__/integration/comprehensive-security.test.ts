@@ -214,7 +214,7 @@ describe('Comprehensive Security Test Suite', () => {
         .get('/plaid/all-accounts');
       
       expect(unauthenticatedResponse.status).toBe(401);
-      expect(unauthenticatedResponse.body.error).toContain('Authentication required');
+      expect(unauthenticatedResponse.body.error).toContain('No token provided');
     });
 
     it('should isolate user data on /plaid/all-accounts', async () => {
