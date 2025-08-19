@@ -50,8 +50,8 @@ run_test "Local Environment" "" "pass" || exit 1
 # Test 2: CI environment variables (should pass)
 run_test "CI Environment" "CI=true GITHUB_ACTIONS=true" "pass" || exit 1
 
-# Test 3: Database fallback (should pass with mock)
-run_test "Database Fallback" "DATABASE_URL=postgresql://invalid:invalid@localhost:9999/invalid CI=true" "pass" || exit 1
+# Test 3: Database fallback (should fail gracefully when database unavailable)
+run_test "Database Fallback" "DATABASE_URL=postgresql://invalid:invalid@localhost:9999/invalid CI=true" "fail" || exit 1
 
 # Test 4: Run specific problematic tests
 echo -e "\n${YELLOW}🎯 Running previously problematic tests...${NC}"

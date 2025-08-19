@@ -1,11 +1,13 @@
 import { jest } from '@jest/globals';
 
 // Mock the OpenAI module before importing ProfileExtractor
+const mockCreate = jest.fn() as jest.MockedFunction<any>;
+
 jest.mock('openai', () => {
   return jest.fn().mockImplementation(() => ({
     chat: {
       completions: {
-        create: jest.fn()
+        create: mockCreate
       }
     }
   }));
@@ -14,20 +16,11 @@ jest.mock('openai', () => {
 // Now import ProfileExtractor after mocking
 import { ProfileExtractor } from '../../profile/extractor';
 
-// TODO: Fix ProfileExtractor tests after resolving OpenAI mocking issues
-// The core functionality is working (verified in application)
-// Tests failing due to complex mocking setup, not actual functionality
-describe.skip('ProfileExtractor Unit Tests', () => {
+describe('ProfileExtractor Unit Tests', () => {
   let extractor: ProfileExtractor;
-  let mockCreate: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
-    // Get the mock function from the mocked module
-    const MockedOpenAI = require('openai');
-    const mockInstance = MockedOpenAI.mock.instances[0];
-    mockCreate = mockInstance.chat.completions.create;
     
     // Set up the mock response
     mockCreate.mockResolvedValue({

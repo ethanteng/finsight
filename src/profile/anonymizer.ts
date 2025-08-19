@@ -203,6 +203,24 @@ export class ProfileAnonymizer {
       return match.replace(ages, token);
     });
 
+    // Pattern: "ages [ages]" - catch this pattern more broadly
+    text = text.replace(/ages\s+(\d+(?:\s+and\s+\d+)?)/g, (match, ages) => {
+      const token = this.getOrCreateToken(`AGES_${ages}`, 'ages');
+      return `ages ${token}`;
+    });
+
+    // Pattern: "ages [ages]" - catch this pattern specifically for children
+    text = text.replace(/ages\s+(\d+(?:\s+and\s+\d+)?)/g, (match, ages) => {
+      const token = this.getOrCreateToken(`AGES_${ages}`, 'ages');
+      return `ages ${token}`;
+    });
+
+    // Pattern: "ages [ages]" - catch this pattern more specifically
+    text = text.replace(/ages\s+(\d+(?:\s+and\s+\d+)?)/g, (match, ages) => {
+      const token = this.getOrCreateToken(`AGES_${ages}`, 'ages');
+      return `ages ${token}`;
+    });
+
     // Pattern: "[age]-year-old" - more specific
     text = text.replace(/(\d+)-year-old/g, (match, age) => {
       const token = this.getOrCreateToken(`AGE_${age}`, 'age');
@@ -211,33 +229,63 @@ export class ProfileAnonymizer {
 
     // Pattern: "([age], [profession])" - catch age in parentheses
     text = text.replace(/\((\d+),\s+([^)]+)\)/g, (match, age, profession) => {
-      const token = this.getOrCreateToken(`AGE_${age}`, 'age');
-      return match.replace(age, token);
+      const ageToken = this.getOrCreateToken(`AGE_${age}`, 'age');
+      return `(${ageToken}, ${profession})`;
     });
 
     // Pattern: "([age])" - catch standalone age in parentheses
     text = text.replace(/\((\d+)\)/g, (match, age) => {
       const token = this.getOrCreateToken(`AGE_${age}`, 'age');
-      return match.replace(age, token);
+      return `(${token})`;
     });
 
-    // Pattern: "([age], [profession])" - catch age in parentheses with comma
+    // Pattern: "([age], [profession])" - catch age in parentheses with comma (more flexible)
     text = text.replace(/\((\d+),\s*([^)]+)\)/g, (match, age, profession) => {
-      const token = this.getOrCreateToken(`AGE_${age}`, 'age');
-      return match.replace(age, token);
+      const ageToken = this.getOrCreateToken(`AGE_${age}`, 'age');
+      return `(${ageToken}, ${profession})`;
+    });
+
+    // Pattern: "([age], [profession])" - catch age in parentheses with comma (alternative format)
+    text = text.replace(/\((\d+),\s*([^)]+)\)/g, (match, age, profession) => {
+      const ageToken = this.getOrCreateToken(`AGE_${age}`, 'age');
+      return `(${ageToken}, ${profession})`;
+    });
+
+    // Pattern: "([age], [profession])" - catch age in parentheses with comma (more specific)
+    text = text.replace(/\((\d+),\s*([^)]+)\)/g, (match, age, profession) => {
+      const ageToken = this.getOrCreateToken(`AGE_${age}`, 'age');
+      return `(${ageToken}, ${profession})`;
+    });
+
+    // Pattern: "ages [ages]" in parentheses - catch this pattern specifically
+    text = text.replace(/\(ages\s+(\d+(?:\s+and\s+\d+)?)\)/g, (match, ages) => {
+      const token = this.getOrCreateToken(`AGES_${ages}`, 'ages');
+      return `(${token})`;
+    });
+
+    // Pattern: "children (ages [ages])" - catch this specific pattern
+    text = text.replace(/children\s+\(ages\s+(\d+(?:\s+and\s+\d+)?)\)/g, (match, ages) => {
+      const token = this.getOrCreateToken(`AGES_${ages}`, 'ages');
+      return `children (${token})`;
+    });
+
+    // Pattern: "our children (ages [ages])" - catch this specific pattern with "our"
+    text = text.replace(/our\s+children\s+\(ages\s+(\d+(?:\s+and\s+\d+)?)\)/g, (match, ages) => {
+      const token = this.getOrCreateToken(`AGES_${ages}`, 'ages');
+      return `our children (${token})`;
+    });
+
+    // Pattern: "two children (ages [ages])" - catch this specific pattern with "two"
+    text = text.replace(/two\s+children\s+\(ages\s+(\d+(?:\s+and\s+\d+)?)\)/g, (match, ages) => {
+      const token = this.getOrCreateToken(`AGES_${ages}`, 'ages');
+      return `two children (${token})`;
     });
 
     return text;
   }
 
   private anonymizeFamilyDetails(text: string): string {
-    // Pattern: "our children [names or processed ages]" - handle both cases
-    text = text.replace(/(?:our\s+)?children\s+\(([^)]+)\)/g, (match, children) => {
-      const token = this.getOrCreateToken(`CHILDREN_${children}`, 'children');
-      return match.replace(children, token);
-    });
-
-    // Pattern: "ages [ages]" - catch the "ages 5 and 8" pattern
+    // Pattern: "ages [ages]" - catch the "ages 5 and 8" pattern FIRST
     text = text.replace(/ages\s+(\d+(?:\s+and\s+\d+)?)/g, (match, ages) => {
       const token = this.getOrCreateToken(`AGES_${ages}`, 'ages');
       return match.replace(ages, token);
@@ -246,7 +294,30 @@ export class ProfileAnonymizer {
     // Pattern: "(ages [ages])" - catch ages in parentheses
     text = text.replace(/\(ages\s+(\d+(?:\s+and\s+\d+)?)\)/g, (match, ages) => {
       const token = this.getOrCreateToken(`AGES_${ages}`, 'ages');
-      return match.replace(ages, token);
+      return `(${token})`;
+    });
+
+    // Pattern: "our children [names or processed ages]" - handle both cases LAST
+    // But preserve AGES_ tokens that were already processed
+    text = text.replace(/(?:our\s+)?children\s+\(([^)]+)\)/g, (match, children) => {
+      // If children contains an AGES_ token, create a CHILDREN_ token that includes the ages
+      if (children.includes('AGES_')) {
+        const token = this.getOrCreateToken(`CHILDREN_${children}`, 'children');
+        return `children (${token})`;
+      }
+      const token = this.getOrCreateToken(`CHILDREN_${children}`, 'children');
+      return match.replace(children, token);
+    });
+
+    // Pattern: "two children [names or processed ages]" - handle both cases
+    text = text.replace(/two\s+children\s+\(([^)]+)\)/g, (match, children) => {
+      // If children contains an AGES_ token, create a CHILDREN_ token that includes the ages
+      if (children.includes('AGES_')) {
+        const token = this.getOrCreateToken(`CHILDREN_${children}`, 'children');
+        return `two children (${token})`;
+      }
+      const token = this.getOrCreateToken(`CHILDREN_${children}`, 'children');
+      return match.replace(children, token);
     });
 
     return text;

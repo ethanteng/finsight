@@ -306,13 +306,25 @@ export function createTestApp() {
     res.status(401).json({ error: 'Authentication required' });
   });
   
-  // Add mock Stripe endpoints for testing
-  app.get('/api/stripe/subscription-status', (req, res) => {
-    res.status(401).json({ error: 'Authentication required' });
+  // Add mock Stripe endpoints for testing with proper authentication
+  app.get('/api/stripe/subscription-status', testAuthMiddleware, (req: any, res) => {
+    res.json({
+      tier: 'starter',
+      accessLevel: 'limited',
+      status: 'active',
+      message: 'Access granted',
+      upgradeRequired: false
+    });
   });
   
-  app.post('/api/stripe/check-feature-access', (req, res) => {
-    res.status(401).json({ error: 'Authentication required' });
+  app.get('/api/stripe/check-feature-access', testAuthMiddleware, (req: any, res) => {
+    res.json({
+      access: true,
+      reason: 'Access granted',
+      currentTier: 'starter',
+      requiredTier: req.query.requiredTier || 'premium',
+      upgradeRequired: false
+    });
   });
   
   app.get('/api/stripe/plans', (req, res) => {
@@ -321,6 +333,12 @@ export function createTestApp() {
   
   app.get('/api/stripe/config', (req, res) => {
     res.json({ publishableKey: 'pk_test_mock' });
+  });
+  
+  app.post('/api/stripe/webhook', testAuthMiddleware, (req: any, res) => {
+    // Mock webhook endpoint - requires authentication
+    // In production, this would validate Stripe signature
+    res.json({ received: true, authenticated: true });
   });
   
   // Add mock ask endpoint for testing
