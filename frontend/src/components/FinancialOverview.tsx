@@ -108,22 +108,56 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
     let totalCash = 0;
     let totalDebt = 0;
     let totalInvestments = 0;
+    let uncategorizedAccounts = 0;
 
     accounts.forEach(account => {
       const balance = account.balance?.current || 0;
+      const accountType = account.type;
+      const accountSubtype = account.subtype;
       
-      if (account.type === 'depository') {
-        // Cash accounts: checking, savings, cd
+      if (accountType === 'depository' || 
+          accountSubtype === 'checking' || 
+          accountSubtype === 'savings' || 
+          accountSubtype === 'cd' ||
+          accountSubtype === 'money market' ||
+          accountSubtype === 'prepaid') {
+        // Cash accounts: checking, savings, cd, money market, prepaid, etc.
         totalCash += Math.max(0, balance);
-      } else if (account.type === 'credit') {
-        // Credit cards - negative balance means debt
-        totalDebt += Math.max(0, -balance);
-      } else if (account.type === 'loan') {
+      } else if (accountType === 'credit') {
+        // Credit cards - balance represents outstanding debt (positive = money owed)
+        // Plaid may return positive or negative balances for credit cards
+        // We want the absolute value as debt
+        totalDebt += Math.abs(balance);
+      } else if (accountType === 'loan' || 
+                 accountSubtype === 'mortgage' || 
+                 accountSubtype === 'student' || 
+                 accountSubtype === 'personal' ||
+                 accountSubtype === 'auto' ||
+                 accountSubtype === 'home equity') {
         // Loans - positive balance means debt
         totalDebt += Math.max(0, balance);
-      } else if (account.type === 'investment') {
-        // Investment accounts
+      } else if (accountType === 'investment' || 
+                 accountSubtype === '401k' || 
+                 accountSubtype === 'ira' || 
+                 accountSubtype === 'roth' || 
+                 accountSubtype === 'brokerage' || 
+                 accountSubtype === 'hsa' || 
+                 accountSubtype === '529' ||
+                 accountSubtype === 'pension' ||
+                 accountSubtype === 'annuity') {
+        // Investment accounts: 401k, IRA, Roth, brokerage, HSA, 529, pension, annuity, etc.
         totalInvestments += Math.max(0, balance);
+      } else {
+        // Fallback: categorize by balance sign
+        // Positive balance could be cash or investment, negative could be debt
+        if (balance > 0) {
+          // Positive balance - treat as cash (conservative approach)
+          totalCash += balance;
+        } else if (balance < 0) {
+          // Negative balance - treat as debt
+          totalDebt += Math.abs(balance);
+        }
+        uncategorizedAccounts++;
       }
     });
 
@@ -132,10 +166,10 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
       totalInvestments = investmentData.portfolio.totalValue;
     }
 
-    return { totalCash, totalDebt, totalInvestments };
+    return { totalCash, totalDebt, totalInvestments, uncategorizedAccounts };
   };
 
-  const { totalCash, totalDebt, totalInvestments } = calculateTotals();
+  const { totalCash, totalDebt, totalInvestments, uncategorizedAccounts } = calculateTotals();
   const hasAccounts = accounts.length > 0;
 
   const formatCurrency = (amount: number) => {
@@ -257,6 +291,14 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
               {formatCurrency(totalCash + totalInvestments - totalDebt)}
             </div>
           </div>
+          
+          {/* Show uncategorized accounts count if any exist */}
+          {uncategorizedAccounts > 0 && (
+            <div className="bg-yellow-800 rounded p-2">
+              <div className="text-yellow-300">Uncategorized</div>
+              <div className="text-white font-medium">{uncategorizedAccounts}</div>
+            </div>
+          )}
         </div>
       )}
     </div>
