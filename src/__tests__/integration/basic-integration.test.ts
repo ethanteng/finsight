@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { app } from '../../index';
+import { testApp } from './test-app-setup';
 import { testPrisma } from '../setup/test-database-ci';
 
 describe('Basic Integration Tests', () => {
@@ -8,7 +8,7 @@ describe('Basic Integration Tests', () => {
   });
 
   it('should have a working health endpoint', async () => {
-    const response = await request(app).get('/health');
+    const response = await request(testApp).get('/health');
     
     expect(response.status).toBe(200);
     expect(response.body).toHaveProperty('status', 'OK');

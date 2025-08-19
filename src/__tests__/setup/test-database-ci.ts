@@ -26,17 +26,35 @@ beforeAll(async () => {
     }
   });
   
-  // Verify connection
-  try {
-    await testPrisma.$connect();
-    console.log('✅ Connected to CI/CD test database:', databaseUrl);
-    
-    // Test a simple query to verify the connection works
-    const result = await testPrisma.$queryRaw`SELECT 1 as test`;
-    console.log('✅ Database query test successful:', result);
-  } catch (error) {
-    console.error('❌ Failed to connect to CI/CD test database:', error);
-    throw error;
+  // Verify connection with retry logic
+  let connected = false;
+  let attempts = 0;
+  const maxAttempts = 5;
+  
+  while (!connected && attempts < maxAttempts) {
+    try {
+      attempts++;
+      console.log(`🔧 Database connection attempt ${attempts}/${maxAttempts}`);
+      
+      await testPrisma.$connect();
+      console.log('✅ Connected to CI/CD test database:', databaseUrl);
+      
+      // Test a simple query to verify the connection works
+      const result = await testPrisma.$queryRaw`SELECT 1 as test`;
+      console.log('✅ Database query test successful:', result);
+      
+      connected = true;
+    } catch (error: any) {
+      console.error(`❌ Database connection attempt ${attempts} failed:`, error.message);
+      
+      if (attempts < maxAttempts) {
+        console.log(`⏳ Waiting 2 seconds before retry...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      } else {
+        console.error('❌ Failed to connect to CI/CD test database after all attempts');
+        throw error;
+      }
+    }
   }
 });
 

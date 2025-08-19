@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { app } from '../../index';
+import { testApp } from './test-app-setup';
 import { testPrisma } from '../setup/test-database-ci';
 import { UserTier } from '../../data/types';
 
@@ -59,7 +59,7 @@ describe('Market News Context Integration Tests', () => {
 
   describe('Market News Context API', () => {
     test('should get market context for Standard tier', async () => {
-      const response = await request(app)
+      const response = await request(testApp)
         .get('/market-news/context/standard')
         .expect(200);
 
@@ -73,7 +73,7 @@ describe('Market News Context Integration Tests', () => {
     });
 
     test('should get market context for Starter tier', async () => {
-      const response = await request(app)
+      const response = await request(testApp)
         .get('/market-news/context/starter')
         .expect(200);
 
@@ -91,7 +91,7 @@ describe('Market News Context Integration Tests', () => {
         contextText: 'Test market context update'
       };
 
-      const response = await request(app)
+      const response = await request(testApp)
         .put('/admin/market-news/context/standard')
         .send(updateData)
         .expect(401); // Should require authentication
@@ -100,7 +100,7 @@ describe('Market News Context Integration Tests', () => {
     });
 
     test('should get market context history', async () => {
-      const response = await request(app)
+      const response = await request(testApp)
         .get('/admin/market-news/history/standard')
         .query({ limit: '5' })
         .expect(401); // Should require authentication
@@ -109,7 +109,7 @@ describe('Market News Context Integration Tests', () => {
     });
 
     test('should handle invalid tier gracefully', async () => {
-      const response = await request(app)
+      const response = await request(testApp)
         .get('/market-news/context/invalid_tier')
         .expect(404);
 
@@ -123,7 +123,7 @@ describe('Market News Context Integration Tests', () => {
     // that cause 500 errors instead of 200 responses
     /*
     test('should include market context in AI responses for Standard tier', async () => {
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/ask')
         .set('X-Session-ID', 'test-market-news-session')
         .send({
@@ -144,7 +144,7 @@ describe('Market News Context Integration Tests', () => {
 
     test('should provide different responses for different tiers', async () => {
       // Test Starter tier
-      const starterResponse = await request(app)
+      const starterResponse = await request(testApp)
         .post('/ask')
         .set('X-Session-ID', 'test-starter-session')
         .send({
@@ -155,7 +155,7 @@ describe('Market News Context Integration Tests', () => {
         .expect(200);
 
       // Test Standard tier
-      const standardResponse = await request(app)
+      const standardResponse = await request(testApp)
         .post('/ask')
         .set('X-Session-ID', 'test-standard-session')
         .send({
