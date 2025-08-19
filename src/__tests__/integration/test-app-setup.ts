@@ -317,12 +317,12 @@ export function createTestApp() {
     });
   });
   
-  app.get('/api/stripe/check-feature-access', testAuthMiddleware, (req: any, res) => {
+  app.post('/api/stripe/check-feature-access', testAuthMiddleware, (req: any, res) => {
     res.json({
       access: true,
       reason: 'Access granted',
       currentTier: 'starter',
-      requiredTier: req.query.requiredTier || 'premium',
+      requiredTier: req.body.requiredTier || 'premium',
       upgradeRequired: false
     });
   });
@@ -335,10 +335,10 @@ export function createTestApp() {
     res.json({ publishableKey: 'pk_test_mock' });
   });
   
-  app.post('/api/stripe/webhook', testAuthMiddleware, (req: any, res) => {
-    // Mock webhook endpoint - requires authentication
+  app.post('/api/stripe/webhook', (req: any, res) => {
+    // Mock webhook endpoint - no authentication required
     // In production, this would validate Stripe signature
-    res.json({ received: true, authenticated: true });
+    res.json({ received: true, authenticated: false });
   });
   
   // Add mock ask endpoint for testing
