@@ -2,10 +2,7 @@ import { jest } from '@jest/globals';
 import request from 'supertest';
 import { app } from '../../index';
 import { ProfileEncryptionService } from '../../profile/encryption';
-import { PrismaClient } from '@prisma/client';
-
-// Test database setup
-let testPrisma: PrismaClient;
+import { testPrisma } from '../setup/test-database-ci';
 
 // Mock authentication middleware for tests
 const mockAuthMiddleware = (req: any, res: any, next: any) => {
@@ -35,15 +32,7 @@ app.use((req: any, res: any, next: any) => {
 });
 
 beforeAll(async () => {
-  // Connect to test database
-  testPrisma = new PrismaClient({
-    datasources: {
-      db: { url: process.env.TEST_DATABASE_URL }
-    }
-  });
-  
-  // Verify connection
-  await testPrisma.$connect();
+  // testPrisma is managed by the centralized test database setup
 });
 
 beforeEach(async () => {
@@ -60,7 +49,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  await testPrisma.$disconnect();
+  // testPrisma is managed by the centralized test database setup
 });
 
 describe('Complete Security Test Suite', () => {

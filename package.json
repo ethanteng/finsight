@@ -10,6 +10,7 @@
     "test:integration": "jest --config jest.integration.config.js",
     "test:integration:ci": "jest --config jest.integration.ci.config.js",
     "test:security": "jest --config jest.security.config.js",
+    "test:security:ci": "jest --config jest.security.ci.config.js",
     "test:profile-encryption": "jest --config jest.complete-security.config.js --testPathPattern=profile-encryption-security",
     "test:complete-security": "jest --config jest.complete-security.config.js",
     "test:security:all": "npm run test:security && npm run test:complete-security",

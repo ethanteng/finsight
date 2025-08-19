@@ -249,7 +249,7 @@ jobs:
           NODE_ENV: test
 
       - name: Run integration tests with coverage
-        run: npm run test:coverage:integration
+        run: npm run test:integration:ci
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
@@ -338,7 +338,7 @@ jobs:
           NODE_ENV: test
 
       - name: Run Core Security Tests (Phases 1-4)
-        run: npm run test:security
+        run: npm run test:security:ci
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db

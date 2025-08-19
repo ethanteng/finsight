@@ -4,8 +4,8 @@ import express from 'express';
 import { setupPlaidRoutes } from '../../plaid';
 import stripeRoutes from '../../routes/stripe';
 import { optionalAuth } from '../../auth/middleware';
-import { PrismaClient } from '@prisma/client';
 import { createTestUser, createTestAccessToken } from '../unit/factories/user.factory';
+import { testPrisma } from '../setup/test-database-ci';
 import { hashPassword } from '../../auth/utils';
 
 // Create a test app instance specifically for comprehensive security tests
@@ -121,18 +121,9 @@ describe('Comprehensive Security Test Suite', () => {
   let user2JWT: string;
   let user1StripeCustomerId: string;
   let user2StripeCustomerId: string;
-  let testPrisma: PrismaClient;
 
   beforeAll(async () => {
-    // Connect to test database
-    testPrisma = new PrismaClient({
-      datasources: {
-        db: { url: process.env.TEST_DATABASE_URL }
-      }
-    });
-    
-    // Verify connection
-    await testPrisma.$connect();
+    // testPrisma is managed by the centralized test database setup
   });
 
   beforeEach(async () => {
@@ -226,7 +217,7 @@ describe('Comprehensive Security Test Suite', () => {
   });
 
   afterAll(async () => {
-    await testPrisma.$disconnect();
+    // testPrisma is managed by the centralized test database setup
   });
 
   describe('🔒 Plaid Endpoint Security Tests', () => {

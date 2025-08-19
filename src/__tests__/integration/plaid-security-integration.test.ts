@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from '@jest/globals';
 import request from 'supertest';
 import express from 'express';
-import { PrismaClient } from '@prisma/client';
 import { setupPlaidRoutes } from '../../plaid';
 import { optionalAuth } from '../../auth/middleware';
 import { createTestUser, createTestAccessToken } from '../unit/factories/user.factory';
 import { hashPassword } from '../../auth/utils';
+import { testPrisma } from '../setup/test-database-ci';
 
 // Create a test app instance specifically for Plaid security tests
 const app = express();
@@ -17,9 +17,6 @@ app.use(optionalAuth);
 // Set up Plaid routes on the test app
 setupPlaidRoutes(app);
 
-// Set up test database connection
-let testPrisma: PrismaClient;
-
 describe('Plaid Security Integration Tests', () => {
   let user1: any;
   let user2: any;
@@ -29,14 +26,7 @@ describe('Plaid Security Integration Tests', () => {
   let user2JWT: string;
 
   beforeAll(async () => {
-    // Connect to test database
-    testPrisma = new PrismaClient({
-      datasources: {
-        db: { url: process.env.TEST_DATABASE_URL }
-      }
-    });
-    // Verify connection
-    await testPrisma.$connect();
+    // testPrisma is managed by the centralized test database setup
   });
 
   beforeEach(async () => {
@@ -119,7 +109,7 @@ describe('Plaid Security Integration Tests', () => {
   });
 
   afterAll(async () => {
-    await testPrisma.$disconnect();
+    // testPrisma is managed by the centralized test database setup
   });
 
   describe('User Data Isolation Tests', () => {
