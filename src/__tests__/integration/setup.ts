@@ -16,43 +16,65 @@ jest.mock('../../openai', () => ({
   }
 }));
 
-jest.mock('../../plaid', () => ({
-  setupPlaidRoutes: jest.fn(),
-  getPlaidClient: jest.fn().mockReturnValue({
-    accountsGet: jest.fn().mockResolvedValue({
-      data: {
-        accounts: [
-          {
-            account_id: 'test-account-1',
-            name: 'Test Checking',
-            type: 'depository',
-            subtype: 'checking',
-            balances: { current: 1000.00 }
-          }
-        ]
-      }
-    }),
-    transactionsGet: jest.fn().mockResolvedValue({
-      data: {
-        transactions: [
-          {
-            transaction_id: 'test-transaction-1',
-            account_id: 'test-account-1',
-            amount: 100.00,
-            name: 'Test Transaction',
-            date: '2024-01-01'
-          }
-        ]
-      }
-    }),
-    linkTokenCreate: jest.fn().mockResolvedValue({
-      data: { link_token: 'test-link-token' }
-    }),
-    itemPublicTokenExchange: jest.fn().mockResolvedValue({
-      data: { access_token: 'test-access-token' }
-    })
-  })
-}));
+// 🔒 CRITICAL: Don't mock Plaid routes for security tests
+// Security tests need real routes to test authentication middleware
+// Only mock the Plaid client methods to prevent real API calls
+jest.mock('../../plaid', () => {
+  const originalModule = jest.requireActual('../../plaid');
+  return {
+    ...originalModule,
+    // Keep the real setupPlaidRoutes function
+    setupPlaidRoutes: originalModule.setupPlaidRoutes,
+    // Mock only the Plaid client methods to prevent real API calls
+    plaidClient: {
+      accountsGet: jest.fn().mockResolvedValue({
+        data: {
+          accounts: [
+            {
+              account_id: 'test-account-1',
+              name: 'Test Checking',
+              type: 'depository',
+              subtype: 'checking',
+              balances: { current: 1000.00 }
+            }
+          ]
+        }
+      }),
+      accountsBalanceGet: jest.fn().mockResolvedValue({
+        data: {
+          accounts: [
+            {
+              account_id: 'test-account-1',
+              name: 'Test Checking',
+              type: 'depository',
+              subtype: 'checking',
+              balances: { current: 1000.00 }
+            }
+          ]
+        }
+      }),
+      transactionsGet: jest.fn().mockResolvedValue({
+        data: {
+          transactions: [
+            {
+              transaction_id: 'test-transaction-1',
+              account_id: 'test-account-1',
+              amount: 100.00,
+              name: 'Test Transaction',
+              date: '2024-01-01'
+            }
+          ]
+        }
+      }),
+      linkTokenCreate: jest.fn().mockResolvedValue({
+        data: { link_token: 'test-link-token' }
+      }),
+      itemPublicTokenExchange: jest.fn().mockResolvedValue({
+        data: { access_token: 'test-access-token' }
+      })
+    }
+  };
+});
 
 jest.mock('../../market-news/synthesizer', () => ({
   MarketNewsSynthesizer: jest.fn().mockImplementation(() => ({
