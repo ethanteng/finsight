@@ -1,4 +1,8 @@
 import express from 'express';
+import { dataOrchestrator } from '../../data/orchestrator';
+import { UserTier } from '../../data/types';
+import { askOpenAIWithEnhancedContext } from '../../openai';
+import { convertResponseToUserFriendly } from '../../privacy';
 
 // Create a test app instance that doesn't depend on ANY external modules or database connections
 export function createTestApp() {
@@ -282,192 +286,172 @@ export function createTestApp() {
   });
   
   // Add mock ask endpoint for testing
-  app.post('/ask', (req, res) => {
-    // Handle different test scenarios based on request content
-    const { question, isDemo, sessionId } = req.body;
-    
-    if (!question) {
-      return res.status(400).json({ error: 'Question is required' });
-    }
-    
-    if (question.includes('Chase Checking Account') || question.includes('Chase Checking')) {
-      res.json({ 
-        answer: 'Your Chase Checking Account has a balance of $1,000.',
+  app.post('/ask', async (req, res) => {
+    try {
+      const { question, isDemo, sessionId } = req.body;
+      
+      if (!question) {
+        return res.status(400).json({ error: 'Question is required' });
+      }
+
+      // Call the actual askOpenAIWithEnhancedContext function (which is mocked in tests)
+      const answer = await askOpenAIWithEnhancedContext(question, [], 'starter' as UserTier, isDemo);
+      
+      // In production mode, convert the response to user-friendly format
+      let finalAnswer = answer;
+      if (!isDemo) {
+        try {
+          finalAnswer = convertResponseToUserFriendly(answer);
+        } catch (conversionError) {
+          // If conversion fails in production mode, return 500 error
+          const errorMessage = conversionError instanceof Error ? conversionError.message : 'Unknown conversion error';
+          return res.status(500).json({ 
+            error: 'Failed to process question',
+            message: errorMessage
+          });
+        }
+      }
+      
+      res.json({
+        answer: finalAnswer,
         sources: []
       });
-    } else if (question.includes('balance')) {
-      res.json({ 
-        answer: 'Your Savings Account at Ally Bank has $5,000.',
-        sources: []
-      });
-    } else if (question.includes('accounts')) {
-      res.json({ 
-        answer: 'Your Savings Account at Ally Bank has $5,000.',
-        sources: []
-      });
-    } else if (question.includes('spend')) {
-      res.json({ 
-        answer: 'You spent $50 at Amazon.com yesterday.',
-        sources: []
-      });
-    } else if (question.includes('Fed rate') || question.includes('CD rates')) {
-      res.json({ 
-        answer: 'The Fed rate is 5.25% and CD rates are currently 3-month: 5.25%, 6-month: 5.35%.',
-        sources: []
-      });
-    } else if (question.includes('Demo response with session data')) {
-      res.json({ 
-        answer: 'Demo response with session data',
-        sources: []
-      });
-    } else if (question.includes('large response')) {
-      res.json({ 
-        answer: 'This is a very large response for testing performance. '.repeat(100),
-        sources: []
-      });
-    } else if (question.includes('concurrent')) {
-      // Handle concurrent request test
-      const responseIndex = parseInt(sessionId || '1');
-      res.json({ 
-        answer: `Response ${responseIndex}`,
-        sources: []
-      });
-    } else if (question.includes('error')) {
-      // Handle error test
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       res.status(500).json({ 
         error: 'Failed to process question',
-        message: 'An internal error occurred'
-      });
-    } else {
-      res.json({ 
-        answer: 'This is a mock response for testing purposes.',
-        sources: []
+        message: errorMessage
       });
     }
   });
   
   // Add mock ask/display-real endpoint for testing
-  app.post('/ask/display-real', (req, res) => {
-    // Handle different test scenarios based on request content
-    const { question, isDemo, sessionId } = req.body;
-    
-    if (!question) {
-      return res.status(400).json({ error: 'Question is required' });
-    }
-    
-    if (question.includes('Chase Checking Account') || question.includes('Chase Checking')) {
-      res.json({ 
-        answer: 'Your Chase Checking Account has a balance of $1,000.',
+  app.post('/ask/display-real', async (req, res) => {
+    try {
+      const { question, isDemo, sessionId } = req.body;
+      
+      if (!question) {
+        return res.status(400).json({ error: 'Question is required' });
+      }
+
+      // Call the actual askOpenAIWithEnhancedContext function (which is mocked in tests)
+      const answer = await askOpenAIWithEnhancedContext(question, [], 'starter' as UserTier, isDemo);
+      
+      // In production mode, convert the response to user-friendly format
+      let finalAnswer = answer;
+      if (!isDemo) {
+        try {
+          finalAnswer = convertResponseToUserFriendly(answer);
+        } catch (conversionError) {
+          // If conversion fails in production mode, return 500 error
+          const errorMessage = conversionError instanceof Error ? conversionError.message : 'Unknown conversion error';
+          return res.status(500).json({ 
+            error: 'Failed to process question',
+            message: errorMessage
+          });
+        }
+      }
+      
+      res.json({
+        answer: finalAnswer,
         sources: []
       });
-    } else if (question.includes('balance')) {
-      res.json({ 
-        answer: 'Your Savings Account at Ally Bank has $5,000.',
-        sources: []
-      });
-    } else if (question.includes('accounts')) {
-      res.json({ 
-        answer: 'Your Savings Account at Ally Bank has $5,000.',
-        sources: []
-      });
-    } else if (question.includes('spend')) {
-      res.json({ 
-        answer: 'You spent $50 at Amazon.com yesterday.',
-        sources: []
-      });
-    } else if (question.includes('Fed rate') || question.includes('CD rates')) {
-      res.json({ 
-        answer: 'The Fed rate is 5.25% and CD rates are currently 3-month: 5.25%, 6-month: 5.35%.',
-        sources: []
-      });
-    } else if (question.includes('Demo response with session data')) {
-      res.json({ 
-        answer: 'Demo response with session data',
-        sources: []
-      });
-    } else if (question.includes('large response')) {
-      res.json({ 
-        answer: 'This is a very large response for testing performance. '.repeat(100),
-        sources: []
-      });
-    } else if (question.includes('concurrent')) {
-      // Handle concurrent request test
-      const responseIndex = parseInt(sessionId || '1');
-      res.json({ 
-        answer: `Response ${responseIndex}`,
-        sources: []
-      });
-    } else if (question.includes('error')) {
-      // Handle error test
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       res.status(500).json({ 
         error: 'Failed to process question',
-        message: 'An internal error occurred'
-      });
-    } else {
-      res.json({ 
-        answer: 'This is a mock response for testing purposes.',
-        sources: []
+        message: errorMessage
       });
     }
   });
   
   // Add mock test endpoints for testing
-  app.get('/test/enhanced-market-context', (req, res) => {
-    res.json({ 
-      tier: req.query.tier || 'starter',
-      isDemo: req.query.isDemo === 'true',
-      marketContextSummary: 'Mock market context for testing',
-      contextLength: 100,
-      cacheStats: {
-        size: 0,
-        keys: [],
-        marketContextCache: {
-          size: 1,
-          keys: ['mock_key'],
-          lastRefresh: new Date().toISOString()
-        }
-      },
-      timestamp: new Date().toISOString()
-    });
+  app.get('/test/enhanced-market-context', async (req, res) => {
+    try {
+      const tier = (req.query.tier as string || 'starter') as UserTier;
+      const isDemo = req.query.isDemo === 'true';
+      
+      // Call the actual orchestrator functions (which are mocked in tests)
+      const marketContextSummary = await dataOrchestrator.getMarketContextSummary(tier, isDemo);
+      const cacheStats = await dataOrchestrator.getCacheStats();
+      
+      res.json({ 
+        tier,
+        isDemo,
+        marketContextSummary,
+        contextLength: marketContextSummary.length,
+        cacheStats,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({ error: errorMessage });
+    }
   });
   
   app.get('/test/current-tier', (req, res) => {
+    const testTier = process.env.TEST_USER_TIER || 'starter';
     res.json({ 
-      tier: 'starter',
+      testTier,
+      backendTier: testTier,
+      message: `Testing with ${testTier} tier`,
+      tier: testTier,
       isDemo: true
     });
   });
   
-  app.get('/test/cache-stats', (req, res) => {
-    res.json({ 
-      size: 0,
-      keys: [],
-      marketContextCache: {
-        size: 1,
-        keys: ['mock_key'],
-        lastRefresh: new Date().toISOString()
-      }
-    });
+  app.get('/test/cache-stats', async (req, res) => {
+    try {
+      // Call the actual orchestrator function (which is mocked in tests)
+      const cacheStats = await dataOrchestrator.getCacheStats();
+      res.json(cacheStats);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({ error: errorMessage });
+    }
   });
   
   // Add missing test endpoints
-  app.post('/test/refresh-market-context', (req, res) => {
-    const { tier, isDemo } = req.body;
-    res.json({ 
-      success: true,
-      tier: tier || 'starter',
-      isDemo: isDemo || false,
-      message: 'Market context refreshed successfully'
-    });
+  app.post('/test/refresh-market-context', async (req, res) => {
+    try {
+      const { tier, isDemo } = req.body;
+      const actualTier = (tier || 'starter') as UserTier;
+      const actualIsDemo = isDemo || false;
+      
+      // Call the actual orchestrator function (which is mocked in tests)
+      await dataOrchestrator.refreshMarketContext(actualTier, actualIsDemo);
+      const cacheStats = await dataOrchestrator.getCacheStats();
+      
+      res.json({ 
+        success: true,
+        tier: actualTier,
+        isDemo: actualIsDemo,
+        cacheStats,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({ error: errorMessage });
+    }
   });
   
-  app.post('/test/invalidate-cache', (req, res) => {
-    const { pattern } = req.body;
-    const defaultPattern = 'economic_indicators';
-    res.json({ 
-      message: `Cache invalidated for pattern: ${pattern || defaultPattern}`,
-      pattern: pattern || defaultPattern
-    });
+  app.post('/test/invalidate-cache', async (req, res) => {
+    try {
+      const { pattern } = req.body;
+      const defaultPattern = 'economic_indicators';
+      const actualPattern = pattern || defaultPattern;
+      
+      // Call the actual orchestrator function (which is mocked in tests)
+      await dataOrchestrator.invalidateCache(actualPattern);
+      
+      res.json({ 
+        message: `Cache invalidated for pattern: ${actualPattern}`,
+        pattern: actualPattern
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      res.status(500).json({ error: errorMessage });
+    }
   });
   
   // Add Plaid investment endpoints for testing
