@@ -31,32 +31,22 @@ beforeEach(async () => {
   // Clean test data before each test
   // Order matters: delete child tables before parent tables
   try {
-    // Only clean tables that exist to avoid errors
-    const tablesToClean = [
-      'transaction',
-      'account', 
-      'accessToken',
-      'conversation',
-      'syncStatus',
-      'userProfile',
-      'user'
-    ];
-    
-    for (const table of tablesToClean) {
-      try {
-        await (testPrisma as any)[table].deleteMany();
-      } catch (error: any) {
-        // Ignore errors for tables that don't exist
-        if (error.code !== 'P2021') {
-          console.warn(`⚠️ Warning cleaning ${table}:`, error.message);
-        }
-      }
-    }
+    // Clean up tables in proper order to avoid foreign key constraints
+    await testPrisma.demoConversation.deleteMany();
+    await testPrisma.demoSession.deleteMany();
+    await testPrisma.encrypted_profile_data.deleteMany();
+    await testPrisma.transaction.deleteMany();
+    await testPrisma.account.deleteMany();
+    await testPrisma.accessToken.deleteMany();
+    await testPrisma.conversation.deleteMany();
+    await testPrisma.syncStatus.deleteMany();
+    await testPrisma.userProfile.deleteMany();
+    await testPrisma.user.deleteMany();
     
     console.log('🧹 Test data cleaned up');
-  } catch (error) {
-    console.error('⚠️ Error cleaning test data:', error);
-    // Don't throw - some tables might not exist yet
+  } catch (error: any) {
+    // Log errors but don't fail the test setup
+    console.warn('⚠️ Warning during test cleanup:', error.message);
   }
 });
 

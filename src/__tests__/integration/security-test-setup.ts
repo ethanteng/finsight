@@ -82,12 +82,20 @@ beforeEach(async () => {
 
   // ✅ Clean up test data before each test
   // Order matters: delete child tables before parent tables
-  await prisma.encryptedEmailVerificationCode.deleteMany();
-  await prisma.encryptedUserData.deleteMany();
-  await prisma.accessToken.deleteMany();
-  await prisma.user.deleteMany();
-  
-  console.log('🧹 Security test data cleaned up');
+  try {
+    await prisma.encryptedEmailVerificationCode.deleteMany();
+    await prisma.encryptedUserData.deleteMany();
+    await prisma.encrypted_profile_data.deleteMany(); // Clean encrypted profile data first
+    await prisma.demoConversation.deleteMany();  // Clean demo conversations first
+    await prisma.demoSession.deleteMany();       // Clean demo sessions
+    await prisma.accessToken.deleteMany();
+    await prisma.user.deleteMany();
+    
+    console.log('🧹 Security test data cleaned up');
+  } catch (error: any) {
+    // Log errors but don't fail the test setup
+    console.warn('⚠️ Warning during security test cleanup:', error.message);
+  }
 });
 
 export { prisma };

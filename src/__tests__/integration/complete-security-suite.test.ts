@@ -52,6 +52,8 @@ beforeEach(async () => {
   await testPrisma.encryptedEmailVerificationCode.deleteMany();
   await testPrisma.encryptedUserData.deleteMany();
   await testPrisma.encrypted_profile_data.deleteMany();
+  await testPrisma.demoConversation.deleteMany();  // Clean demo conversations first
+  await testPrisma.demoSession.deleteMany();       // Clean demo sessions
   await testPrisma.accessToken.deleteMany();
   await testPrisma.userProfile.deleteMany();
   await testPrisma.user.deleteMany();
