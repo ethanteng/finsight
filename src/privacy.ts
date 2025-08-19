@@ -362,6 +362,12 @@ export function anonymizeConversationHistory(conversations: any[]): string {
 
 // Convert AI response back to user-friendly format
 export function convertResponseToUserFriendly(response: string): string {
+  // ✅ Input validation - must be first to prevent errors
+  if (typeof response !== 'string' || response === null || response === undefined) {
+    console.log('convertResponseToUserFriendly: Invalid input, converting to string:', typeof response, response);
+    return String(response); // Use String() directly to get "null", "undefined", etc.
+  }
+  
   // ✅ DEBUG: Log current tokenization maps and response content
   console.log('convertResponseToUserFriendly: Current merchantRealDataMap size:', merchantRealDataMap.size);
   if (merchantRealDataMap.size > 0) {
@@ -369,18 +375,13 @@ export function convertResponseToUserFriendly(response: string): string {
       Array.from(merchantRealDataMap.entries()).slice(0, 10));
   }
   
-  // ✅ DEBUG: Check for July transaction patterns in response
+  // ✅ DEBUG: Check for July transaction patterns in response (safe now that we know it's a string)
   const julyPatterns = response.match(/CREDIT CARD.*PAYMENT.*\/\/\d+/g);
   const merchantPatterns = response.match(/Merchant_\d+/g);
   console.log('convertResponseToUserFriendly: Found patterns:', {
     julyPatterns: julyPatterns?.slice(0, 5),
     merchantPatterns: merchantPatterns?.slice(0, 5)
   });
-  
-  // ✅ Input validation
-  if (typeof response !== 'string') {
-    return String(response);
-  }
   
   let userFriendlyResponse = response;
   
