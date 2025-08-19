@@ -2,8 +2,8 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   testMatch: [
-    '**/__tests__/integration/**/*.test.ts',
-    '**/__tests__/integration/**/*.spec.ts'
+    '<rootDir>/src/__tests__/integration/**/*.test.ts',
+    '<rootDir>/src/__tests__/integration/**/*.spec.ts'
   ],
   testPathIgnorePatterns: [
     'comprehensive-security.test.ts', // Exclude comprehensive security tests - they have their own setup
@@ -38,4 +38,13 @@ module.exports = {
   // Clear mocks between tests to ensure clean state
   clearMocks: true,
   restoreMocks: true,
+  
+  // Add explicit root directory and module directories
+  rootDir: '.',
+  moduleDirectories: ['node_modules', 'src'],
+  
+  // Add test discovery options
+  testLocationInResults: true,
+  detectOpenHandles: true,
+  forceExit: true,
 }; 

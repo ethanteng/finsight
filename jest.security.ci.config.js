@@ -2,10 +2,10 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   testMatch: [
-    '**/__tests__/integration/plaid-security-integration.test.ts',
-    '**/__tests__/integration/comprehensive-security.test.ts',
-    '**/__tests__/integration/profile-encryption-security.test.ts',
-    '**/__tests__/integration/complete-security-suite.test.ts'
+    '<rootDir>/src/__tests__/integration/plaid-security-integration.test.ts',
+    '<rootDir>/src/__tests__/integration/comprehensive-security.test.ts',
+    '<rootDir>/src/__tests__/integration/profile-encryption-security.test.ts',
+    '<rootDir>/src/__tests__/integration/complete-security-suite.test.ts'
   ],
   setupFilesAfterEnv: [
     '<rootDir>/src/__tests__/integration/security-test-setup.ts',
@@ -28,7 +28,7 @@ module.exports = {
   moduleNameMapper: {
     // Only mock non-security dependencies
     '^../../openai$': '<rootDir>/src/__tests__/integration/security-test-setup.ts',
-    '^../../market-news/synthesizer$': '<rootDir>/src/__tests__/integration/security-test-setup.ts',
+    '^../../market-news/synthesizer$': '<rootDir>/src/__tests__/setup/security-test-setup.ts',
     // DO NOT mock Plaid or database - we need real security implementation
     // DO NOT mock Prisma - we need real database queries to test security filtering
   },
@@ -36,4 +36,13 @@ module.exports = {
   // Clear mocks between tests to ensure clean state
   clearMocks: true,
   restoreMocks: true,
+  
+  // Add explicit root directory and module directories
+  rootDir: '.',
+  moduleDirectories: ['node_modules', 'src'],
+  
+  // Add test discovery options
+  testLocationInResults: true,
+  detectOpenHandles: true,
+  forceExit: true,
 };
