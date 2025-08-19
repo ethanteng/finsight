@@ -5,11 +5,11 @@
     "skipLibCheck": true
   },
   "exclude": [
-    "node_modules", 
-    "frontend", 
-    "generated", 
-    "**/*.test.ts", 
-    "**/*.spec.ts", 
+    "node_modules",
+    "frontend",
+    "generated",
+    "**/*.test.ts",
+    "**/*.spec.ts",
     "**/__tests__/**",
     "**/setup.ts"
   ]
