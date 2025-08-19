@@ -39,12 +39,12 @@ jest.mock('../../profile/anonymizer', () => ({
 describe('Profile Anonymization with Encryption and Preservation', () => {
   let profileManager: ProfileManager;
   let mockPrisma: any;
-  let mockUserProfileCreate: jest.Mock;
-  let mockUserProfileUpdate: jest.Mock;
-  let mockUserProfileFindUnique: jest.Mock;
-  let mockEncryptedProfileDataCreate: jest.Mock;
-  let mockEncryptedProfileDataUpdate: jest.Mock;
-  let mockUserFindUnique: jest.Mock;
+  let mockUserProfileCreate: any;
+  let mockUserProfileUpdate: any;
+  let mockUserProfileFindUnique: any;
+  let mockEncryptedProfileDataCreate: any;
+  let mockEncryptedProfileDataUpdate: any;
+  let mockUserFindUnique: any;
 
   beforeEach(() => {
     // Reset all mocks
@@ -91,8 +91,8 @@ describe('Profile Anonymization with Encryption and Preservation', () => {
       const testProfile = 'John Doe is a 35-year-old software engineer earning $100,000 annually. He lives in New York, NY.';
       
       // Mock user and profile existence
-      mockUserFindUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
-      mockUserProfileFindUnique.mockResolvedValue({
+      (mockUserFindUnique as any).mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
+      (mockUserProfileFindUnique as any).mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: '',
@@ -122,7 +122,7 @@ describe('Profile Anonymization with Encryption and Preservation', () => {
       expect(mockEncryptedProfileDataCreate).toHaveBeenCalled();
       
       // Mock profile retrieval with encrypted data
-      mockUserProfileFindUnique.mockResolvedValue({
+      (mockUserProfileFindUnique as any).mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: '',
@@ -171,8 +171,8 @@ describe('Profile Anonymization with Encryption and Preservation', () => {
       };
       
       // Mock user and profile existence
-      mockUserFindUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' } as any);
-      mockUserProfileFindUnique.mockResolvedValue({
+      (mockUserFindUnique as any).mockResolvedValue({ id: 'test-user', email: 'test@example.com' } as any);
+      (mockUserProfileFindUnique as any).mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: '',
@@ -221,8 +221,8 @@ describe('Profile Anonymization with Encryption and Preservation', () => {
       const backupProfile = 'I am a teacher earning $45,000';
       
       // Mock user and profile existence
-      mockUserFindUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
-      mockUserProfileFindUnique.mockResolvedValue({
+      (mockUserFindUnique as any).mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
+      (mockUserProfileFindUnique as any).mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: '',
@@ -257,8 +257,8 @@ describe('Profile Anonymization with Encryption and Preservation', () => {
       const testProfile = 'I am a software engineer';
       
       // Mock user and profile with encrypted data
-      mockUserFindUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
-      mockUserProfileFindUnique.mockResolvedValue({
+      (mockUserFindUnique as any).mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
+      (mockUserProfileFindUnique as any).mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: '',
@@ -290,8 +290,8 @@ describe('Profile Anonymization with Encryption and Preservation', () => {
       const testProfile = 'I am Sarah Chen, earning $100,000 in Austin, TX';
       
       // Mock user and profile with encrypted data
-      mockUserFindUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
-      mockUserProfileFindUnique.mockResolvedValue({
+      (mockUserFindUnique as any).mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
+      (mockUserProfileFindUnique as any).mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: '',
@@ -333,8 +333,8 @@ describe('Profile Anonymization with Encryption and Preservation', () => {
   describe('Error Handling', () => {
     test('should handle decryption failures gracefully', async () => {
       // Mock user and profile with encrypted data
-      mockUserFindUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
-      mockUserProfileFindUnique.mockResolvedValue({
+      (mockUserFindUnique as any).mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
+      (mockUserProfileFindUnique as any).mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: 'fallback-profile',
@@ -365,8 +365,8 @@ describe('Profile Anonymization with Encryption and Preservation', () => {
 
     test('should handle missing profile gracefully', async () => {
       // Mock user but no profile
-      mockUserFindUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
-      mockUserProfileFindUnique.mockResolvedValue(null);
+      (mockUserFindUnique as any).mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
+      (mockUserProfileFindUnique as any).mockResolvedValue(null);
       
       // Should create new profile
       const aiProfile = await profileManager.getOrCreateProfile('test-user');
@@ -381,8 +381,8 @@ describe('Profile Anonymization with Encryption and Preservation', () => {
       const originalProfile = 'I am Jane Smith, earning $80,000 in Boston, MA';
       
       // Mock user and profile existence
-      mockUserFindUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
-      mockUserProfileFindUnique.mockResolvedValue({
+      (mockUserFindUnique as any).mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
+      (mockUserProfileFindUnique as any).mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: '',
@@ -406,7 +406,7 @@ describe('Profile Anonymization with Encryption and Preservation', () => {
       expect(mockEncrypt).toHaveBeenCalledWith(originalProfile);
       
       // Mock profile retrieval with encrypted data
-      mockUserProfileFindUnique.mockResolvedValue({
+      (mockUserProfileFindUnique as any).mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: '',
@@ -449,8 +449,8 @@ describe('Profile Anonymization with Encryption and Preservation', () => {
       const largeProfile = 'I am ' + 'A'.repeat(1000) + ', earning $' + '1'.repeat(1000) + ' in ' + 'B'.repeat(1000) + ', ' + 'C'.repeat(1000);
       
       // Mock user and profile existence
-      mockUserFindUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
-      mockUserProfileFindUnique.mockResolvedValue({
+      (mockUserFindUnique as any).mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
+      (mockUserProfileFindUnique as any).mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: '',
