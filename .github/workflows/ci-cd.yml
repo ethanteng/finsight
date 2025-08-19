@@ -53,7 +53,7 @@ jobs:
       - name: Lint backend
         run: |
           npx eslint src/ --ext .ts
-          npx tsc --noEmit --skipLibCheck --exclude "src/__tests__/integration/profile-anonymization-encryption-preservation.test.ts"
+          npx tsc --noEmit --skipLibCheck -p tsconfig.build.json
 
       - name: Lint frontend
         run: |
@@ -330,7 +330,7 @@ jobs:
 
       - name: Verify backend build
         run: |
-          npx tsc --noEmit --skipLibCheck --exclude "src/__tests__/integration/profile-anonymization-encryption-preservation.test.ts"
+          npx tsc --noEmit --skipLibCheck -p tsconfig.build.json
           npm run build:backend
 
       - name: Verify frontend build
