@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { app } from '../../index';
+import { testApp } from './test-app-setup';
 import { dataOrchestrator } from '../../data/orchestrator';
 import { UserTier } from '../../data/types';
 
@@ -46,7 +46,7 @@ describe('Enhanced Market Context API Integration', () => {
         }
       });
 
-      const response = await request(app)
+      const response = await request(testApp)
         .get('/test/enhanced-market-context')
         .query({ tier: 'starter', isDemo: 'true' })
         .expect(200);
@@ -85,7 +85,7 @@ describe('Enhanced Market Context API Integration', () => {
         }
       });
 
-      const response = await request(app)
+      const response = await request(testApp)
         .get('/test/enhanced-market-context')
         .query({ tier: 'standard', isDemo: 'true' })
         .expect(200);
@@ -111,7 +111,7 @@ describe('Enhanced Market Context API Integration', () => {
         }
       });
 
-      const response = await request(app)
+      const response = await request(testApp)
         .get('/test/enhanced-market-context')
         .query({ tier: 'premium', isDemo: 'true' })
         .expect(200);
@@ -139,7 +139,7 @@ describe('Enhanced Market Context API Integration', () => {
         }
       });
 
-      const response = await request(app)
+      const response = await request(testApp)
         .get('/test/enhanced-market-context')
         .expect(200);
 
@@ -151,7 +151,7 @@ describe('Enhanced Market Context API Integration', () => {
     it('should handle orchestrator errors gracefully', async () => {
       MockDataOrchestrator.getMarketContextSummary.mockRejectedValue(new Error('Test error'));
 
-      const response = await request(app)
+      const response = await request(testApp)
         .get('/test/enhanced-market-context')
         .query({ tier: 'standard', isDemo: 'true' })
         .expect(500);
@@ -173,7 +173,7 @@ describe('Enhanced Market Context API Integration', () => {
         }
       });
 
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/test/refresh-market-context')
         .send({ tier: 'premium', isDemo: true })
         .expect(200);
@@ -198,7 +198,7 @@ describe('Enhanced Market Context API Integration', () => {
     });
 
     it('should handle missing request body parameters', async () => {
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/test/refresh-market-context')
         .send({})
         .expect(200);
@@ -211,7 +211,7 @@ describe('Enhanced Market Context API Integration', () => {
     it('should handle orchestrator errors gracefully', async () => {
       MockDataOrchestrator.refreshMarketContext.mockRejectedValue(new Error('Refresh failed'));
 
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/test/refresh-market-context')
         .send({ tier: 'standard', isDemo: true })
         .expect(500);
@@ -222,7 +222,7 @@ describe('Enhanced Market Context API Integration', () => {
 
   describe('GET /test/current-tier', () => {
     it('should return current tier configuration', async () => {
-      const response = await request(app)
+      const response = await request(testApp)
         .get('/test/current-tier')
         .expect(200);
 
@@ -249,7 +249,7 @@ describe('Enhanced Market Context API Integration', () => {
         }
       });
 
-      const response = await request(app)
+      const response = await request(testApp)
         .get('/test/cache-stats')
         .expect(200);
 
@@ -267,7 +267,7 @@ describe('Enhanced Market Context API Integration', () => {
     it('should invalidate cache with pattern', async () => {
       MockDataOrchestrator.invalidateCache.mockResolvedValue();
 
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/test/invalidate-cache')
         .send({ pattern: 'market' })
         .expect(200);
@@ -279,7 +279,7 @@ describe('Enhanced Market Context API Integration', () => {
     it('should use default pattern when none provided', async () => {
       MockDataOrchestrator.invalidateCache.mockResolvedValue();
 
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/test/invalidate-cache')
         .send({})
         .expect(200);
@@ -333,7 +333,7 @@ describe('Enhanced Market Context API Integration', () => {
 
       const startTime = Date.now();
       
-      const response = await request(app)
+      const response = await request(testApp)
         .get('/test/enhanced-market-context')
         .query({ tier: 'starter', isDemo: 'true' })
         .expect(200);
@@ -362,7 +362,7 @@ describe('Enhanced Market Context API Integration', () => {
 
       // Make concurrent requests
       const requests = Array(5).fill(null).map(() =>
-        request(app)
+        request(testApp)
           .get('/test/enhanced-market-context')
           .query({ tier: 'starter', isDemo: 'true' })
       );

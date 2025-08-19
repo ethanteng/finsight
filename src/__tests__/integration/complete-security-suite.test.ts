@@ -1,8 +1,9 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
-import { app } from '../../index';
 import { ProfileEncryptionService } from '../../profile/encryption';
 import { testPrisma } from '../setup/test-database-ci';
+import { testApp } from './test-app-setup';
+import { app } from '../..';
 
 // Mock authentication middleware for tests
 const mockAuthMiddleware = (req: any, res: any, next: any) => {
@@ -10,8 +11,8 @@ const mockAuthMiddleware = (req: any, res: any, next: any) => {
   next();
 };
 
-// Apply mock middleware to the app for testing
-app.use((req: any, res: any, next: any) => {
+// Apply mock middleware to the testApp for testing
+testApp.use((req: any, res: any, next: any) => {
   // Mock the requireAuth middleware by setting req.user based on JWT token
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -88,7 +89,7 @@ describe('Complete Security Test Suite', () => {
     describe('Protected Endpoint Security', () => {
       test('should enforce authentication on /profile', async () => {
         // Test without authentication
-        const unauthenticatedResponse = await request(app)
+        const unauthenticatedResponse = await request(testApp)
           .get('/profile');
         
         expect(unauthenticatedResponse.status).toBe(401);
@@ -102,14 +103,14 @@ describe('Complete Security Test Suite', () => {
         // Test that both users get authentication required (401) without valid users
         // This validates that the authentication middleware is working correctly
         
-        const user1Response = await request(app)
+        const user1Response = await request(testApp)
           .get('/profile')
           .set('Authorization', `Bearer ${user1JWT}`);
         
         // User doesn't exist in main database, so authentication fails
         expect(user1Response.status).toBe(401);
         
-        const user2Response = await request(app)
+        const user2Response = await request(testApp)
           .get('/profile')
           .set('Authorization', `Bearer ${user2JWT}`);
         
@@ -124,14 +125,14 @@ describe('Complete Security Test Suite', () => {
         // Test that both users get authentication required (401) without valid users
         // This validates that the authentication middleware prevents unauthorized access
         
-        const user1AccessingUser2 = await request(app)
+        const user1AccessingUser2 = await request(testApp)
           .get('/profile')
           .set('Authorization', `Bearer ${user1JWT}`);
         
         // User doesn't exist in main database, so authentication fails
         expect(user1AccessingUser2.status).toBe(401);
         
-        const user2AccessingUser1 = await request(app)
+        const user2AccessingUser1 = await request(testApp)
           .get('/profile')
           .set('Authorization', `Bearer ${user2JWT}`);
         
@@ -146,7 +147,7 @@ describe('Complete Security Test Suite', () => {
     describe('Stripe Endpoint Security', () => {
       test('should enforce authentication on /api/stripe/subscription-status', async () => {
         // Test without authentication
-        const unauthenticatedResponse = await request(app)
+        const unauthenticatedResponse = await request(testApp)
           .get('/api/stripe/subscription-status');
         
         expect(unauthenticatedResponse.status).toBe(401);
@@ -158,7 +159,7 @@ describe('Complete Security Test Suite', () => {
       
       test('should enforce authentication on /api/stripe/check-feature-access', async () => {
         // Test without authentication
-        const unauthenticatedResponse = await request(app)
+        const unauthenticatedResponse = await request(testApp)
           .post('/api/stripe/check-feature-access')
           .send({ requiredTier: 'FREE' });
         
@@ -170,7 +171,7 @@ describe('Complete Security Test Suite', () => {
       });
       
       test('should allow public access to /api/stripe/plans', async () => {
-        const response = await request(app)
+        const response = await request(testApp)
           .get('/api/stripe/plans');
         
         expect(response.status).toBe(200);
@@ -178,7 +179,7 @@ describe('Complete Security Test Suite', () => {
       });
       
       test('should allow public access to /api/stripe/config', async () => {
-        const response = await request(app)
+        const response = await request(testApp)
           .get('/api/stripe/config');
         
         expect(response.status).toBe(200);
@@ -192,22 +193,22 @@ describe('Complete Security Test Suite', () => {
         // This validates that the security middleware is consistently applied
         
         // User 1 accesses profile endpoint
-        const user1Profile = await request(app)
+        const user1Profile = await request(testApp)
           .get('/profile')
           .set('Authorization', `Bearer ${user1JWT}`);
         
         // User 1 accesses Stripe endpoint
-        const user1Stripe = await request(app)
+        const user1Stripe = await request(testApp)
           .get('/api/stripe/subscription-status')
           .set('Authorization', `Bearer ${user1JWT}`);
         
         // User 2 accesses profile endpoint
-        const user2Profile = await request(app)
+        const user2Profile = await request(testApp)
           .get('/profile')
           .set('Authorization', `Bearer ${user2JWT}`);
         
         // User 2 accesses Stripe endpoint
-        const user2Stripe = await request(app)
+        const user2Stripe = await request(testApp)
           .get('/api/stripe/subscription-status')
           .set('Authorization', `Bearer ${user2JWT}`);
         
@@ -224,20 +225,20 @@ describe('Complete Security Test Suite', () => {
         // This validates that no user can access any endpoint without proper authentication
         
         // User 1 cannot access User 2's data through any endpoint
-        const user1AccessingUser2Profile = await request(app)
+        const user1AccessingUser2Profile = await request(testApp)
           .get('/profile')
           .set('Authorization', `Bearer ${user1JWT}`);
         
-        const user1AccessingUser2Stripe = await request(app)
+        const user1AccessingUser2Stripe = await request(testApp)
           .get('/api/stripe/subscription-status')
           .set('Authorization', `Bearer ${user1JWT}`);
         
         // User 2 cannot access User 1's data through any endpoint
-        const user2AccessingUser1Profile = await request(app)
+        const user2AccessingUser1Profile = await request(testApp)
           .get('/profile')
           .set('Authorization', `Bearer ${user2JWT}`);
         
-        const user2AccessingUser1Stripe = await request(app)
+        const user2AccessingUser1Stripe = await request(testApp)
           .get('/api/stripe/subscription-status')
           .set('Authorization', `Bearer ${user2JWT}`);
         
@@ -255,14 +256,14 @@ describe('Complete Security Test Suite', () => {
         const invalidJWT = 'invalid.jwt.token';
         
         // Test profile endpoint
-        const profileResponse = await request(app)
+        const profileResponse = await request(testApp)
           .get('/profile')
           .set('Authorization', `Bearer ${invalidJWT}`);
         
         expect(profileResponse.status).toBe(401);
         
         // Test Stripe endpoint
-        const stripeResponse = await request(app)
+        const stripeResponse = await request(testApp)
           .get('/api/stripe/subscription-status')
           .set('Authorization', `Bearer ${invalidJWT}`);
         
@@ -277,14 +278,14 @@ describe('Complete Security Test Suite', () => {
         );
         
         // Test profile endpoint
-        const profileResponse = await request(app)
+        const profileResponse = await request(testApp)
           .get('/profile')
           .set('Authorization', `Bearer ${expiredJWT}`);
         
         expect(profileResponse.status).toBe(401);
         
         // Test Stripe endpoint
-        const stripeResponse = await request(app)
+        const stripeResponse = await request(testApp)
           .get('/api/stripe/subscription-status')
           .set('Authorization', `Bearer ${expiredJWT}`);
         
@@ -293,13 +294,13 @@ describe('Complete Security Test Suite', () => {
       
       test('should reject missing Authorization header', async () => {
         // Test profile endpoint
-        const profileResponse = await request(app)
+        const profileResponse = await request(testApp)
           .get('/profile');
         
         expect(profileResponse.status).toBe(401);
         
         // Test Stripe endpoint
-        const stripeResponse = await request(app)
+        const stripeResponse = await request(testApp)
           .get('/api/stripe/subscription-status');
         
         expect(stripeResponse.status).toBe(401);
@@ -308,7 +309,7 @@ describe('Complete Security Test Suite', () => {
     
     describe('Data Leakage Prevention', () => {
       test('should not expose internal database IDs in public endpoints', async () => {
-        const plansResponse = await request(app)
+        const plansResponse = await request(testApp)
           .get('/api/stripe/plans');
         
         expect(plansResponse.status).toBe(200);
@@ -319,7 +320,7 @@ describe('Complete Security Test Suite', () => {
       });
       
       test('should not expose Stripe internal IDs in public endpoints', async () => {
-        const configResponse = await request(app)
+        const configResponse = await request(testApp)
           .get('/api/stripe/config');
         
         expect(configResponse.status).toBe(200);

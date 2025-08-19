@@ -1,8 +1,8 @@
 import { jest } from '@jest/globals';
 import request from 'supertest';
-import { app } from '../../index';
 import { ProfileEncryptionService } from '../../profile/encryption';
 import { testPrisma } from '../setup/test-database-ci';
+import { testApp } from './test-app-setup';
 
 beforeAll(async () => {
   // testPrisma is managed by the centralized test database setup

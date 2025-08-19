@@ -1,25 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from '@jest/globals';
 const request = require('supertest');
-import express from 'express';
-import { setupPlaidRoutes } from '../../plaid';
-import stripeRoutes from '../../routes/stripe';
-import { optionalAuth } from '../../auth/middleware';
 import { createTestUser, createTestAccessToken } from '../unit/factories/user.factory';
 import { testPrisma } from '../setup/test-database-ci';
 import { hashPassword } from '../../auth/utils';
+import { testApp } from './test-app-setup';
 
-// Create a test app instance specifically for comprehensive security tests
-const app = express();
-app.use(express.json());
-
-// Add authentication middleware
-app.use(optionalAuth);
-
-// Set up Plaid routes on the test app
-setupPlaidRoutes(app);
-
-// Set up Stripe routes on the test app
-app.use('/api/stripe', stripeRoutes);
+// Use the test app instance that doesn't depend on external modules
+const app = testApp;
 
 // Mock Stripe service to avoid database issues in security tests
 jest.mock('../../services/stripe', () => ({

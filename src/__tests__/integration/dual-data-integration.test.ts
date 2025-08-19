@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { app } from '../../index';
+import { testApp } from './test-app-setup';
 import { askOpenAI, askOpenAIWithEnhancedContext } from '../../openai';
 import { convertResponseToUserFriendly, clearTokenizationMaps } from '../../privacy';
 
@@ -55,7 +55,7 @@ describe('Dual-Data System Integration Tests', () => {
       mockAskOpenAIWithEnhancedContext.mockResolvedValue(demoResponse);
 
       // ✅ Act
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/ask/display-real')
         .send({
           question: 'What is my account balance?',
@@ -75,7 +75,7 @@ describe('Dual-Data System Integration Tests', () => {
       mockAskOpenAIWithEnhancedContext.mockResolvedValue(fakeDataResponse);
 
       // ✅ Act
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/ask/display-real')
         .send({
           question: 'Show me my accounts',
@@ -94,7 +94,7 @@ describe('Dual-Data System Integration Tests', () => {
       mockAskOpenAIWithEnhancedContext.mockResolvedValue(demoResponse);
 
       // ✅ Act
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/ask/display-real')
         .send({
           question: 'Test question',
@@ -118,7 +118,7 @@ describe('Dual-Data System Integration Tests', () => {
       mockConvertResponse.mockReturnValue(userFriendlyResponse);
 
       // ✅ Act
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/ask/display-real')
         .send({
           question: 'What is my account balance?',
@@ -140,7 +140,7 @@ describe('Dual-Data System Integration Tests', () => {
       mockConvertResponse.mockReturnValue(userFriendlyResponse);
 
       // ✅ Act
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/ask/display-real')
         .send({
           question: 'What did I spend money on?',
@@ -161,7 +161,7 @@ describe('Dual-Data System Integration Tests', () => {
       mockConvertResponse.mockReturnValue(userFriendlyResponse);
 
       // ✅ Act
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/ask/display-real')
         .set('Authorization', 'Bearer mock-token')
         .send({
@@ -184,7 +184,7 @@ describe('Dual-Data System Integration Tests', () => {
       };
 
       // ✅ Act
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/ask/display-real')
         .send(requestBody);
 
@@ -198,7 +198,7 @@ describe('Dual-Data System Integration Tests', () => {
       mockAskOpenAIWithEnhancedContext.mockRejectedValue(new Error('AI service unavailable'));
 
       // ✅ Act
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/ask/display-real')
         .send({
           question: 'What is my balance?',
@@ -218,7 +218,7 @@ describe('Dual-Data System Integration Tests', () => {
       });
 
       // ✅ Act
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/ask/display-real')
         .send({
           question: 'What is my balance?',
@@ -234,7 +234,7 @@ describe('Dual-Data System Integration Tests', () => {
       const malformedBody = { invalidField: 'test' };
 
       // ✅ Act
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/ask/display-real')
         .send(malformedBody);
 
@@ -254,7 +254,7 @@ describe('Dual-Data System Integration Tests', () => {
       mockConvertResponse.mockReturnValue(userFriendlyResponse);
 
       // ✅ Act
-      await request(app)
+      await request(testApp)
         .post('/ask/display-real')
         .send({
           question: 'What is my balance?',
@@ -271,7 +271,7 @@ describe('Dual-Data System Integration Tests', () => {
       mockAskOpenAIWithEnhancedContext.mockResolvedValue(fakeResponse);
 
       // ✅ Act
-      await request(app)
+      await request(testApp)
         .post('/ask/display-real')
         .send({
           question: 'What is my balance?',
@@ -292,7 +292,7 @@ describe('Dual-Data System Integration Tests', () => {
 
       // ✅ Act
       const startTime = Date.now();
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/ask/display-real')
         .send({
           question: 'Generate large response',
@@ -317,7 +317,7 @@ describe('Dual-Data System Integration Tests', () => {
 
       // ✅ Act
       const promises = responses.map((_, index) =>
-        request(app)
+        request(testApp)
           .post('/ask/display-real')
           .send({
             question: `Question ${index + 1}`,
@@ -342,7 +342,7 @@ describe('Dual-Data System Integration Tests', () => {
       mockAskOpenAIWithEnhancedContext.mockRejectedValue(new Error('Internal error with sensitive data'));
 
       // ✅ Act
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/ask/display-real')
         .send({
           question: 'What is my balance?',
@@ -360,7 +360,7 @@ describe('Dual-Data System Integration Tests', () => {
       const invalidSessionId = 'invalid-session-123';
 
       // ✅ Act
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/ask/display-real')
         .send({
           question: 'Test question',

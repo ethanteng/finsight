@@ -55,7 +55,7 @@ jest.mock('../../plaid', () => {
 });
 
 // Import the app after mocking
-import { app } from '../../index';
+import { testApp } from './test-app-setup';
 import { getPrismaClient } from '../../prisma-client';
 
 describe('Demo Mode Plaid Integration', () => {
@@ -64,9 +64,8 @@ describe('Demo Mode Plaid Integration', () => {
   beforeAll(async () => {
     prisma = getPrismaClient();
     
-    // Set up the mocked Plaid routes
-    const { setupPlaidRoutes } = require('../../plaid');
-    setupPlaidRoutes(app);
+    // Note: setupPlaidRoutes is not needed for testApp since we have mock endpoints
+    // The testApp already has all the necessary Plaid mock endpoints
   });
 
   afterAll(async () => {
@@ -75,7 +74,7 @@ describe('Demo Mode Plaid Integration', () => {
 
   describe('Demo Mode Link Token Creation', () => {
     it('should detect demo mode and use sandbox environment', async () => {
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/plaid/create_link_token')
         .set('x-demo-mode', 'true')
         .send({ isDemo: true });
@@ -86,7 +85,7 @@ describe('Demo Mode Plaid Integration', () => {
     });
 
     it('should detect demo mode from body parameter', async () => {
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/plaid/create_link_token')
         .send({ isDemo: true });
 
@@ -96,7 +95,7 @@ describe('Demo Mode Plaid Integration', () => {
     });
 
     it('should not create demo link token when demo mode is not specified', async () => {
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/plaid/create_link_token')
         .send({});
 
@@ -109,7 +108,7 @@ describe('Demo Mode Plaid Integration', () => {
   describe('Demo Mode Environment Isolation', () => {
     it('should use sandbox environment regardless of main environment setting', async () => {
       // Test that demo mode always uses sandbox, even if main environment is production
-      const response = await request(app)
+      const response = await request(testApp)
         .post('/plaid/create_link_token')
         .set('x-demo-mode', 'true')
         .send({ isDemo: true });
