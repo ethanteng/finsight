@@ -12,7 +12,7 @@ jest.mock('../../config/stripe', () => ({
       },
       billingPortal: {
         sessions: {
-          create: jest.fn()
+        create: jest.fn()
         }
       },
       subscriptions: {
@@ -23,7 +23,9 @@ jest.mock('../../config/stripe', () => ({
   },
   getStripePriceId: jest.fn(),
   getTierFromPriceId: jest.fn(),
-  constructWebhookEvent: jest.fn()
+  constructWebhookEvent: jest.fn(),
+  getPublishableKey: jest.fn().mockReturnValue('pk_test_mock_key'),
+  isStripeConfigured: jest.fn().mockReturnValue(true)
 }));
 
 // Mock Prisma

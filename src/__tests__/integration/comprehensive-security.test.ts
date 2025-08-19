@@ -55,7 +55,17 @@ jest.mock('../../config/stripe', () => ({
       }
     }
   },
-  constructWebhookEvent: jest.fn().mockReturnValue({ type: 'test' })
+  constructWebhookEvent: jest.fn().mockReturnValue({ type: 'test' }),
+  getPublishableKey: jest.fn().mockReturnValue('pk_test_mock_key'),
+  getStripePriceId: jest.fn().mockImplementation((tier: string) => {
+    const mockPriceIds = {
+      starter: 'price_starter_test',
+      standard: 'price_standard_test',
+      premium: 'price_premium_test'
+    };
+    return mockPriceIds[tier as keyof typeof mockPriceIds] || 'price_default_test';
+  }),
+  isStripeConfigured: jest.fn().mockReturnValue(true)
 }));
 
 // Mock the Prisma client used by routes to return test users
