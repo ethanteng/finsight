@@ -236,8 +236,21 @@ jobs:
       - name: Wait for database
         run: |
           echo "Waiting for database to be ready..."
-          sleep 10
-          echo "Database should be ready now"
+          # Wait for PostgreSQL to be fully ready
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U postgres -d test_db; then
+              echo "✅ Database is ready!"
+              break
+            fi
+            echo "⏳ Waiting for database... attempt $i/30"
+            sleep 2
+          done
+          
+          # Verify we can connect and run a query
+          PGPASSWORD=postgres psql -h localhost -U postgres -d test_db -c "SELECT 1 as test;" || {
+            echo "❌ Database connection failed"
+            exit 1
+          }
 
       - name: Setup test database
         run: |
@@ -272,6 +285,12 @@ jobs:
           STRIPE_PRICE_STARTER: price_starter_test
           STRIPE_PRICE_STANDARD: price_standard_test
           STRIPE_PRICE_PREMIUM: price_premium_test
+          # Additional environment variables needed by tests
+          CI: "true"
+          GITHUB_ACTIONS: "true"
+          # Database connection details
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
 
       - name: Upload integration test coverage to Codecov
         uses: codecov/codecov-action@v3
@@ -325,8 +344,21 @@ jobs:
       - name: Wait for database
         run: |
           echo "Waiting for database to be ready..."
-          sleep 10
-          echo "Database should be ready now"
+          # Wait for PostgreSQL to be fully ready
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U postgres -d test_db; then
+              echo "✅ Database is ready!"
+              break
+            fi
+            echo "⏳ Waiting for database... attempt $i/30"
+            sleep 2
+          done
+          
+          # Verify we can connect and run a query
+          PGPASSWORD=postgres psql -h localhost -U postgres -d test_db -c "SELECT 1 as test;" || {
+            echo "❌ Database connection failed"
+            exit 1
+          }
 
       - name: Setup test database
         run: |
@@ -361,6 +393,12 @@ jobs:
           STRIPE_PRICE_STARTER: price_starter_test
           STRIPE_PRICE_STANDARD: price_standard_test
           STRIPE_PRICE_PREMIUM: price_premium_test
+          # Additional environment variables needed by tests
+          CI: "true"
+          GITHUB_ACTIONS: "true"
+          # Database connection details
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
 
       - name: Run Profile Encryption Security Tests (Phase 5)
         run: npm run test:profile-encryption
@@ -386,6 +424,12 @@ jobs:
           STRIPE_PRICE_STARTER: price_starter_test
           STRIPE_PRICE_STANDARD: price_standard_test
           STRIPE_PRICE_PREMIUM: price_premium_test
+          # Additional environment variables needed by tests
+          CI: "true"
+          GITHUB_ACTIONS: "true"
+          # Database connection details
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
 
       - name: Run Complete Security Suite (All Phases)
         run: npm run test:complete-security
@@ -411,6 +455,12 @@ jobs:
           STRIPE_PRICE_STARTER: price_starter_test
           STRIPE_PRICE_STANDARD: price_standard_test
           STRIPE_PRICE_PREMIUM: price_premium_test
+          # Additional environment variables needed by tests
+          CI: "true"
+          GITHUB_ACTIONS: "true"
+          # Database connection details
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
 
       - name: Security Test Results Summary
         run: |

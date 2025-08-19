@@ -7,9 +7,18 @@ beforeAll(async () => {
   // In CI/CD, we use the PostgreSQL service container
   const databaseUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
   
+  console.log('🔧 Test Database Setup - Environment Variables:');
+  console.log('  TEST_DATABASE_URL:', process.env.TEST_DATABASE_URL ? '✅ Set' : '❌ Not set');
+  console.log('  DATABASE_URL:', process.env.DATABASE_URL ? '✅ Set' : '❌ Not set');
+  console.log('  NODE_ENV:', process.env.NODE_ENV);
+  console.log('  CI:', process.env.CI);
+  console.log('  GITHUB_ACTIONS:', process.env.GITHUB_ACTIONS);
+  
   if (!databaseUrl) {
     throw new Error('TEST_DATABASE_URL or DATABASE_URL environment variable is required for CI/CD tests');
   }
+  
+  console.log('🔧 Attempting to connect to database:', databaseUrl);
   
   testPrisma = new PrismaClient({
     datasources: {
@@ -21,6 +30,10 @@ beforeAll(async () => {
   try {
     await testPrisma.$connect();
     console.log('✅ Connected to CI/CD test database:', databaseUrl);
+    
+    // Test a simple query to verify the connection works
+    const result = await testPrisma.$queryRaw`SELECT 1 as test`;
+    console.log('✅ Database query test successful:', result);
   } catch (error) {
     console.error('❌ Failed to connect to CI/CD test database:', error);
     throw error;
