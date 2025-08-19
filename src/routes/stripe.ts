@@ -367,19 +367,21 @@ router.get('/subscription-status', requireAuth, async (req, res) => {
 /**
  * POST /api/stripe/check-feature-access
  * Check if user can access a specific feature
+ * 🔒 SECURITY: Requires authentication to prevent cross-user access checks
  */
-router.post('/check-feature-access', async (req, res) => {
+router.post('/check-feature-access', requireAuth, async (req, res) => {
   try {
-    const { userId, requiredTier } = req.body;
+    const { requiredTier } = req.body;
+    const userId = req.user?.id; // Get user ID from authenticated session
     
     if (!userId || !requiredTier) {
       return res.status(400).json({
-        error: 'Missing required fields: userId, requiredTier',
+        error: 'Missing required fields: requiredTier',
         code: 'MISSING_REQUIRED_FIELDS'
       });
     }
 
-    // Check feature access
+    // 🔒 SECURITY: Users can only check their own feature access
     const accessResult = await stripeService.canAccessFeature(userId, requiredTier);
     
     res.json({

@@ -9,6 +9,7 @@
     "test:unit": "jest --testPathPattern=unit",
     "test:integration": "jest --config jest.integration.config.js",
     "test:integration:ci": "jest --config jest.integration.ci.config.js",
+    "test:security": "jest --config jest.security.config.js",
     "test:all": "npm run test:unit && npm run test:integration",
     "test:coverage:unit": "jest --coverage --testPathPattern=unit",
     "test:coverage:integration": "jest --config jest.integration.config.js --coverage",

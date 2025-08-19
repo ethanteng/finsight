@@ -121,11 +121,28 @@ app.use(optionalAuth);
 
 // Setup Plaid routes
 try {
-  console.log('🔧 Calling setupPlaidRoutes...');
-  setupPlaidRoutes(app);
-  console.log('✅ setupPlaidRoutes completed successfully');
+	console.log('🔧 Calling setupPlaidRoutes...');
+	setupPlaidRoutes(app);
+	console.log('✅ setupPlaidRoutes completed successfully');
+	// Test-only: list registered routes to diagnose 404s
+	if (process.env.NODE_ENV === 'test') {
+		try {
+			const router = (app as any)._router;
+			console.log('Router present:', !!router);
+			console.log('Router stack length:', router?.stack?.length);
+			const routes = router?.stack
+				?.filter((layer: any) => layer.route)
+				?.map((layer: any) => ({ methods: Object.keys(layer.route.methods), path: layer.route.path }));
+			console.log('🗺️ Registered routes:', routes);
+			app.get('/__routes', (_req: Request, res: Response) => {
+				res.json({ routes });
+			});
+		} catch (e) {
+			console.log('Route introspection failed', e);
+		}
+	}
 } catch (error) {
-  console.error('❌ Error in setupPlaidRoutes:', error);
+	console.error('❌ Error in setupPlaidRoutes:', error);
 }
 
 // Setup Auth routes
