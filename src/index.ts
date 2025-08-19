@@ -326,7 +326,22 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
     // For production, convert AI response back to user-friendly format
     console.log('Production mode: converting AI response to user-friendly format');
     const { convertResponseToUserFriendly } = await import('./privacy');
+    
+    // ✅ DEBUG: Log the AI response before conversion
+    console.log('DEBUG: AI response before conversion:', aiResponse.substring(0, 500));
+    
+    // ✅ DEBUG: Check if July transactions are in the response
+    const julyTransactions = aiResponse.match(/July.*Transactions?/g);
+    const julyTransactionLines = aiResponse.match(/- \*\*.*\*\*: \$.*/g);
+    console.log('DEBUG: July transaction patterns found:', {
+      julyHeader: julyTransactions,
+      julyTransactionLines: julyTransactionLines?.slice(0, 5)
+    });
+    
     const displayResponse = convertResponseToUserFriendly(aiResponse);
+    
+    // ✅ DEBUG: Log the converted response
+    console.log('DEBUG: Response after conversion:', displayResponse.substring(0, 500));
     
     console.log('Dual-data system: AI received tokenized data, user sees real data');
 

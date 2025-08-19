@@ -362,6 +362,21 @@ export function anonymizeConversationHistory(conversations: any[]): string {
 
 // Convert AI response back to user-friendly format
 export function convertResponseToUserFriendly(response: string): string {
+  // ✅ DEBUG: Log current tokenization maps and response content
+  console.log('convertResponseToUserFriendly: Current merchantRealDataMap size:', merchantRealDataMap.size);
+  if (merchantRealDataMap.size > 0) {
+    console.log('convertResponseToUserFriendly: Merchant mappings:', 
+      Array.from(merchantRealDataMap.entries()).slice(0, 10));
+  }
+  
+  // ✅ DEBUG: Check for July transaction patterns in response
+  const julyPatterns = response.match(/CREDIT CARD.*PAYMENT.*\/\/\d+/g);
+  const merchantPatterns = response.match(/Merchant_\d+/g);
+  console.log('convertResponseToUserFriendly: Found patterns:', {
+    julyPatterns: julyPatterns?.slice(0, 5),
+    merchantPatterns: merchantPatterns?.slice(0, 5)
+  });
+  
   // ✅ Input validation
   if (typeof response !== 'string') {
     return String(response);

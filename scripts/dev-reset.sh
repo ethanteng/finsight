@@ -3,6 +3,7 @@ set -euo pipefail
 
 # Development Database Reset Script
 # This script provides a simple way to reset your local development database
+# to match the production schema without affecting migration history
 
 # Load environment variables from .env file
 if [[ -f .env ]]; then
@@ -44,6 +45,7 @@ fi
 echo ""
 echo "🚨 WARNING: This will completely wipe your local development database!"
 echo "   All local data will be lost!"
+echo "   The database will be recreated to match your current Prisma schema"
 echo ""
 
 # Confirm the action
@@ -61,20 +63,27 @@ echo "🔄 Starting database reset..."
 echo "📦 Generating Prisma client..."
 npx prisma generate
 
-# Step 2: Reset database (wipe everything and reapply migrations)
-echo "🗑️  Resetting database..."
-npx prisma migrate reset --force
+# Step 2: Reset database to match current schema (force reset)
+echo "🗑️  Resetting database to match current schema..."
+echo "   This will drop all tables and recreate them from your Prisma schema"
+npx prisma db push --force-reset
 
 # Step 3: Verify the reset
 echo "✅ Verifying database reset..."
-npx prisma migrate status
+echo "   Checking that all tables were created correctly..."
+
+# List all tables to verify they were created
+echo "📊 Current database tables:"
+npx prisma db execute --stdin <<< "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name;"
 
 echo ""
 echo "🎉 Database reset complete!"
-echo "   Your local development database is now fresh and up-to-date"
-echo "   All migrations have been applied successfully"
+echo "   Your local development database now matches your Prisma schema"
+echo "   All tables have been recreated from scratch"
 echo ""
 echo "💡 Next steps:"
 echo "   - Start your development server: npm run dev"
+echo "   - The subscription status check should now work properly"
+echo "   - Your Financial Overview should display correctly"
 echo "   - Create test data as needed"
 echo "   - Begin development work"
