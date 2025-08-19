@@ -4,18 +4,24 @@ set -euo pipefail
 # Development Database Reset Script
 # This script provides a simple way to reset your local development database
 
+# Load environment variables from .env file
+if [[ -f .env ]]; then
+    echo "📁 Loading environment variables from .env file..."
+    export $(grep -v '^#' .env | xargs)
+fi
+
 echo "🔄 Development Database Reset Script"
 echo "=================================="
 
 # Check if we're in development mode
-if [[ "$NODE_ENV" == "production" ]]; then
+if [[ "${NODE_ENV:-}" == "production" ]]; then
     echo "❌ ERROR: This script cannot run in production environment"
-    echo "   NODE_ENV: $NODE_ENV"
+    echo "   NODE_ENV: ${NODE_ENV:-not set}"
     exit 1
 fi
 
 # Check if DATABASE_URL is set
-if [[ -z "$DATABASE_URL" ]]; then
+if [[ -z "${DATABASE_URL:-}" ]]; then
     echo "❌ ERROR: DATABASE_URL environment variable is not set"
     echo "   Please set DATABASE_URL in your .env file"
     exit 1
