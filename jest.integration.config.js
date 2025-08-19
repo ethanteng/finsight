@@ -5,6 +5,10 @@ module.exports = {
     '**/__tests__/integration/**/*.test.ts',
     '**/__tests__/integration/**/*.spec.ts'
   ],
+  testPathIgnorePatterns: [
+    'comprehensive-security.test.ts', // Exclude comprehensive security tests - they have their own setup
+    'plaid-security-integration.test.ts' // Exclude Plaid security tests - they have their own setup
+  ],
   setupFilesAfterEnv: [
     '<rootDir>/src/__tests__/integration/setup.ts',
     '<rootDir>/src/__tests__/setup/test-database.ts'

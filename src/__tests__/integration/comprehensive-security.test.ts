@@ -1,9 +1,25 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from '@jest/globals';
 const request = require('supertest');
-import { app } from '../../index';
+import express from 'express';
+import { setupPlaidRoutes } from '../../plaid';
+import stripeRoutes from '../../routes/stripe';
+import { optionalAuth } from '../../auth/middleware';
 import { getPrismaClient } from '../../prisma-client';
 import { createTestUser, createTestAccessToken } from '../unit/factories/user.factory';
 import { hashPassword } from '../../auth/utils';
+
+// Create a test app instance specifically for comprehensive security tests
+const app = express();
+app.use(express.json());
+
+// Add authentication middleware
+app.use(optionalAuth);
+
+// Set up Plaid routes on the test app
+setupPlaidRoutes(app);
+
+// Set up Stripe routes on the test app
+app.use('/api/stripe', stripeRoutes);
 
 // Mock Stripe service to avoid database issues in security tests
 jest.mock('../../services/stripe', () => ({
@@ -103,6 +119,16 @@ describe('Comprehensive Security Test Suite', () => {
         itemId: 'user2_item_id'
       })
     });
+  });
+
+  afterEach(async () => {
+    // Clean up after each test
+    await prisma.accessToken.deleteMany();
+    await prisma.user.deleteMany();
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
   });
 
   describe('🔒 Plaid Endpoint Security Tests', () => {
@@ -304,10 +330,9 @@ describe('Comprehensive Security Test Suite', () => {
       ];
 
       for (const endpoint of protectedEndpoints) {
-        const response = await request(app)
-          [endpoint.method.toLowerCase()](endpoint.path)
-          .set('Authorization', `Bearer ${invalidToken}`)
-          .send(endpoint.body || {});
+        const response = await (request(app) as any)[endpoint.method.toLowerCase()](endpoint.path)
+           .set('Authorization', `Bearer ${invalidToken}`)
+           .send(endpoint.body || {});
 
         expect(response.status).toBe(401);
       }

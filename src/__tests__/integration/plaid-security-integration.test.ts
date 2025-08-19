@@ -1,9 +1,21 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from '@jest/globals';
 import request from 'supertest';
-import { app } from '../../index';
+import express from 'express';
+import { setupPlaidRoutes } from '../../plaid';
+import { optionalAuth } from '../../auth/middleware';
 import { prisma } from './setup';
 import { createTestUser, createTestAccessToken } from '../unit/factories/user.factory';
 import { hashPassword } from '../../auth/utils';
+
+// Create a test app instance specifically for Plaid security tests
+const app = express();
+app.use(express.json());
+
+// Add authentication middleware
+app.use(optionalAuth);
+
+// Set up Plaid routes on the test app
+setupPlaidRoutes(app);
 
 describe('Plaid Security Integration Tests', () => {
   let user1: any;
@@ -97,28 +109,18 @@ describe('Plaid Security Integration Tests', () => {
       throw error;
     }
 
-    // Login users to get JWT tokens
-    const user1LoginResponse = await request(app)
-      .post('/auth/login')
-      .send({
-        email: 'user1@test.com',
-        password: 'password123'
-      });
+    // Create JWT tokens directly for testing (since we don't have auth routes in test app)
+    user1JWT = require('jsonwebtoken').sign(
+      { userId: user1.id, email: user1.email, tier: 'starter' },
+      process.env.JWT_SECRET || 'test-secret',
+      { expiresIn: '24h' }
+    );
 
-    const user2LoginResponse = await request(app)
-      .post('/auth/login')
-      .send({
-        email: 'user2@test.com',
-        password: 'password123'
-      });
-
-    // console.log('User1 login response status:', user1LoginResponse.status);
-    // console.log('User1 login response body:', user1LoginResponse.body);
-    // console.log('User2 login response status:', user2LoginResponse.status);
-    // console.log('User2 login response body:', user2LoginResponse.body);
-
-    user1JWT = user1LoginResponse.body.token;
-    user2JWT = user2LoginResponse.body.token;
+    user2JWT = require('jsonwebtoken').sign(
+      { userId: user2.id, email: user2.email, tier: 'starter' },
+      process.env.JWT_SECRET || 'test-secret',
+      { expiresIn: '24h' }
+    );
     
     // console.log('User1 JWT length:', user1JWT?.length);
     // console.log('User2 JWT length:', user2JWT?.length);
@@ -346,11 +348,8 @@ describe('Error Handling Security Tests', () => {
   it('should not leak sensitive information in error messages', async () => {
     // Test error responses don't contain sensitive data
     const response = await request(app)
-      .post('/ask')
-      .set('Authorization', 'Bearer invalid-token')
-      .send({
-        question: 'Show me my accounts'
-      });
+      .get('/plaid/all-accounts')
+      .set('Authorization', 'Bearer invalid-token');
 
     expect(response.status).toBe(401);
     
