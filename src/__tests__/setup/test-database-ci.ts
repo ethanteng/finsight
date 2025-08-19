@@ -120,7 +120,8 @@ beforeAll(async () => {
             update: async (data: any) => ({ id: 'mock-user-id', ...data.data }),
             delete: async () => ({ id: 'mock-user-id' }),
             findUnique: async (data: any) => ({ id: 'mock-user-id', email: 'test@example.com' }),
-            deleteMany: async () => ({ count: 0 })
+            deleteMany: async () => ({ count: 0 }),
+            count: async () => 0
           },
           userProfile: { 
             findMany: async () => [], 
@@ -128,7 +129,8 @@ beforeAll(async () => {
             update: async (data: any) => ({ id: 'mock-profile-id', ...data.data }),
             delete: async () => ({ id: 'mock-profile-id' }),
             findUnique: async (data: any) => ({ id: 'mock-profile-id', userId: 'mock-user-id' }),
-            deleteMany: async () => ({ count: 0 })
+            deleteMany: async () => ({ count: 0 }),
+            count: async () => 0
           },
           account: { 
             findMany: async () => [], 
@@ -136,7 +138,8 @@ beforeAll(async () => {
             update: async (data: any) => ({ id: 'mock-account-id', ...data.data }),
             delete: async () => ({ id: 'mock-account-id' }),
             findUnique: async (data: any) => ({ id: 'mock-account-id', plaidAccountId: 'mock-plaid-id' }),
-            deleteMany: async () => ({ count: 0 })
+            deleteMany: async () => ({ count: 0 }),
+            count: async () => 0
           },
           transaction: { 
             findMany: async () => [], 
@@ -144,7 +147,8 @@ beforeAll(async () => {
             update: async (data: any) => ({ id: 'mock-transaction-id', ...data.data }),
             delete: async () => ({ id: 'mock-transaction-id' }),
             findUnique: async (data: any) => ({ id: 'mock-transaction-id', plaidTransactionId: 'mock-plaid-id' }),
-            deleteMany: async () => ({ count: 0 })
+            deleteMany: async () => ({ count: 0 }),
+            count: async () => 0
           },
           accessToken: { 
             findMany: async () => [], 
@@ -152,7 +156,8 @@ beforeAll(async () => {
             update: async (data: any) => ({ id: 'mock-token-id', ...data.data }),
             delete: async () => ({ id: 'mock-token-id' }),
             findUnique: async (data: any) => ({ id: 'mock-token-id', token: 'mock-token' }),
-            deleteMany: async () => ({ count: 0 })
+            deleteMany: async () => ({ count: 0 }),
+            count: async () => 0
           },
           conversation: { 
             findMany: async () => [], 
@@ -160,7 +165,8 @@ beforeAll(async () => {
             update: async (data: any) => ({ id: 'mock-conversation-id', ...data.data }),
             delete: async () => ({ id: 'mock-conversation-id' }),
             findUnique: async (data: any) => ({ id: 'mock-conversation-id', sessionId: 'mock-session' }),
-            deleteMany: async () => ({ count: 0 })
+            deleteMany: async () => ({ count: 0 }),
+            count: async () => 0
           },
           syncStatus: { 
             findMany: async () => [], 
@@ -168,7 +174,8 @@ beforeAll(async () => {
             update: async (data: any) => ({ id: 'mock-sync-id', ...data.data }),
             delete: async () => ({ id: 'mock-sync-id' }),
             findUnique: async (data: any) => ({ id: 'mock-sync-id', userId: 'mock-user-id' }),
-            deleteMany: async () => ({ count: 0 })
+            deleteMany: async () => ({ count: 0 }),
+            count: async () => 0
           },
           
           // Demo and session models
@@ -178,7 +185,8 @@ beforeAll(async () => {
             update: async (data: any) => ({ id: 'mock-demo-session-id', ...data.data }),
             delete: async () => ({ id: 'mock-demo-session-id' }),
             findUnique: async (data: any) => ({ id: 'mock-demo-session-id', sessionId: 'mock-demo-session' }),
-            deleteMany: async () => ({ count: 0 })
+            deleteMany: async () => ({ count: 0 }),
+            count: async () => 0
           },
           demoConversation: { 
             findMany: async () => [], 
@@ -186,7 +194,8 @@ beforeAll(async () => {
             update: async (data: any) => ({ id: 'mock-demo-conversation-id', ...data.data }),
             delete: async () => ({ id: 'mock-demo-conversation-id' }),
             findUnique: async (data: any) => ({ id: 'mock-demo-conversation-id', sessionId: 'mock-demo-session' }),
-            deleteMany: async () => ({ count: 0 })
+            deleteMany: async () => ({ count: 0 }),
+            count: async () => 0
           },
           
           // Encryption and security models
@@ -196,7 +205,8 @@ beforeAll(async () => {
             update: async (data: any) => ({ id: 'mock-encrypted-id', ...data.data }),
             delete: async () => ({ id: 'mock-encrypted-id' }),
             findUnique: async (data: any) => ({ id: 'mock-encrypted-id', userId: 'mock-user-id' }),
-            deleteMany: async () => ({ count: 0 })
+            deleteMany: async () => ({ count: 0 }),
+            count: async () => 0
           },
           encryptedEmailVerificationCode: { 
             findMany: async () => [], 
@@ -204,7 +214,8 @@ beforeAll(async () => {
             update: async (data: any) => ({ id: 'mock-verification-id', ...data.data }),
             delete: async () => ({ id: 'mock-verification-id' }),
             findUnique: async (data: any) => ({ id: 'mock-verification-id', userId: 'mock-user-id' }),
-            deleteMany: async () => ({ count: 0 })
+            deleteMany: async () => ({ count: 0 }),
+            count: async () => 0
           },
           encryptedUserData: { 
             findMany: async () => [], 
@@ -212,7 +223,8 @@ beforeAll(async () => {
             update: async (data: any) => ({ id: 'mock-user-data-id', ...data.data }),
             delete: async () => ({ id: 'mock-user-data-id' }),
             findUnique: async (data: any) => ({ id: 'mock-user-data-id', userId: 'mock-user-id' }),
-            deleteMany: async () => ({ count: 0 })
+            deleteMany: async () => ({ count: 0 }),
+            count: async () => 0
           },
           
           // Market news models
@@ -222,15 +234,28 @@ beforeAll(async () => {
             update: async (data: any) => ({ id: 'mock-context-id', ...data.data }),
             delete: async () => ({ id: 'mock-context-id' }),
             findUnique: async (data: any) => ({ id: 'mock-context-id', tier: 'starter' }),
-            deleteMany: async () => ({ count: 0 })
+            deleteMany: async () => ({ count: 0 }),
+            count: async () => 0
           },
           marketNewsHistory: { 
             findMany: async () => [], 
             create: async (data: any) => ({ id: 'mock-history-id', ...data.data }),
             update: async (data: any) => ({ id: 'mock-history-id', ...data.data }),
             delete: async () => ({ id: 'mock-history-id' }),
-            findUnique: async (data: any) => ({ id: 'mock-history-id', date: '2025-01-01' }),
-            deleteMany: async () => ({ count: 0 })
+            findUnique: async (data: any) => ({ id: 'mock-history-id', date: '2024-01-01' }),
+            deleteMany: async () => ({ count: 0 }),
+            count: async () => 0
+          },
+          
+          // Additional models that might be needed
+          privacySettings: { 
+            findMany: async () => [], 
+            create: async (data: any) => ({ id: 'mock-privacy-id', ...data.data }),
+            update: async (data: any) => ({ id: 'mock-privacy-id', ...data.data }),
+            delete: async () => ({ id: 'mock-privacy-id' }),
+            findUnique: async (data: any) => ({ id: 'mock-privacy-id', userId: 'mock-user-id' }),
+            deleteMany: async () => ({ count: 0 }),
+            count: async () => 0
           }
         } as any;
         

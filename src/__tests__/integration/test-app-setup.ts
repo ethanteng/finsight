@@ -3,6 +3,7 @@ import { dataOrchestrator } from '../../data/orchestrator';
 import { UserTier } from '../../data/types';
 import { askOpenAIWithEnhancedContext } from '../../openai';
 import { convertResponseToUserFriendly } from '../../privacy';
+import { verifyToken, extractTokenFromHeader } from '../../auth/utils';
 
 // Create a test app instance that doesn't depend on ANY external modules or database connections
 export function createTestApp() {
@@ -10,6 +11,33 @@ export function createTestApp() {
   
   // Add basic middleware
   app.use(express.json());
+  
+  // Simple authentication middleware for testing
+  const testAuthMiddleware = (req: any, res: any, next: any) => {
+    try {
+      const token = extractTokenFromHeader(req.headers.authorization);
+      
+      if (!token) {
+        return res.status(401).json({ error: 'No token provided' });
+      }
+
+      const payload = verifyToken(token);
+      if (!payload) {
+        return res.status(401).json({ error: 'Invalid or expired token' });
+      }
+
+      // For testing, we'll just attach the user info from the JWT
+      req.user = {
+        id: payload.userId,
+        email: payload.email,
+        tier: payload.tier
+      };
+
+      next();
+    } catch (error) {
+      res.status(401).json({ error: 'Authentication error' });
+    }
+  };
   
   // Add basic health endpoint for testing
   app.get('/health', (req, res) => {
@@ -31,8 +59,8 @@ export function createTestApp() {
     });
   });
   
-  // Add mock Plaid endpoints for testing
-  app.get('/plaid/all-accounts', (req, res) => {
+  // Add mock Plaid endpoints for testing - these require authentication
+  app.get('/plaid/all-accounts', testAuthMiddleware, (req: any, res) => {
     // Mock Plaid endpoint - return empty accounts for testing
     res.json({ accounts: [] });
   });
@@ -51,7 +79,7 @@ export function createTestApp() {
     }
   });
   
-  app.get('/plaid/accounts', (req, res) => {
+  app.get('/plaid/accounts', testAuthMiddleware, (req: any, res) => {
     res.json({
       accounts: [
         {
@@ -86,7 +114,7 @@ export function createTestApp() {
     });
   });
   
-  app.get('/plaid/transactions', (req, res) => {
+  app.get('/plaid/transactions', testAuthMiddleware, (req: any, res) => {
     res.json({
       transactions: [
         {
@@ -127,7 +155,7 @@ export function createTestApp() {
     });
   });
   
-  app.get('/plaid/liabilities', (req, res) => {
+  app.get('/plaid/liabilities', testAuthMiddleware, (req: any, res) => {
     res.json({
       liabilities: [{
         accounts: [
@@ -213,50 +241,62 @@ export function createTestApp() {
     });
   });
   
-  app.get('/plaid/income', (req, res) => {
+  app.get('/plaid/income', testAuthMiddleware, (req: any, res) => {
     res.json({
-      income: [{
-        income_streams: [
-          {
-            confidence: 0.9,
-            days: 730,
-            monthly_income: 5000,
-            name: 'Salary',
-            type: 'INCOME_TYPE_W2'
-          },
-          {
-            confidence: 0.7,
-            days: 365,
-            monthly_income: 1000,
-            name: 'Freelance',
-            type: 'INCOME_TYPE_1099'
-          }
-        ],
-        last_year_income: 72000,
-        last_year_income_before_tax: 80000,
-        projected_yearly_income: 75000,
-        projected_yearly_income_before_tax: 83000,
-        max_number_of_overlapping_income_streams: 2,
-        max_number_of_overlapping_income_streams_with_unknown_frequency: 1,
-        total_number_of_income_streams: 2,
-        income_streams_with_unknown_frequency: 1,
-        item: { item_id: 'item1' },
-        request_id: 'req1'
-      }],
-      summary: {
-        totalIncomeStreams: 2,
-        totalMonthlyIncome: 6000,
-        totalYearlyIncome: 72000,
-        projectedYearlyIncome: 75000
-      }
+      income: [
+        {
+          account_id: 'acc1',
+          name: 'Checking Account',
+          type: 'depository',
+          subtype: 'checking',
+          income_streams: [
+            {
+              name: 'Salary',
+              monthly_income: 5000,
+              income_stream_type: 'primary',
+              confidence: 0.95
+            }
+          ],
+          projectedYearlyIncome: 60000
+        },
+        {
+          account_id: 'acc2',
+          name: 'Savings Account',
+          type: 'depository',
+          subtype: 'savings',
+          income_streams: [
+            {
+              name: 'Freelance',
+              monthly_income: 2500,
+              income_stream_type: 'secondary',
+              confidence: 0.85
+            }
+          ],
+          projectedYearlyIncome: 75000
+        }
+      ]
     });
   });
   
   // Add mock market news endpoints for testing
   app.get('/market-news/context/:tier', (req, res) => {
+    const { tier } = req.params;
+    
+    // Return 404 for invalid tiers
+    if (!['starter', 'standard', 'premium'].includes(tier)) {
+      return res.status(404).json({ error: 'Invalid tier' });
+    }
+    
     res.json({ 
-      contextText: `Mock market context for ${req.params.tier} tier`,
-      tier: req.params.tier 
+      contextText: `Mock market context for ${tier} tier`,
+      tier: tier,
+      dataSources: ['FRED', 'Alpha Vantage', 'Search API'],
+      keyEvents: [
+        'Federal Reserve maintains current interest rates',
+        'Inflation data shows moderate increase',
+        'Market volatility remains within normal range'
+      ],
+      lastUpdate: new Date().toISOString()
     });
   });
   
@@ -455,7 +495,7 @@ export function createTestApp() {
   });
   
   // Add Plaid investment endpoints for testing
-  app.get('/plaid/investments/holdings', (req, res) => {
+  app.get('/plaid/investments/holdings', testAuthMiddleware, (req: any, res) => {
     res.json({
       holdings: [{
         holdings: [
@@ -516,7 +556,7 @@ export function createTestApp() {
     });
   });
   
-  app.get('/plaid/investments/transactions', (req, res) => {
+  app.get('/plaid/investments/transactions', testAuthMiddleware, (req, res) => {
     const { start_date, end_date } = req.query;
     res.json({
       transactions: [{
@@ -606,7 +646,7 @@ export function createTestApp() {
     });
   });
   
-  app.get('/plaid/investments', (req, res) => {
+  app.get('/plaid/investments', testAuthMiddleware, (req, res) => {
     res.json({
       investments: [{
         holdings: [
