@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from '@jest/globals';
 import request from 'supertest';
 import express from 'express';
+import { PrismaClient } from '@prisma/client';
 import { setupPlaidRoutes } from '../../plaid';
 import { optionalAuth } from '../../auth/middleware';
-import { prisma } from './setup';
 import { createTestUser, createTestAccessToken } from '../unit/factories/user.factory';
 import { hashPassword } from '../../auth/utils';
 
@@ -17,6 +17,9 @@ app.use(optionalAuth);
 // Set up Plaid routes on the test app
 setupPlaidRoutes(app);
 
+// Set up test database connection
+let testPrisma: PrismaClient;
+
 describe('Plaid Security Integration Tests', () => {
   let user1: any;
   let user2: any;
@@ -25,67 +28,48 @@ describe('Plaid Security Integration Tests', () => {
   let user1JWT: string;
   let user2JWT: string;
 
+  beforeAll(async () => {
+    // Connect to test database
+    testPrisma = new PrismaClient({
+      datasources: {
+        db: { url: process.env.TEST_DATABASE_URL }
+      }
+    });
+    // Verify connection
+    await testPrisma.$connect();
+  });
+
   beforeEach(async () => {
     // Clean up before each test
-    await prisma.accessToken.deleteMany();
-    await prisma.user.deleteMany();
+    await testPrisma.encryptedEmailVerificationCode.deleteMany();
+    await testPrisma.encryptedUserData.deleteMany();
+    await testPrisma.encrypted_profile_data.deleteMany();
+    await testPrisma.demoConversation.deleteMany();
+    await testPrisma.demoSession.deleteMany();
+    await testPrisma.accessToken.deleteMany();
+    await testPrisma.userProfile.deleteMany();
+    await testPrisma.user.deleteMany();
 
     // Create test users in database with proper password hash
     const passwordHash = await hashPassword('password123');
     
-    user1 = await prisma.user.create({
+    user1 = await testPrisma.user.create({
       data: createTestUser({ 
         email: 'user1@test.com',
         passwordHash: passwordHash
       })
     });
     
-    // Verify user1 was created
-    // console.log('User1 created with ID:', user1.id);
-    
-    user2 = await prisma.user.create({
+    user2 = await testPrisma.user.create({
       data: createTestUser({ 
         email: 'user2@test.com',
         passwordHash: passwordHash
       })
     });
-    
-    // Verify user2 was created
-    // console.log('User2 created with ID:', user2.id);
-
-    // Verify users exist before creating access tokens
-    let verifyUser1 = null;
-    let verifyUser2 = null;
-    let retryCount = 0;
-    const maxRetries = 3;
-    
-    while (retryCount < maxRetries) {
-      verifyUser1 = await prisma.user.findUnique({ where: { id: user1.id } });
-      verifyUser2 = await prisma.user.findUnique({ where: { id: user2.id } });
-      
-      if (verifyUser1 && verifyUser2) {
-        break;
-      }
-      
-      // console.log(`Retry ${retryCount + 1}: User1 exists: ${!!verifyUser1}, User2 exists: ${!!verifyUser2}`);
-      retryCount++;
-      
-      if (retryCount < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 100)); // Wait 100ms before retry
-      }
-    }
-    
-    if (!verifyUser1 || !verifyUser2) {
-      console.error('User1 data:', user1);
-      console.error('User2 data:', user2);
-      console.error('VerifyUser1:', verifyUser1);
-      console.error('VerifyUser2:', verifyUser2);
-      throw new Error(`Users not created properly after ${maxRetries} retries`);
-    }
 
     // Create access tokens for each user (simulating linked banks)
     try {
-      user1Token = await prisma.accessToken.create({
+      user1Token = await testPrisma.accessToken.create({
         data: createTestAccessToken({ 
           userId: user1.id,
           token: 'user1_plaid_token',
@@ -93,17 +77,13 @@ describe('Plaid Security Integration Tests', () => {
         })
       });
       
-      // console.log('User1 token created for user:', user1Token.userId);
-      
-      user2Token = await prisma.accessToken.create({
+      user2Token = await testPrisma.accessToken.create({
         data: createTestAccessToken({ 
           userId: user2.id,
           token: 'user2_plaid_token',
           itemId: 'user2_item_id'
         })
       });
-      
-      // console.log('User2 token created for user:', user2Token.userId);
     } catch (error) {
       console.error('Error creating access tokens:', error);
       throw error;
@@ -128,8 +108,18 @@ describe('Plaid Security Integration Tests', () => {
 
   afterEach(async () => {
     // Clean up after each test
-    await prisma.accessToken.deleteMany();
-    await prisma.user.deleteMany();
+    await testPrisma.encryptedEmailVerificationCode.deleteMany();
+    await testPrisma.encryptedUserData.deleteMany();
+    await testPrisma.encrypted_profile_data.deleteMany();
+    await testPrisma.demoConversation.deleteMany();
+    await testPrisma.demoSession.deleteMany();
+    await testPrisma.accessToken.deleteMany();
+    await testPrisma.userProfile.deleteMany();
+    await testPrisma.user.deleteMany();
+  });
+
+  afterAll(async () => {
+    await testPrisma.$disconnect();
   });
 
   describe('User Data Isolation Tests', () => {
@@ -187,7 +177,7 @@ describe('Plaid Security Integration Tests', () => {
 
     it('should handle user with no linked accounts correctly', async () => {
       // Create a third user with no linked accounts
-      const user3 = await prisma.user.create({
+      const user3 = await testPrisma.user.create({
         data: createTestUser({ 
           email: 'user3@test.com',
           passwordHash: await hashPassword('password123')
@@ -365,9 +355,9 @@ describe('Error Handling Security Tests', () => {
     // to ensure they don't leak sensitive information
     
     const mockError = new Error('Database connection failed');
-    const originalFindMany = prisma.accessToken.findMany;
+    const originalFindMany = testPrisma.accessToken.findMany;
     
-    prisma.accessToken.findMany = jest.fn().mockRejectedValue(mockError);
+    testPrisma.accessToken.findMany = jest.fn().mockRejectedValue(mockError);
 
     const response = await request(app)
       .post('/ask')
@@ -377,7 +367,7 @@ describe('Error Handling Security Tests', () => {
       });
 
     // Restore original function
-    prisma.accessToken.findMany = originalFindMany;
+    testPrisma.accessToken.findMany = originalFindMany;
 
     expect(response.status).toBe(401);
     
@@ -394,17 +384,17 @@ describe('GPT Context User Isolation Integration', () => {
   let user2JWT: string;
 
   beforeAll(async () => {
-    await prisma.account.deleteMany();
-    await prisma.user.deleteMany();
+    await testPrisma.account.deleteMany();
+    await testPrisma.user.deleteMany();
     
     // Create users with proper password hash
     const passwordHash = await hashPassword('password123');
-    user1 = await prisma.user.create({ data: { email: 'user1@test.com', passwordHash: passwordHash, tier: 'starter' } });
-    user2 = await prisma.user.create({ data: { email: 'user2@test.com', passwordHash: passwordHash, tier: 'starter' } });
+    user1 = await testPrisma.user.create({ data: { email: 'user1@test.com', passwordHash: passwordHash, tier: 'starter' } });
+    user2 = await testPrisma.user.create({ data: { email: 'user2@test.com', passwordHash: passwordHash, tier: 'starter' } });
     
     // Create accounts for user1 only
-    await prisma.account.create({ data: { name: 'User1 Checking', type: 'checking', plaidAccountId: 'acc1', userId: user1.id } });
-    await prisma.account.create({ data: { name: 'User1 Savings', type: 'savings', plaidAccountId: 'acc2', userId: user1.id } });
+    await testPrisma.account.create({ data: { name: 'User1 Checking', type: 'checking', plaidAccountId: 'acc1', userId: user1.id } });
+    await testPrisma.account.create({ data: { name: 'User1 Savings', type: 'savings', plaidAccountId: 'acc2', userId: user1.id } });
     
     // Login users to get JWT tokens
     const user1Login = await request(app).post('/auth/login').send({ email: 'user1@test.com', password: 'password123' });
