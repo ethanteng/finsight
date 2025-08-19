@@ -158,7 +158,7 @@ const generateTestToken = (userId: string, email: string, tier: string = 'starte
   return `Bearer test-token-${userId}-${email}-${tier}`;
 };
 
-describe.skip('Privacy Endpoints Integration Security', () => {
+describe('Privacy Endpoints Integration Security', () => {
   let user1: any;
   let user2: any;
   let user1Account: any;

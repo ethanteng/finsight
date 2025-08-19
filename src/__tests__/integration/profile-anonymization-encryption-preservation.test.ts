@@ -1,59 +1,105 @@
-import { jest } from '@jest/globals';
+import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import { ProfileManager } from '../../profile/manager';
-import { ProfileAnonymizer } from '../../profile/anonymizer';
+import { PrismaClient } from '@prisma/client';
 
-// Mock Prisma client for testing
-const mockPrisma: any = {
-  userProfile: {
-    findUnique: jest.fn(),
-    create: jest.fn(),
-    update: jest.fn(),
-  },
-  encrypted_profile_data: {
-    create: jest.fn(),
-    update: jest.fn(),
-  },
-  user: {
-    findUnique: jest.fn(),
-  },
-  $disconnect: jest.fn(),
-};
-
+// Mock PrismaClient at the module level
 jest.mock('@prisma/client', () => ({
-  PrismaClient: jest.fn().mockImplementation(() => mockPrisma),
+  PrismaClient: jest.fn()
 }));
 
-// TODO: Fix TypeScript errors in integration tests
-describe.skip('Profile Anonymization with Encryption and Preservation', () => {
+// Mock the ProfileManager dependencies
+jest.mock('../../profile/encryption', () => ({
+  ProfileEncryptionService: jest.fn().mockImplementation(() => ({
+    encrypt: jest.fn().mockReturnValue({
+      encryptedData: 'encrypted-data',
+      iv: 'iv',
+      tag: 'tag',
+      keyVersion: 1
+    }),
+    decrypt: jest.fn().mockReturnValue('decrypted-profile-text'),
+    validateKey: jest.fn().mockReturnValue(true)
+  }))
+}));
+
+jest.mock('../../profile/extractor', () => ({
+  ProfileExtractor: jest.fn().mockImplementation(() => ({
+    extractAndUpdateProfile: jest.fn().mockResolvedValue('extracted-profile-text')
+  }))
+}));
+
+jest.mock('../../profile/anonymizer', () => ({
+  ProfileAnonymizer: jest.fn().mockImplementation(() => ({
+    anonymizeProfile: jest.fn().mockReturnValue({
+      anonymizedProfile: 'anonymized-profile-text',
+      anonymizationMap: new Map()
+    })
+  }))
+}));
+
+describe('Profile Anonymization with Encryption and Preservation', () => {
   let profileManager: ProfileManager;
+  let mockPrisma: any;
+  let mockUserProfileCreate: jest.Mock;
+  let mockUserProfileUpdate: jest.Mock;
+  let mockUserProfileFindUnique: jest.Mock;
+  let mockEncryptedProfileDataCreate: jest.Mock;
+  let mockEncryptedProfileDataUpdate: jest.Mock;
+  let mockUserFindUnique: jest.Mock;
 
   beforeEach(() => {
+    // Reset all mocks
     jest.clearAllMocks();
     
-    // Set up environment variable for testing
-    process.env.PROFILE_ENCRYPTION_KEY = 'test-encryption-key-32-bytes-long-here';
+    // Create mock Prisma client methods
+    mockUserProfileCreate = jest.fn();
+    mockUserProfileUpdate = jest.fn();
+    mockUserProfileFindUnique = jest.fn();
+    mockEncryptedProfileDataCreate = jest.fn();
+    mockEncryptedProfileDataUpdate = jest.fn();
+    mockUserFindUnique = jest.fn();
     
+    // Mock PrismaClient constructor
+    mockPrisma = {
+      userProfile: {
+        create: mockUserProfileCreate,
+        update: mockUserProfileUpdate,
+        findUnique: mockUserProfileFindUnique
+      },
+      encrypted_profile_data: {
+        create: mockEncryptedProfileDataCreate,
+        update: mockEncryptedProfileDataUpdate
+      },
+      user: {
+        findUnique: mockUserFindUnique
+      },
+      $disconnect: jest.fn()
+    };
+    
+    // Mock the PrismaClient constructor to return our mock
+    (PrismaClient as jest.Mock).mockImplementation(() => mockPrisma);
+    
+    // Create ProfileManager instance
     profileManager = new ProfileManager('test-session');
   });
 
   afterEach(() => {
-    delete process.env.PROFILE_ENCRYPTION_KEY;
+    jest.restoreAllMocks();
   });
 
   describe('Complete Profile Workflow', () => {
     test('should encrypt, decrypt, and anonymize profiles while preserving functionality', async () => {
-      const testProfile = 'I am John Doe, earning $100,000 in New York, NY';
+      const testProfile = 'John Doe is a 35-year-old software engineer earning $100,000 annually. He lives in New York, NY.';
       
       // Mock user and profile existence
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
+      mockUserFindUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
+      mockUserProfileFindUnique.mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: '',
         encrypted_profile_data: null
       });
       
-      // Mock encryption service with proper typing
+      // Mock encryption service
       const mockEncrypt = jest.fn().mockReturnValue({
         encryptedData: 'encrypted-data',
         iv: 'iv',
@@ -72,11 +118,11 @@ describe.skip('Profile Anonymization with Encryption and Preservation', () => {
       
       // Verify encryption was used
       expect(mockEncrypt).toHaveBeenCalledWith(testProfile);
-      expect(mockPrisma.userProfile.create).toHaveBeenCalled();
-      expect(mockPrisma.encrypted_profile_data.create).toHaveBeenCalled();
+      expect(mockUserProfileCreate).toHaveBeenCalled();
+      expect(mockEncryptedProfileDataCreate).toHaveBeenCalled();
       
       // Mock profile retrieval with encrypted data
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
+      mockUserProfileFindUnique.mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: '',
@@ -125,13 +171,13 @@ describe.skip('Profile Anonymization with Encryption and Preservation', () => {
       };
       
       // Mock user and profile existence
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
+      mockUserFindUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' } as any);
+      mockUserProfileFindUnique.mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: '',
         encrypted_profile_data: null
-      });
+      } as any);
       
       // Mock encryption service with proper typing
       const mockEncrypt = jest.fn().mockReturnValue({
@@ -165,8 +211,8 @@ describe.skip('Profile Anonymization with Encryption and Preservation', () => {
       
       // Verify profile was updated and encrypted
       expect(mockEncrypt).toHaveBeenCalled();
-      expect(mockPrisma.userProfile.create).toHaveBeenCalled();
-      expect(mockPrisma.encrypted_profile_data.create).toHaveBeenCalled();
+      expect(mockUserProfileCreate).toHaveBeenCalled();
+      expect(mockEncryptedProfileDataCreate).toHaveBeenCalled();
     });
   });
 
@@ -175,8 +221,8 @@ describe.skip('Profile Anonymization with Encryption and Preservation', () => {
       const backupProfile = 'I am a teacher earning $45,000';
       
       // Mock user and profile existence
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
+      mockUserFindUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
+      mockUserProfileFindUnique.mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: '',
@@ -200,8 +246,8 @@ describe.skip('Profile Anonymization with Encryption and Preservation', () => {
       await profileManager.recoverProfile('test-user', backupProfile);
       
       // Verify recovery was attempted
-      expect(mockPrisma.userProfile.create).toHaveBeenCalled();
-      expect(mockPrisma.encrypted_profile_data.create).toHaveBeenCalled();
+      expect(mockUserProfileCreate).toHaveBeenCalled();
+      expect(mockEncryptedProfileDataCreate).toHaveBeenCalled();
       expect(mockEncrypt).toHaveBeenCalledWith(backupProfile);
     });
   });
@@ -211,8 +257,8 @@ describe.skip('Profile Anonymization with Encryption and Preservation', () => {
       const testProfile = 'I am a software engineer';
       
       // Mock user and profile with encrypted data
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
+      mockUserFindUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
+      mockUserProfileFindUnique.mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: '',
@@ -244,8 +290,8 @@ describe.skip('Profile Anonymization with Encryption and Preservation', () => {
       const testProfile = 'I am Sarah Chen, earning $100,000 in Austin, TX';
       
       // Mock user and profile with encrypted data
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
+      mockUserFindUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
+      mockUserProfileFindUnique.mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: '',
@@ -287,8 +333,8 @@ describe.skip('Profile Anonymization with Encryption and Preservation', () => {
   describe('Error Handling', () => {
     test('should handle decryption failures gracefully', async () => {
       // Mock user and profile with encrypted data
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
+      mockUserFindUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
+      mockUserProfileFindUnique.mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: 'fallback-profile',
@@ -319,14 +365,14 @@ describe.skip('Profile Anonymization with Encryption and Preservation', () => {
 
     test('should handle missing profile gracefully', async () => {
       // Mock user but no profile
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
-      mockPrisma.userProfile.findUnique.mockResolvedValue(null);
+      mockUserFindUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
+      mockUserProfileFindUnique.mockResolvedValue(null);
       
       // Should create new profile
       const aiProfile = await profileManager.getOrCreateProfile('test-user');
       
       expect(aiProfile).toBe('');
-      expect(mockPrisma.userProfile.create).toHaveBeenCalled();
+      expect(mockUserProfileCreate).toHaveBeenCalled();
     });
   });
 
@@ -335,8 +381,8 @@ describe.skip('Profile Anonymization with Encryption and Preservation', () => {
       const originalProfile = 'I am Jane Smith, earning $80,000 in Boston, MA';
       
       // Mock user and profile existence
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
+      mockUserFindUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
+      mockUserProfileFindUnique.mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: '',
@@ -360,7 +406,7 @@ describe.skip('Profile Anonymization with Encryption and Preservation', () => {
       expect(mockEncrypt).toHaveBeenCalledWith(originalProfile);
       
       // Mock profile retrieval with encrypted data
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
+      mockUserProfileFindUnique.mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: '',
@@ -403,8 +449,8 @@ describe.skip('Profile Anonymization with Encryption and Preservation', () => {
       const largeProfile = 'I am ' + 'A'.repeat(1000) + ', earning $' + '1'.repeat(1000) + ' in ' + 'B'.repeat(1000) + ', ' + 'C'.repeat(1000);
       
       // Mock user and profile existence
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
+      mockUserFindUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
+      mockUserProfileFindUnique.mockResolvedValue({
         id: 'profile1',
         profileHash: 'hash1',
         profileText: '',
