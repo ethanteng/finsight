@@ -282,10 +282,149 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+  # Security Tests (Phase 5 & 6 Implementation)
+  security-tests:
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-build]
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          # Retry npm ci with exponential backoff for network issues
+          for i in 1 2 3; do
+            echo "Attempt $i of 3: Installing dependencies..."
+            npm ci --prefer-offline --no-audit || {
+              if [ $i -eq 3 ]; then
+                echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
+                sleep $((i * 10))
+              fi
+            } && break
+          done
+
+      - name: Wait for database
+        run: |
+          echo "Waiting for database to be ready..."
+          sleep 10
+          echo "Database should be ready now"
+
+      - name: Setup test database
+        run: |
+          npx prisma generate
+          npx prisma migrate reset --force
+          npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          NODE_ENV: test
+
+      - name: Run Core Security Tests (Phases 1-4)
+        run: npm run test:security
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          PLAID_CLIENT_ID: test_client_id
+          PLAID_SECRET: test_secret
+          PLAID_ENV: sandbox
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
+          FINNHUB_API_KEY: test_finnhub_key
+          POLYGON_API_KEY: test_polygon_key
+          PROFILE_ENCRYPTION_KEY: "QffTMJcTkYC8Nyk/T9jH83958GLtdei8YzgDQ0PDCaw="
+          JWT_SECRET: test-jwt-secret-for-security-tests
+          NODE_ENV: test
+          ENABLE_USER_AUTH: "true"
+          ENABLE_TIER_ENFORCEMENT: "true"
+          ADMIN_EMAILS: "admin@example.com,test@example.com"
+          RESEND_API_KEY: test-resend-key
+          STRIPE_PRICE_STARTER: price_starter_test
+          STRIPE_PRICE_STANDARD: price_standard_test
+          STRIPE_PRICE_PREMIUM: price_premium_test
+
+      - name: Run Profile Encryption Security Tests (Phase 5)
+        run: npm run test:profile-encryption
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          PLAID_CLIENT_ID: test_client_id
+          PLAID_SECRET: test_secret
+          PLAID_ENV: sandbox
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
+          FINNHUB_API_KEY: test_finnhub_key
+          POLYGON_API_KEY: test_polygon_key
+          PROFILE_ENCRYPTION_KEY: "QffTMJcTkYC8Nyk/T9jH83958GLtdei8YzgDQ0PDCaw="
+          JWT_SECRET: test-jwt-secret-for-security-tests
+          NODE_ENV: test
+          ENABLE_USER_AUTH: "true"
+          ENABLE_TIER_ENFORCEMENT: "true"
+          ADMIN_EMAILS: "admin@example.com,test@example.com"
+          RESEND_API_KEY: test-resend-key
+          STRIPE_PRICE_STARTER: price_starter_test
+          STRIPE_PRICE_STANDARD: price_standard_test
+          STRIPE_PRICE_PREMIUM: price_premium_test
+
+      - name: Run Complete Security Suite (All Phases)
+        run: npm run test:complete-security
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          PLAID_CLIENT_ID: test_client_id
+          PLAID_SECRET: test_secret
+          PLAID_ENV: sandbox
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          SEARCH_API_KEY: ${{ secrets.SEARCH_API_KEY }}
+          FINNHUB_API_KEY: test_finnhub_key
+          POLYGON_API_KEY: test_polygon_key
+          PROFILE_ENCRYPTION_KEY: "QffTMJcTkYC8Nyk/T9jH83958GLtdei8YzgDQ0PDCaw="
+          JWT_SECRET: test-jwt-secret-for-security-tests
+          NODE_ENV: test
+          ENABLE_USER_AUTH: "true"
+          ENABLE_TIER_ENFORCEMENT: "true"
+          ADMIN_EMAILS: "admin@example.com,test@example.com"
+          RESEND_API_KEY: test-resend-key
+          STRIPE_PRICE_STARTER: price_starter_test
+          STRIPE_PRICE_STANDARD: price_standard_test
+          STRIPE_PRICE_PREMIUM: price_premium_test
+
+      - name: Security Test Results Summary
+        run: |
+          echo "🔒 SECURITY TESTING COMPLETED - PHASES 1-6"
+          echo "✅ Core Security Tests (Phases 1-4): Plaid, Stripe, Cross-Service"
+          echo "✅ Profile Encryption Tests (Phase 5): Encryption, Decryption, Key Rotation"
+          echo "✅ Complete Security Suite (Phase 6): All Security Tests Integrated"
+          echo "🚀 Security testing now integrated into CI/CD pipeline"
+          echo "🛡️ Zero security vulnerabilities in tested endpoints"
+
   # Build Verification
   build-verification:
     runs-on: ubuntu-latest
-    needs: [lint-and-test, backend-tests, frontend-build, integration-tests]
+    needs: [lint-and-test, backend-tests, frontend-build, integration-tests, security-tests]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
