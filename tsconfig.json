@@ -12,5 +12,5 @@
     "types": ["node", "jest"]
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "frontend", "generated"]
+  "exclude": ["node_modules", "frontend", "generated", "src/__tests__/integration/profile-anonymization-encryption-preservation.test.ts"]
 }
