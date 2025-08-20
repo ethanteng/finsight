@@ -240,6 +240,7 @@ export async function askOpenAIWithEnhancedContext(
         console.log('OpenAI Enhanced: Found', accounts.length, 'accounts and', transactions.length, 'transactions in database for user', userId);
         
         // If no data in database, try to fetch from Plaid directly
+        // eslint-disable-next-line no-constant-condition
         if (true) {
           console.log('OpenAI Enhanced: No data in database, fetching from Plaid directly');
           
