@@ -231,7 +231,7 @@ function LoginPageContent() {
         <div className="text-center">
           <p className="text-gray-400 text-sm">
             Don't have an account?{' '}
-            <Link href="/register" className="text-primary hover:text-primary/80">
+            <Link href="/#pricing" className="text-primary hover:text-primary/80">
               Sign up
             </Link>
           </p>

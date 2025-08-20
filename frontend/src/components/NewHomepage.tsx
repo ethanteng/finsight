@@ -45,9 +45,9 @@ const NewHomepage = () => {
               <Button 
                 variant="hero" 
                 size="sm"
-                onClick={() => scrollToSection('waitlist')}
+                onClick={() => window.location.href = '/login'}
               >
-                Get Early Access
+                Login
               </Button>
             </div>
           </div>

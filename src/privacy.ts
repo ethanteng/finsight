@@ -152,14 +152,14 @@ export function anonymizeAccountData(accounts: any[]): string {
     let balance = 'N/A';
     let available = '';
     
-    if (a.balance && a.balance.current !== undefined) {
+    if (a.balance && a.balance.current !== undefined && a.balance.current !== null) {
       balance = `$${a.balance.current.toFixed(2)}`;
-      if (a.balance.available !== undefined) {
+      if (a.balance.available !== undefined && a.balance.available !== null) {
         available = ` (Available: $${a.balance.available.toFixed(2)})`;
       }
-    } else if (a.currentBalance !== undefined) {
+    } else if (a.currentBalance !== undefined && a.currentBalance !== null) {
       balance = `$${a.currentBalance.toFixed(2)}`;
-      if (a.availableBalance !== undefined) {
+      if (a.availableBalance !== undefined && a.availableBalance !== null) {
         available = ` (Available: $${a.availableBalance.toFixed(2)})`;
       }
     }
