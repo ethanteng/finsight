@@ -40,6 +40,38 @@ const getPlaidCredentials = () => {
   }
 };
 
+// Helper function to get institution data for an access token
+const getInstitutionData = async (accessToken: string, plaidClient: any) => {
+  try {
+    // First get the item to get the institution_id
+    const itemResponse = await plaidClient.itemGet({
+      access_token: accessToken,
+    });
+    
+    const institutionId = itemResponse.data.item.institution_id;
+    
+    // Then get the institution details
+    const institutionResponse = await plaidClient.institutionsGetById({
+      institution_id: institutionId,
+      country_codes: ['US'],
+      options: {
+        include_optional_metadata: true
+      }
+    });
+    
+    return {
+      institution_id: institutionId,
+      name: institutionResponse.data.institution.name,
+      logo: institutionResponse.data.institution.logo,
+      primary_color: institutionResponse.data.institution.primary_color,
+      url: institutionResponse.data.institution.url
+    };
+  } catch (error) {
+    console.error('Error fetching institution data:', error);
+    return null;
+  }
+};
+
 interface Conversation {
   id: string;
   question: string;
@@ -251,7 +283,10 @@ export async function askOpenAIWithEnhancedContext(
                       access_token: tokenRecord.token,
                     });
                     
-                    // Merge account and balance data
+                    // Get institution data for this token
+                    const institutionData = await getInstitutionData(tokenRecord.token, plaidClient);
+                    
+                    // Merge account and balance data with institution information
                     const accountsWithBalances = accountsResponse.data.accounts.map((account: any) => {
                       const balance = balancesResponse.data.accounts.find((b: any) => b.account_id === account.account_id);
                       return {
@@ -259,6 +294,10 @@ export async function askOpenAIWithEnhancedContext(
                         name: account.name,
                         type: account.type,
                         subtype: account.subtype,
+                        institution: institutionData?.name || account.institution_name || 'Unknown',
+                        institution_id: institutionData?.institution_id,
+                        institution_logo: institutionData?.logo,
+                        institution_url: institutionData?.url,
                         balance: {
                           available: balance?.balances?.available || account.balances?.available,
                           current: balance?.balances?.current || account.balances?.current,
@@ -269,8 +308,22 @@ export async function askOpenAIWithEnhancedContext(
                       };
                     });
                     
+                    // ✅ DEBUG: Log account data being processed
+                    console.log('OpenAI Enhanced: Raw Plaid accounts for token:', tokenRecord.id);
+                    accountsResponse.data.accounts.forEach((account: any, index: number) => {
+                      console.log(`OpenAI Enhanced: Account ${index}:`, {
+                        id: account.account_id,
+                        name: account.name,
+                        type: account.type,
+                        subtype: account.subtype,
+                        institution: institutionData?.name || account.institution_name || 'Unknown'
+                      });
+                    });
+                    
+                    console.log('OpenAI Enhanced: Processed accounts with balances and institution data:', accountsWithBalances);
+                    
                     accounts.push(...accountsWithBalances);
-                    console.log('OpenAI Enhanced: Fetched', accountsWithBalances.length, 'accounts from Plaid');
+                    console.log('OpenAI Enhanced: Fetched', accountsWithBalances.length, 'accounts from Plaid with institution data');
                   } catch (error) {
                     console.error('OpenAI Enhanced: Error fetching accounts from token:', error);
                   }
@@ -307,7 +360,8 @@ export async function askOpenAIWithEnhancedContext(
                       payment_meta: transaction.payment_meta,
                       pending_transaction_id: transaction.pending_transaction_id,
                       account_owner: transaction.account_owner,
-                      transaction_code: transaction.transaction_code
+                      transaction_code: transaction.transaction_code,
+                      enriched_data: transaction.enriched_data // Include enhanced data
                     }));
                     
                     transactions.push(...processedTransactions);
@@ -415,6 +469,10 @@ export async function askOpenAIWithEnhancedContext(
     // Use proper anonymization functions that maintain tokenization maps
     const accountSummary = anonymizeAccountData(accounts);
     const transactionSummary = anonymizeTransactionData(transactions);
+    
+    // ✅ DEBUG: Dump tokenization maps after processing accounts
+    const { dumpTokenizationMaps } = await import('./privacy');
+    dumpTokenizationMaps();
     
     // Replace the accounts and transactions with anonymized versions for AI processing
     accounts = accounts.map(account => {
@@ -1292,7 +1350,10 @@ export async function askOpenAI(
                       access_token: tokenRecord.token,
                     });
                     
-                    // Merge account and balance data
+                    // Get institution data for this token
+                    const institutionData = await getInstitutionData(tokenRecord.token, plaidClient);
+                    
+                    // Merge account and balance data with institution information
                     const accountsWithBalances = accountsResponse.data.accounts.map((account: any) => {
                       const balance = balancesResponse.data.accounts.find((b: any) => b.account_id === account.account_id);
                       return {
@@ -1300,21 +1361,36 @@ export async function askOpenAI(
                         name: account.name,
                         type: account.type,
                         subtype: account.subtype,
-                        mask: account.mask,
+                        institution: institutionData?.name || account.institution_name || 'Unknown',
+                        institution_id: institutionData?.institution_id,
+                        institution_logo: institutionData?.logo,
+                        institution_url: institutionData?.url,
                         balance: {
                           available: balance?.balances?.available || account.balances?.available,
                           current: balance?.balances?.current || account.balances?.current,
                           limit: balance?.balances?.limit || account.balances?.limit,
-                        },
-                        institution: account.institution_name,
-                        officialName: account.official_name,
-                        verificationStatus: account.verification_status,
-                        currency: account.currency
+                          iso_currency_code: balance?.balances?.iso_currency_code || account.balances?.iso_currency_code,
+                          unofficial_currency_code: balance?.balances?.unofficial_currency_code || account.balances?.unofficial_currency_code
+                        }
                       };
                     });
                     
+                    // ✅ DEBUG: Log account data being processed
+                    console.log('OpenAI Enhanced: Raw Plaid accounts for token:', tokenRecord.id);
+                    accountsResponse.data.accounts.forEach((account: any, index: number) => {
+                      console.log(`OpenAI Enhanced: Account ${index}:`, {
+                        id: account.account_id,
+                        name: account.name,
+                        type: account.type,
+                        subtype: account.subtype,
+                        institution: institutionData?.name || account.institution_name || 'Unknown'
+                      });
+                    });
+                    
+                    console.log('OpenAI Enhanced: Processed accounts with balances and institution data:', accountsWithBalances);
+                    
                     accounts.push(...accountsWithBalances);
-                    console.log('OpenAI Enhanced: Fetched', accountsWithBalances.length, 'accounts from Plaid');
+                    console.log('OpenAI Enhanced: Fetched', accountsWithBalances.length, 'accounts from Plaid with institution data');
                   } catch (error) {
                     console.error('OpenAI Enhanced: Error fetching accounts from token:', error);
                   }

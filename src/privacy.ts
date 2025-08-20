@@ -28,13 +28,25 @@ export function tokenizeAccount(accountName: string, institutionName?: string): 
   const safeAccountName = String(accountName || '');
   const safeInstitutionName = String(institutionName || '');
   
+  console.log('tokenizeAccount: Input:', { accountName: safeAccountName, institutionName: safeInstitutionName });
+  
   const key = `${safeAccountName}-${safeInstitutionName || 'unknown'}`;
+  console.log('tokenizeAccount: Generated key:', key);
+  
   if (!accountTokenMap.has(key)) {
     const token = `Account_${accountCounter++}`;
     accountTokenMap.set(key, token);
     accountRealDataMap.set(token, { name: safeAccountName, institution: safeInstitutionName });
+    console.log('tokenizeAccount: Created new token:', token, 'for key:', key);
+    console.log('tokenizeAccount: Updated accountRealDataMap with:', { token, name: safeAccountName, institution: safeInstitutionName });
+  } else {
+    const existingToken = accountTokenMap.get(key)!;
+    console.log('tokenizeAccount: Found existing token:', existingToken, 'for key:', key);
   }
-  return accountTokenMap.get(key)!;
+  
+  const result = accountTokenMap.get(key)!;
+  console.log('tokenizeAccount: Returning token:', result);
+  return result;
 }
 
 export function tokenizeInstitution(institutionName: string): string {
@@ -123,12 +135,40 @@ export function getRealLiabilityName(token: string): string {
 }
 
 export function anonymizeAccountData(accounts: any[]): string {
+  console.log('anonymizeAccountData: Processing', accounts.length, 'accounts');
+  
   return accounts.map(a => {
-    const balance = a.currentBalance ? `$${a.currentBalance.toFixed(2)}` : 'N/A';
-    const available = a.availableBalance ? ` (Available: $${a.availableBalance.toFixed(2)})` : '';
+    console.log('anonymizeAccountData: Processing account:', {
+      name: a.name,
+      institution: a.institution,
+      type: a.type,
+      subtype: a.subtype,
+      balance: a.balance,
+      currentBalance: a.currentBalance,
+      availableBalance: a.availableBalance
+    });
+    
+    // Handle different balance field structures
+    let balance = 'N/A';
+    let available = '';
+    
+    if (a.balance && a.balance.current !== undefined) {
+      balance = `$${a.balance.current.toFixed(2)}`;
+      if (a.balance.available !== undefined) {
+        available = ` (Available: $${a.balance.available.toFixed(2)})`;
+      }
+    } else if (a.currentBalance !== undefined) {
+      balance = `$${a.currentBalance.toFixed(2)}`;
+      if (a.availableBalance !== undefined) {
+        available = ` (Available: $${a.availableBalance.toFixed(2)})`;
+      }
+    }
+    
     const accountToken = tokenizeAccount(a.name, a.institution);
     const institutionToken = a.institution ? tokenizeInstitution(a.institution) : '';
     const institutionInfo = institutionToken ? ` at ${institutionToken}` : '';
+    
+    console.log('anonymizeAccountData: Generated token:', accountToken, 'for account:', a.name);
     
     return `- ${accountToken} (${a.type}${a.subtype ? '/' + a.subtype : ''}): ${balance}${available}${institutionInfo}`;
   }).join('\n');
@@ -375,6 +415,26 @@ export function convertResponseToUserFriendly(response: string): string {
       Array.from(merchantRealDataMap.entries()).slice(0, 10));
   }
   
+  // ✅ DEBUG: Log account tokenization maps to diagnose Robinhood account issue
+  console.log('convertResponseToUserFriendly: Current accountRealDataMap size:', accountRealDataMap.size);
+  if (accountRealDataMap.size > 0) {
+    console.log('convertResponseToUserFriendly: Account mappings:', 
+      Array.from(accountRealDataMap.entries()).slice(0, 20));
+  }
+  
+  // ✅ DEBUG: Check for specific Robinhood account tokens in response
+  const robinhoodTokens = response.match(/Account_\d+/g);
+  if (robinhoodTokens) {
+    console.log('convertResponseToUserFriendly: Found Robinhood account tokens in response:', robinhoodTokens);
+    robinhoodTokens.forEach(token => {
+      const realData = accountRealDataMap.get(token);
+      console.log(`convertResponseToUserFriendly: Token ${token} maps to:`, realData);
+    });
+  }
+  
+  // ✅ DEBUG: Dump all tokenization maps to see current state
+  dumpTokenizationMaps();
+  
   // ✅ DEBUG: Check for July transaction patterns in response (safe now that we know it's a string)
   const julyPatterns = response.match(/CREDIT CARD.*PAYMENT.*\/\/\d+/g);
   const merchantPatterns = response.match(/Merchant_\d+/g);
@@ -447,4 +507,27 @@ export function clearTokenizationMaps(): void {
   merchantCounter = 1;
   securityCounter = 1;
   liabilityCounter = 1;
+}
+
+// Debug function to dump current tokenization maps
+export function dumpTokenizationMaps(): void {
+  console.log('=== TOKENIZATION MAPS DUMP ===');
+  console.log('Account Token Map:', Array.from(accountTokenMap.entries()));
+  console.log('Account Real Data Map:', Array.from(accountRealDataMap.entries()));
+  console.log('Institution Token Map:', Array.from(institutionTokenMap.entries()));
+  console.log('Institution Real Data Map:', Array.from(institutionRealDataMap.entries()));
+  console.log('Merchant Token Map:', Array.from(merchantTokenMap.entries()));
+  console.log('Merchant Real Data Map:', Array.from(merchantRealDataMap.entries()));
+  console.log('Security Token Map:', Array.from(securityTokenMap.entries()));
+  console.log('Security Real Data Map:', Array.from(securityRealDataMap.entries()));
+  console.log('Liability Token Map:', Array.from(liabilityTokenMap.entries()));
+  console.log('Liability Real Data Map:', Array.from(liabilityRealDataMap.entries()));
+  console.log('Counters:', {
+    account: accountCounter,
+    institution: institutionCounter,
+    merchant: merchantCounter,
+    security: securityCounter,
+    liability: liabilityCounter
+  });
+  console.log('=== END TOKENIZATION MAPS DUMP ===');
 } 
