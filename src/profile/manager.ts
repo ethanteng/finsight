@@ -132,72 +132,65 @@ export class ProfileManager {
         profileText = profile.profileText || '';
       }
       
-      // If the profile contains anonymized tokens, deanonymize it
-      if (this.containsAnonymizedTokens(profileText)) {
-        console.log('ProfileManager: Deanonymizing profile for user display');
-        const deanonymizedProfile = this.deanonymizeProfile(profileText);
-        return deanonymizedProfile;
-      }
-      
       return profileText;
     } finally {
       await prisma.$disconnect();
     }
   }
 
-  // Check if profile contains anonymized tokens
-  private containsAnonymizedTokens(profileText: string): boolean {
-    return /(\$?AMOUNT_|INCOME_|GOAL_|RATE_|LOCATION_|PERSON_|SPOUSE_|AGE_|AGES_|INSTITUTION_|CHILDREN_)/.test(profileText);
+  // Method to get anonymized profile for AI services
+  async getAnonymizedProfile(userId: string): Promise<string> {
+    const originalProfile = await this.getOriginalProfile(userId);
+    if (!originalProfile) {
+      return '';
+    }
+    
+    // Anonymize the profile for AI consumption
+    return this.anonymizeProfile(originalProfile);
   }
 
-  // Deanonymize profile by replacing tokens with readable values
-  private deanonymizeProfile(profileText: string): string {
-    // For now, we'll replace tokens with generic readable values
-    // In a production system, you might want to store the original values and restore them
+  // Anonymize profile by replacing sensitive values with tokens (for AI services)
+  private anonymizeProfile(profileText: string): string {
+    let anonymizedProfile = profileText;
     
-    let deanonymizedProfile = profileText;
+    // Replace amounts with tokens
+    anonymizedProfile = anonymizedProfile.replace(/\$[\d,]+(?:\.\d{2})?/g, (match, index) => {
+      return `$AMOUNT_${index + 1}`;
+    });
     
-    // Replace amount tokens with generic readable values (handle both $AMOUNT_ and AMOUNT_ formats)
-    deanonymizedProfile = deanonymizedProfile.replace(/\$?AMOUNT_[^\s]+/g, '[Amount]');
+    // Replace rates with tokens
+    anonymizedProfile = anonymizedProfile.replace(/(\d+(?:\.\d+)?)%/g, (match, index) => {
+      return `RATE_${index + 1}%`;
+    });
     
-    // Replace income tokens with generic readable values
-    deanonymizedProfile = deanonymizedProfile.replace(/INCOME_[^\s]+/g, '[Income]');
+    // Replace locations with tokens
+    anonymizedProfile = anonymizedProfile.replace(/([A-Z][a-z]+(?:[\s,]+[A-Z]{2})?)/g, (match, index) => {
+      if (match.length > 2 && /^[A-Z][a-z]/.test(match)) {
+        return `LOCATION_${index + 1}`;
+      }
+      return match;
+    });
     
-    // Replace goal tokens with generic readable values
-    deanonymizedProfile = deanonymizedProfile.replace(/GOAL_[^\s]+/g, '[Goal]');
+    // Replace ages with tokens
+    anonymizedProfile = anonymizedProfile.replace(/(\d+)-year-old|age (\d+)/gi, (match, index) => {
+      return `AGE_${index + 1}`;
+    });
     
-    // Replace rate tokens with generic readable values
-    deanonymizedProfile = deanonymizedProfile.replace(/RATE_[^\s%]+/g, '[Rate]');
+    // Replace names with tokens
+    anonymizedProfile = anonymizedProfile.replace(/\b([A-Z][a-z]+)\b/g, (match, index) => {
+      if (match.length > 2 && !['The', 'Our', 'We', 'You', 'Your'].includes(match)) {
+        return `PERSON_${index + 1}`;
+      }
+      return match;
+    });
     
-    // Replace location tokens with generic readable values
-    deanonymizedProfile = deanonymizedProfile.replace(/LOCATION_[^\s]+/g, '[Location]');
-    
-    // Replace person tokens with generic readable values
-    deanonymizedProfile = deanonymizedProfile.replace(/PERSON_[^\s]+/g, '[Name]');
-    
-    // Replace spouse tokens with generic readable values
-    deanonymizedProfile = deanonymizedProfile.replace(/SPOUSE_[^\s]+/g, '[Spouse]');
-    
-    // Replace age tokens with generic readable values
-    deanonymizedProfile = deanonymizedProfile.replace(/AGE_[^\s]+/g, '[Age]');
-    
-    // Replace ages tokens with generic readable values
-    deanonymizedProfile = deanonymizedProfile.replace(/AGES_[^\s]+/g, '[Ages]');
-    
-    // Replace institution tokens with generic readable values
-    deanonymizedProfile = deanonymizedProfile.replace(/INSTITUTION_[^\s]+/g, '[Institution]');
-    
-    // Replace children tokens with generic readable values
-    deanonymizedProfile = deanonymizedProfile.replace(/CHILDREN_[^\s]+/g, '[Children]');
-    
-    return deanonymizedProfile;
+    return anonymizedProfile;
   }
 
   async updateProfile(userId: string, newProfileText: string): Promise<void> {
     const prisma = new PrismaClient();
     
     try {
-      // Get user to include email in create operation
       const user = await prisma.user.findUnique({
         where: { id: userId }
       });
@@ -221,7 +214,7 @@ export class ProfileManager {
         });
       }
       
-      // Encrypt the profile data
+      // Encrypt the profile data (without anonymization)
       const encrypted = this.encryptionService.encrypt(newProfileText);
       
       if (profile) {
@@ -355,4 +348,4 @@ export class ProfileManager {
     const currentProfile = await this.getOriginalProfile(userId);
     return currentProfile ? [currentProfile] : [];
   }
-} 
+}
