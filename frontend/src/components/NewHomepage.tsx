@@ -6,12 +6,50 @@ import MailerLiteForm from './MailerLiteForm';
 import MailerLiteScript from './MailerLiteScript';
 import AnimatedPrompt from './AnimatedPrompt';
 import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, Database, BarChart3, MessageCircle, ArrowRight, Sparkles, X, Target, XCircle } from 'lucide-react';
+import { useState } from 'react';
 
 const NewHomepage = () => {
+  const [isLoading, setIsLoading] = useState<string | null>(null);
+
   const scrollToSection = (id: string) => {
     document.getElementById(id)?.scrollIntoView({
       behavior: 'smooth'
     });
+  };
+
+  const handleBuyClick = async (planId: string) => {
+    setIsLoading(planId);
+    
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      
+      // Create checkout session for anyone (new or existing users)
+      const response = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          tier: planId,
+          successUrl: `${window.location.origin}/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=${planId}`,
+          cancelUrl: `${window.location.origin}/`
+        })
+      });
+
+      if (response.ok) {
+        const { url } = await response.json();
+        window.location.href = url;
+      } else {
+        const error = await response.json();
+        console.error('Failed to create checkout session:', error);
+        alert('Failed to create checkout session. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error creating checkout session:', error);
+      alert('An error occurred. Please try again.');
+    } finally {
+      setIsLoading(null);
+    }
   };
 
   return (
@@ -87,9 +125,9 @@ const NewHomepage = () => {
                 variant="hero" 
                 size="xl" 
                 className="group"
-                onClick={() => scrollToSection('waitlist')}
+                onClick={() => scrollToSection('pricing')}
               >
-                Get Early Access
+                Get Started
               </Button>
               <div className="flex flex-col items-center">
                 <a href="/demo">
@@ -430,28 +468,28 @@ const NewHomepage = () => {
           
           <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
             {[{
+              id: 'starter',
               name: "Starter",
               price: "$9",
               period: "/month",
               description: "Better than a spreadsheet, smarter than any budgeting app.",
               features: ["Ask anything about your spending — get real answers, instantly", "Connect up to 3 accounts — like checking, savings, and your 401(k)", "Automatically categorize spending and highlight patterns","No ads. No upsells. No selling your data."],
-              cta: "Get Early Access",
               popular: false
             }, {
+              id: 'standard',
               name: "Standard",
               price: "$18",
               period: "/month",
               description: "Like YNAB, but it also knows what the Fed just did.",
               features: ["Everything in Starter","Connect all your accounts — banks, cards, investments, and more. Ask anything, anytime.", "Factor in key economic indicators like CPI, Fed rates, APRs & more", "Searches the web for current financial headlines from trusted sites"],
-              cta: "Get Early Access",
               popular: true
             }, {
+              id: 'premium',
               name: "Premium",
               price: "$28",
               period: "/month",
               description: "Your personal Bloomberg Terminal — without the $2,000/month price tag.",
               features: ["Everything in Standard", "Live market data (CDs, Treasuries, stocks, crypto, mortgage rates)", "Real-time news feeds from 60+ trusted sources like Bloomberg and Reuters", "What-if scenario modeling", "Portfolio analysis & retirement planning", "Get notified when markets move — instantly"],
-              cta: "Get Early Access",
               popular: false
             }].map((plan, index) => (
               <Card key={index} className={`relative overflow-hidden hover:shadow-2xl transition-all duration-300 hover:scale-105 ${plan.popular ? 'ring-2 ring-primary shadow-xl' : ''}`}>
@@ -505,9 +543,10 @@ const NewHomepage = () => {
                       variant={plan.popular ? "hero" : "outline"} 
                       className="w-full" 
                       size="lg"
-                      onClick={() => scrollToSection('waitlist')}
+                      onClick={() => handleBuyClick(plan.id)}
+                      disabled={isLoading === plan.id}
                     >
-                      {plan.cta}
+                      {isLoading === plan.id ? 'Creating...' : `Get ${plan.name}`}
                     </Button>
                   </div>
                 </CardContent>
@@ -632,23 +671,7 @@ const NewHomepage = () => {
         </div>
       </section>
 
-      {/* Waitlist Section */}
-      <section id="waitlist" className="py-20 bg-gradient-to-r from-primary/10 via-secondary/10 to-primary/10">
-        <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8">
-          <h2 className="text-3xl md:text-4xl font-bold">
-            Ready to get <span className="gradient-text">real answers</span> about your money?
-          </h2>
-          <p className="text-xl text-muted-foreground">
-            Stop guessing and started getting clear, honest financial advice
-          </p>
-          <div className="max-w-md mx-auto">
-            <MailerLiteForm />
-          </div>
-          <p className="text-sm text-muted-foreground">
-            No spam • Unsubscribe anytime • Early access to features
-          </p>
-        </div>
-      </section>
+
 
       {/* Demo CTA Section */}
       {/*<section className="py-20 bg-gradient-to-r from-primary/10 via-secondary/10 to-primary/10">
