@@ -433,7 +433,7 @@ const NewHomepage = () => {
               name: "Starter",
               price: "$9",
               period: "/month",
-              description: "Perfect for simple financial clarity — without giving up your privacy.",
+              description: "Better than a spreadsheet, smarter than any budgeting app.",
               features: ["Ask anything about your spending — get real answers, instantly", "Connect up to 3 accounts — like checking, savings, and your 401(k)", "Automatically categorize spending and highlight patterns","No ads. No upsells. No selling your data."],
               cta: "Get Early Access",
               popular: false
@@ -441,7 +441,7 @@ const NewHomepage = () => {
               name: "Standard",
               price: "$18",
               period: "/month",
-              description: "Level up with real-world context.",
+              description: "Like YNAB, but it also knows what the Fed just did.",
               features: ["Everything in Starter","Connect all your accounts — banks, cards, investments, and more. Ask anything, anytime.", "Factor in key economic indicators like CPI, Fed rates, APRs & more", "Searches the web for current financial headlines from trusted sites"],
               cta: "Get Early Access",
               popular: true
@@ -449,7 +449,7 @@ const NewHomepage = () => {
               name: "Premium",
               price: "$28",
               period: "/month",
-              description: "Get advisor-level insights without the fees.",
+              description: "Your personal Bloomberg Terminal — without the $2,000/month price tag.",
               features: ["Everything in Standard", "Live market data (CDs, Treasuries, stocks, crypto, mortgage rates)", "Real-time news feeds from 60+ trusted sources like Bloomberg and Reuters", "What-if scenario modeling", "Portfolio analysis & retirement planning", "Get notified when markets move — instantly"],
               cta: "Get Early Access",
               popular: false
