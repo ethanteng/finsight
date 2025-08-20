@@ -25,12 +25,12 @@ const TermsPage = () => {
               >
                 How We Protect Your Data
               </a>
-              <Link href="/#waitlist">
+              <Link href="/#pricing">
                 <Button 
                   variant="hero" 
                   size="sm"
                 >
-                  Get Early Access
+                  Get Started
                 </Button>
               </Link>
             </div>
@@ -250,12 +250,12 @@ const TermsPage = () => {
               >
                 Terms of Service
               </a>
-              <a 
-                href="mailto:hello@asklinc.com"
+              <Link 
+                href="/contact"
                 className="hover:text-primary transition-colors"
               >
                 Contact
-              </a>
+              </Link>
             </div>
           </div>
           <div className="mt-8 pt-8 border-t border-border text-center text-sm text-muted-foreground">

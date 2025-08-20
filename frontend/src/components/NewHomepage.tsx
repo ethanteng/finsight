@@ -67,7 +67,7 @@ const NewHomepage = () => {
               <button onClick={() => scrollToSection('features')} className="text-muted-foreground hover:text-primary transition-colors">Features</button>
               <button onClick={() => scrollToSection('pricing')} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
               <a 
-                href="https://ask-linc-blog.ghost.io/" 
+                href="https://blog.asklinc.com/" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-primary transition-colors"
@@ -559,7 +559,7 @@ const NewHomepage = () => {
             <p className="text-muted-foreground">
               Not sure which plan is right?{" "}
               <a 
-                href="https://ask-linc-blog.ghost.io/which-ask-linc-plan-fits-you/" 
+                href="https://blog.asklinc.com/which-ask-linc-plan-fits-you/" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-[hsl(158,64%,52%)] hover:text-[hsl(158,64%,62%)] transition-colors font-medium"
@@ -705,7 +705,7 @@ const NewHomepage = () => {
             </div>
             <div className="flex items-center space-x-6 text-sm text-muted-foreground">
               <a 
-                href="https://ask-linc-blog.ghost.io/i-pasted-my-bank-statements-into-chatgpt-and-immediately-regretted-it/" 
+                href="https://blog.asklinc.com/i-pasted-my-bank-statements-into-chatgpt-and-immediately-regretted-it/" 
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:text-primary/80 transition-colors"

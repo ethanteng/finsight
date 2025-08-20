@@ -17,12 +17,12 @@ const PrivacyPage = () => {
               <span className="text-xl font-bold gradient-text">Ask Linc</span>
             </Link>
             <div className="hidden md:flex items-center space-x-8">
-              <Link href="/#waitlist">
+              <Link href="/#pricing">
                 <Button 
                   variant="hero" 
                   size="sm"
                 >
-                  Get Early Access
+                  Get Started
                 </Button>
               </Link>
             </div>
@@ -285,14 +285,14 @@ const PrivacyPage = () => {
               <CardContent>
                 <p className="text-muted-foreground mb-4">
                   Privacy is a relationship — not a legal checkbox. If you ever have questions, concerns, or suggestions, 
-                  reach out directly at <a href="mailto:hello@asklinc.com" className="text-primary hover:underline font-medium">hello@asklinc.com</a>. 
+                  reach out directly through our contact page. 
                   We'll always respond, and we'll always be transparent.
                 </p>
-                <a href="mailto:hello@asklinc.com">
+                <Link href="/contact">
                   <Button variant="hero">
                     Contact Us
                   </Button>
-                </a>
+                </Link>
               </CardContent>
             </Card>
           </div>

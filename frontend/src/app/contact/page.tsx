@@ -65,7 +65,7 @@ const ContactPage = () => {
                 Home
               </Link>
               <a 
-                href="https://ask-linc-blog.ghost.io/" 
+                href="https://blog.asklinc.com/" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-primary transition-colors"
@@ -267,7 +267,7 @@ const ContactPage = () => {
             </div>
             <div className="flex items-center space-x-6 text-sm text-muted-foreground">
               <a 
-                href="https://ask-linc-blog.ghost.io/i-pasted-my-bank-statements-into-chatgpt-and-immediately-regretted-it/" 
+                href="https://blog.asklinc.com/i-pasted-my-bank-statements-into-chatgpt-and-immediately-regretted-it/" 
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:text-primary/80 transition-colors"
