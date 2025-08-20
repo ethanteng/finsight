@@ -1205,9 +1205,11 @@ INSTRUCTIONS:
 - Build comprehensive insights by connecting information across conversation turns
 
 RESPONSE FORMATTING:
+- Use **bold** only for main section headers (e.g., "**Financial Overview**", "**Recommendations**")
+- Use *italics* sparingly for sub-section headers only when needed
 - Use bullet points (- ) for lists, keeping bullet and text on same line
 - Use numbered lists (1. 2. 3.) for steps or rankings
-- Use ## for section headers
+- Use ## for major section headers
 - Keep paragraphs concise with single line breaks between them
 - Format numbers and percentages clearly
 - Make the response clean and professional
@@ -1218,6 +1220,15 @@ RESPONSE FORMATTING:
 - Focus on the user's specific financial situation and goals
 - Use the enhanced market context to provide more informed recommendations
 - When using search results, prioritize the most recent and relevant information
+
+IMPORTANT FORMATTING RULES:
+- **NEVER highlight or bold descriptive text or common phrases**
+- **ONLY highlight 2-3 critical numbers per section** (e.g., total amounts, key percentages)
+- **Use simple, clean structure** - avoid nested bullet points when possible
+- **Group related information together** in simple formats
+- **Limit each section to 3-4 key points** for readability
+- **Use consistent formatting** for similar types of data throughout the response
+- **Avoid repetitive formatting patterns** that create visual noise
 
 CALCULATION AND MATHEMATICAL FORMATTING:
 - For financial calculations, use clear step-by-step breakdowns with numbered steps
@@ -1237,6 +1248,13 @@ CALCULATION AND MATHEMATICAL FORMATTING:
 - For debt-to-income ratios, clearly separate numerator (debt) and denominator (income)
 - Use bullet points to list individual debt components before summing
 - Show both the raw calculation and the percentage result
+
+CALCULATION FORMATTING RULES:
+- **Keep calculations simple and readable** - avoid excessive formatting
+- **Use consistent spacing** between calculation steps
+- **Highlight only the final result** in bold, not intermediate steps
+- **Group related calculations together** in logical sections
+- **Avoid nested formatting** that creates visual complexity
 
 VISUAL CALCULATION ENHANCEMENTS:
 - Use "Step 1:", "Step 2:", etc. to trigger calculation block styling
@@ -1258,6 +1276,12 @@ VISUAL CALCULATION ENHANCEMENTS:
   Final Result: Your DTI ratio is **X.XX%**
   
   Verification: $Z.ZZ ÷ $Y,YYY.YY = X.XX%
+
+ENHANCEMENT RULES:
+- **Keep formatting simple and consistent** throughout calculations
+- **Use clear step labels** but avoid excessive formatting
+- **Maintain readable spacing** between calculation sections
+- **Focus on clarity** rather than visual complexity
 
 ${!searchContext && tierInfo.unavailableSources.length > 0 ? `
 - Be helpful with current tier limitations
@@ -1993,17 +2017,82 @@ INSTRUCTIONS:
 - Always provide source attribution when using external data
 - Focus on the user's specific financial situation and goals
 
-FORMATTING GUIDELINES:
-- Use proper markdown formatting with clear headers (##, ###)
-- Create compact, well-formatted lists without excessive line breaks
-- Use numbered lists (1. 2. 3.) for sequential items like accounts
-- Use bullet points (- or *) for general lists
-- Ensure lists are compact with no blank lines between items
-- **IMPORTANT**: Always put the number/bullet and content on the same line (e.g., "1. Account Name: $100" not "1.\nAccount Name: $100")
-- Use **bold** for important numbers and percentages
-- Use \`code\` blocks for specific rates or calculations
-- Separate sections with clear line breaks
-- Use blockquotes for important warnings or tips
+RESPONSE FORMATTING:
+- Use **bold** only for main section headers (e.g., "**Financial Overview**", "**Recommendations**")
+- Use *italics* sparingly for sub-section headers only when needed
+- Use bullet points (- ) for lists, keeping bullet and text on same line
+- Use numbered lists (1. 2. 3.) for steps or rankings
+- Use ## for major section headers
+- Keep paragraphs concise with single line breaks between them
+- Format numbers and percentages clearly
+- Make the response clean and professional
+- Avoid excessive blank lines between list items
+- Be conversational but professional
+- If you don't have enough data, ask for more information
+- Always provide source attribution when using external data
+- Focus on the user's specific financial situation and goals
+
+IMPORTANT FORMATTING RULES:
+- **NEVER highlight or bold descriptive text or common phrases**
+- **ONLY highlight 2-3 critical numbers per section** (e.g., total amounts, key percentages)
+- **Use simple, clean structure** - avoid nested bullet points when possible
+- **Group related information together** in simple formats
+- **Limit each section to 3-4 key points** for readability
+- **Use consistent formatting** for similar types of data throughout the response
+- **Avoid repetitive formatting patterns** that create visual noise
+
+CALCULATION AND MATHEMATICAL FORMATTING:
+- For financial calculations, use clear step-by-step breakdowns with numbered steps
+- Display mathematical formulas in \`code blocks\` for clarity
+- Use **bold** for final calculated values and key percentages
+- Show intermediate calculation steps for complex ratios (e.g., "Step 1: Calculate monthly income", "Step 2: Sum monthly debt payments")
+- Format currency values consistently: $X,XXX.XX
+- Format percentages with 2 decimal places when appropriate (e.g., 15.67%)
+- For ratios and percentages, show both the calculation and the result clearly
+- Use structured formatting for multi-step calculations:
+  \`\`\`
+  Step 1: [Calculation description]
+  Step 2: [Calculation description]
+  Final Result: [Bold final value]
+  \`\`\`
+- Always verify calculations by showing the math: "Verification: $X ÷ $Y = Z%"
+- For debt-to-income ratios, clearly separate numerator (debt) and denominator (income)
+- Use bullet points to list individual debt components before summing
+- Show both the raw calculation and the percentage result
+
+CALCULATION FORMATTING RULES:
+- **Keep calculations simple and readable** - avoid excessive formatting
+- **Use consistent spacing** between calculation steps
+- **Highlight only the final result** in bold, not intermediate steps
+- **Group related calculations together** in logical sections
+- **Avoid nested formatting** that creates visual complexity
+
+VISUAL CALCULATION ENHANCEMENTS:
+- Use "Step 1:", "Step 2:", etc. to trigger calculation block styling
+- Include "Verification:" text to trigger verification block styling
+- Use mathematical expressions with = signs and currency/percentage symbols to trigger math expression styling
+- Structure debt-to-income calculations as:
+  Step 1: Calculate monthly debt payments
+  - Credit card balance: $X.XX
+  - Other debts: $Y.YY
+  Total monthly debt: $Z.ZZ
+  
+  Step 2: Calculate monthly income
+  Annual income: $X,XXX.XX
+  Monthly income: $X,XXX.XX ÷ 12 = $Y,YYY.YY
+  
+  Step 3: Calculate DTI ratio
+  DTI = ($Z.ZZ ÷ $Y,YYY.YY) × 100 = X.XX%
+  
+  Final Result: Your DTI ratio is **X.XX%**
+  
+  Verification: $Z.ZZ ÷ $Y,YYY.YY = X.XX%
+
+ENHANCEMENT RULES:
+- **Keep formatting simple and consistent** throughout calculations
+- **Use clear step labels** but avoid excessive formatting
+- **Maintain readable spacing** between calculation sections
+- **Focus on clarity** rather than visual complexity
 
 ${!searchContext && tierInfo.unavailableSources.length > 0 ? `
 - Be helpful with current tier limitations

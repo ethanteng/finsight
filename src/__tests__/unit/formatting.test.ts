@@ -89,4 +89,32 @@ describe('Response Formatting', () => {
     expect(formatted).toContain('- First item\n- Second item');
     expect(formatted).not.toContain('- First item\n\n- Second item');
   });
+});
+
+describe('Clean Formatting Rules', () => {
+  it('should produce clean, readable financial analysis with basic formatting', () => {
+    const messyResponse = `**Financial Overview**
+    
+**Total Savings in Depository Accounts:** $94,741.47
+**Investment Portfolio:** $1,631,356.61
+**401(k) through Slavic401k:** $14,779.57
+
+**Total Investment in 401(k) Account (Adv Plus Banking4):** $1,005,943.25
+
+**Recommendations:**
+**Retirement Plan Review:** Evaluate the performance of your Slavic401k compared to other retirement accounts you have.
+**Diversification:** Ensure your portfolio is well-diversified across various asset classes.
+**Regular Monitoring:** Keep an eye on your investment performance and adjust your strategy as needed.`;
+
+    const formatted = formatResponseWithRegex(messyResponse);
+    
+    // Should have clean structure
+    expect(formatted).toContain('Financial Overview');
+    expect(formatted).toContain('$94,741.47');
+    expect(formatted).toContain('$1,631,356.61');
+    expect(formatted).toContain('$14,779.57');
+    
+    // Should have proper spacing and formatting
+    expect(formatted).not.toMatch(/\n{3,}/); // Should not have excessive line breaks
+  });
 }); 
