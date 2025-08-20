@@ -878,18 +878,20 @@ ${anonymizeInvestmentData(holdings.slice(0, 10))}`;
 
     console.log('OpenAI Enhanced: Response generated successfully');
     
-    // Update user profile from conversation (for authenticated users only)
+    // Update user profile from conversation BEFORE generating response (for authenticated users only)
     if (userId && !isDemo) {
       try {
         const { ProfileManager } = await import('./profile/manager');
         const profileManager = new ProfileManager();
+        
+        // Extract profile information from the user's question BEFORE AI response
         await profileManager.updateProfileFromConversation(userId, {
           id: 'temp',
           question,
-          answer,
+          answer: '', // No answer yet - we're extracting from the question
           createdAt: new Date()
         });
-        console.log('OpenAI Enhanced: User profile updated from conversation');
+        console.log('OpenAI Enhanced: User profile updated from conversation question');
       } catch (error) {
         console.error('OpenAI Enhanced: Failed to update user profile:', error);
         // Don't fail the main request if profile update fails
@@ -1748,18 +1750,20 @@ export async function askOpenAI(
 
     console.log('OpenAI: Response generated successfully');
     
-    // Update user profile from conversation (for authenticated users only)
+    // Update user profile from conversation BEFORE generating response (for authenticated users only)
     if (userId && !isDemo) {
       try {
         const { ProfileManager } = await import('./profile/manager');
         const profileManager = new ProfileManager();
+        
+        // Extract profile information from the user's question BEFORE AI response
         await profileManager.updateProfileFromConversation(userId, {
           id: 'temp',
           question,
-          answer,
+          answer: '', // No answer yet - we're extracting from the question
           createdAt: new Date()
         });
-        console.log('OpenAI: User profile updated from conversation');
+        console.log('OpenAI: User profile updated from conversation question');
       } catch (error) {
         console.error('OpenAI: Failed to update user profile:', error);
         // Don't fail the main request if profile update fails

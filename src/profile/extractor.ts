@@ -19,16 +19,19 @@ export class ProfileExtractor {
     existingProfile?: string
   ): Promise<string> {
     
+    // If there's no answer yet, extract profile info from just the question
+    const hasAnswer = conversation.answer && conversation.answer.trim().length > 0;
+    
     const prompt = `
     Analyze this financial conversation and update the user's profile.
     
     Current conversation:
     Q: ${conversation.question}
-    A: ${conversation.answer}
+    ${hasAnswer ? `A: ${conversation.answer}` : 'A: (No answer yet - extracting from question only)'}
     
     ${existingProfile ? `Current profile: ${existingProfile}` : 'No existing profile.'}
     
-    Extract any new information about the user and update the profile text.
+    Extract any new information about the user from the question${hasAnswer ? ' and answer' : ''} and update the profile text.
     Include details like:
     - Age or age range
     - Occupation or employer
@@ -41,7 +44,10 @@ export class ProfileExtractor {
     - Debt situation
     - Any other relevant personal or financial information
     
-    Return ONLY the updated profile text in natural language format.
+    IMPORTANT: Only return the updated profile text in natural language format.
+    Do NOT include the original question or answer in the profile.
+    Focus on extracting factual information about the user's personal and financial situation.
+    
     If no new information is found, return the existing profile unchanged.
     `;
     
@@ -52,7 +58,15 @@ export class ProfileExtractor {
         temperature: 0.1
       });
       
-      return response.choices[0].message.content || existingProfile || '';
+      const extractedProfile = response.choices[0].message.content || existingProfile || '';
+      
+      // Validate that we're not just returning the raw conversation
+      if (extractedProfile === conversation.question || extractedProfile === conversation.answer) {
+        console.warn('ProfileExtractor: Extracted profile appears to be raw conversation, returning existing profile');
+        return existingProfile || '';
+      }
+      
+      return extractedProfile;
     } catch (error) {
       console.error('Error extracting profile from conversation:', error);
       return existingProfile || '';
