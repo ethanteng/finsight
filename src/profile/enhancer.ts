@@ -57,8 +57,8 @@ export const enhanceProfileWithInvestmentData = async (
     const prisma = getPrismaClient();
     const profileManager = new ProfileManager();
     
-    // Get current profile
-    const currentProfile = await profileManager.getOrCreateProfile(userId);
+    // Get current profile (use original, not anonymized)
+    const currentProfile = await profileManager.getOriginalProfile(userId);
     
     // Analyze portfolio and activity
     const portfolioAnalysis = analyzePortfolio(holdings);
@@ -98,8 +98,8 @@ export const enhanceProfileWithLiabilityData = async (
     const prisma = getPrismaClient();
     const profileManager = new ProfileManager();
     
-    // Get current profile
-    const currentProfile = await profileManager.getOrCreateProfile(userId);
+    // Get current profile (use original, not anonymized)
+    const currentProfile = await profileManager.getOriginalProfile(userId);
     
     // Analyze debt obligations
     const debtAnalysis = analyzeDebtObligations(liabilities);
@@ -139,8 +139,8 @@ export const enhanceProfileWithEnrichmentData = async (
     const prisma = getPrismaClient();
     const profileManager = new ProfileManager();
     
-    // Get current profile
-    const currentProfile = await profileManager.getOrCreateProfile(userId);
+    // Get current profile (use original, not anonymized)
+    const currentProfile = await profileManager.getOriginalProfile(userId);
     
     // Analyze spending patterns
     const spendingAnalysis = analyzeSpendingPatterns(enrichedTransactions);

@@ -727,7 +727,7 @@ ${anonymizeInvestmentData(holdings.slice(0, 10))}`;
       userProfile = await profileManager.getOrCreateProfile(userId);
       console.log('OpenAI Enhanced: User profile retrieved and anonymized, length:', userProfile.length);
       
-      // Enhance profile with Plaid data if available
+      // Enhance profile with Plaid data if available (for AI context only - don't overwrite original profile)
       if (accounts.length > 0 || transactions.length > 0) {
         try {
           const { PlaidProfileEnhancer } = await import('./profile/plaid-enhancer');
@@ -740,10 +740,10 @@ ${anonymizeInvestmentData(holdings.slice(0, 10))}`;
           );
           
           if (enhancedProfile !== userProfile) {
-            // Update the profile with Plaid insights
-            await profileManager.updateProfile(userId, enhancedProfile);
+            // Use enhanced profile for AI context but DON'T overwrite the original profile
+            // The original profile should only be updated through updateProfileFromConversation
             userProfile = enhancedProfile;
-            console.log('OpenAI Enhanced: User profile enhanced with Plaid data');
+            console.log('OpenAI Enhanced: User profile enhanced with Plaid data for AI context');
           }
         } catch (error) {
           console.error('OpenAI Enhanced: Failed to enhance profile with Plaid data:', error);
@@ -1599,7 +1599,7 @@ export async function askOpenAI(
       userProfile = await profileManager.getOrCreateProfile(userId);
       console.log('OpenAI: User profile retrieved and anonymized, length:', userProfile.length);
       
-      // Enhance profile with Plaid data if available
+      // Enhance profile with Plaid data if available (for AI context only - don't overwrite original profile)
       if (accounts.length > 0 || transactions.length > 0) {
         try {
           const { PlaidProfileEnhancer } = await import('./profile/plaid-enhancer');
@@ -1612,10 +1612,10 @@ export async function askOpenAI(
           );
           
           if (enhancedProfile !== userProfile) {
-            // Update the profile with Plaid insights
-            await profileManager.updateProfile(userId, enhancedProfile);
+            // Use enhanced profile for AI context but DON'T overwrite the original profile
+            // The original profile should only be updated through updateProfileFromConversation
             userProfile = enhancedProfile;
-            console.log('OpenAI: User profile enhanced with Plaid data');
+            console.log('OpenAI: User profile enhanced with Plaid data for AI context');
           }
         } catch (error) {
           console.error('OpenAI: Failed to enhance profile with Plaid data:', error);
