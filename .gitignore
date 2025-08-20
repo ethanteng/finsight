@@ -90,5 +90,8 @@ temp/
 # Migration backups
 migration-backups/
 
-#Test DB
+# Test DB
 test-database-setup.log
+
+# Schema backups
+prisma/schema.prisma.backup.*

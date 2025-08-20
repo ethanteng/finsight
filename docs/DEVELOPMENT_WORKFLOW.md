@@ -883,4 +883,196 @@ git push  # ← Now confident it will pass CI/CD
 - **[TESTING.md](./TESTING.md)** - Complete testing guide
 - **[SECURITY_TESTING_IMPROVEMENT_PLAN.md](./SECURITY_TESTING_IMPROVEMENT_PLAN.md)** - Security testing strategy
 - **[CI_CD_SECURITY_INTEGRATION.md](./CI_CD_SECURITY_INTEGRATION.md)** - CI/CD security integration
-- **[scripts/test-cicd-security.sh](../scripts/test-cicd-security.sh)** - Main local CI/CD security testing script 
+- **[scripts/test-cicd-security.sh](../scripts/test-cicd-security.sh)** - Main local CI/CD security testing script
+
+---
+
+## 🗄️ **Database Management Scripts**
+
+This section covers the database management scripts that ensure your local development environment stays in sync with production.
+
+### **🚀 Scripts Overview**
+
+#### **1. `scripts/dev-reset.sh` - Production Database Sync**
+**Purpose**: Syncs your local development environment with production
+**When to use**: When you need your local environment to exactly match production
+**Requirements**: `PRODUCTION_DATABASE_URL` or `RENDER_DATABASE_URL` environment variable
+
+**What it does**:
+- Pulls the actual production database schema
+- Resets your local database to match production exactly
+- Syncs migrations with production automatically
+- Ensures your local environment matches production 100%
+
+**Setup**:
+```bash
+# Add to your .env file:
+PRODUCTION_DATABASE_URL="postgresql://user:pass@prod-host:5432/dbname"
+# OR
+RENDER_DATABASE_URL="postgresql://user:pass@render-host:5432/dbname"
+```
+
+**Usage**:
+```bash
+./scripts/dev-reset.sh
+```
+
+#### **2. `scripts/quick-clear.sh` - Local Database Reset**
+**Purpose**: Resets your local database to match your current local Prisma schema
+**When to use**: When you want to clear local data but don't need production sync
+**Requirements**: Only `DATABASE_URL` (local database)
+
+**What it does**:
+- Resets local database using your current `schema.prisma`
+- No production sync - just local cleanup
+- Faster than production sync
+
+**Usage**:
+```bash
+./scripts/quick-clear.sh
+```
+
+### **🔧 When to Use Which Script**
+
+#### **Use `dev-reset.sh` (Production Sync) when:**
+- ✅ You're starting work on a new feature and want to ensure local matches production
+- ✅ You're debugging production issues locally
+- ✅ Your local schema is out of sync with production
+- ✅ You want to test with the exact production database structure
+- ✅ You're setting up the project for the first time
+
+#### **Use `quick-clear.sh` (Local Reset) when:**
+- ✅ You just want to clear local test data
+- ✅ You're testing local schema changes
+- ✅ You don't have access to production database
+- ✅ You want a quick local cleanup
+
+### **🚨 Important Notes**
+
+#### **Production Sync Safety:**
+- **Always backs up** your current local schema before syncing
+- **Requires confirmation** by typing 'SYNC'
+- **Completely wipes** local database and recreates it
+- **Syncs migrations** to match production exactly
+
+#### **Local Reset Safety:**
+- **Only affects local database**
+- **Requires confirmation** by typing 'RESET'
+- **Uses your current schema.prisma** (no production sync)
+
+### **📋 Environment Variables**
+
+#### **Required for Production Sync:**
+```bash
+# Either of these:
+PRODUCTION_DATABASE_URL="postgresql://user:pass@prod-host:5432/dbname"
+RENDER_DATABASE_URL="postgresql://user:pass@render-host:5432/dbname"
+
+# Plus your local database:
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/finsight"
+```
+
+#### **Required for Local Reset:**
+```bash
+# Only this:
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/finsight"
+```
+
+### **🔄 Workflow Examples**
+
+#### **Scenario 1: Starting New Feature Development**
+```bash
+# 1. Sync with production to ensure you have latest schema
+./scripts/dev-reset.sh
+
+# 2. Start development
+npm run dev
+```
+
+#### **Scenario 2: Quick Local Testing**
+```bash
+# 1. Clear local data quickly
+./scripts/quick-clear.sh
+
+# 2. Test your changes
+npm run dev
+```
+
+#### **Scenario 3: Debugging Production Issue**
+```bash
+# 1. Sync with production to reproduce issue locally
+./scripts/dev-reset.sh
+
+# 2. Debug with exact production setup
+npm run dev
+```
+
+### **🛡️ Safety Features**
+
+- **Environment Detection**: Won't run in production
+- **Database URL Validation**: Checks for local vs production URLs
+- **Confirmation Required**: Must type 'SYNC' or 'RESET' to proceed
+- **Automatic Backup**: Backs up schema before production sync
+- **Verification**: Shows all tables after reset for verification
+
+### **🚨 Troubleshooting**
+
+#### **"No production database URL found"**
+- Set `PRODUCTION_DATABASE_URL` or `RENDER_DATABASE_URL` in your `.env`
+- Or use `./scripts/quick-clear.sh` for local-only reset
+
+#### **"Permission denied"**
+- Make scripts executable: `chmod +x scripts/*.sh`
+
+#### **"Database connection failed"**
+- Check your database URLs are correct
+- Ensure databases are accessible from your machine
+- Verify network/firewall settings
+
+### **💡 Integration with Development Workflow**
+
+#### **Before Starting New Features:**
+```bash
+# 1. Sync with production to ensure latest schema
+./scripts/dev-reset.sh
+
+# 2. Begin development with confidence
+npm run dev
+```
+
+#### **When Schema Changes Are Made:**
+```bash
+# 1. Create and test migration locally
+npx prisma migrate dev --name your_migration_name
+
+# 2. Test migration cycle
+npx prisma migrate reset
+npx prisma migrate deploy
+
+# 3. Commit migration files WITH code changes
+git add prisma/migrations/
+git add src/
+git commit -m "feat: add new feature + migration"
+git push origin main
+```
+
+#### **After Production Deployments:**
+```bash
+# 1. Sync local environment with production changes
+./scripts/dev-reset.sh
+
+# 2. Verify local matches production
+npx prisma migrate status
+npm run build
+```
+
+### **🎯 Benefits of Database Scripts**
+
+1. **✅ No More Schema Drift**: Local always matches production
+2. **✅ Production Sync**: Pull real schema from production database
+3. **✅ Migration Sync**: Local migrations match production exactly
+4. **✅ Safety Features**: Environment detection, confirmation required, automatic backups
+5. **✅ Clear Choice**: Production sync vs local reset based on your needs
+6. **✅ Integration**: Seamlessly fits into your development workflow
+
+**These scripts ensure your local development environment is always production-identical, preventing the schema drift issues that cause deployment failures.** 
