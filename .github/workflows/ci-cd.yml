@@ -3,6 +3,12 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'frontend/src/app/contact/**'
+      - 'frontend/src/app/how-we-protect-your-data/**'
+      - 'frontend/src/app/privacy/**'
+      - 'frontend/src/app/terms/**'
+      - 'frontend/src/components/NewHomepage.tsx'
   pull_request:
     branches: [ main ]
   workflow_dispatch:

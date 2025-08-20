@@ -1,0 +1,82 @@
+name: Fast Deploy - Website Pages
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'frontend/src/app/contact/**'
+      - 'frontend/src/app/how-we-protect-your-data/**'
+      - 'frontend/src/app/privacy/**'
+      - 'frontend/src/app/terms/**'
+      - 'frontend/src/components/NewHomepage.tsx'
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Force deploy even if no website page changes'
+        required: false
+        default: 'false'
+
+jobs:
+  # Quick validation for website pages
+  validate-website:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci --prefer-offline --no-audit
+
+      - name: Quick frontend validation
+        run: |
+          cd frontend
+          # Basic TypeScript check (no strict mode)
+          npx tsc --noEmit --skipLibCheck --noUnusedLocals false --noUnusedParameters false
+          # Basic ESLint check (only critical errors)
+          npx eslint src/ --ext .ts,.tsx --max-warnings 0 --quiet
+
+      - name: Verify frontend build
+        run: |
+          cd frontend
+          npm run build
+
+  # Fast deployment to Vercel
+  deploy-frontend:
+    needs: [validate-website]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.event.inputs.force_deploy == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          vercel-args: '--prod'
+
+  # Optional: Quick backend restart (if needed)
+  restart-backend:
+    needs: [deploy-frontend]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.event.inputs.force_deploy == 'true'
+    steps:
+      - name: Restart Render backend
+        run: |
+          if [ -n "${{ secrets.RENDER_DEPLOY_HOOK }}" ]; then
+            echo "Triggering Render restart via webhook..."
+            curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"
+            echo "Backend restart triggered successfully"
+          else
+            echo "No RENDER_DEPLOY_HOOK secret found, skipping backend restart"
+          fi
