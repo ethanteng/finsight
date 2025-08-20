@@ -451,23 +451,53 @@ export const setupPlaidRoutes = (app: any) => {
       const isDemo = req.headers['x-demo-mode'] === 'true';
       
       if (isDemo) {
-        // Return demo data for testing
-        const demoAccounts = [
-          {
-            id: "checking_1",
-            name: "Chase Checking",
-            type: "depository",
-            subtype: "checking",
-            mask: "1234",
+        // Import demo data and convert to Plaid account format
+        const { demoData } = await import('./demo-data');
+        
+        const demoAccounts = demoData.accounts.map(account => {
+          // Convert demo account format to Plaid account format
+          let type = 'depository';
+          let subtype = 'checking';
+          
+          switch (account.type) {
+            case 'checking':
+              type = 'depository';
+              subtype = 'checking';
+              break;
+            case 'savings':
+              type = 'depository';
+              subtype = 'savings';
+              break;
+            case 'investment':
+              type = 'investment';
+              subtype = 'all';
+              break;
+            case 'credit':
+              type = 'credit';
+              subtype = 'credit card';
+              break;
+            case 'loan':
+              type = 'loan';
+              subtype = 'mortgage';
+              break;
+          }
+          
+          return {
+            id: account.id,
+            name: account.name,
+            type: type,
+            subtype: subtype,
+            mask: account.id.slice(-4),
             balance: {
-              available: 12450.67,
-              current: 12450.67,
-              limit: null,
+              available: account.balance,
+              current: account.balance,
+              limit: account.type === 'credit' ? 10000 : null,
               iso_currency_code: "USD",
               unofficial_currency_code: null
             }
-          }
-        ];
+          };
+        });
+        
         return res.json({ accounts: demoAccounts });
       }
 
