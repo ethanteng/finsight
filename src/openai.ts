@@ -240,7 +240,7 @@ export async function askOpenAIWithEnhancedContext(
         console.log('OpenAI Enhanced: Found', accounts.length, 'accounts and', transactions.length, 'transactions in database for user', userId);
         
         // If no data in database, try to fetch from Plaid directly
-        if (accounts.length === 0 || transactions.length === 0) {
+        if (true) {
           console.log('OpenAI Enhanced: No data in database, fetching from Plaid directly');
           
           // CRITICAL SECURITY FIX: Never call Plaid APIs in demo mode
@@ -307,6 +307,9 @@ export async function askOpenAIWithEnhancedContext(
                         }
                       };
                     });
+
+                    // DEBUG: Log the accountsWithBalances
+                    console.log('OpenAI Enhanced: Processed accounts with balances and institution data:', accountsWithBalances);
                     
                     // ✅ DEBUG: Log account data being processed
                     console.log('OpenAI Enhanced: Raw Plaid accounts for token:', tokenRecord.id);
@@ -605,11 +608,26 @@ export async function askOpenAIWithEnhancedContext(
     let balance;
     if (isDemo) {
       balance = account.balance;
+    } else if (account.balance && account.balance.available !== undefined && account.balance.available !== null) {
+      // ✅ FIX: For checking/savings accounts, use available balance (spendable amount)
+      // For investment accounts, use current balance (total portfolio value)
+      if (account.type === 'depository' || account.type === 'checking' || account.type === 'savings') {
+        balance = account.balance.available; // Use available for checking/savings
+      } else {
+        balance = account.balance.current; // Use current for investments/loans/credit
+      }
     } else if (account.balance && account.balance.current) {
-      // Plaid API structure
+      // Fallback to current balance for other account types
       balance = account.balance.current;
+    } else if (account.availableBalance) {
+      // Database structure - prioritize available balance for checking/savings
+      if (account.type === 'depository' || account.type === 'checking' || account.type === 'savings') {
+        balance = account.availableBalance;
+      } else {
+        balance = account.currentBalance;
+      }
     } else if (account.currentBalance) {
-      // Database structure
+      // Database structure - fallback to current balance
       balance = account.currentBalance;
     } else {
       balance = 0;
@@ -1565,11 +1583,26 @@ export async function askOpenAI(
     let balance;
     if (isDemo) {
       balance = account.balance;
+    } else if (account.balance && account.balance.available !== undefined && account.balance.available !== null) {
+      // ✅ FIX: For checking/savings accounts, use available balance (spendable amount)
+      // For investment accounts, use current balance (total portfolio value)
+      if (account.type === 'depository' || account.type === 'checking' || account.type === 'savings') {
+        balance = account.balance.available; // Use available for checking/savings
+      } else {
+        balance = account.balance.current; // Use current for investments/loans/credit
+      }
     } else if (account.balance && account.balance.current) {
-      // Plaid API structure
+      // Fallback to current balance for other account types
       balance = account.balance.current;
+    } else if (account.availableBalance) {
+      // Database structure - prioritize available balance for checking/savings
+      if (account.type === 'depository' || account.type === 'checking' || account.type === 'savings') {
+        balance = account.availableBalance;
+      } else {
+        balance = account.currentBalance;
+      }
     } else if (account.currentBalance) {
-      // Database structure
+      // Database structure - fallback to current balance
       balance = account.currentBalance;
     } else {
       balance = 0;

@@ -696,7 +696,22 @@ export default function ProfilePage() {
                       </div>
                       <div className="text-right">
                         <div className="font-semibold text-white">
-                          {formatCurrency(account.balance.current)}
+                          {/* ✅ FIX: Use the correct balance field based on account type */}
+                          {(() => {
+                            let balance;
+                            if (account.type === 'depository' || 
+                                account.subtype === 'checking' || 
+                                account.subtype === 'savings') {
+                              // For checking/savings accounts, use available balance
+                              balance = account.balance?.available !== undefined && account.balance?.available !== null 
+                                ? account.balance.available 
+                                : account.balance?.current || 0;
+                            } else {
+                              // For investment/credit accounts, use current balance
+                              balance = account.balance?.current || 0;
+                            }
+                            return formatCurrency(balance);
+                          })()}
                         </div>
                       </div>
                     </div>

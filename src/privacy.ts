@@ -152,16 +152,41 @@ export function anonymizeAccountData(accounts: any[]): string {
     let balance = 'N/A';
     let available = '';
     
-    if (a.balance && a.balance.current !== undefined && a.balance.current !== null) {
+    // ✅ FIX: For checking/savings accounts, prioritize available balance over current balance
+    // For investment accounts, use current balance (total portfolio value)
+    if (a.balance && a.balance.available !== undefined && a.balance.available !== null) {
+      // Account-type aware balance selection
+      if (a.type === 'depository' || a.type === 'checking' || a.type === 'savings') {
+        // For checking/savings accounts, use available balance as primary
+        balance = `$${a.balance.available.toFixed(2)}`;
+        if (a.balance.current !== undefined && a.balance.current !== null && a.balance.current !== a.balance.available) {
+          available = ` (Total: $${a.balance.current.toFixed(2)})`;
+        }
+      } else {
+        // For investment/loan/credit accounts, use current balance
+        balance = `$${a.balance.current.toFixed(2)}`;
+        if (a.balance.available !== undefined && a.balance.available !== null && a.balance.available !== a.balance.current) {
+          available = ` (Available: $${a.balance.available.toFixed(2)})`;
+        }
+      }
+    } else if (a.balance && a.balance.current !== undefined && a.balance.current !== null) {
+      // Fallback to current balance for other account types
       balance = `$${a.balance.current.toFixed(2)}`;
-      if (a.balance.available !== undefined && a.balance.available !== null) {
-        available = ` (Available: $${a.balance.available.toFixed(2)})`;
+    } else if (a.availableBalance !== undefined && a.availableBalance !== null) {
+      // Database structure - account-type aware
+      if (a.type === 'depository' || a.type === 'checking' || a.type === 'savings') {
+        balance = `$${a.availableBalance.toFixed(2)}`;
+        if (a.currentBalance !== undefined && a.currentBalance !== null && a.currentBalance !== a.availableBalance) {
+          available = ` (Total: $${a.currentBalance.toFixed(2)})`;
+        }
+      } else {
+        balance = `$${a.currentBalance.toFixed(2)}`;
+        if (a.availableBalance !== undefined && a.availableBalance !== null && a.availableBalance !== a.currentBalance) {
+          available = ` (Available: $${a.availableBalance.toFixed(2)})`;
+        }
       }
     } else if (a.currentBalance !== undefined && a.currentBalance !== null) {
       balance = `$${a.currentBalance.toFixed(2)}`;
-      if (a.availableBalance !== undefined && a.availableBalance !== null) {
-        available = ` (Available: $${a.availableBalance.toFixed(2)})`;
-      }
     }
     
     const accountToken = tokenizeAccount(a.name, a.institution);

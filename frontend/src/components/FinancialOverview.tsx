@@ -111,7 +111,37 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
     let uncategorizedAccounts = 0;
 
     accounts.forEach(account => {
-      const balance = account.balance?.current || 0;
+      // ✅ FIX: Use the correct balance field based on account type
+      let balance;
+      if (account.type === 'depository' || 
+          account.subtype === 'checking' || 
+          account.subtype === 'savings' || 
+          account.subtype === 'cd' ||
+          account.subtype === 'money market' ||
+          account.subtype === 'prepaid') {
+        // For checking/savings accounts, use available balance (what user can actually spend)
+        balance = account.balance?.available !== undefined && account.balance?.available !== null 
+          ? account.balance.available 
+          : account.balance?.current || 0;
+      } else if (account.type === 'investment' || 
+                 account.subtype === '401k' || 
+                 account.subtype === 'ira' || 
+                 account.subtype === 'roth' || 
+                 account.subtype === 'brokerage' || 
+                 account.subtype === 'hsa' || 
+                 account.subtype === '529' ||
+                 account.subtype === 'pension' ||
+                 account.subtype === 'annuity') {
+        // For investment accounts, use current balance (total portfolio value)
+        balance = account.balance?.current || 0;
+      } else if (account.type === 'credit') {
+        // For credit accounts, use current balance (amount owed)
+        balance = account.balance?.current || 0;
+      } else {
+        // Fallback to current balance for other account types
+        balance = account.balance?.current || 0;
+      }
+      
       const accountType = account.type;
       const accountSubtype = account.subtype;
       
