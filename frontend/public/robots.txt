@@ -1,0 +1,26 @@
+User-agent: *
+Allow: /
+
+# Allow all pages to be crawled
+Allow: /login
+Allow: /register
+Allow: /profile
+Allow: /app
+Allow: /demo
+Allow: /blog
+Allow: /contact
+Allow: /privacy
+Allow: /terms
+Allow: /how-we-protect-your-data
+
+# Disallow admin and sensitive areas
+Disallow: /admin/
+Disallow: /api/
+Disallow: /_next/
+Disallow: /static/
+
+# Sitemap location
+Sitemap: https://asklinc.com/sitemap.xml
+
+# Crawl delay (optional - be respectful to server)
+Crawl-delay: 1

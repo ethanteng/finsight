@@ -15,6 +15,8 @@ on:
       - 'frontend/src/app/globals.css'
       - 'frontend/tailwind.config.js'
       - 'frontend/package.json'
+      - 'frontend/public/sitemap.xml'
+      - 'frontend/public/robots.txt'
   workflow_dispatch:
     inputs:
       force_deploy:
