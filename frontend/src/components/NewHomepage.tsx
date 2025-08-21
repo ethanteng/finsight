@@ -545,7 +545,7 @@ const NewHomepage = () => {
                       onClick={() => handleBuyClick(plan.id)}
                       disabled={isLoading === plan.id}
                     >
-                      {isLoading === plan.id ? 'Creating...' : `Get ${plan.name}`}
+                      {isLoading === plan.id ? 'Creating...' : (plan.id === 'standard' ? 'Get Started' : `Get ${plan.name}`)}
                     </Button>
                   </div>
                 </CardContent>
