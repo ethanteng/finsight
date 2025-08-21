@@ -227,7 +227,7 @@ const createEmailTemplate = (content: string, subject: string): string => {
             <a href="${baseUrl}" class="footer-link">Home</a>
             <a href="${baseUrl}/pricing" class="footer-link">Pricing</a>
             <a href="${baseUrl}/how-we-protect-your-data" class="footer-link">Privacy</a>
-            <a href="https://ask-linc-blog.ghost.io/" class="footer-link">Blog</a>
+                            <a href="https://asklinc.com/blog" class="footer-link">Blog</a>
           </div>
           
           <p style="margin: 0; color: #6b7280;">© 2024 Ask Linc. All rights reserved.</p>

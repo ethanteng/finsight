@@ -1,4 +1,4 @@
-name: Fast Deploy - Website Pages
+name: Fast Deploy - Website Pages & Blog
 
 on:
   push:
@@ -8,7 +8,13 @@ on:
       - 'frontend/src/app/how-we-protect-your-data/**'
       - 'frontend/src/app/privacy/**'
       - 'frontend/src/app/terms/**'
+      - 'frontend/src/app/blog/**'
+      - 'frontend/src/lib/ghost.ts'
       - 'frontend/src/components/NewHomepage.tsx'
+      - 'frontend/next.config.ts'
+      - 'frontend/src/app/globals.css'
+      - 'frontend/tailwind.config.js'
+      - 'frontend/package.json'
   workflow_dispatch:
     inputs:
       force_deploy:
@@ -17,7 +23,7 @@ on:
         default: 'false'
 
 jobs:
-  # Quick validation for website pages
+  # Quick validation for website pages and blog
   validate-website:
     runs-on: ubuntu-latest
     steps:

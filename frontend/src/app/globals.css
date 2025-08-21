@@ -164,3 +164,226 @@
     box-shadow: 0 0 30px hsl(158, 64%, 52% / 0.6);
   }
 }
+
+/* Line clamp utilities for blog posts */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Ghost.io formatting enhancements */
+.ghost-content {
+  /* Preserve Ghost's original spacing and layout */
+  line-height: 1.6;
+}
+
+.ghost-content h1,
+.ghost-content h2,
+.ghost-content h3,
+.ghost-content h4,
+.ghost-content h5,
+.ghost-content h6 {
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.ghost-content h1 {
+  font-size: 2.5rem;
+}
+
+.ghost-content h2 {
+  font-size: 2rem;
+}
+
+.ghost-content h3 {
+  font-size: 1.5rem;
+}
+
+.ghost-content p {
+  margin-bottom: 1.5rem;
+  line-height: 1.8;
+}
+
+.ghost-content ul,
+.ghost-content ol {
+  margin: 1.5rem 0;
+  padding-left: 2rem;
+}
+
+.ghost-content li {
+  margin-bottom: 0.5rem;
+}
+
+.ghost-content blockquote {
+  margin: 2rem 0;
+  padding: 1.5rem 2rem;
+  border-left: 4px solid #3b82f6;
+  background-color: #eff6ff;
+  font-style: italic;
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+
+.ghost-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  margin: 2rem 0;
+}
+
+.ghost-content a {
+  color: #2563eb;
+  text-decoration: none;
+  font-weight: 500;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.2s ease;
+}
+
+.ghost-content a:hover {
+  border-bottom-color: #2563eb;
+}
+
+.ghost-content strong {
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.ghost-content em {
+  font-style: italic;
+  color: #374151;
+}
+
+.ghost-content code {
+  background-color: #f3f4f6;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.875rem;
+}
+
+.ghost-content pre {
+  background-color: #1f2937;
+  color: #f9fafb;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  margin: 2rem 0;
+}
+
+.ghost-content pre code {
+  background-color: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.ghost-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 2rem 0;
+}
+
+.ghost-content th,
+.ghost-content td {
+  border: 1px solid #d1d5db;
+  padding: 0.75rem 1rem;
+  text-align: left;
+}
+
+.ghost-content th {
+  background-color: #f9fafb;
+  font-weight: 600;
+}
+
+.ghost-content hr {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 3rem 0;
+}
+
+/* Ghost-specific element styling */
+.ghost-kg-card {
+  margin: 2rem 0;
+}
+
+.ghost-kg-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin: 2rem 0;
+}
+
+.ghost-kg-gallery img {
+  width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.ghost-caption {
+  text-align: center;
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin-top: 0.5rem;
+  font-style: italic;
+}
+
+/* Preserve Ghost's original spacing for content blocks */
+.ghost-content .kg-embed-card,
+.ghost-content .kg-file-card,
+.ghost-content .kg-product-card {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  background-color: #f9fafb;
+}
+
+/* Ghost's callout boxes */
+.ghost-content .kg-callout-card {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  background-color: #eff6ff;
+  border-left: 4px solid #3b82f6;
+}
+
+.ghost-content .kg-callout-card.kg-callout-card-accent {
+  background-color: #fef3c7;
+  border-left-color: #f59e0b;
+}
+
+.ghost-content .kg-callout-card.kg-callout-card-warning {
+  background-color: #fef2f2;
+  border-left-color: #ef4444;
+}
+
+/* Ghost's toggle content */
+.ghost-content .kg-toggle-card {
+  margin: 2rem 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.ghost-content .kg-toggle-card .kg-toggle-heading {
+  background-color: #f9fafb;
+  padding: 1rem 1.5rem;
+  cursor: pointer;
+  font-weight: 600;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.ghost-content .kg-toggle-card .kg-toggle-content {
+  padding: 1.5rem;
+}

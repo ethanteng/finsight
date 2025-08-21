@@ -7,6 +7,7 @@ import MailerLiteScript from './MailerLiteScript';
 import AnimatedPrompt from './AnimatedPrompt';
 import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, Database, BarChart3, MessageCircle, ArrowRight, Sparkles, X, Target, XCircle } from 'lucide-react';
 import { useState } from 'react';
+import Link from 'next/link';
 
 const NewHomepage = () => {
   const [isLoading, setIsLoading] = useState<string | null>(null);
@@ -66,14 +67,12 @@ const NewHomepage = () => {
             <div className="hidden md:flex items-center space-x-8">
               <button onClick={() => scrollToSection('features')} className="text-muted-foreground hover:text-primary transition-colors">Features</button>
               <button onClick={() => scrollToSection('pricing')} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
-              <a 
-                href="https://blog.asklinc.com/" 
-                target="_blank" 
-                rel="noopener noreferrer"
+              <Link 
+                href="/blog" 
                 className="text-muted-foreground hover:text-primary transition-colors"
               >
                 Our Blog
-              </a>
+              </Link>
               <a 
                 href="/how-we-protect-your-data" 
                 className="text-primary hover:text-primary/80 transition-colors cursor-pointer"
@@ -559,7 +558,7 @@ const NewHomepage = () => {
             <p className="text-muted-foreground">
               Not sure which plan is right?{" "}
               <a 
-                href="https://blog.asklinc.com/which-ask-linc-plan-fits-you/" 
+                href="/blog/which-ask-linc-plan-fits-you/" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-[hsl(158,64%,52%)] hover:text-[hsl(158,64%,62%)] transition-colors font-medium"
@@ -705,7 +704,7 @@ const NewHomepage = () => {
             </div>
             <div className="flex items-center space-x-6 text-sm text-muted-foreground">
               <a 
-                href="https://blog.asklinc.com/i-pasted-my-bank-statements-into-chatgpt-and-immediately-regretted-it/" 
+                href="/blog/i-pasted-my-bank-statements-into-chatgpt-and-immediately-regretted-it/" 
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:text-primary/80 transition-colors"
