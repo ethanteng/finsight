@@ -11,6 +11,7 @@ import authRoutes from './auth/routes';
 import stripeRoutes from './routes/stripe';
 import { optionalAuth, requireAuth, adminAuth } from './auth/middleware';
 import { UserTier } from './data/types';
+import * as Sentry from '@sentry/node';
 
 
 // Extend Express Request type to include user
@@ -40,6 +41,14 @@ import { askOpenAI, askOpenAIWithEnhancedContext } from './openai';
 import { getPrismaClient } from './prisma-client';
 
 const app: Application = express();
+
+// Initialize Sentry for backend monitoring
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.NODE_ENV || 'development',
+  tracesSampleRate: 1.0, // Capture 100% of transactions for now
+  enableLogs: true,
+});
 
 // CORS setup
 app.use(cors({
@@ -171,7 +180,20 @@ app.post('/ask', async (req: Request, res: Response) => {
           const result = await handleDemoRequest(req, res);
           const totalTime = Date.now() - startTime;
           
-          // Log AI response time for monitoring
+          // Create Sentry performance span for AI request
+          Sentry.startSpan({
+            op: 'ai.request',
+            name: 'AI Financial Advice Request - Demo Mode',
+          }, (span) => {
+            // Set span attributes for detailed monitoring
+            span.setAttribute('ai.question_length', question.length);
+            span.setAttribute('ai.user_tier', userTier);
+            span.setAttribute('ai.is_demo', true);
+            span.setAttribute('ai.response_time_ms', totalTime);
+            span.setAttribute('ai.endpoint', '/ask');
+          });
+          
+          // Keep console logging for immediate visibility
           console.log(`📊 AI Response Time - Demo Mode: ${totalTime}ms | Question Length: ${question.length} | User Tier: ${userTier}`);
           
           // Note: Headers are set in handleDemoRequest function
@@ -187,7 +209,21 @@ app.post('/ask', async (req: Request, res: Response) => {
             const result = await handleUserRequest(req, res);
         const totalTime = Date.now() - startTime;
         
-        // Log AI response time for monitoring
+        // Create Sentry performance span for AI request
+        Sentry.startSpan({
+          op: 'ai.request',
+          name: 'AI Financial Advice Request - User Mode',
+        }, (span) => {
+          // Set span attributes for detailed monitoring
+          span.setAttribute('ai.question_length', question.length);
+          span.setAttribute('ai.user_tier', userTier);
+          span.setAttribute('ai.is_demo', false);
+          span.setAttribute('ai.response_time_ms', totalTime);
+          span.setAttribute('ai.endpoint', '/ask');
+          span.setAttribute('ai.user_id', req.user?.id || 'unknown');
+        });
+        
+        // Keep console logging for immediate visibility
         console.log(`📊 AI Response Time - User Mode: ${totalTime}ms | Question Length: ${question.length} | User Tier: ${userTier} | User ID: ${req.user?.id}`);
         
         // Note: Headers are set in handleUserRequest function
@@ -195,6 +231,21 @@ app.post('/ask', async (req: Request, res: Response) => {
     
   } catch (err) {
     const totalTime = Date.now() - startTime;
+    
+    // Create Sentry performance span for AI request error
+    Sentry.startSpan({
+      op: 'ai.request',
+      name: 'AI Financial Advice Request - Error',
+    }, (span) => {
+      // Set span attributes for detailed monitoring
+      span.setAttribute('ai.question_length', req.body?.question?.length || 0);
+      span.setAttribute('ai.user_tier', req.body?.userTier || 'unknown');
+      span.setAttribute('ai.is_demo', req.body?.isDemo || false);
+      span.setAttribute('ai.response_time_ms', totalTime);
+      span.setAttribute('ai.endpoint', '/ask');
+      span.setAttribute('ai.error', err instanceof Error ? err.message : 'Unknown error');
+      span.setAttribute('ai.status', 'error');
+    });
     
     // Log AI response time for error cases
     console.error(`📊 AI Response Time - Error: ${totalTime}ms | Question Length: ${req.body?.question?.length || 0} | Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -204,8 +255,12 @@ app.post('/ask', async (req: Request, res: Response) => {
     res.set('X-AI-Mode', 'error');
     
     if (err instanceof Error) {
+      // Capture error in Sentry
+      Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
+      // Capture unknown error in Sentry
+      Sentry.captureMessage('Unknown error in AI endpoint', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
@@ -229,7 +284,19 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
           const result = await handleTierAwareDemoRequest(req, res);
           const totalTime = Date.now() - startTime;
           
-          // Log AI response time for monitoring
+          // Create Sentry performance span for AI request
+          Sentry.startSpan({
+            op: 'ai.request',
+            name: 'AI Financial Advice Request - Tier-Aware Demo',
+          }, (span) => {
+            // Set span attributes for detailed monitoring
+            span.setAttribute('ai.question_length', question.length);
+            span.setAttribute('ai.is_demo', true);
+            span.setAttribute('ai.response_time_ms', totalTime);
+            span.setAttribute('ai.endpoint', '/ask/tier-aware');
+          });
+          
+          // Keep console logging for immediate visibility
           console.log(`📊 AI Response Time - Tier-Aware Demo: ${totalTime}ms | Question Length: ${question.length}`);
           
           // Note: Headers are set in handleTierAwareDemoRequest function
@@ -245,7 +312,20 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
             const result = await handleTierAwareUserRequest(req, res);
         const totalTime = Date.now() - startTime;
         
-        // Log AI response time for monitoring
+        // Create Sentry performance span for AI request
+        Sentry.startSpan({
+          op: 'ai.request',
+          name: 'AI Financial Advice Request - Tier-Aware User',
+        }, (span) => {
+          // Set span attributes for detailed monitoring
+          span.setAttribute('ai.question_length', question.length);
+          span.setAttribute('ai.is_demo', false);
+          span.setAttribute('ai.response_time_ms', totalTime);
+          span.setAttribute('ai.endpoint', '/ask/tier-aware');
+          span.setAttribute('ai.user_id', req.user?.id || 'unknown');
+        });
+        
+        // Keep console logging for immediate visibility
         console.log(`📊 AI Response Time - Tier-Aware User: ${totalTime}ms | Question Length: ${question.length} | User ID: ${req.user?.id}`);
         
         // Note: Headers are set in handleTierAwareUserRequest function
@@ -253,6 +333,20 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
     
   } catch (err) {
     const totalTime = Date.now() - startTime;
+    
+    // Create Sentry performance span for AI request error
+    Sentry.startSpan({
+      op: 'ai.request',
+      name: 'AI Financial Advice Request - Tier-Aware Error',
+    }, (span) => {
+      // Set span attributes for detailed monitoring
+      span.setAttribute('ai.question_length', req.body?.question?.length || 0);
+      span.setAttribute('ai.is_demo', req.body?.isDemo || false);
+      span.setAttribute('ai.response_time_ms', totalTime);
+      span.setAttribute('ai.endpoint', '/ask/tier-aware');
+      span.setAttribute('ai.error', err instanceof Error ? err.message : 'Unknown error');
+      span.setAttribute('ai.status', 'error');
+    });
     
     // Log AI response time for error cases
     console.error(`📊 AI Response Time - Tier-Aware Error: ${totalTime}ms | Question Length: ${req.body?.question?.length || 0} | Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -262,8 +356,12 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
     res.set('X-AI-Mode', 'tier-aware-error');
     
     if (err instanceof Error) {
+      // Capture error in Sentry
+      Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
+      // Capture unknown error in Sentry
+      Sentry.captureMessage('Unknown error in tier-aware AI endpoint', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
@@ -275,6 +373,8 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
 // 2. User sees real data for usability
 // 3. Responses are converted back to user-friendly format
 app.post('/ask/display-real', async (req: Request, res: Response) => {
+  const startTime = Date.now();
+  
   try {
     const { question, isDemo = false, sessionId } = req.body;
     
@@ -369,6 +469,23 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
         console.log('Not saving demo conversation - isDemo:', isDemo, 'sessionId:', sessionId);
       }
       
+      // Create Sentry performance span for AI request
+      const totalTime = Date.now() - startTime;
+      Sentry.startSpan({
+        op: 'ai.request',
+        name: 'AI Financial Advice Request - Display Real Demo',
+      }, (span) => {
+        // Set span attributes for detailed monitoring
+        span.setAttribute('ai.question_length', question.length);
+        span.setAttribute('ai.is_demo', true);
+        span.setAttribute('ai.response_time_ms', totalTime);
+        span.setAttribute('ai.endpoint', '/ask/display-real');
+        span.setAttribute('ai.user_tier', userTier);
+      });
+      
+      // Keep console logging for immediate visibility
+      console.log(`📊 AI Response Time - Display Real Demo: ${totalTime}ms | Question Length: ${question.length} | User Tier: ${userTier}`);
+      
       return res.json({ 
         answer: displayResponse,
         conversationId: null
@@ -425,12 +542,53 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
       }
     }
 
+    // Create Sentry performance span for AI request
+    const totalTime = Date.now() - startTime;
+    Sentry.startSpan({
+      op: 'ai.request',
+      name: 'AI Financial Advice Request - Display Real Production',
+    }, (span) => {
+      // Set span attributes for detailed monitoring
+      span.setAttribute('ai.question_length', question.length);
+      span.setAttribute('ai.is_demo', false);
+      span.setAttribute('ai.response_time_ms', totalTime);
+      span.setAttribute('ai.endpoint', '/ask/display-real');
+      span.setAttribute('ai.user_tier', userTier);
+      span.setAttribute('ai.user_id', userId || 'unknown');
+    });
+    
+    // Keep console logging for immediate visibility
+    console.log(`📊 AI Response Time - Display Real Production: ${totalTime}ms | Question Length: ${question.length} | User Tier: ${userTier} | User ID: ${userId || 'none'}`);
+    
     res.json({ 
       answer: displayResponse,
       conversationId: null
     });
   } catch (error) {
     console.error('Error in ask endpoint:', error);
+    
+    // Create Sentry performance span for AI request error
+    const totalTime = Date.now() - startTime;
+    Sentry.startSpan({
+      op: 'ai.request',
+      name: 'AI Financial Advice Request - Display Real Error',
+    }, (span) => {
+      // Set span attributes for detailed monitoring
+      span.setAttribute('ai.question_length', req.body?.question?.length || 0);
+      span.setAttribute('ai.is_demo', req.body?.isDemo || false);
+      span.setAttribute('ai.response_time_ms', totalTime);
+      span.setAttribute('ai.endpoint', '/ask/display-real');
+      span.setAttribute('ai.error', error instanceof Error ? error.message : 'Unknown error');
+      span.setAttribute('ai.status', 'error');
+    });
+    
+    // Capture error in Sentry
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in display-real AI endpoint', 'error');
+    }
+    
     res.status(500).json({ error: 'Failed to process question' });
   }
 });
@@ -476,6 +634,14 @@ app.post('/feedback', async (req: Request, res: Response) => {
     
   } catch (error) {
     console.error('Error saving feedback:', error);
+    
+    // Capture error in Sentry
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in feedback endpoint', 'error');
+    }
+    
     res.status(500).json({ error: 'Failed to save feedback' });
   }
 });
@@ -660,9 +826,12 @@ const handleDemoRequest = async (req: Request, res: Response) => {
       res.json({ answer });
     }
   } catch (err) {
+    // Capture error in Sentry
     if (err instanceof Error) {
+      Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
+      Sentry.captureMessage('Unknown error in handleDemoRequest', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
@@ -708,9 +877,12 @@ const handleUserRequest = async (req: Request, res: Response) => {
     
     res.json({ answer });
   } catch (err) {
+    // Capture error in Sentry
     if (err instanceof Error) {
+      Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
+      Sentry.captureMessage('Unknown error in handleUserRequest', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
@@ -753,9 +925,12 @@ const handleTierAwareUserRequest = async (req: Request, res: Response) => {
     
     res.json({ answer });
   } catch (err) {
+    // Capture error in Sentry
     if (err instanceof Error) {
+      Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
+      Sentry.captureMessage('Unknown error in handleTierAwareUserRequest', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
@@ -891,9 +1066,12 @@ const handleTierAwareDemoRequest = async (req: Request, res: Response) => {
     
     res.json({ answer });
   } catch (err) {
+    // Capture error in Sentry
     if (err instanceof Error) {
+      Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
+      Sentry.captureMessage('Unknown error in handleTierAwareDemoRequest', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
@@ -931,9 +1109,12 @@ app.get('/demo/conversations', async (req: Request, res: Response) => {
       }))
     });
   } catch (err) {
+    // Capture error in Sentry
     if (err instanceof Error) {
+      Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
+      Sentry.captureMessage('Unknown error in demo conversations endpoint', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
@@ -972,9 +1153,12 @@ app.get('/tier-info', async (req: Request, res: Response) => {
 
     res.json(tierInfo);
   } catch (err) {
+    // Capture error in Sentry
     if (err instanceof Error) {
+      Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
+      Sentry.captureMessage('Unknown error in tier-info endpoint', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
@@ -1008,9 +1192,12 @@ app.get('/conversations', async (req: Request, res: Response) => {
       }))
     });
   } catch (err) {
+    // Capture error in Sentry
     if (err instanceof Error) {
+      Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
+      Sentry.captureMessage('Unknown error in conversations endpoint', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
@@ -1037,6 +1224,14 @@ app.post('/log-demo', async (req: Request, res: Response) => {
     res.json({ success: true });
   } catch (err) {
     console.error('Error logging demo interaction:', err);
+    
+    // Capture error in Sentry
+    if (err instanceof Error) {
+      Sentry.captureException(err);
+    } else {
+      Sentry.captureMessage('Unknown error in log-demo endpoint', 'error');
+    }
+    
     res.status(500).json({ error: 'Failed to log demo interaction' });
   }
 });
@@ -1060,9 +1255,12 @@ app.get('/test/market-data/:tier', async (req: Request, res: Response) => {
       cacheStats: await dataOrchestrator.getCacheStats()
     });
   } catch (err) {
+    // Capture error in Sentry
     if (err instanceof Error) {
+      Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
+      Sentry.captureMessage('Unknown error in test market data endpoint', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
@@ -1083,9 +1281,12 @@ app.get('/user/tier', async (req: Request, res: Response) => {
       message: `Current user tier: ${user.tier}`
     });
   } catch (err) {
+    // Capture error in Sentry
     if (err instanceof Error) {
+      Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
+      Sentry.captureMessage('Unknown error in user tier endpoint', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
@@ -1109,9 +1310,12 @@ app.get('/test/current-tier', async (req: Request, res: Response) => {
       message: testTier ? `Testing with ${testTier} tier` : 'Using tier from request'
     });
   } catch (err) {
+    // Capture error in Sentry
     if (err instanceof Error) {
+      Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
+      Sentry.captureMessage('Unknown error in test current tier endpoint', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
@@ -1123,9 +1327,12 @@ app.get('/test/cache-stats', async (req: Request, res: Response) => {
     const cacheStats = await dataOrchestrator.getCacheStats();
     res.json(cacheStats);
   } catch (err) {
+    // Capture error in Sentry
     if (err instanceof Error) {
+      Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
+      Sentry.captureMessage('Unknown error in test cache stats endpoint', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
@@ -1143,6 +1350,14 @@ app.get('/test/demo-data', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error in /test/demo-data endpoint:', error);
+    
+    // Capture error in Sentry
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in test demo data endpoint', 'error');
+    }
+    
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -1154,9 +1369,12 @@ app.post('/test/invalidate-cache', async (req: Request, res: Response) => {
     await dataOrchestrator.invalidateCache(pattern || 'economic_indicators');
     res.json({ message: `Cache invalidated for pattern: ${pattern || 'economic_indicators'}` });
   } catch (err) {
+    // Capture error in Sentry
     if (err instanceof Error) {
+      Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
+      Sentry.captureMessage('Unknown error in test invalidate cache endpoint', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
@@ -1172,9 +1390,12 @@ app.get('/test/fred-api-key', async (req: Request, res: Response) => {
       isTestKey: fredApiKey === 'test_fred_key'
     });
   } catch (err) {
+    // Capture error in Sentry
     if (err instanceof Error) {
+      Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
+      Sentry.captureMessage('Unknown error in test FRED API key endpoint', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
@@ -1190,9 +1411,12 @@ app.get('/test/alpha-vantage-api-key', async (req: Request, res: Response) => {
       isTestKey: alphaVantageApiKey === 'your_alpha_vantage_api_key'
     });
   } catch (err) {
+    // Capture error in Sentry
     if (err instanceof Error) {
+      Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
+      Sentry.captureMessage('Unknown error in test Alpha Vantage API key endpoint', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
@@ -1221,9 +1445,12 @@ app.get('/test/enhanced-market-context', async (req: Request, res: Response) => 
       timestamp: new Date().toISOString()
     });
   } catch (err) {
+    // Capture error in Sentry
     if (err instanceof Error) {
+      Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
+      Sentry.captureMessage('Unknown error in test enhanced market context endpoint', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
@@ -1251,9 +1478,12 @@ app.post('/test/refresh-market-context', async (req: Request, res: Response) => 
       timestamp: new Date().toISOString()
     });
   } catch (err) {
+    // Capture error in Sentry
     if (err instanceof Error) {
+      Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
+      Sentry.captureMessage('Unknown error in test refresh market context endpoint', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
@@ -1287,9 +1517,12 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
   } catch (err) {
+    // Capture error in Sentry
     if (err instanceof Error) {
+      Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
+      Sentry.captureMessage('Unknown error in sync status endpoint', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
@@ -1347,6 +1580,13 @@ app.get('/sync/status', async (req: Request, res: Response) => {
           lastSync: null // Sync info removed - transactions are now real-time only
         });
       } catch (err) {
+        // Capture error in Sentry
+        if (err instanceof Error) {
+          Sentry.captureException(err);
+        } else {
+          Sentry.captureMessage('Unknown error in privacy data endpoint', 'error');
+        }
+        
         res.status(500).json({ error: 'Failed to retrieve data summary' });
       }
     });
@@ -1460,6 +1700,14 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         });
       } catch (err) {
         console.error('Error deleting user data:', err);
+        
+        // Capture error in Sentry
+        if (err instanceof Error) {
+          Sentry.captureException(err);
+        } else {
+          Sentry.captureMessage('Unknown error in delete all data endpoint', 'error');
+        }
+        
         res.status(500).json({ error: 'Failed to delete data' });
       }
     });
@@ -1511,6 +1759,13 @@ app.get('/sync/status', async (req: Request, res: Response) => {
 
         res.json({ success: true, message: 'All accounts disconnected and data cleared' });
       } catch (err) {
+        // Capture error in Sentry
+        if (err instanceof Error) {
+          Sentry.captureException(err);
+        } else {
+          Sentry.captureMessage('Unknown error in disconnect accounts endpoint', 'error');
+        }
+        
         res.status(500).json({ error: 'Failed to disconnect accounts' });
       }
     });
@@ -1556,6 +1811,14 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         res.json({ sessions: sessionStats });
       } catch (error) {
         console.error('Error fetching demo sessions:', error);
+        
+        // Capture error in Sentry
+        if (error instanceof Error) {
+          Sentry.captureException(error);
+        } else {
+          Sentry.captureMessage('Unknown error in admin demo sessions endpoint', 'error');
+        }
+        
         res.status(500).json({ error: 'Failed to fetch demo sessions' });
       }
     });
@@ -1586,6 +1849,14 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         res.json({ conversations });
       } catch (error) {
         console.error('Error fetching demo conversations:', error);
+        
+        // Capture error in Sentry
+        if (error instanceof Error) {
+          Sentry.captureException(error);
+        } else {
+          Sentry.captureMessage('Unknown error in admin demo conversations endpoint', 'error');
+        }
+        
         res.status(500).json({ error: 'Failed to fetch demo conversations' });
       }
     });
@@ -1628,6 +1899,14 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         });
       } catch (error) {
         console.error('Error deleting demo session:', error);
+        
+        // Capture error in Sentry
+        if (error instanceof Error) {
+          Sentry.captureException(error);
+        } else {
+          Sentry.captureMessage('Unknown error in admin delete demo session endpoint', 'error');
+        }
+        
         res.status(500).json({ error: 'Failed to delete demo session' });
       }
     });
@@ -1676,6 +1955,14 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         res.json({ users: userStats });
       } catch (error) {
         console.error('Error fetching production sessions:', error);
+        
+        // Capture error in Sentry
+        if (error instanceof Error) {
+          Sentry.captureException(error);
+        } else {
+          Sentry.captureMessage('Unknown error in admin production sessions endpoint', 'error');
+        }
+        
         res.status(500).json({ error: 'Failed to fetch production sessions' });
       }
     });
@@ -1717,6 +2004,14 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         res.json({ conversations });
       } catch (error) {
         console.error('Error fetching production conversations:', error);
+        
+        // Capture error in Sentry
+        if (error instanceof Error) {
+          Sentry.captureException(error);
+        } else {
+          Sentry.captureMessage('Unknown error in admin production conversations endpoint', 'error');
+        }
+        
         res.status(500).json({ error: 'Failed to fetch production conversations' });
       }
     });
@@ -1782,6 +2077,14 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         res.json({ users: enhancedUsers });
       } catch (error) {
         console.error('Error fetching production users:', error);
+        
+        // Capture error in Sentry
+        if (error instanceof Error) {
+          Sentry.captureException(error);
+        } else {
+          Sentry.captureMessage('Unknown error in admin production users endpoint', 'error');
+        }
+        
         res.status(500).json({ error: 'Failed to fetch production users' });
       }
     });
@@ -1815,6 +2118,14 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         res.json({ success: true, user: updatedUser });
       } catch (error) {
         console.error('Error updating user tier:', error);
+        
+        // Capture error in Sentry
+        if (error instanceof Error) {
+          Sentry.captureException(error);
+        } else {
+          Sentry.captureMessage('Unknown error in admin update user tier endpoint', 'error');
+        }
+        
         res.status(500).json({ error: 'Failed to update user tier' });
       }
     });
@@ -2082,6 +2393,14 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         res.json(financialData);
       } catch (error) {
         console.error('Error fetching user financial data:', error);
+        
+        // Capture error in Sentry
+        if (error instanceof Error) {
+          Sentry.captureException(error);
+        } else {
+          Sentry.captureMessage('Unknown error in admin user financial data endpoint', 'error');
+        }
+        
         res.status(500).json({ error: 'Failed to fetch user financial data' });
       }
     });
@@ -2114,6 +2433,14 @@ app.get('/ai/performance', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('AI Performance endpoint error:', error);
+    
+    // Capture error in Sentry
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in AI performance endpoint', 'error');
+    }
+    
     res.status(500).json({ error: 'Failed to get AI performance info' });
   }
 });
@@ -2160,6 +2487,14 @@ app.get('/test-db', async (req: Request, res: Response) => {
         });
       } catch (error) {
         console.error('Database test failed:', error);
+        
+        // Capture error in Sentry
+        if (error instanceof Error) {
+          Sentry.captureException(error);
+        } else {
+          Sentry.captureMessage('Unknown error in test database endpoint', 'error');
+        }
+        
         res.status(500).json({ 
           error: 'Database test failed', 
           details: error instanceof Error ? error.message : 'Unknown error'
@@ -2177,6 +2512,14 @@ app.get('/profile', requireAuth, async (req: Request, res: Response) => {
     res.json({ profile: { profileText } });
   } catch (error) {
     console.error('Failed to fetch profile:', error);
+    
+    // Capture error in Sentry
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in profile fetch endpoint', 'error');
+    }
+    
     res.status(500).json({ error: 'Failed to fetch profile' });
   }
 });
@@ -2196,6 +2539,14 @@ app.put('/profile', requireAuth, async (req: Request, res: Response) => {
     res.json({ success: true });
   } catch (error) {
     console.error('Failed to update profile:', error);
+    
+    // Capture error in Sentry
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in profile update endpoint', 'error');
+    }
+    
     res.status(500).json({ error: 'Failed to update profile' });
   }
 });
@@ -2225,6 +2576,14 @@ app.get('/test/search-context', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Search context test error:', error);
+    
+    // Capture error in Sentry
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in test search context endpoint', 'error');
+    }
+    
     res.status(500).json({ error: 'Failed to get search context' });
   }
 });
@@ -2260,6 +2619,14 @@ app.get('/market-news/context/:tier', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('Error fetching market context:', error);
+    
+    // Capture error in Sentry
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in market news context endpoint', 'error');
+    }
+    
     res.status(500).json({ error: 'Failed to fetch market context' });
   }
 });
@@ -2283,6 +2650,14 @@ app.put('/admin/market-news/context/:tier', adminAuth, async (req: Request, res:
     res.json({ success: true });
   } catch (error) {
     console.error('Error updating market context:', error);
+    
+    // Capture error in Sentry
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in admin market news context endpoint', 'error');
+    }
+    
     res.status(500).json({ error: 'Failed to update market context' });
   }
 });
@@ -2299,6 +2674,14 @@ app.get('/admin/market-news/history/:tier', adminAuth, async (req: Request, res:
     res.json({ history });
   } catch (error) {
     console.error('Error fetching market context history:', error);
+    
+    // Capture error in Sentry
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in admin market news history endpoint', 'error');
+    }
+    
     res.status(500).json({ error: 'Failed to fetch market context history' });
   }
 });
@@ -2315,6 +2698,14 @@ app.post('/admin/market-news/refresh/:tier', adminAuth, async (req: Request, res
     res.json({ success: true });
   } catch (error) {
     console.error('Error refreshing market context:', error);
+    
+    // Capture error in Sentry
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in admin market news refresh endpoint', 'error');
+    }
+    
     res.status(500).json({ error: 'Failed to refresh market context' });
   }
 });
@@ -2349,6 +2740,13 @@ if (require.main === module) {
         const duration = Date.now() - startTime;
         console.error(`❌ Error in market context refresh after ${duration}ms:`, error);
         console.error(`📊 Market Context Error: duration=${duration}ms, error=${error}`);
+        
+        // Capture error in Sentry
+        if (error instanceof Error) {
+          Sentry.captureException(error);
+        } else {
+          Sentry.captureMessage('Unknown error in market context refresh cron job', 'error');
+        }
       }
     }, {
       timezone: 'America/New_York',
@@ -2374,6 +2772,13 @@ if (require.main === module) {
         console.log('✅ Market news context refresh completed');
       } catch (error) {
         console.error('❌ Error in market news context refresh:', error);
+        
+        // Capture error in Sentry
+        if (error instanceof Error) {
+          Sentry.captureException(error);
+        } else {
+          Sentry.captureMessage('Unknown error in market news context refresh cron job', 'error');
+        }
       }
     }, {
       timezone: 'America/New_York',
@@ -2428,6 +2833,14 @@ app.put('/admin/revoke-user-access/:userId', adminAuth, async (req: Request, res
     });
   } catch (error) {
     console.error('Error revoking user access:', error);
+    
+    // Capture error in Sentry
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in admin revoke user access endpoint', 'error');
+    }
+    
     res.status(500).json({ error: 'Failed to revoke user access' });
   }
 });
@@ -2475,6 +2888,14 @@ app.put('/admin/restore-user-access/:userId', adminAuth, async (req: Request, re
     });
   } catch (error) {
     console.error('Error restoring user access:', error);
+    
+    // Capture error in Sentry
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in admin restore user access endpoint', 'error');
+    }
+    
     res.status(500).json({ error: 'Failed to restore user access' });
   }
 });
@@ -2583,6 +3004,14 @@ app.delete('/admin/delete-user-account/:userId', adminAuth, async (req: Request,
     });
   } catch (error) {
     console.error('Error deleting user account:', error);
+    
+    // Capture error in Sentry
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in admin delete user account endpoint', 'error');
+    }
+    
     res.status(500).json({ error: 'Failed to delete user account' });
   }
 });
