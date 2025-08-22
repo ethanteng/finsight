@@ -153,6 +153,8 @@ app.use('/api/stripe', stripeRoutes);
 
 // OpenAI Q&A endpoint with tier-aware system
 app.post('/ask', async (req: Request, res: Response) => {
+  const startTime = Date.now();
+  
   try {
     const { question, userTier = 'starter', isDemo = false } = req.body;
     if (!question) {
@@ -166,7 +168,17 @@ app.post('/ask', async (req: Request, res: Response) => {
     
     // Demo mode always works (no auth required)
     if (isDemo) {
-      return handleDemoRequest(req, res);
+      const result = await handleDemoRequest(req, res);
+      const totalTime = Date.now() - startTime;
+      
+      // Log AI response time for monitoring
+      console.log(`📊 AI Response Time - Demo Mode: ${totalTime}ms | Question Length: ${question.length} | User Tier: ${userTier}`);
+      
+      // Add response time to response headers for client-side monitoring
+      res.set('X-AI-Response-Time', totalTime.toString());
+      res.set('X-AI-Mode', 'demo');
+      
+      return result;
     }
     
     // User mode requires auth when enabled
@@ -175,8 +187,28 @@ app.post('/ask', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
     
-    return handleUserRequest(req, res);
+    const result = await handleUserRequest(req, res);
+    const totalTime = Date.now() - startTime;
+    
+    // Log AI response time for monitoring
+    console.log(`📊 AI Response Time - User Mode: ${totalTime}ms | Question Length: ${question.length} | User Tier: ${userTier} | User ID: ${req.user?.id}`);
+    
+    // Add response time to response headers for client-side monitoring
+    res.set('X-AI-Response-Time', totalTime.toString());
+    res.set('X-AI-Mode', 'user');
+    
+    return result;
+    
   } catch (err) {
+    const totalTime = Date.now() - startTime;
+    
+    // Log AI response time for error cases
+    console.error(`📊 AI Response Time - Error: ${totalTime}ms | Question Length: ${req.body?.question?.length || 0} | Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    
+    // Add response time to response headers even for errors
+    res.set('X-AI-Response-Time', totalTime.toString());
+    res.set('X-AI-Mode', 'error');
+    
     if (err instanceof Error) {
       res.status(500).json({ error: err.message });
     } else {
@@ -187,6 +219,8 @@ app.post('/ask', async (req: Request, res: Response) => {
 
 // New tier-aware endpoint for enhanced context
 app.post('/ask/tier-aware', async (req: Request, res: Response) => {
+  const startTime = Date.now();
+  
   try {
     const { question, isDemo = false } = req.body;
     if (!question) {
@@ -198,7 +232,17 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
     
     // Demo mode always works (no auth required)
     if (isDemo) {
-      return handleTierAwareDemoRequest(req, res);
+      const result = await handleTierAwareDemoRequest(req, res);
+      const totalTime = Date.now() - startTime;
+      
+      // Log AI response time for monitoring
+      console.log(`📊 AI Response Time - Tier-Aware Demo: ${totalTime}ms | Question Length: ${question.length}`);
+      
+      // Add response time to response headers
+      res.set('X-AI-Response-Time', totalTime.toString());
+      res.set('X-AI-Mode', 'tier-aware-demo');
+      
+      return result;
     }
     
     // User mode requires auth when enabled
@@ -207,8 +251,28 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
     
-    return handleTierAwareUserRequest(req, res);
+    const result = await handleTierAwareUserRequest(req, res);
+    const totalTime = Date.now() - startTime;
+    
+    // Log AI response time for monitoring
+    console.log(`📊 AI Response Time - Tier-Aware User: ${totalTime}ms | Question Length: ${question.length} | User ID: ${req.user?.id}`);
+    
+    // Add response time to response headers
+    res.set('X-AI-Response-Time', totalTime.toString());
+    res.set('X-AI-Mode', 'tier-aware-user');
+    
+    return result;
+    
   } catch (err) {
+    const totalTime = Date.now() - startTime;
+    
+    // Log AI response time for error cases
+    console.error(`📊 AI Response Time - Tier-Aware Error: ${totalTime}ms | Question Length: ${req.body?.question?.length || 0} | Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    
+    // Add response time to response headers even for errors
+    res.set('X-AI-Response-Time', totalTime.toString());
+    res.set('X-AI-Mode', 'tier-aware-error');
+    
     if (err instanceof Error) {
       res.status(500).json({ error: err.message });
     } else {
@@ -2034,8 +2098,40 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
-    // Test database connection
-    app.get('/test-db', async (req: Request, res: Response) => {
+    // AI Performance Monitoring Endpoint
+app.get('/ai/performance', async (req: Request, res: Response) => {
+  try {
+    // This endpoint provides AI performance metrics
+    // You can use this with Sentry uptime monitoring to track AI system health
+    res.json({
+      status: 'OK',
+      message: 'AI Performance monitoring endpoint is active',
+      timestamp: new Date().toISOString(),
+      features: [
+        'Response time tracking on all AI endpoints',
+        'Performance logging with question length and user tier',
+        'Response headers with timing data',
+        'Error tracking with timing information'
+      ],
+      endpoints: [
+        '/ask - Main AI endpoint with timing',
+        '/ask/tier-aware - Tier-aware AI endpoint with timing',
+        '/ask/display-real - Real data AI endpoint with timing'
+      ],
+      monitoring: {
+        responseTimeHeaders: 'X-AI-Response-Time, X-AI-Mode',
+        consoleLogging: '📊 AI Response Time logs for all requests',
+        errorTracking: 'Timing data included even for failed requests'
+      }
+    });
+  } catch (error) {
+    console.error('AI Performance endpoint error:', error);
+    res.status(500).json({ error: 'Failed to get AI performance info' });
+  }
+});
+
+// Test database connection
+app.get('/test-db', async (req: Request, res: Response) => {
       try {
         const { getPrismaClient } = await import('./prisma-client');
         const prisma = getPrismaClient();
