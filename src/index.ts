@@ -166,20 +166,17 @@ app.post('/ask', async (req: Request, res: Response) => {
     console.log('Ask endpoint - user:', req.user);
     console.log('Ask endpoint - isDemo:', isDemo);
     
-    // Demo mode always works (no auth required)
-    if (isDemo) {
-      const result = await handleDemoRequest(req, res);
-      const totalTime = Date.now() - startTime;
-      
-      // Log AI response time for monitoring
-      console.log(`📊 AI Response Time - Demo Mode: ${totalTime}ms | Question Length: ${question.length} | User Tier: ${userTier}`);
-      
-      // Add response time to response headers for client-side monitoring
-      res.set('X-AI-Response-Time', totalTime.toString());
-      res.set('X-AI-Mode', 'demo');
-      
-      return result;
-    }
+            // Demo mode always works (no auth required)
+        if (isDemo) {
+          const result = await handleDemoRequest(req, res);
+          const totalTime = Date.now() - startTime;
+          
+          // Log AI response time for monitoring
+          console.log(`📊 AI Response Time - Demo Mode: ${totalTime}ms | Question Length: ${question.length} | User Tier: ${userTier}`);
+          
+          // Note: Headers are set in handleDemoRequest function
+          return result;
+        }
     
     // User mode requires auth when enabled
     if (isFeatureEnabled('USER_AUTH') && !req.user) {
@@ -187,17 +184,14 @@ app.post('/ask', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
     
-    const result = await handleUserRequest(req, res);
-    const totalTime = Date.now() - startTime;
-    
-    // Log AI response time for monitoring
-    console.log(`📊 AI Response Time - User Mode: ${totalTime}ms | Question Length: ${question.length} | User Tier: ${userTier} | User ID: ${req.user?.id}`);
-    
-    // Add response time to response headers for client-side monitoring
-    res.set('X-AI-Response-Time', totalTime.toString());
-    res.set('X-AI-Mode', 'user');
-    
-    return result;
+            const result = await handleUserRequest(req, res);
+        const totalTime = Date.now() - startTime;
+        
+        // Log AI response time for monitoring
+        console.log(`📊 AI Response Time - User Mode: ${totalTime}ms | Question Length: ${question.length} | User Tier: ${userTier} | User ID: ${req.user?.id}`);
+        
+        // Note: Headers are set in handleUserRequest function
+        return result;
     
   } catch (err) {
     const totalTime = Date.now() - startTime;
@@ -230,20 +224,17 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
     console.log('Tier-aware ask endpoint - user:', req.user);
     console.log('Tier-aware ask endpoint - isDemo:', isDemo);
     
-    // Demo mode always works (no auth required)
-    if (isDemo) {
-      const result = await handleTierAwareDemoRequest(req, res);
-      const totalTime = Date.now() - startTime;
-      
-      // Log AI response time for monitoring
-      console.log(`📊 AI Response Time - Tier-Aware Demo: ${totalTime}ms | Question Length: ${question.length}`);
-      
-      // Add response time to response headers
-      res.set('X-AI-Response-Time', totalTime.toString());
-      res.set('X-AI-Mode', 'tier-aware-demo');
-      
-      return result;
-    }
+            // Demo mode always works (no auth required)
+        if (isDemo) {
+          const result = await handleTierAwareDemoRequest(req, res);
+          const totalTime = Date.now() - startTime;
+          
+          // Log AI response time for monitoring
+          console.log(`📊 AI Response Time - Tier-Aware Demo: ${totalTime}ms | Question Length: ${question.length}`);
+          
+          // Note: Headers are set in handleTierAwareDemoRequest function
+          return result;
+        }
     
     // User mode requires auth when enabled
     if (isFeatureEnabled('USER_AUTH') && !req.user) {
@@ -251,17 +242,14 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
     
-    const result = await handleTierAwareUserRequest(req, res);
-    const totalTime = Date.now() - startTime;
-    
-    // Log AI response time for monitoring
-    console.log(`📊 AI Response Time - Tier-Aware User: ${totalTime}ms | Question Length: ${question.length} | User ID: ${req.user?.id}`);
-    
-    // Add response time to response headers
-    res.set('X-AI-Response-Time', totalTime.toString());
-    res.set('X-AI-Mode', 'tier-aware-user');
-    
-    return result;
+            const result = await handleTierAwareUserRequest(req, res);
+        const totalTime = Date.now() - startTime;
+        
+        // Log AI response time for monitoring
+        console.log(`📊 AI Response Time - Tier-Aware User: ${totalTime}ms | Question Length: ${question.length} | User ID: ${req.user?.id}`);
+        
+        // Note: Headers are set in handleTierAwareUserRequest function
+        return result;
     
   } catch (err) {
     const totalTime = Date.now() - startTime;
