@@ -116,13 +116,13 @@ export default function DemoPage() {
             </div>
           </div>
           <div className="flex items-center space-x-3">
-            {/* Hide Join the Waitlist button on mobile */}
+            {/* Hide Get Started button on mobile */}
             <div className="hidden md:block">
               <Link 
-                href="/#waitlist" 
+                href="/#pricing" 
                 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
               >
-                Join the Waitlist
+                Get Started
               </Link>
             </div>
             <a 
