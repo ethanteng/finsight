@@ -206,28 +206,29 @@ app.post('/ask', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
     
-            const result = await handleUserRequest(req, res);
-        const totalTime = Date.now() - startTime;
-        
-        // Create Sentry performance span for AI request
-        Sentry.startSpan({
-          op: 'ai.request',
-          name: 'AI Financial Advice Request - User Mode',
-        }, (span: any) => {
-          // Set span attributes for detailed monitoring
-          span.setAttribute('ai.question_length', question.length);
-          span.setAttribute('ai.user_tier', userTier);
-          span.setAttribute('ai.is_demo', false);
-          span.setAttribute('ai.response_time_ms', totalTime);
-          span.setAttribute('ai.endpoint', '/ask');
-          span.setAttribute('ai.user_id', req.user?.id || 'unknown');
-        });
-        
-        // Keep console logging for immediate visibility
-        console.log(`📊 AI Response Time - User Mode: ${totalTime}ms | Question Length: ${question.length} | User Tier: ${userTier} | User ID: ${req.user?.id}`);
-        
-        // Note: Headers are set in handleUserRequest function
-        return result;
+    // Handle user mode request
+    const result = await handleUserRequest(req, res);
+    const totalTime = Date.now() - startTime;
+    
+    // Create Sentry performance span for AI request
+    Sentry.startSpan({
+      op: 'ai.request',
+      name: 'AI Financial Advice Request - User Mode',
+    }, (span: any) => {
+      // Set span attributes for detailed monitoring
+      span.setAttribute('ai.question_length', question.length);
+      span.setAttribute('ai.user_tier', userTier);
+      span.setAttribute('ai.is_demo', false);
+      span.setAttribute('ai.response_time_ms', totalTime);
+      span.setAttribute('ai.endpoint', '/ask');
+      span.setAttribute('ai.user_id', req.user?.id || 'unknown');
+    });
+    
+    // Keep console logging for immediate visibility
+    console.log(`📊 AI Response Time - User Mode: ${totalTime}ms | Question Length: ${question.length} | User Tier: ${userTier} | User ID: ${req.user?.id}`);
+    
+    // Note: Headers are set in handleUserRequest function
+    return result;
     
   } catch (err) {
     const totalTime = Date.now() - startTime;
