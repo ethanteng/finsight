@@ -33,17 +33,22 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
 
   // Demo placeholder questions that rotate
   const demoPlaceholders = [
-    "How much am I saving each month? What's my emergency fund status? Should I move my savings to a higher-yield account?",
-    "What's my current asset allocation? Am I on track for retirement? Should I rebalance my 401k?",
-    "What's my debt-to-income ratio? How much am I spending on housing vs other expenses? Should I pay off my credit card first?"
+    "Is my savings account really keeping up?",
+    "Should I pay off debt or invest first?",
+    "Does it make sense to refinance my mortgage now?",
+    "What’s smarter: keep buying stocks or wait?",
+    "How much emergency cash should I actually keep?",
+    "Am I missing out by not using a Roth IRA?"
   ];
 
   // Regular user placeholder questions that also rotate
   const userPlaceholders = [
-    "How much did I spend on dining last month? What's my current asset allocation? Which accounts have the highest fees?",
-    "What's my debt-to-income ratio? How much am I saving each month? Should I refinance my mortgage?",
-    "Am I on track for retirement? What's my emergency fund status? Should I pay off my credit card first?",
-    "How much am I spending on housing vs other expenses? What's my current investment performance? Should I rebalance my portfolio?"
+    "Is my high-yield savings account worse than Treasuries after taxes?",
+    "Should I pay down student loans faster or invest that money instead?",
+    "Am I better off putting extra cash into my mortgage or into bonds?",
+    "Should I keep dollar-cost averaging into stocks now, or wait for rates to drop?",
+    "In my 40s, do today’s bond yields make it smart to shift away from stocks?",
+    "Should I rebalance my portfolio now or wait for the next Fed move?"
   ];
 
   // Fun loading messages that rotate

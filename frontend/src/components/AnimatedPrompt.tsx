@@ -12,15 +12,16 @@ const AnimatedPrompt = () => {
   }, []);
 
   const questions = [
-    "Is now a good time to refinance our mortgage?",
-    "Are we paying too much in credit card interest?",
-    "Do we have money sitting in savings that could be earning more?",
-    "Should we go with a Treasury or a CD right now?",
-    "Is our money invested the right way — not too risky, not too safe?",
-    "If we lost income, how long could we cover our expenses?",
-    "How much am I really saving each month?",
-    "Are we doing the right things to hit our goals?",
-    "What happens if interest rates go up again?"
+    "Is my savings account falling behind?",
+    "Pay off loans or invest instead?",
+    "Extra cash: mortgage or bonds?",
+    "Keep buying stocks or wait it out?",
+    "Am I better off funding my Roth or 401(k)?",
+    "How much cash should I really keep on hand?",
+    "Should I refinance now or wait?",
+    "Are today’s bond yields worth shifting into?",
+    "Should I rebalance my portfolio now?",
+    "Am I overexposed to inflation risk?"
   ];
 
   if (!isVisible) {
