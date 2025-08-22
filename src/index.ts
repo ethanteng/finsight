@@ -184,7 +184,7 @@ app.post('/ask', async (req: Request, res: Response) => {
           Sentry.startSpan({
             op: 'ai.request',
             name: 'AI Financial Advice Request - Demo Mode',
-          }, (span) => {
+          }, (span: any) => {
             // Set span attributes for detailed monitoring
             span.setAttribute('ai.question_length', question.length);
             span.setAttribute('ai.user_tier', userTier);
@@ -213,7 +213,7 @@ app.post('/ask', async (req: Request, res: Response) => {
         Sentry.startSpan({
           op: 'ai.request',
           name: 'AI Financial Advice Request - User Mode',
-        }, (span) => {
+        }, (span: any) => {
           // Set span attributes for detailed monitoring
           span.setAttribute('ai.question_length', question.length);
           span.setAttribute('ai.user_tier', userTier);
@@ -236,7 +236,7 @@ app.post('/ask', async (req: Request, res: Response) => {
     Sentry.startSpan({
       op: 'ai.request',
       name: 'AI Financial Advice Request - Error',
-    }, (span) => {
+    }, (span: any) => {
       // Set span attributes for detailed monitoring
       span.setAttribute('ai.question_length', req.body?.question?.length || 0);
       span.setAttribute('ai.user_tier', req.body?.userTier || 'unknown');
@@ -288,7 +288,7 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
           Sentry.startSpan({
             op: 'ai.request',
             name: 'AI Financial Advice Request - Tier-Aware Demo',
-          }, (span) => {
+          }, (span: any) => {
             // Set span attributes for detailed monitoring
             span.setAttribute('ai.question_length', question.length);
             span.setAttribute('ai.is_demo', true);
@@ -316,7 +316,7 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
         Sentry.startSpan({
           op: 'ai.request',
           name: 'AI Financial Advice Request - Tier-Aware User',
-        }, (span) => {
+        }, (span: any) => {
           // Set span attributes for detailed monitoring
           span.setAttribute('ai.question_length', question.length);
           span.setAttribute('ai.is_demo', false);
@@ -338,7 +338,7 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
     Sentry.startSpan({
       op: 'ai.request',
       name: 'AI Financial Advice Request - Tier-Aware Error',
-    }, (span) => {
+    }, (span: any) => {
       // Set span attributes for detailed monitoring
       span.setAttribute('ai.question_length', req.body?.question?.length || 0);
       span.setAttribute('ai.is_demo', req.body?.isDemo || false);
@@ -474,7 +474,7 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
       Sentry.startSpan({
         op: 'ai.request',
         name: 'AI Financial Advice Request - Display Real Demo',
-      }, (span) => {
+      }, (span: any) => {
         // Set span attributes for detailed monitoring
         span.setAttribute('ai.question_length', question.length);
         span.setAttribute('ai.is_demo', true);
@@ -547,7 +547,7 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
     Sentry.startSpan({
       op: 'ai.request',
       name: 'AI Financial Advice Request - Display Real Production',
-    }, (span) => {
+    }, (span: any) => {
       // Set span attributes for detailed monitoring
       span.setAttribute('ai.question_length', question.length);
       span.setAttribute('ai.is_demo', false);
@@ -572,7 +572,7 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
     Sentry.startSpan({
       op: 'ai.request',
       name: 'AI Financial Advice Request - Display Real Error',
-    }, (span) => {
+    }, (span: any) => {
       // Set span attributes for detailed monitoring
       span.setAttribute('ai.question_length', req.body?.question?.length || 0);
       span.setAttribute('ai.is_demo', req.body?.isDemo || false);
