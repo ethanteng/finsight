@@ -2204,7 +2204,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         }
 
         // If no accounts in database but user has access tokens, try to fetch live from Plaid
-        let liveAccounts: any[] = [];
+        const liveAccounts: any[] = [];
         if (accessTokens.length > 0) {
           console.log('Admin: Fetching live accounts from Plaid for all access tokens...');
           try {

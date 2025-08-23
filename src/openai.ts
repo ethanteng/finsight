@@ -829,7 +829,7 @@ ${anonymizeInvestmentData(holdings.slice(0, 10))}`;
       }
       
       // ✅ NEW: Fetch liabilities data for credit accounts
-      let liabilitiesData = '';
+      const liabilitiesData = '';
       try {
         const accessTokens = await prisma.accessToken.findMany({
           where: { userId }
@@ -1540,8 +1540,8 @@ export async function askOpenAI(
   }
 
   // Create dual data structures: real data for display, tokenized data for AI
-  let displayAccounts = [...accounts];
-  let displayTransactions = [...transactions];
+  const displayAccounts = [...accounts];
+  const displayTransactions = [...transactions];
   let aiAccounts = [...accounts];
   let aiTransactions = [...transactions];
 
@@ -1758,7 +1758,7 @@ export async function askOpenAI(
       }
       
       // ✅ NEW: Fetch liabilities data for credit accounts
-      let liabilitiesData = '';
+      const liabilitiesData = '';
       try {
         const accessTokens = await prisma.accessToken.findMany({
           where: { userId }

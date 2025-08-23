@@ -2,7 +2,7 @@ import { UserTier } from '../data/types';
 import { SearchProvider } from '../data/providers/search';
 
 // Polygon.io client will be initialized in constructor
-let restClient: any = null;
+const restClient: any = null;
 
 export interface MarketNewsSource {
   id: string;

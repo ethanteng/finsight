@@ -104,9 +104,6 @@ export class MailerLiteSyncService {
           if (user.subscriptionStatus === 'active') {
             // Active subscription - full access
             hasActiveSubscription = true;
-          } else if (user.subscriptionStatus === 'active' && user.subscriptions.length === 0) {
-            // Payment completed but account setup incomplete
-            hasActiveSubscription = false;
           } else if (user.subscriptions.length === 0 && user.subscriptionStatus === 'inactive') {
             // Admin-created user - no Stripe subscription records exist
             hasActiveSubscription = true;
