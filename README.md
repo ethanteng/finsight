@@ -227,6 +227,9 @@ npm run test:dual-data
 
 # Enhanced market context tests
 npm run test:enhanced-market-context
+
+# GPT Model Smoke Test (Real API validation)
+npm run test:gpt-smoke
 ```
 
 ### **Test Coverage**
@@ -234,6 +237,7 @@ npm run test:enhanced-market-context
 - **Integration Tests**: 33+ tests for API endpoints and workflows
 - **RAG System Tests**: Enhanced market context and search integration
 - **CI/CD Tests**: Selective test suite for reliable deployment
+- **GPT Smoke Tests**: Real OpenAI API validation to catch model issues
 
 ## 🔐 **Security & Privacy**
 
@@ -276,6 +280,34 @@ OPENAI_MODEL=gpt-3.5-turbo
 | gpt-3.5-turbo | $0.50/1M tokens | $1.50/1M tokens | Tests |
 
 **Savings**: Using gpt-3.5-turbo for tests reduces costs by ~90% while maintaining test coverage.
+
+### **GPT Model Smoke Testing**
+
+To prevent issues like the GPT-5 prompt failures, we've implemented a comprehensive smoke testing strategy:
+
+#### **Automated Tests (Unit Test Suite)**
+- **Configuration Validation**: Ensures API keys and environment variables are properly set
+- **Model Configuration**: Validates that the expected model (`gpt-4o`) is correctly configured
+- **Environment Setup**: Checks that all required environment variables are present
+
+#### **Manual Smoke Tests (Real API Validation)**
+```bash
+# Test real OpenAI API calls with current model
+npm run test:gpt-smoke
+```
+
+This script:
+- Makes actual API calls to validate model availability
+- Tests prompt formatting and response generation
+- Catches model-specific issues (like GPT-5 failures)
+- Provides cost estimates for testing
+- Runs outside the Jest environment to avoid mocking
+
+**When to Run**:
+- Before deploying model changes
+- When switching between GPT models
+- To validate API key functionality
+- After OpenAI API updates or changes
 
 ### **Performance Features**
 - **Caching**: Multi-level caching for market data
