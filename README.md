@@ -101,7 +101,7 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
     - Daily automated sync at 3 AM EST
     - Non-destructive upsert operations
     - Production users only (excludes demo data)
-    - Comprehensive user data sync (email, tier, subscription status, conversation count)
+    - Comprehensive user data sync (email, tier, subscription status, conversation count, account creation date, last login)
     - Robust error handling with Sentry integration
     - Rate limiting to respect API constraints
 

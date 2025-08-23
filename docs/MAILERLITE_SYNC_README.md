@@ -51,6 +51,8 @@ For each user, the following data is synchronized to MailerLite:
 - **active_user**: Boolean (1 or 0) indicating if user has an active subscription
 - **current_tier**: String value (premium, standard, or starter)
 - **conversation_count**: Number of conversations the user has had
+- **user_created_at**: Date when the user account was created (YYYY-MM-DD format)
+- **last_login_at**: Date of the user's last login (YYYY-MM-DD format, empty if never logged in)
 
 ## API Endpoint
 

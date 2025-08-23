@@ -7,6 +7,8 @@ interface MailerLiteSubscriber {
     active_user: number;
     current_tier: string;
     conversation_count: number;
+    user_created_at: string;
+    last_login_at: string;
   };
 }
 
@@ -105,7 +107,9 @@ export class MailerLiteSyncService {
             fields: {
               active_user: hasActiveSubscription ? 1 : 0,
               current_tier: currentTier,
-              conversation_count: conversationCount
+              conversation_count: conversationCount,
+              user_created_at: this.formatDateForMailerLite(user.createdAt),
+              last_login_at: user.lastLoginAt ? this.formatDateForMailerLite(user.lastLoginAt) : ''
             }
           };
 
@@ -137,6 +141,11 @@ export class MailerLiteSyncService {
       result.errors.push(errorMessage);
       return result;
     }
+  }
+
+  private formatDateForMailerLite(date: Date): string {
+    // Convert Date to YYYY-MM-DD format for MailerLite
+    return date.toISOString().split('T')[0];
   }
 
   private async syncSubscriber(subscriber: MailerLiteSubscriber): Promise<void> {
@@ -208,7 +217,9 @@ export class MailerLiteSyncService {
         fields: {
           active_user: hasActiveSubscription ? 1 : 0,
           current_tier: currentTier,
-          conversation_count: conversationCount
+          conversation_count: conversationCount,
+          user_created_at: this.formatDateForMailerLite(user.createdAt),
+          last_login_at: user.lastLoginAt ? this.formatDateForMailerLite(user.lastLoginAt) : ''
         }
       };
 
