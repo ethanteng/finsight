@@ -65,6 +65,8 @@ A user is considered active if **either** condition is true, ensuring maximum ac
 
 **Important**: The system fetches ALL subscriptions (not just active ones) to avoid circular logic issues where active subscriptions would be filtered out before checking their status.
 
+**Edge Case Handling**: The system properly handles users who have `subscriptionStatus: 'active'` but no subscription records in the database (e.g., admin-created users or users with incomplete setup). In such cases, the user's default tier is used instead of attempting to access a non-existent subscription record.
+
 ## API Endpoint
 
 The system uses MailerLite's Create/Upsert Subscriber API:
