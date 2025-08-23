@@ -194,18 +194,18 @@ app.post('/ask', async (req: Request, res: Response) => {
             span.setAttribute('ai.user_tier', userTier);
             span.setAttribute('ai.endpoint', '/ask');
             
-            // Handle demo request within the span
-            const result = await handleDemoRequest(req, res);
-            
-            // Set response time after the request completes
+            // Set response time before handling request
             span.setAttribute('ai.response_time_ms', Date.now() - startTime);
             
             // Keep console logging for immediate visibility
             console.log(`📊 AI Response Time - Demo Mode: ${Date.now() - startTime}ms | Question Length: ${question.length} | User Tier: ${userTier}`);
             
             // Note: Headers are set in handleDemoRequest function
-            return result;
+            // Don't return anything - handleDemoRequest already sends the response
           });
+          
+          // Handle demo request AFTER creating the span
+          await handleDemoRequest(req, res);
         }
     
     // User mode requires auth when enabled
@@ -227,18 +227,18 @@ app.post('/ask', async (req: Request, res: Response) => {
       span.setAttribute('ai.endpoint', '/ask');
       span.setAttribute('ai.user_id', req.user?.id || 'unknown');
       
-      // Handle user mode request within the span
-      const result = await handleUserRequest(req, res);
-      
-      // Set response time after the request completes
+      // Set response time before handling request
       span.setAttribute('ai.response_time_ms', Date.now() - startTime);
       
       // Keep console logging for immediate visibility
       console.log(`📊 AI Response Time - User Mode: ${Date.now() - startTime}ms | Question Length: ${question.length} | User Tier: ${userTier} | User ID: ${req.user?.id}`);
       
       // Note: Headers are set in handleUserRequest function
-      return result;
+      // Don't return anything - handleUserRequest already sends the response
     });
+    
+    // Handle user mode request AFTER creating the span
+    await handleUserRequest(req, res);
     
   } catch (err) {
     const totalTime = Date.now() - startTime;
@@ -303,18 +303,18 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
             span.setAttribute('ai.mode', 'demo');
             span.setAttribute('ai.endpoint', '/ask/tier-aware');
             
-            // Handle demo request within the span
-            const result = await handleTierAwareDemoRequest(req, res);
-            
-            // Set response time after the request completes
+            // Set response time before handling request
             span.setAttribute('ai.response_time_ms', Date.now() - startTime);
             
             // Keep console logging for immediate visibility
             console.log(`📊 AI Response Time - Tier-Aware Demo: ${Date.now() - startTime}ms | Question Length: ${question.length}`);
             
             // Note: Headers are set in handleTierAwareDemoRequest function
-            return result;
+            // Don't return anything - handleTierAwareDemoRequest already sends the response
           });
+          
+          // Handle demo request AFTER creating the span
+          await handleTierAwareDemoRequest(req, res);
         }
     
     // User mode requires auth when enabled
@@ -335,18 +335,18 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
           span.setAttribute('ai.endpoint', '/ask/tier-aware');
           span.setAttribute('ai.user_id', req.user?.id || 'unknown');
           
-          // Handle user request within the span
-          const result = await handleTierAwareUserRequest(req, res);
-          
-          // Set response time after the request completes
+          // Set response time before handling request
           span.setAttribute('ai.response_time_ms', Date.now() - startTime);
           
           // Keep console logging for immediate visibility
           console.log(`📊 AI Response Time - Tier-Aware User: ${Date.now() - startTime}ms | Question Length: ${question.length} | User ID: ${req.user?.id}`);
           
           // Note: Headers are set in handleTierAwareUserRequest function
-          return result;
+          // Don't return anything - handleTierAwareUserRequest already sends the response
         });
+        
+        // Handle user request AFTER creating the span
+        await handleTierAwareUserRequest(req, res);
     
   } catch (err) {
     const totalTime = Date.now() - startTime;
