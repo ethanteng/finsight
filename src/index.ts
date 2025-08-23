@@ -182,27 +182,30 @@ app.post('/ask', async (req: Request, res: Response) => {
     
             // Demo mode always works (no auth required)
         if (isDemo) {
-          const result = await handleDemoRequest(req, res);
+          // Create Sentry performance span for AI request BEFORE calling handler
           const totalTime = Date.now() - startTime;
-          
-                    // Create Sentry performance span for AI request
           Sentry.startSpan({
             op: 'ai.request',
             name: 'AI Financial Advice Request - Demo Mode',
-          }, (span: any) => {
+          }, async (span: any) => {
             // Set span attributes for detailed monitoring and filtering
             span.setAttribute('ai.question_length', question.length);
-            span.setAttribute('ai.response_time_ms', totalTime);
             span.setAttribute('ai.mode', 'demo');
             span.setAttribute('ai.user_tier', userTier);
             span.setAttribute('ai.endpoint', '/ask');
+            
+            // Handle demo request within the span
+            const result = await handleDemoRequest(req, res);
+            
+            // Set response time after the request completes
+            span.setAttribute('ai.response_time_ms', Date.now() - startTime);
+            
+            // Keep console logging for immediate visibility
+            console.log(`📊 AI Response Time - Demo Mode: ${Date.now() - startTime}ms | Question Length: ${question.length} | User Tier: ${userTier}`);
+            
+            // Note: Headers are set in handleDemoRequest function
+            return result;
           });
-          
-          // Keep console logging for immediate visibility
-          console.log(`📊 AI Response Time - Demo Mode: ${totalTime}ms | Question Length: ${question.length} | User Tier: ${userTier}`);
-          
-          // Note: Headers are set in handleDemoRequest function
-          return result;
         }
     
     // User mode requires auth when enabled
@@ -211,29 +214,31 @@ app.post('/ask', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
     
-    // Handle user mode request
-    const result = await handleUserRequest(req, res);
+    // Create Sentry performance span for AI request BEFORE calling handler
     const totalTime = Date.now() - startTime;
-    
-    // Create Sentry performance span for AI request
     Sentry.startSpan({
       op: 'ai.request',
       name: 'AI Financial Advice Request - User Mode',
-    }, (span: any) => {
+    }, async (span: any) => {
       // Set span attributes for detailed monitoring and filtering
       span.setAttribute('ai.question_length', question.length);
-      span.setAttribute('ai.response_time_ms', totalTime);
       span.setAttribute('ai.mode', 'production');
       span.setAttribute('ai.user_tier', userTier);
       span.setAttribute('ai.endpoint', '/ask');
       span.setAttribute('ai.user_id', req.user?.id || 'unknown');
+      
+      // Handle user mode request within the span
+      const result = await handleUserRequest(req, res);
+      
+      // Set response time after the request completes
+      span.setAttribute('ai.response_time_ms', Date.now() - startTime);
+      
+      // Keep console logging for immediate visibility
+      console.log(`📊 AI Response Time - User Mode: ${Date.now() - startTime}ms | Question Length: ${question.length} | User Tier: ${userTier} | User ID: ${req.user?.id}`);
+      
+      // Note: Headers are set in handleUserRequest function
+      return result;
     });
-    
-    // Keep console logging for immediate visibility
-    console.log(`📊 AI Response Time - User Mode: ${totalTime}ms | Question Length: ${question.length} | User Tier: ${userTier} | User ID: ${req.user?.id}`);
-    
-    // Note: Headers are set in handleUserRequest function
-    return result;
     
   } catch (err) {
     const totalTime = Date.now() - startTime;
@@ -287,26 +292,29 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
     
             // Demo mode always works (no auth required)
         if (isDemo) {
-          const result = await handleTierAwareDemoRequest(req, res);
+          // Create Sentry performance span for AI request BEFORE calling handler
           const totalTime = Date.now() - startTime;
-          
-                  // Create Sentry performance span for AI request
-        Sentry.startSpan({
-          op: 'ai.request',
-          name: 'AI Financial Advice Request - Tier-Aware Demo',
-        }, (span: any) => {
-          // Set span attributes for detailed monitoring and filtering
-          span.setAttribute('ai.question_length', question.length);
-          span.setAttribute('ai.response_time_ms', totalTime);
-          span.setAttribute('ai.mode', 'demo');
-          span.setAttribute('ai.endpoint', '/ask/tier-aware');
-        });
-          
-          // Keep console logging for immediate visibility
-          console.log(`📊 AI Response Time - Tier-Aware Demo: ${totalTime}ms | Question Length: ${question.length}`);
-          
-          // Note: Headers are set in handleTierAwareDemoRequest function
-          return result;
+          Sentry.startSpan({
+            op: 'ai.request',
+            name: 'AI Financial Advice Request - Tier-Aware Demo',
+          }, async (span: any) => {
+            // Set span attributes for detailed monitoring and filtering
+            span.setAttribute('ai.question_length', question.length);
+            span.setAttribute('ai.mode', 'demo');
+            span.setAttribute('ai.endpoint', '/ask/tier-aware');
+            
+            // Handle demo request within the span
+            const result = await handleTierAwareDemoRequest(req, res);
+            
+            // Set response time after the request completes
+            span.setAttribute('ai.response_time_ms', Date.now() - startTime);
+            
+            // Keep console logging for immediate visibility
+            console.log(`📊 AI Response Time - Tier-Aware Demo: ${Date.now() - startTime}ms | Question Length: ${question.length}`);
+            
+            // Note: Headers are set in handleTierAwareDemoRequest function
+            return result;
+          });
         }
     
     // User mode requires auth when enabled
@@ -315,27 +323,30 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
     
-            const result = await handleTierAwareUserRequest(req, res);
+        // Create Sentry performance span for AI request BEFORE calling handler
         const totalTime = Date.now() - startTime;
-        
-        // Create Sentry performance span for AI request
         Sentry.startSpan({
           op: 'ai.request',
           name: 'AI Financial Advice Request - Tier-Aware User',
-        }, (span: any) => {
+        }, async (span: any) => {
           // Set span attributes for detailed monitoring and filtering
           span.setAttribute('ai.question_length', question.length);
-          span.setAttribute('ai.response_time_ms', totalTime);
           span.setAttribute('ai.mode', 'production');
           span.setAttribute('ai.endpoint', '/ask/tier-aware');
           span.setAttribute('ai.user_id', req.user?.id || 'unknown');
+          
+          // Handle user request within the span
+          const result = await handleTierAwareUserRequest(req, res);
+          
+          // Set response time after the request completes
+          span.setAttribute('ai.response_time_ms', Date.now() - startTime);
+          
+          // Keep console logging for immediate visibility
+          console.log(`📊 AI Response Time - Tier-Aware User: ${Date.now() - startTime}ms | Question Length: ${question.length} | User ID: ${req.user?.id}`);
+          
+          // Note: Headers are set in handleTierAwareUserRequest function
+          return result;
         });
-        
-        // Keep console logging for immediate visibility
-        console.log(`📊 AI Response Time - Tier-Aware User: ${totalTime}ms | Question Length: ${question.length} | User ID: ${req.user?.id}`);
-        
-        // Note: Headers are set in handleTierAwareUserRequest function
-        return result;
     
   } catch (err) {
     const totalTime = Date.now() - startTime;
@@ -414,161 +425,157 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
       console.log('Demo mode - using tier from environment:', { demoTier, userTier });
     }
 
-    // Get AI response using enhanced context with RAG
-    const aiResponse = await askOpenAIWithEnhancedContext(question, [], userTier, isDemo, userId);
-
-    // For demo mode, use the AI response directly (no tokenization needed for fake data)
-    if (isDemo) {
-      console.log('Demo mode: using AI response directly (no tokenization needed for fake data)');
-      const displayResponse = aiResponse;
+    // Create Sentry performance span for AI request BEFORE processing
+    const totalTime = Date.now() - startTime;
+    Sentry.startSpan({
+      op: 'ai.request',
+      name: isDemo ? 'AI Financial Advice Request - Display Real Demo' : 'AI Financial Advice Request - Display Real Production',
+    }, async (span: any) => {
+      // Set span attributes for detailed monitoring and filtering
+      span.setAttribute('ai.question_length', question.length);
+      span.setAttribute('ai.mode', isDemo ? 'demo' : 'production');
+      span.setAttribute('ai.endpoint', '/ask/display-real');
+      span.setAttribute('ai.user_tier', userTier);
+      if (!isDemo && userId) {
+        span.setAttribute('ai.user_id', userId);
+      }
       
-      // Save conversation for demo mode
-      if (isDemo && sessionId) {
-        console.log('Attempting to save demo conversation for sessionId:', sessionId);
-        console.log('isDemo:', isDemo, 'sessionId:', sessionId);
+      // Get AI response using enhanced context with RAG
+      const aiResponse = await askOpenAIWithEnhancedContext(question, [], userTier, isDemo, userId);
+
+      // For demo mode, use the AI response directly (no tokenization needed for fake data)
+      if (isDemo) {
+        console.log('Demo mode: using AI response directly (no tokenization needed for fake data)');
+        const displayResponse = aiResponse;
+        
+        // Save conversation for demo mode
+        if (isDemo && sessionId) {
+          console.log('Attempting to save demo conversation for sessionId:', sessionId);
+          console.log('isDemo:', isDemo, 'sessionId:', sessionId);
+          try {
+            const { getPrismaClient } = await import('./prisma-client');
+            const prisma = getPrismaClient();
+            
+            // Get or create demo session
+            let demoSession = await prisma.demoSession.findUnique({
+              where: { sessionId }
+            });
+            
+            if (!demoSession) {
+              console.log('Creating new demo session for sessionId:', sessionId);
+              demoSession = await prisma.demoSession.create({
+                data: {
+                  sessionId,
+                  userAgent: req.headers['user-agent'] || 'unknown'
+                }
+              });
+              console.log('Demo session created:', demoSession.id);
+            } else {
+              console.log('Found existing demo session:', demoSession.id);
+            }
+            
+            // Store the demo conversation with session association
+            const conversation = await prisma.demoConversation.create({
+              data: {
+                question,
+                answer: displayResponse,
+                sessionId: demoSession.id,
+              }
+            });
+            console.log('Demo conversation saved successfully:', conversation.id);
+            
+            // Verify the conversation was actually stored
+            const verifyConversation = await prisma.demoConversation.findUnique({
+              where: { id: conversation.id }
+            });
+            
+            if (verifyConversation) {
+              console.log('Demo conversation verified in database:', verifyConversation.id);
+            } else {
+              console.error('Demo conversation was not actually stored in database');
+            }
+          } catch (error) {
+            console.error('Error saving demo conversation:', error);
+          }
+        } else {
+          console.log('Not saving demo conversation - isDemo:', isDemo, 'sessionId:', sessionId);
+        }
+        
+        // Set response time after processing completes
+        span.setAttribute('ai.response_time_ms', Date.now() - startTime);
+        
+        // Keep console logging for immediate visibility
+        console.log(`📊 AI Response Time - Display Real Demo: ${Date.now() - startTime}ms | Question Length: ${question.length} | User Tier: ${userTier}`);
+        
+        return res.json({ 
+          answer: displayResponse,
+          conversationId: null
+        });
+      }
+
+      // For production, convert AI response back to user-friendly format
+      console.log('Production mode: converting AI response to user-friendly format');
+      const { convertResponseToUserFriendly } = await import('./privacy');
+      
+      // ✅ DEBUG: Log the AI response before conversion
+      console.log('DEBUG: AI response before conversion:', aiResponse.substring(0, 500));
+      
+      // ✅ DEBUG: Check if July transactions are in the response
+      const julyTransactions = aiResponse.match(/July.*Transactions?/g);
+      const julyTransactionLines = aiResponse.match(/- \*\*.*\*\*: \$.*/g);
+      console.log('DEBUG: July transaction patterns found:', {
+        julyHeader: julyTransactions,
+        julyTransactionLines: julyTransactionLines?.slice(0, 5)
+      });
+      
+      const displayResponse = convertResponseToUserFriendly(aiResponse);
+      
+      // ✅ DEBUG: Log the converted response
+      console.log('DEBUG: Response after conversion:', displayResponse.substring(0, 500));
+      
+      console.log('Dual-data system: AI received tokenized data, user sees real data');
+
+      // Save conversation for authenticated users
+      if (!isDemo && userId) {
         try {
           const { getPrismaClient } = await import('./prisma-client');
           const prisma = getPrismaClient();
           
-          // Get or create demo session
-          let demoSession = await prisma.demoSession.findUnique({
-            where: { sessionId }
-          });
-          
-          if (!demoSession) {
-            console.log('Creating new demo session for sessionId:', sessionId);
-            demoSession = await prisma.demoSession.create({
-              data: {
-                sessionId,
-                userAgent: req.headers['user-agent'] || 'unknown'
-              }
-            });
-            console.log('Demo session created:', demoSession.id);
-          } else {
-            console.log('Found existing demo session:', demoSession.id);
-          }
-          
-          // Store the demo conversation with session association
-          const conversation = await prisma.demoConversation.create({
+          const conversation = await prisma.conversation.create({
             data: {
+              userId,
               question,
               answer: displayResponse,
-              sessionId: demoSession.id,
+              createdAt: new Date()
             }
           });
-          console.log('Demo conversation saved successfully:', conversation.id);
+          console.log('Conversation saved for user:', userId);
           
-          // Verify the conversation was actually stored
-          const verifyConversation = await prisma.demoConversation.findUnique({
-            where: { id: conversation.id }
+          // Set response time after processing completes
+          span.setAttribute('ai.response_time_ms', Date.now() - startTime);
+          
+          // Keep console logging for immediate visibility
+          console.log(`📊 AI Response Time - Display Real Production: ${Date.now() - startTime}ms | Question Length: ${question.length} | User Tier: ${userTier} | User ID: ${userId || 'none'}`);
+          
+          return res.json({ 
+            answer: displayResponse,
+            conversationId: conversation.id
           });
-          
-          if (verifyConversation) {
-            console.log('Demo conversation verified in database:', verifyConversation.id);
-          } else {
-            console.error('Demo conversation was not actually stored in database');
-          }
         } catch (error) {
-          console.error('Error saving demo conversation:', error);
+          console.error('Error saving conversation:', error);
         }
-      } else {
-        console.log('Not saving demo conversation - isDemo:', isDemo, 'sessionId:', sessionId);
       }
-      
-      // Create Sentry performance span for AI request
-      const totalTime = Date.now() - startTime;
-      Sentry.startSpan({
-        op: 'ai.request',
-        name: 'AI Financial Advice Request - Display Real Demo',
-      }, (span: any) => {
-        // Set span attributes for detailed monitoring and filtering
-        span.setAttribute('ai.question_length', question.length);
-        span.setAttribute('ai.response_time_ms', totalTime);
-        span.setAttribute('ai.mode', 'demo');
-        span.setAttribute('ai.endpoint', '/ask/display-real');
-        span.setAttribute('ai.user_tier', userTier);
-      });
+
+      // Set response time after processing completes
+      span.setAttribute('ai.response_time_ms', Date.now() - startTime);
       
       // Keep console logging for immediate visibility
-      console.log(`📊 AI Response Time - Display Real Demo: ${totalTime}ms | Question Length: ${question.length} | User Tier: ${userTier}`);
+      console.log(`📊 AI Response Time - Display Real Production: ${Date.now() - startTime}ms | Question Length: ${question.length} | User Tier: ${userTier} | User ID: ${userId || 'none'}`);
       
       return res.json({ 
         answer: displayResponse,
         conversationId: null
       });
-    }
-
-    // For production, convert AI response back to user-friendly format
-    console.log('Production mode: converting AI response to user-friendly format');
-    const { convertResponseToUserFriendly } = await import('./privacy');
-    
-    // ✅ DEBUG: Log the AI response before conversion
-    console.log('DEBUG: AI response before conversion:', aiResponse.substring(0, 500));
-    
-    // ✅ DEBUG: Check if July transactions are in the response
-    const julyTransactions = aiResponse.match(/July.*Transactions?/g);
-    const julyTransactionLines = aiResponse.match(/- \*\*.*\*\*: \$.*/g);
-    console.log('DEBUG: July transaction patterns found:', {
-      julyHeader: julyTransactions,
-      julyTransactionLines: julyTransactionLines?.slice(0, 5)
-    });
-    
-    const displayResponse = convertResponseToUserFriendly(aiResponse);
-    
-    // ✅ DEBUG: Log the converted response
-    console.log('DEBUG: Response after conversion:', displayResponse.substring(0, 500));
-    
-    console.log('Dual-data system: AI received tokenized data, user sees real data');
-
-
-
-    // Save conversation for authenticated users
-    if (!isDemo && userId) {
-      try {
-        const { getPrismaClient } = await import('./prisma-client');
-        const prisma = getPrismaClient();
-        
-        const conversation = await prisma.conversation.create({
-          data: {
-            userId,
-            question,
-            answer: displayResponse,
-            createdAt: new Date()
-          }
-        });
-        console.log('Conversation saved for user:', userId);
-        
-        res.json({ 
-          answer: displayResponse,
-          conversationId: conversation.id
-        });
-        return;
-      } catch (error) {
-        console.error('Error saving conversation:', error);
-      }
-    }
-
-    // Create Sentry performance span for AI request
-    const totalTime = Date.now() - startTime;
-    Sentry.startSpan({
-      op: 'ai.request',
-      name: 'AI Financial Advice Request - Display Real Production',
-    }, (span: any) => {
-      // Set span attributes for detailed monitoring and filtering
-      span.setAttribute('ai.question_length', question.length);
-      span.setAttribute('ai.response_time_ms', totalTime);
-      span.setAttribute('ai.mode', 'production');
-      span.setAttribute('ai.endpoint', '/ask/display-real');
-      span.setAttribute('ai.user_tier', userTier);
-      span.setAttribute('ai.user_id', userId || 'unknown');
-    });
-    
-    // Keep console logging for immediate visibility
-    console.log(`📊 AI Response Time - Display Real Production: ${totalTime}ms | Question Length: ${question.length} | User Tier: ${userTier} | User ID: ${userId || 'none'}`);
-    
-    res.json({ 
-      answer: displayResponse,
-      conversationId: null
     });
   } catch (error) {
     console.error('Error in ask endpoint:', error);
