@@ -95,6 +95,16 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
     - Seamless multi-turn financial conversations
     - Enhanced user experience with contextual memory
 
+### **8. MailerLite User Sync System**
+- **Purpose**: Automatically synchronizes user data to MailerLite for email marketing
+- **Features**:
+    - Daily automated sync at 3 AM EST
+    - Non-destructive upsert operations
+    - Production users only (excludes demo data)
+    - Comprehensive user data sync (email, tier, subscription status, conversation count)
+    - Robust error handling with Sentry integration
+    - Rate limiting to respect API constraints
+
 ## 🚀 **Quick Start**
 
 ### **Prerequisites**
@@ -111,9 +121,12 @@ finsight/
 │   ├── FEATURES.md             # Platform features documentation
 │   ├── RAG_VS_INDIVIDUAL_SOURCES.md
 │   ├── TIER_TESTING.md         # Tier-specific testing guide
-│   └── SEAMLESS_PLAID_INTEGRATION.md  # Plaid integration best practices
+│   ├── SEAMLESS_PLAID_INTEGRATION.md  # Plaid integration best practices
+│   ├── MAILERLITE_SYNC_README.md      # MailerLite sync system documentation
+│   └── MAILERLITE_ENV_TEMPLATE.md     # MailerLite environment setup guide
 ├── 📁 scripts/                 # 🔧 Utility scripts
 │   ├── test-*.js/ts           # Testing scripts
+│   ├── test-mailerlite-sync.js # MailerLite sync testing
 │   ├── check-db.js            # Database utilities
 │   ├── clear-*.js             # Cleanup scripts
 │   ├── build.sh               # Build scripts
@@ -163,6 +176,10 @@ ALPHA_VANTAGE_API_KEY="your_alpha_vantage_api_key"
 
 # Search API (for RAG system)
 SEARCH_API_KEY="your_search_api_key"
+
+# MailerLite (for user sync)
+MAILER_LITE_API_KEY="your_mailerlite_api_key"
+MAILER_LITE_GROUP_ID="your_mailerlite_group_id"
 
 # JWT Secret
 JWT_SECRET="your_jwt_secret"

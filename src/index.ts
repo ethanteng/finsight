@@ -105,6 +105,7 @@ app.get('/health/cron', (req: Request, res: Response) => {
   const cronJobs = cron.getTasks();
   const syncJob = Array.from(cronJobs.values()).find((job: any) => job.name === 'daily-sync');
   const marketContextJob = Array.from(cronJobs.values()).find((job: any) => job.name === 'market-context-refresh');
+  const mailerLiteJob = Array.from(cronJobs.values()).find((job: any) => job.name === 'mailerlite-sync');
   
   res.json({
     status: 'OK',
@@ -116,6 +117,10 @@ app.get('/health/cron', (req: Request, res: Response) => {
       marketContextRefresh: {
         running: !!marketContextJob,
         name: 'market-context-refresh'
+      },
+      mailerLiteSync: {
+        running: !!mailerLiteJob,
+        name: 'mailerlite-sync'
       }
     },
     timestamp: new Date().toISOString(),
@@ -2788,6 +2793,45 @@ if (require.main === module) {
     
     console.log('Cron job scheduled: market context refresh every hour');
     console.log('Cron job scheduled: market news context refresh every 4 hours');
+    
+    // Set up cron job to sync users to MailerLite daily at 3 AM EST
+    cron.schedule('0 3 * * *', async () => {
+      console.log('🔄 Starting daily MailerLite user sync...');
+      const startTime = Date.now();
+      
+      try {
+        const { MailerLiteSyncService } = await import('./services/mailerlite-sync');
+        const mailerLiteService = new MailerLiteSyncService();
+        
+        const result = await mailerLiteService.syncAllUsers();
+        const duration = Date.now() - startTime;
+        
+        if (result.success) {
+          console.log(`✅ MailerLite sync completed successfully in ${duration}ms`);
+          console.log(`📊 MailerLite Sync Metrics: duration=${duration}ms, users=${result.usersSynced}/${result.usersProcessed}`);
+        } else {
+          console.error(`❌ MailerLite sync failed after ${duration}ms:`, result.errors);
+          console.error(`📊 MailerLite Sync Failure: duration=${duration}ms, errors=${result.errors.length}`);
+        }
+        
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        console.error(`❌ Error in MailerLite sync after ${duration}ms:`, error);
+        console.error(`📊 MailerLite Sync Error: duration=${duration}ms, error=${error}`);
+        
+        // Capture error in Sentry
+        if (error instanceof Error) {
+          Sentry.captureException(error);
+        } else {
+          Sentry.captureMessage('Unknown error in MailerLite sync cron job', 'error');
+        }
+      }
+    }, {
+      timezone: 'America/New_York',
+      name: 'mailerlite-sync'
+    });
+    
+    console.log('Cron job scheduled: MailerLite user sync daily at 3 AM EST');
   });
 }
 
