@@ -54,6 +54,17 @@ For each user, the following data is synchronized to MailerLite:
 - **user_created_at**: Date when the user account was created (YYYY-MM-DD format)
 - **last_login_at**: Date of the user's last login (YYYY-MM-DD format, empty if never logged in)
 
+### Active User Logic
+
+The system determines if a user is active using a dual-check approach that **exactly matches the admin dashboard logic**:
+
+1. **Primary Check**: `user.subscriptionStatus === 'active'` (from User model)
+2. **Secondary Check**: Any subscription with `status === 'active'` (from Subscription model)
+
+A user is considered active if **either** condition is true, ensuring maximum accuracy in identifying active users.
+
+**Important**: The system fetches ALL subscriptions (not just active ones) to avoid circular logic issues where active subscriptions would be filtered out before checking their status.
+
 ## API Endpoint
 
 The system uses MailerLite's Create/Upsert Subscriber API:

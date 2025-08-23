@@ -65,20 +65,28 @@ export class MailerLiteSyncService {
             }
           }
         },
-        include: {
+        select: {
+          id: true,
+          email: true,
+          tier: true,
+          createdAt: true,
+          lastLoginAt: true,
+          subscriptionStatus: true,
           conversations: {
             select: {
               id: true
             }
           },
           subscriptions: {
-            where: {
-              status: 'active'
-            },
             orderBy: {
               currentPeriodEnd: 'desc'
             },
-            take: 1
+            take: 1,
+            select: {
+              id: true,
+              tier: true,
+              status: true
+            }
           }
         }
       });
@@ -89,8 +97,23 @@ export class MailerLiteSyncService {
         try {
           result.usersProcessed++;
           
-          // Determine if user has active subscription
-          const hasActiveSubscription = user.subscriptions.length > 0;
+          // Determine if user has active subscription using the SAME logic as admin dashboard
+          // This ensures consistency between admin view and MailerLite sync
+          let hasActiveSubscription = false;
+          
+          if (user.subscriptionStatus === 'active') {
+            // Active subscription - full access
+            hasActiveSubscription = true;
+          } else if (user.subscriptionStatus === 'active' && user.subscriptions.length === 0) {
+            // Payment completed but account setup incomplete
+            hasActiveSubscription = false;
+          } else if (user.subscriptions.length === 0 && user.subscriptionStatus === 'inactive') {
+            // Admin-created user - no Stripe subscription records exist
+            hasActiveSubscription = true;
+          } else {
+            // Check if any subscription is active
+            hasActiveSubscription = user.subscriptions.some(sub => sub.status === 'active');
+          }
           
           // Get current tier (from subscription or user default)
           const currentTier = hasActiveSubscription 
@@ -182,20 +205,28 @@ export class MailerLiteSyncService {
       
       const user = await prisma.user.findFirst({
         where: isEmail ? { email: userIdentifier } : { id: userIdentifier },
-        include: {
+        select: {
+          id: true,
+          email: true,
+          tier: true,
+          createdAt: true,
+          lastLoginAt: true,
+          subscriptionStatus: true,
           conversations: {
             select: {
               id: true
             }
           },
           subscriptions: {
-            where: {
-              status: 'active'
-            },
             orderBy: {
               currentPeriodEnd: 'desc'
             },
-            take: 1
+            take: 1,
+            select: {
+              id: true,
+              tier: true,
+              status: true
+            }
           }
         }
       });
@@ -205,7 +236,9 @@ export class MailerLiteSyncService {
         throw new Error(`User not found with ${identifierType}: ${userIdentifier}`);
       }
 
-      const hasActiveSubscription = user.subscriptions.length > 0;
+      // Check both the subscriptionStatus field and if there are active subscriptions
+      const hasActiveSubscription = user.subscriptionStatus === 'active' || 
+        user.subscriptions.some(sub => sub.status === 'active');
       const currentTier = hasActiveSubscription 
         ? user.subscriptions[0].tier 
         : user.tier;
