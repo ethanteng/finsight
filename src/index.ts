@@ -190,14 +190,12 @@ app.post('/ask', async (req: Request, res: Response) => {
             op: 'ai.request',
             name: 'AI Financial Advice Request - Demo Mode',
           }, (span: any) => {
-            // Set span tags for filtering and categorization
-            span.setTag('ai.mode', 'demo');
-            span.setTag('ai.user_tier', userTier);
-            span.setTag('ai.endpoint', '/ask');
-            
-            // Set span attributes for detailed monitoring
+            // Set span attributes for detailed monitoring and filtering
             span.setAttribute('ai.question_length', question.length);
             span.setAttribute('ai.response_time_ms', totalTime);
+            span.setAttribute('ai.mode', 'demo');
+            span.setAttribute('ai.user_tier', userTier);
+            span.setAttribute('ai.endpoint', '/ask');
           });
           
           // Keep console logging for immediate visibility
@@ -222,14 +220,12 @@ app.post('/ask', async (req: Request, res: Response) => {
       op: 'ai.request',
       name: 'AI Financial Advice Request - User Mode',
     }, (span: any) => {
-      // Set span tags for filtering and categorization
-      span.setTag('ai.mode', 'production');
-      span.setTag('ai.user_tier', userTier);
-      span.setTag('ai.endpoint', '/ask');
-      
-      // Set span attributes for detailed monitoring
+      // Set span attributes for detailed monitoring and filtering
       span.setAttribute('ai.question_length', question.length);
       span.setAttribute('ai.response_time_ms', totalTime);
+      span.setAttribute('ai.mode', 'production');
+      span.setAttribute('ai.user_tier', userTier);
+      span.setAttribute('ai.endpoint', '/ask');
       span.setAttribute('ai.user_id', req.user?.id || 'unknown');
     });
     
@@ -247,16 +243,14 @@ app.post('/ask', async (req: Request, res: Response) => {
       op: 'ai.request',
       name: 'AI Financial Advice Request - Error',
     }, (span: any) => {
-      // Set span tags for filtering and categorization
-      span.setTag('ai.mode', req.body?.isDemo ? 'demo' : 'production');
-      span.setTag('ai.user_tier', req.body?.userTier || 'unknown');
-      span.setTag('ai.endpoint', '/ask');
-      span.setTag('ai.status', 'error');
-      
-      // Set span attributes for detailed monitoring
+      // Set span attributes for detailed monitoring and filtering
       span.setAttribute('ai.question_length', req.body?.question?.length || 0);
       span.setAttribute('ai.response_time_ms', totalTime);
+      span.setAttribute('ai.mode', req.body?.isDemo ? 'demo' : 'production');
+      span.setAttribute('ai.user_tier', req.body?.userTier || 'unknown');
+      span.setAttribute('ai.endpoint', '/ask');
       span.setAttribute('ai.error', err instanceof Error ? err.message : 'Unknown error');
+      span.setAttribute('ai.status', 'error');
     });
     
     // Log AI response time for error cases
@@ -301,13 +295,11 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
           op: 'ai.request',
           name: 'AI Financial Advice Request - Tier-Aware Demo',
         }, (span: any) => {
-          // Set span tags for filtering and categorization
-          span.setTag('ai.mode', 'demo');
-          span.setTag('ai.endpoint', '/ask/tier-aware');
-          
-          // Set span attributes for detailed monitoring
+          // Set span attributes for detailed monitoring and filtering
           span.setAttribute('ai.question_length', question.length);
           span.setAttribute('ai.response_time_ms', totalTime);
+          span.setAttribute('ai.mode', 'demo');
+          span.setAttribute('ai.endpoint', '/ask/tier-aware');
         });
           
           // Keep console logging for immediate visibility
@@ -331,13 +323,11 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
           op: 'ai.request',
           name: 'AI Financial Advice Request - Tier-Aware User',
         }, (span: any) => {
-          // Set span tags for filtering and categorization
-          span.setTag('ai.mode', 'production');
-          span.setTag('ai.endpoint', '/ask/tier-aware');
-          
-          // Set span attributes for detailed monitoring
+          // Set span attributes for detailed monitoring and filtering
           span.setAttribute('ai.question_length', question.length);
           span.setAttribute('ai.response_time_ms', totalTime);
+          span.setAttribute('ai.mode', 'production');
+          span.setAttribute('ai.endpoint', '/ask/tier-aware');
           span.setAttribute('ai.user_id', req.user?.id || 'unknown');
         });
         
@@ -355,15 +345,13 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
       op: 'ai.request',
       name: 'AI Financial Advice Request - Tier-Aware Error',
     }, (span: any) => {
-      // Set span tags for filtering and categorization
-      span.setTag('ai.mode', req.body?.isDemo ? 'demo' : 'production');
-      span.setTag('ai.endpoint', '/ask/tier-aware');
-      span.setTag('ai.status', 'error');
-      
-      // Set span attributes for detailed monitoring
+      // Set span attributes for detailed monitoring and filtering
       span.setAttribute('ai.question_length', req.body?.question?.length || 0);
       span.setAttribute('ai.response_time_ms', totalTime);
+      span.setAttribute('ai.mode', req.body?.isDemo ? 'demo' : 'production');
+      span.setAttribute('ai.endpoint', '/ask/tier-aware');
       span.setAttribute('ai.error', err instanceof Error ? err.message : 'Unknown error');
+      span.setAttribute('ai.status', 'error');
     });
     
     // Log AI response time for error cases
@@ -493,14 +481,12 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
         op: 'ai.request',
         name: 'AI Financial Advice Request - Display Real Demo',
       }, (span: any) => {
-        // Set span tags for filtering and categorization
-        span.setTag('ai.mode', 'demo');
-        span.setTag('ai.endpoint', '/ask/display-real');
-        span.setTag('ai.user_tier', userTier);
-        
-        // Set span attributes for detailed monitoring
+        // Set span attributes for detailed monitoring and filtering
         span.setAttribute('ai.question_length', question.length);
         span.setAttribute('ai.response_time_ms', totalTime);
+        span.setAttribute('ai.mode', 'demo');
+        span.setAttribute('ai.endpoint', '/ask/display-real');
+        span.setAttribute('ai.user_tier', userTier);
       });
       
       // Keep console logging for immediate visibility
@@ -568,14 +554,12 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
       op: 'ai.request',
       name: 'AI Financial Advice Request - Display Real Production',
     }, (span: any) => {
-      // Set span tags for filtering and categorization
-      span.setTag('ai.mode', 'production');
-      span.setTag('ai.endpoint', '/ask/display-real');
-      span.setTag('ai.user_tier', userTier);
-      
-      // Set span attributes for detailed monitoring
+      // Set span attributes for detailed monitoring and filtering
       span.setAttribute('ai.question_length', question.length);
       span.setAttribute('ai.response_time_ms', totalTime);
+      span.setAttribute('ai.mode', 'production');
+      span.setAttribute('ai.endpoint', '/ask/display-real');
+      span.setAttribute('ai.user_tier', userTier);
       span.setAttribute('ai.user_id', userId || 'unknown');
     });
     
@@ -595,15 +579,13 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
       op: 'ai.request',
       name: 'AI Financial Advice Request - Display Real Error',
     }, (span: any) => {
-      // Set span tags for filtering and categorization
-      span.setTag('ai.mode', req.body?.isDemo ? 'demo' : 'production');
-      span.setTag('ai.endpoint', '/ask/display-real');
-      span.setTag('ai.status', 'error');
-      
-      // Set span attributes for detailed monitoring
+      // Set span attributes for detailed monitoring and filtering
       span.setAttribute('ai.question_length', req.body?.question?.length || 0);
       span.setAttribute('ai.response_time_ms', totalTime);
+      span.setAttribute('ai.mode', req.body?.isDemo ? 'demo' : 'production');
+      span.setAttribute('ai.endpoint', '/ask/display-real');
       span.setAttribute('ai.error', error instanceof Error ? error.message : 'Unknown error');
+      span.setAttribute('ai.status', 'error');
     });
     
     // Capture error in Sentry
