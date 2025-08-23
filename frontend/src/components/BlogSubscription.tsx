@@ -23,7 +23,7 @@ export default function BlogSubscription() {
       formData.append('ml-submit', '1');
       formData.append('anticsrf', 'true');
       
-      const response = await fetch('https://assets.mailerlite.com/jsonp/1687893/forms/163474981491050102/subscribe', {
+      await fetch('https://assets.mailerlite.com/jsonp/1687893/forms/163474981491050102/subscribe', {
         method: 'POST',
         body: formData,
         mode: 'no-cors' // Prevent CORS issues
@@ -266,13 +266,7 @@ export default function BlogSubscription() {
         </div>
         </div>
 
-        <script src="https://groot.mailerlite.com/js/w/webforms.min.js?v176e10baa5e7ed80d35ae235be3d5024" type="text/javascript"></script>
 
-        <script>
-          {`
-            fetch("https://assets.mailerlite.com/jsonp/1687893/forms/163474981491050102/takel")
-          `}
-        </script>
       </div>
     </div>
   );
