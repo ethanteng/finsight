@@ -2,6 +2,7 @@ import { ghost, type GhostPost, processGhostHtml } from '@/lib/ghost';
 import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
+import BlogSubscription from '@/components/BlogSubscription';
 
 export const revalidate = 60; // Revalidate every minute
 
@@ -141,6 +142,11 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
             />
           </div>
         </article>
+
+        {/* Subscription Form */}
+        <div className="mt-12">
+          <BlogSubscription />
+        </div>
       </div>
     </div>
   );

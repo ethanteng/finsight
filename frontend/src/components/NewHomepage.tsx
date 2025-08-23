@@ -5,6 +5,7 @@ import { Badge } from './ui/badge';
 import MailerLiteForm from './MailerLiteForm';
 import MailerLiteScript from './MailerLiteScript';
 import AnimatedPrompt from './AnimatedPrompt';
+import BlogSubscription from './BlogSubscription';
 import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, Database, BarChart3, MessageCircle, ArrowRight, Sparkles, X, Target, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import Link from 'next/link';
@@ -693,6 +694,24 @@ const NewHomepage = () => {
           </p>
         </div>
       </section>*/}
+
+      {/* Newsletter Subscription Section */}
+      <section className="py-20 bg-gradient-to-r from-primary/10 via-secondary/10 to-primary/10">
+        <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8">
+          <div className="space-y-4">
+            <h2 className="text-3xl md:text-4xl font-bold">
+              Stay <span className="gradient-text">Informed</span>
+            </h2>
+            <p className="text-xl text-muted-foreground">
+              Get daily insights on the economy, markets, and how they impact your wallet.
+            </p>
+          </div>
+          
+          <div className="flex justify-center">
+            <BlogSubscription />
+          </div>
+        </div>
+      </section>
 
       {/* Footer */}
       <footer className="bg-muted/50 py-12">

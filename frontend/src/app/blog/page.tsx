@@ -2,6 +2,7 @@ import { ghost, type GhostPost } from '@/lib/ghost';
 import { Brain } from 'lucide-react';
 import Link from 'next/link';
 import BlogPostsList from './BlogPostsList';
+import BlogSubscription from '@/components/BlogSubscription';
 
 export const revalidate = 60; // Revalidate every minute
 
@@ -42,6 +43,9 @@ export default async function BlogPage() {
           </Link>
           <p className="text-2xl text-gray-300">Daily financial market insights & occasional product updates</p>
         </div>
+
+        {/* Subscription Form */}
+        <BlogSubscription />
 
         {/* Blog Posts List with Filtering */}
         <BlogPostsList posts={posts} />
