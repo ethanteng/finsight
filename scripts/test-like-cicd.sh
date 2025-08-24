@@ -16,21 +16,42 @@ run_test() {
     
     echo -e "\n${YELLOW}🧪 Testing: $test_name${NC}"
     
-    if eval "$env_vars npm run test:integration:ci"; then
-        if [ "$expected_result" = "pass" ]; then
-            echo -e "${GREEN}✅ $test_name: PASSED${NC}"
-            return 0
+    if [ -n "$env_vars" ]; then
+        if eval "$env_vars npm run test:integration:ci"; then
+            if [ "$expected_result" = "pass" ]; then
+                echo -e "${GREEN}✅ $test_name: PASSED${NC}"
+                return 0
+            else
+                echo -e "${RED}❌ $test_name: Expected to fail but passed${NC}"
+                return 1
+            fi
         else
-            echo -e "${RED}❌ $test_name: Expected to fail but passed${NC}"
-            return 1
+            if [ "$expected_result" = "fail" ]; then
+                echo -e "${GREEN}✅ $test_name: FAILED as expected${NC}"
+                return 0
+            else
+                echo -e "${RED}❌ $test_name: FAILED unexpectedly${NC}"
+                return 1
+            fi
         fi
     else
-        if [ "$expected_result" = "fail" ]; then
-            echo -e "${GREEN}✅ $test_name: FAILED as expected${NC}"
-            return 0
+        # No environment variables, run directly
+        if npm run test:integration:ci; then
+            if [ "$expected_result" = "pass" ]; then
+                echo -e "${GREEN}✅ $test_name: PASSED${NC}"
+                return 0
+            else
+                echo -e "${RED}❌ $test_name: Expected to fail but passed${NC}"
+                return 1
+            fi
         else
-            echo -e "${RED}❌ $test_name: FAILED unexpectedly${NC}"
-            return 1
+            if [ "$expected_result" = "fail" ]; then
+                echo -e "${GREEN}✅ $test_name: FAILED as expected${NC}"
+                return 0
+            else
+                echo -e "${RED}❌ $test_name: FAILED unexpectedly${NC}"
+                return 1
+            fi
         fi
     fi
 }
@@ -44,11 +65,11 @@ if ! pg_isready -h localhost -p 5432 >/dev/null 2>&1; then
     sleep 3
 fi
 
-# Test 1: Normal local environment (should pass)
-run_test "Local Environment" "" "pass" || exit 1
-
-# Test 2: CI environment variables (should pass)
+# Test 1: CI environment variables (should pass with mock database)
 run_test "CI Environment" "CI=true GITHUB_ACTIONS=true" "pass" || exit 1
+
+# Test 2: Normal local environment (should pass)
+run_test "Local Environment" "" "pass" || exit 1
 
 # Test 3: Database fallback (should fail gracefully when database unavailable)
 run_test "Database Fallback" "DATABASE_URL=postgresql://invalid:invalid@localhost:9999/invalid CI=true" "fail" || exit 1

@@ -182,9 +182,8 @@ app.post('/ask', async (req: Request, res: Response) => {
     
             // Demo mode always works (no auth required)
         if (isDemo) {
-          // Create Sentry performance span for AI request BEFORE calling handler
-          const totalTime = Date.now() - startTime;
-          Sentry.startSpan({
+          // Create Sentry performance span for AI request and handle demo request within it
+          return Sentry.startSpan({
             op: 'ai.request',
             name: 'AI Financial Advice Request - Demo Mode',
           }, async (span: any) => {
@@ -194,18 +193,15 @@ app.post('/ask', async (req: Request, res: Response) => {
             span.setAttribute('ai.user_tier', userTier);
             span.setAttribute('ai.endpoint', '/ask');
             
-            // Set response time before handling request
-            span.setAttribute('ai.response_time_ms', Date.now() - startTime);
-            
             // Keep console logging for immediate visibility
             console.log(`📊 AI Response Time - Demo Mode: ${Date.now() - startTime}ms | Question Length: ${question.length} | User Tier: ${userTier}`);
             
-            // Note: Headers are set in handleDemoRequest function
-            // Don't return anything - handleDemoRequest already sends the response
+            // Handle demo request within the span context
+            await handleDemoRequest(req, res);
+            
+            // Set final response time
+            span.setAttribute('ai.response_time_ms', Date.now() - startTime);
           });
-          
-          // Handle demo request AFTER creating the span
-          await handleDemoRequest(req, res);
         }
     
     // User mode requires auth when enabled
@@ -214,9 +210,8 @@ app.post('/ask', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
     
-    // Create Sentry performance span for AI request BEFORE calling handler
-    const totalTime = Date.now() - startTime;
-    Sentry.startSpan({
+    // Create Sentry performance span for AI request and handle user request within it
+    return Sentry.startSpan({
       op: 'ai.request',
       name: 'AI Financial Advice Request - User Mode',
     }, async (span: any) => {
@@ -227,18 +222,15 @@ app.post('/ask', async (req: Request, res: Response) => {
       span.setAttribute('ai.endpoint', '/ask');
       span.setAttribute('ai.user_id', req.user?.id || 'unknown');
       
-      // Set response time before handling request
-      span.setAttribute('ai.response_time_ms', Date.now() - startTime);
-      
       // Keep console logging for immediate visibility
       console.log(`📊 AI Response Time - User Mode: ${Date.now() - startTime}ms | Question Length: ${question.length} | User Tier: ${userTier} | User ID: ${req.user?.id}`);
       
-      // Note: Headers are set in handleUserRequest function
-      // Don't return anything - handleUserRequest already sends the response
+      // Handle user request within the span context
+      await handleUserRequest(req, res);
+      
+      // Set final response time
+      span.setAttribute('ai.response_time_ms', Date.now() - startTime);
     });
-    
-    // Handle user mode request AFTER creating the span
-    await handleUserRequest(req, res);
     
   } catch (err) {
     const totalTime = Date.now() - startTime;
@@ -292,9 +284,8 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
     
             // Demo mode always works (no auth required)
         if (isDemo) {
-          // Create Sentry performance span for AI request BEFORE calling handler
-          const totalTime = Date.now() - startTime;
-          Sentry.startSpan({
+          // Create Sentry performance span for AI request and handle demo request within it
+          return Sentry.startSpan({
             op: 'ai.request',
             name: 'AI Financial Advice Request - Tier-Aware Demo',
           }, async (span: any) => {
@@ -303,18 +294,15 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
             span.setAttribute('ai.mode', 'demo');
             span.setAttribute('ai.endpoint', '/ask/tier-aware');
             
-            // Set response time before handling request
-            span.setAttribute('ai.response_time_ms', Date.now() - startTime);
-            
             // Keep console logging for immediate visibility
             console.log(`📊 AI Response Time - Tier-Aware Demo: ${Date.now() - startTime}ms | Question Length: ${question.length}`);
             
-            // Note: Headers are set in handleTierAwareDemoRequest function
-            // Don't return anything - handleTierAwareDemoRequest already sends the response
+            // Handle demo request within the span context
+            await handleTierAwareDemoRequest(req, res);
+            
+            // Set final response time
+            span.setAttribute('ai.response_time_ms', Date.now() - startTime);
           });
-          
-          // Handle demo request AFTER creating the span
-          await handleTierAwareDemoRequest(req, res);
         }
     
     // User mode requires auth when enabled
@@ -323,9 +311,8 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
     
-        // Create Sentry performance span for AI request BEFORE calling handler
-        const totalTime = Date.now() - startTime;
-        Sentry.startSpan({
+        // Create Sentry performance span for AI request and handle user request within it
+        return Sentry.startSpan({
           op: 'ai.request',
           name: 'AI Financial Advice Request - Tier-Aware User',
         }, async (span: any) => {
@@ -335,18 +322,15 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
           span.setAttribute('ai.endpoint', '/ask/tier-aware');
           span.setAttribute('ai.user_id', req.user?.id || 'unknown');
           
-          // Set response time before handling request
-          span.setAttribute('ai.response_time_ms', Date.now() - startTime);
-          
           // Keep console logging for immediate visibility
           console.log(`📊 AI Response Time - Tier-Aware User: ${Date.now() - startTime}ms | Question Length: ${question.length} | User ID: ${req.user?.id}`);
           
-          // Note: Headers are set in handleTierAwareUserRequest function
-          // Don't return anything - handleTierAwareUserRequest already sends the response
+          // Handle user request within the span context
+          await handleTierAwareUserRequest(req, res);
+          
+          // Set final response time
+          span.setAttribute('ai.response_time_ms', Date.now() - startTime);
         });
-        
-        // Handle user request AFTER creating the span
-        await handleTierAwareUserRequest(req, res);
     
   } catch (err) {
     const totalTime = Date.now() - startTime;

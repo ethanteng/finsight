@@ -272,6 +272,21 @@ function createEnhancedMockDatabase() {
       deleteMany: async () => ({ count: 1 })
     },
     
+    // Add missing models that tests expect
+    passwordResetToken: { 
+      findMany: async () => [], 
+      create: async (data: any) => ({ id: 'mock-password-reset-1', ...data.data }), 
+      update: async (data: any) => ({ id: 'mock-password-reset-1', ...data.data }), 
+      deleteMany: async () => ({ count: 0 }) 
+    },
+    
+    emailVerificationCode: { 
+      findMany: async () => [], 
+      create: async (data: any) => ({ id: 'mock-email-verification-1', ...data.data }), 
+      update: async (data: any) => ({ id: 'mock-email-verification-1', ...data.data }), 
+      deleteMany: async () => ({ count: 0 }) 
+    },
+    
     marketNewsContext: { 
       // Store created contexts in memory for testing
       _mockStorage: new Map(),
@@ -458,6 +473,8 @@ beforeEach(async () => {
       'user',
       'encryptedEmailVerificationCode',
       'encryptedUserData',
+      'passwordResetToken',
+      'emailVerificationCode',
       'marketNewsHistory',
       'marketNewsContext'
     ];

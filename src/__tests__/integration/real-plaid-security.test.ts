@@ -10,13 +10,17 @@ describe('Real Plaid Security Tests', () => {
   let user1Token: any, user2Token: any;
 
   beforeEach(async () => {
-    // Clean up before each test
+    // Clean up before each test - order matters for foreign key constraints
+    // Delete child records first, then parent records
     await testPrisma.encryptedEmailVerificationCode.deleteMany();
     await testPrisma.encryptedUserData.deleteMany();
     await testPrisma.encrypted_profile_data.deleteMany();
     await testPrisma.demoConversation.deleteMany();
     await testPrisma.demoSession.deleteMany();
-    await testPrisma.accessToken.deleteMany();
+    await testPrisma.accessToken.deleteMany(); // Delete access tokens BEFORE users
+    await testPrisma.syncStatus.deleteMany(); // Delete sync statuses BEFORE users
+    await testPrisma.passwordResetToken.deleteMany(); // Delete password reset tokens BEFORE users
+    await testPrisma.emailVerificationCode.deleteMany(); // Delete email verification codes BEFORE users
     await testPrisma.userProfile.deleteMany();
     await testPrisma.user.deleteMany();
 
