@@ -9,6 +9,7 @@ interface UserProfileProps {
 
 export default function UserProfile({ userId, isDemo }: UserProfileProps) {
   const [profileText, setProfileText] = useState<string>('');
+  const [originalProfileText, setOriginalProfileText] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -35,7 +36,9 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
       
       if (response.ok) {
         const data = await response.json();
-        setProfileText(data.profile?.profileText || '');
+        const profileTextValue = data.profile?.profileText || '';
+        setProfileText(profileTextValue);
+        setOriginalProfileText(profileTextValue);
       } else {
         console.error('Failed to load profile:', response.status);
       }
@@ -74,6 +77,7 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
       
       if (response.ok) {
         setProfileText(newText);
+        setOriginalProfileText(newText);
         setEditing(false);
       } else {
         setError('Failed to save profile');
@@ -84,6 +88,15 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleEdit = () => {
+    setEditing(true);
+  };
+
+  const handleCancel = () => {
+    setProfileText(originalProfileText);
+    setEditing(false);
   };
 
   // Don't show anything if not in demo mode and no userId
@@ -129,7 +142,7 @@ Note: This profile reflects our financial situation as of August 2025.`;
         <h3 className="text-lg font-semibold text-white">Your Financial Profile</h3>
         {!loading && !isDemo && (
           <button
-            onClick={() => setEditing(!editing)}
+            onClick={editing ? handleCancel : handleEdit}
             className="text-blue-400 hover:text-blue-300 text-sm transition-colors"
           >
             {editing ? 'Cancel' : 'Edit'}
@@ -162,7 +175,7 @@ Note: This profile reflects our financial situation as of August 2025.`;
               {saving ? 'Saving...' : 'Save'}
             </button>
             <button
-              onClick={() => setEditing(false)}
+              onClick={handleCancel}
               className="px-4 py-2 bg-gray-600 text-gray-300 rounded hover:bg-gray-700 transition-colors"
             >
               Cancel

@@ -23,7 +23,7 @@ export class ProfileExtractor {
     const hasAnswer = conversation.answer && conversation.answer.trim().length > 0;
     
     const prompt = `
-    Analyze this financial conversation and update the user's profile.
+    Analyze this financial conversation and intelligently update the user's profile.
     
     Current conversation:
     Q: ${conversation.question}
@@ -31,8 +31,9 @@ export class ProfileExtractor {
     
     ${existingProfile ? `Current profile: ${existingProfile}` : 'No existing profile.'}
     
-    Extract any new information about the user from the question${hasAnswer ? ' and answer' : ''} and update the profile text.
-    Include details like:
+    Extract and integrate ANY relevant information about the user from the question${hasAnswer ? ' and answer' : ''} to build a comprehensive profile.
+    
+    Include and expand on:
     - Age or age range
     - Occupation or employer
     - Education level
@@ -42,11 +43,19 @@ export class ProfileExtractor {
     - Financial goals and priorities
     - Investment style or risk tolerance
     - Debt situation
+    - Account types and financial institutions mentioned
+    - Investment preferences or strategies
+    - Spending patterns or budget concerns
+    - Financial challenges or questions
     - Any other relevant personal or financial information
     
-    IMPORTANT: Only return the updated profile text in natural language format.
-    Do NOT include the original question or answer in the profile.
-    Focus on extracting factual information about the user's personal and financial situation.
+    IMPORTANT: 
+    - Return ONLY the updated profile text in natural language format
+    - Do NOT include the original question or answer in the profile
+    - Focus on building a comprehensive, coherent profile
+    - If the conversation reveals financial context (like asking about asset allocation), note this as part of their financial profile
+    - Combine new information with existing information intelligently
+    - Make the profile more detailed and useful over time
     
     If no new information is found, return the existing profile unchanged.
     `;

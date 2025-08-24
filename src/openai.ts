@@ -817,10 +817,20 @@ ${anonymizeInvestmentData(holdings.slice(0, 10))}`;
           );
           
           if (enhancedProfile !== userProfile) {
-            // Use enhanced profile for AI context but DON'T overwrite the original profile
-            // The original profile should only be updated through updateProfileFromConversation
+            // Use enhanced profile for AI context
             userProfile = enhancedProfile;
             console.log('OpenAI Enhanced: User profile enhanced with Plaid data for AI context');
+            
+            // ALSO update the persistent profile with Plaid insights
+            try {
+              const { ProfileManager } = await import('./profile/manager');
+              const profileManager = new ProfileManager();
+              await profileManager.updateProfile(userId, enhancedProfile);
+              console.log('OpenAI Enhanced: Persistent profile updated with Plaid insights');
+            } catch (profileUpdateError) {
+              console.error('OpenAI Enhanced: Failed to update persistent profile with Plaid insights:', profileUpdateError);
+              // Don't fail the main request if profile update fails
+            }
           }
         } catch (error) {
           console.error('OpenAI Enhanced: Failed to enhance profile with Plaid data:', error);
@@ -1746,10 +1756,20 @@ export async function askOpenAI(
           );
           
           if (enhancedProfile !== userProfile) {
-            // Use enhanced profile for AI context but DON'T overwrite the original profile
-            // The original profile should only be updated through updateProfileFromConversation
+            // Use enhanced profile for AI context
             userProfile = enhancedProfile;
             console.log('OpenAI: User profile enhanced with Plaid data for AI context');
+            
+            // ALSO update the persistent profile with Plaid insights
+            try {
+              const { ProfileManager } = await import('./profile/manager');
+              const profileManager = new ProfileManager();
+              await profileManager.updateProfile(userId, enhancedProfile);
+              console.log('OpenAI: Persistent profile updated with Plaid insights');
+            } catch (profileUpdateError) {
+              console.error('OpenAI: Failed to update persistent profile with Plaid insights:', profileUpdateError);
+              // Don't fail the main request if profile update fails
+            }
           }
         } catch (error) {
           console.error('OpenAI: Failed to enhance profile with Plaid data:', error);
