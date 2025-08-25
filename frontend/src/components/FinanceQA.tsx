@@ -175,6 +175,16 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
         headers,
         body: JSON.stringify(requestBody),
       });
+
+      // Check for authentication errors first
+      if (res.status === 401) {
+        // Session expired - redirect to login
+        console.log('Session expired, redirecting to login');
+        localStorage.removeItem('auth_token');
+        window.location.href = '/login?message=' + encodeURIComponent('Your session has expired. Please log in again.');
+        return;
+      }
+
       const data = await res.json();
       if (data.answer) {
         setAnswer(data.answer);

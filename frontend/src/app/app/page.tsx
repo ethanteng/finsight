@@ -46,6 +46,14 @@ export default function AppPage() {
         }
       });
       
+      if (res.status === 401) {
+        // Session expired - redirect to login
+        console.log('Session expired while checking subscription status, redirecting to login');
+        localStorage.removeItem('auth_token');
+        router.push('/login?message=' + encodeURIComponent('Your session has expired. Please log in again.'));
+        return;
+      }
+      
       if (res.ok) {
         const data = await res.json();
         console.log('🔍 Frontend received subscription status response:', data);
@@ -146,6 +154,14 @@ export default function AppPage() {
           }
         });
         
+        if (res.status === 401) {
+          // Session expired - redirect to login
+          console.log('Session expired while loading conversation history, redirecting to login');
+          localStorage.removeItem('auth_token');
+          router.push('/login?message=' + encodeURIComponent('Your session has expired. Please log in again.'));
+          return;
+        }
+        
         if (res.ok) {
           const data = await res.json();
           console.log('Backend response:', data);
@@ -171,7 +187,7 @@ export default function AppPage() {
     };
     
     loadConversationHistory();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, router]);
 
   // Note: Conversation history is now stored in the backend, not localStorage
 
@@ -189,6 +205,14 @@ export default function AppPage() {
             'Authorization': `Bearer ${token}`
           }
         });
+        
+        if (res.status === 401) {
+          // Session expired - redirect to login
+          console.log('Session expired while reloading conversation history, redirecting to login');
+          localStorage.removeItem('auth_token');
+          router.push('/login?message=' + encodeURIComponent('Your session has expired. Please log in again.'));
+          return;
+        }
         
         if (res.ok) {
           const data = await res.json();

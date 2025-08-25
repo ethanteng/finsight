@@ -392,16 +392,20 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
     if (!isDemo) {
       // Extract user from token for authenticated requests
       const authHeader = req.headers.authorization;
-      if (authHeader) {
-        const { verifyToken } = await import('./auth/utils');
-        const token = authHeader.replace('Bearer ', '');
-        const payload = verifyToken(token);
-        if (payload) {
-          userId = payload.userId;
-          userTier = payload.tier as UserTier || UserTier.STARTER;
-          console.log('Authenticated user:', { userId, userTier });
-        }
+      if (!authHeader) {
+        return res.status(401).json({ error: 'Authentication required' });
       }
+
+      const { verifyToken } = await import('./auth/utils');
+      const token = authHeader.replace('Bearer ', '');
+      const payload = verifyToken(token);
+      if (!payload) {
+        return res.status(401).json({ error: 'Invalid or expired token' });
+      }
+
+      userId = payload.userId;
+      userTier = payload.tier as UserTier || UserTier.STARTER;
+      console.log('Authenticated user:', { userId, userTier });
     } else {
       // For demo mode, use environment variable for tier
       const demoTier = process.env.TEST_USER_TIER || 'premium';
