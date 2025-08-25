@@ -3,11 +3,17 @@ import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Shield, Eye, Lock, FileText, MessageCircle, Brain } from 'lucide-react';
 import Link from 'next/link';
+import PageMeta from '../../components/PageMeta';
 
 const TermsPage = () => {
 
   return (
-    <div className="min-h-screen bg-background">
+    <>
+      <PageMeta 
+        title="Terms of Service - Ask Linc" 
+        description="Read Ask Linc's terms of service. Learn about our platform usage, user responsibilities, and service agreements for our AI financial assistant."
+      />
+      <div className="min-h-screen bg-background">
       {/* Navigation */}
       <nav className="fixed top-0 w-full z-50 backdrop-blur-lg bg-background/80 border-b border-border/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -264,6 +270,7 @@ const TermsPage = () => {
         </div>
       </footer>
     </div>
+    </>
   );
 };
 

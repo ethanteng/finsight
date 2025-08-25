@@ -2,6 +2,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import PageMeta from '../../components/PageMeta';
 
 interface SubscriptionContext {
   subscription: string;
@@ -235,8 +236,14 @@ function VerifyEmailPageContent() {
 
 export default function VerifyEmailPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <VerifyEmailPageContent />
-    </Suspense>
+    <>
+      <PageMeta 
+        title="Verify Email - Ask Linc" 
+        description="Verify your email address to complete your Ask Linc account setup. Enter the verification code sent to your email to get started."
+      />
+      <Suspense fallback={<div>Loading...</div>}>
+        <VerifyEmailPageContent />
+      </Suspense>
+    </>
   );
 } 

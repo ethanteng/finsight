@@ -2,6 +2,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import PageMeta from '../../components/PageMeta';
 
 interface SubscriptionContext {
   subscription: string;
@@ -249,8 +250,14 @@ function LoginPageContent() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <LoginPageContent />
-    </Suspense>
+    <>
+      <PageMeta 
+        title="Login - Ask Linc" 
+        description="Sign in to your Ask Linc account to access your personalized financial dashboard, AI-powered insights, and financial planning tools."
+      />
+      <Suspense fallback={<div>Loading...</div>}>
+        <LoginPageContent />
+      </Suspense>
+    </>
   );
 } 

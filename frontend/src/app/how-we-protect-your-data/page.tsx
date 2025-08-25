@@ -3,11 +3,17 @@ import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Shield, Eye, Lock, Database, FileText, MessageCircle, Brain } from 'lucide-react';
 import Link from 'next/link';
+import PageMeta from '../../components/PageMeta';
 
 const PrivacyPage = () => {
 
   return (
-    <div className="min-h-screen bg-background">
+    <>
+      <PageMeta 
+        title="How We Protect Your Data - Ask Linc" 
+        description="Discover the advanced security measures Ask Linc uses to protect your financial information. Learn about our encryption, data handling, and privacy-first approach."
+      />
+      <div className="min-h-screen bg-background">
       {/* Navigation */}
       <nav className="fixed top-0 w-full z-50 backdrop-blur-lg bg-background/80 border-b border-border/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -349,6 +355,7 @@ const PrivacyPage = () => {
         </div>
       </footer>
     </div>
+    </>
   );
 };
 

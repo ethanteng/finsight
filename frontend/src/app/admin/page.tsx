@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from 'react';
 import MarkdownRenderer from '../../components/MarkdownRenderer';
+import PageMeta from '../../components/PageMeta';
 
 interface DemoConversation {
   id: string;
@@ -1662,8 +1663,13 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
-      <div className="max-w-6xl mx-auto">
+    <>
+      <PageMeta 
+        title="Admin Dashboard - Ask Linc" 
+        description="Administrative dashboard for Ask Linc. Manage users, monitor system performance, and oversee platform operations with comprehensive admin tools."
+      />
+      <div className="min-h-screen bg-gray-900 text-white p-6">
+        <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">Admin Dashboard</h1>
         </div>
@@ -1717,7 +1723,8 @@ export default function AdminPage() {
         {activeTab === 'production' && renderProductionTab()}
         {activeTab === 'users' && renderUsersTab()}
         {activeTab === 'market-news' && renderMarketNewsTab()}
+        </div>
       </div>
-    </div>
+    </>
   );
 } 

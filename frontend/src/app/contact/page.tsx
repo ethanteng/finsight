@@ -5,6 +5,7 @@ import { Card, CardContent } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Brain, MessageCircle, Send, CheckCircle, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
+import PageMeta from '../../components/PageMeta';
 
 const ContactPage = () => {
   const [formData, setFormData] = useState({
@@ -51,7 +52,12 @@ const ContactPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <>
+      <PageMeta 
+        title="Contact Us - Ask Linc" 
+        description="Get in touch with the Ask Linc team. We're here to help with questions, feedback, and support for your AI financial assistant."
+      />
+      <div className="min-h-screen bg-background">
       {/* Navigation */}
       <nav className="fixed top-0 w-full z-50 backdrop-blur-lg bg-background/80 border-b border-border/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -344,6 +350,7 @@ const ContactPage = () => {
         </div>
       </footer>
     </div>
+    </>
   );
 };
 

@@ -1,8 +1,10 @@
 "use client";
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import FinanceQA from '../../components/FinanceQA';
 import TierBanner from '../../components/TierBanner';
+import PageMeta from '../../components/PageMeta';
+import Link from 'next/link';
 // import { demoData, getDemoDataAnalysis } from '../../data/demo-data';
 
 interface PromptHistory {
@@ -100,152 +102,158 @@ export default function DemoPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <h1 className="text-2xl font-bold text-white">Ask Linc</h1>
-            {/* Hide TierBanner on mobile */}
-            <div className="hidden md:block">
-              <TierBanner isDemoPage={true} />
+    <>
+      <PageMeta 
+        title="Try Ask Linc Demo - AI Financial Assistant" 
+        description="Experience Ask Linc's AI-powered financial analysis with our interactive demo. See how our platform provides personalized financial insights and advice."
+      />
+      <div className="min-h-screen bg-gray-900 text-white">
+        {/* Header */}
+        <div className="bg-gray-800 border-b border-gray-700 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <h1 className="text-2xl font-bold text-white">Ask Linc</h1>
+              {/* Hide TierBanner on mobile */}
+              <div className="hidden md:block">
+                <TierBanner isDemoPage={true} />
+              </div>
+              {/* Hide DEMO MODE badge on mobile */}
+              <div className="hidden md:block px-3 py-1 bg-yellow-500 text-yellow-900 rounded-full text-xs font-medium">
+                DEMO MODE
+              </div>
             </div>
-            {/* Hide DEMO MODE badge on mobile */}
-            <div className="hidden md:block px-3 py-1 bg-yellow-500 text-yellow-900 rounded-full text-xs font-medium">
-              DEMO MODE
-            </div>
-          </div>
-          <div className="flex items-center space-x-3">
-            {/* Hide Get Started button on mobile */}
-            <div className="hidden md:block">
-              <Link 
-                href="/#pricing" 
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+            <div className="flex items-center space-x-3">
+              {/* Hide Get Started button on mobile */}
+              <div className="hidden md:block">
+                <Link 
+                  href="/#pricing" 
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                >
+                  Get Started
+                </Link>
+              </div>
+              <a 
+                href="/contact" 
+                className="text-blue-300 hover:text-blue-200 text-sm transition-colors font-medium"
               >
-                Get Started
-              </Link>
+                Give Feedback
+              </a>
+              <a 
+                href="/profile?demo=true" 
+                className="text-gray-300 hover:text-white text-sm transition-colors"
+              >
+                Profile
+              </a>
+              <button
+                onClick={() => setShowSidebar(!showSidebar)}
+                className="lg:hidden bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm"
+              >
+                {showSidebar ? 'Hide' : 'Show'} History
+              </button>
             </div>
-            <a 
-              href="/contact" 
-              className="text-blue-300 hover:text-blue-200 text-sm transition-colors font-medium"
-            >
-              Give Feedback
-            </a>
-            <a 
-              href="/profile?demo=true" 
-              className="text-gray-300 hover:text-white text-sm transition-colors"
-            >
-              Profile
-            </a>
-            <button
-              onClick={() => setShowSidebar(!showSidebar)}
-              className="lg:hidden bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm"
-            >
-              {showSidebar ? 'Hide' : 'Show'} History
-            </button>
           </div>
         </div>
-      </div>
 
-      <div className="flex h-[calc(100vh-80px)]">
-        {/* Sidebar - Hidden on mobile, visible on desktop */}
-        {showSidebar && (
-          <div className="w-80 bg-gray-800 border-r border-gray-700 overflow-y-auto hidden lg:block">
-            <div className="p-4">
-              <h2 className="text-lg font-semibold mb-4">Prompt History</h2>
-              {promptHistory.length === 0 ? (
-                <p className="text-gray-400 text-sm">No prompts yet. Start asking questions!</p>
-              ) : (
-                <div className="space-y-2">
-                  {promptHistory.map((prompt) => (
-                    <div
-                      key={prompt.id}
-                      onClick={() => handleHistorySelect(prompt)}
-                      className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                        selectedPrompt?.id === prompt.id
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
-                      }`}
-                    >
-                      <div className="text-sm font-medium mb-1">
-                        {truncateText(prompt.question)}
+        <div className="flex h-[calc(100vh-80px)]">
+          {/* Sidebar - Hidden on mobile, visible on desktop */}
+          {showSidebar && (
+            <div className="w-80 bg-gray-800 border-r border-gray-700 overflow-y-auto hidden lg:block">
+              <div className="p-4">
+                <h2 className="text-lg font-semibold mb-4">Prompt History</h2>
+                {promptHistory.length === 0 ? (
+                  <p className="text-gray-400 text-sm">No prompts yet. Start asking questions!</p>
+                ) : (
+                  <div className="space-y-2">
+                    {promptHistory.map((prompt) => (
+                      <div
+                        key={prompt.id}
+                        onClick={() => handleHistorySelect(prompt)}
+                        className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                          selectedPrompt?.id === prompt.id
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+                        }`}
+                      >
+                        <div className="text-sm font-medium mb-1">
+                          {truncateText(prompt.question)}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {formatTimestamp(prompt.timestamp)}
+                        </div>
                       </div>
-                      <div className="text-xs text-gray-400">
-                        {formatTimestamp(prompt.timestamp)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Main Content */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="max-w-4xl mx-auto p-4 md:p-6">
-            {/* Demo Info Banner */}
-            <div className="bg-blue-900 border border-blue-700 rounded-lg p-4 mb-6">
-              <div className="flex items-center space-x-2 mb-2">
-                <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                <h3 className="text-lg font-semibold text-blue-100">Demo Mode Active</h3>
-              </div>
-              <p className="text-blue-200 text-sm mb-3">
-                You're exploring Linc with realistic demo data including 60 investment holdings, 
-                20+ transactions, and enhanced merchant data. All features work normally, 
-                but no real data is stored.
-              </p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                <div className="bg-blue-800 rounded p-2">
-                  <div className="text-blue-300">Monthly Income</div>
-                  <div className="text-white font-medium">$4,250</div>
-                </div>
-                <div className="bg-blue-800 rounded p-2">
-                  <div className="text-blue-300">Monthly Savings</div>
-                  <div className="text-white font-medium">$1,247</div>
-                </div>
-                <div className="bg-blue-800 rounded p-2">
-                  <div className="text-blue-300">Investment Portfolio</div>
-                  <div className="text-white font-medium">$421,701</div>
-                </div>
-                <div className="bg-blue-800 rounded p-2">
-                  <div className="text-blue-300">Total Holdings</div>
-                  <div className="text-white font-medium">60</div>
-                </div>
-              </div>
-              <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-                <div className="bg-blue-800 rounded p-2">
-                  <div className="text-blue-300">Emergency Fund</div>
-                  <div className="text-white font-medium">$28,450</div>
-                </div>
-                <div className="bg-blue-800 rounded p-2">
-                  <div className="text-blue-300">Total Assets</div>
-                  <div className="text-white font-medium">$1,247,450</div>
-                </div>
-                <div className="bg-blue-800 rounded p-2">
-                  <div className="text-blue-300">Net Worth</div>
-                  <div className="text-white font-medium">$1,247,450</div>
-                </div>
-                <div className="bg-blue-800 rounded p-2">
-                  <div className="text-blue-300">Accounts</div>
-                  <div className="text-white font-medium">10</div>
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
+          )}
 
-            {/* Q&A Interface */}
-            <div className="bg-gray-800 rounded-lg p-4 md:p-6">
-              <FinanceQA 
-                onNewAnswer={addToHistory}
-                selectedPrompt={selectedPrompt}
-                onNewQuestion={handleNewQuestion}
-                isDemo={true}
-                sessionId={sessionId}
-              />
+          {/* Main Content */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-4xl mx-auto p-4 md:p-6">
+              {/* Demo Info Banner */}
+              <div className="bg-blue-900 border border-blue-700 rounded-lg p-4 mb-6">
+                <div className="flex items-center space-x-2 mb-2">
+                  <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                  <h3 className="text-lg font-semibold text-blue-100">Demo Mode Active</h3>
+                </div>
+                <p className="text-blue-200 text-sm mb-3">
+                  You're exploring Linc with realistic demo data including 60 investment holdings, 
+                  20+ transactions, and enhanced merchant data. All features work normally, 
+                  but no real data is stored.
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                  <div className="bg-blue-800 rounded p-2">
+                    <div className="text-blue-300">Monthly Income</div>
+                    <div className="text-white font-medium">$4,250</div>
+                  </div>
+                  <div className="bg-blue-800 rounded p-2">
+                    <div className="text-blue-300">Monthly Savings</div>
+                    <div className="text-white font-medium">$1,247</div>
+                  </div>
+                  <div className="bg-blue-800 rounded p-2">
+                    <div className="text-blue-300">Investment Portfolio</div>
+                    <div className="text-white font-medium">$421,701</div>
+                  </div>
+                  <div className="bg-blue-800 rounded p-2">
+                    <div className="text-blue-300">Total Holdings</div>
+                    <div className="text-white font-medium">60</div>
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                  <div className="bg-blue-800 rounded p-2">
+                    <div className="text-blue-300">Emergency Fund</div>
+                    <div className="text-white font-medium">$28,450</div>
+                  </div>
+                  <div className="bg-blue-800 rounded p-2">
+                    <div className="text-blue-300">Total Assets</div>
+                    <div className="text-white font-medium">$1,247,450</div>
+                  </div>
+                  <div className="bg-blue-800 rounded p-2">
+                    <div className="text-blue-300">Net Worth</div>
+                    <div className="text-white font-medium">$1,247,450</div>
+                  </div>
+                  <div className="bg-blue-800 rounded p-2">
+                    <div className="text-blue-300">Accounts</div>
+                    <div className="text-white font-medium">10</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Q&A Interface */}
+              <div className="bg-gray-800 rounded-lg p-4 md:p-6">
+                <FinanceQA 
+                  onNewAnswer={addToHistory}
+                  selectedPrompt={selectedPrompt}
+                  onNewQuestion={handleNewQuestion}
+                  isDemo={true}
+                  sessionId={sessionId}
+                />
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 } 

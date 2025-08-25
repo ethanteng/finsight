@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import PageMeta from '../../components/PageMeta';
 
 function PaymentSuccessContent() {
   const [error, setError] = useState<string | null>(null);
@@ -151,29 +152,35 @@ function PaymentSuccessContent() {
 
 export default function PaymentSuccessPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-        <div className="sm:mx-auto sm:w-full sm:max-w-md">
-          <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-            <div className="text-center">
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100">
-                <svg className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <h3 className="mt-2 text-sm font-medium text-gray-900">Loading...</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                Please wait while we load the payment success page...
-              </p>
-              <div className="mt-6">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+    <>
+      <PageMeta 
+        title="Payment Successful - Ask Linc" 
+        description="Welcome to Ask Linc! Your payment was successful. Start exploring your personalized financial dashboard with AI-powered insights and analysis."
+      />
+      <Suspense fallback={
+        <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+          <div className="sm:mx-auto sm:w-full sm:max-w-md">
+            <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+              <div className="text-center">
+                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100">
+                  <svg className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <h3 className="mt-2 text-sm font-medium text-gray-900">Loading...</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Please wait while we load the payment success page...
+                </p>
+                <div className="mt-6">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    }>
-      <PaymentSuccessContent />
-    </Suspense>
+      }>
+        <PaymentSuccessContent />
+      </Suspense>
+    </>
   );
 }

@@ -1,9 +1,19 @@
 "use client";
+import { Button } from '../../components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { Shield, Eye, Lock, Database, FileText, MessageCircle, Brain } from 'lucide-react';
 import Link from 'next/link';
+import PageMeta from '../../components/PageMeta';
 
-export default function PrivacyPolicyPage() {
+const PrivacyPolicyPage = () => {
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <>
+      <PageMeta 
+        title="Privacy Policy - Ask Linc" 
+        description="Read Ask Linc's comprehensive privacy policy. Understand how we collect, use, and protect your personal and financial information."
+      />
+      <div className="min-h-screen bg-gray-900 text-white">
       {/* Header */}
       <div className="bg-gray-800 border-b border-gray-700 p-4">
         <div className="flex items-center justify-between">
@@ -205,5 +215,8 @@ export default function PrivacyPolicyPage() {
         </div>
       </div>
     </div>
+    </>
   );
-} 
+}
+
+export default PrivacyPolicyPage; 

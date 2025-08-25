@@ -5,6 +5,7 @@ import FinanceQA from '../../components/FinanceQA';
 import TierBanner from '../../components/TierBanner';
 import FinancialOverview from '../../components/FinancialOverview';
 import { resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
+import PageMeta from '../../components/PageMeta';
 
 interface PromptHistory {
   id: string;
@@ -302,99 +303,105 @@ export default function AppPage() {
   // No subscription warning needed
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <h1 className="text-2xl font-bold text-white">Ask Linc</h1>
-            {/* Hide TierBanner on mobile */}
-            <div className="hidden md:block">
-              <TierBanner />
+    <>
+      <PageMeta 
+        title="App Dashboard - Ask Linc" 
+        description="Access your personalized financial dashboard with AI-powered insights, account analysis, and financial planning tools."
+      />
+      <div className="min-h-screen bg-gray-900 text-white">
+        {/* Header */}
+        <div className="bg-gray-800 border-b border-gray-700 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <h1 className="text-2xl font-bold text-white">Ask Linc</h1>
+              {/* Hide TierBanner on mobile */}
+              <div className="hidden md:block">
+                <TierBanner />
+              </div>
             </div>
-          </div>
-          <div className="flex items-center space-x-3">
-            {/* Hide email on mobile */}
-            {userEmail && (
-              <span className="hidden md:block text-gray-400 text-sm">
-                {userEmail}
-              </span>
-            )}
-            <a 
-              href="/contact" 
-              className="text-blue-300 hover:text-blue-200 text-sm transition-colors font-medium"
-            >
-              Give Feedback
-            </a>
-            <a 
-              href="/profile" 
-              className="text-gray-300 hover:text-white text-sm transition-colors"
-            >
-              Profile
-            </a>
-            <button 
-              onClick={handleLogout}
-              className="text-gray-300 hover:text-white text-sm transition-colors"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* No subscription warning banner - access controlled at login level */}
-
-      <div className="flex h-[calc(100vh-80px)]">
-        {/* Sidebar - Hidden on mobile, visible on desktop */}
-        {showSidebar && (
-          <div className="w-80 bg-gray-800 border-r border-gray-700 overflow-y-auto hidden lg:block">
-            <div className="p-4">
-              <h2 className="text-lg font-semibold mb-4">Prompt History</h2>
-              {promptHistory.length === 0 ? (
-                <p className="text-gray-400 text-sm">No prompts yet. Start asking questions!</p>
-              ) : (
-                <div className="space-y-2">
-                  {promptHistory.map((prompt) => (
-                    <div
-                      key={prompt.id}
-                      onClick={() => handleHistorySelect(prompt)}
-                      className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                        selectedPrompt?.id === prompt.id
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
-                      }`}
-                    >
-                      <div className="text-sm font-medium mb-1">
-                        {truncateText(prompt.question)}
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        {formatTimestamp(prompt.timestamp)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            <div className="flex items-center space-x-3">
+              {/* Hide email on mobile */}
+              {userEmail && (
+                <span className="hidden md:block text-gray-400 text-sm">
+                  {userEmail}
+                </span>
               )}
+              <a 
+                href="/contact" 
+                className="text-blue-300 hover:text-blue-200 text-sm transition-colors font-medium"
+              >
+                Give Feedback
+              </a>
+              <a 
+                href="/profile" 
+                className="text-gray-300 hover:text-white text-sm transition-colors"
+              >
+                Profile
+              </a>
+              <button 
+                onClick={handleLogout}
+                className="text-gray-300 hover:text-white text-sm transition-colors"
+              >
+                Logout
+              </button>
             </div>
           </div>
-        )}
+        </div>
 
-        {/* Main Content */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="max-w-4xl mx-auto p-4 md:p-6">
-            {/* Financial Overview */}
-            <FinancialOverview />
-            
-            {/* Q&A Interface */}
-            <div className="bg-gray-800 rounded-lg p-4 md:p-6">
-              <FinanceQA 
-                onNewAnswer={addToHistory}
-                selectedPrompt={selectedPrompt}
-                onNewQuestion={handleNewQuestion}
-              />
+        {/* No subscription warning banner - access controlled at login level */}
+
+        <div className="flex h-[calc(100vh-80px)]">
+          {/* Sidebar - Hidden on mobile, visible on desktop */}
+          {showSidebar && (
+            <div className="w-80 bg-gray-800 border-r border-gray-700 overflow-y-auto hidden lg:block">
+              <div className="p-4">
+                <h2 className="text-lg font-semibold mb-4">Prompt History</h2>
+                {promptHistory.length === 0 ? (
+                  <p className="text-gray-400 text-sm">No prompts yet. Start asking questions!</p>
+                ) : (
+                  <div className="space-y-2">
+                    {promptHistory.map((prompt) => (
+                      <div
+                        key={prompt.id}
+                        onClick={() => handleHistorySelect(prompt)}
+                        className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                          selectedPrompt?.id === prompt.id
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+                        }`}
+                      >
+                        <div className="text-sm font-medium mb-1">
+                          {truncateText(prompt.question)}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {formatTimestamp(prompt.timestamp)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Main Content */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-4xl mx-auto p-4 md:p-6">
+              {/* Financial Overview */}
+              <FinancialOverview />
+              
+              {/* Q&A Interface */}
+              <div className="bg-gray-800 rounded-lg p-4 md:p-6">
+                <FinanceQA 
+                  onNewAnswer={addToHistory}
+                  selectedPrompt={selectedPrompt}
+                  onNewQuestion={handleNewQuestion}
+                />
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </>
   );
 } 

@@ -4,6 +4,7 @@ import PlaidLinkButton, { PlaidLinkButtonRef, resetPlaidLinkInitialization } fro
 import TransactionHistory from '../../components/TransactionHistory';
 import UserProfile from '../../components/UserProfile';
 import InvestmentPortfolio from '../../components/InvestmentPortfolio';
+import PageMeta from '../../components/PageMeta';
 
 interface Account {
   id: string;
@@ -581,351 +582,357 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      
-      {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 p-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-white">Profile</h1>
-          <div className="flex items-center space-x-3">
-            {userEmail && !isDemo && (
-              <span className="text-gray-400 text-sm">
-                {userEmail}
-              </span>
-            )}
-            <a 
-              href={isDemo ? "/demo" : "/app"}
-              className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm transition-colors"
-            >
-              Back to App
-            </a>
-            {!isDemo && (
-              <button 
-                onClick={() => {
-                  // Reset Plaid Link initialization flag when logging out
-                  resetPlaidLinkInitialization();
-                  localStorage.removeItem('auth_token');
-                  window.location.href = '/login';
-                }}
-                className="text-gray-300 hover:text-white text-sm transition-colors"
-              >
-                Logout
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-4xl mx-auto p-6">
-        {/* User Profile Section */}
-        {demoStatusDetermined && (
-          <UserProfile userId={userEmail ? 'user' : undefined} isDemo={isDemo} />
-        )}
+    <>
+      <PageMeta 
+        title="User Profile - Ask Linc" 
+        description="Manage your Ask Linc profile, update account settings, view subscription details, and control your privacy preferences."
+      />
+      <div className="min-h-screen bg-gray-900 text-white">
         
-        {/* Account Management Section */}
-        <div className="bg-gray-800 rounded-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Your Connected Accounts</h2>
+        {/* Header */}
+        <div className="bg-gray-800 border-b border-gray-700 p-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold text-white">Profile</h1>
+            <div className="flex items-center space-x-3">
+              {userEmail && !isDemo && (
+                <span className="text-gray-400 text-sm">
+                  {userEmail}
+                </span>
+              )}
+              <a 
+                href={isDemo ? "/demo" : "/app"}
+                className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm transition-colors"
+              >
+                Back to App
+              </a>
+              {!isDemo && (
+                <button 
+                  onClick={() => {
+                    // Reset Plaid Link initialization flag when logging out
+                    resetPlaidLinkInitialization();
+                    localStorage.removeItem('auth_token');
+                    window.location.href = '/login';
+                  }}
+                  className="text-gray-300 hover:text-white text-sm transition-colors"
+                >
+                  Logout
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-4xl mx-auto p-6">
+          {/* User Profile Section */}
+          {demoStatusDetermined && (
+            <UserProfile userId={userEmail ? 'user' : undefined} isDemo={isDemo} />
+          )}
           
-          {/* Connect New Account */}
-          <div className="mb-6">
-            <PlaidLinkButton 
-              key={forcePlaidReinitialize ? 'force-reinit' : 'normal'}
-              onSuccess={() => {
-                // Refresh all data when an account is successfully linked
-                console.log('Account linked, refreshing all data');
-                refreshAllData();
-                // Reset the force flag after successful connection
-                setForcePlaidReinitialize(false);
-              }}
-              isDemo={isDemo}
-              forceReinitialize={forcePlaidReinitialize}
-              ref={plaidLinkButtonRef}
-            />
+          {/* Account Management Section */}
+          <div className="bg-gray-800 rounded-lg p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4">Your Connected Accounts</h2>
             
-            {/* Retry Status Messages */}
-            {retryMessage && (
-              <div className={`mt-3 p-3 rounded-lg text-sm ${
-                retryMessage.includes('✅') 
-                  ? 'bg-green-900/20 border border-green-700 text-green-300'
-                  : retryMessage.includes('❌') 
-                  ? 'bg-red-900/20 border border-red-700 text-red-300'
-                  : retryMessage.includes('⏰')
-                  ? 'bg-yellow-900/20 border border-yellow-700 text-yellow-300'
-                  : 'bg-blue-900/20 border border-blue-700 text-blue-300'
-              }`}>
-                {retryMessage}
-              </div>
-            )}
-            
-            {/* Retry Progress Indicator */}
-            {isRetrying && (
-              <div className="mt-3 p-3 bg-blue-900/20 border border-blue-700 rounded-lg">
-                <div className="flex items-center gap-2 text-blue-300 text-sm">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-300"></div>
-                  <span>Waiting for data to be ready... (Retry {retryCount + 1}/5)</span>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Connected Accounts List */}
-          <div>
-            {loading ? (
-              <div className="text-gray-400">Loading accounts...</div>
-            ) : error ? (
-              <div className="text-gray-400">
-                {error}
-              </div>
-            ) : connectedAccounts.length === 0 ? (
-              <div className="text-gray-400">
-                No accounts connected yet. Use the button above to connect your first account.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {connectedAccounts.map((account) => (
-                  <div 
-                    key={account.id} 
-                    className="bg-gray-700 rounded-lg p-4 border border-gray-600"
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
-                        <div className="font-medium text-white">{account.name}</div>
-                        <div className="text-sm text-gray-400">
-                          {account.type} • {account.subtype}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-semibold text-white">
-                          {/* ✅ FIX: Use the correct balance field based on account type */}
-                          {(() => {
-                            let balance;
-                            if (account.type === 'depository' || 
-                                account.subtype === 'checking' || 
-                                account.subtype === 'savings') {
-                              // For checking/savings accounts, use available balance
-                              balance = account.balance?.available !== undefined && account.balance?.available !== null 
-                                ? account.balance.available 
-                                : account.balance?.current || 0;
-                            } else {
-                              // For investment/credit accounts, use current balance
-                              balance = account.balance?.current || 0;
-                            }
-                            return formatCurrency(balance);
-                          })()}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* NEW: Enhanced Investment Portfolio Section */}
-        {investmentData && (
-          <div className="mb-6">
-            <InvestmentPortfolio 
-              portfolio={{
-                totalValue: investmentData.portfolio?.totalValue || 0,
-                assetAllocation: investmentData.portfolio?.assetAllocation || [],
-                holdingCount: investmentData.portfolio?.holdingCount || 0,
-                securityCount: investmentData.portfolio?.securityCount || 0
-              }}
-              holdings={investmentData.holdings || []}
-              transactions={investmentData.transactions || []}
-              isDemo={isDemo}
-            />
-          </div>
-        )}
-
-        {/* Transaction History - Show ALL transactions */}
-        <div className="mb-6">
-          <TransactionHistory ref={transactionHistoryRef} isDemo={isDemo} />
-        </div>
-
-        {/* Subscription Management Section */}
-        {!isDemo && (
-          <div className="mb-6">
-            <div className="bg-gray-800 rounded-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">Subscription Management</h2>
+            {/* Connect New Account */}
+            <div className="mb-6">
+              <PlaidLinkButton 
+                key={forcePlaidReinitialize ? 'force-reinit' : 'normal'}
+                onSuccess={() => {
+                  // Refresh all data when an account is successfully linked
+                  console.log('Account linked, refreshing all data');
+                  refreshAllData();
+                  // Reset the force flag after successful connection
+                  setForcePlaidReinitialize(false);
+                }}
+                isDemo={isDemo}
+                forceReinitialize={forcePlaidReinitialize}
+                ref={plaidLinkButtonRef}
+              />
               
-              {/* Subscription Message */}
-              {subscriptionMessage && (
-                <div className="mb-4 p-3 bg-green-900/20 border border-green-700 rounded-lg">
-                  <div className="text-sm text-green-400">
-                    {subscriptionMessage}
-                  </div>
-                </div>
-              )}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium text-white mb-2">Current Plan</h3>
-                    <p className="text-gray-400 text-sm">
-                      Manage your subscription, update payment methods, and view billing history
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <button
-                      onClick={handleManageSubscription}
-                      disabled={isManagingSubscription}
-                      className="px-4 py-2 rounded text-sm transition-colors text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800"
-                      title="Open Stripe customer portal"
-                    >
-                      {isManagingSubscription ? 'Opening...' : 'Manage Subscription'}
-                    </button>
-                    <div className="text-xs text-gray-400 mt-1">
-                      Opens Stripe customer portal
-                    </div>
-                  </div>
-                </div>
-                
-                {subscriptionStatus ? (
-                  <div className="border border-gray-600 rounded-lg p-4 bg-gray-700">
-                    <div className="mb-2">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm font-medium text-gray-300">Status</span>
-                        <span className={`px-2 py-1 text-xs rounded-full ${
-                          subscriptionStatus.stripeCustomerId && subscriptionStatus.status === 'active'
-                            ? 'bg-green-600 text-white' 
-                            : subscriptionStatus.accessLevel === 'full'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-yellow-600 text-white'
-                        }`}>
-                          {subscriptionStatus.stripeCustomerId && subscriptionStatus.status === 'active'
-                            ? 'Active Subscription'
-                            : subscriptionStatus.accessLevel === 'full'
-                            ? 'Admin Access'
-                            : subscriptionStatus.status}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-sm text-gray-400">
-                      Plan: {subscriptionStatus.tier} • Access: {subscriptionStatus.accessLevel}
-                    </div>
-                    {!subscriptionStatus.stripeCustomerId && (
-                      <div className="mt-2 text-xs text-blue-400">
-                        No active subscription found. You can still access the customer portal to view billing options.
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="border border-gray-600 rounded-lg p-4 bg-gray-700">
-                    <div className="text-sm text-gray-400">
-                      Loading subscription status...
-                    </div>
-                  </div>
-                )}
-                
-                {/* Error Display */}
-                {error && (
-                  <div className="border border-red-600 rounded-lg p-4 bg-red-900/20">
-                    <div className="text-sm text-red-400">
-                      ⚠️ {error}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Account Settings */}
-        <div className="bg-gray-800 rounded-lg p-6">
-          <h2 className="text-xl font-semibold mb-4">Account Settings</h2>
-          <div className="space-y-6">
-            <div>
-              <p className="text-gray-400 text-sm mb-4">
-                Your financial data is read-only and never stored permanently. 
-                We use Plaid&apos;s secure API to access your accounts.
-              </p>
-              
-              <div className="space-y-4">
-                <div className="border border-gray-600 rounded-lg p-4">
-                  <h4 className="font-medium mb-2">Disconnect Your Accounts</h4>
-                  <p className="text-gray-400 text-sm mb-3">
-                    Remove all Plaid connections and clear your financial data. 
-                    This will disconnect all linked bank accounts but keep your conversation history.
-                  </p>
-                  <button
-                    onClick={handleDisconnectAccounts}
-                    disabled={isDeleting}
-                    className="bg-slate-600 hover:bg-slate-700 disabled:bg-slate-800 px-4 py-2 rounded text-sm transition-colors"
-                  >
-                    {isDeleting ? 'Disconnecting...' : 'Disconnect All Accounts'}
-                  </button>
-                </div>
-
-                <div className="border border-gray-600 rounded-lg p-4">
-                  <h4 className="font-medium mb-2">Delete All Your Data</h4>
-                  <p className="text-gray-400 text-sm mb-3">
-                    Permanently delete all your data including accounts, transactions, 
-                    conversations, and Plaid connections. This action cannot be undone.
-                  </p>
-                  <button
-                    onClick={() => setShowDeleteConfirm(true)}
-                    disabled={isDeleting}
-                    className="bg-rose-600 hover:bg-rose-700 disabled:bg-rose-800 px-4 py-2 rounded text-sm transition-colors"
-                  >
-                    Delete All Data
-                  </button>
-                </div>
-              </div>
-
-              {deleteMessage && (
-                <div className={`mt-4 p-3 rounded-lg ${
-                  deleteMessage.includes('successfully') || deleteMessage.includes('This is a demo only')
-                    ? 'bg-green-900 border border-green-700 text-green-200' 
-                    : 'bg-red-900 border border-red-700 text-red-200'
+              {/* Retry Status Messages */}
+              {retryMessage && (
+                <div className={`mt-3 p-3 rounded-lg text-sm ${
+                  retryMessage.includes('✅') 
+                    ? 'bg-green-900/20 border border-green-700 text-green-300'
+                    : retryMessage.includes('❌') 
+                    ? 'bg-red-900/20 border border-red-700 text-red-300'
+                    : retryMessage.includes('⏰')
+                    ? 'bg-yellow-900/20 border border-yellow-700 text-yellow-300'
+                    : 'bg-blue-900/20 border border-blue-700 text-blue-300'
                 }`}>
-                  {deleteMessage}
+                  {retryMessage}
+                </div>
+              )}
+              
+              {/* Retry Progress Indicator */}
+              {isRetrying && (
+                <div className="mt-3 p-3 bg-blue-900/20 border border-blue-700 rounded-lg">
+                  <div className="flex items-center gap-2 text-blue-300 text-sm">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-300"></div>
+                    <span>Waiting for data to be ready... (Retry {retryCount + 1}/5)</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Connected Accounts List */}
+            <div>
+              {loading ? (
+                <div className="text-gray-400">Loading accounts...</div>
+              ) : error ? (
+                <div className="text-gray-400">
+                  {error}
+                </div>
+              ) : connectedAccounts.length === 0 ? (
+                <div className="text-gray-400">
+                  No accounts connected yet. Use the button above to connect your first account.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {connectedAccounts.map((account) => (
+                    <div 
+                      key={account.id} 
+                      className="bg-gray-700 rounded-lg p-4 border border-gray-600"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="font-medium text-white">{account.name}</div>
+                          <div className="text-sm text-gray-400">
+                            {account.type} • {account.subtype}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-semibold text-white">
+                            {/* ✅ FIX: Use the correct balance field based on account type */}
+                            {(() => {
+                              let balance;
+                              if (account.type === 'depository' || 
+                                  account.subtype === 'checking' || 
+                                  account.subtype === 'savings') {
+                                // For checking/savings accounts, use available balance
+                                balance = account.balance?.available !== undefined && account.balance?.available !== null 
+                                  ? account.balance.available 
+                                  : account.balance?.current || 0;
+                              } else {
+                                // For investment/credit accounts, use current balance
+                                balance = account.balance?.current || 0;
+                              }
+                              return formatCurrency(balance);
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           </div>
 
-          {/* Delete Confirmation Modal */}
-          {showDeleteConfirm && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-              <div className="bg-gray-800 border border-gray-600 rounded-lg p-6 max-w-md mx-4">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="h-6 w-6 text-red-400">⚠️</div>
-                  <h3 className="text-lg font-semibold">Confirm Data Deletion</h3>
-                </div>
-                <p className="text-gray-300 mb-4">
-                  This action will permanently delete all your data including:
-                </p>
-                <ul className="text-sm text-gray-400 mb-4 space-y-1">
-                  <li>• All connected bank accounts</li>
-                  <li>• Transaction history</li>
-                  <li>• Conversation history</li>
-                  <li>• Account balances and sync data</li>
-                  <li>• Financial profile</li>
-                </ul>
-                <p className="text-sm text-red-400 mb-4 font-medium">
-                  This action cannot be undone.
-                </p>
-                <div className="flex gap-3">
-                  <button
-                    onClick={handleDeleteAllData}
-                    disabled={isDeleting}
-                    className="bg-rose-600 hover:bg-rose-700 disabled:bg-rose-800 px-4 py-2 rounded text-sm transition-colors flex-1"
-                  >
-                    {isDeleting ? 'Deleting...' : 'Yes, Delete Everything'}
-                  </button>
-                  <button
-                    onClick={() => setShowDeleteConfirm(false)}
-                    className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded text-sm transition-colors flex-1"
-                  >
-                    Cancel
-                  </button>
+          {/* NEW: Enhanced Investment Portfolio Section */}
+          {investmentData && (
+            <div className="mb-6">
+              <InvestmentPortfolio 
+                portfolio={{
+                  totalValue: investmentData.portfolio?.totalValue || 0,
+                  assetAllocation: investmentData.portfolio?.assetAllocation || [],
+                  holdingCount: investmentData.portfolio?.holdingCount || 0,
+                  securityCount: investmentData.portfolio?.securityCount || 0
+                }}
+                holdings={investmentData.holdings || []}
+                transactions={investmentData.transactions || []}
+                isDemo={isDemo}
+              />
+            </div>
+          )}
+
+          {/* Transaction History - Show ALL transactions */}
+          <div className="mb-6">
+            <TransactionHistory ref={transactionHistoryRef} isDemo={isDemo} />
+          </div>
+
+          {/* Subscription Management Section */}
+          {!isDemo && (
+            <div className="mb-6">
+              <div className="bg-gray-800 rounded-lg p-6">
+                <h2 className="text-xl font-semibold mb-4">Subscription Management</h2>
+                
+                {/* Subscription Message */}
+                {subscriptionMessage && (
+                  <div className="mb-4 p-3 bg-green-900/20 border border-green-700 rounded-lg">
+                    <div className="text-sm text-green-400">
+                      {subscriptionMessage}
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium text-white mb-2">Current Plan</h3>
+                      <p className="text-gray-400 text-sm">
+                        Manage your subscription, update payment methods, and view billing history
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <button
+                        onClick={handleManageSubscription}
+                        disabled={isManagingSubscription}
+                        className="px-4 py-2 rounded text-sm transition-colors text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800"
+                        title="Open Stripe customer portal"
+                      >
+                        {isManagingSubscription ? 'Opening...' : 'Manage Subscription'}
+                      </button>
+                      <div className="text-xs text-gray-400 mt-1">
+                        Opens Stripe customer portal
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {subscriptionStatus ? (
+                    <div className="border border-gray-600 rounded-lg p-4 bg-gray-700">
+                      <div className="mb-2">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm font-medium text-gray-300">Status</span>
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            subscriptionStatus.stripeCustomerId && subscriptionStatus.status === 'active'
+                              ? 'bg-green-600 text-white' 
+                              : subscriptionStatus.accessLevel === 'full'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-yellow-600 text-white'
+                          }`}>
+                            {subscriptionStatus.stripeCustomerId && subscriptionStatus.status === 'active'
+                              ? 'Active Subscription'
+                              : subscriptionStatus.accessLevel === 'full'
+                              ? 'Admin Access'
+                              : subscriptionStatus.status}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-400">
+                        Plan: {subscriptionStatus.tier} • Access: {subscriptionStatus.accessLevel}
+                      </div>
+                      {!subscriptionStatus.stripeCustomerId && (
+                        <div className="mt-2 text-xs text-blue-400">
+                          No active subscription found. You can still access the customer portal to view billing options.
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="border border-gray-600 rounded-lg p-4 bg-gray-700">
+                      <div className="text-sm text-gray-400">
+                        Loading subscription status...
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Error Display */}
+                  {error && (
+                    <div className="border border-red-600 rounded-lg p-4 bg-red-900/20">
+                      <div className="text-sm text-red-400">
+                        ⚠️ {error}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           )}
+
+          {/* Account Settings */}
+          <div className="bg-gray-800 rounded-lg p-6">
+            <h2 className="text-xl font-semibold mb-4">Account Settings</h2>
+            <div className="space-y-6">
+              <div>
+                <p className="text-gray-400 text-sm mb-4">
+                  Your financial data is read-only and never stored permanently. 
+                  We use Plaid&apos;s secure API to access your accounts.
+                </p>
+                
+                <div className="space-y-4">
+                  <div className="border border-gray-600 rounded-lg p-4">
+                    <h4 className="font-medium mb-2">Disconnect Your Accounts</h4>
+                    <p className="text-gray-400 text-sm mb-3">
+                      Remove all Plaid connections and clear your financial data. 
+                      This will disconnect all linked bank accounts but keep your conversation history.
+                    </p>
+                    <button
+                      onClick={handleDisconnectAccounts}
+                      disabled={isDeleting}
+                      className="bg-slate-600 hover:bg-slate-700 disabled:bg-slate-800 px-4 py-2 rounded text-sm transition-colors"
+                    >
+                      {isDeleting ? 'Disconnecting...' : 'Disconnect All Accounts'}
+                    </button>
+                  </div>
+
+                  <div className="border border-gray-600 rounded-lg p-4">
+                    <h4 className="font-medium mb-2">Delete All Your Data</h4>
+                    <p className="text-gray-400 text-sm mb-3">
+                      Permanently delete all your data including accounts, transactions, 
+                      conversations, and Plaid connections. This action cannot be undone.
+                    </p>
+                    <button
+                      onClick={() => setShowDeleteConfirm(true)}
+                      disabled={isDeleting}
+                      className="bg-rose-600 hover:bg-rose-700 disabled:bg-rose-800 px-4 py-2 rounded text-sm transition-colors"
+                    >
+                      Delete All Data
+                    </button>
+                  </div>
+                </div>
+
+                {deleteMessage && (
+                  <div className={`mt-4 p-3 rounded-lg ${
+                    deleteMessage.includes('successfully') || deleteMessage.includes('This is a demo only')
+                      ? 'bg-green-900 border border-green-700 text-green-200' 
+                      : 'bg-red-900 border border-red-700 text-red-200'
+                  }`}>
+                    {deleteMessage}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Delete Confirmation Modal */}
+            {showDeleteConfirm && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div className="bg-gray-800 border border-gray-600 rounded-lg p-6 max-w-md mx-4">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="h-6 w-6 text-red-400">⚠️</div>
+                    <h3 className="text-lg font-semibold">Confirm Data Deletion</h3>
+                  </div>
+                  <p className="text-gray-300 mb-4">
+                    This action will permanently delete all your data including:
+                  </p>
+                  <ul className="text-sm text-gray-400 mb-4 space-y-1">
+                    <li>• All connected bank accounts</li>
+                    <li>• Transaction history</li>
+                    <li>• Conversation history</li>
+                    <li>• Account balances and sync data</li>
+                    <li>• Financial profile</li>
+                  </ul>
+                  <p className="text-sm text-red-400 mb-4 font-medium">
+                    This action cannot be undone.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleDeleteAllData}
+                      disabled={isDeleting}
+                      className="bg-rose-600 hover:bg-rose-700 disabled:bg-rose-800 px-4 py-2 rounded text-sm transition-colors flex-1"
+                    >
+                      {isDeleting ? 'Deleting...' : 'Yes, Delete Everything'}
+                    </button>
+                    <button
+                      onClick={() => setShowDeleteConfirm(false)}
+                      className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded text-sm transition-colors flex-1"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 } 

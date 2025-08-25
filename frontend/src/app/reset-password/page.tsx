@@ -2,6 +2,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import PageMeta from '../../components/PageMeta';
 
 function ResetPasswordPageContent() {
   const [password, setPassword] = useState('');
@@ -166,17 +167,23 @@ function ResetPasswordPageContent() {
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-        <div className="max-w-md w-full space-y-8 p-8">
-          <div className="text-center">
-            <h1 className="text-3xl font-bold">Loading...</h1>
-            <p className="text-gray-400 mt-2">Please wait while we load the reset page</p>
+    <>
+      <PageMeta 
+        title="Set New Password - Ask Linc" 
+        description="Set a new password for your Ask Linc account. Choose a strong, secure password to protect your financial information and account access."
+      />
+      <Suspense fallback={
+        <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+          <div className="max-w-md w-full space-y-8 p-8">
+            <div className="text-center">
+              <h1 className="text-3xl font-bold">Loading...</h1>
+              <p className="text-gray-400 mt-2">Please wait while we load the reset page</p>
+            </div>
           </div>
         </div>
-      </div>
-    }>
-      <ResetPasswordPageContent />
-    </Suspense>
+      }>
+        <ResetPasswordPageContent />
+      </Suspense>
+    </>
   );
 } 
