@@ -481,7 +481,7 @@ const NewHomepage = () => {
               price: "$18",
               period: "/month",
               description: "Go beyond budgets — see how the economy affects your money.",
-              features: ["Everything in Starter","Connect all your accounts — banks, cards, investments, and more", "Factor in key U.S. economic data like inflation, interest rates, mortgages, APRs, and unemployment", "Get recommendations shaped by real-world events, not just your spending"],
+              features: ["Everything in Starter","Connect unlimited accounts — from mortgages and student loans to retirement and investment accounts", "Factor in key U.S. economic data like inflation, interest rates, mortgages, APRs, and unemployment", "Get recommendations shaped by real-world events, not just your spending"],
               popular: true
             }, {
               id: 'premium',
@@ -489,7 +489,7 @@ const NewHomepage = () => {
               price: "$28",
               period: "/month",
               description: "Your personal Bloomberg Terminal — without the $2,000/month price tag.",
-              features: ["Everything in Standard", "Live market data: CD rates, Treasury yields, mortgage rates, stocks & crypto", "Real-time news feeds from 60+ trusted sources like Bloomberg and Reuters", "Know how your retirement timeline is impacted by the economy", "Get notified when markets move — instantly"],
+              features: ["Everything in Standard", "Live market data: CD rates, Treasury yields, mortgage rates, stocks & crypto", "Real-time news feeds from 60+ trusted sources like Bloomberg and Reuters", "Know how your retirement timeline is impacted by the economy — and what you can do about it", "Get notified when markets move — instantly"],
               popular: false
             }].map((plan, index) => (
               <Card key={index} className={`relative overflow-hidden hover:shadow-2xl transition-all duration-300 hover:scale-105 ${plan.popular ? 'ring-2 ring-primary shadow-xl' : ''}`}>
