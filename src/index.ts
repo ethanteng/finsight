@@ -424,8 +424,45 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
         span.setAttribute('ai.user_id', userId);
       }
       
-      // Get AI response using enhanced context with RAG
-      const aiResponse = await askOpenAIWithEnhancedContext(question, [], userTier, isDemo, userId);
+      // Get conversation history for authenticated users to provide context
+      let conversationHistory: any[] = [];
+      if (!isDemo && userId) {
+        try {
+          const { getPrismaClient } = await import('./prisma-client');
+          const prisma = getPrismaClient();
+          
+          // Get recent conversation history (last 10 Q&A pairs for better context)
+          conversationHistory = await prisma.conversation.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+          });
+          
+          console.log(`Retrieved ${conversationHistory.length} conversations for user ${userId}`);
+          console.log('Recent conversation questions:', conversationHistory.slice(0, 3).map(c => c.question.substring(0, 50) + '...'));
+
+        } catch (error) {
+          console.error('Error retrieving conversation history:', error);
+          // Continue without conversation history if retrieval fails
+          conversationHistory = [];
+        }
+      }
+      
+      // Validate conversation history format
+      if (conversationHistory.length > 0) {
+        console.log('Conversation history validation:', {
+          firstConversation: {
+            hasId: !!conversationHistory[0].id,
+            hasQuestion: !!conversationHistory[0].question,
+            hasAnswer: !!conversationHistory[0].answer,
+            hasCreatedAt: !!conversationHistory[0].createdAt
+          },
+          totalConversations: conversationHistory.length
+        });
+      }
+      
+      // Get AI response using enhanced context with RAG and conversation history
+      const aiResponse = await askOpenAIWithEnhancedContext(question, conversationHistory, userTier, isDemo, userId);
 
       // For demo mode, use the AI response directly (no tokenization needed for fake data)
       if (isDemo) {

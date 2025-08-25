@@ -11,119 +11,15 @@ global.fetch = jest.fn().mockImplementation(() =>
 );
 
 // Mock external dependencies for unit tests
-jest.mock('../../openai', () => ({
-  askOpenAI: jest.fn().mockResolvedValue('Mocked AI response'),
-  askOpenAIForTests: jest.fn().mockResolvedValue('Mocked AI response for tests'),
-  analyzeConversationContext: jest.fn().mockImplementation((conversationHistory: any[], currentQuestion: string) => {
-    // Debug logging to see what's being received
-    console.log('🔍 Mock analyzeConversationContext called with:');
-    console.log('📚 History:', conversationHistory.map((conv: any) => conv.question));
-    console.log('❓ Current question:', currentQuestion);
-    
-    // Mock implementation that returns context opportunities based on test data
-    if (conversationHistory.length === 0) {
-      console.log('❌ No history, returning false');
-      return { hasContextOpportunities: false, instruction: '' };
-    }
-    
-    // Check for portfolio context - look for various ways to ask about portfolio
-    const hasPortfolioContext = conversationHistory.some((conv: any) => {
-      const question = conv.question.toLowerCase();
-      const result = question.includes('portfolio') || 
-             question.includes('investment') ||
-             question.includes('analyze my portfolio') ||
-             question.includes('analyze my investment');
-      console.log(`🔍 Portfolio context check for "${question}": ${result}`);
-      return result;
-    });
-    
-    // Check for planning context
-    const hasPlanningContext = conversationHistory.some((conv: any) => {
-      const question = conv.question.toLowerCase();
-      const result = question.includes('plan') || 
-             question.includes('retirement') ||
-             question.includes('financial plan');
-      console.log(`🔍 Planning context check for "${question}": ${result}`);
-      return result;
-    });
-    
-    // Check for debt context
-    const hasDebtContext = conversationHistory.some((conv: any) => {
-      const question = conv.question.toLowerCase();
-      const result = question.includes('debt') || 
-             question.includes('credit') ||
-             question.includes('debt analysis') ||
-             question.includes('debt situation');
-      console.log(`🔍 Debt context check for "${question}": ${result}`);
-      return result;
-    });
-    
-    // Check for budget context
-    const hasBudgetContext = conversationHistory.some((conv: any) => {
-      const question = conv.question.toLowerCase();
-      const result = question.includes('budget') || 
-             question.includes('spending') ||
-             question.includes('help me budget') ||
-             question.includes('budgeting') ||
-             question.includes('create a budget');
-      console.log(`🔍 Budget context check for "${question}": ${result}`);
-      return result;
-    });
-    
-    console.log(`🔍 Context detection results:`);
-    console.log(`  - Portfolio: ${hasPortfolioContext}`);
-    console.log(`  - Planning: ${hasPlanningContext}`);
-    console.log(`  - Debt: ${hasDebtContext}`);
-    console.log(`  - Budget: ${hasBudgetContext}`);
-    console.log(`  - Current question contains age: ${currentQuestion.toLowerCase().includes('age')}`);
-    console.log(`  - Current question contains income: ${currentQuestion.toLowerCase().includes('income')}`);
-    console.log(`  - Current question contains $: ${currentQuestion.toLowerCase().includes('$')}`);
-    
-    // Check for multiple context opportunities
-    if (hasPortfolioContext && hasBudgetContext && (currentQuestion.includes('age') || currentQuestion.includes('income') || currentQuestion.includes('$'))) {
-      console.log('✅ Multiple context opportunity detected (portfolio + budget)');
-      return { 
-        hasContextOpportunities: true, 
-        instruction: 'User previously asked about portfolio analysis and budgeting and now provided key personal information. Offer to complete both analyses with this new context.' 
-      };
-    }
-    
-    if (hasPortfolioContext && (currentQuestion.includes('age') || currentQuestion.includes('income') || currentQuestion.includes('$'))) {
-      console.log('✅ Portfolio context opportunity detected');
-      return { 
-        hasContextOpportunities: true, 
-        instruction: 'User previously asked about portfolio analysis and now provided key personal information. Offer to complete the portfolio analysis with this new context.' 
-      };
-    }
-    
-    if (hasPlanningContext && (currentQuestion.includes('age') || currentQuestion.includes('years'))) {
-      console.log('✅ Planning context opportunity detected');
-      return { 
-        hasContextOpportunities: true, 
-        instruction: 'User previously asked about financial planning and now provided timeline or age information. Offer to create a comprehensive financial plan.' 
-      };
-    }
-    
-    if (hasDebtContext && (currentQuestion.includes('income') || currentQuestion.includes('$'))) {
-      console.log('✅ Debt context opportunity detected');
-      return { 
-        hasContextOpportunities: true, 
-        instruction: 'User previously asked about debt analysis and now provided income/expense information. Offer to complete the debt-to-income analysis.' 
-      };
-    }
-    
-    if (hasBudgetContext && (currentQuestion.includes('income') || currentQuestion.includes('children') || currentQuestion.includes('$'))) {
-      console.log('✅ Budget context opportunity detected');
-      return { 
-        hasContextOpportunities: true, 
-        instruction: 'User previously asked about budgeting and now provided income or family information. Offer to create a comprehensive budget plan.' 
-      };
-    }
-    
-    console.log('❌ No context opportunities detected');
-    return { hasContextOpportunities: false, instruction: '' };
-  })
-}));
+jest.mock('../../openai', () => {
+  const actual = jest.requireActual('../../openai');
+  return {
+    ...actual, // Include all real implementations
+    askOpenAI: jest.fn().mockResolvedValue('Mocked AI response'),
+    askOpenAIForTests: jest.fn().mockResolvedValue('Mocked AI response for tests')
+    // analyzeConversationContext will use the real implementation from actual
+  };
+});
 
 // Mock market news aggregator to prevent real API calls
 jest.mock('../../market-news/aggregator', () => ({

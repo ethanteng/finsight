@@ -907,7 +907,14 @@ ${anonymizeInvestmentData(holdings.slice(0, 10))}`;
   ];
 
   // Enhanced conversation history processing with context analysis
-  const recentHistory = conversationHistory.slice(-10);
+  // Database returns conversations in descending order (newest first), so we need to reverse for chronological order
+  const recentHistory = conversationHistory.slice(0, 10).reverse();
+  
+  console.log('OpenAI Enhanced: Processing conversation history:', {
+    totalHistoryLength: conversationHistory.length,
+    recentHistoryLength: recentHistory.length,
+    recentQuestions: recentHistory.map(conv => conv.question.substring(0, 50))
+  });
   
   // Analyze conversation history for context building opportunities
   const contextAnalysis = analyzeConversationContext(recentHistory, question);
@@ -936,13 +943,19 @@ ${anonymizeInvestmentData(holdings.slice(0, 10))}`;
 
   console.log('OpenAI Enhanced: Sending request to OpenAI with', messages.length, 'messages');
   console.log('OpenAI Enhanced: Using model:', model || 'gpt-4o');
+  console.log('OpenAI Enhanced: Message breakdown:', {
+    systemMessage: 1,
+    contextInstructions: contextAnalysis.hasContextOpportunities ? 1 : 0,
+    conversationHistory: recentHistory.length * 2, // Q&A pairs
+    currentQuestion: 1
+  });
 
   try {
     const completion = await openai.chat.completions.create({
       model: model || 'gpt-4o',
       messages,
       temperature: 0.7,
-      max_tokens: 1000
+      max_tokens: 2000
     });
 
     let answer = completion.choices[0]?.message?.content || 'I apologize, but I was unable to generate a response.';
@@ -1069,6 +1082,54 @@ export function analyzeConversationContext(conversationHistory: Conversation[], 
     
     if (incomeInfo || familyInfo) {
       contextOpportunities.push('User previously asked about budgeting and now provided income or family information. Offer to create a comprehensive budget plan.');
+    }
+  }
+  
+  // Look for business banking and savings account requests
+  const businessBankingQuestions = conversationHistory.filter(conv => 
+    conv.question.toLowerCase().includes('business') || 
+    conv.question.toLowerCase().includes('llc') ||
+    conv.question.toLowerCase().includes('business savings') ||
+    conv.question.toLowerCase().includes('business account') ||
+    conv.question.toLowerCase().includes('business banking')
+  );
+  
+  if (businessBankingQuestions.length > 0) {
+    const rateQuestion = currentQuestion.toLowerCase().includes('rate') || 
+                         currentQuestion.toLowerCase().includes('interest') ||
+                         currentQuestion.toLowerCase().includes('apy') ||
+                         currentQuestion.toLowerCase().includes('yield') ||
+                         currentQuestion.toLowerCase().includes('compare') ||
+                         currentQuestion.toLowerCase().includes('which') ||
+                         currentQuestion.toLowerCase().includes('better');
+    
+    if (rateQuestion) {
+      contextOpportunities.push('User previously asked about business banking/savings accounts and now is asking about rates or comparing options. Provide specific rate information for business accounts and reference the previous conversation about business banking needs.');
+    }
+  }
+  
+  // Look for general savings and banking requests
+  const savingsBankingQuestions = conversationHistory.filter(conv => 
+    conv.question.toLowerCase().includes('savings') || 
+    conv.question.toLowerCase().includes('banking') ||
+    conv.question.toLowerCase().includes('account') ||
+    conv.question.toLowerCase().includes('bank') ||
+    conv.question.toLowerCase().includes('cd') ||
+    conv.question.toLowerCase().includes('certificate of deposit')
+  );
+  
+  if (savingsBankingQuestions.length > 0) {
+    const rateQuestion = currentQuestion.toLowerCase().includes('rate') || 
+                         currentQuestion.toLowerCase().includes('interest') ||
+                         currentQuestion.toLowerCase().includes('apy') ||
+                         currentQuestion.toLowerCase().includes('yield') ||
+                         currentQuestion.toLowerCase().includes('compare') ||
+                         currentQuestion.toLowerCase().includes('which') ||
+                         currentQuestion.toLowerCase().includes('better') ||
+                         currentQuestion.toLowerCase().includes('highest');
+    
+    if (rateQuestion) {
+      contextOpportunities.push('User previously asked about savings, banking, or accounts and now is asking about rates or comparing options. Reference the previous conversation about their banking needs and provide specific rate information for the types of accounts they were interested in.');
     }
   }
   
