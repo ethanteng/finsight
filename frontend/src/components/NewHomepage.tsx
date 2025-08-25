@@ -472,16 +472,16 @@ const NewHomepage = () => {
               name: "Starter",
               price: "$9",
               period: "/month",
-              description: "Better than a spreadsheet, smarter than any budgeting app.",
-              features: ["Ask anything about your spending — get real answers, instantly", "Connect up to 3 accounts — like checking, savings, and your 401(k)", "Automatically categorize spending and highlight patterns","No ads. No upsells. No selling your data."],
+              description: "Smarter than spreadsheets, simpler than budgeting apps.",
+              features: ["Ask anything about your money and get clear, instant answers", "Connect your accounts — checking, savings, 401(k), and more", "See personalized suggestions to reach your goals"],
               popular: false
             }, {
               id: 'standard',
               name: "Standard",
               price: "$18",
               period: "/month",
-              description: "Like YNAB, but it also knows what the Fed just did.",
-              features: ["Everything in Starter","Connect all your accounts — banks, cards, investments, and more. Ask anything, anytime.", "Factor in key economic indicators like CPI, Fed rates, APRs & more", "Searches the web for current financial headlines from trusted sites"],
+              description: "Go beyond budgets — see how the economy affects your money.",
+              features: ["Everything in Starter","Connect all your accounts — banks, cards, investments, and more", "Factor in key U.S. economic data like inflation, interest rates, mortgages, APRs, and unemployment", "Get recommendations shaped by real-world events, not just your spending"],
               popular: true
             }, {
               id: 'premium',
@@ -489,7 +489,7 @@ const NewHomepage = () => {
               price: "$28",
               period: "/month",
               description: "Your personal Bloomberg Terminal — without the $2,000/month price tag.",
-              features: ["Everything in Standard", "Live market data (CDs, Treasuries, stocks, crypto, mortgage rates)", "Real-time news feeds from 60+ trusted sources like Bloomberg and Reuters", "What-if scenario modeling", "Portfolio analysis & retirement planning", "Get notified when markets move — instantly"],
+              features: ["Everything in Standard", "Live market data: CD rates, Treasury yields, mortgage rates, stocks & crypto", "Real-time news feeds from 60+ trusted sources like Bloomberg and Reuters", "Know if your investments and retirement savings are on track", "Get notified when markets move — instantly"],
               popular: false
             }].map((plan, index) => (
               <Card key={index} className={`relative overflow-hidden hover:shadow-2xl transition-all duration-300 hover:scale-105 ${plan.popular ? 'ring-2 ring-primary shadow-xl' : ''}`}>
@@ -510,7 +510,7 @@ const NewHomepage = () => {
                   
                   <ul className="space-y-3 mt-6">
                     {plan.features.map((feature, featureIndex) => {
-                      const isHighlighted = feature.includes("Factor in economic indicators") || feature.includes("Factor in key economic indicators") || feature.includes("Pull from trusted sources") || feature.includes("Pulls the latest financial news") || feature.includes("Searches the web for current financial headlines") || feature.includes("Live market data") || feature.includes("Real-time news feeds from 60+ trusted sources");
+                      const isHighlighted = feature.includes("Factor in economic indicators") || feature.includes("Factor in key economic indicators") || feature.includes("Factor in key U.S. economic data") || feature.includes("Get recommendations shaped by real-world events") || feature.includes("Pull from trusted sources") || feature.includes("Pulls the latest financial news") || feature.includes("Searches the web for current financial headlines") || feature.includes("Live market data") || feature.includes("Real-time news feeds from 60+ trusted sources");
                       const isNewFeature = feature.includes("Get notified when markets move");
                       return (
                         <li key={featureIndex} className="flex items-center space-x-3">
@@ -538,7 +538,7 @@ const NewHomepage = () => {
                     })}
                   </ul>
                   
-                  <div className="mt-auto pt-6">
+                  <div className={`mt-auto pt-6 ${plan.id === 'premium' ? 'pt-8' : ''}`}>
                     <Button 
                       variant={plan.popular ? "hero" : "outline"} 
                       className="w-full" 
@@ -548,6 +548,18 @@ const NewHomepage = () => {
                     >
                       {isLoading === plan.id ? 'Creating...' : (plan.id === 'standard' ? 'Get Started' : `Get ${plan.name}`)}
                     </Button>
+                    
+                    {/* Data sources callout - only for Standard and Premium */}
+                    {plan.id !== 'starter' ? (
+                      <div className="mt-3 text-center">
+                        <p className="text-xs text-muted-foreground/70">
+                          {plan.id === 'standard' ? 'Included data sources: FRED, Brave Search' : 'Additional data sources: Alpha Vantage, Polygon.io'}
+                        </p>
+                      </div>
+                    ) : (
+                      /* Placeholder div to maintain button alignment for Starter plan */
+                      <div className="mt-3 h-5"></div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
