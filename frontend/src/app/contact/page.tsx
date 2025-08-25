@@ -54,8 +54,8 @@ const ContactPage = () => {
   return (
     <>
       <PageMeta 
-        title="Contact Ask Linc | Get Support & Feedback" 
-        description="Get in touch with the Ask Linc team. We're here to help with questions, feedback, and support for your AI financial assistant."
+        title="Get Help & Support | Ask Linc Customer Service" 
+        description="Need help with Ask Linc? Our support team is here to assist you. Get answers to your questions, share feedback, or report any issues with our AI financial platform."
       />
       <div className="min-h-screen bg-background">
       {/* Navigation */}

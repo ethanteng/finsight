@@ -252,8 +252,8 @@ export default function LoginPage() {
   return (
     <>
       <PageMeta 
-        title="Sign In | Ask Linc Account Access" 
-        description="Sign in to your Ask Linc account to access your personalized financial dashboard, AI-powered insights, and financial planning tools."
+        title="Access Your Account | Ask Linc Sign In" 
+        description="Welcome back to Ask Linc. Sign in to your account to access your personalized financial dashboard, continue your financial analysis, and get AI-powered money management insights."
       />
       <Suspense fallback={<div>Loading...</div>}>
         <LoginPageContent />

@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Financial Blog & Market Insights | Ask Linc',
-  description: 'Daily financial market insights, investment strategies, and economic analysis from the Ask Linc team. Stay informed with expert financial commentary.',
+  title: 'Financial Insights & Market Analysis | Ask Linc Blog',
+  description: 'Stay ahead of the financial curve with Ask Linc\'s expert blog. Get daily market analysis, investment strategies, economic insights, and personal finance tips from our financial experts.',
   openGraph: {
-    title: 'Financial Blog & Market Insights | Ask Linc',
-    description: 'Daily financial market insights, investment strategies, and economic analysis from the Ask Linc team. Stay informed with expert financial commentary.',
+    title: 'Financial Insights & Market Analysis | Ask Linc Blog',
+    description: 'Stay ahead of the financial curve with Ask Linc\'s expert blog. Get daily market analysis, investment strategies, economic insights, and personal finance tips from our financial experts.',
     type: 'website',
   },
 };

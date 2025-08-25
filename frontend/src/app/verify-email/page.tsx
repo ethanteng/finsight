@@ -238,8 +238,8 @@ export default function VerifyEmailPage() {
   return (
     <>
       <PageMeta 
-        title="Verify Email | Complete Ask Linc Account Setup" 
-        description="Verify your email address to complete your Ask Linc account setup. Enter the verification code sent to your email to get started."
+        title="Email Verification | Complete Ask Linc Setup" 
+        description="Almost there! Complete your Ask Linc account setup by verifying your email address. Enter the verification code we sent you to start using our AI financial assistant platform."
       />
       <Suspense fallback={<div>Loading...</div>}>
         <VerifyEmailPageContent />

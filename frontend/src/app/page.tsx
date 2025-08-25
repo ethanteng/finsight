@@ -6,8 +6,8 @@ export default function Home() {
   return (
     <>
       <PageMeta 
-        title="Ask Linc - AI Financial Assistant | Personalized Financial Advice" 
-        description="Get personalized financial advice powered by AI. Connect your accounts securely and get insights about your money with privacy-first technology."
+        title="Ask Linc - Revolutionary AI Financial Assistant | Personalized Money Management" 
+        description="Discover Ask Linc, the revolutionary AI financial assistant that provides personalized money management advice. Connect your accounts securely and get actionable insights to improve your financial health."
       />
       <NewHomepage />
     </>

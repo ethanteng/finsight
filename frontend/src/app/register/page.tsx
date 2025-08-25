@@ -205,8 +205,8 @@ export default function RegisterPage() {
   return (
     <>
       <PageMeta 
-        title="Create Account | Join Ask Linc Today" 
-        description="Join Ask Linc today and start your journey to better financial health. Create a free account to access AI-powered financial insights and planning tools."
+        title="Join Ask Linc | Create Your Financial Account" 
+        description="Start your financial transformation journey with Ask Linc. Create a free account today and unlock the power of AI-driven financial analysis, personalized advice, and comprehensive money management tools."
       />
       <Suspense fallback={<div>Loading...</div>}>
         <RegisterPageContent />

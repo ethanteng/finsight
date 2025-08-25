@@ -154,8 +154,8 @@ export default function PaymentSuccessPage() {
   return (
     <>
       <PageMeta 
-        title="Payment Successful | Welcome to Ask Linc" 
-        description="Welcome to Ask Linc! Your payment was successful. Start exploring your personalized financial dashboard with AI-powered insights and analysis."
+        title="Welcome to Ask Linc | Subscription Activated" 
+        description="Congratulations! Your Ask Linc subscription is now active. Welcome to the future of AI-powered financial management. Start exploring your personalized dashboard and unlock advanced financial insights."
       />
       <Suspense fallback={
         <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">

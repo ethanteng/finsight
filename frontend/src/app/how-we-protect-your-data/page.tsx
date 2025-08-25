@@ -10,8 +10,8 @@ const PrivacyPage = () => {
   return (
     <>
       <PageMeta 
-        title="Data Security & Privacy | How Ask Linc Protects You" 
-        description="Discover the advanced security measures Ask Linc uses to protect your financial information. Learn about our encryption, data handling, and privacy-first approach."
+        title="Security & Data Protection | Ask Linc Safety Measures" 
+        description="Explore Ask Linc's multi-layered security approach. From bank-level encryption to secure API connections, discover how we safeguard your financial data and maintain your privacy."
       />
       <div className="min-h-screen bg-background">
       {/* Navigation */}

@@ -10,8 +10,8 @@ const TermsPage = () => {
   return (
     <>
       <PageMeta 
-        title="Terms of Service | Ask Linc Platform Agreement" 
-        description="Read Ask Linc's terms of service. Learn about our platform usage, user responsibilities, and service agreements for our AI financial assistant."
+        title="User Agreement & Terms | Ask Linc Platform Rules" 
+        description="Review Ask Linc's terms of service and user agreement. Understand your rights, responsibilities, and the rules governing your use of our AI financial assistant platform."
       />
       <div className="min-h-screen bg-background">
       {/* Navigation */}

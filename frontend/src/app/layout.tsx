@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'Ask Linc - AI Financial Assistant | Transform Your Financial Life',
-  description: 'Transform your financial life with Ask Linc. Get personalized AI-powered financial advice, connect your accounts securely, and gain insights about your money with cutting-edge technology.',
+  description: 'Ask Linc is your AI-powered financial assistant that transforms how you manage money. Get personalized financial advice, securely connect your bank accounts, and gain real-time insights with cutting-edge AI technology.',
 }
 
 export default function RootLayout({

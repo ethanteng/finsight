@@ -584,8 +584,8 @@ export default function ProfilePage() {
   return (
     <>
       <PageMeta 
-        title="User Profile | Manage Ask Linc Account Settings" 
-        description="Manage your Ask Linc profile, update account settings, view subscription details, and control your privacy preferences."
+        title="Account Settings | Manage Ask Linc Profile" 
+        description="Take control of your Ask Linc experience. Manage your account settings, update personal information, review connected financial accounts, and customize your AI financial assistant preferences."
       />
       <div className="min-h-screen bg-gray-900 text-white">
         

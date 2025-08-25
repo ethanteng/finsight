@@ -169,8 +169,8 @@ export default function ResetPasswordPage() {
   return (
     <>
       <PageMeta 
-        title="Set New Password | Ask Linc Account Security" 
-        description="Set a new password for your Ask Linc account. Choose a strong, secure password to protect your financial information and account access."
+        title="Create New Password | Ask Linc Account Security" 
+        description="Secure your Ask Linc account with a new password. Choose a strong, unique password to protect your financial information and maintain secure access to your AI-powered financial dashboard."
       />
       <Suspense fallback={
         <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
