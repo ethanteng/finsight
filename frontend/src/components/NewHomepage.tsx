@@ -472,8 +472,8 @@ const NewHomepage = () => {
               name: "Starter",
               price: "$9",
               period: "/month",
-              description: "Smarter than spreadsheets, simpler than budgeting apps.",
-              features: ["Ask anything about your money and get clear, instant answers", "Connect your accounts — checking, savings, 401(k), and more", "See personalized suggestions to reach your goals"],
+              description: "Simpler than spreadsheets, smarter than budgeting apps.",
+              features: ["Ask anything about your money and get clear, instant answers", "Connect up to 5 accounts — like your checking, savings, credit card, 401(k), and student loans", "See personalized suggestions to reach your goals"],
               popular: false
             }, {
               id: 'standard',
@@ -489,7 +489,7 @@ const NewHomepage = () => {
               price: "$28",
               period: "/month",
               description: "Your personal Bloomberg Terminal — without the $2,000/month price tag.",
-              features: ["Everything in Standard", "Live market data: CD rates, Treasury yields, mortgage rates, stocks & crypto", "Real-time news feeds from 60+ trusted sources like Bloomberg and Reuters", "Know if your investments and retirement savings are on track", "Get notified when markets move — instantly"],
+              features: ["Everything in Standard", "Live market data: CD rates, Treasury yields, mortgage rates, stocks & crypto", "Real-time news feeds from 60+ trusted sources like Bloomberg and Reuters", "Know how your retirement timeline is impacted by the economy", "Get notified when markets move — instantly"],
               popular: false
             }].map((plan, index) => (
               <Card key={index} className={`relative overflow-hidden hover:shadow-2xl transition-all duration-300 hover:scale-105 ${plan.popular ? 'ring-2 ring-primary shadow-xl' : ''}`}>
