@@ -104,7 +104,7 @@ export default function DemoPage() {
   return (
     <>
       <PageMeta 
-        title="Try Ask Linc Demo - AI Financial Assistant" 
+        title="Try Ask Linc Demo | AI Financial Analysis Experience" 
         description="Experience Ask Linc's AI-powered financial analysis with our interactive demo. See how our platform provides personalized financial insights and advice."
       />
       <div className="min-h-screen bg-gray-900 text-white">

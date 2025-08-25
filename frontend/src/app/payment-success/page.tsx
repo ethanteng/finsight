@@ -154,7 +154,7 @@ export default function PaymentSuccessPage() {
   return (
     <>
       <PageMeta 
-        title="Payment Successful - Ask Linc" 
+        title="Payment Successful | Welcome to Ask Linc" 
         description="Welcome to Ask Linc! Your payment was successful. Start exploring your personalized financial dashboard with AI-powered insights and analysis."
       />
       <Suspense fallback={

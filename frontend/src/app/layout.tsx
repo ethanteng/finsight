@@ -5,7 +5,7 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Ask Linc - AI Financial Assistant',
+  title: 'Ask Linc - AI Financial Assistant | Transform Your Financial Life',
   description: 'Transform your financial life with Ask Linc. Get personalized AI-powered financial advice, connect your accounts securely, and gain insights about your money with cutting-edge technology.',
 }
 

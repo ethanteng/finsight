@@ -1665,7 +1665,7 @@ export default function AdminPage() {
   return (
     <>
       <PageMeta 
-        title="Admin Dashboard - Ask Linc" 
+        title="Admin Dashboard | Ask Linc Platform Management" 
         description="Administrative dashboard for Ask Linc. Manage users, monitor system performance, and oversee platform operations with comprehensive admin tools."
       />
       <div className="min-h-screen bg-gray-900 text-white p-6">

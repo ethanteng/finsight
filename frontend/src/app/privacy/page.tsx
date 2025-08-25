@@ -10,7 +10,7 @@ const PrivacyPage = () => {
   return (
     <>
       <PageMeta 
-        title="Privacy Policy - Ask Linc" 
+        title="Privacy Policy | Ask Linc Data Protection" 
         description="Learn how Ask Linc protects your privacy and handles your financial data. Our comprehensive privacy policy ensures your information stays secure and confidential."
       />
       <div className="min-h-screen bg-background">

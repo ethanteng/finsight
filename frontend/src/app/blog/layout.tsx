@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Blog - Ask Linc',
+  title: 'Financial Blog & Market Insights | Ask Linc',
   description: 'Daily financial market insights, investment strategies, and economic analysis from the Ask Linc team. Stay informed with expert financial commentary.',
   openGraph: {
-    title: 'Blog - Ask Linc',
+    title: 'Financial Blog & Market Insights | Ask Linc',
     description: 'Daily financial market insights, investment strategies, and economic analysis from the Ask Linc team. Stay informed with expert financial commentary.',
     type: 'website',
   },

@@ -46,7 +46,7 @@ export default function ForgotPasswordPage() {
   return (
     <>
       <PageMeta 
-        title="Reset Password - Ask Linc" 
+        title="Reset Password | Ask Linc Account Recovery" 
         description="Forgot your password? Reset your Ask Linc account password securely. We'll send you a reset link to get back to managing your finances."
       />
       <div className="min-h-screen bg-background">

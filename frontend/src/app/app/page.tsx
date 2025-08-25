@@ -305,7 +305,7 @@ export default function AppPage() {
   return (
     <>
       <PageMeta 
-        title="App Dashboard - Ask Linc" 
+        title="Financial Dashboard | Ask Linc - AI-Powered Insights" 
         description="Access your personalized financial dashboard with AI-powered insights, account analysis, and financial planning tools."
       />
       <div className="min-h-screen bg-gray-900 text-white">

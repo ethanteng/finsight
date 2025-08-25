@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import BlogSubscription from '@/components/BlogSubscription';
+import type { Metadata } from 'next';
 
 export const revalidate = 60; // Revalidate every minute
 
@@ -19,6 +20,28 @@ async function getPost(slug: string): Promise<GhostPost | null> {
     console.error('Error fetching post:', error);
     return null;
   }
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const post = await getPost(slug);
+
+  if (!post || !post.title) {
+    return {
+      title: 'Blog Post | Ask Linc',
+      description: 'Read the latest financial insights and market analysis from Ask Linc.',
+    };
+  }
+
+  return {
+    title: `${post.title} | Ask Linc Financial Blog`,
+    description: post.excerpt || `Read ${post.title} on Ask Linc's financial blog. Get expert insights on markets, investments, and personal finance.`,
+    openGraph: {
+      title: `${post.title} | Ask Linc`,
+      description: post.excerpt || `Read ${post.title} on Ask Linc's financial blog.`,
+      type: 'article',
+    },
+  };
 }
 
 export default async function BlogPostPage({ params }: { params: Promise<{ slug: string }> }) {

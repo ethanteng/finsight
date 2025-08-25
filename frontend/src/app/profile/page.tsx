@@ -584,7 +584,7 @@ export default function ProfilePage() {
   return (
     <>
       <PageMeta 
-        title="User Profile - Ask Linc" 
+        title="User Profile | Manage Ask Linc Account Settings" 
         description="Manage your Ask Linc profile, update account settings, view subscription details, and control your privacy preferences."
       />
       <div className="min-h-screen bg-gray-900 text-white">
