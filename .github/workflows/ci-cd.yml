@@ -476,7 +476,7 @@ jobs:
           # Retry npm ci with exponential backoff for network issues
           for i in 1 2 3; do
             echo "Attempt $i of 3: Installing dependencies..."
-            npm ci --prefer-offline --no-audit || {
+            npm ci --prefer-offline --no-audit --include=dev || {
               if [ $i -eq 3 ]; then
                 echo "Failed to install dependencies after 3 attempts"
                 exit 1
