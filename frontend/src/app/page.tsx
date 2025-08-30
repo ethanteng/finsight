@@ -2,8 +2,9 @@ import NewHomepage from '../components/NewHomepage';
 import type { Metadata } from 'next';
 
 // Dynamic metadata generation based on query parameters
-export async function generateMetadata({ searchParams }: { searchParams: { ref?: string } }): Promise<Metadata> {
-  const ref = searchParams.ref;
+export async function generateMetadata({ searchParams }: { searchParams: Promise<{ ref?: string }> }): Promise<Metadata> {
+  const params = await searchParams;
+  const ref = params.ref;
   
   let description = 'Discover Ask Linc, the revolutionary AI financial assistant that provides personalized money management advice. Connect your accounts securely and get actionable insights to improve your financial health.';
   
