@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import ProfileContent from '../../components/ProfileContent';
+import UserProfile from '../../components/UserProfile';
 
 export const metadata: Metadata = {
   title: 'Your Profile | Ask Linc Account Settings & Connections',
@@ -7,5 +7,5 @@ export const metadata: Metadata = {
 };
 
 export default function ProfilePage() {
-  return <ProfileContent />;
+  return <UserProfile />;
 } 
