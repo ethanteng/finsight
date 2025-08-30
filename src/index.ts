@@ -1808,6 +1808,24 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
+    // Admin endpoint to check access
+    app.get('/admin/check-access', adminAuth, async (req: Request, res: Response) => {
+      try {
+        // If we get here, the user has admin access (adminAuth middleware passed)
+        res.json({ 
+          user: { 
+            email: req.user?.email,
+            id: req.user?.id,
+            tier: req.user?.tier
+          },
+          access: 'granted'
+        });
+      } catch (error) {
+        console.error('Error in admin check-access endpoint:', error);
+        res.status(500).json({ error: 'Failed to check admin access' });
+      }
+    });
+
     // Admin endpoints for demo data analysis
     app.get('/admin/demo-sessions', adminAuth, async (req: Request, res: Response) => {
       try {
