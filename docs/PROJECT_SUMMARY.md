@@ -14,6 +14,7 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
 - **AI Integration**: OpenAI GPT-4 for financial analysis
 - **External APIs**: 
   - Plaid (banking data)
+  - **SnapTrade** (investment account management)
   - FRED (economic indicators)
   - Alpha Vantage (market data)
   - **Brave Search API** (real-time financial information)
@@ -352,7 +353,18 @@ The demo system now includes a comprehensive financial profile that demonstrates
     - Source attribution and transparency
     - Tier-aware access control
 
-### **4. Tier-Based Access Control**
+### **4. SnapTrade Investment Integration**
+
+- **Purpose**: Comprehensive investment account management and analysis
+- **Features**:
+    - Investment account connection and management
+    - Real-time portfolio holdings and balances
+    - Investment transaction history and analysis
+    - Multi-broker support through SnapTrade platform
+    - Secure user authentication and data protection
+    - Integration with AI financial analysis
+
+### **5. Tier-Based Access Control**
 
 - **Tiers**: Starter, Standard, Premium
 - **Features**:
@@ -1220,6 +1232,207 @@ npm run test:integration
 npm run test:integration -- src/__tests__/integration/enhanced-market-context-api.test.ts
 ```
 
+## 📈 **SnapTrade Investment Integration System**
+
+### **Overview**
+
+The platform includes a comprehensive SnapTrade integration that enables users to connect, manage, and analyze their investment accounts across multiple brokers. This system provides real-time portfolio data, transaction history, and seamless integration with the AI financial analysis engine.
+
+### **Core Features**
+
+#### **1. Investment Account Management**
+- **Multi-Broker Support**: Connect investment accounts from various brokers through SnapTrade's unified platform
+- **Account Discovery**: Automatic detection and listing of available investment accounts
+- **Real-Time Balances**: Live portfolio values and account balances
+- **Account Status Tracking**: Monitor connection status and sync health
+
+#### **2. Portfolio Holdings Analysis**
+- **Comprehensive Holdings**: View all investment positions across connected accounts
+- **Real-Time Values**: Current market values and performance tracking
+- **Asset Allocation**: Portfolio composition and diversification analysis
+- **Position Details**: Individual security holdings with quantities and values
+
+#### **3. Investment Transaction History**
+- **Complete Activity Log**: All investment transactions including buys, sells, dividends, and transfers
+- **Account-Specific Activities**: Transaction history organized by account
+- **Transaction Details**: Comprehensive transaction information with dates, amounts, and securities
+- **Performance Tracking**: Historical transaction analysis for investment performance
+
+#### **4. Secure Authentication & Data Protection**
+- **User Registration**: Secure SnapTrade user registration with unique user secrets
+- **OAuth Integration**: Secure login flow with redirect URI management
+- **Data Encryption**: All sensitive investment data encrypted at rest
+- **User Isolation**: Complete data isolation between users
+
+### **Technical Implementation**
+
+#### **SnapTrade Service Architecture**
+
+```typescript
+export class SnapTradeService {
+  // User management
+  async registerUser(userId: string): Promise<RegistrationResult>
+  async getUserStatus(userId: string): Promise<UserStatus>
+  async deleteUser(userId: string): Promise<DeletionResult>
+  
+  // Authentication
+  async getLoginRedirect(userId: string, userSecret: string): Promise<LoginResult>
+  
+  // Data retrieval
+  async getUserAccounts(userId: string, userSecret: string): Promise<AccountsResult>
+  async getUserHoldings(userId: string, userSecret: string): Promise<HoldingsResult>
+  async getUserActivities(userId: string, userSecret: string): Promise<ActivitiesResult>
+  
+  // Health monitoring
+  async healthCheck(): Promise<boolean>
+}
+```
+
+#### **Database Schema**
+
+```sql
+-- SnapTrade User Management
+CREATE TABLE "snaptrade_users" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL UNIQUE,           -- Our system's user ID
+    "snapTradeUserId" TEXT NOT NULL UNIQUE,  -- SnapTrade's user ID
+    "userSecret" TEXT NOT NULL,              -- SnapTrade authentication secret
+    "status" TEXT NOT NULL DEFAULT 'registered',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    
+    CONSTRAINT "snaptrade_users_pkey" PRIMARY KEY ("id")
+);
+
+-- Foreign key relationship to users table
+ALTER TABLE "snaptrade_users" 
+ADD CONSTRAINT "snaptrade_users_userId_fkey" 
+FOREIGN KEY ("userId") REFERENCES "users"("id") 
+ON DELETE CASCADE ON UPDATE CASCADE;
+```
+
+#### **API Endpoints**
+
+| Endpoint | Method | Purpose | Authentication |
+|----------|--------|---------|----------------|
+| `/snaptrade/status` | GET | Service health check | None |
+| `/snaptrade/status/user` | GET | User's SnapTrade status | Required |
+| `/snaptrade/init` | POST | Initialize SnapTrade for user | Required |
+| `/snaptrade/login` | POST | Get login redirect URI | Required |
+| `/snaptrade/accounts` | GET | Get user investment accounts | Required |
+| `/snaptrade/holdings` | GET | Get portfolio holdings | Required |
+| `/snaptrade/activities` | GET | Get investment transactions | Required |
+| `/snaptrade/delete` | DELETE | Delete SnapTrade user | Required |
+
+### **Integration with AI Financial Analysis**
+
+#### **Enhanced Financial Insights**
+- **Portfolio Analysis**: AI analyzes investment holdings for diversification and risk assessment
+- **Performance Insights**: Historical performance analysis with market context
+- **Investment Recommendations**: AI-powered suggestions based on portfolio composition
+- **Goal-Based Planning**: Investment advice aligned with financial goals
+
+#### **Unified Financial Picture**
+- **Complete Net Worth**: Combines banking (Plaid) and investment (SnapTrade) data
+- **Cross-Account Analysis**: AI considers both cash and investment positions
+- **Comprehensive Planning**: Financial advice incorporating all asset types
+- **Risk Assessment**: Portfolio risk analysis across all connected accounts
+
+### **Security & Privacy Features**
+
+#### **Data Protection**
+- **Encryption at Rest**: All SnapTrade data encrypted using AES-256-GCM
+- **Secure Authentication**: JWT-based authentication with SnapTrade user secrets
+- **User Isolation**: Complete data separation between users
+- **API Security**: All endpoints require valid authentication
+
+#### **Privacy Controls**
+- **Data Anonymization**: Investment data anonymized for AI processing
+- **User Control**: Users can disconnect and delete SnapTrade data
+- **Audit Trail**: Complete logging of all SnapTrade operations
+- **Compliance**: GDPR and financial data protection compliance
+
+### **Environment Configuration**
+
+#### **Development & Production Setup**
+```bash
+# SnapTrade Configuration
+SNAPTRADE_MODE=sandbox                    # or 'production'
+SNAPTRADE_CLIENT_ID=your_client_id
+SNAPTRADE_CONSUMER_KEY=your_consumer_key
+
+# Production overrides
+SNAPTRADE_CLIENT_ID_PROD=prod_client_id
+SNAPTRADE_CONSUMER_KEY_PROD=prod_consumer_key
+SNAPTRADE_ENV_PROD=production
+```
+
+#### **Test Environment Safety**
+- **Mock Implementation**: Complete mock SnapTrade service for testing
+- **Database Isolation**: Test database with SnapTrade user management
+- **API Safety**: No real SnapTrade API calls in test/CI environments
+- **Comprehensive Testing**: Full workflow testing with mock data
+
+### **User Workflow**
+
+#### **1. Initial Setup**
+1. User registers with the platform
+2. User initiates SnapTrade connection
+3. System registers user with SnapTrade
+4. User receives login redirect URI
+5. User completes SnapTrade authentication
+
+#### **2. Account Connection**
+1. User authenticates with SnapTrade
+2. System retrieves available investment accounts
+3. Accounts are linked to user profile
+4. Real-time data synchronization begins
+
+#### **3. Data Analysis**
+1. System retrieves portfolio holdings
+2. Investment transactions are fetched
+3. Data is integrated with AI analysis
+4. User receives comprehensive financial insights
+
+#### **4. Ongoing Management**
+1. Regular data synchronization
+2. Portfolio performance monitoring
+3. AI-powered investment insights
+4. User can manage connections and data
+
+### **Benefits for Users**
+
+#### **Comprehensive Financial Management**
+- **Unified Dashboard**: All financial accounts in one place
+- **Real-Time Updates**: Live portfolio and account data
+- **AI-Powered Insights**: Intelligent analysis of investment performance
+- **Goal Tracking**: Investment progress toward financial goals
+
+#### **Professional-Grade Analysis**
+- **Portfolio Optimization**: AI recommendations for better diversification
+- **Risk Assessment**: Comprehensive risk analysis across all investments
+- **Performance Tracking**: Historical performance with market context
+- **Tax Optimization**: Investment tax strategy recommendations
+
+### **Implementation Status**
+
+✅ **Complete Implementation**: All SnapTrade features successfully implemented
+✅ **Database Integration**: SnapTrade user management fully integrated
+✅ **API Endpoints**: All SnapTrade endpoints implemented and tested
+✅ **Security Features**: Complete authentication and data protection
+✅ **AI Integration**: Investment data integrated with financial analysis
+✅ **Testing Coverage**: Comprehensive test suite with mock implementations
+✅ **Documentation**: Complete API and integration documentation
+
+### **Future Enhancements**
+
+#### **Planned Features**
+- **Advanced Analytics**: More sophisticated portfolio analysis algorithms
+- **Tax Optimization**: Enhanced tax-loss harvesting recommendations
+- **Rebalancing**: Automated portfolio rebalancing suggestions
+- **Market Timing**: AI-powered market timing insights
+- **Social Features**: Investment community and sharing features
+
 ---
 
-**This summary provides a comprehensive overview of the Ask Linc platform, including the sophisticated RAG system implementation that sets it apart from traditional financial apps. The platform now offers real-time financial intelligence with privacy protection, comprehensive demo capabilities, holistic coverage of all financial institutions and products, and a powerful admin dashboard for complete system management.** 
+**This summary provides a comprehensive overview of the Ask Linc platform, including the sophisticated RAG system implementation and comprehensive SnapTrade investment integration that sets it apart from traditional financial apps. The platform now offers real-time financial intelligence with privacy protection, comprehensive demo capabilities, holistic coverage of all financial institutions and products, investment account management, and a powerful admin dashboard for complete system management.** 
