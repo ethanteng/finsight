@@ -481,15 +481,31 @@ export async function askOpenAIWithEnhancedContext(
               // Fetch SnapTrade holdings
               const holdingsResult = await snapTradeService.getUserHoldings(userId, snapTradeUser.userSecret);
               if (holdingsResult.success && holdingsResult.data) {
-                snapTradeData = holdingsResult.data;
-                console.log('OpenAI Enhanced: Fetched SnapTrade holdings:', snapTradeData.length, 'holdings');
+                // Extract individual positions from account-level data
+                const allPositions = [];
+                for (const account of holdingsResult.data) {
+                  if (account.positions && Array.isArray(account.positions)) {
+                    // Add account info to each position
+                    const accountPositions = account.positions.map((position: any) => ({
+                      ...position,
+                      account_name: account.account?.name || 'Unknown Account',
+                      account_number: account.account?.number || '',
+                      institution: account.account?.institution || 'SnapTrade'
+                    }));
+                    allPositions.push(...accountPositions);
+                  }
+                }
+                snapTradeData = allPositions;
+                console.log('OpenAI Enhanced: Fetched SnapTrade holdings:', snapTradeData.length, 'positions');
+                console.log('OpenAI Enhanced: Sample SnapTrade position structure:', snapTradeData[0]);
               }
               
               // Fetch SnapTrade activities
               const activitiesResult = await snapTradeService.getUserActivities(userId, snapTradeUser.userSecret);
-              if (activitiesResult.success && activitiesResult.data) {
-                snapTradeActivities = activitiesResult.data;
+              if (activitiesResult.success && activitiesResult.data && activitiesResult.data.activities) {
+                snapTradeActivities = activitiesResult.data.activities;
                 console.log('OpenAI Enhanced: Fetched SnapTrade activities:', snapTradeActivities.length, 'activities');
+                console.log('OpenAI Enhanced: Sample SnapTrade activity structure:', snapTradeActivities[0]);
               }
             } else {
               console.log('OpenAI Enhanced: No SnapTrade user found or no userSecret available');
@@ -799,7 +815,9 @@ ${anonymizeInvestmentData(holdings.slice(0, 10))}`;
     } else {
       investmentSummary = 'INVESTMENT DATA:\n';
     }
-    investmentSummary += anonymizeSnapTradeData(snapTradeData || [], snapTradeActivities || []);
+    const snapTradeSummary = anonymizeSnapTradeData(snapTradeData || [], snapTradeActivities || []);
+    investmentSummary += snapTradeSummary;
+    console.log('OpenAI Enhanced: SnapTrade summary added to investment data:', snapTradeSummary.substring(0, 200));
   }
 
   console.log('OpenAI Enhanced: Account summary for AI:', accountSummary);
@@ -1267,7 +1285,7 @@ Recent Transactions:
 ${transactionSummary || 'No transactions found'}
 
 ${investmentSummary ? `INVESTMENT DATA:
-${investmentSummary}` : 'No investment data available (upgrade to Standard tier)'}
+${investmentSummary}` : 'No investment data available'}
 
 CRITICAL DATA INTERPRETATION RULES:
 - For credit card accounts: The "balance" field shows the OUTSTANDING BALANCE (money owed), NOT the credit limit
@@ -1329,6 +1347,12 @@ INSTRUCTIONS:
 - ALWAYS reference relevant previous conversation context when providing new insights
 - When new information allows you to complete a previous incomplete analysis, proactively offer to do so
 - Build comprehensive insights by connecting information across conversation turns
+- IMPORTANT: If investment data is provided in the INVESTMENT DATA section above, you CAN and SHOULD use it to answer questions about the user's investments, regardless of their tier level
+- The tier limitations only apply to external data sources (like market data, economic indicators), not to the user's own connected investment data
+- CRITICAL: When you see "SnapTrade Holdings" in the investment data, these are the user's actual investment holdings and you MUST reference them specifically when answering questions about their investments
+- CRITICAL: If the user asks about Treasuries and you see Treasury-related holdings in the investment data, you MUST provide specific information about those holdings rather than giving generic advice
+- CRITICAL: Treasury securities are identified by symbols like "912797PV3-BOND" or descriptions like "UST 0.0% 03/19/2026" - when you see these in the investment data, they are Treasury securities and you MUST acknowledge them specifically
+- CRITICAL: If you see holdings with "UST" (US Treasury) or bond symbols in the investment data, these are Treasury securities and you should provide specific analysis of these holdings
 
 RESPONSE FORMATTING:
 - Use **bold** only for main section headers (e.g., "**Financial Overview**", "**Recommendations**")
