@@ -81,6 +81,10 @@ export class SnapTradeService {
       const userSecret = registration.data.userSecret;
       console.log('🔍 SnapTrade registration successful, userSecret generated');
       
+      if (!userSecret) {
+        throw new Error('No userSecret received from SnapTrade registration');
+      }
+      
       // Store in database
       const db = getPrismaClient();
       await db.snapTradeUser.create({
