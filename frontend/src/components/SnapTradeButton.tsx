@@ -30,6 +30,14 @@ export default function SnapTradeButton() {
     checkSnapTradeStatus();
   }, []);
 
+  // Auto-initialize SnapTrade if not already initialized
+  useEffect(() => {
+    if (status === 'not_initialized' && !isInitializing) {
+      console.log('Auto-initializing SnapTrade...');
+      initializeSnapTrade();
+    }
+  }, [status, isInitializing]);
+
   useEffect(() => {
     if (snapTradeStatus?.status === 'registered') {
       checkConnectedAccounts();
@@ -219,7 +227,7 @@ export default function SnapTradeButton() {
       case 'not_authenticated':
         return 'Please log in';
       case 'not_initialized':
-        return isInitializing ? 'Initializing...' : 'Initialize SnapTrade';
+        return isInitializing ? 'Initializing...' : 'Setting up SnapTrade...';
       case 'registered':
         return isInitializing ? 'Connecting...' : 'Connect Account';
       case 'connected':
@@ -241,6 +249,7 @@ export default function SnapTradeButton() {
       case 'error':
         return 'bg-red-600 hover:bg-red-700 text-white';
       case 'loading':
+      case 'not_initialized':
         return 'bg-gray-600 cursor-not-allowed text-gray-300';
       default:
         return 'bg-blue-600 hover:bg-blue-700 text-white';
@@ -248,11 +257,11 @@ export default function SnapTradeButton() {
   };
 
   const isButtonDisabled = () => {
-    return status === 'loading' || isInitializing || status === 'not_authenticated';
+    return status === 'loading' || isInitializing || status === 'not_authenticated' || status === 'not_initialized';
   };
 
   const handleClick = () => {
-    if (status === 'not_initialized' || status === 'error') {
+    if (status === 'error') {
       initializeSnapTrade();
     } else if (status === 'registered') {
       connectSnapTrade();

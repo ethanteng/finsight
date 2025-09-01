@@ -769,7 +769,7 @@ export default function ProfilePage() {
       if (plaidResponse.ok && snapTradeResponse.ok) {
         setDeleteMessage('All your accounts (Plaid and SnapTrade) have been successfully disconnected.');
       } else if (plaidResponse.ok) {
-        setDeleteMessage('Your Plaid accounts have been disconnected. Some SnapTrade accounts may still be connected.');
+        setDeleteMessage('All your financial accounts have been disconnected.');
       } else if (snapTradeResponse.ok) {
         setDeleteMessage('Your SnapTrade accounts have been disconnected. Some Plaid accounts may still be connected.');
       } else {
@@ -953,7 +953,7 @@ export default function ProfilePage() {
                   {error}
                 </div>
               ) : connectedAccounts.length === 0 ? (
-                <div className="text-gray-400">
+                <div className="text-gray-400 text-sm">
                   No accounts connected yet. Use the button above to connect your first account.
                 </div>
               ) : (
@@ -1002,6 +1002,7 @@ export default function ProfilePage() {
           <div className="bg-gray-800 rounded-lg p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4">Your Connected Accounts (SnapTrade)</h2>
             <SnapTradeButton />
+            <p className="text-gray-400 text-sm mt-4">No accounts connected yet. Use the button above to connect your first account.</p>
           </div>
 
           {/* NEW: Enhanced Investment Portfolio Section */}
