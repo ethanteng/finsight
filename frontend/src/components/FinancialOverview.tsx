@@ -15,6 +15,16 @@ interface Account {
   };
 }
 
+interface SnapTradeAccount {
+  id: string;
+  name: string;
+  type: string;
+  institution: string;
+  balance: number;
+  accountNumber: string;
+  syncStatus: string;
+}
+
 interface InvestmentData {
   portfolio: {
     totalValue: number;
@@ -34,6 +44,7 @@ interface FinancialOverviewProps {
 
 export default function FinancialOverview({ isDemo = false }: FinancialOverviewProps) {
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [snapTradeAccounts, setSnapTradeAccounts] = useState<SnapTradeAccount[]>([]);
   const [investmentData, setInvestmentData] = useState<InvestmentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -64,7 +75,7 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
           }
         }
 
-        // Load accounts
+        // Load Plaid accounts
         const accountsRes = await fetch(`${API_URL}/plaid/all-accounts`, {
           headers,
         });
@@ -73,9 +84,37 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
           const accountsData = await accountsRes.json();
           setAccounts(accountsData.accounts || []);
         } else {
-          console.error('Failed to load accounts:', accountsRes.status);
+          console.error('Failed to load Plaid accounts:', accountsRes.status);
           // Set accounts to empty array if fetch fails
           setAccounts([]);
+        }
+
+        // Load SnapTrade accounts (only for authenticated users, not demo)
+        if (!isDemo) {
+          try {
+            console.log('Fetching SnapTrade accounts...');
+            const snapTradeRes = await fetch(`${API_URL}/snaptrade/accounts`, {
+              headers,
+            });
+
+            console.log('SnapTrade response status:', snapTradeRes.status);
+            if (snapTradeRes.ok) {
+              const snapTradeData = await snapTradeRes.json();
+              console.log('SnapTrade response data:', snapTradeData);
+              if (snapTradeData.success && snapTradeData.data?.accounts) {
+                setSnapTradeAccounts(snapTradeData.data.accounts);
+                console.log('SnapTrade accounts loaded:', snapTradeData.data.accounts);
+              } else {
+                console.log('SnapTrade response not successful or no accounts:', snapTradeData);
+              }
+            } else {
+              console.log('Failed to load SnapTrade accounts:', snapTradeRes.status);
+              // Don't set error as this is optional
+            }
+          } catch (snapTradeError) {
+            console.log('Error loading SnapTrade accounts:', snapTradeError);
+            // Don't set error as this is optional
+          }
         }
 
         // Load investment data
@@ -110,6 +149,11 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
     let totalInvestments = 0;
     let uncategorizedAccounts = 0;
 
+    console.log('Calculating totals...');
+    console.log('Plaid accounts:', accounts);
+    console.log('SnapTrade accounts:', snapTradeAccounts);
+
+    // Process Plaid accounts
     accounts.forEach(account => {
       // ✅ FIX: Use the correct balance field based on account type
       let balance;
@@ -191,16 +235,46 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
       }
     });
 
+    // Process SnapTrade accounts
+    snapTradeAccounts.forEach(account => {
+      // SnapTrade accounts have balance as a direct field, not nested like Plaid
+      const balance = account.balance || 0;
+      
+      console.log('Processing SnapTrade account:', account.name, 'balance:', balance, 'type:', account.type);
+      
+      // SnapTrade accounts are typically investment accounts (brokerage, treasury, etc.)
+      // Add them to total investments
+      totalInvestments += Math.max(0, balance);
+    });
+
+    console.log('After processing SnapTrade accounts - totalInvestments:', totalInvestments);
+
     // Add investment portfolio value if available
     if (investmentData?.portfolio?.totalValue) {
-      totalInvestments = investmentData.portfolio.totalValue;
+      console.log('Investment data portfolio value:', investmentData.portfolio.totalValue);
+      console.log('Calculated totalInvestments before override:', totalInvestments);
+      
+      // If we have SnapTrade accounts, use the sum of both
+      // If no SnapTrade accounts, use the Plaid investment value
+      if (snapTradeAccounts.length > 0) {
+        console.log('SnapTrade accounts found - using sum of Plaid investment value and SnapTrade accounts');
+        // Don't double-count - use the investment data value plus SnapTrade accounts
+        const plaidInvestmentValue = investmentData.portfolio.totalValue;
+        const snapTradeValue = snapTradeAccounts.reduce((sum, account) => sum + (account.balance || 0), 0);
+        totalInvestments = plaidInvestmentValue + snapTradeValue;
+        console.log('Combined total: Plaid investment value', plaidInvestmentValue, '+ SnapTrade value', snapTradeValue, '=', totalInvestments);
+      } else {
+        console.log('No SnapTrade accounts - using Plaid investment value as total');
+        totalInvestments = investmentData.portfolio.totalValue;
+      }
     }
 
+    console.log('Final totals - totalCash:', totalCash, 'totalDebt:', totalDebt, 'totalInvestments:', totalInvestments);
     return { totalCash, totalDebt, totalInvestments, uncategorizedAccounts };
   };
 
   const { totalCash, totalDebt, totalInvestments, uncategorizedAccounts } = calculateTotals();
-  const hasAccounts = accounts.length > 0;
+  const hasAccounts = accounts.length > 0 || snapTradeAccounts.length > 0;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -299,7 +373,7 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
         <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
           <div className="bg-blue-800 rounded p-2">
             <div className="text-blue-300">Accounts</div>
-            <div className="text-white font-medium">{accounts.length}</div>
+            <div className="text-white font-medium">{accounts.length + snapTradeAccounts.length}</div>
           </div>
           
           {investmentData?.portfolio && (

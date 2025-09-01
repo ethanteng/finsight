@@ -155,6 +155,8 @@ export async function askOpenAIWithEnhancedContext(
   // Convert string tier to enum if needed
   const tier = typeof userTier === 'string' ? (userTier as UserTier) : userTier;
 
+  console.log('🚀 askOpenAIWithEnhancedContext called with question:', question.substring(0, 50) + '...');
+  console.log('🚀 User ID:', userId, 'Tier:', tier, 'Demo:', isDemo);
   console.log('OpenAI Enhanced: Starting enhanced context request for tier:', tier, 'isDemo:', isDemo);
 
   // Get user-specific data
@@ -790,34 +792,113 @@ export async function askOpenAIWithEnhancedContext(
 
   // Create investment summary
   let investmentSummary = '';
+  
+  // Combine Plaid and SnapTrade data for unified portfolio composition
+  let combinedPortfolioValue = 0;
+  let combinedHoldings = [];
+  let combinedAssetAllocation = new Map();
+  
+  // Add Plaid investment data
   if (investmentData) {
     const { portfolio, holdings } = investmentData;
+    combinedPortfolioValue += portfolio.totalValue;
+    combinedHoldings.push(...holdings);
     
-    // Portfolio overview (keep totals but anonymize individual holdings)
+    // Add Plaid asset allocation
+    portfolio.assetAllocation.forEach((allocation: any) => {
+      const currentValue = combinedAssetAllocation.get(allocation.type) || 0;
+      combinedAssetAllocation.set(allocation.type, currentValue + allocation.value);
+    });
+  }
+  
+  // Add SnapTrade data to portfolio composition
+  console.log('🔍 Processing SnapTrade data for portfolio composition...');
+  console.log('🔍 SnapTrade data available:', snapTradeData ? snapTradeData.length : 0, 'positions');
+  
+  if (snapTradeData && snapTradeData.length > 0) {
+    snapTradeData.forEach((position: any) => {
+      // Calculate value: units * price
+      const value = (position.units || 0) * (position.price || 0);
+      console.log('🔍 Processing SnapTrade position:', position.symbol?.symbol?.description || position.symbol?.symbol?.symbol, 'value:', value);
+      combinedPortfolioValue += value;
+      
+      // Create a holding object for consistency
+      const holding = {
+        ...position,
+        value: value,
+        name: position.symbol?.symbol?.description || position.symbol?.symbol?.symbol || 'Unknown',
+        type: position.symbol?.symbol?.type?.description || 'Unknown'
+      };
+      combinedHoldings.push(holding);
+      
+      // Categorize by security type
+      let assetType = 'Fixed Income'; // Default for treasuries
+      if (position.symbol?.symbol?.type?.description) {
+        const typeDesc = position.symbol.symbol.type.description.toLowerCase();
+        if (typeDesc.includes('bond') || typeDesc.includes('treasury')) {
+          assetType = 'Fixed Income';
+        } else if (typeDesc.includes('equity') || typeDesc.includes('stock')) {
+          assetType = 'Equity';
+        } else if (typeDesc.includes('etf')) {
+          assetType = 'ETF';
+        } else if (typeDesc.includes('mutual fund')) {
+          assetType = 'Mutual Funds';
+        } else {
+          assetType = 'Other';
+        }
+      } else if (position.symbol?.symbol?.symbol) {
+        // Fallback: categorize by symbol
+        const symbol = position.symbol.symbol.symbol.toUpperCase();
+        if (symbol.includes('TREASURY') || symbol.includes('TIPS') || symbol.includes('BOND')) {
+          assetType = 'Fixed Income';
+        } else if (symbol.includes('ETF')) {
+          assetType = 'ETF';
+        } else {
+          assetType = 'Equity';
+        }
+      }
+      
+      const currentValue = combinedAssetAllocation.get(assetType) || 0;
+      combinedAssetAllocation.set(assetType, currentValue + value);
+      console.log('🔍 Added to', assetType, ':', value, 'Total now:', currentValue + value);
+    });
+    
+    console.log('🔍 Final combined portfolio value:', combinedPortfolioValue);
+    console.log('🔍 Final asset allocation:', Array.from(combinedAssetAllocation.entries()));
+  }
+  
+  // Create unified portfolio summary
+  if (combinedPortfolioValue > 0) {
+    const assetAllocationArray = Array.from(combinedAssetAllocation.entries()).map(([type, value]) => ({
+      type,
+      value,
+      percentage: (value / combinedPortfolioValue) * 100
+    }));
+    
     investmentSummary += `Portfolio Overview:
-- Total Value: $${portfolio.totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-- Number of Holdings: ${portfolio.holdingCount}
-- Number of Securities: ${portfolio.securityCount}
+- Total Value: $${combinedPortfolioValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+- Number of Holdings: ${combinedHoldings.length}
+- Number of Securities: ${combinedHoldings.length}
 
-Asset Allocation:
-${portfolio.assetAllocation.map((allocation: any) => 
+Portfolio Composition:
+${assetAllocationArray.map((allocation: any) => 
   `- ${allocation.type}: $${allocation.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${allocation.percentage.toFixed(1)}%)`
 ).join('\n')}
 
 Top Holdings:
-${anonymizeInvestmentData(holdings.slice(0, 10))}`;
+${anonymizeInvestmentData(combinedHoldings.slice(0, 10))}`;
   }
 
-  // Add SnapTrade data to investment summary if available
-  if (snapTradeData || snapTradeActivities) {
+  // Add SnapTrade activities if available
+  if (snapTradeActivities && snapTradeActivities.length > 0) {
     if (investmentSummary) {
       investmentSummary += '\n\n';
     } else {
       investmentSummary = 'INVESTMENT DATA:\n';
     }
-    const snapTradeSummary = anonymizeSnapTradeData(snapTradeData || [], snapTradeActivities || []);
-    investmentSummary += snapTradeSummary;
-    console.log('OpenAI Enhanced: SnapTrade summary added to investment data:', snapTradeSummary.substring(0, 200));
+    const snapTradeActivitiesSummary = anonymizeSnapTradeData([], snapTradeActivities);
+    investmentSummary += snapTradeActivitiesSummary;
+    console.log('OpenAI Enhanced: SnapTrade activities added to investment data:', snapTradeActivitiesSummary.substring(0, 200));
   }
 
   console.log('OpenAI Enhanced: Account summary for AI:', accountSummary);
