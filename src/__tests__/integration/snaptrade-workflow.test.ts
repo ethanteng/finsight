@@ -74,8 +74,13 @@ describe('SnapTrade Workflow Integration Tests', () => {
     // Clean up before each test
     await testPrisma.snapTradeUser.deleteMany();
     await testPrisma.user.deleteMany();
-    await mainPrisma.snapTradeUser.deleteMany();
-    await mainPrisma.user.deleteMany();
+    try {
+      await mainPrisma.snapTradeUser.deleteMany();
+      await mainPrisma.user.deleteMany();
+    } catch (error) {
+      // Main database might not be available or have different schema
+      console.log('Main database cleanup skipped:', error instanceof Error ? error.message : 'Unknown error');
+    }
 
     // Create test user in both databases
     testUser = await mainPrisma.user.create({
@@ -102,8 +107,13 @@ describe('SnapTrade Workflow Integration Tests', () => {
     // Clean up after each test
     await testPrisma.snapTradeUser.deleteMany();
     await testPrisma.user.deleteMany();
-    await mainPrisma.snapTradeUser.deleteMany();
-    await mainPrisma.user.deleteMany();
+    try {
+      await mainPrisma.snapTradeUser.deleteMany();
+      await mainPrisma.user.deleteMany();
+    } catch (error) {
+      // Main database might not be available or have different schema
+      console.log('Main database cleanup skipped:', error instanceof Error ? error.message : 'Unknown error');
+    }
   });
 
   describe('Complete SnapTrade User Workflow', () => {

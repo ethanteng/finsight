@@ -28,18 +28,23 @@ describe('Real Plaid Security Tests', () => {
     await testPrisma.userProfile.deleteMany();
     await testPrisma.user.deleteMany();
     
-    // Also clean up main database
-    await mainPrisma.encryptedEmailVerificationCode.deleteMany();
-    await mainPrisma.encryptedUserData.deleteMany();
-    await mainPrisma.encrypted_profile_data.deleteMany();
-    await mainPrisma.demoConversation.deleteMany();
-    await mainPrisma.demoSession.deleteMany();
-    await mainPrisma.accessToken.deleteMany();
-    await mainPrisma.syncStatus.deleteMany();
-    await mainPrisma.passwordResetToken.deleteMany();
-    await mainPrisma.emailVerificationCode.deleteMany();
-    await mainPrisma.userProfile.deleteMany();
-    await mainPrisma.user.deleteMany();
+    // Also clean up main database (with error handling)
+    try {
+      await mainPrisma.encryptedEmailVerificationCode.deleteMany();
+      await mainPrisma.encryptedUserData.deleteMany();
+      await mainPrisma.encrypted_profile_data.deleteMany();
+      await mainPrisma.demoConversation.deleteMany();
+      await mainPrisma.demoSession.deleteMany();
+      await mainPrisma.accessToken.deleteMany();
+      await mainPrisma.syncStatus.deleteMany();
+      await mainPrisma.passwordResetToken.deleteMany();
+      await mainPrisma.emailVerificationCode.deleteMany();
+      await mainPrisma.userProfile.deleteMany();
+      await mainPrisma.user.deleteMany();
+    } catch (error) {
+      // Main database might not have all tables or might be in different state
+      console.log('Main database cleanup skipped:', error instanceof Error ? error.message : 'Unknown error');
+    }
 
     // Create real test users with real authentication
     const passwordHash = await hashPassword('password123');
@@ -63,25 +68,30 @@ describe('Real Plaid Security Tests', () => {
       })
     });
     
-    // Also create users in main database for authentication middleware
-    await mainPrisma.user.create({
-      data: createTestUser({ 
-        email: `plaid-user1-${timestamp}-${randomId}@test.com`,
-        passwordHash: passwordHash
-      })
-    });
-    
-    await mainPrisma.user.create({
-      data: createTestUser({ 
-        email: `plaid-user2-${timestamp}-${randomId}@test.com`,
-        passwordHash: passwordHash
-      })
-    });
+    // Also create users in main database for authentication middleware (with error handling)
+    try {
+      await mainPrisma.user.create({
+        data: createTestUser({ 
+          email: `plaid-user1-${timestamp}-${randomId}@test.com`,
+          passwordHash: passwordHash
+        })
+      });
+      
+      await mainPrisma.user.create({
+        data: createTestUser({ 
+          email: `plaid-user2-${timestamp}-${randomId}@test.com`,
+          passwordHash: passwordHash
+        })
+      });
+    } catch (error) {
+      // Main database might not be available or have different schema
+      console.log('Main database user creation skipped:', error instanceof Error ? error.message : 'Unknown error');
+    }
 
-    // Create real access tokens for each user with unique tokens
+    // Create real access tokens for each user with unique tokens (using test database user IDs)
     user1Token = await testPrisma.accessToken.create({
       data: createTestAccessToken({ 
-        userId: user1.id,
+        userId: user1.id, // Use test database user ID
         token: `plaid-token-${timestamp}-${randomId}-user1`,
         itemId: `item-${timestamp}-${randomId}-user1`
       })
@@ -89,7 +99,7 @@ describe('Real Plaid Security Tests', () => {
     
     user2Token = await testPrisma.accessToken.create({
       data: createTestAccessToken({ 
-        userId: user2.id,
+        userId: user2.id, // Use test database user ID
         token: `plaid-token-${timestamp}-${randomId}-user2`,
         itemId: `item-${timestamp}-${randomId}-user2`
       })
@@ -126,20 +136,25 @@ describe('Real Plaid Security Tests', () => {
     }
     await testPrisma.user.deleteMany();
     
-    // Also clean up main database
-    await mainPrisma.encryptedEmailVerificationCode.deleteMany();
-    await mainPrisma.encryptedUserData.deleteMany();
-    await mainPrisma.encrypted_profile_data.deleteMany();
-    await mainPrisma.demoConversation.deleteMany();
-    await mainPrisma.demoSession.deleteMany();
-    await mainPrisma.accessToken.deleteMany();
-    await mainPrisma.userProfile.deleteMany();
+    // Also clean up main database (with error handling)
     try {
-      await mainPrisma.snapTradeUser.deleteMany();
+      await mainPrisma.encryptedEmailVerificationCode.deleteMany();
+      await mainPrisma.encryptedUserData.deleteMany();
+      await mainPrisma.encrypted_profile_data.deleteMany();
+      await mainPrisma.demoConversation.deleteMany();
+      await mainPrisma.demoSession.deleteMany();
+      await mainPrisma.accessToken.deleteMany();
+      await mainPrisma.userProfile.deleteMany();
+      try {
+        await mainPrisma.snapTradeUser.deleteMany();
+      } catch (error) {
+        // Table might not exist in main database
+      }
+      await mainPrisma.user.deleteMany();
     } catch (error) {
-      // Table might not exist in main database
+      // Main database might not be available or have different schema
+      console.log('Main database cleanup skipped:', error instanceof Error ? error.message : 'Unknown error');
     }
-    await mainPrisma.user.deleteMany();
   });
 
   describe('Authentication Enforcement', () => {
