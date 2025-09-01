@@ -28,6 +28,12 @@ interface Holding {
   name?: string;
   type?: string;
   value?: number;
+  snapTradeData?: {
+    open_pnl?: number;
+    average_purchase_price?: number;
+    account_name?: string;
+    account_number?: string;
+  };
 }
 
 interface InvestmentTransaction {
@@ -249,10 +255,13 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                       <div className="text-sm text-gray-400">
                         {holding.security_type || holding.type || 'Unknown Type'}
                         {holding.ticker_symbol && ` • ${holding.ticker_symbol}`}
+                        {holding.snapTradeData?.account_name && ` • ${holding.snapTradeData.account_name}`}
                       </div>
                       <div className="text-xs text-gray-500">
                         Quantity: {holding.quantity?.toLocaleString() || 'N/A'}
                         {holding.cost_basis > 0 && ` • Cost Basis: ${formatCurrency(holding.cost_basis)}`}
+                        {holding.snapTradeData?.average_purchase_price && 
+                          ` • Avg Price: ${formatCurrency(holding.snapTradeData.average_purchase_price)}`}
                       </div>
                     </div>
                   </div>
@@ -263,6 +272,13 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                     <div className="text-sm text-gray-400">
                       {holding.institution_price ? `${formatCurrency(holding.institution_price)} per share` : 'N/A'}
                     </div>
+                    {holding.snapTradeData?.open_pnl !== undefined && (
+                      <div className={`text-xs font-medium ${
+                        holding.snapTradeData.open_pnl >= 0 ? 'text-green-400' : 'text-red-400'
+                      }`}>
+                        P&L: {formatCurrency(holding.snapTradeData.open_pnl)}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
