@@ -3,13 +3,17 @@ import { app } from '../../index';  // Import REAL application
 import { createTestUser, createTestAccessToken } from '../unit/factories/user.factory';
 import { hashPassword } from '../../auth/utils';
 import { testPrisma } from '../setup/test-database-ci';
+import { getPrismaClient } from '../../prisma-client';
 
 describe('Real Plaid Security Tests', () => {
   let user1: any, user2: any;
   let user1JWT: string, user2JWT: string;
   let user1Token: any, user2Token: any;
+  let mainPrisma: any;
 
   beforeEach(async () => {
+    // Initialize main Prisma client for authentication middleware
+    mainPrisma = getPrismaClient();
     // Clean up before each test - order matters for foreign key constraints
     // Delete child records first, then parent records
     await testPrisma.encryptedEmailVerificationCode.deleteMany();
@@ -23,6 +27,19 @@ describe('Real Plaid Security Tests', () => {
     await testPrisma.emailVerificationCode.deleteMany(); // Delete email verification codes BEFORE users
     await testPrisma.userProfile.deleteMany();
     await testPrisma.user.deleteMany();
+    
+    // Also clean up main database
+    await mainPrisma.encryptedEmailVerificationCode.deleteMany();
+    await mainPrisma.encryptedUserData.deleteMany();
+    await mainPrisma.encrypted_profile_data.deleteMany();
+    await mainPrisma.demoConversation.deleteMany();
+    await mainPrisma.demoSession.deleteMany();
+    await mainPrisma.accessToken.deleteMany();
+    await mainPrisma.syncStatus.deleteMany();
+    await mainPrisma.passwordResetToken.deleteMany();
+    await mainPrisma.emailVerificationCode.deleteMany();
+    await mainPrisma.userProfile.deleteMany();
+    await mainPrisma.user.deleteMany();
 
     // Create real test users with real authentication
     const passwordHash = await hashPassword('password123');
@@ -31,6 +48,7 @@ describe('Real Plaid Security Tests', () => {
     const timestamp = Date.now();
     const randomId = Math.random().toString(36).substring(7);
     
+    // Create users in both test database and main database
     user1 = await testPrisma.user.create({
       data: createTestUser({ 
         email: `plaid-user1-${timestamp}-${randomId}@test.com`,
@@ -39,6 +57,21 @@ describe('Real Plaid Security Tests', () => {
     });
     
     user2 = await testPrisma.user.create({
+      data: createTestUser({ 
+        email: `plaid-user2-${timestamp}-${randomId}@test.com`,
+        passwordHash: passwordHash
+      })
+    });
+    
+    // Also create users in main database for authentication middleware
+    await mainPrisma.user.create({
+      data: createTestUser({ 
+        email: `plaid-user1-${timestamp}-${randomId}@test.com`,
+        passwordHash: passwordHash
+      })
+    });
+    
+    await mainPrisma.user.create({
       data: createTestUser({ 
         email: `plaid-user2-${timestamp}-${randomId}@test.com`,
         passwordHash: passwordHash
@@ -92,6 +125,21 @@ describe('Real Plaid Security Tests', () => {
       // Table might not exist in test database
     }
     await testPrisma.user.deleteMany();
+    
+    // Also clean up main database
+    await mainPrisma.encryptedEmailVerificationCode.deleteMany();
+    await mainPrisma.encryptedUserData.deleteMany();
+    await mainPrisma.encrypted_profile_data.deleteMany();
+    await mainPrisma.demoConversation.deleteMany();
+    await mainPrisma.demoSession.deleteMany();
+    await mainPrisma.accessToken.deleteMany();
+    await mainPrisma.userProfile.deleteMany();
+    try {
+      await mainPrisma.snapTradeUser.deleteMany();
+    } catch (error) {
+      // Table might not exist in main database
+    }
+    await mainPrisma.user.deleteMany();
   });
 
   describe('Authentication Enforcement', () => {
