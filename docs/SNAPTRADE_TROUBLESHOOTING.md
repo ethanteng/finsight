@@ -110,17 +110,24 @@ If you don't have production credentials yet:
 
 ### **Solution 3: Database Migration Issues**
 
-If the SnapTrade users table doesn't exist:
+If the SnapTrade users table doesn't exist (error: `The table 'public.snaptrade_users' does not exist`):
 
-1. **Run Database Migrations**:
+1. **Run Database Migrations** (Recommended):
    ```bash
    npx prisma migrate deploy
    ```
 
-2. **Or Push Schema Changes**:
+2. **Or use the provided script**:
+   ```bash
+   node scripts/apply-production-migration.js
+   ```
+
+3. **Or Push Schema Changes** (Alternative):
    ```bash
    npx prisma db push
    ```
+
+**Note**: The `snaptrade_users` table was added in migration `20250901002129_add_snaptrade_user_model`. If this migration hasn't been applied to production, you'll get the table not found error.
 
 ### **Solution 4: Invalid API Credentials**
 
