@@ -84,6 +84,24 @@ export class SnapTradeService {
         return { success: false, error: errorMsg };
       }
       
+      // Check if user already exists in our database
+      const db = getPrismaClient();
+      const existingUser = await db.snapTradeUser.findUnique({
+        where: { userId: userId }
+      });
+      
+      if (existingUser) {
+        console.log('🔍 User already exists in database, returning existing data');
+        return { 
+          success: true, 
+          data: {
+            userId: existingUser.userId,
+            userSecret: existingUser.userSecret,
+            status: existingUser.status
+          }
+        };
+      }
+      
       // Register user with SnapTrade
       const registration = await snaptrade.authentication.registerSnapTradeUser({
         userId,
@@ -97,7 +115,6 @@ export class SnapTradeService {
       }
       
       // Store in database
-      const db = getPrismaClient();
       await db.snapTradeUser.create({
         data: {
           userId: userId,
@@ -120,13 +137,50 @@ export class SnapTradeService {
     } catch (error) {
       console.error('SnapTrade user registration failed:', error);
       
-      // Provide more detailed error information
-      let errorMessage = 'Registration failed';
-      
+      // Handle specific error cases
       if (error instanceof Error) {
-        errorMessage = error.message;
+        // Check if user already exists in SnapTrade
+        if (error.message.includes('User with the following userId already exist')) {
+          console.log('🔍 User already exists in SnapTrade, checking if we have the userSecret');
+          
+          // Try to get the user status to see if we can retrieve the userSecret
+          try {
+            const db = getPrismaClient();
+            const existingUser = await db.snapTradeUser.findUnique({
+              where: { userId: userId }
+            });
+            
+            if (existingUser) {
+              console.log('🔍 Found existing user in database');
+              return { 
+                success: true, 
+                data: {
+                  userId: existingUser.userId,
+                  userSecret: existingUser.userSecret,
+                  status: existingUser.status
+                }
+              };
+            } else {
+              // User exists in SnapTrade but not in our database
+              // This is a problem - we need to either delete the SnapTrade user or get the userSecret
+              console.log('⚠️ User exists in SnapTrade but not in our database');
+              return { 
+                success: false, 
+                error: 'User exists in SnapTrade but not in our database. Please contact support or try deleting the SnapTrade user first.'
+              };
+            }
+          } catch (dbError) {
+            console.error('Database error while checking existing user:', dbError);
+            return { 
+              success: false, 
+              error: 'User already exists in SnapTrade. Database error occurred while checking existing user.'
+            };
+          }
+        }
         
-        // Check for specific error types
+        // Handle other specific error types
+        let errorMessage = error.message;
+        
         if (error.message.includes('Request failed with status code')) {
           errorMessage = `SnapTrade API error: ${error.message}`;
         } else if (error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
@@ -136,9 +190,11 @@ export class SnapTradeService {
         } else if (error.message.includes('400') || error.message.includes('Bad Request')) {
           errorMessage = 'SnapTrade API request invalid. Check request parameters and API documentation.';
         }
+        
+        return { success: false, error: errorMessage };
       }
       
-      return { success: false, error: errorMessage };
+      return { success: false, error: 'Registration failed' };
     }
   }
 
@@ -376,7 +432,36 @@ export class SnapTradeService {
       };
     } catch (error) {
       console.error('SnapTrade delete user failed:', error);
-      return { success: false, error: error instanceof Error ? error.message : 'Delete user failed' };
+      
+      // Handle specific error cases
+      if (error instanceof Error) {
+        // If user doesn't exist in SnapTrade, just delete from our database
+        if (error.message.includes('User not found') || error.message.includes('404')) {
+          console.log('🔍 User not found in SnapTrade, deleting from database only');
+          
+          try {
+            const db = getPrismaClient();
+            await db.snapTradeUser.delete({
+              where: { userId: userId }
+            });
+            
+            return { 
+              success: true, 
+              data: {
+                userId: userId,
+                message: 'User deleted from database (user not found in SnapTrade)'
+              }
+            };
+          } catch (dbError) {
+            console.error('Database deletion failed:', dbError);
+            return { success: false, error: 'Failed to delete user from database' };
+          }
+        }
+        
+        return { success: false, error: error.message };
+      }
+      
+      return { success: false, error: 'Delete user failed' };
     }
   }
 }
