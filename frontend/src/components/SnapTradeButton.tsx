@@ -297,22 +297,10 @@ export default function SnapTradeButton() {
         )}
       </div>
 
-      {snapTradeStatus && (
-        <div className="text-sm text-gray-400 bg-gray-800 border border-gray-600 rounded-lg p-3">
-          <div className="font-medium text-gray-200 mb-2">SnapTrade Status:</div>
-          <div className="text-gray-400">Status: <span className="font-semibold text-green-400">{snapTradeStatus.status}</span></div>
-          {snapTradeStatus.snapTradeUserId && (
-            <div className="text-gray-400">User ID: <span className="font-mono text-xs text-gray-300">{snapTradeStatus.snapTradeUserId}</span></div>
-          )}
-          {snapTradeStatus.createdAt && (
-            <div className="text-gray-400">Created: {new Date(snapTradeStatus.createdAt).toLocaleDateString()}</div>
-          )}
-        </div>
-      )}
+
 
       {connectedAccounts.length > 0 && (
         <div className="mt-4">
-          <h4 className="font-medium text-sm mb-3 text-gray-300">Connected Investment Accounts:</h4>
           <div className="space-y-3">
             {connectedAccounts.map((account) => (
               <div key={account.id} className="text-sm bg-gray-800 border border-gray-600 rounded-lg p-3">

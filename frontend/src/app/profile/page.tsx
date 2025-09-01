@@ -877,7 +877,7 @@ export default function ProfilePage() {
           
           {/* Account Management Section */}
           <div className="bg-gray-800 rounded-lg p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">Your Connected Accounts</h2>
+            <h2 className="text-xl font-semibold mb-4">Your Connected Accounts (Plaid)</h2>
             
             {/* Connect New Account */}
             <div className="mb-6">
@@ -977,11 +977,7 @@ export default function ProfilePage() {
 
           {/* Investment Accounts (SnapTrade) Section */}
           <div className="bg-gray-800 rounded-lg p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">Investment Accounts (SnapTrade)</h2>
-            <p className="text-gray-400 text-sm mb-4">
-              Connect your investment accounts to get insights on your portfolio, 
-              holdings, and investment performance.
-            </p>
+            <h2 className="text-xl font-semibold mb-4">Your Connected Accounts (SnapTrade)</h2>
             <SnapTradeButton />
           </div>
 
