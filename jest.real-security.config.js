@@ -2,7 +2,10 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   testMatch: [
-    '**/__tests__/integration/real-plaid-security.test.ts'
+    '**/__tests__/integration/plaid-security-integration.test.ts',
+    '**/__tests__/integration/privacy-security-integration.test.ts',
+    '**/__tests__/integration/profile-encryption-security.test.ts',
+    '**/__tests__/integration/snaptrade-security.test.ts'
   ],
   setupFilesAfterEnv: [
     '<rootDir>/src/__tests__/setup/test-database.ts'
