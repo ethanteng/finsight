@@ -129,6 +129,27 @@ If the SnapTrade users table doesn't exist (error: `The table 'public.snaptrade_
 
 **Note**: The `snaptrade_users` table was added in migration `20250901002129_add_snaptrade_user_model`. If this migration hasn't been applied to production, you'll get the table not found error.
 
+### **Migration Conflict Resolution**
+
+If you get an error like `column "algorithm" of relation "encrypted_profile_data" already exists` when running `npx prisma migrate deploy`:
+
+1. **Use the conflict resolution script**:
+   ```bash
+   node scripts/resolve-migration-conflict.js
+   ```
+
+2. **Or run the SQL directly**:
+   ```bash
+   npx prisma db execute --file scripts/create-snaptrade-table.sql
+   ```
+
+3. **Or use the bash script**:
+   ```bash
+   bash scripts/fix-snaptrade-table.sh
+   ```
+
+This will create only the `snaptrade_users` table without trying to modify existing columns that are already present.
+
 ### **Solution 4: Invalid API Credentials**
 
 If credentials are set but still failing:
