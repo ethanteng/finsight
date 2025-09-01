@@ -266,6 +266,63 @@ export class SnapTradeService {
     }
   }
 
+  // Get user activities (transactions) for all accounts
+  async getUserActivities(userId: string, userSecret: string): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      console.log('🔍 Getting activities for user:', userId);
+      
+      // First get all accounts
+      const accountsResult = await this.getUserAccounts(userId, userSecret);
+      if (!accountsResult.success || !accountsResult.data?.accounts) {
+        return { success: false, error: 'Failed to get accounts for activities' };
+      }
+      
+      // Get activities for each account
+      const allActivities = [];
+      for (const account of accountsResult.data.accounts) {
+        try {
+          console.log(`🔍 Getting activities for account: ${account.name} (${account.id})`);
+          
+          const activities = await snaptrade.accountInformation.getAccountActivities({
+            accountId: account.id,
+            userId,
+            userSecret,
+            limit: 1000 // Get up to 1000 activities per account
+          });
+          
+          if (activities.data && Array.isArray(activities.data)) {
+            // Add account info to each activity
+            const accountActivities = activities.data.map((activity: any) => ({
+              ...activity,
+              account_name: account.name,
+              account_number: account.accountNumber,
+              institution: account.institution
+            }));
+            
+            allActivities.push(...accountActivities);
+            console.log(`🔍 Found ${accountActivities.length} activities for account ${account.name}`);
+          }
+        } catch (accountError) {
+          console.error(`🔍 Error getting activities for account ${account.name}:`, accountError);
+          // Continue with other accounts even if one fails
+        }
+      }
+      
+      console.log(`🔍 Total activities found: ${allActivities.length}`);
+      
+      return {
+        success: true,
+        data: {
+          activities: allActivities,
+          total: allActivities.length
+        }
+      };
+    } catch (error) {
+      console.error('SnapTrade get activities failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Get activities failed' };
+    }
+  }
+
   // Delete user
   async deleteUser(userId: string): Promise<{ success: boolean; data?: any; error?: string }> {
     try {

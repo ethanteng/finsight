@@ -50,6 +50,16 @@ interface InvestmentTransaction {
   quantity: number;
   type: string;
   iso_currency_code: string;
+  snapTradeData?: {
+    activity_type?: string;
+    description?: string;
+    trade_date?: string;
+    settlement_date?: string;
+    fee?: number;
+    account_name?: string;
+    account_number?: string;
+    institution?: string;
+  };
 }
 
 interface PortfolioAnalysis {
@@ -306,11 +316,14 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                         {transaction.security_name || transaction.name || 'Unknown Security'}
                       </div>
                       <div className="text-sm text-gray-400">
-                        {transaction.type} • {transaction.date}
+                        {transaction.snapTradeData?.activity_type || transaction.type} • {transaction.date}
                         {transaction.ticker_symbol && ` • ${transaction.ticker_symbol}`}
+                        {transaction.snapTradeData?.account_name && ` • ${transaction.snapTradeData.account_name}`}
                       </div>
                       <div className="text-xs text-gray-500">
                         Quantity: {transaction.quantity?.toLocaleString() || 'N/A'}
+                        {transaction.snapTradeData?.description && ` • ${transaction.snapTradeData.description}`}
+                        {transaction.snapTradeData?.fee && transaction.snapTradeData.fee > 0 && ` • Fee: ${formatCurrency(transaction.snapTradeData.fee)}`}
                       </div>
                     </div>
                   </div>
@@ -321,7 +334,7 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                       {formatCurrency(Math.abs(transaction.amount || 0))}
                     </div>
                     <div className="text-sm text-gray-400">
-                      {transaction.type === 'buy' ? 'Purchase' : 'Sale'}
+                      {transaction.snapTradeData?.activity_type || transaction.type}
                     </div>
                   </div>
                 </div>
