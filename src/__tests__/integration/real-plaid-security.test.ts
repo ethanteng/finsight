@@ -27,34 +27,38 @@ describe('Real Plaid Security Tests', () => {
     // Create real test users with real authentication
     const passwordHash = await hashPassword('password123');
     
+    // Generate unique email addresses to prevent conflicts when tests run in parallel
+    const timestamp = Date.now();
+    const randomId = Math.random().toString(36).substring(7);
+    
     user1 = await testPrisma.user.create({
       data: createTestUser({ 
-        email: 'user1@test.com',
+        email: `plaid-user1-${timestamp}-${randomId}@test.com`,
         passwordHash: passwordHash
       })
     });
     
     user2 = await testPrisma.user.create({
       data: createTestUser({ 
-        email: 'user2@test.com',
+        email: `plaid-user2-${timestamp}-${randomId}@test.com`,
         passwordHash: passwordHash
       })
     });
 
-    // Create real access tokens for each user
+    // Create real access tokens for each user with unique tokens
     user1Token = await testPrisma.accessToken.create({
       data: createTestAccessToken({ 
         userId: user1.id,
-        token: 'user1_plaid_token',
-        itemId: 'user1_item_id'
+        token: `plaid-token-${timestamp}-${randomId}-user1`,
+        itemId: `item-${timestamp}-${randomId}-user1`
       })
     });
     
     user2Token = await testPrisma.accessToken.create({
       data: createTestAccessToken({ 
         userId: user2.id,
-        token: 'user2_plaid_token',
-        itemId: 'user2_item_id'
+        token: `plaid-token-${timestamp}-${randomId}-user2`,
+        itemId: `item-${timestamp}-${randomId}-user2`
       })
     });
 
@@ -178,7 +182,7 @@ describe('Real Plaid Security Tests', () => {
       
       // Verify the response doesn't contain User2's data
       const responseBody = JSON.stringify(user1Response.body);
-      expect(responseBody).not.toContain('user2_plaid_token');
+      expect(responseBody).not.toContain(user2Token.token);
       expect(responseBody).not.toContain('user2_item_id');
     });
   });
@@ -200,7 +204,7 @@ describe('Real Plaid Security Tests', () => {
       
       // Verify no cross-user data leakage
       const responseBody = JSON.stringify(user1Response.body);
-      expect(responseBody).not.toContain('user2_plaid_token');
+      expect(responseBody).not.toContain(user2Token.token);
       expect(responseBody).not.toContain('user2_item_id');
     });
 
@@ -341,8 +345,8 @@ describe('Real Plaid Security Tests', () => {
       
       // Error response should not contain sensitive information
       const errorBody = JSON.stringify(response.body);
-      expect(errorBody).not.toContain('user1_plaid_token');
-      expect(errorBody).not.toContain('user2_plaid_token');
+      expect(errorBody).not.toContain(user1Token.token);
+      expect(errorBody).not.toContain(user2Token.token);
       expect(errorBody).not.toContain('user1_item_id');
       expect(errorBody).not.toContain('user2_item_id');
     });
@@ -357,8 +361,8 @@ describe('Real Plaid Security Tests', () => {
       
       // Response should not contain sensitive database information
       const responseBody = JSON.stringify(response.body);
-      expect(responseBody).not.toContain('user1_plaid_token');
-      expect(responseBody).not.toContain('user2_plaid_token');
+      expect(responseBody).not.toContain(user1Token.token);
+      expect(responseBody).not.toContain(user2Token.token);
     });
   });
 });

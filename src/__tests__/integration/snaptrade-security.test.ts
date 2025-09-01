@@ -25,16 +25,20 @@ describe('SnapTrade Security Tests', () => {
     // Create real test users with real authentication
     const passwordHash = await hashPassword('password123');
     
+    // Generate unique email addresses to prevent conflicts when tests run in parallel
+    const timestamp = Date.now();
+    const randomId = Math.random().toString(36).substring(7);
+    
     user1 = await testPrisma.user.create({
       data: createTestUser({ 
-        email: 'user1@test.com',
+        email: `snaptrade-user1-${timestamp}-${randomId}@test.com`,
         passwordHash: passwordHash
       })
     });
     
     user2 = await testPrisma.user.create({
       data: createTestUser({ 
-        email: 'user2@test.com',
+        email: `snaptrade-user2-${timestamp}-${randomId}@test.com`,
         passwordHash: passwordHash
       })
     });

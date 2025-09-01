@@ -30,10 +30,13 @@ describe('SnapTrade Privacy Integration Tests', () => {
     await testPrisma.userProfile.deleteMany();
     await testPrisma.user.deleteMany();
 
-    // Create test users in database
+    // Create test users in database with unique emails to prevent conflicts
+    const timestamp = Date.now();
+    const randomId = Math.random().toString(36).substring(7);
+    
     user1 = await testPrisma.user.create({
       data: {
-        email: 'user1@test.com',
+        email: `snaptrade-privacy-user1-${timestamp}-${randomId}@test.com`,
         passwordHash: 'hashedpassword1',
         tier: 'starter',
         isActive: true,
@@ -42,7 +45,7 @@ describe('SnapTrade Privacy Integration Tests', () => {
     });
     user2 = await testPrisma.user.create({
       data: {
-        email: 'user2@test.com',
+        email: `snaptrade-privacy-user2-${timestamp}-${randomId}@test.com`,
         passwordHash: 'hashedpassword2',
         tier: 'starter',
         isActive: true,
@@ -88,17 +91,17 @@ describe('SnapTrade Privacy Integration Tests', () => {
       user2SnapTradeUser = null;
     }
 
-    // Create some Plaid data for testing
+    // Create some Plaid data for testing with unique tokens
     await testPrisma.accessToken.createMany({
       data: [
         {
-          token: 'user1_plaid_token',
-          itemId: 'user1_item_id',
+          token: `snaptrade-privacy-token-${timestamp}-${randomId}-user1`,
+          itemId: `snaptrade-privacy-item-${timestamp}-${randomId}-user1`,
           userId: user1.id,
         },
         {
-          token: 'user2_plaid_token',
-          itemId: 'user2_item_id',
+          token: `snaptrade-privacy-token-${timestamp}-${randomId}-user2`,
+          itemId: `snaptrade-privacy-item-${timestamp}-${randomId}-user2`,
           userId: user2.id,
         }
       ]
@@ -259,7 +262,7 @@ describe('SnapTrade Privacy Integration Tests', () => {
         where: { id: user2.id }
       });
       expect(user2After).toBeDefined();
-      expect(user2After!.email).toBe('user2@test.com');
+      expect(user2After!.email).toMatch(/^snaptrade-privacy-user2-\d+-[a-z0-9]+@test\.com$/);
     });
 
     it('should handle users without SnapTrade accounts gracefully during deletion', async () => {
@@ -340,7 +343,7 @@ describe('SnapTrade Privacy Integration Tests', () => {
         where: { id: user1.id }
       });
       expect(user1After).toBeDefined();
-      expect(user1After!.email).toBe('user1@test.com');
+      expect(user1After!.email).toMatch(/^snaptrade-privacy-user1-\d+-[a-z0-9]+@test\.com$/);
 
       // Verify user2 is completely deleted
       const user2After = await testPrisma.user.findUnique({

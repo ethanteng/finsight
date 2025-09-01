@@ -50,21 +50,21 @@ describe('Plaid Security Integration Tests', () => {
       })
     });
 
-    // Create access tokens for each user (simulating linked banks)
+    // Create access tokens for each user (simulating linked banks) with unique tokens
     try {
       user1Token = await testPrisma.accessToken.create({
         data: createTestAccessToken({ 
           userId: user1.id,
-          token: 'user1_plaid_token',
-          itemId: 'user1_item_id'
+          token: `plaid-security-token-${timestamp}-${randomId}-user1`,
+          itemId: `plaid-security-item-${timestamp}-${randomId}-user1`
         })
       });
       
       user2Token = await testPrisma.accessToken.create({
         data: createTestAccessToken({ 
           userId: user2.id,
-          token: 'user2_plaid_token',
-          itemId: 'user2_item_id'
+          token: `plaid-security-token-${timestamp}-${randomId}-user2`,
+          itemId: `plaid-security-item-${timestamp}-${randomId}-user2`
         })
       });
     } catch (error) {
@@ -287,8 +287,8 @@ describe('Demo Mode Security Tests', () => {
     // Should not contain any real user account information
     expect(responseText).not.toContain('user1');
     expect(responseText).not.toContain('user2');
-    expect(responseText).not.toContain('user1@test.com');
-    expect(responseText).not.toContain('user2@test.com');
+    expect(responseText).not.toContain(user1.email);
+    expect(responseText).not.toContain(user2.email);
   });
 
   it.skip('should maintain demo mode isolation from real users', async () => {
@@ -329,8 +329,8 @@ describe('Error Handling Security Tests', () => {
     // Error response should not contain sensitive information
     const errorBody = JSON.stringify(response.body);
     // Remove references to user variables since they don't exist in this context
-    expect(errorBody).not.toContain('user1_plaid_token');
-    expect(errorBody).not.toContain('user2_plaid_token');
+    expect(errorBody).not.toContain(user1Token.token);
+    expect(errorBody).not.toContain(user2Token.token);
   });
 
   it.skip('should handle database errors securely', async () => {
@@ -356,7 +356,7 @@ describe('Error Handling Security Tests', () => {
     
     // Error response should not contain sensitive information
     const errorBody = JSON.stringify(response.body);
-    expect(errorBody).not.toContain('user1_plaid_token');
+    expect(errorBody).not.toContain(user1Token.token);
   });
 });
 
@@ -370,18 +370,33 @@ describe('GPT Context User Isolation Integration', () => {
     await testPrisma.account.deleteMany();
     await testPrisma.user.deleteMany();
     
-    // Create users with proper password hash
+    // Create users with proper password hash and unique emails
+    const timestamp = Date.now();
+    const randomId = Math.random().toString(36).substring(7);
     const passwordHash = await hashPassword('password123');
-    user1 = await testPrisma.user.create({ data: { email: 'user1@test.com', passwordHash: passwordHash, tier: 'starter' } });
-    user2 = await testPrisma.user.create({ data: { email: 'user2@test.com', passwordHash: passwordHash, tier: 'starter' } });
+    
+    user1 = await testPrisma.user.create({ 
+      data: { 
+        email: `plaid-security-user1-${timestamp}-${randomId}@test.com`, 
+        passwordHash: passwordHash, 
+        tier: 'starter' 
+      } 
+    });
+    user2 = await testPrisma.user.create({ 
+      data: { 
+        email: `plaid-security-user2-${timestamp}-${randomId}@test.com`, 
+        passwordHash: passwordHash, 
+        tier: 'starter' 
+      } 
+    });
     
     // Create accounts for user1 only
     await testPrisma.account.create({ data: { name: 'User1 Checking', type: 'checking', plaidAccountId: 'acc1', userId: user1.id } });
     await testPrisma.account.create({ data: { name: 'User1 Savings', type: 'savings', plaidAccountId: 'acc2', userId: user1.id } });
     
     // Login users to get JWT tokens
-    const user1Login = await request(testApp).post('/auth/login').send({ email: 'user1@test.com', password: 'password123' });
-    const user2Login = await request(testApp).post('/auth/login').send({ email: 'user2@test.com', password: 'password123' });
+    const user1Login = await request(testApp).post('/auth/login').send({ email: user1.email, password: 'password123' });
+    const user2Login = await request(testApp).post('/auth/login').send({ email: user2.email, password: 'password123' });
     user1JWT = user1Login.body.token;
     user2JWT = user2Login.body.token;
   });

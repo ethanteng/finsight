@@ -60,10 +60,13 @@ describe('Complete Security Test Suite', () => {
   let user2JWT: string;
   
   beforeEach(async () => {
-    // Create test users
+    // Create test users with unique emails to prevent conflicts
+    const timestamp = Date.now();
+    const randomId = Math.random().toString(36).substring(7);
+    
     user1 = await testPrisma.user.create({
       data: {
-        email: 'user1@test.com',
+        email: `complete-security-user1-${timestamp}-${randomId}@test.com`,
         passwordHash: 'test-hash',
         emailVerified: true,
         tier: 'FREE'
@@ -72,7 +75,7 @@ describe('Complete Security Test Suite', () => {
     
     user2 = await testPrisma.user.create({
       data: {
-        email: 'user2@test.com',
+        email: `complete-security-user2-${timestamp}-${randomId}@test.com`,
         passwordHash: 'test-hash',
         emailVerified: true,
         tier: 'FREE'
