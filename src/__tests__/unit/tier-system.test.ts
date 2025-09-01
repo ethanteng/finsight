@@ -124,7 +124,7 @@ describe('Tier System', () => {
       const premiumLimitations = DataSourceManager.getTierLimitations(UserTier.PREMIUM);
       
       expect(starterLimitations.length).toBeGreaterThan(0);
-      expect(starterLimitations.some(l => l.includes('account data only'))).toBe(true);
+      expect(starterLimitations.some(l => l.includes('economic context'))).toBe(true);
       
       expect(standardLimitations.length).toBeGreaterThan(0);
       expect(standardLimitations.some(l => l.includes('real-time'))).toBe(true);

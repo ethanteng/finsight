@@ -41,6 +41,9 @@ const mockPrismaClient = {
   },
   emailVerificationCode: {
     deleteMany: jest.fn()
+  },
+  snapTradeUser: {
+    deleteMany: jest.fn()
   }
 };
 
