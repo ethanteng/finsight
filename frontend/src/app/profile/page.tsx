@@ -19,6 +19,50 @@ interface Account {
   };
 }
 
+interface SnapTradeData {
+  open_pnl?: number;
+  average_purchase_price?: number;
+  account_name?: string;
+  account_number?: string;
+  activity_type?: string;
+  description?: string;
+  trade_date?: string;
+  settlement_date?: string;
+  fee?: number;
+  institution?: string;
+}
+
+interface Security {
+  id: string;
+  name: string;
+  type: string;
+  ticker?: string;
+}
+
+interface Account {
+  id: string;
+  name: string;
+  type: string;
+  number?: string;
+}
+
+interface InvestmentTransaction {
+  id: string;
+  account_id: string;
+  security_id: string;
+  amount: number;
+  date: string;
+  name: string;
+  quantity: number;
+  price: number;
+  fees: number;
+  type: string;
+  iso_currency_code: string;
+  institution_value?: number;
+  value?: number;
+  snapTradeData?: SnapTradeData;
+}
+
 interface InvestmentData {
   portfolio: {
     totalValue: number;
@@ -46,7 +90,7 @@ interface InvestmentData {
     name?: string;
     type?: string;
     value?: number;
-    snapTradeData?: any;
+    snapTradeData?: SnapTradeData;
   }>;
   transactions: Array<{
     id: string;
@@ -62,11 +106,11 @@ interface InvestmentData {
     iso_currency_code: string;
   }>;
   // Additional fields for SnapTrade integration
-  investment_transactions?: Array<any>;
+  investment_transactions?: InvestmentTransaction[];
   total_investment_transactions?: number;
-  securities?: any[];
-  accounts?: any[];
-  item?: any;
+  securities?: Security[];
+  accounts?: Account[];
+  item?: Record<string, unknown>;
   analysis?: {
     portfolio: {
       totalValue: number;
@@ -90,7 +134,7 @@ interface InvestmentData {
 export default function ProfilePage() {
   const [connectedAccounts, setConnectedAccounts] = useState<Account[]>([]);
   const [investmentData, setInvestmentData] = useState<InvestmentData | null>(null);
-  const [snapTradeHoldings, setSnapTradeHoldings] = useState<any[] | null>(null);
+  const [snapTradeHoldings, setSnapTradeHoldings] = useState<Record<string, unknown>[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isDemo, setIsDemo] = useState<boolean | undefined>(undefined); // Start as undefined to prevent premature rendering
@@ -283,7 +327,7 @@ export default function ProfilePage() {
   }, [API_URL]);
 
   // Function to merge Plaid and SnapTrade investment data
-  const mergeInvestmentData = useCallback((plaidData: InvestmentData | null, snapTradeData: any[] | null, snapTradeActivities: any[] | null) => {
+  const mergeInvestmentData = useCallback((plaidData: InvestmentData | null, snapTradeData: Record<string, unknown>[] | null, snapTradeActivities: Record<string, unknown>[] | null) => {
     if (!plaidData && !snapTradeData) {
       return null;
     }
@@ -292,7 +336,7 @@ export default function ProfilePage() {
     const activities = snapTradeActivities || [];
 
     // Convert SnapTrade holdings to the format expected by InvestmentPortfolio
-    const snapTradeHoldingsFormatted = snapTradeData ? snapTradeData.flatMap((accountHolding: any) => {
+    const snapTradeHoldingsFormatted = snapTradeData ? snapTradeData.flatMap((accountHolding: Record<string, unknown>) => {
       console.log('Processing SnapTrade account holding:', accountHolding);
       
       if (!accountHolding.account) {
@@ -303,14 +347,14 @@ export default function ProfilePage() {
       const holdings = [];
 
       // Handle accounts with positions (investments)
-      if (accountHolding.positions && accountHolding.positions.length > 0) {
-        accountHolding.positions.forEach((position: any) => {
-          const positionValue = (position.price || 0) * (position.units || 0);
-          const costBasis = (position.average_purchase_price || 0) * (position.units || 0);
+      if (accountHolding.positions && Array.isArray(accountHolding.positions) && accountHolding.positions.length > 0) {
+        (accountHolding.positions as Record<string, unknown>[]).forEach((position: Record<string, unknown>) => {
+          const positionValue = (Number(position.price) || 0) * (Number(position.units) || 0);
+          const costBasis = (Number(position.average_purchase_price) || 0) * (Number(position.units) || 0);
           
           console.log('Processing position:', {
-            symbol: position.symbol?.symbol?.symbol,
-            description: position.symbol?.symbol?.description,
+            symbol: ((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.symbol,
+            description: ((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.description,
             units: position.units,
             price: position.price,
             value: positionValue,
@@ -318,56 +362,56 @@ export default function ProfilePage() {
           });
           
           holdings.push({
-            id: `${accountHolding.account.id}-${position.symbol?.id || 'unknown'}`,
-            account_id: accountHolding.account.id,
-            security_id: position.symbol?.id || 'unknown',
+            id: `${(accountHolding.account as Record<string, unknown>).id}-${(position.symbol as Record<string, unknown>)?.id || 'unknown'}`,
+            account_id: (accountHolding.account as Record<string, unknown>).id as string,
+            security_id: (position.symbol as Record<string, unknown>)?.id || 'unknown',
             institution_value: positionValue,
-            institution_price: position.price || 0,
+            institution_price: Number(position.price) || 0,
             institution_price_as_of: new Date().toISOString(),
             cost_basis: costBasis,
-            quantity: position.units || 0,
-            iso_currency_code: position.currency?.code || 'USD',
-            security_name: position.symbol?.symbol?.description || position.symbol?.symbol?.symbol || 'Unknown Security',
-            security_type: position.symbol?.symbol?.type?.description || 'Bond',
-            ticker_symbol: position.symbol?.symbol?.symbol || 'Unknown',
-            name: position.symbol?.symbol?.description || position.symbol?.symbol?.symbol || 'Unknown Security',
-            type: position.symbol?.symbol?.type?.description || 'Bond',
+            quantity: Number(position.units) || 0,
+            iso_currency_code: (position.currency as Record<string, unknown>)?.code || 'USD',
+            security_name: ((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.description || ((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.symbol || 'Unknown Security',
+            security_type: (((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.type as Record<string, unknown>)?.description || 'Bond',
+            ticker_symbol: ((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.symbol || 'Unknown',
+            name: ((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.description || ((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.symbol || 'Unknown Security',
+            type: (((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.type as Record<string, unknown>)?.description || 'Bond',
             value: positionValue,
             // SnapTrade specific fields
             snapTradeData: {
               open_pnl: position.open_pnl,
               average_purchase_price: position.average_purchase_price,
-              account_name: accountHolding.account.name,
-              account_number: accountHolding.account.number,
+              account_name: (accountHolding.account as Record<string, unknown>).name as string,
+              account_number: (accountHolding.account as Record<string, unknown>).number as string,
             }
           });
         });
       }
 
       // Handle accounts with only cash (no positions)
-      if (accountHolding.balances && accountHolding.balances.length > 0) {
-        const cashBalance = accountHolding.balances.find((b: any) => b.currency?.code === 'USD');
-        if (cashBalance && cashBalance.cash > 0) {
+      if (accountHolding.balances && Array.isArray(accountHolding.balances) && accountHolding.balances.length > 0) {
+        const cashBalance = (accountHolding.balances as Record<string, unknown>[]).find((b: Record<string, unknown>) => (b.currency as Record<string, unknown>)?.code === 'USD');
+        if (cashBalance && Number(cashBalance.cash) > 0) {
           console.log('Adding cash balance:', cashBalance.cash);
           holdings.push({
-            id: `${accountHolding.account.id}-cash`,
-            account_id: accountHolding.account.id,
+            id: `${(accountHolding.account as Record<string, unknown>).id}-cash`,
+            account_id: (accountHolding.account as Record<string, unknown>).id as string,
             security_id: 'cash',
-            institution_value: cashBalance.cash,
+            institution_value: Number(cashBalance.cash),
             institution_price: 1,
             institution_price_as_of: new Date().toISOString(),
-            cost_basis: cashBalance.cash,
-            quantity: cashBalance.cash,
+            cost_basis: Number(cashBalance.cash),
+            quantity: Number(cashBalance.cash),
             iso_currency_code: 'USD',
             security_name: 'Cash',
             security_type: 'Cash',
             ticker_symbol: 'CASH',
             name: 'Cash',
             type: 'Cash',
-            value: cashBalance.cash,
+            value: Number(cashBalance.cash),
             snapTradeData: {
-              account_name: accountHolding.account.name,
-              account_number: accountHolding.account.number,
+              account_name: (accountHolding.account as Record<string, unknown>).name as string,
+              account_number: (accountHolding.account as Record<string, unknown>).number as string,
             }
           });
         }
@@ -412,32 +456,36 @@ export default function ProfilePage() {
 
     // Convert SnapTrade activities to the format expected by InvestmentPortfolio
     console.log('Processing SnapTrade activities:', activities);
-    const snapTradeActivitiesFormatted = activities ? activities.map((activity: any) => ({
-      id: activity.id,
-      account_id: activity.account_name || 'snaptrade',
-      security_id: activity.symbol?.id || 'unknown',
-      institution_value: activity.amount || 0,
-      institution_price: activity.price || 0,
-      institution_price_as_of: activity.trade_date || new Date().toISOString(),
-      cost_basis: (activity.price || 0) * (activity.units || 0),
-      quantity: activity.units || 0,
-      iso_currency_code: activity.currency?.code || 'USD',
-      security_name: activity.symbol?.description || activity.symbol?.symbol || 'Unknown Security',
-      security_type: activity.symbol?.type?.description || 'Unknown',
-      ticker_symbol: activity.symbol?.symbol || 'Unknown',
-      name: activity.symbol?.description || activity.symbol?.symbol || 'Unknown Security',
-      type: activity.symbol?.type?.description || 'Unknown',
-      value: activity.amount || 0,
+    const snapTradeActivitiesFormatted = activities ? activities.map((activity: Record<string, unknown>) => ({
+      id: activity.id as string,
+      account_id: (activity.account_name as string) || 'snaptrade',
+      security_id: ((activity.symbol as Record<string, unknown>)?.id as string) || 'unknown',
+      amount: Number(activity.amount) || 0,
+      date: (activity.trade_date as string) || new Date().toISOString(),
+      name: ((activity.symbol as Record<string, unknown>)?.description as string) || ((activity.symbol as Record<string, unknown>)?.symbol as string) || 'Unknown Security',
+      quantity: Number(activity.units) || 0,
+      price: Number(activity.price) || 0,
+      fees: Number(activity.fee) || 0,
+      type: (activity.type as string) || 'Unknown',
+      iso_currency_code: ((activity.currency as Record<string, unknown>)?.code as string) || 'USD',
+      institution_value: Number(activity.amount) || 0,
+      institution_price: Number(activity.price) || 0,
+      institution_price_as_of: (activity.trade_date as string) || new Date().toISOString(),
+      cost_basis: (Number(activity.price) || 0) * (Number(activity.units) || 0),
+      security_name: ((activity.symbol as Record<string, unknown>)?.description as string) || ((activity.symbol as Record<string, unknown>)?.symbol as string) || 'Unknown Security',
+      security_type: (((activity.symbol as Record<string, unknown>)?.type as Record<string, unknown>)?.description as string) || 'Unknown',
+      ticker_symbol: ((activity.symbol as Record<string, unknown>)?.symbol as string) || 'Unknown',
+      value: Number(activity.amount) || 0,
       // SnapTrade specific fields
       snapTradeData: {
-        activity_type: activity.type,
-        description: activity.description,
-        trade_date: activity.trade_date,
-        settlement_date: activity.settlement_date,
-        fee: activity.fee,
-        account_name: activity.account_name,
-        account_number: activity.account_number,
-        institution: activity.institution
+        activity_type: activity.type as string,
+        description: activity.description as string,
+        trade_date: activity.trade_date as string,
+        settlement_date: activity.settlement_date as string,
+        fee: activity.fee as number,
+        account_name: activity.account_name as string,
+        account_number: activity.account_number as string,
+        institution: activity.institution as string
       }
     })) : [];
 
@@ -461,7 +509,7 @@ export default function ProfilePage() {
     // Group transactions by type
     const activityByType: Record<string, number> = {};
     combinedTransactions.forEach(tx => {
-      const type = tx.snapTradeData?.activity_type || 'UNKNOWN';
+      const type = (tx.snapTradeData?.activity_type as string) || 'UNKNOWN';
       activityByType[type] = (activityByType[type] || 0) + 1;
     });
 

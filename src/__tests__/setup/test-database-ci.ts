@@ -71,6 +71,7 @@ function createEnhancedMockDatabase() {
         return [];
       },
       create: async (data: any) => ({ id: 'mock-token-1', ...data.data }),
+      createMany: async (data: any) => ({ count: data.data.length }),
       update: async (data: any) => ({ id: 'mock-token-1', ...data.data }),
       deleteMany: async () => ({ count: 1 })
     },
@@ -359,6 +360,26 @@ function createEnhancedMockDatabase() {
       create: async (data: any) => ({ id: 'mock-privacy-1', ...data.data }), 
       update: async (data: any) => ({ id: 'mock-privacy-1', ...data.data }), 
       deleteMany: async () => ({ count: 1 }) 
+    },
+    
+    // SnapTrade models for integration testing
+    snapTradeUser: { 
+      findMany: async (where?: any) => {
+        // Mock filtering by user ID for security testing
+        if (where?.userId) {
+          return [{ id: 'mock-snaptrade-user-1', userId: where.userId, snapTradeUserId: 'mock-snaptrade-id' }];
+        }
+        return [];
+      },
+      findUnique: async (where?: any) => {
+        if (where?.userId) {
+          return { id: 'mock-snaptrade-user-1', userId: where.userId, snapTradeUserId: 'mock-snaptrade-id' };
+        }
+        return null;
+      },
+      create: async (data: any) => ({ id: 'mock-snaptrade-user-1', ...data.data }),
+      update: async (data: any) => ({ id: 'mock-snaptrade-user-1', ...data.data }),
+      deleteMany: async (where?: any) => ({ count: 1 })
     }
   } as any;
 }
@@ -476,7 +497,8 @@ beforeEach(async () => {
       'passwordResetToken',
       'emailVerificationCode',
       'marketNewsHistory',
-      'marketNewsContext'
+      'marketNewsContext',
+      'snapTradeUser'
     ];
     
     for (const table of tables) {
