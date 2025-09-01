@@ -4,6 +4,7 @@ import {
   anonymizeAccountData, 
   anonymizeTransactionData, 
   anonymizeInvestmentData,
+  anonymizeSnapTradeData,
   anonymizeLiabilityData,
   anonymizeEnhancedTransactionData,
   anonymizeConversationHistory, 
@@ -160,6 +161,8 @@ export async function askOpenAIWithEnhancedContext(
   let accounts: any[] = [];
   let transactions: any[] = [];
   let investmentData: any = null;
+  let snapTradeData: any = null;
+  let snapTradeActivities: any = null;
 
   // For demo mode, use demo data instead of database data
   if (isDemo) {
@@ -459,7 +462,44 @@ export async function askOpenAIWithEnhancedContext(
           }
         }
         
-        console.log('OpenAI Enhanced: Final count -', accounts.length, 'accounts,', transactions.length, 'transactions, and investment data:', investmentData ? 'available' : 'none', 'for user', userId);
+        // Fetch SnapTrade data for authenticated users
+        if (userId && !isDemo) {
+          try {
+            console.log('OpenAI Enhanced: Fetching SnapTrade data for user:', userId);
+            const { snapTradeService } = await import('./snaptrade');
+            
+            // Get SnapTrade user record to get userSecret
+            const { getPrismaClient } = await import('./prisma-client');
+            const prisma = getPrismaClient();
+            const snapTradeUser = await prisma.snapTradeUser.findUnique({
+              where: { userId }
+            });
+            
+            if (snapTradeUser && snapTradeUser.userSecret) {
+              console.log('OpenAI Enhanced: Found SnapTrade user, fetching holdings and activities');
+              
+              // Fetch SnapTrade holdings
+              const holdingsResult = await snapTradeService.getUserHoldings(userId, snapTradeUser.userSecret);
+              if (holdingsResult.success && holdingsResult.data) {
+                snapTradeData = holdingsResult.data;
+                console.log('OpenAI Enhanced: Fetched SnapTrade holdings:', snapTradeData.length, 'holdings');
+              }
+              
+              // Fetch SnapTrade activities
+              const activitiesResult = await snapTradeService.getUserActivities(userId, snapTradeUser.userSecret);
+              if (activitiesResult.success && activitiesResult.data) {
+                snapTradeActivities = activitiesResult.data;
+                console.log('OpenAI Enhanced: Fetched SnapTrade activities:', snapTradeActivities.length, 'activities');
+              }
+            } else {
+              console.log('OpenAI Enhanced: No SnapTrade user found or no userSecret available');
+            }
+          } catch (snapTradeError) {
+            console.error('OpenAI Enhanced: Error fetching SnapTrade data:', snapTradeError);
+          }
+        }
+        
+        console.log('OpenAI Enhanced: Final count -', accounts.length, 'accounts,', transactions.length, 'transactions, investment data:', investmentData ? 'available' : 'none', 'SnapTrade data:', snapTradeData ? 'available' : 'none', 'SnapTrade activities:', snapTradeActivities ? 'available' : 'none', 'for user', userId);
       } else {
         console.log('OpenAI Enhanced: No userId provided, fetching all data (this should not happen for authenticated users)');
       }
@@ -752,12 +792,25 @@ Top Holdings:
 ${anonymizeInvestmentData(holdings.slice(0, 10))}`;
   }
 
+  // Add SnapTrade data to investment summary if available
+  if (snapTradeData || snapTradeActivities) {
+    if (investmentSummary) {
+      investmentSummary += '\n\n';
+    } else {
+      investmentSummary = 'INVESTMENT DATA:\n';
+    }
+    investmentSummary += anonymizeSnapTradeData(snapTradeData || [], snapTradeActivities || []);
+  }
+
   console.log('OpenAI Enhanced: Account summary for AI:', accountSummary);
   console.log('OpenAI Enhanced: Transaction summary for AI:', transactionSummary);
   console.log('OpenAI Enhanced: Investment summary for AI:', investmentSummary ? 'available' : 'none');
+  console.log('OpenAI Enhanced: Investment summary length:', investmentSummary ? investmentSummary.length : 0);
   console.log('OpenAI Enhanced: Number of accounts found:', tierContext.accounts.length);
   console.log('OpenAI Enhanced: Number of transactions found:', tierContext.transactions.length);
   console.log('OpenAI Enhanced: Investment data available:', investmentData ? 'yes' : 'no');
+  console.log('OpenAI Enhanced: SnapTrade data available:', snapTradeData ? 'yes' : 'no');
+  console.log('OpenAI Enhanced: SnapTrade activities available:', snapTradeActivities ? 'yes' : 'no');
   console.log('OpenAI Enhanced: User ID being used:', userId);
   
   // ✅ Debug: Log enhanced transaction data availability
@@ -783,6 +836,8 @@ ${anonymizeInvestmentData(holdings.slice(0, 10))}`;
     console.log('OpenAI Enhanced: Demo accounts:', tierContext.accounts.length);
     console.log('OpenAI Enhanced: Demo transactions:', tierContext.transactions.length);
     console.log('OpenAI Enhanced: Demo investments:', investmentData ? 'available' : 'none');
+    console.log('OpenAI Enhanced: Demo SnapTrade data:', snapTradeData ? 'available' : 'none');
+    console.log('OpenAI Enhanced: Demo SnapTrade activities:', snapTradeActivities ? 'available' : 'none');
     console.log('OpenAI Enhanced: Account summary preview:', accountSummary.substring(0, 500));
     console.log('OpenAI Enhanced: Transaction summary preview:', transactionSummary.substring(0, 500));
     console.log('OpenAI Enhanced: Investment summary preview:', investmentSummary ? investmentSummary.substring(0, 500) : 'none');

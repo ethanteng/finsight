@@ -307,6 +307,92 @@ export function anonymizeInvestmentData(investments: any[]): string {
   }).join('\n');
 }
 
+export function anonymizeSnapTradeData(snapTradeHoldings: any[], snapTradeActivities: any[]): string {
+  console.log('anonymizeSnapTradeData: Processing', snapTradeHoldings.length, 'holdings and', snapTradeActivities.length, 'activities');
+  
+  let result = '';
+  
+  // Anonymize SnapTrade holdings
+  if (snapTradeHoldings && snapTradeHoldings.length > 0) {
+    result += 'SnapTrade Holdings:\n';
+    result += snapTradeHoldings.map(holding => {
+      // Tokenize security name and ticker symbol
+      const securityToken = tokenizeSecurity(
+        holding.security_name || 'Unknown Security',
+        holding.ticker_symbol,
+        holding.security_type
+      );
+      
+      console.log('anonymizeSnapTradeData: Created security token:', securityToken, 'for:', holding.security_name, holding.ticker_symbol);
+      
+      // Format quantity with appropriate precision
+      const quantity = holding.quantity ? 
+        (Number.isInteger(holding.quantity) ? 
+          holding.quantity.toString() : 
+          holding.quantity.toFixed(4)
+        ) : '0';
+      
+      // Format price and value
+      const price = holding.institution_price ? `$${Number(holding.institution_price).toFixed(2)}` : 'N/A';
+      const value = holding.institution_value ? `$${Number(holding.institution_value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'N/A';
+      
+      // Include security type if available
+      const typeInfo = holding.security_type ? ` (${holding.security_type})` : '';
+      
+      return `- ${securityToken}${typeInfo}: ${quantity} shares @ ${price} = ${value}`;
+    }).join('\n');
+    result += '\n\n';
+  }
+  
+  // Anonymize SnapTrade activities
+  if (snapTradeActivities && snapTradeActivities.length > 0) {
+    result += 'SnapTrade Activities:\n';
+    result += snapTradeActivities.map(activity => {
+      // Tokenize security name and ticker symbol
+      const securityToken = tokenizeSecurity(
+        activity.symbol?.description || activity.symbol?.symbol || 'Unknown Security',
+        activity.symbol?.symbol,
+        activity.symbol?.type?.description
+      );
+      
+      // Tokenize account name
+      const accountToken = tokenizeAccount(
+        activity.account_name || 'SnapTrade Account',
+        'SnapTrade'
+      );
+      
+      console.log('anonymizeSnapTradeData: Created security token:', securityToken, 'for activity:', activity.symbol?.description, activity.symbol?.symbol);
+      console.log('anonymizeSnapTradeData: Created account token:', accountToken, 'for account:', activity.account_name);
+      
+      // Format amount and price
+      const amount = activity.amount ? `$${Number(activity.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'N/A';
+      const price = activity.price ? `$${Number(activity.price).toFixed(2)}` : 'N/A';
+      
+      // Format quantity
+      const quantity = activity.units ? 
+        (Number.isInteger(activity.units) ? 
+          activity.units.toString() : 
+          activity.units.toFixed(4)
+        ) : '0';
+      
+      // Format date
+      const date = activity.trade_date ? 
+        (typeof activity.trade_date === 'string' ? 
+          activity.trade_date.split('T')[0] : 
+          new Date(activity.trade_date).toISOString().split('T')[0]
+        ) : 'Unknown';
+      
+      // Include activity type and description
+      const typeInfo = activity.type ? ` (${activity.type})` : '';
+      const description = activity.description ? ` - ${activity.description}` : '';
+      
+      return `- ${securityToken}${typeInfo}${description}: ${quantity} shares @ ${price} = ${amount} on ${date} via ${accountToken}`;
+    }).join('\n');
+  }
+  
+  return result;
+}
+
 export function anonymizeLiabilityData(liabilities: any[]): string {
   return liabilities.map(liability => {
     // Tokenize liability name and institution
