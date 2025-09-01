@@ -23,6 +23,51 @@ router.get('/status', async (req, res) => {
   }
 });
 
+// GET /snaptrade/config - Get SnapTrade configuration (for debugging)
+router.get('/config', async (req, res) => {
+  try {
+    const snapTradeMode = process.env.SNAPTRADE_MODE || 'sandbox';
+    const clientId = process.env.SNAPTRADE_CLIENT_ID;
+    const consumerKey = process.env.SNAPTRADE_CONSUMER_KEY;
+    const clientIdProd = process.env.SNAPTRADE_CLIENT_ID_PROD;
+    const consumerKeyProd = process.env.SNAPTRADE_CONSUMER_KEY_PROD;
+    
+    // Determine which credentials will be used
+    const getSnapTradeCredentials = () => {
+      if (snapTradeMode === 'production') {
+        return {
+          clientId: clientIdProd || clientId,
+          consumerKey: consumerKeyProd || consumerKey,
+          env: process.env.SNAPTRADE_ENV_PROD || 'production'
+        };
+      } else {
+        return {
+          clientId: clientId,
+          consumerKey: consumerKey,
+          env: 'sandbox'
+        };
+      }
+    };
+    
+    const credentials = getSnapTradeCredentials();
+    
+    res.json({
+      mode: snapTradeMode,
+      environment: credentials.env,
+      hasClientId: !!credentials.clientId,
+      hasConsumerKey: !!credentials.consumerKey,
+      credentialsConfigured: !!(credentials.clientId && credentials.consumerKey),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('SnapTrade config check failed:', error);
+    res.status(500).json({
+      error: 'Failed to check SnapTrade configuration',
+      status: 'error'
+    });
+  }
+});
+
 // GET /snaptrade/status/user - Get user's SnapTrade status
 router.get('/status/user', requireAuth, async (req, res) => {
   try {

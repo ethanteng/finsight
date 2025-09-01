@@ -73,6 +73,17 @@ export class SnapTradeService {
     try {
       console.log('🔍 Registering SnapTrade user:', userId);
       
+      // Check if credentials are available
+      if (!credentials.clientId || !credentials.consumerKey) {
+        const missingVars = [];
+        if (!credentials.clientId) missingVars.push('SNAPTRADE_CLIENT_ID' + (snapTradeMode === 'production' ? '_PROD' : ''));
+        if (!credentials.consumerKey) missingVars.push('SNAPTRADE_CONSUMER_KEY' + (snapTradeMode === 'production' ? '_PROD' : ''));
+        
+        const errorMsg = `SnapTrade credentials not configured. Missing: ${missingVars.join(', ')}`;
+        console.error('❌', errorMsg);
+        return { success: false, error: errorMsg };
+      }
+      
       // Register user with SnapTrade
       const registration = await snaptrade.authentication.registerSnapTradeUser({
         userId,
@@ -108,7 +119,26 @@ export class SnapTradeService {
       };
     } catch (error) {
       console.error('SnapTrade user registration failed:', error);
-      return { success: false, error: error instanceof Error ? error.message : 'Registration failed' };
+      
+      // Provide more detailed error information
+      let errorMessage = 'Registration failed';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        
+        // Check for specific error types
+        if (error.message.includes('Request failed with status code')) {
+          errorMessage = `SnapTrade API error: ${error.message}`;
+        } else if (error.message.includes('ECONNREFUSED') || error.message.includes('ENOTFOUND')) {
+          errorMessage = 'SnapTrade API connection failed. Check network connectivity and API endpoint.';
+        } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+          errorMessage = 'SnapTrade authentication failed. Check your API credentials.';
+        } else if (error.message.includes('400') || error.message.includes('Bad Request')) {
+          errorMessage = 'SnapTrade API request invalid. Check request parameters and API documentation.';
+        }
+      }
+      
+      return { success: false, error: errorMessage };
     }
   }
 

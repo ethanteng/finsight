@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import { config } from 'dotenv';
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
@@ -27,12 +26,21 @@ declare global {
   }
 }
 
-// Load environment variables from .env.local (for local development)
-config({ path: '.env.local' });
+// Load environment variables from .env.local (for local development only)
+// In production, environment variables should come from Render's environment settings
+if (process.env.NODE_ENV !== 'production') {
+  config({ path: '.env.local' });
+}
 
-// DEBUG: Log the actual DATABASE_URL being used
-console.log('🔍 DEBUG - DATABASE_URL:', process.env.DATABASE_URL);
-console.log('🔍 DEBUG - NODE_ENV:', process.env.NODE_ENV);
+// DEBUG: Log environment configuration
+console.log('🔍 Environment Configuration:');
+console.log('  NODE_ENV:', process.env.NODE_ENV);
+console.log('  DATABASE_URL:', process.env.DATABASE_URL ? 'SET' : 'NOT SET');
+console.log('  SNAPTRADE_MODE:', process.env.SNAPTRADE_MODE || 'sandbox');
+console.log('  SNAPTRADE_CLIENT_ID:', process.env.SNAPTRADE_CLIENT_ID ? 'SET' : 'NOT SET');
+console.log('  SNAPTRADE_CONSUMER_KEY:', process.env.SNAPTRADE_CONSUMER_KEY ? 'SET' : 'NOT SET');
+console.log('  SNAPTRADE_CLIENT_ID_PROD:', process.env.SNAPTRADE_CLIENT_ID_PROD ? 'SET' : 'NOT SET');
+console.log('  SNAPTRADE_CONSUMER_KEY_PROD:', process.env.SNAPTRADE_CONSUMER_KEY_PROD ? 'SET' : 'NOT SET');
 
 // Now import Plaid after environment variables are loaded
 import { setupPlaidRoutes } from './plaid';
