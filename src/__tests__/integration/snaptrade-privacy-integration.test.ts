@@ -30,13 +30,39 @@ describe('SnapTrade Privacy Integration Tests', () => {
     await testPrisma.userProfile.deleteMany();
     await testPrisma.user.deleteMany();
 
-    // Create test users
-    user1 = await createTestUser('user1@test.com');
-    user2 = await createTestUser('user2@test.com');
+    // Create test users in database
+    user1 = await testPrisma.user.create({
+      data: {
+        email: 'user1@test.com',
+        passwordHash: 'hashedpassword1',
+        tier: 'starter',
+        isActive: true,
+        emailVerified: false
+      }
+    });
+    user2 = await testPrisma.user.create({
+      data: {
+        email: 'user2@test.com',
+        passwordHash: 'hashedpassword2',
+        tier: 'starter',
+        isActive: true,
+        emailVerified: false
+      }
+    });
 
     // Generate JWT tokens
-    user1JWT = await hashPassword(user1.id + user1.email + user1.tier);
-    user2JWT = await hashPassword(user2.id + user2.email + user2.tier);
+    const jwt = require('jsonwebtoken');
+    const JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
+    user1JWT = jwt.sign(
+      { userId: user1.id, email: user1.email, tier: user1.tier },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+    user2JWT = jwt.sign(
+      { userId: user2.id, email: user2.email, tier: user2.tier },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
 
     // Create SnapTrade users for testing (if table exists)
     try {

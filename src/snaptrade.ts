@@ -366,6 +366,18 @@ if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
   
   snapTradeService.registerUser = async (userId: string) => {
     console.log('SnapTrade: Mock registerUser called with:', userId);
+    
+    // Create the database record like the real service does
+    const db = getPrismaClient();
+    await db.snapTradeUser.create({
+      data: {
+        userId: userId,
+        snapTradeUserId: userId,
+        userSecret: `mock_secret_${userId}`,
+        status: 'registered'
+      }
+    });
+    
     return {
       success: true,
       data: {
@@ -407,6 +419,13 @@ if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
   
   snapTradeService.deleteUser = async (userId: string) => {
     console.log('SnapTrade: Mock deleteUser called with:', userId);
+    
+    // Actually delete the user from the database like the real service does
+    const db = getPrismaClient();
+    await db.snapTradeUser.deleteMany({
+      where: { userId }
+    });
+    
     return {
       success: true,
       data: {
