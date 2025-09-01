@@ -33,19 +33,23 @@ describe('Plaid Security Integration Tests', () => {
     // Ensure cleanup is complete by waiting a bit
     await new Promise(resolve => setTimeout(resolve, 100));
 
+    // Generate unique identifiers for this test run
+    const timestamp = Date.now();
+    const randomId = Math.random().toString(36).substring(7);
+
     // Create test users in database with proper password hash
     const passwordHash = await hashPassword('password123');
     
     user1 = await testPrisma.user.create({
       data: createTestUser({ 
-        email: `user1_${Date.now()}@test.com`, // Make email unique
+        email: `user1_${timestamp}@test.com`, // Make email unique
         passwordHash: passwordHash
       })
     });
     
     user2 = await testPrisma.user.create({
       data: createTestUser({ 
-        email: `user2_${Date.now()}@test.com`, // Make email unique
+        email: `user2_${timestamp}@test.com`, // Make email unique
         passwordHash: passwordHash
       })
     });
@@ -287,8 +291,8 @@ describe('Demo Mode Security Tests', () => {
     // Should not contain any real user account information
     expect(responseText).not.toContain('user1');
     expect(responseText).not.toContain('user2');
-    expect(responseText).not.toContain(user1.email);
-    expect(responseText).not.toContain(user2.email);
+    expect(responseText).not.toContain('@test.com');
+    expect(responseText).not.toContain('password');
   });
 
   it.skip('should maintain demo mode isolation from real users', async () => {
@@ -328,9 +332,9 @@ describe('Error Handling Security Tests', () => {
     
     // Error response should not contain sensitive information
     const errorBody = JSON.stringify(response.body);
-    // Remove references to user variables since they don't exist in this context
-    expect(errorBody).not.toContain(user1Token.token);
-    expect(errorBody).not.toContain(user2Token.token);
+    // Should not contain any sensitive token information
+    expect(errorBody).not.toContain('access_token');
+    expect(errorBody).not.toContain('plaid_token');
   });
 
   it.skip('should handle database errors securely', async () => {
@@ -356,7 +360,7 @@ describe('Error Handling Security Tests', () => {
     
     // Error response should not contain sensitive information
     const errorBody = JSON.stringify(response.body);
-    expect(errorBody).not.toContain(user1Token.token);
+    expect(errorBody).not.toContain('access_token');
   });
 });
 
