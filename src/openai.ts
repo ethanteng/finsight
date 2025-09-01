@@ -128,11 +128,14 @@ function enhanceResponseWithUpgrades(answer: string, tierContext: TierAwareConte
 
   const upgradeSection = `
 
-> **💡 Want more insights?** Upgrade your plan to access:
-> 
-> ${tierContext.upgradeHints.map(hint => `> • **${hint.feature}**: ${hint.benefit}`).join('\n')}
-> 
-> *Your current tier: ${tierContext.tierInfo.currentTier}*
+
+───────────────
+
+**💡 Want more insights?** Upgrade your plan to access:
+
+${tierContext.upgradeHints.map(hint => `• **${hint.feature}**: ${hint.benefit}`).join('\n')}
+
+*Your current tier: ${tierContext.tierInfo.currentTier}*
 `;
 
   return answer + upgradeSection;
