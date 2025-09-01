@@ -229,34 +229,51 @@ export default function ProfilePage() {
 
     // Convert SnapTrade holdings to the format expected by InvestmentPortfolio
     const snapTradeHoldingsFormatted = snapTradeData ? snapTradeData.flatMap((accountHolding: any) => {
+      console.log('Processing SnapTrade account holding:', accountHolding);
+      
       if (!accountHolding.account || !accountHolding.positions) {
+        console.log('Skipping account holding - missing account or positions');
         return [];
       }
 
-      return accountHolding.positions.map((position: any) => ({
-        id: `${accountHolding.account.id}-${position.symbol?.id || 'unknown'}`,
-        account_id: accountHolding.account.id,
-        security_id: position.symbol?.id || 'unknown',
-        institution_value: (position.price || 0) * (position.units || 0),
-        institution_price: position.price || 0,
-        institution_price_as_of: new Date().toISOString(),
-        cost_basis: (position.average_purchase_price || 0) * (position.units || 0),
-        quantity: position.units || 0,
-        iso_currency_code: position.currency?.code || 'USD',
-        security_name: position.symbol?.symbol?.description || position.symbol?.symbol?.symbol || 'Unknown Security',
-        security_type: position.symbol?.symbol?.type?.description || 'Bond',
-        ticker_symbol: position.symbol?.symbol?.symbol || 'Unknown',
-        name: position.symbol?.symbol?.description || position.symbol?.symbol?.symbol || 'Unknown Security',
-        type: position.symbol?.symbol?.type?.description || 'Bond',
-        value: (position.price || 0) * (position.units || 0),
-        // SnapTrade specific fields
-        snapTradeData: {
-          open_pnl: position.open_pnl,
-          average_purchase_price: position.average_purchase_price,
-          account_name: accountHolding.account.name,
-          account_number: accountHolding.account.number,
-        }
-      }));
+      return accountHolding.positions.map((position: any) => {
+        const positionValue = (position.price || 0) * (position.units || 0);
+        const costBasis = (position.average_purchase_price || 0) * (position.units || 0);
+        
+        console.log('Processing position:', {
+          symbol: position.symbol?.symbol?.symbol,
+          description: position.symbol?.symbol?.description,
+          units: position.units,
+          price: position.price,
+          value: positionValue,
+          costBasis: costBasis
+        });
+        
+        return {
+          id: `${accountHolding.account.id}-${position.symbol?.id || 'unknown'}`,
+          account_id: accountHolding.account.id,
+          security_id: position.symbol?.id || 'unknown',
+          institution_value: positionValue,
+          institution_price: position.price || 0,
+          institution_price_as_of: new Date().toISOString(),
+          cost_basis: costBasis,
+          quantity: position.units || 0,
+          iso_currency_code: position.currency?.code || 'USD',
+          security_name: position.symbol?.symbol?.description || position.symbol?.symbol?.symbol || 'Unknown Security',
+          security_type: position.symbol?.symbol?.type?.description || 'Bond',
+          ticker_symbol: position.symbol?.symbol?.symbol || 'Unknown',
+          name: position.symbol?.symbol?.description || position.symbol?.symbol?.symbol || 'Unknown Security',
+          type: position.symbol?.symbol?.type?.description || 'Bond',
+          value: positionValue,
+          // SnapTrade specific fields
+          snapTradeData: {
+            open_pnl: position.open_pnl,
+            average_purchase_price: position.average_purchase_price,
+            account_name: accountHolding.account.name,
+            account_number: accountHolding.account.number,
+          }
+        };
+      });
     }) : [];
 
     // Combine Plaid and SnapTrade holdings
@@ -266,9 +283,18 @@ export default function ProfilePage() {
     ];
 
     // Calculate combined portfolio metrics
-    const totalValue = combinedHoldings.reduce((sum, holding) => sum + (holding.institution_value || holding.value || 0), 0);
+    console.log('Combined holdings:', combinedHoldings.length);
+    console.log('Sample holding:', combinedHoldings[0]);
+    
+    const totalValue = combinedHoldings.reduce((sum, holding) => {
+      const holdingValue = holding.institution_value || holding.value || 0;
+      console.log(`Holding ${holding.security_name}: value = ${holdingValue}`);
+      return sum + holdingValue;
+    }, 0);
     const holdingCount = combinedHoldings.length;
     const securityCount = new Set(combinedHoldings.map(h => h.security_id)).size;
+    
+    console.log('Calculated metrics:', { totalValue, holdingCount, securityCount });
 
     // Group by security type for asset allocation
     const assetAllocationMap = new Map<string, number>();
@@ -350,6 +376,12 @@ export default function ProfilePage() {
       setSnapTradeHoldings(snapTradeData);
       
       console.log('Merged investment data:', mergedData);
+      console.log('Portfolio metrics:', {
+        totalValue: mergedData?.analysis?.portfolio?.totalValue,
+        holdingCount: mergedData?.analysis?.portfolio?.holdingCount,
+        securityCount: mergedData?.analysis?.portfolio?.securityCount,
+        holdingsLength: mergedData?.holdings?.length
+      });
     } catch (err) {
       console.error('Error loading investment data:', err);
       // Don't set error here as this is optional data
@@ -864,13 +896,13 @@ export default function ProfilePage() {
             <div className="mb-6">
               <InvestmentPortfolio 
                 portfolio={{
-                  totalValue: investmentData.portfolio?.totalValue || 0,
-                  assetAllocation: investmentData.portfolio?.assetAllocation || [],
-                  holdingCount: investmentData.portfolio?.holdingCount || 0,
-                  securityCount: investmentData.portfolio?.securityCount || 0
+                  totalValue: investmentData.analysis?.portfolio?.totalValue || 0,
+                  assetAllocation: investmentData.analysis?.portfolio?.assetAllocation || [],
+                  holdingCount: investmentData.analysis?.portfolio?.holdingCount || 0,
+                  securityCount: investmentData.analysis?.portfolio?.securityCount || 0
                 }}
                 holdings={investmentData.holdings || []}
-                transactions={investmentData.transactions || []}
+                transactions={investmentData.investment_transactions || []}
                 isDemo={isDemo}
               />
             </div>
