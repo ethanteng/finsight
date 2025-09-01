@@ -19,6 +19,7 @@ function createEnhancedMockDatabase() {
         return [];
       },
       create: async (data: any) => ({ id: 'mock-account-1', ...data.data }),
+      createMany: async (data: any) => ({ count: data.data.length }),
       update: async (data: any) => ({ id: 'mock-account-1', ...data.data }),
       deleteMany: async () => ({ count: 1 })
     },
