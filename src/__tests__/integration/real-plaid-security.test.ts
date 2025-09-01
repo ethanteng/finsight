@@ -81,6 +81,12 @@ describe('Real Plaid Security Tests', () => {
     await testPrisma.demoSession.deleteMany();
     await testPrisma.accessToken.deleteMany();
     await testPrisma.userProfile.deleteMany();
+    // Clean up SnapTrade users if table exists
+    try {
+      await testPrisma.snapTradeUser.deleteMany();
+    } catch (error) {
+      // Table might not exist in test database
+    }
     await testPrisma.user.deleteMany();
   });
 
