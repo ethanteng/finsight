@@ -4,6 +4,7 @@ import PlaidLinkButton, { PlaidLinkButtonRef, resetPlaidLinkInitialization } fro
 import TransactionHistory from '../../components/TransactionHistory';
 import UserProfile from '../../components/UserProfile';
 import InvestmentPortfolio from '../../components/InvestmentPortfolio';
+import SnapTradeButton from '../../components/SnapTradeButton';
 import PageMeta from '../../components/PageMeta';
 
 interface Account {
@@ -848,6 +849,15 @@ export default function ProfilePage() {
                 </p>
                 
                 <div className="space-y-4">
+                  <div className="border border-gray-600 rounded-lg p-4">
+                    <h4 className="font-medium mb-2">Investment Accounts (SnapTrade)</h4>
+                    <p className="text-gray-400 text-sm mb-3">
+                      Connect your investment accounts to get insights on your portfolio, 
+                      holdings, and investment performance.
+                    </p>
+                    <SnapTradeButton />
+                  </div>
+
                   <div className="border border-gray-600 rounded-lg p-4">
                     <h4 className="font-medium mb-2">Disconnect Your Accounts</h4>
                     <p className="text-gray-400 text-sm mb-3">

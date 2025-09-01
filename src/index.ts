@@ -38,6 +38,10 @@ console.log('🔍 DEBUG - NODE_ENV:', process.env.NODE_ENV);
 import { setupPlaidRoutes } from './plaid';
 import { askOpenAI, askOpenAIWithEnhancedContext } from './openai';
 
+// Import SnapTrade configuration
+import './snaptrade';
+import { setupSnapTradeRoutes } from './auth/snaptrade-routes';
+
 import { getPrismaClient } from './prisma-client';
 
 const app: Application = express();
@@ -136,8 +140,12 @@ app.use(optionalAuth);
 // Setup Plaid routes
 try {
 	console.log('🔧 Calling setupPlaidRoutes...');
-	setupPlaidRoutes(app);
-	console.log('✅ setupPlaidRoutes completed successfully');
+setupPlaidRoutes(app);
+console.log('✅ setupPlaidRoutes completed successfully');
+
+console.log('🔧 Calling setupSnapTradeRoutes...');
+setupSnapTradeRoutes(app);
+console.log('✅ setupSnapTradeRoutes completed successfully');
 	// Test-only: list registered routes to diagnose 404s
 	if (process.env.NODE_ENV === 'test') {
 		try {

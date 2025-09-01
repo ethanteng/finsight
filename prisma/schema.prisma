@@ -30,6 +30,7 @@ model User {
   passwordResetTokens    PasswordResetToken[]
   subscriptions          Subscription[]
   profile                UserProfile?
+  snapTradeUser          SnapTradeUser?
 
   @@map("users")
 }
@@ -326,4 +327,17 @@ model SubscriptionEvent {
   subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
 
   @@map("subscription_events")
+}
+
+model SnapTradeUser {
+  id                String   @id @default(cuid())
+  userId            String   @unique // Our system's user ID
+  snapTradeUserId   String   @unique // SnapTrade's user ID
+  userSecret        String
+  status            String   @default("registered") // registered, connected, disconnected, error
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("snaptrade_users")
 }
