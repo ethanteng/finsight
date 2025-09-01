@@ -754,18 +754,30 @@ export default function ProfilePage() {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${API_URL}/privacy/disconnect-accounts`, {
+      // Disconnect Plaid accounts
+      const plaidResponse = await fetch(`${API_URL}/privacy/disconnect-accounts`, {
         method: 'POST',
         headers,
       });
 
-      if (response.ok) {
-        setDeleteMessage('Your accounts have been successfully disconnected.');
-        // Reload accounts to show they're disconnected
-        loadConnectedAccountsWithDemoMode(false);
+      // Disconnect SnapTrade accounts
+      const snapTradeResponse = await fetch(`${API_URL}/snaptrade/delete`, {
+        method: 'DELETE',
+        headers,
+      });
+
+      if (plaidResponse.ok && snapTradeResponse.ok) {
+        setDeleteMessage('All your accounts (Plaid and SnapTrade) have been successfully disconnected.');
+      } else if (plaidResponse.ok) {
+        setDeleteMessage('Your Plaid accounts have been disconnected. Some SnapTrade accounts may still be connected.');
+      } else if (snapTradeResponse.ok) {
+        setDeleteMessage('Your SnapTrade accounts have been disconnected. Some Plaid accounts may still be connected.');
       } else {
-        setDeleteMessage('Failed to disconnect accounts. Please try again.');
+        setDeleteMessage('Failed to disconnect some accounts. Please try again.');
       }
+
+      // Reload accounts to show they're disconnected
+      loadConnectedAccountsWithDemoMode(false);
     } catch (_error) {
       setDeleteMessage('An error occurred while disconnecting your accounts. Please try again.');
     } finally {
@@ -793,20 +805,31 @@ export default function ProfilePage() {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${API_URL}/privacy/delete-all-data`, {
+      // Delete Plaid data
+      const plaidResponse = await fetch(`${API_URL}/privacy/delete-all-data`, {
         method: 'DELETE',
         headers,
       });
 
-      if (response.ok) {
-        setDeleteMessage('All your data has been successfully deleted.');
+      // Delete SnapTrade data
+      const snapTradeResponse = await fetch(`${API_URL}/snaptrade/delete`, {
+        method: 'DELETE',
+        headers,
+      });
+
+      if (plaidResponse.ok && snapTradeResponse.ok) {
+        setDeleteMessage('All your data (Plaid and SnapTrade) has been successfully deleted.');
         localStorage.removeItem('auth_token');
         // Redirect to home page after successful deletion
         setTimeout(() => {
           window.location.href = '/';
         }, 2000);
+      } else if (plaidResponse.ok) {
+        setDeleteMessage('Your Plaid data has been deleted. Some SnapTrade data may still exist.');
+      } else if (snapTradeResponse.ok) {
+        setDeleteMessage('Your SnapTrade data has been deleted. Some Plaid data may still exist.');
       } else {
-        setDeleteMessage('Failed to delete data. Please try again or contact support.');
+        setDeleteMessage('Failed to delete some data. Please try again or contact support.');
       }
     } catch (_error) {
       setDeleteMessage('An error occurred while deleting your data. Please try again.');
@@ -1096,16 +1119,15 @@ export default function ProfilePage() {
             <div className="space-y-6">
               <div>
                 <p className="text-gray-400 text-sm mb-4">
-                  Your financial data is read-only and never stored permanently. 
-                  We use Plaid&apos;s secure API to access your accounts.
+                  Your financial data is read-only and never stored permanently.
                 </p>
                 
                 <div className="space-y-4">
                   <div className="border border-gray-600 rounded-lg p-4">
                     <h4 className="font-medium mb-2">Disconnect Your Accounts</h4>
                     <p className="text-gray-400 text-sm mb-3">
-                      Remove all Plaid connections and clear your financial data. 
-                      This will disconnect all linked bank accounts but keep your conversation history.
+                      Remove all Plaid and SnapTrade connections and clear your financial data. 
+                      This will disconnect all linked financial accounts but keep your conversation history.
                     </p>
                     <button
                       onClick={handleDisconnectAccounts}
@@ -1120,7 +1142,7 @@ export default function ProfilePage() {
                     <h4 className="font-medium mb-2">Delete All Your Data</h4>
                     <p className="text-gray-400 text-sm mb-3">
                       Permanently delete all your data including accounts, transactions, 
-                      conversations, and Plaid connections. This action cannot be undone.
+                      conversations, and Plaid and SnapTrade connections. This action cannot be undone.
                     </p>
                     <button
                       onClick={() => setShowDeleteConfirm(true)}
@@ -1156,7 +1178,8 @@ export default function ProfilePage() {
                     This action will permanently delete all your data including:
                   </p>
                   <ul className="text-sm text-gray-400 mb-4 space-y-1">
-                    <li>• All connected bank accounts</li>
+                    <li>• All connected accounts (Plaid)</li>
+                    <li>• All connected accounts (SnapTrade)</li>
                     <li>• Transaction history</li>
                     <li>• Conversation history</li>
                     <li>• Account balances and sync data</li>

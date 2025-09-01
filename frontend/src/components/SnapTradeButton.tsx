@@ -274,15 +274,7 @@ export default function SnapTradeButton() {
           {getButtonText()}
         </button>
         
-        {(status === 'registered' || status === 'connected') && (
-                      <button
-              onClick={disconnectSnapTrade}
-              disabled={isInitializing}
-              className="px-4 py-2 text-red-400 border border-red-500 hover:bg-red-600 hover:text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-            Disconnect
-          </button>
-        )}
+
         
         {status === 'loading' && (
           <div className="text-sm text-gray-400 bg-gray-800 border border-gray-600 rounded-lg p-3">
