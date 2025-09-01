@@ -591,4 +591,130 @@ describe('Complete Security Test Suite', () => {
       });
     });
   }
+
+  describe('Phase 6: SnapTrade Security Tests', () => {
+
+    describe('SnapTrade Authentication Security', () => {
+      test('should enforce authentication on SnapTrade endpoints', async () => {
+        // Test without authentication
+        const unauthenticatedResponse = await request(testApp)
+          .get('/snaptrade/status/user');
+        
+        expect(unauthenticatedResponse.status).toBe(401);
+      });
+
+      test('should reject invalid JWT tokens for SnapTrade endpoints', async () => {
+        const response = await request(testApp)
+          .get('/snaptrade/status/user')
+          .set('Authorization', 'Bearer invalid_token')
+          .expect(401);
+        
+        expect(response.body).toHaveProperty('error');
+      });
+
+      test('should accept valid JWT tokens for SnapTrade endpoints', async () => {
+        const response = await request(testApp)
+          .get('/snaptrade/status/user')
+          .set('Authorization', `Bearer ${user1JWT}`)
+          .expect(200);
+        
+        expect(response.body).toHaveProperty('status');
+      });
+    });
+
+    describe('SnapTrade User Data Isolation', () => {
+      test('should prevent User A from seeing User B SnapTrade data', async () => {
+        // User1 should only see their own SnapTrade data
+        const user1Response = await request(testApp)
+          .get('/snaptrade/status/user')
+          .set('Authorization', `Bearer ${user1JWT}`);
+        
+        // User2 should only see their own SnapTrade data
+        const user2Response = await request(testApp)
+          .get('/snaptrade/status/user')
+          .set('Authorization', `Bearer ${user2JWT}`);
+        
+        // Both should get responses (200 or 404)
+        expect([200, 404]).toContain(user1Response.status);
+        expect([200, 404]).toContain(user2Response.status);
+        
+        // If both have SnapTrade data, responses should be different
+        if (user1Response.status === 200 && user2Response.status === 200) {
+          expect(user1Response.body).not.toEqual(user2Response.body);
+        }
+      });
+
+      test('should only return SnapTrade data for authenticated user', async () => {
+        const response = await request(testApp)
+          .get('/snaptrade/status/user')
+          .set('Authorization', `Bearer ${user1JWT}`);
+        
+        // Should return 200 (if user has SnapTrade) or 404 (if not)
+        expect([200, 404]).toContain(response.status);
+      });
+    });
+
+    describe('SnapTrade Endpoint Security', () => {
+      test('should test actual /snaptrade/accounts endpoint', async () => {
+        const response = await request(testApp)
+          .get('/snaptrade/accounts')
+          .set('Authorization', `Bearer ${user1JWT}`);
+        
+        // Should return 200 (if user has SnapTrade) or 404 (if not)
+        expect([200, 404]).toContain(response.status);
+      });
+
+      test('should test actual /snaptrade/holdings endpoint', async () => {
+        const response = await request(testApp)
+          .get('/snaptrade/holdings')
+          .set('Authorization', `Bearer ${user1JWT}`);
+        
+        // Should return 200 (if user has SnapTrade) or 404 (if not)
+        expect([200, 404]).toContain(response.status);
+      });
+
+      test('should test actual /snaptrade/activities endpoint', async () => {
+        const response = await request(testApp)
+          .get('/snaptrade/activities')
+          .set('Authorization', `Bearer ${user1JWT}`);
+        
+        // Should return 200 (if user has SnapTrade) or 404 (if not)
+        expect([200, 404]).toContain(response.status);
+      });
+    });
+
+    describe('SnapTrade Error Handling Security', () => {
+      test('should not leak sensitive SnapTrade information in error messages', async () => {
+        // Test with a user that doesn't have SnapTrade initialized
+        const newUser = await testPrisma.user.create({
+          data: {
+            email: 'newuser@test.com',
+            passwordHash: 'test-hash',
+            emailVerified: true,
+            tier: 'FREE'
+          }
+        });
+        
+        const jwt = require('jsonwebtoken');
+        const newUserJWT = jwt.sign(
+          { userId: newUser.id, email: newUser.email, tier: 'FREE' },
+          process.env.JWT_SECRET || 'test-secret'
+        );
+        
+        const response = await request(testApp)
+          .get('/snaptrade/accounts')
+          .set('Authorization', `Bearer ${newUserJWT}`);
+        
+        // Should return 404 for user without SnapTrade
+        expect(response.status).toBe(404);
+        
+        // Error message should not contain sensitive information
+        if (response.body.error) {
+          expect(response.body.error).not.toContain('userSecret');
+          expect(response.body.error).not.toContain('snapTradeUserId');
+          expect(response.body.error).toContain('not found');
+        }
+      });
+    });
+  });
 });
