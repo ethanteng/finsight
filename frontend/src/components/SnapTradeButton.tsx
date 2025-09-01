@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { SnapTradeReact } from 'snaptrade-react';
+import { useWindowMessage } from 'snaptrade-react/hooks/useWindowMessage';
 
 interface SnapTradeStatus {
   status: string;
@@ -23,8 +25,39 @@ export default function SnapTradeButton() {
   const [snapTradeStatus, setSnapTradeStatus] = useState<SnapTradeStatus | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<SnapTradeAccount[]>([]);
   const [isInitializing, setIsInitializing] = useState(false);
+  
+  // Modal state for SnapTrade connection portal
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [redirectLink, setRedirectLink] = useState<string | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+  // Use the useWindowMessage hook for handling SnapTrade events
+  useWindowMessage({
+    handleSuccess: (data) => {
+      console.log('SnapTrade connection successful via window message:', data);
+      setIsModalOpen(false);
+      setRedirectLink(null);
+      // Refresh connected accounts
+      checkConnectedAccounts();
+    },
+    handleError: (error) => {
+      console.error('SnapTrade connection error via window message:', error);
+      setStatus('error');
+      setIsModalOpen(false);
+      setRedirectLink(null);
+    },
+    handleExit: () => {
+      console.log('User exited SnapTrade connection via window message');
+      setIsModalOpen(false);
+      setRedirectLink(null);
+    },
+    close: () => {
+      console.log('SnapTrade modal closed via window message');
+      setIsModalOpen(false);
+      setRedirectLink(null);
+    },
+  });
 
   useEffect(() => {
     checkSnapTradeStatus();
@@ -165,13 +198,10 @@ export default function SnapTradeButton() {
         const data = await response.json();
         console.log('SnapTrade login redirect:', data);
         
-        // Redirect user to SnapTrade
+        // Use the modal approach instead of opening in new tab
         if (data.data?.redirectURI) {
-          window.open(data.data.redirectURI, '_blank');
-          // Wait a bit then check for new accounts
-          setTimeout(() => {
-            checkConnectedAccounts();
-          }, 2000);
+          setRedirectLink(data.data.redirectURI);
+          setIsModalOpen(true);
         }
       } else {
         const errorData = await response.json();
@@ -329,6 +359,37 @@ export default function SnapTradeButton() {
           <div className="font-medium text-red-300 mb-1">Connection Error</div>
           <div className="text-gray-400">There was an error connecting to SnapTrade. Please try again.</div>
         </div>
+      )}
+
+      {/* SnapTrade Connection Modal */}
+      {redirectLink && (
+        <SnapTradeReact
+          loginLink={redirectLink}
+          isOpen={isModalOpen}
+          close={() => {
+            setIsModalOpen(false);
+            setRedirectLink(null);
+          }}
+          onSuccess={(data) => {
+            console.log('SnapTrade connection successful:', data);
+            setIsModalOpen(false);
+            setRedirectLink(null);
+            // Refresh connected accounts
+            checkConnectedAccounts();
+          }}
+          onError={(error) => {
+            console.error('SnapTrade connection error:', error);
+            setStatus('error');
+            setIsModalOpen(false);
+            setRedirectLink(null);
+          }}
+          onExit={() => {
+            console.log('User exited SnapTrade connection');
+            setIsModalOpen(false);
+            setRedirectLink(null);
+          }}
+          contentLabel="Connect Account via SnapTrade"
+        />
       )}
     </div>
   );

@@ -40,6 +40,13 @@ interface InvestmentData {
     cost_basis: number;
     quantity: number;
     iso_currency_code: string;
+    security_name?: string;
+    security_type?: string;
+    ticker_symbol?: string;
+    name?: string;
+    type?: string;
+    value?: number;
+    snapTradeData?: any;
   }>;
   transactions: Array<{
     id: string;
@@ -54,6 +61,30 @@ interface InvestmentData {
     type: string;
     iso_currency_code: string;
   }>;
+  // Additional fields for SnapTrade integration
+  investment_transactions?: Array<any>;
+  total_investment_transactions?: number;
+  securities?: any[];
+  accounts?: any[];
+  item?: any;
+  analysis?: {
+    portfolio: {
+      totalValue: number;
+      assetAllocation: Array<{
+        type: string;
+        value: number;
+        percentage: number;
+      }>;
+      holdingCount: number;
+      securityCount: number;
+    };
+    activity: {
+      totalTransactions: number;
+      totalVolume: number;
+      activityByType: Record<string, number>;
+      averageTransactionSize: number;
+    };
+  };
 }
 
 export default function ProfilePage() {
@@ -264,49 +295,85 @@ export default function ProfilePage() {
     const snapTradeHoldingsFormatted = snapTradeData ? snapTradeData.flatMap((accountHolding: any) => {
       console.log('Processing SnapTrade account holding:', accountHolding);
       
-      if (!accountHolding.account || !accountHolding.positions) {
-        console.log('Skipping account holding - missing account or positions');
+      if (!accountHolding.account) {
+        console.log('Skipping account holding - missing account');
         return [];
       }
 
-      return accountHolding.positions.map((position: any) => {
-        const positionValue = (position.price || 0) * (position.units || 0);
-        const costBasis = (position.average_purchase_price || 0) * (position.units || 0);
-        
-        console.log('Processing position:', {
-          symbol: position.symbol?.symbol?.symbol,
-          description: position.symbol?.symbol?.description,
-          units: position.units,
-          price: position.price,
-          value: positionValue,
-          costBasis: costBasis
+      const holdings = [];
+
+      // Handle accounts with positions (investments)
+      if (accountHolding.positions && accountHolding.positions.length > 0) {
+        accountHolding.positions.forEach((position: any) => {
+          const positionValue = (position.price || 0) * (position.units || 0);
+          const costBasis = (position.average_purchase_price || 0) * (position.units || 0);
+          
+          console.log('Processing position:', {
+            symbol: position.symbol?.symbol?.symbol,
+            description: position.symbol?.symbol?.description,
+            units: position.units,
+            price: position.price,
+            value: positionValue,
+            costBasis: costBasis
+          });
+          
+          holdings.push({
+            id: `${accountHolding.account.id}-${position.symbol?.id || 'unknown'}`,
+            account_id: accountHolding.account.id,
+            security_id: position.symbol?.id || 'unknown',
+            institution_value: positionValue,
+            institution_price: position.price || 0,
+            institution_price_as_of: new Date().toISOString(),
+            cost_basis: costBasis,
+            quantity: position.units || 0,
+            iso_currency_code: position.currency?.code || 'USD',
+            security_name: position.symbol?.symbol?.description || position.symbol?.symbol?.symbol || 'Unknown Security',
+            security_type: position.symbol?.symbol?.type?.description || 'Bond',
+            ticker_symbol: position.symbol?.symbol?.symbol || 'Unknown',
+            name: position.symbol?.symbol?.description || position.symbol?.symbol?.symbol || 'Unknown Security',
+            type: position.symbol?.symbol?.type?.description || 'Bond',
+            value: positionValue,
+            // SnapTrade specific fields
+            snapTradeData: {
+              open_pnl: position.open_pnl,
+              average_purchase_price: position.average_purchase_price,
+              account_name: accountHolding.account.name,
+              account_number: accountHolding.account.number,
+            }
+          });
         });
-        
-        return {
-          id: `${accountHolding.account.id}-${position.symbol?.id || 'unknown'}`,
-          account_id: accountHolding.account.id,
-          security_id: position.symbol?.id || 'unknown',
-          institution_value: positionValue,
-          institution_price: position.price || 0,
-          institution_price_as_of: new Date().toISOString(),
-          cost_basis: costBasis,
-          quantity: position.units || 0,
-          iso_currency_code: position.currency?.code || 'USD',
-          security_name: position.symbol?.symbol?.description || position.symbol?.symbol?.symbol || 'Unknown Security',
-          security_type: position.symbol?.symbol?.type?.description || 'Bond',
-          ticker_symbol: position.symbol?.symbol?.symbol || 'Unknown',
-          name: position.symbol?.symbol?.description || position.symbol?.symbol?.symbol || 'Unknown Security',
-          type: position.symbol?.symbol?.type?.description || 'Bond',
-          value: positionValue,
-          // SnapTrade specific fields
-          snapTradeData: {
-            open_pnl: position.open_pnl,
-            average_purchase_price: position.average_purchase_price,
-            account_name: accountHolding.account.name,
-            account_number: accountHolding.account.number,
-          }
-        };
-      });
+      }
+
+      // Handle accounts with only cash (no positions)
+      if (accountHolding.balances && accountHolding.balances.length > 0) {
+        const cashBalance = accountHolding.balances.find((b: any) => b.currency?.code === 'USD');
+        if (cashBalance && cashBalance.cash > 0) {
+          console.log('Adding cash balance:', cashBalance.cash);
+          holdings.push({
+            id: `${accountHolding.account.id}-cash`,
+            account_id: accountHolding.account.id,
+            security_id: 'cash',
+            institution_value: cashBalance.cash,
+            institution_price: 1,
+            institution_price_as_of: new Date().toISOString(),
+            cost_basis: cashBalance.cash,
+            quantity: cashBalance.cash,
+            iso_currency_code: 'USD',
+            security_name: 'Cash',
+            security_type: 'Cash',
+            ticker_symbol: 'CASH',
+            name: 'Cash',
+            type: 'Cash',
+            value: cashBalance.cash,
+            snapTradeData: {
+              account_name: accountHolding.account.name,
+              account_number: accountHolding.account.number,
+            }
+          });
+        }
+      }
+
+      return holdings;
     }) : [];
 
     // Combine Plaid and SnapTrade holdings
@@ -321,7 +388,7 @@ export default function ProfilePage() {
     
     const totalValue = combinedHoldings.reduce((sum, holding) => {
       const holdingValue = holding.institution_value || holding.value || 0;
-      console.log(`Holding ${holding.security_name}: value = ${holdingValue}`);
+      console.log(`Holding ${holding.security_name || holding.name || 'Unknown'}: value = ${holdingValue}`);
       return sum + holdingValue;
     }, 0);
     const holdingCount = combinedHoldings.length;
@@ -380,6 +447,12 @@ export default function ProfilePage() {
       ...snapTradeActivitiesFormatted
     ];
 
+    console.log('Final portfolio data being set:', {
+      portfolio: { totalValue, assetAllocation, holdingCount, securityCount },
+      holdingsCount: combinedHoldings.length,
+      transactionsCount: combinedTransactions.length
+    });
+
     // Calculate transaction metrics
     const totalTransactions = combinedTransactions.length;
     const totalVolume = combinedTransactions.reduce((sum, tx) => sum + Math.abs(tx.institution_value || tx.value || 0), 0);
@@ -393,11 +466,19 @@ export default function ProfilePage() {
     });
 
     return {
+      portfolio: {
+        totalValue,
+        assetAllocation,
+        holdingCount,
+        securityCount
+      },
       holdings: combinedHoldings,
-      securities: plaidData?.securities || [],
-      accounts: plaidData?.accounts || [],
+      transactions: combinedTransactions,
+      // Additional fields for SnapTrade integration
       investment_transactions: combinedTransactions,
       total_investment_transactions: totalTransactions,
+      securities: plaidData?.securities || [],
+      accounts: plaidData?.accounts || [],
       item: plaidData?.item,
       analysis: {
         portfolio: {
@@ -1003,6 +1084,36 @@ export default function ProfilePage() {
             <h2 className="text-xl font-semibold mb-4">Your Connected Accounts (SnapTrade)</h2>
             <SnapTradeButton />
             <p className="text-gray-400 text-sm mt-4">No accounts connected yet. Use the button above to connect your first account.</p>
+            
+            {/* Supported Financial Institutions */}
+            <div className="mt-6">
+              <h3 className="text-sm font-medium text-gray-300 mb-3">Supported Financial Institutions</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 text-xs text-gray-400">
+                <div>• TD Ameritrade</div>
+                <div>• Charles Schwab</div>
+                <div>• Fidelity</div>
+                <div>• E*TRADE</div>
+                <div>• Interactive Brokers</div>
+                <div>• Robinhood</div>
+                <div>• Webull</div>
+                <div>• Public.com</div>
+                <div>• Ally Invest</div>
+                <div>• Vanguard</div>
+                <div>• Merrill Edge</div>
+                <div>• Wells Fargo</div>
+                <div>• Chase</div>
+                <div>• Bank of America</div>
+                <div>• US Bank</div>
+                <div>• PNC Bank</div>
+                <div>• Capital One</div>
+                <div>• Citi</div>
+                <div>• HSBC</div>
+                <div>• And many more...</div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                View the complete list of <a href="https://snaptrade.notion.site/brokerages" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">supported brokerages</a>
+              </p>
+            </div>
           </div>
 
           {/* NEW: Enhanced Investment Portfolio Section */}
