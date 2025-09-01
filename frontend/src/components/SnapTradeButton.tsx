@@ -221,10 +221,7 @@ export default function SnapTradeButton() {
       case 'not_initialized':
         return isInitializing ? 'Initializing...' : 'Initialize SnapTrade';
       case 'registered':
-        if (connectedAccounts.length > 0) {
-          return `Connected (${connectedAccounts.length} account${connectedAccounts.length > 1 ? 's' : ''})`;
-        }
-        return isInitializing ? 'Connecting...' : 'Connect Investment Accounts';
+        return isInitializing ? 'Connecting...' : 'Connect Account';
       case 'connected':
         return 'SnapTrade Active';
       case 'disconnected':
@@ -303,14 +300,21 @@ export default function SnapTradeButton() {
         <div className="mt-4">
           <div className="space-y-3">
             {connectedAccounts.map((account) => (
-              <div key={account.id} className="text-sm bg-gray-800 border border-gray-600 rounded-lg p-3">
-                <div className="font-medium text-gray-200 mb-1">{account.name}</div>
-                <div className="text-gray-400 text-xs">
-                  {account.institution} • {account.type}
+              <div key={account.id} className="bg-gray-700 border border-gray-600 rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="font-semibold text-white text-base mb-1">{account.name}</div>
+                    <div className="text-gray-400 text-sm">
+                      {account.institution} • {account.type}
+                      {account.subtype && ` • ${account.subtype}`}
+                    </div>
+                  </div>
                   {account.balance && (
-                    <span className="ml-2 font-semibold text-green-400">
-                      • ${account.balance.toLocaleString()}
-                    </span>
+                    <div className="text-right">
+                      <div className="font-semibold text-white text-base">
+                        ${account.balance.toLocaleString()}
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
