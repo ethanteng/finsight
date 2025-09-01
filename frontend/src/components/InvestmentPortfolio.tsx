@@ -28,6 +28,12 @@ interface Holding {
   name?: string;
   type?: string;
   value?: number;
+  snapTradeData?: {
+    open_pnl?: number;
+    average_purchase_price?: number;
+    account_name?: string;
+    account_number?: string;
+  };
 }
 
 interface InvestmentTransaction {
@@ -44,6 +50,16 @@ interface InvestmentTransaction {
   quantity: number;
   type: string;
   iso_currency_code: string;
+  snapTradeData?: {
+    activity_type?: string;
+    description?: string;
+    trade_date?: string;
+    settlement_date?: string;
+    fee?: number;
+    account_name?: string;
+    account_number?: string;
+    institution?: string;
+  };
 }
 
 interface PortfolioAnalysis {
@@ -249,10 +265,13 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                       <div className="text-sm text-gray-400">
                         {holding.security_type || holding.type || 'Unknown Type'}
                         {holding.ticker_symbol && ` • ${holding.ticker_symbol}`}
+                        {holding.snapTradeData?.account_name && ` • ${holding.snapTradeData.account_name}`}
                       </div>
                       <div className="text-xs text-gray-500">
                         Quantity: {holding.quantity?.toLocaleString() || 'N/A'}
                         {holding.cost_basis > 0 && ` • Cost Basis: ${formatCurrency(holding.cost_basis)}`}
+                        {holding.snapTradeData?.average_purchase_price && 
+                          ` • Avg Price: ${formatCurrency(holding.snapTradeData.average_purchase_price)}`}
                       </div>
                     </div>
                   </div>
@@ -263,6 +282,13 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                     <div className="text-sm text-gray-400">
                       {holding.institution_price ? `${formatCurrency(holding.institution_price)} per share` : 'N/A'}
                     </div>
+                    {holding.snapTradeData?.open_pnl !== undefined && (
+                      <div className={`text-xs font-medium ${
+                        holding.snapTradeData.open_pnl >= 0 ? 'text-green-400' : 'text-red-400'
+                      }`}>
+                        P&L: {formatCurrency(holding.snapTradeData.open_pnl)}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -290,11 +316,14 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                         {transaction.security_name || transaction.name || 'Unknown Security'}
                       </div>
                       <div className="text-sm text-gray-400">
-                        {transaction.type} • {transaction.date}
+                        {transaction.snapTradeData?.activity_type || transaction.type} • {transaction.date}
                         {transaction.ticker_symbol && ` • ${transaction.ticker_symbol}`}
+                        {transaction.snapTradeData?.account_name && ` • ${transaction.snapTradeData.account_name}`}
                       </div>
                       <div className="text-xs text-gray-500">
                         Quantity: {transaction.quantity?.toLocaleString() || 'N/A'}
+                        {transaction.snapTradeData?.description && ` • ${transaction.snapTradeData.description}`}
+                        {transaction.snapTradeData?.fee && transaction.snapTradeData.fee > 0 && ` • Fee: ${formatCurrency(transaction.snapTradeData.fee)}`}
                       </div>
                     </div>
                   </div>
@@ -305,7 +334,7 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                       {formatCurrency(Math.abs(transaction.amount || 0))}
                     </div>
                     <div className="text-sm text-gray-400">
-                      {transaction.type === 'buy' ? 'Purchase' : 'Sale'}
+                      {transaction.snapTradeData?.activity_type || transaction.type}
                     </div>
                   </div>
                 </div>

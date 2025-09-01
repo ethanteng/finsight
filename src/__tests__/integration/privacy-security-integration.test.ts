@@ -50,6 +50,11 @@ app.delete('/privacy/delete-all-data', mockRequireAuth, async (req: any, res: an
     await mockPrisma.syncStatus.deleteMany({
       where: { userId }
     });
+    
+    // Delete SnapTrade user data
+    await mockPrisma.snapTradeUser.deleteMany({
+      where: { userId }
+    });
 
     res.json({ success: true, message: 'All data deleted successfully' });
   } catch (err) {
@@ -77,6 +82,11 @@ app.post('/privacy/disconnect-accounts', mockRequireAuth, async (req: any, res: 
       where: { userId }
     });
     await mockPrisma.syncStatus.deleteMany({
+      where: { userId }
+    });
+    
+    // Clear SnapTrade user data
+    await mockPrisma.snapTradeUser.deleteMany({
       where: { userId }
     });
 

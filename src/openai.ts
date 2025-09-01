@@ -4,6 +4,7 @@ import {
   anonymizeAccountData, 
   anonymizeTransactionData, 
   anonymizeInvestmentData,
+  anonymizeSnapTradeData,
   anonymizeLiabilityData,
   anonymizeEnhancedTransactionData,
   anonymizeConversationHistory, 
@@ -157,12 +158,16 @@ export async function askOpenAIWithEnhancedContext(
   // Convert string tier to enum if needed
   const tier = typeof userTier === 'string' ? (userTier as UserTier) : userTier;
 
+  console.log('🚀 askOpenAIWithEnhancedContext called with question:', question.substring(0, 50) + '...');
+  console.log('🚀 User ID:', userId, 'Tier:', tier, 'Demo:', isDemo);
   console.log('OpenAI Enhanced: Starting enhanced context request for tier:', tier, 'isDemo:', isDemo);
 
   // Get user-specific data
   let accounts: any[] = [];
   let transactions: any[] = [];
   let investmentData: any = null;
+  let snapTradeData: any = null;
+  let snapTradeActivities: any = null;
 
   // For demo mode, use demo data instead of database data
   if (isDemo) {
@@ -462,7 +467,60 @@ export async function askOpenAIWithEnhancedContext(
           }
         }
         
-        console.log('OpenAI Enhanced: Final count -', accounts.length, 'accounts,', transactions.length, 'transactions, and investment data:', investmentData ? 'available' : 'none', 'for user', userId);
+        // Fetch SnapTrade data for authenticated users
+        if (userId && !isDemo) {
+          try {
+            console.log('OpenAI Enhanced: Fetching SnapTrade data for user:', userId);
+            const { snapTradeService } = await import('./snaptrade');
+            
+            // Get SnapTrade user record to get userSecret
+            const { getPrismaClient } = await import('./prisma-client');
+            const prisma = getPrismaClient();
+            const snapTradeUser = await prisma.snapTradeUser.findUnique({
+              where: { userId }
+            });
+            
+            if (snapTradeUser && snapTradeUser.userSecret) {
+              console.log('OpenAI Enhanced: Found SnapTrade user, fetching holdings and activities');
+              
+              // Fetch SnapTrade holdings
+              const holdingsResult = await snapTradeService.getUserHoldings(userId, snapTradeUser.userSecret);
+              if (holdingsResult.success && holdingsResult.data) {
+                // Extract individual positions from account-level data
+                const allPositions = [];
+                for (const account of holdingsResult.data) {
+                  if (account.positions && Array.isArray(account.positions)) {
+                    // Add account info to each position
+                    const accountPositions = account.positions.map((position: any) => ({
+                      ...position,
+                      account_name: account.account?.name || 'Unknown Account',
+                      account_number: account.account?.number || '',
+                      institution: account.account?.institution || 'SnapTrade'
+                    }));
+                    allPositions.push(...accountPositions);
+                  }
+                }
+                snapTradeData = allPositions;
+                console.log('OpenAI Enhanced: Fetched SnapTrade holdings:', snapTradeData.length, 'positions');
+                console.log('OpenAI Enhanced: Sample SnapTrade position structure:', snapTradeData[0]);
+              }
+              
+              // Fetch SnapTrade activities
+              const activitiesResult = await snapTradeService.getUserActivities(userId, snapTradeUser.userSecret);
+              if (activitiesResult.success && activitiesResult.data && activitiesResult.data.activities) {
+                snapTradeActivities = activitiesResult.data.activities;
+                console.log('OpenAI Enhanced: Fetched SnapTrade activities:', snapTradeActivities.length, 'activities');
+                console.log('OpenAI Enhanced: Sample SnapTrade activity structure:', snapTradeActivities[0]);
+              }
+            } else {
+              console.log('OpenAI Enhanced: No SnapTrade user found or no userSecret available');
+            }
+          } catch (snapTradeError) {
+            console.error('OpenAI Enhanced: Error fetching SnapTrade data:', snapTradeError);
+          }
+        }
+        
+        console.log('OpenAI Enhanced: Final count -', accounts.length, 'accounts,', transactions.length, 'transactions, investment data:', investmentData ? 'available' : 'none', 'SnapTrade data:', snapTradeData ? 'available' : 'none', 'SnapTrade activities:', snapTradeActivities ? 'available' : 'none', 'for user', userId);
       } else {
         console.log('OpenAI Enhanced: No userId provided, fetching all data (this should not happen for authenticated users)');
       }
@@ -737,30 +795,124 @@ export async function askOpenAIWithEnhancedContext(
 
   // Create investment summary
   let investmentSummary = '';
+  
+  // Combine Plaid and SnapTrade data for unified portfolio composition
+  let combinedPortfolioValue = 0;
+  let combinedHoldings = [];
+  let combinedAssetAllocation = new Map();
+  
+  // Add Plaid investment data
   if (investmentData) {
     const { portfolio, holdings } = investmentData;
+    combinedPortfolioValue += portfolio.totalValue;
+    combinedHoldings.push(...holdings);
     
-    // Portfolio overview (keep totals but anonymize individual holdings)
+    // Add Plaid asset allocation
+    portfolio.assetAllocation.forEach((allocation: any) => {
+      const currentValue = combinedAssetAllocation.get(allocation.type) || 0;
+      combinedAssetAllocation.set(allocation.type, currentValue + allocation.value);
+    });
+  }
+  
+  // Add SnapTrade data to portfolio composition
+  console.log('🔍 Processing SnapTrade data for portfolio composition...');
+  console.log('🔍 SnapTrade data available:', snapTradeData ? snapTradeData.length : 0, 'positions');
+  
+  if (snapTradeData && snapTradeData.length > 0) {
+    snapTradeData.forEach((position: any) => {
+      // Calculate value: units * price
+      const value = (position.units || 0) * (position.price || 0);
+      console.log('🔍 Processing SnapTrade position:', position.symbol?.symbol?.description || position.symbol?.symbol?.symbol, 'value:', value);
+      combinedPortfolioValue += value;
+      
+      // Create a holding object for consistency
+      const holding = {
+        ...position,
+        value: value,
+        name: position.symbol?.symbol?.description || position.symbol?.symbol?.symbol || 'Unknown',
+        type: position.symbol?.symbol?.type?.description || 'Unknown'
+      };
+      combinedHoldings.push(holding);
+      
+      // Categorize by security type
+      let assetType = 'Fixed Income'; // Default for treasuries
+      if (position.symbol?.symbol?.type?.description) {
+        const typeDesc = position.symbol.symbol.type.description.toLowerCase();
+        if (typeDesc.includes('bond') || typeDesc.includes('treasury')) {
+          assetType = 'Fixed Income';
+        } else if (typeDesc.includes('equity') || typeDesc.includes('stock')) {
+          assetType = 'Equity';
+        } else if (typeDesc.includes('etf')) {
+          assetType = 'ETF';
+        } else if (typeDesc.includes('mutual fund')) {
+          assetType = 'Mutual Funds';
+        } else {
+          assetType = 'Other';
+        }
+      } else if (position.symbol?.symbol?.symbol) {
+        // Fallback: categorize by symbol
+        const symbol = position.symbol.symbol.symbol.toUpperCase();
+        if (symbol.includes('TREASURY') || symbol.includes('TIPS') || symbol.includes('BOND')) {
+          assetType = 'Fixed Income';
+        } else if (symbol.includes('ETF')) {
+          assetType = 'ETF';
+        } else {
+          assetType = 'Equity';
+        }
+      }
+      
+      const currentValue = combinedAssetAllocation.get(assetType) || 0;
+      combinedAssetAllocation.set(assetType, currentValue + value);
+      console.log('🔍 Added to', assetType, ':', value, 'Total now:', currentValue + value);
+    });
+    
+    console.log('🔍 Final combined portfolio value:', combinedPortfolioValue);
+    console.log('🔍 Final asset allocation:', Array.from(combinedAssetAllocation.entries()));
+  }
+  
+  // Create unified portfolio summary
+  if (combinedPortfolioValue > 0) {
+    const assetAllocationArray = Array.from(combinedAssetAllocation.entries()).map(([type, value]) => ({
+      type,
+      value,
+      percentage: (value / combinedPortfolioValue) * 100
+    }));
+    
     investmentSummary += `Portfolio Overview:
-- Total Value: $${portfolio.totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-- Number of Holdings: ${portfolio.holdingCount}
-- Number of Securities: ${portfolio.securityCount}
+- Total Value: $${combinedPortfolioValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+- Number of Holdings: ${combinedHoldings.length}
+- Number of Securities: ${combinedHoldings.length}
 
-Asset Allocation:
-${portfolio.assetAllocation.map((allocation: any) => 
+Portfolio Composition:
+${assetAllocationArray.map((allocation: any) => 
   `- ${allocation.type}: $${allocation.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${allocation.percentage.toFixed(1)}%)`
 ).join('\n')}
 
 Top Holdings:
-${anonymizeInvestmentData(holdings.slice(0, 10))}`;
+${anonymizeInvestmentData(combinedHoldings.slice(0, 10))}`;
+  }
+
+  // Add SnapTrade activities if available
+  if (snapTradeActivities && snapTradeActivities.length > 0) {
+    if (investmentSummary) {
+      investmentSummary += '\n\n';
+    } else {
+      investmentSummary = 'INVESTMENT DATA:\n';
+    }
+    const snapTradeActivitiesSummary = anonymizeSnapTradeData([], snapTradeActivities);
+    investmentSummary += snapTradeActivitiesSummary;
+    console.log('OpenAI Enhanced: SnapTrade activities added to investment data:', snapTradeActivitiesSummary.substring(0, 200));
   }
 
   console.log('OpenAI Enhanced: Account summary for AI:', accountSummary);
   console.log('OpenAI Enhanced: Transaction summary for AI:', transactionSummary);
   console.log('OpenAI Enhanced: Investment summary for AI:', investmentSummary ? 'available' : 'none');
+  console.log('OpenAI Enhanced: Investment summary length:', investmentSummary ? investmentSummary.length : 0);
   console.log('OpenAI Enhanced: Number of accounts found:', tierContext.accounts.length);
   console.log('OpenAI Enhanced: Number of transactions found:', tierContext.transactions.length);
   console.log('OpenAI Enhanced: Investment data available:', investmentData ? 'yes' : 'no');
+  console.log('OpenAI Enhanced: SnapTrade data available:', snapTradeData ? 'yes' : 'no');
+  console.log('OpenAI Enhanced: SnapTrade activities available:', snapTradeActivities ? 'yes' : 'no');
   console.log('OpenAI Enhanced: User ID being used:', userId);
   
   // ✅ Debug: Log enhanced transaction data availability
@@ -786,6 +938,8 @@ ${anonymizeInvestmentData(holdings.slice(0, 10))}`;
     console.log('OpenAI Enhanced: Demo accounts:', tierContext.accounts.length);
     console.log('OpenAI Enhanced: Demo transactions:', tierContext.transactions.length);
     console.log('OpenAI Enhanced: Demo investments:', investmentData ? 'available' : 'none');
+    console.log('OpenAI Enhanced: Demo SnapTrade data:', snapTradeData ? 'available' : 'none');
+    console.log('OpenAI Enhanced: Demo SnapTrade activities:', snapTradeActivities ? 'available' : 'none');
     console.log('OpenAI Enhanced: Account summary preview:', accountSummary.substring(0, 500));
     console.log('OpenAI Enhanced: Transaction summary preview:', transactionSummary.substring(0, 500));
     console.log('OpenAI Enhanced: Investment summary preview:', investmentSummary ? investmentSummary.substring(0, 500) : 'none');
@@ -1215,7 +1369,7 @@ Recent Transactions:
 ${transactionSummary || 'No transactions found'}
 
 ${investmentSummary ? `INVESTMENT DATA:
-${investmentSummary}` : 'No investment data available (upgrade to Standard tier)'}
+${investmentSummary}` : 'No investment data available'}
 
 CRITICAL DATA INTERPRETATION RULES:
 - For credit card accounts: The "balance" field shows the OUTSTANDING BALANCE (money owed), NOT the credit limit
@@ -1277,6 +1431,12 @@ INSTRUCTIONS:
 - ALWAYS reference relevant previous conversation context when providing new insights
 - When new information allows you to complete a previous incomplete analysis, proactively offer to do so
 - Build comprehensive insights by connecting information across conversation turns
+- IMPORTANT: If investment data is provided in the INVESTMENT DATA section above, you CAN and SHOULD use it to answer questions about the user's investments, regardless of their tier level
+- The tier limitations only apply to external data sources (like market data, economic indicators), not to the user's own connected investment data
+- CRITICAL: When you see "SnapTrade Holdings" in the investment data, these are the user's actual investment holdings and you MUST reference them specifically when answering questions about their investments
+- CRITICAL: If the user asks about Treasuries and you see Treasury-related holdings in the investment data, you MUST provide specific information about those holdings rather than giving generic advice
+- CRITICAL: Treasury securities are identified by symbols like "912797PV3-BOND" or descriptions like "UST 0.0% 03/19/2026" - when you see these in the investment data, they are Treasury securities and you MUST acknowledge them specifically
+- CRITICAL: If you see holdings with "UST" (US Treasury) or bond symbols in the investment data, these are Treasury securities and you should provide specific analysis of these holdings
 
 RESPONSE FORMATTING:
 - Use **bold** only for main section headers (e.g., "**Financial Overview**", "**Recommendations**")

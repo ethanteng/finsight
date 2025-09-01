@@ -38,6 +38,10 @@ console.log('🔍 DEBUG - NODE_ENV:', process.env.NODE_ENV);
 import { setupPlaidRoutes } from './plaid';
 import { askOpenAI, askOpenAIWithEnhancedContext } from './openai';
 
+// Import SnapTrade configuration
+import './snaptrade';
+import { setupSnapTradeRoutes } from './auth/snaptrade-routes';
+
 import { getPrismaClient } from './prisma-client';
 
 const app: Application = express();
@@ -136,8 +140,12 @@ app.use(optionalAuth);
 // Setup Plaid routes
 try {
 	console.log('🔧 Calling setupPlaidRoutes...');
-	setupPlaidRoutes(app);
-	console.log('✅ setupPlaidRoutes completed successfully');
+setupPlaidRoutes(app);
+console.log('✅ setupPlaidRoutes completed successfully');
+
+console.log('🔧 Calling setupSnapTradeRoutes...');
+setupSnapTradeRoutes(app);
+console.log('✅ setupSnapTradeRoutes completed successfully');
 	// Test-only: list registered routes to diagnose 404s
 	if (process.env.NODE_ENV === 'test') {
 		try {
@@ -1688,12 +1696,17 @@ app.get('/sync/status', async (req: Request, res: Response) => {
           where: { userId }
         });
         
-        // 6. Delete privacy settings (references users)
+        // 6. Delete SnapTrade user data (references users)
+        await prisma.snapTradeUser.deleteMany({
+          where: { userId }
+        });
+        
+        // 7. Delete privacy settings (references users)
         await prisma.privacySettings.deleteMany({
           where: { userId }
         });
         
-        // 7. Delete encrypted profile data first (references userProfile)
+        // 8. Delete encrypted profile data first (references userProfile)
         await prisma.encrypted_profile_data.deleteMany({
           where: { 
             profileHash: {
@@ -1705,27 +1718,27 @@ app.get('/sync/status', async (req: Request, res: Response) => {
           }
         });
         
-        // 8. Delete user profile (references users)
+        // 9. Delete user profile (references users)
         await prisma.userProfile.deleteMany({
           where: { userId }
         });
         
-        // 9. Delete encrypted user data (references users)
+        // 10. Delete encrypted user data (references users)
         await prisma.encryptedUserData.deleteMany({
           where: { userId }
         });
         
-        // 10. Delete password reset tokens (references users)
+        // 11. Delete password reset tokens (references users)
         await prisma.passwordResetToken.deleteMany({
           where: { userId }
         });
         
-        // 11. Delete email verification codes (references users)
+        // 12. Delete email verification codes (references users)
         await prisma.emailVerificationCode.deleteMany({
           where: { userId }
         });
         
-        // 12. Finally, delete the user themselves (including login/email)
+        // 13. Finally, delete the user themselves (including login/email)
         await prisma.user.delete({
           where: { id: userId }
         });
@@ -1792,6 +1805,11 @@ app.get('/sync/status', async (req: Request, res: Response) => {
           where: { userId }
         });
         await prisma.syncStatus.deleteMany({
+          where: { userId }
+        });
+        
+        // Clear SnapTrade user data
+        await prisma.snapTradeUser.deleteMany({
           where: { userId }
         });
 

@@ -4,6 +4,7 @@ import PlaidLinkButton, { PlaidLinkButtonRef, resetPlaidLinkInitialization } fro
 import TransactionHistory from '../../components/TransactionHistory';
 import UserProfile from '../../components/UserProfile';
 import InvestmentPortfolio from '../../components/InvestmentPortfolio';
+import SnapTradeButton from '../../components/SnapTradeButton';
 import PageMeta from '../../components/PageMeta';
 
 interface Account {
@@ -16,6 +17,50 @@ interface Account {
     available: number;
     iso_currency_code: string;
   };
+}
+
+interface SnapTradeData {
+  open_pnl?: number;
+  average_purchase_price?: number;
+  account_name?: string;
+  account_number?: string;
+  activity_type?: string;
+  description?: string;
+  trade_date?: string;
+  settlement_date?: string;
+  fee?: number;
+  institution?: string;
+}
+
+interface Security {
+  id: string;
+  name: string;
+  type: string;
+  ticker?: string;
+}
+
+interface Account {
+  id: string;
+  name: string;
+  type: string;
+  number?: string;
+}
+
+interface InvestmentTransaction {
+  id: string;
+  account_id: string;
+  security_id: string;
+  amount: number;
+  date: string;
+  name: string;
+  quantity: number;
+  price: number;
+  fees: number;
+  type: string;
+  iso_currency_code: string;
+  institution_value?: number;
+  value?: number;
+  snapTradeData?: SnapTradeData;
 }
 
 interface InvestmentData {
@@ -39,6 +84,13 @@ interface InvestmentData {
     cost_basis: number;
     quantity: number;
     iso_currency_code: string;
+    security_name?: string;
+    security_type?: string;
+    ticker_symbol?: string;
+    name?: string;
+    type?: string;
+    value?: number;
+    snapTradeData?: SnapTradeData;
   }>;
   transactions: Array<{
     id: string;
@@ -53,11 +105,36 @@ interface InvestmentData {
     type: string;
     iso_currency_code: string;
   }>;
+  // Additional fields for SnapTrade integration
+  investment_transactions?: InvestmentTransaction[];
+  total_investment_transactions?: number;
+  securities?: Security[];
+  accounts?: Account[];
+  item?: Record<string, unknown>;
+  analysis?: {
+    portfolio: {
+      totalValue: number;
+      assetAllocation: Array<{
+        type: string;
+        value: number;
+        percentage: number;
+      }>;
+      holdingCount: number;
+      securityCount: number;
+    };
+    activity: {
+      totalTransactions: number;
+      totalVolume: number;
+      activityByType: Record<string, number>;
+      averageTransactionSize: number;
+    };
+  };
 }
 
 export default function ProfilePage() {
   const [connectedAccounts, setConnectedAccounts] = useState<Account[]>([]);
   const [investmentData, setInvestmentData] = useState<InvestmentData | null>(null);
+  const [snapTradeHoldings, setSnapTradeHoldings] = useState<Record<string, unknown>[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isDemo, setIsDemo] = useState<boolean | undefined>(undefined); // Start as undefined to prevent premature rendering
@@ -189,6 +266,285 @@ export default function ProfilePage() {
     }
   }, [API_URL]);
 
+  // NEW: Load SnapTrade holdings data
+  const loadSnapTradeHoldings = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        return null;
+      }
+
+      const res = await fetch(`${API_URL}/snaptrade/holdings`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        console.log('Received SnapTrade holdings data:', data);
+        return data.data;
+      } else {
+        console.log('Failed to load SnapTrade holdings:', res.status);
+        return null;
+      }
+    } catch (err) {
+      console.error('Error loading SnapTrade holdings:', err);
+      return null;
+    }
+  }, [API_URL]);
+
+  // NEW: Load SnapTrade activities data
+  const loadSnapTradeActivities = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        return null;
+      }
+
+      const res = await fetch(`${API_URL}/snaptrade/activities`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        console.log('Received SnapTrade activities data:', data);
+        return data.data?.activities || []; // Return the activities array, not the whole data object
+      } else {
+        console.log('Failed to load SnapTrade activities:', res.status);
+        return [];
+      }
+    } catch (err) {
+      console.error('Error loading SnapTrade activities:', err);
+      return [];
+    }
+  }, [API_URL]);
+
+  // Function to merge Plaid and SnapTrade investment data
+  const mergeInvestmentData = useCallback((plaidData: InvestmentData | null, snapTradeData: Record<string, unknown>[] | null, snapTradeActivities: Record<string, unknown>[] | null) => {
+    if (!plaidData && !snapTradeData) {
+      return null;
+    }
+
+    // Ensure snapTradeActivities is always an array
+    const activities = snapTradeActivities || [];
+
+    // Convert SnapTrade holdings to the format expected by InvestmentPortfolio
+    const snapTradeHoldingsFormatted = snapTradeData ? snapTradeData.flatMap((accountHolding: Record<string, unknown>) => {
+      console.log('Processing SnapTrade account holding:', accountHolding);
+      
+      if (!accountHolding.account) {
+        console.log('Skipping account holding - missing account');
+        return [];
+      }
+
+      const holdings = [];
+
+      // Handle accounts with positions (investments)
+      if (accountHolding.positions && Array.isArray(accountHolding.positions) && accountHolding.positions.length > 0) {
+        (accountHolding.positions as Record<string, unknown>[]).forEach((position: Record<string, unknown>) => {
+          const positionValue = (Number(position.price) || 0) * (Number(position.units) || 0);
+          const costBasis = (Number(position.average_purchase_price) || 0) * (Number(position.units) || 0);
+          
+          console.log('Processing position:', {
+            symbol: ((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.symbol,
+            description: ((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.description,
+            units: position.units,
+            price: position.price,
+            value: positionValue,
+            costBasis: costBasis
+          });
+          
+          holdings.push({
+            id: `${(accountHolding.account as Record<string, unknown>).id}-${(position.symbol as Record<string, unknown>)?.id || 'unknown'}`,
+            account_id: (accountHolding.account as Record<string, unknown>).id as string,
+            security_id: (position.symbol as Record<string, unknown>)?.id || 'unknown',
+            institution_value: positionValue,
+            institution_price: Number(position.price) || 0,
+            institution_price_as_of: new Date().toISOString(),
+            cost_basis: costBasis,
+            quantity: Number(position.units) || 0,
+            iso_currency_code: (position.currency as Record<string, unknown>)?.code || 'USD',
+            security_name: ((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.description || ((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.symbol || 'Unknown Security',
+            security_type: (((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.type as Record<string, unknown>)?.description || 'Bond',
+            ticker_symbol: ((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.symbol || 'Unknown',
+            name: ((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.description || ((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.symbol || 'Unknown Security',
+            type: (((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.type as Record<string, unknown>)?.description || 'Bond',
+            value: positionValue,
+            // SnapTrade specific fields
+            snapTradeData: {
+              open_pnl: position.open_pnl,
+              average_purchase_price: position.average_purchase_price,
+              account_name: (accountHolding.account as Record<string, unknown>).name as string,
+              account_number: (accountHolding.account as Record<string, unknown>).number as string,
+            }
+          });
+        });
+      }
+
+      // Handle accounts with only cash (no positions)
+      if (accountHolding.balances && Array.isArray(accountHolding.balances) && accountHolding.balances.length > 0) {
+        const cashBalance = (accountHolding.balances as Record<string, unknown>[]).find((b: Record<string, unknown>) => (b.currency as Record<string, unknown>)?.code === 'USD');
+        if (cashBalance && Number(cashBalance.cash) > 0) {
+          console.log('Adding cash balance:', cashBalance.cash);
+          holdings.push({
+            id: `${(accountHolding.account as Record<string, unknown>).id}-cash`,
+            account_id: (accountHolding.account as Record<string, unknown>).id as string,
+            security_id: 'cash',
+            institution_value: Number(cashBalance.cash),
+            institution_price: 1,
+            institution_price_as_of: new Date().toISOString(),
+            cost_basis: Number(cashBalance.cash),
+            quantity: Number(cashBalance.cash),
+            iso_currency_code: 'USD',
+            security_name: 'Cash',
+            security_type: 'Cash',
+            ticker_symbol: 'CASH',
+            name: 'Cash',
+            type: 'Cash',
+            value: Number(cashBalance.cash),
+            snapTradeData: {
+              account_name: (accountHolding.account as Record<string, unknown>).name as string,
+              account_number: (accountHolding.account as Record<string, unknown>).number as string,
+            }
+          });
+        }
+      }
+
+      return holdings;
+    }) : [];
+
+    // Combine Plaid and SnapTrade holdings
+    const combinedHoldings = [
+      ...(plaidData?.holdings || []),
+      ...snapTradeHoldingsFormatted
+    ];
+
+    // Calculate combined portfolio metrics
+    console.log('Combined holdings:', combinedHoldings.length);
+    console.log('Sample holding:', combinedHoldings[0]);
+    
+    const totalValue = combinedHoldings.reduce((sum, holding) => {
+      const holdingValue = holding.institution_value || holding.value || 0;
+      console.log(`Holding ${holding.security_name || holding.name || 'Unknown'}: value = ${holdingValue}`);
+      return sum + holdingValue;
+    }, 0);
+    const holdingCount = combinedHoldings.length;
+    const securityCount = new Set(combinedHoldings.map(h => h.security_id)).size;
+    
+    console.log('Calculated metrics:', { totalValue, holdingCount, securityCount });
+
+    // Group by security type for asset allocation
+    const assetAllocationMap = new Map<string, number>();
+    combinedHoldings.forEach(holding => {
+      const type = holding.security_type || holding.type || 'Unknown';
+      const value = holding.institution_value || holding.value || 0;
+      assetAllocationMap.set(type, (assetAllocationMap.get(type) || 0) + value);
+    });
+
+    const assetAllocation = Array.from(assetAllocationMap.entries()).map(([type, value]) => ({
+      type,
+      value,
+      percentage: totalValue > 0 ? (value / totalValue) * 100 : 0
+    }));
+
+    // Convert SnapTrade activities to the format expected by InvestmentPortfolio
+    console.log('Processing SnapTrade activities:', activities);
+    const snapTradeActivitiesFormatted = activities ? activities.map((activity: Record<string, unknown>) => ({
+      id: activity.id as string,
+      account_id: (activity.account_name as string) || 'snaptrade',
+      security_id: ((activity.symbol as Record<string, unknown>)?.id as string) || 'unknown',
+      amount: Number(activity.amount) || 0,
+      date: (activity.trade_date as string) || new Date().toISOString(),
+      name: ((activity.symbol as Record<string, unknown>)?.description as string) || ((activity.symbol as Record<string, unknown>)?.symbol as string) || 'Unknown Security',
+      quantity: Number(activity.units) || 0,
+      price: Number(activity.price) || 0,
+      fees: Number(activity.fee) || 0,
+      type: (activity.type as string) || 'Unknown',
+      iso_currency_code: ((activity.currency as Record<string, unknown>)?.code as string) || 'USD',
+      institution_value: Number(activity.amount) || 0,
+      institution_price: Number(activity.price) || 0,
+      institution_price_as_of: (activity.trade_date as string) || new Date().toISOString(),
+      cost_basis: (Number(activity.price) || 0) * (Number(activity.units) || 0),
+      security_name: ((activity.symbol as Record<string, unknown>)?.description as string) || ((activity.symbol as Record<string, unknown>)?.symbol as string) || 'Unknown Security',
+      security_type: (((activity.symbol as Record<string, unknown>)?.type as Record<string, unknown>)?.description as string) || 'Unknown',
+      ticker_symbol: ((activity.symbol as Record<string, unknown>)?.symbol as string) || 'Unknown',
+      value: Number(activity.amount) || 0,
+      // SnapTrade specific fields
+      snapTradeData: {
+        activity_type: activity.type as string,
+        description: activity.description as string,
+        trade_date: activity.trade_date as string,
+        settlement_date: activity.settlement_date as string,
+        fee: activity.fee as number,
+        account_name: activity.account_name as string,
+        account_number: activity.account_number as string,
+        institution: activity.institution as string
+      }
+    })) : [];
+
+    // Combine Plaid and SnapTrade transactions
+    const combinedTransactions = [
+      ...(plaidData?.investment_transactions || []),
+      ...snapTradeActivitiesFormatted
+    ];
+
+    console.log('Final portfolio data being set:', {
+      portfolio: { totalValue, assetAllocation, holdingCount, securityCount },
+      holdingsCount: combinedHoldings.length,
+      transactionsCount: combinedTransactions.length
+    });
+
+    // Calculate transaction metrics
+    const totalTransactions = combinedTransactions.length;
+    const totalVolume = combinedTransactions.reduce((sum, tx) => sum + Math.abs(tx.institution_value || tx.value || 0), 0);
+    const averageTransactionSize = totalTransactions > 0 ? totalVolume / totalTransactions : 0;
+
+    // Group transactions by type
+    const activityByType: Record<string, number> = {};
+    combinedTransactions.forEach(tx => {
+      const type = (tx.snapTradeData?.activity_type as string) || 'UNKNOWN';
+      activityByType[type] = (activityByType[type] || 0) + 1;
+    });
+
+    return {
+      portfolio: {
+        totalValue,
+        assetAllocation,
+        holdingCount,
+        securityCount
+      },
+      holdings: combinedHoldings,
+      transactions: combinedTransactions,
+      // Additional fields for SnapTrade integration
+      investment_transactions: combinedTransactions,
+      total_investment_transactions: totalTransactions,
+      securities: plaidData?.securities || [],
+      accounts: plaidData?.accounts || [],
+      item: plaidData?.item,
+      analysis: {
+        portfolio: {
+          totalValue,
+          assetAllocation,
+          holdingCount,
+          securityCount
+        },
+        activity: {
+          totalTransactions,
+          totalVolume,
+          activityByType,
+          averageTransactionSize
+        }
+      }
+    };
+  }, []);
+
   // NEW: Load enhanced investment data
   const loadInvestmentData = useCallback(async (demoMode: boolean) => {
     try {
@@ -205,25 +561,45 @@ export default function ProfilePage() {
         }
       }
 
-      // Use the new comprehensive investment endpoint
-      const res = await fetch(`${API_URL}/plaid/investments`, {
+      // Load Plaid investment data
+      const plaidRes = await fetch(`${API_URL}/plaid/investments`, {
         method: 'GET',
         headers,
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        console.log('Received enhanced investment data:', data);
-        setInvestmentData(data);
+      let plaidData = null;
+      if (plaidRes.ok) {
+        plaidData = await plaidRes.json();
+        console.log('Received Plaid investment data:', plaidData);
       } else {
-        console.log('Failed to load investment data:', res.status);
-        // Don't set error here as this is optional data
+        console.log('Failed to load Plaid investment data:', plaidRes.status);
       }
+
+              // Load SnapTrade holdings data (only if not in demo mode)
+        let snapTradeData = null;
+        let snapTradeActivities = null;
+        if (!demoMode) {
+          snapTradeData = await loadSnapTradeHoldings();
+          snapTradeActivities = await loadSnapTradeActivities();
+        }
+
+        // Merge the data
+        const mergedData = mergeInvestmentData(plaidData, snapTradeData, snapTradeActivities);
+      setInvestmentData(mergedData);
+      setSnapTradeHoldings(snapTradeData);
+      
+      console.log('Merged investment data:', mergedData);
+      console.log('Portfolio metrics:', {
+        totalValue: mergedData?.analysis?.portfolio?.totalValue,
+        holdingCount: mergedData?.analysis?.portfolio?.holdingCount,
+        securityCount: mergedData?.analysis?.portfolio?.securityCount,
+        holdingsLength: mergedData?.holdings?.length
+      });
     } catch (err) {
       console.error('Error loading investment data:', err);
       // Don't set error here as this is optional data
     }
-  }, [API_URL]);
+  }, [API_URL, loadSnapTradeHoldings, loadSnapTradeActivities, mergeInvestmentData]);
 
   // Function to refresh all data after successful Plaid connection with retry logic
   const refreshAllData = useCallback(async (isRetry = false, currentRetryCount = 0) => {
@@ -507,18 +883,30 @@ export default function ProfilePage() {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${API_URL}/privacy/disconnect-accounts`, {
+      // Disconnect Plaid accounts
+      const plaidResponse = await fetch(`${API_URL}/privacy/disconnect-accounts`, {
         method: 'POST',
         headers,
       });
 
-      if (response.ok) {
-        setDeleteMessage('Your accounts have been successfully disconnected.');
-        // Reload accounts to show they're disconnected
-        loadConnectedAccountsWithDemoMode(false);
+      // Disconnect SnapTrade accounts
+      const snapTradeResponse = await fetch(`${API_URL}/snaptrade/delete`, {
+        method: 'DELETE',
+        headers,
+      });
+
+      if (plaidResponse.ok && snapTradeResponse.ok) {
+        setDeleteMessage('All your accounts (Plaid and SnapTrade) have been successfully disconnected.');
+      } else if (plaidResponse.ok) {
+        setDeleteMessage('All your financial accounts have been disconnected.');
+      } else if (snapTradeResponse.ok) {
+        setDeleteMessage('Your SnapTrade accounts have been disconnected. Some Plaid accounts may still be connected.');
       } else {
-        setDeleteMessage('Failed to disconnect accounts. Please try again.');
+        setDeleteMessage('Failed to disconnect some accounts. Please try again.');
       }
+
+      // Reload accounts to show they're disconnected
+      loadConnectedAccountsWithDemoMode(false);
     } catch (_error) {
       setDeleteMessage('An error occurred while disconnecting your accounts. Please try again.');
     } finally {
@@ -546,20 +934,31 @@ export default function ProfilePage() {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`${API_URL}/privacy/delete-all-data`, {
+      // Delete Plaid data
+      const plaidResponse = await fetch(`${API_URL}/privacy/delete-all-data`, {
         method: 'DELETE',
         headers,
       });
 
-      if (response.ok) {
-        setDeleteMessage('All your data has been successfully deleted.');
+      // Delete SnapTrade data
+      const snapTradeResponse = await fetch(`${API_URL}/snaptrade/delete`, {
+        method: 'DELETE',
+        headers,
+      });
+
+      if (plaidResponse.ok && snapTradeResponse.ok) {
+        setDeleteMessage('All your data (Plaid and SnapTrade) has been successfully deleted.');
         localStorage.removeItem('auth_token');
         // Redirect to home page after successful deletion
         setTimeout(() => {
           window.location.href = '/';
         }, 2000);
+      } else if (plaidResponse.ok) {
+        setDeleteMessage('Your Plaid data has been deleted. Some SnapTrade data may still exist.');
+      } else if (snapTradeResponse.ok) {
+        setDeleteMessage('Your SnapTrade data has been deleted. Some Plaid data may still exist.');
       } else {
-        setDeleteMessage('Failed to delete data. Please try again or contact support.');
+        setDeleteMessage('Failed to delete some data. Please try again or contact support.');
       }
     } catch (_error) {
       setDeleteMessage('An error occurred while deleting your data. Please try again.');
@@ -630,7 +1029,7 @@ export default function ProfilePage() {
           
           {/* Account Management Section */}
           <div className="bg-gray-800 rounded-lg p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">Your Connected Accounts</h2>
+            <h2 className="text-xl font-semibold mb-4">Your Connected Accounts (Plaid)</h2>
             
             {/* Connect New Account */}
             <div className="mb-6">
@@ -683,7 +1082,7 @@ export default function ProfilePage() {
                   {error}
                 </div>
               ) : connectedAccounts.length === 0 ? (
-                <div className="text-gray-400">
+                <div className="text-gray-400 text-sm">
                   No accounts connected yet. Use the button above to connect your first account.
                 </div>
               ) : (
@@ -728,18 +1127,55 @@ export default function ProfilePage() {
             </div>
           </div>
 
+          {/* Investment Accounts (SnapTrade) Section */}
+          <div className="bg-gray-800 rounded-lg p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4">Your Connected Accounts (SnapTrade)</h2>
+            <SnapTradeButton />
+            <p className="text-gray-400 text-sm mt-4">No accounts connected yet. Use the button above to connect your first account.</p>
+            
+            {/* Supported Financial Institutions */}
+            <div className="mt-6">
+              <h3 className="text-sm font-medium text-gray-300 mb-3">Supported Financial Institutions</h3>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 text-xs text-gray-400">
+                <div>• TD Ameritrade</div>
+                <div>• Charles Schwab</div>
+                <div>• Fidelity</div>
+                <div>• E*TRADE</div>
+                <div>• Interactive Brokers</div>
+                <div>• Robinhood</div>
+                <div>• Webull</div>
+                <div>• Public.com</div>
+                <div>• Ally Invest</div>
+                <div>• Vanguard</div>
+                <div>• Merrill Edge</div>
+                <div>• Wells Fargo</div>
+                <div>• Chase</div>
+                <div>• Bank of America</div>
+                <div>• US Bank</div>
+                <div>• PNC Bank</div>
+                <div>• Capital One</div>
+                <div>• Citi</div>
+                <div>• HSBC</div>
+                <div>• And many more...</div>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                View the complete list of <a href="https://snaptrade.notion.site/brokerages" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">supported brokerages</a>
+              </p>
+            </div>
+          </div>
+
           {/* NEW: Enhanced Investment Portfolio Section */}
           {investmentData && (
             <div className="mb-6">
               <InvestmentPortfolio 
                 portfolio={{
-                  totalValue: investmentData.portfolio?.totalValue || 0,
-                  assetAllocation: investmentData.portfolio?.assetAllocation || [],
-                  holdingCount: investmentData.portfolio?.holdingCount || 0,
-                  securityCount: investmentData.portfolio?.securityCount || 0
+                  totalValue: investmentData.analysis?.portfolio?.totalValue || 0,
+                  assetAllocation: investmentData.analysis?.portfolio?.assetAllocation || [],
+                  holdingCount: investmentData.analysis?.portfolio?.holdingCount || 0,
+                  securityCount: investmentData.analysis?.portfolio?.securityCount || 0
                 }}
                 holdings={investmentData.holdings || []}
-                transactions={investmentData.transactions || []}
+                transactions={investmentData.investment_transactions || []}
                 isDemo={isDemo}
               />
             </div>
@@ -843,16 +1279,15 @@ export default function ProfilePage() {
             <div className="space-y-6">
               <div>
                 <p className="text-gray-400 text-sm mb-4">
-                  Your financial data is read-only and never stored permanently. 
-                  We use Plaid&apos;s secure API to access your accounts.
+                  Your financial data is read-only and never stored permanently.
                 </p>
                 
                 <div className="space-y-4">
                   <div className="border border-gray-600 rounded-lg p-4">
                     <h4 className="font-medium mb-2">Disconnect Your Accounts</h4>
                     <p className="text-gray-400 text-sm mb-3">
-                      Remove all Plaid connections and clear your financial data. 
-                      This will disconnect all linked bank accounts but keep your conversation history.
+                      Remove all Plaid and SnapTrade connections and clear your financial data. 
+                      This will disconnect all linked financial accounts but keep your conversation history.
                     </p>
                     <button
                       onClick={handleDisconnectAccounts}
@@ -867,7 +1302,7 @@ export default function ProfilePage() {
                     <h4 className="font-medium mb-2">Delete All Your Data</h4>
                     <p className="text-gray-400 text-sm mb-3">
                       Permanently delete all your data including accounts, transactions, 
-                      conversations, and Plaid connections. This action cannot be undone.
+                      conversations, and Plaid and SnapTrade connections. This action cannot be undone.
                     </p>
                     <button
                       onClick={() => setShowDeleteConfirm(true)}
@@ -903,7 +1338,8 @@ export default function ProfilePage() {
                     This action will permanently delete all your data including:
                   </p>
                   <ul className="text-sm text-gray-400 mb-4 space-y-1">
-                    <li>• All connected bank accounts</li>
+                    <li>• All connected accounts (Plaid)</li>
+                    <li>• All connected accounts (SnapTrade)</li>
                     <li>• Transaction history</li>
                     <li>• Conversation history</li>
                     <li>• Account balances and sync data</li>

@@ -307,6 +307,162 @@ export function anonymizeInvestmentData(investments: any[]): string {
   }).join('\n');
 }
 
+export function anonymizeSnapTradeData(snapTradeHoldings: any[], snapTradeActivities: any[]): string {
+  console.log('anonymizeSnapTradeData: Processing', snapTradeHoldings.length, 'holdings and', snapTradeActivities.length, 'activities');
+  
+  let result = '';
+  
+  // Anonymize SnapTrade holdings
+  if (snapTradeHoldings && snapTradeHoldings.length > 0) {
+    result += 'SnapTrade Holdings:\n';
+    result += snapTradeHoldings.map(holding => {
+      // Log the holding structure to debug
+      console.log('anonymizeSnapTradeData: Holding structure:', Object.keys(holding));
+      
+      // Try different possible field names for security information
+      let securityName = holding.security_name || holding.name || holding.security?.name || 'Unknown Security';
+      let tickerSymbol = holding.ticker_symbol || holding.ticker || holding.symbol || holding.security?.symbol || '';
+      let securityType = holding.security_type || holding.type || holding.security?.type || '';
+      
+      // Handle SnapTrade symbol object structure
+      if (holding.symbol && typeof holding.symbol === 'object') {
+        // Handle nested symbol structure: symbol.symbol.description, symbol.symbol.symbol, etc.
+        if (holding.symbol.symbol && typeof holding.symbol.symbol === 'object') {
+          securityName = holding.symbol.symbol.description || holding.symbol.symbol.symbol || securityName;
+          tickerSymbol = holding.symbol.symbol.symbol || tickerSymbol;
+          securityType = holding.symbol.symbol.type?.description || securityType;
+        } else {
+          // Handle flat symbol structure
+          securityName = holding.symbol.description || holding.symbol.symbol || securityName;
+          tickerSymbol = holding.symbol.symbol || tickerSymbol;
+          securityType = holding.symbol.type?.description || securityType;
+        }
+        
+        console.log('anonymizeSnapTradeData: Extracted from symbol object:', {
+          description: securityName,
+          symbol: tickerSymbol,
+          type: securityType
+        });
+      }
+      
+      // Ensure we have valid strings, not objects
+      securityName = String(securityName || 'Unknown Security');
+      tickerSymbol = String(tickerSymbol || '');
+      securityType = String(securityType || '');
+      
+      // Additional safety check - if we still have object strings, try to extract them
+      if (securityName.includes('[object Object]') || tickerSymbol.includes('[object Object]')) {
+        console.log('anonymizeSnapTradeData: WARNING - Found [object Object] strings, attempting to fix');
+        if (holding.symbol && typeof holding.symbol === 'object') {
+          securityName = holding.symbol.description || holding.symbol.symbol || 'Unknown Security';
+          tickerSymbol = holding.symbol.symbol || '';
+        }
+      }
+      
+      // Tokenize security name and ticker symbol
+      const securityToken = tokenizeSecurity(
+        securityName,
+        tickerSymbol,
+        securityType
+      );
+      
+      console.log('anonymizeSnapTradeData: Created security token:', securityToken, 'for:', securityName, tickerSymbol);
+      console.log('anonymizeSnapTradeData: Raw holding symbol:', holding.symbol);
+      
+      // Try different possible field names for quantity and value
+      const quantity = holding.quantity || holding.units || holding.shares || holding.amount || 0;
+      const price = holding.institution_price || holding.price || holding.currentPrice || holding.unitPrice || 0;
+      const value = holding.institution_value || holding.value || holding.currentValue || holding.totalValue || (quantity * price) || 0;
+      
+      // For SnapTrade, calculate value as units * price if not provided
+      const calculatedValue = quantity && price ? quantity * price : value;
+      
+      console.log('anonymizeSnapTradeData: Quantity:', quantity, 'Price:', price, 'Value:', value);
+      
+      // Format quantity with appropriate precision
+      const formattedQuantity = quantity ? 
+        (Number.isInteger(quantity) ? 
+          quantity.toString() : 
+          quantity.toFixed(4)
+        ) : '0';
+      
+      // Format price and value
+      const formattedPrice = price ? `$${Number(price).toFixed(2)}` : 'N/A';
+      const formattedValue = calculatedValue ? `$${Number(calculatedValue).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'N/A';
+      
+      // Include security type if available
+      const typeInfo = securityType ? ` (${securityType})` : '';
+      
+      return `- ${securityToken}${typeInfo}: ${formattedQuantity} shares @ ${formattedPrice} = ${formattedValue}`;
+    }).join('\n');
+    result += '\n\n';
+  }
+  
+  // Anonymize SnapTrade activities
+  if (snapTradeActivities && snapTradeActivities.length > 0) {
+    result += 'SnapTrade Activities:\n';
+    result += snapTradeActivities.map(activity => {
+      // Log the activity structure to debug
+      console.log('anonymizeSnapTradeData: Activity structure:', Object.keys(activity));
+      
+      // Try different possible field names for security information
+      const securityName = activity.symbol?.description || activity.symbol?.symbol || activity.security?.name || activity.name || 'Unknown Security';
+      const tickerSymbol = activity.symbol?.symbol || activity.ticker || activity.symbol || activity.security?.symbol || '';
+      const securityType = activity.symbol?.type?.description || activity.type || activity.security?.type || '';
+      
+      // Tokenize security name and ticker symbol
+      const securityToken = tokenizeSecurity(
+        securityName,
+        tickerSymbol,
+        securityType
+      );
+      
+      // Tokenize account name
+      const accountToken = tokenizeAccount(
+        activity.account_name || activity.accountName || 'SnapTrade Account',
+        'SnapTrade'
+      );
+      
+      console.log('anonymizeSnapTradeData: Created security token:', securityToken, 'for activity:', securityName, tickerSymbol);
+      console.log('anonymizeSnapTradeData: Created account token:', accountToken, 'for account:', activity.account_name || activity.accountName);
+      
+      // Try different possible field names for activity data
+      const amount = activity.amount || activity.value || 0;
+      const price = activity.price || activity.unitPrice || 0;
+      const units = activity.units || activity.quantity || activity.shares || 0;
+      const tradeDate = activity.trade_date || activity.tradeDate || activity.date || activity.timestamp || '';
+      const activityType = activity.type || activity.activityType || '';
+      const description = activity.description || activity.note || '';
+      
+      // Format amount and price
+      const formattedAmount = amount ? `$${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'N/A';
+      const formattedPrice = price ? `$${Number(price).toFixed(2)}` : 'N/A';
+      
+      // Format quantity
+      const formattedQuantity = units ? 
+        (Number.isInteger(units) ? 
+          units.toString() : 
+          units.toFixed(4)
+        ) : '0';
+      
+      // Format date
+      const formattedDate = tradeDate ? 
+        (typeof tradeDate === 'string' ? 
+          tradeDate.split('T')[0] : 
+          new Date(tradeDate).toISOString().split('T')[0]
+        ) : 'Unknown';
+      
+      // Include activity type and description
+      const typeInfo = activityType ? ` (${activityType})` : '';
+      const descriptionText = description ? ` - ${description}` : '';
+      
+      return `- ${securityToken}${typeInfo}${descriptionText}: ${formattedQuantity} shares @ ${formattedPrice} = ${formattedAmount} on ${formattedDate} via ${accountToken}`;
+    }).join('\n');
+  }
+  
+  return result;
+}
+
 export function anonymizeLiabilityData(liabilities: any[]): string {
   return liabilities.map(liability => {
     // Tokenize liability name and institution

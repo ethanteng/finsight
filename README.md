@@ -170,6 +170,10 @@ OPENAI_API_KEY="your_openai_api_key"
 PLAID_CLIENT_ID="your_plaid_client_id"
 PLAID_SECRET="your_plaid_secret"
 
+# SnapTrade
+SNAPTRADE_CLIENT_ID="your_snaptrade_client_id"
+SNAPTRADE_CONSUMER_KEY="your_snaptrade_consumer_key"
+
 # Market Data APIs
 FRED_API_KEY="your_fred_api_key"
 ALPHA_VANTAGE_API_KEY="your_alpha_vantage_api_key"

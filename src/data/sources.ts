@@ -233,10 +233,10 @@ export class DataSourceManager {
     
     switch (tier) {
       case UserTier.STARTER:
-        limitations.push('Limited to account data only');
         limitations.push('No economic context for financial decisions');
         limitations.push('No real-time search for current financial information');
         limitations.push('No live market data for investment insights');
+        limitations.push('No external market data feeds');
         break;
       case UserTier.STANDARD:
         limitations.push('No live CD rates or Treasury yields');
