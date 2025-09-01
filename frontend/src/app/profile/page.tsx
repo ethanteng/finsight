@@ -975,6 +975,16 @@ export default function ProfilePage() {
             </div>
           </div>
 
+          {/* Investment Accounts (SnapTrade) Section */}
+          <div className="bg-gray-800 rounded-lg p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4">Investment Accounts (SnapTrade)</h2>
+            <p className="text-gray-400 text-sm mb-4">
+              Connect your investment accounts to get insights on your portfolio, 
+              holdings, and investment performance.
+            </p>
+            <SnapTradeButton />
+          </div>
+
           {/* NEW: Enhanced Investment Portfolio Section */}
           {investmentData && (
             <div className="mb-6">
@@ -1095,15 +1105,6 @@ export default function ProfilePage() {
                 </p>
                 
                 <div className="space-y-4">
-                  <div className="border border-gray-600 rounded-lg p-4">
-                    <h4 className="font-medium mb-2">Investment Accounts (SnapTrade)</h4>
-                    <p className="text-gray-400 text-sm mb-3">
-                      Connect your investment accounts to get insights on your portfolio, 
-                      holdings, and investment performance.
-                    </p>
-                    <SnapTradeButton />
-                  </div>
-
                   <div className="border border-gray-600 rounded-lg p-4">
                     <h4 className="font-medium mb-2">Disconnect Your Accounts</h4>
                     <p className="text-gray-400 text-sm mb-3">
