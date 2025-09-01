@@ -88,6 +88,80 @@ export default function SnapTradeButton() {
     }
   };
 
+  const connectSnapTrade = async () => {
+    try {
+      setIsInitializing(true);
+      
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        setStatus('not_authenticated');
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/snaptrade/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('SnapTrade login redirect:', data);
+        
+        // Redirect user to SnapTrade
+        if (data.data?.redirectURI) {
+          window.open(data.data.redirectURI, '_blank');
+          await checkSnapTradeStatus(); // Refresh status
+        }
+      } else {
+        const errorData = await response.json();
+        console.error('SnapTrade login failed:', errorData);
+        setStatus('error');
+      }
+    } catch (error) {
+      console.error('Error connecting SnapTrade:', error);
+      setStatus('error');
+    } finally {
+      setIsInitializing(false);
+    }
+  };
+
+  const disconnectSnapTrade = async () => {
+    try {
+      setIsInitializing(true);
+      
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        setStatus('not_authenticated');
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/snaptrade/delete`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        console.log('SnapTrade disconnected successfully');
+        await checkSnapTradeStatus(); // Refresh status
+      } else {
+        const errorData = await response.json();
+        console.error('SnapTrade disconnect failed:', errorData);
+        setStatus('error');
+      }
+    } catch (error) {
+      console.error('Error disconnecting SnapTrade:', error);
+      setStatus('error');
+    } finally {
+      setIsInitializing(false);
+    }
+  };
+
   const getButtonText = () => {
     switch (status) {
       case 'loading':
@@ -95,9 +169,9 @@ export default function SnapTradeButton() {
       case 'not_authenticated':
         return 'Please log in';
       case 'not_initialized':
-        return isInitializing ? 'Initializing...' : 'Connect SnapTrade';
+        return isInitializing ? 'Initializing...' : 'Initialize SnapTrade';
       case 'registered':
-        return 'SnapTrade Connected';
+        return isInitializing ? 'Connecting...' : 'Connect Investment Accounts';
       case 'connected':
         return 'SnapTrade Active';
       case 'disconnected':
@@ -130,6 +204,8 @@ export default function SnapTradeButton() {
   const handleClick = () => {
     if (status === 'not_initialized' || status === 'error') {
       initializeSnapTrade();
+    } else if (status === 'registered') {
+      connectSnapTrade();
     } else if (status === 'disconnected') {
       initializeSnapTrade();
     }
@@ -147,6 +223,16 @@ export default function SnapTradeButton() {
         >
           {getButtonText()}
         </button>
+        
+        {(status === 'registered' || status === 'connected') && (
+          <button
+            onClick={disconnectSnapTrade}
+            disabled={isInitializing}
+            className="px-4 py-2 text-red-600 border border-red-600 hover:bg-red-600 hover:text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Disconnect
+          </button>
+        )}
         
         {status === 'loading' && (
           <div className="text-sm text-gray-600">Checking status...</div>

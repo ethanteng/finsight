@@ -1,6 +1,7 @@
 import express from 'express';
 import { snapTradeService } from '../snaptrade';
 import { requireAuth } from './middleware';
+import { getPrismaClient } from '../prisma-client';
 
 const router = express.Router();
 
@@ -70,6 +71,119 @@ router.post('/init', requireAuth, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to initialize SnapTrade'
+    });
+  }
+});
+
+// POST /snaptrade/login - Get login redirect URI
+router.post('/login', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    console.log('🔍 Getting login redirect for user:', userId);
+    
+    // Get user from database to get userSecret
+    const db = getPrismaClient();
+    const user = await db.snapTradeUser.findUnique({
+      where: { userId }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'SnapTrade user not found. Please initialize first.'
+      });
+    }
+
+    const result = await snapTradeService.getLoginRedirect(userId, user.userSecret);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Login redirect URI obtained',
+        data: result.data
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error('SnapTrade login redirect failed:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get login redirect'
+    });
+  }
+});
+
+// GET /snaptrade/holdings - Get user holdings
+router.get('/holdings', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    console.log('🔍 Getting holdings for user:', userId);
+    
+    // Get user from database to get userSecret
+    const db = getPrismaClient();
+    const user = await db.snapTradeUser.findUnique({
+      where: { userId }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'SnapTrade user not found. Please initialize first.'
+      });
+    }
+
+    const result = await snapTradeService.getUserHoldings(userId, user.userSecret);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Holdings retrieved successfully',
+        data: result.data
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error('SnapTrade get holdings failed:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get holdings'
+    });
+  }
+});
+
+// DELETE /snaptrade/delete - Delete SnapTrade user
+router.delete('/delete', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    console.log('🔍 Deleting SnapTrade user:', userId);
+    
+    const result = await snapTradeService.deleteUser(userId);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'SnapTrade user deleted successfully',
+        data: result.data
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error('SnapTrade delete user failed:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete SnapTrade user'
     });
   }
 });
