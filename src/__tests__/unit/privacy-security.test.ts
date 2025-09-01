@@ -110,12 +110,17 @@ describe('Privacy Endpoints Security', () => {
           where: { userId }
         });
         
-        // 6. Delete privacy settings (references users)
+        // 6. Delete SnapTrade user data (references users)
+        await mockPrismaClient.snapTradeUser.deleteMany({
+          where: { userId }
+        });
+        
+        // 7. Delete privacy settings (references users)
         await mockPrismaClient.privacySettings.deleteMany({
           where: { userId }
         });
         
-        // 7. Delete encrypted profile data first (references userProfile)
+        // 8. Delete encrypted profile data first (references userProfile)
         await mockPrismaClient.encrypted_profile_data.deleteMany({
           where: { 
             profileHash: {
@@ -127,27 +132,27 @@ describe('Privacy Endpoints Security', () => {
           }
         });
         
-        // 8. Delete user profile (references users)
+        // 9. Delete user profile (references users)
         await mockPrismaClient.userProfile.deleteMany({
           where: { userId }
         });
         
-        // 9. Delete encrypted user data (references users)
+        // 10. Delete encrypted user data (references users)
         await mockPrismaClient.encryptedUserData.deleteMany({
           where: { userId }
         });
         
-        // 10. Delete password reset tokens (references users)
+        // 11. Delete password reset tokens (references users)
         await mockPrismaClient.passwordResetToken.deleteMany({
           where: { userId }
         });
         
-        // 11. Delete email verification codes (references users)
+        // 12. Delete email verification codes (references users)
         await mockPrismaClient.emailVerificationCode.deleteMany({
           where: { userId }
         });
         
-        // 12. Finally, delete the user themselves (including login/email)
+        // 13. Finally, delete the user themselves (including login/email)
         await mockPrismaClient.user.delete({
           where: { id: userId }
         });
@@ -181,6 +186,11 @@ describe('Privacy Endpoints Security', () => {
           where: { userId }
         });
         await mockPrismaClient.syncStatus.deleteMany({
+          where: { userId }
+        });
+        
+        // Clear SnapTrade user data
+        await mockPrismaClient.snapTradeUser.deleteMany({
           where: { userId }
         });
 
