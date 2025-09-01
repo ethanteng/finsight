@@ -117,6 +117,48 @@ router.post('/login', requireAuth, async (req, res) => {
   }
 });
 
+// GET /snaptrade/accounts - Get user accounts
+router.get('/accounts', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    console.log('🔍 Getting accounts for user:', userId);
+    
+    // Get user from database to get userSecret
+    const db = getPrismaClient();
+    const user = await db.snapTradeUser.findUnique({
+      where: { userId }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'SnapTrade user not found. Please initialize first.'
+      });
+    }
+
+    const result = await snapTradeService.getUserAccounts(userId, user.userSecret);
+    
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Accounts retrieved successfully',
+        data: result.data
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error('SnapTrade get accounts failed:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get accounts'
+    });
+  }
+});
+
 // GET /snaptrade/holdings - Get user holdings
 router.get('/holdings', requireAuth, async (req, res) => {
   try {

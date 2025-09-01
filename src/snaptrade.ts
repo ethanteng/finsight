@@ -168,6 +168,82 @@ export class SnapTradeService {
     }
   }
 
+    // Get user accounts
+  async getUserAccounts(userId: string, userSecret: string): Promise<{ success: boolean; data?: any; error?: string }> {
+    try {
+      console.log('🔍 Getting accounts for user:', userId);
+      
+      // Try to get user holdings first, which should include account information
+      const holdings = await snaptrade.accountInformation.getAllUserHoldings({
+        userId,
+        userSecret,
+      });
+      
+      console.log('🔍 Holdings retrieved successfully');
+      console.log('🔍 Raw holdings data structure:', JSON.stringify(holdings.data, null, 2));
+      
+      // Extract unique accounts from holdings
+      const accounts = new Map();
+      if (holdings.data && Array.isArray(holdings.data)) {
+        holdings.data.forEach((accountHolding: any) => {
+          console.log('🔍 Processing account holding:', accountHolding);
+          
+          if (accountHolding.account) {
+            const account = accountHolding.account;
+            const accountId = account.id;
+            
+            if (accountId && !accounts.has(accountId)) {
+              // Calculate total value from positions and cash
+              let totalValue = 0;
+              
+              // Check total_value from the account holding (root level)
+              if (accountHolding.total_value && accountHolding.total_value.value) {
+                totalValue = accountHolding.total_value.value;
+              }
+              
+              // Also check balances array for cash
+              if (account.balances && Array.isArray(account.balances)) {
+                account.balances.forEach((balance: any) => {
+                  if (balance.cash) {
+                    totalValue += balance.cash;
+                  }
+                });
+              }
+              
+              // Debug logging
+              console.log(`🔍 Account ${account.name} (${accountId}):`, {
+                accountHoldingTotalValue: accountHolding.total_value,
+                accountTotalValue: account.total_value,
+                balances: account.balances,
+                calculatedTotal: totalValue
+              });
+              
+              accounts.set(accountId, {
+                id: accountId,
+                name: account.name || `Account ${account.number}`,
+                type: account.brokerage_authorization?.brokerage?.name || 'investment',
+                institution: account.brokerage_authorization?.brokerage?.display_name || 'Unknown',
+                balance: totalValue,
+                accountNumber: account.number,
+                syncStatus: account.sync_status
+              });
+            }
+          }
+        });
+      }
+      
+      return { 
+        success: true, 
+        data: {
+          accounts: Array.from(accounts.values())
+        }
+      };
+    } catch (error) {
+      console.error('SnapTrade get accounts failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Get accounts failed' };
+    }
+  }
+
   // Get user holdings
   async getUserHoldings(userId: string, userSecret: string): Promise<{ success: boolean; data?: any; error?: string }> {
     try {

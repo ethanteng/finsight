@@ -9,9 +9,19 @@ interface SnapTradeStatus {
   updatedAt?: string;
 }
 
+interface SnapTradeAccount {
+  id: string;
+  name: string;
+  type: string;
+  subtype?: string;
+  institution?: string;
+  balance?: number;
+}
+
 export default function SnapTradeButton() {
   const [status, setStatus] = useState<string>('loading');
   const [snapTradeStatus, setSnapTradeStatus] = useState<SnapTradeStatus | null>(null);
+  const [connectedAccounts, setConnectedAccounts] = useState<SnapTradeAccount[]>([]);
   const [isInitializing, setIsInitializing] = useState(false);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -19,6 +29,12 @@ export default function SnapTradeButton() {
   useEffect(() => {
     checkSnapTradeStatus();
   }, []);
+
+  useEffect(() => {
+    if (snapTradeStatus?.status === 'registered') {
+      checkConnectedAccounts();
+    }
+  }, [snapTradeStatus]);
 
   const checkSnapTradeStatus = async () => {
     try {
@@ -50,6 +66,37 @@ export default function SnapTradeButton() {
     } catch (error) {
       console.error('Error checking SnapTrade status:', error);
       setStatus('error');
+    }
+  };
+
+  const checkConnectedAccounts = async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/snaptrade/accounts`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('SnapTrade accounts:', data);
+        if (data.data?.accounts) {
+          setConnectedAccounts(data.data.accounts);
+        }
+      } else {
+        console.log('No connected accounts found or error:', response.status);
+        setConnectedAccounts([]);
+      }
+    } catch (error) {
+      console.error('Error checking connected accounts:', error);
+      setConnectedAccounts([]);
     }
   };
 
@@ -113,7 +160,10 @@ export default function SnapTradeButton() {
         // Redirect user to SnapTrade
         if (data.data?.redirectURI) {
           window.open(data.data.redirectURI, '_blank');
-          await checkSnapTradeStatus(); // Refresh status
+          // Wait a bit then check for new accounts
+          setTimeout(() => {
+            checkConnectedAccounts();
+          }, 2000);
         }
       } else {
         const errorData = await response.json();
@@ -171,6 +221,9 @@ export default function SnapTradeButton() {
       case 'not_initialized':
         return isInitializing ? 'Initializing...' : 'Initialize SnapTrade';
       case 'registered':
+        if (connectedAccounts.length > 0) {
+          return `Connected (${connectedAccounts.length} account${connectedAccounts.length > 1 ? 's' : ''})`;
+        }
         return isInitializing ? 'Connecting...' : 'Connect Investment Accounts';
       case 'connected':
         return 'SnapTrade Active';
@@ -187,13 +240,13 @@ export default function SnapTradeButton() {
     switch (status) {
       case 'registered':
       case 'connected':
-        return 'bg-green-500 hover:bg-green-600';
+        return 'bg-green-600 hover:bg-green-700 text-white';
       case 'error':
-        return 'bg-red-500 hover:bg-red-600';
+        return 'bg-red-600 hover:bg-red-700 text-white';
       case 'loading':
-        return 'bg-gray-400 cursor-not-allowed';
+        return 'bg-gray-600 cursor-not-allowed text-gray-300';
       default:
-        return 'bg-blue-500 hover:bg-blue-600';
+        return 'bg-blue-600 hover:bg-blue-700 text-white';
     }
   };
 
@@ -217,7 +270,7 @@ export default function SnapTradeButton() {
         <button
           onClick={handleClick}
           disabled={isButtonDisabled()}
-          className={`px-4 py-2 text-white font-medium rounded-lg transition-colors ${getButtonColor()} ${
+          className={`px-4 py-2 font-medium rounded-lg transition-colors ${getButtonColor()} ${
             isButtonDisabled() ? 'cursor-not-allowed' : 'cursor-pointer'
           }`}
         >
@@ -225,35 +278,63 @@ export default function SnapTradeButton() {
         </button>
         
         {(status === 'registered' || status === 'connected') && (
-          <button
-            onClick={disconnectSnapTrade}
-            disabled={isInitializing}
-            className="px-4 py-2 text-red-600 border border-red-600 hover:bg-red-600 hover:text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+                      <button
+              onClick={disconnectSnapTrade}
+              disabled={isInitializing}
+              className="px-4 py-2 text-red-400 border border-red-500 hover:bg-red-600 hover:text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
             Disconnect
           </button>
         )}
         
         {status === 'loading' && (
-          <div className="text-sm text-gray-600">Checking status...</div>
+          <div className="text-sm text-gray-400 bg-gray-800 border border-gray-600 rounded-lg p-3">
+            <div className="flex items-center space-x-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
+              <span>Checking SnapTrade status...</span>
+            </div>
+          </div>
         )}
       </div>
 
       {snapTradeStatus && (
-        <div className="text-sm text-gray-600">
-          <div>Status: {snapTradeStatus.status}</div>
+        <div className="text-sm text-gray-400 bg-gray-800 border border-gray-600 rounded-lg p-3">
+          <div className="font-medium text-gray-200 mb-2">SnapTrade Status:</div>
+          <div className="text-gray-400">Status: <span className="font-semibold text-green-400">{snapTradeStatus.status}</span></div>
           {snapTradeStatus.snapTradeUserId && (
-            <div>User ID: {snapTradeStatus.snapTradeUserId}</div>
+            <div className="text-gray-400">User ID: <span className="font-mono text-xs text-gray-300">{snapTradeStatus.snapTradeUserId}</span></div>
           )}
           {snapTradeStatus.createdAt && (
-            <div>Created: {new Date(snapTradeStatus.createdAt).toLocaleDateString()}</div>
+            <div className="text-gray-400">Created: {new Date(snapTradeStatus.createdAt).toLocaleDateString()}</div>
           )}
         </div>
       )}
 
+      {connectedAccounts.length > 0 && (
+        <div className="mt-4">
+          <h4 className="font-medium text-sm mb-3 text-gray-300">Connected Investment Accounts:</h4>
+          <div className="space-y-3">
+            {connectedAccounts.map((account) => (
+              <div key={account.id} className="text-sm bg-gray-800 border border-gray-600 rounded-lg p-3">
+                <div className="font-medium text-gray-200 mb-1">{account.name}</div>
+                <div className="text-gray-400 text-xs">
+                  {account.institution} • {account.type}
+                  {account.balance && (
+                    <span className="ml-2 font-semibold text-green-400">
+                      • ${account.balance.toLocaleString()}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {status === 'error' && (
-        <div className="text-sm text-red-600">
-          There was an error connecting to SnapTrade. Please try again.
+        <div className="text-sm text-red-400 bg-gray-800 border border-red-500/30 rounded-lg p-3">
+          <div className="font-medium text-red-300 mb-1">Connection Error</div>
+          <div className="text-gray-400">There was an error connecting to SnapTrade. Please try again.</div>
         </div>
       )}
     </div>
