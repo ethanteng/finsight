@@ -414,17 +414,23 @@ export class SnapTradeService {
     try {
       console.log('🔍 Deleting SnapTrade user:', userId);
       
+      // First, try to delete from SnapTrade
       const deleteResponse = await snaptrade.authentication.deleteSnapTradeUser({ 
         userId 
       });
       
-      // Also delete from our database
-      const db = getPrismaClient();
-      await db.snapTradeUser.delete({
-        where: { userId }
-      });
+      console.log('🔍 User deleted from SnapTrade successfully');
       
-      console.log('🔍 User deleted successfully');
+      // Then try to delete from our database (if it exists)
+      try {
+        const db = getPrismaClient();
+        await db.snapTradeUser.delete({
+          where: { userId }
+        });
+        console.log('🔍 User deleted from database successfully');
+      } catch (dbError) {
+        console.log('🔍 User not found in database (this is okay if it was never stored)');
+      }
       
       return { 
         success: true, 
