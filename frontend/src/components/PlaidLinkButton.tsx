@@ -20,10 +20,19 @@ export const clearAllFinancialServices = () => {
   console.log('All financial services cleared');
 };
 
+// Extend the Window interface to include our debugging functions
+declare global {
+  interface Window {
+    clearAllFinancialServices?: () => void;
+    resetPlaidLinkInitialization?: () => void;
+    plaidFallbackTimer?: NodeJS.Timeout | null;
+  }
+}
+
 // Make the function available globally for debugging
 if (typeof window !== 'undefined') {
-  (window as any).clearAllFinancialServices = clearAllFinancialServices;
-  (window as any).resetPlaidLinkInitialization = resetPlaidLinkInitialization;
+  window.clearAllFinancialServices = clearAllFinancialServices;
+  window.resetPlaidLinkInitialization = resetPlaidLinkInitialization;
 }
 
 interface PlaidLinkButtonProps {
@@ -272,9 +281,9 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
     setStatus('');
     
     // Clear the fallback timer if it exists
-    if ((window as any).plaidFallbackTimer) {
-      clearTimeout((window as any).plaidFallbackTimer);
-      (window as any).plaidFallbackTimer = null;
+    if (window.plaidFallbackTimer) {
+      clearTimeout(window.plaidFallbackTimer);
+      window.plaidFallbackTimer = null;
     }
     
     // Unregister this service immediately
@@ -333,7 +342,7 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
         }, 5 * 60 * 1000); // 5 minutes
         
         // Store the timer so we can clear it if needed
-        (window as any).plaidFallbackTimer = fallbackUnregisterTimer;
+        window.plaidFallbackTimer = fallbackUnregisterTimer;
         
       } catch (error) {
         console.error('Error opening Plaid Link:', error);
