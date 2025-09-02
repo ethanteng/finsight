@@ -727,6 +727,115 @@ export function createTestApp() {
     res.status(401).json({ error: 'Authentication required' });
   });
   
+  // Add mock SnapTrade endpoints for testing
+  app.get('/snaptrade/status/user', testAuthMiddleware, (req: any, res) => {
+    res.json({
+      status: 'registered',
+      snapTradeUserId: 'test-snaptrade-user-id',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+  });
+  
+  app.get('/snaptrade/accounts', testAuthMiddleware, (req: any, res) => {
+    // For testing error handling, return 404 for users without SnapTrade data
+    // This simulates the real behavior when a user hasn't initialized SnapTrade
+    res.status(404).json({
+      success: false,
+      error: 'SnapTrade user not found. Please initialize first.'
+    });
+  });
+  
+  app.get('/snaptrade/holdings', testAuthMiddleware, (req: any, res) => {
+    res.json({
+      success: true,
+      message: 'Holdings retrieved successfully',
+      data: {
+        holdings: [
+          {
+            account: {
+              id: 'test-account-1',
+              name: 'Test Investment Account',
+              number: '123456789'
+            },
+            positions: [
+              {
+                symbol: {
+                  id: 'test-symbol-1',
+                  symbol: { symbol: 'TEST', description: 'Test Stock' },
+                  type: { description: 'Stock' }
+                },
+                price: 100,
+                units: 100,
+                open_pnl: 500,
+                average_purchase_price: 95,
+                currency: { code: 'USD' }
+              }
+            ],
+            balances: [
+              {
+                currency: { code: 'USD' },
+                cash: 1000,
+                buying_power: 1000
+              }
+            ],
+            total_value: { currency: 'USD', value: 11000 }
+          }
+        ]
+      }
+    });
+  });
+  
+  app.get('/snaptrade/activities', testAuthMiddleware, (req: any, res) => {
+    res.json({
+      success: true,
+      message: 'Activities retrieved successfully',
+      data: {
+        activities: [
+          {
+            id: 'test-activity-1',
+            account_id: 'test-account-1',
+            amount: 1000,
+            date: '2025-01-01',
+            name: 'Buy Test Stock',
+            type: 'buy',
+            quantity: 10,
+            price: 100
+          }
+        ]
+      }
+    });
+  });
+  
+  app.post('/snaptrade/init', testAuthMiddleware, (req: any, res) => {
+    res.json({
+      success: true,
+      message: 'SnapTrade initialized successfully',
+      data: {
+        snapTradeUserId: 'test-snaptrade-user-id',
+        userSecret: 'test-user-secret'
+      }
+    });
+  });
+  
+  app.post('/snaptrade/login', testAuthMiddleware, (req: any, res) => {
+    res.json({
+      success: true,
+      message: 'Login redirect URI obtained',
+      data: {
+        redirectURI: 'https://test-snaptrade-login.com'
+      }
+    });
+  });
+  
+  app.delete('/snaptrade/delete', testAuthMiddleware, (req: any, res) => {
+    res.json({
+      success: true,
+      message: 'SnapTrade user deleted successfully',
+      data: {}
+    });
+  });
+  
   return app;
 }
 

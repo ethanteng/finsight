@@ -20,7 +20,11 @@ interface SnapTradeAccount {
   balance?: number;
 }
 
-export default function SnapTradeButton() {
+interface SnapTradeButtonProps {
+  onAccountsUpdated?: () => void;
+}
+
+export default function SnapTradeButton({ onAccountsUpdated }: SnapTradeButtonProps) {
   const [status, setStatus] = useState<string>('loading');
   const [snapTradeStatus, setSnapTradeStatus] = useState<SnapTradeStatus | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<SnapTradeAccount[]>([]);
@@ -130,6 +134,10 @@ export default function SnapTradeButton() {
         console.log('SnapTrade accounts:', data);
         if (data.data?.accounts) {
           setConnectedAccounts(data.data.accounts);
+          // Notify parent component that accounts have been updated
+          if (onAccountsUpdated) {
+            onAccountsUpdated();
+          }
         }
       } else {
         console.log('No connected accounts found or error:', response.status);
