@@ -30,6 +30,43 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
   const [status, setStatus] = useState<string>('');
   const { trackEvent, trackConversion } = useAnalytics();
 
+  // Utility function to clean up Plaid Link modal remnants
+  const cleanupPlaidLink = useCallback(() => {
+    setTimeout(() => {
+      // Remove any Plaid Link modal backdrops
+      const plaidModals = document.querySelectorAll('[data-plaid-modal], .plaid-link-modal, .plaid-modal');
+      plaidModals.forEach(modal => {
+        if (modal.parentNode) {
+          modal.parentNode.removeChild(modal);
+        }
+      });
+      
+      // Remove any Plaid Link iframes
+      const plaidIframes = document.querySelectorAll('iframe[src*="plaid.com"]');
+      plaidIframes.forEach(iframe => {
+        if (iframe.parentNode) {
+          iframe.parentNode.removeChild(iframe);
+        }
+      });
+      
+      // Restore body scroll
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      
+      // Remove any Plaid Link overlay elements
+      const overlays = document.querySelectorAll('.plaid-overlay, .plaid-backdrop');
+      overlays.forEach(overlay => {
+        if (overlay.parentNode) {
+          overlay.parentNode.removeChild(overlay);
+        }
+      });
+      
+      console.log('Plaid Link cleanup completed');
+    }, 100);
+  }, []);
+
   // Prevent multiple Plaid Link initializations
   useEffect(() => {
     console.log('PlaidLinkButton useEffect triggered:', {
@@ -63,8 +100,11 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
     // The flag will be reset when the user logs out or when explicitly requested
     return () => {
       console.log('Plaid Link component unmounted, keeping global flag for stability');
+      
+      // Clean up any Plaid Link remnants when component unmounts
+      cleanupPlaidLink();
     };
-  }, [forceReinitialize, isDemo]);
+  }, [forceReinitialize, isDemo, cleanupPlaidLink]);
 
   // Fetch link_token from backend
   const createLinkToken = useCallback(async () => {
@@ -177,6 +217,10 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
         // Reset the component state after successful connection
         setLinkToken(null);
         setStatus('');
+        
+        // Clean up any Plaid Link modal remnants after successful connection
+        cleanupPlaidLink();
+        
         // Call the onSuccess callback if provided
         if (onSuccess) {
           onSuccess(publicToken, metadata);
@@ -202,8 +246,11 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
       // Reset state on error
       setLinkToken(null);
       setStatus('');
+      
+      // Clean up any Plaid Link modal remnants after error
+      cleanupPlaidLink();
     }
-  }, [trackEvent, trackConversion, isDemo, onSuccess]);
+  }, [trackEvent, trackConversion, isDemo, onSuccess, cleanupPlaidLink]);
 
   const handleExit: PlaidLinkOnExit = useCallback((err, metadata) => {
     console.log('Plaid Link exit:', err, metadata);
@@ -214,6 +261,9 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
     // Reset the component state when Plaid Link exits
     setLinkToken(null);
     setStatus('');
+    
+    // Clean up any Plaid Link modal remnants that might be causing scroll lock
+    cleanupPlaidLink();
     
     // Track exit event
     trackEvent('plaid_link_exit', {
@@ -226,7 +276,7 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
     if (onExit) {
       onExit();
     }
-  }, [trackEvent, isDemo, onExit]);
+  }, [trackEvent, isDemo, onExit, cleanupPlaidLink]);
 
   // Always call the hook, but with a dummy token when no real token is available
   const plaid = usePlaidLink(
