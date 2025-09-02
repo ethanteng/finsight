@@ -38,6 +38,12 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
       isDemo
     });
     
+    // Skip initialization in demo mode
+    if (isDemo) {
+      console.log('Demo mode - skipping Plaid Link initialization');
+      return;
+    }
+    
     // Allow re-initialization if forceReinitialize is true
     if (plaidLinkInitialized && !forceReinitialize) {
       console.log('Plaid Link already initialized globally, skipping this instance');
@@ -53,18 +59,22 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
     console.log('Setting global Plaid Link initialization flag');
     plaidLinkInitialized = true;
     
-    // Reset the flag on unmount to allow re-initialization for new users
+    // Don't reset the flag on unmount in production to prevent conflicts
+    // The flag will be reset when the user logs out or when explicitly requested
     return () => {
-      // Only reset if this is the last instance (we could add a counter here if needed)
-      // For now, reset on unmount to allow new users to initialize
-      plaidLinkInitialized = false;
-      console.log('Plaid Link component unmounted, resetting global flag');
+      console.log('Plaid Link component unmounted, keeping global flag for stability');
     };
   }, [forceReinitialize, isDemo]);
 
   // Fetch link_token from backend
   const createLinkToken = useCallback(async () => {
     console.log('createLinkToken called with props:', { isDemo, forceReinitialize });
+    
+    // Don't create tokens in demo mode
+    if (isDemo) {
+      console.log('Demo mode - not creating link token');
+      return;
+    }
     
     // Check if other financial services are active
     if (financialServiceCoordinator.hasActiveServices()) {
@@ -227,8 +237,19 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
 
   // Automatically open Plaid Link when token is ready
   useEffect(() => {
-    if (linkToken && plaid.ready && plaidLinkInitialized) {
-      console.log('Plaid Link ready, opening...', { linkToken: linkToken.substring(0, 20) + '...', ready: plaid.ready });
+    if (linkToken && plaid.ready) {
+      // Check if we need to set the global flag (in case it was reset)
+      if (!plaidLinkInitialized) {
+        console.log('Setting global Plaid Link initialization flag (delayed)');
+        plaidLinkInitialized = true;
+      }
+      
+      console.log('Plaid Link ready, opening...', { 
+        linkToken: linkToken.substring(0, 20) + '...', 
+        ready: plaid.ready,
+        plaidLinkInitialized 
+      });
+      
       try {
         plaid.open();
         console.log('Plaid Link opened successfully');
@@ -237,9 +258,33 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
         setStatus('Failed to open Plaid Link. Please try again.');
       }
     } else if (linkToken && !plaid.ready) {
-      console.log('Plaid Link token ready but not ready to open yet', { linkToken: linkToken.substring(0, 20) + '...', ready: plaid.ready });
+      console.log('Plaid Link token ready but not ready to open yet', { 
+        linkToken: linkToken.substring(0, 20) + '...', 
+        ready: plaid.ready 
+      });
     } else if (!plaidLinkInitialized) {
       console.log('Plaid Link not yet initialized globally, waiting...');
+    }
+  }, [linkToken, plaid.ready, plaid]);
+
+  // Fallback: Try to open Plaid Link after a delay if it hasn't opened yet
+  useEffect(() => {
+    if (linkToken && plaid.ready) {
+      const fallbackTimer = setTimeout(() => {
+        // Check if Plaid Link is still not open after 3 seconds
+        const plaidModal = document.querySelector('[data-plaid-modal]');
+        if (plaidModal && !plaidModal.querySelector('iframe')) {
+          console.log('Fallback: Plaid Link not opened after delay, attempting to open...');
+          try {
+            plaid.open();
+            console.log('Fallback: Plaid Link opened successfully');
+          } catch (error) {
+            console.error('Fallback: Error opening Plaid Link:', error);
+          }
+        }
+      }, 3000);
+
+      return () => clearTimeout(fallbackTimer);
     }
   }, [linkToken, plaid.ready, plaid]);
 
