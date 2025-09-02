@@ -21,26 +21,31 @@ if [[ "${NODE_ENV:-}" == "production" ]]; then
     exit 1
 fi
 
-# Check if DATABASE_URL is set
-if [[ -z "${DATABASE_URL:-}" ]]; then
-    echo "❌ ERROR: DATABASE_URL environment variable is not set"
-    echo "   Please set DATABASE_URL in your .env file"
-    exit 1
-fi
-
-# Check if this looks like a local development database
-if [[ "$DATABASE_URL" == *"localhost"* ]] || [[ "$DATABASE_URL" == *"127.0.0.1"* ]]; then
-    echo "✅ Local development database detected"
-else
-    echo "⚠️  WARNING: This doesn't look like a local development database"
-    echo "   DATABASE_URL: $DATABASE_URL"
-    echo "   Are you sure you want to continue? (y/N)"
-    read -r response
-    if [[ ! "$response" =~ ^[Yy]$ ]]; then
-        echo "❌ Aborted by user"
+# Ensure local database is set up with Docker Compose
+echo "🐳 Ensuring local PostgreSQL database is running with proper setup..."
+if ! docker-compose ps db | grep -q "Up"; then
+    echo "📦 Starting PostgreSQL container with proper user setup..."
+    docker-compose up -d db
+    
+    # Wait for database to be ready
+    echo "⏳ Waiting for database to be ready..."
+    sleep 5
+    
+    # Check if database is healthy
+    if ! docker-compose exec db pg_isready -U postgres -d postgres; then
+        echo "❌ Database is not ready. Please check Docker logs:"
+        docker-compose logs db
         exit 1
     fi
+else
+    echo "✅ PostgreSQL container is already running"
 fi
+
+# Set local database URL to use the Docker container
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/finsight"
+export DATABASE_URL
+
+echo "✅ Using local development database: $DATABASE_URL"
 
 echo ""
 echo "🚨 WARNING: This will completely wipe your local development database!"
@@ -74,7 +79,7 @@ echo "   Checking that all tables were created correctly..."
 
 # List all tables to verify they were created
 echo "📊 Current database tables:"
-npx prisma db execute --stdin <<< "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name;"
+npx prisma db execute --url="$DATABASE_URL" --stdin <<< "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name;"
 
 echo ""
 echo "🎉 Local database reset complete!"

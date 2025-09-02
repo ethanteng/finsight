@@ -42,8 +42,29 @@ elif [[ -n "${RENDER_DATABASE_URL:-}" ]]; then
     echo "✅ Using RENDER_DATABASE_URL"
 fi
 
-# Store original local database URL
-LOCAL_DB_URL="$DATABASE_URL"
+# Ensure local database is set up with Docker Compose
+echo "🐳 Ensuring local PostgreSQL database is running with proper setup..."
+if ! docker-compose ps db | grep -q "Up"; then
+    echo "📦 Starting PostgreSQL container with proper user setup..."
+    docker-compose up -d db
+    
+    # Wait for database to be ready
+    echo "⏳ Waiting for database to be ready..."
+    sleep 5
+    
+    # Check if database is healthy
+    if ! docker-compose exec db pg_isready -U postgres -d postgres; then
+        echo "❌ Database is not ready. Please check Docker logs:"
+        docker-compose logs db
+        exit 1
+    fi
+else
+    echo "✅ PostgreSQL container is already running"
+fi
+
+# Set local database URL to use the Docker container
+LOCAL_DB_URL="postgresql://postgres:postgres@localhost:5432/finsight"
+export DATABASE_URL="$LOCAL_DB_URL"
 
 echo ""
 echo "🚨 WARNING: This will completely sync your local development environment with production!"
@@ -155,7 +176,7 @@ echo "   Checking that all tables match production..."
 
 # List all tables to verify they were created correctly
 echo "📊 Current local database tables:"
-npx prisma db execute --stdin <<< "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name;" 2>/dev/null || echo "   Could not list tables (database might still be initializing)"
+npx prisma db execute --url="$DATABASE_URL" --stdin <<< "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name;" 2>/dev/null || echo "   Could not list tables (database might still be initializing)"
 
 # Step 8: Final verification
 echo ""
@@ -171,7 +192,7 @@ fi
 
 # Check if we can connect to the database
 echo "🔌 Database connection test:"
-if npx prisma db execute --stdin <<< "SELECT 1 as test;" > /dev/null 2>&1; then
+if npx prisma db execute --url="$DATABASE_URL" --stdin <<< "SELECT 1 as test;" > /dev/null 2>&1; then
     echo "✅ Database connection successful"
 else
     echo "❌ Database connection failed"
@@ -180,7 +201,7 @@ fi
 
 # Show final table count
 echo "📊 Final table count:"
-TABLE_COUNT=$(npx prisma db execute --stdin <<< "SELECT COUNT(*) as table_count FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE';" 2>/dev/null | grep -o '[0-9]*' | tail -1 || echo "unknown")
+TABLE_COUNT=$(npx prisma db execute --url="$DATABASE_URL" --stdin <<< "SELECT COUNT(*) as table_count FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE';" 2>/dev/null | grep -o '[0-9]*' | tail -1 || echo "unknown")
 echo "   Tables in database: $TABLE_COUNT"
 
 # Final migration status check
