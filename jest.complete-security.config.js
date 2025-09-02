@@ -30,6 +30,7 @@ module.exports = {
   clearMocks: true,
   resetMocks: true,
   restoreMocks: true,
+  maxWorkers: 1, // Use single worker to avoid race conditions and match CI/CD behavior
   // Include all security tests
   testMatch: [
     '**/complete-security-suite.test.ts',

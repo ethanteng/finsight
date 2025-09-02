@@ -30,6 +30,7 @@ module.exports = {
   clearMocks: true,
   resetMocks: true,
   restoreMocks: true,
+  maxWorkers: 1, // Use single worker to avoid race conditions and match CI/CD behavior
   // CI Environment: Only include core security tests, exclude Profile Encryption tests
   // Profile Encryption tests require real database and are skipped in CI
   testMatch: [

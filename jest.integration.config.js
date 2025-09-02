@@ -17,6 +17,7 @@ module.exports = {
   testTimeout: 60000, // 60 seconds for integration tests
   verbose: true,
   collectCoverage: true, // Enable coverage for integration tests
+  maxWorkers: 1, // Use single worker to avoid race conditions and match CI/CD behavior
   globals: {
     'ts-jest': {
       tsconfig: 'tsconfig.json',
