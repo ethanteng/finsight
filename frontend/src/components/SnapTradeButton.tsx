@@ -381,7 +381,7 @@ export default function SnapTradeButton({ onAccountsUpdated, isDemo = false }: S
                   <div className="flex-1">
                     <div className="font-semibold text-white text-base mb-1">{account.name}</div>
                     <div className="text-gray-400 text-sm">
-                      {account.institution} • {account.type}
+                      {account.institution && `${account.institution} • `}{account.type}
                       {account.subtype && ` • ${account.subtype}`}
                     </div>
                   </div>

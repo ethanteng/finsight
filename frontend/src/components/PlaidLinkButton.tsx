@@ -14,6 +14,18 @@ export const resetPlaidLinkInitialization = () => {
   console.log('Global Plaid Link initialization flag reset');
 };
 
+// Function to manually clear all financial services (useful for debugging)
+export const clearAllFinancialServices = () => {
+  financialServiceCoordinator.clear();
+  console.log('All financial services cleared');
+};
+
+// Make the function available globally for debugging
+if (typeof window !== 'undefined') {
+  (window as any).clearAllFinancialServices = clearAllFinancialServices;
+  (window as any).resetPlaidLinkInitialization = resetPlaidLinkInitialization;
+}
+
 interface PlaidLinkButtonProps {
   onSuccess?: (publicToken: string, metadata: PlaidLinkOnSuccessMetadata) => void;
   onExit?: () => void;
@@ -255,12 +267,19 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
   const handleExit: PlaidLinkOnExit = useCallback((err, metadata) => {
     console.log('Plaid Link exit:', err, metadata);
     
-    // Unregister this service
-    financialServiceCoordinator.unregisterService(SERVICE_NAMES.PLAID_LINK);
-    
     // Reset the component state when Plaid Link exits
     setLinkToken(null);
     setStatus('');
+    
+    // Clear the fallback timer if it exists
+    if ((window as any).plaidFallbackTimer) {
+      clearTimeout((window as any).plaidFallbackTimer);
+      (window as any).plaidFallbackTimer = null;
+    }
+    
+    // Unregister this service immediately
+    financialServiceCoordinator.unregisterService(SERVICE_NAMES.PLAID_LINK);
+    console.log('Plaid Link service unregistered on exit');
     
     // Clean up any Plaid Link modal remnants that might be causing scroll lock
     cleanupPlaidLink();
@@ -303,9 +322,24 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
       try {
         plaid.open();
         console.log('Plaid Link opened successfully');
+        
+        // Set a fallback timer to unregister the service if it's still active after 5 minutes
+        // This prevents the service from being stuck in "active" state
+        const fallbackUnregisterTimer = setTimeout(() => {
+          if (financialServiceCoordinator.isServiceActive(SERVICE_NAMES.PLAID_LINK)) {
+            console.log('Fallback: Unregistering Plaid Link service after timeout');
+            financialServiceCoordinator.unregisterService(SERVICE_NAMES.PLAID_LINK);
+          }
+        }, 5 * 60 * 1000); // 5 minutes
+        
+        // Store the timer so we can clear it if needed
+        (window as any).plaidFallbackTimer = fallbackUnregisterTimer;
+        
       } catch (error) {
         console.error('Error opening Plaid Link:', error);
         setStatus('Failed to open Plaid Link. Please try again.');
+        // Unregister service on error
+        financialServiceCoordinator.unregisterService(SERVICE_NAMES.PLAID_LINK);
       }
     } else if (linkToken && !plaid.ready) {
       console.log('Plaid Link token ready but not ready to open yet', { 

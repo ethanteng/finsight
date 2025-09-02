@@ -266,7 +266,6 @@ export class SnapTradeService {
       });
       
       console.log('🔍 Holdings retrieved successfully');
-      console.log('🔍 Raw holdings data structure:', JSON.stringify(holdings.data, null, 2));
       
       // Extract unique accounts from holdings
       const accounts = new Map();
@@ -304,11 +303,44 @@ export class SnapTradeService {
                 calculatedTotal: totalValue
               });
               
+              // Determine account type based on account properties
+              let accountType = 'investment'; // default
+              let accountSubtype = '';
+              
+              if (account.type) {
+                accountType = account.type;
+              } else {
+                // Determine account type based on account name patterns
+                const accountName = (account.name || '').toLowerCase();
+                if (accountName.includes('brokerage')) {
+                  accountType = 'brokerage';
+                } else if (accountName.includes('treasury')) {
+                  accountType = 'treasury';
+                } else if (accountName.includes('ira') || accountName.includes('roth')) {
+                  accountType = 'ira';
+                } else if (accountName.includes('401k') || accountName.includes('401(k)')) {
+                  accountType = '401k';
+                } else if (accountName.includes('hsa')) {
+                  accountType = 'hsa';
+                } else if (accountName.includes('529')) {
+                  accountType = '529';
+                } else {
+                  // Default to investment for unknown account types
+                  accountType = 'investment';
+                }
+              }
+              
+              // Add subtype if available
+              if (account.subtype) {
+                accountSubtype = account.subtype;
+              }
+
               accounts.set(accountId, {
                 id: accountId,
                 name: account.name || `Account ${account.number}`,
-                type: account.brokerage_authorization?.brokerage?.name || 'investment',
-                institution: account.brokerage_authorization?.brokerage?.display_name || 'Unknown',
+                type: accountType,
+                subtype: accountSubtype,
+                institution: account.brokerage_authorization?.brokerage?.display_name || account.brokerage_authorization?.brokerage?.name || 'Unknown',
                 balance: totalValue,
                 accountNumber: account.number,
                 syncStatus: account.sync_status

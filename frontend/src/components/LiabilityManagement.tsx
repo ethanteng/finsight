@@ -15,6 +15,7 @@ interface LiabilityAccount {
   };
   verification_status?: string;
   last_updated_datetime?: string;
+  institution?: string;
 }
 
 interface LiabilityData {
@@ -208,7 +209,7 @@ export default function LiabilityManagement({ isDemo = false }: LiabilityManagem
                       {account.name}
                     </div>
                     <div className="text-sm text-gray-400">
-                      {account.type} • {account.subtype}
+                      {account.institution && `${account.institution} • `}{account.type} • {account.subtype}
                     </div>
                     {account.verification_status && (
                       <div className="text-xs text-gray-500">

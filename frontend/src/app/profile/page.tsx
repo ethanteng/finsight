@@ -17,6 +17,7 @@ interface Account {
     available: number;
     iso_currency_code: string;
   };
+  institution?: string;
 }
 
 interface SnapTradeData {
@@ -1096,7 +1097,7 @@ export default function ProfilePage() {
                         <div className="flex-1">
                           <div className="font-medium text-white">{account.name}</div>
                           <div className="text-sm text-gray-400">
-                            {account.type} • {account.subtype}
+                            {account.institution && `${account.institution} • `}{account.type} • {account.subtype}
                           </div>
                         </div>
                         <div className="text-right">

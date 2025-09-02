@@ -494,7 +494,8 @@ export const setupPlaidRoutes = (app: any) => {
               limit: account.type === 'credit' ? 10000 : null,
               iso_currency_code: "USD",
               unofficial_currency_code: null
-            }
+            },
+            institution: account.institution || 'Demo Bank'
           };
         });
         
@@ -539,6 +540,21 @@ export const setupPlaidRoutes = (app: any) => {
             access_token: tokenRecord.token,
           });
 
+          // Get institution information
+          let institutionName = 'Unknown Institution';
+          try {
+            if (accountsResponse.data.item?.institution_id) {
+              // Try to get institution details
+              const institutionResponse = await plaidClient.institutionsGetById({
+                institution_id: accountsResponse.data.item.institution_id,
+                country_codes: [CountryCode.Us]
+              });
+              institutionName = institutionResponse.data.institution.name;
+            }
+          } catch (institutionError) {
+            console.log('Could not fetch institution name, using default');
+          }
+
           // Process accounts
           const accountsWithBalances = accountsResponse.data.accounts
             .filter((account: any) => {
@@ -555,7 +571,8 @@ export const setupPlaidRoutes = (app: any) => {
                 type: account.type,
                 subtype: account.subtype,
                 mask: account.mask,
-                balance: balance?.balances || account.balances
+                balance: balance?.balances || account.balances,
+                institution: institutionName
               };
             });
 
@@ -3039,7 +3056,8 @@ export const setupPlaidRoutes = (app: any) => {
                   next_payment_due_date: '2025-08-01',
                   next_monthly_payment: 2500,
                   last_statement_balance: 450000,
-                  minimum_payment_amount: 2500
+                  minimum_payment_amount: 2500,
+                  institution: 'Wells Fargo'
                 }
               ],
               item: {
@@ -3078,8 +3096,28 @@ export const setupPlaidRoutes = (app: any) => {
             access_token: tokenRecord.token,
           });
           
+          // Get institution information
+          let institutionName = 'Unknown Institution';
+          try {
+            if (liabilitiesResponse.data.item?.institution_id) {
+              const institutionResponse = await plaidClient.institutionsGetById({
+                institution_id: liabilitiesResponse.data.item.institution_id,
+                country_codes: [CountryCode.Us]
+              });
+              institutionName = institutionResponse.data.institution.name;
+            }
+          } catch (institutionError) {
+            console.log('Could not fetch institution name for liabilities, using default');
+          }
+          
+          // Add institution information to accounts
+          const accountsWithInstitution = liabilitiesResponse.data.accounts.map((account: any) => ({
+            ...account,
+            institution: institutionName
+          }));
+          
           allLiabilities.push({
-            accounts: liabilitiesResponse.data.accounts,
+            accounts: accountsWithInstitution,
             item: liabilitiesResponse.data.item,
             request_id: liabilitiesResponse.data.request_id
           });
