@@ -1130,12 +1130,15 @@ export default function ProfilePage() {
           {/* Investment Accounts (SnapTrade) Section */}
           <div className="bg-gray-800 rounded-lg p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4">Your Connected Accounts (SnapTrade)</h2>
-            <SnapTradeButton onAccountsUpdated={() => {
-              // Refresh investment data when SnapTrade accounts are updated
-              if (!isDemo) {
-                loadInvestmentData(false);
-              }
-            }} />
+            <SnapTradeButton 
+              isDemo={isDemo}
+              onAccountsUpdated={() => {
+                // Refresh investment data when SnapTrade accounts are updated
+                if (!isDemo) {
+                  loadInvestmentData(false);
+                }
+              }} 
+            />
             
             {/* Supported Financial Institutions */}
             <div className="mt-6">

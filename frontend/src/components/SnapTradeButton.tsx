@@ -23,9 +23,10 @@ interface SnapTradeAccount {
 
 interface SnapTradeButtonProps {
   onAccountsUpdated?: () => void;
+  isDemo?: boolean;
 }
 
-export default function SnapTradeButton({ onAccountsUpdated }: SnapTradeButtonProps) {
+export default function SnapTradeButton({ onAccountsUpdated, isDemo = false }: SnapTradeButtonProps) {
   const [status, setStatus] = useState<string>('loading');
   const [snapTradeStatus, setSnapTradeStatus] = useState<SnapTradeStatus | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<SnapTradeAccount[]>([]);
@@ -69,12 +70,14 @@ export default function SnapTradeButton({ onAccountsUpdated }: SnapTradeButtonPr
   });
 
   useEffect(() => {
-    checkSnapTradeStatus();
-  }, []);
+    if (!isDemo) {
+      checkSnapTradeStatus();
+    }
+  }, [isDemo]);
 
   // Auto-initialize SnapTrade if not already initialized (with delay to avoid conflicts)
   useEffect(() => {
-    if (status === 'not_initialized' && !isInitializing) {
+    if (!isDemo && status === 'not_initialized' && !isInitializing) {
       console.log('Auto-initializing SnapTrade with delay to avoid conflicts...');
       // Add a delay to prevent conflicts with other components initializing
       const timer = setTimeout(() => {
@@ -83,13 +86,13 @@ export default function SnapTradeButton({ onAccountsUpdated }: SnapTradeButtonPr
       
       return () => clearTimeout(timer);
     }
-  }, [status, isInitializing]);
+  }, [status, isInitializing, isDemo]);
 
   useEffect(() => {
-    if (snapTradeStatus?.status === 'registered') {
+    if (!isDemo && snapTradeStatus?.status === 'registered') {
       checkConnectedAccounts();
     }
-  }, [snapTradeStatus]);
+  }, [snapTradeStatus, isDemo]);
 
   const checkSnapTradeStatus = async () => {
     try {
@@ -332,28 +335,40 @@ export default function SnapTradeButton({ onAccountsUpdated }: SnapTradeButtonPr
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center space-x-4">
-        <button
-          onClick={handleClick}
-          disabled={isButtonDisabled()}
-          className={`px-4 py-2 font-medium rounded-lg transition-colors ${getButtonColor()} ${
-            isButtonDisabled() ? 'cursor-not-allowed' : 'cursor-pointer'
-          }`}
-        >
-          {getButtonText()}
-        </button>
-        
-
-        
-        {status === 'loading' && (
-          <div className="text-sm text-gray-400 bg-gray-800 border border-gray-600 rounded-lg p-3">
-            <div className="flex items-center space-x-2">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
-              <span>Checking SnapTrade status...</span>
-            </div>
+      {isDemo ? (
+        <div>
+          <button 
+            disabled
+            className="bg-gray-600 cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200"
+          >
+            Connect Account
+          </button>
+          <div className="text-sm text-gray-400 mt-2">
+            This is a demo. In the real app, you would see SnapTrade open to let you connect your investment account.
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="flex items-center space-x-4">
+          <button
+            onClick={handleClick}
+            disabled={isButtonDisabled()}
+            className={`px-4 py-2 font-medium rounded-lg transition-colors ${getButtonColor()} ${
+              isButtonDisabled() ? 'cursor-not-allowed' : 'cursor-pointer'
+            }`}
+          >
+            {getButtonText()}
+          </button>
+          
+          {status === 'loading' && (
+            <div className="text-sm text-gray-400 bg-gray-800 border border-gray-600 rounded-lg p-3">
+              <div className="flex items-center space-x-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
+                <span>Checking SnapTrade status...</span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
 
 
