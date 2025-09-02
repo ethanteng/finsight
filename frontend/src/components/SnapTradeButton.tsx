@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { SnapTradeReact } from 'snaptrade-react';
 import { useWindowMessage } from 'snaptrade-react/hooks/useWindowMessage';
+import { financialServiceCoordinator, SERVICE_NAMES } from '../services/FinancialServiceCoordinator';
 
 interface SnapTradeStatus {
   status: string;
@@ -40,6 +41,7 @@ export default function SnapTradeButton({ onAccountsUpdated }: SnapTradeButtonPr
   useWindowMessage({
     handleSuccess: (data) => {
       console.log('SnapTrade connection successful via window message:', data);
+      financialServiceCoordinator.unregisterService(SERVICE_NAMES.SNAPTRADE);
       setIsModalOpen(false);
       setRedirectLink(null);
       // Refresh connected accounts
@@ -47,17 +49,20 @@ export default function SnapTradeButton({ onAccountsUpdated }: SnapTradeButtonPr
     },
     handleError: (error) => {
       console.error('SnapTrade connection error via window message:', error);
+      financialServiceCoordinator.unregisterService(SERVICE_NAMES.SNAPTRADE);
       setStatus('error');
       setIsModalOpen(false);
       setRedirectLink(null);
     },
     handleExit: () => {
       console.log('User exited SnapTrade connection via window message');
+      financialServiceCoordinator.unregisterService(SERVICE_NAMES.SNAPTRADE);
       setIsModalOpen(false);
       setRedirectLink(null);
     },
     close: () => {
       console.log('SnapTrade modal closed via window message');
+      financialServiceCoordinator.unregisterService(SERVICE_NAMES.SNAPTRADE);
       setIsModalOpen(false);
       setRedirectLink(null);
     },
@@ -67,11 +72,16 @@ export default function SnapTradeButton({ onAccountsUpdated }: SnapTradeButtonPr
     checkSnapTradeStatus();
   }, []);
 
-  // Auto-initialize SnapTrade if not already initialized
+  // Auto-initialize SnapTrade if not already initialized (with delay to avoid conflicts)
   useEffect(() => {
     if (status === 'not_initialized' && !isInitializing) {
-      console.log('Auto-initializing SnapTrade...');
-      initializeSnapTrade();
+      console.log('Auto-initializing SnapTrade with delay to avoid conflicts...');
+      // Add a delay to prevent conflicts with other components initializing
+      const timer = setTimeout(() => {
+        initializeSnapTrade();
+      }, 2000); // 2 second delay
+      
+      return () => clearTimeout(timer);
     }
   }, [status, isInitializing]);
 
@@ -186,11 +196,22 @@ export default function SnapTradeButton({ onAccountsUpdated }: SnapTradeButtonPr
 
   const connectSnapTrade = async () => {
     try {
+      // Check if other financial services are active
+      if (financialServiceCoordinator.hasActiveServices()) {
+        const activeServices = financialServiceCoordinator.getActiveServices();
+        console.log('Other financial services are active, cannot start SnapTrade:', activeServices);
+        setStatus('error');
+        return;
+      }
+      
+      // Register this service as active
+      financialServiceCoordinator.registerService(SERVICE_NAMES.SNAPTRADE);
       setIsInitializing(true);
       
       const token = localStorage.getItem('auth_token');
       if (!token) {
         setStatus('not_authenticated');
+        financialServiceCoordinator.unregisterService(SERVICE_NAMES.SNAPTRADE);
         return;
       }
 
@@ -219,6 +240,7 @@ export default function SnapTradeButton({ onAccountsUpdated }: SnapTradeButtonPr
     } catch (error) {
       console.error('Error connecting SnapTrade:', error);
       setStatus('error');
+      financialServiceCoordinator.unregisterService(SERVICE_NAMES.SNAPTRADE);
     } finally {
       setIsInitializing(false);
     }
@@ -371,15 +393,18 @@ export default function SnapTradeButton({ onAccountsUpdated }: SnapTradeButtonPr
 
       {/* SnapTrade Connection Modal */}
       {redirectLink && (
-        <SnapTradeReact
-          loginLink={redirectLink}
-          isOpen={isModalOpen}
-          close={() => {
+        <div data-snaptrade-modal="true">
+          <SnapTradeReact
+            loginLink={redirectLink}
+            isOpen={isModalOpen}
+                      close={() => {
+            financialServiceCoordinator.unregisterService(SERVICE_NAMES.SNAPTRADE);
             setIsModalOpen(false);
             setRedirectLink(null);
           }}
           onSuccess={(data) => {
             console.log('SnapTrade connection successful:', data);
+            financialServiceCoordinator.unregisterService(SERVICE_NAMES.SNAPTRADE);
             setIsModalOpen(false);
             setRedirectLink(null);
             // Refresh connected accounts
@@ -387,17 +412,20 @@ export default function SnapTradeButton({ onAccountsUpdated }: SnapTradeButtonPr
           }}
           onError={(error) => {
             console.error('SnapTrade connection error:', error);
+            financialServiceCoordinator.unregisterService(SERVICE_NAMES.SNAPTRADE);
             setStatus('error');
             setIsModalOpen(false);
             setRedirectLink(null);
           }}
           onExit={() => {
             console.log('User exited SnapTrade connection');
+            financialServiceCoordinator.unregisterService(SERVICE_NAMES.SNAPTRADE);
             setIsModalOpen(false);
             setRedirectLink(null);
           }}
-          contentLabel="Connect Account via SnapTrade"
-        />
+            contentLabel="Connect Account via SnapTrade"
+          />
+        </div>
       )}
     </div>
   );

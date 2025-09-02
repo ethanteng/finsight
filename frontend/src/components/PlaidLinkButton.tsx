@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { usePlaidLink, PlaidLinkOnSuccess, PlaidLinkOnExit, PlaidLinkOnSuccessMetadata } from 'react-plaid-link';
 import { useAnalytics } from './Analytics';
+import { financialServiceCoordinator, SERVICE_NAMES } from '../services/FinancialServiceCoordinator';
 
 // Global flag to prevent multiple Plaid Link initializations
 let plaidLinkInitialized = false;
@@ -59,11 +60,22 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
       plaidLinkInitialized = false;
       console.log('Plaid Link component unmounted, resetting global flag');
     };
-  }, [forceReinitialize]);
+  }, [forceReinitialize, isDemo]);
 
   // Fetch link_token from backend
   const createLinkToken = useCallback(async () => {
     console.log('createLinkToken called with props:', { isDemo, forceReinitialize });
+    
+    // Check if other financial services are active
+    if (financialServiceCoordinator.hasActiveServices()) {
+      const activeServices = financialServiceCoordinator.getActiveServices();
+      console.log('Other financial services are active:', activeServices);
+      setStatus('Please close other connection windows first...');
+      return;
+    }
+    
+    // Register this service as active
+    financialServiceCoordinator.registerService(SERVICE_NAMES.PLAID_LINK);
     setStatus('Connecting to your account...');
     const API_URL = process.env.NEXT_PUBLIC_API_URL;
     const token = localStorage.getItem('auth_token');
@@ -186,6 +198,9 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
   const handleExit: PlaidLinkOnExit = useCallback((err, metadata) => {
     console.log('Plaid Link exit:', err, metadata);
     
+    // Unregister this service
+    financialServiceCoordinator.unregisterService(SERVICE_NAMES.PLAID_LINK);
+    
     // Reset the component state when Plaid Link exits
     setLinkToken(null);
     setStatus('');
@@ -203,7 +218,7 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
     }
   }, [trackEvent, isDemo, onExit]);
 
-  // Always call the hook, but the global flag prevents multiple library initializations
+  // Always call the hook, but with a dummy token when no real token is available
   const plaid = usePlaidLink(
     linkToken
       ? { token: linkToken, onSuccess: handleSuccess, onExit: handleExit }
@@ -234,7 +249,7 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
   }));
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-plaid-modal={!!linkToken ? "true" : undefined}>
       {isDemo ? (
         <div>
           <button 
