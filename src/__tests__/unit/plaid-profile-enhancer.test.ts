@@ -468,6 +468,66 @@ describe('PlaidProfileEnhancer Unit Tests', () => {
       );
     });
 
+    it('should exclude investment transactions from monthly spending calculation', async () => {
+      const transactions = [
+        {
+          id: 'trans-1',
+          account_id: 'account-1',
+          amount: 100.00,
+          date: '2024-01-15',
+          name: 'Grocery Store',
+          category: ['Food and Drink'],
+          pending: false
+        },
+        {
+          id: 'trans-2',
+          account_id: 'account-1',
+          amount: 75000.00, // Large investment transaction
+          date: '2024-01-20',
+          name: 'VANGUARD SELL DES:INVESTMENT',
+          category: ['Investment'],
+          pending: false
+        },
+        {
+          id: 'trans-3',
+          account_id: 'account-1',
+          amount: 200.00,
+          date: '2024-01-25',
+          name: 'Gas Station',
+          category: ['Transportation'],
+          pending: false
+        },
+        {
+          id: 'trans-4',
+          account_id: 'account-1',
+          amount: 50000.00, // CD maturity
+          date: '2024-01-30',
+          name: 'Bread Financial CD Maturity',
+          category: ['Deposit'],
+          pending: false
+        }
+      ];
+
+      const result = await enhancer.enhanceProfileFromPlaidData(
+        'test-user-id',
+        [],
+        transactions
+      );
+
+      expect(result).toContain('Enhanced profile with Plaid insights');
+      // Should only include the $100 grocery and $200 gas transactions in monthly spending
+      // Total: $300, Average: $300 (only one month of data)
+      expect(mockOpenAI.chat.completions.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messages: expect.arrayContaining([
+            expect.objectContaining({
+              content: expect.stringContaining('The user\'s average monthly spending is $300.00')
+            })
+          ])
+        })
+      );
+    });
+
     it('should handle transactions without categories', async () => {
       const transactions = [
         {

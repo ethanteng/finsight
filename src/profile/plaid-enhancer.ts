@@ -138,20 +138,65 @@ export class PlaidProfileEnhancer {
     const spendingByCategory: Record<string, number> = {};
     const monthlySpending = new Map<string, number>();
     
+    // Helper function to determine if a transaction should be excluded from expenditure calculation
+    const shouldExcludeFromExpenditure = (transaction: PlaidTransaction): boolean => {
+      const amount = Math.abs(transaction.amount);
+      const category = transaction.category?.[0] || 'Unknown';
+      const name = transaction.name?.toLowerCase() || '';
+      
+      // Exclude investment-related categories
+      const investmentCategories = [
+        'Investment', 'Securities', 'Brokerage', 'Investment and Retirement',
+        'Transfer', 'Deposit', 'Payment', 'Interest', 'Dividend'
+      ];
+      
+      // Exclude investment-related merchant names
+      const investmentMerchants = [
+        'vanguard', 'fidelity', 'schwab', 'etrade', 'ameritrade', 'public.com',
+        'bread financial', 'bread savings', 'cd', 'certificate of deposit',
+        'annuity', 'payout', 'rmd', 'required minimum distribution'
+      ];
+      
+      // Exclude very large amounts (likely investment transactions)
+      const isLargeAmount = amount > 10000;
+      
+      // Exclude if it's an investment category
+      const isInvestmentCategory = investmentCategories.some(cat => 
+        category.toLowerCase().includes(cat.toLowerCase())
+      );
+      
+      // Exclude if it's an investment merchant
+      const isInvestmentMerchant = investmentMerchants.some(merchant => 
+        name.includes(merchant)
+      );
+      
+      // Exclude transfers and deposits
+      const isTransferOrDeposit = category.toLowerCase().includes('transfer') || 
+                                 category.toLowerCase().includes('deposit') ||
+                                 name.includes('transfer') ||
+                                 name.includes('deposit');
+      
+      return isLargeAmount || isInvestmentCategory || isInvestmentMerchant || isTransferOrDeposit;
+    };
+    
     for (const transaction of transactions) {
       const amount = Math.abs(transaction.amount);
       const category = transaction.category?.[0] || 'Unknown';
       const month = transaction.date.substring(0, 7); // YYYY-MM
       
+      // Always add to category analysis for insights
       if (!spendingByCategory[category]) {
         spendingByCategory[category] = 0;
       }
       spendingByCategory[category] += amount;
       
-      if (!monthlySpending.has(month)) {
-        monthlySpending.set(month, 0);
+      // Only add to monthly spending if it's not an investment transaction
+      if (!shouldExcludeFromExpenditure(transaction)) {
+        if (!monthlySpending.has(month)) {
+          monthlySpending.set(month, 0);
+        }
+        monthlySpending.set(month, monthlySpending.get(month)! + amount);
       }
-      monthlySpending.set(month, monthlySpending.get(month)! + amount);
     }
 
     // Find top spending categories
