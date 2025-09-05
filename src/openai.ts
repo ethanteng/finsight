@@ -241,9 +241,14 @@ export async function askOpenAIWithEnhancedContext(
         });
         
         transactions = await prisma.transaction.findMany({
-          where: { account: { userId } },
+          where: { 
+            account: { userId },
+            date: {
+              gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) // 90 days ago
+            }
+          },
           orderBy: { date: 'desc' },
-          take: 50
+          take: 500
         });
         
         console.log('OpenAI Enhanced: Found', accounts.length, 'accounts and', transactions.length, 'transactions in database for user', userId);
@@ -348,14 +353,14 @@ export async function askOpenAIWithEnhancedContext(
                 for (const tokenRecord of accessTokens) {
                   try {
                     const endDate = new Date().toISOString().split('T')[0];
-                    const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                    const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
                     
                     const transactionsResponse = await plaidClient.transactionsGet({
                       access_token: tokenRecord.token,
                       start_date: startDate,
                       end_date: endDate,
                       options: {
-                        count: 50,
+                        count: 500,
                         include_personal_finance_category: true
                       }
                     });
@@ -529,6 +534,60 @@ export async function askOpenAIWithEnhancedContext(
       }
     } catch (error) {
       console.error('OpenAI Enhanced: Error fetching user data:', error);
+    }
+  }
+
+  // Analyze income patterns BEFORE anonymization
+  let incomeAnalysis = '';
+  if (!isDemo && transactions.length > 0) {
+    const incomeTransactions = transactions.filter(transaction => transaction.amount > 0);
+    if (incomeTransactions.length > 0) {
+      const monthlyIncome = new Map<string, number>();
+      const incomeSources = new Map<string, number>();
+      
+      for (const transaction of incomeTransactions) {
+        const month = transaction.date.substring(0, 7); // YYYY-MM
+        if (!monthlyIncome.has(month)) {
+          monthlyIncome.set(month, 0);
+        }
+        monthlyIncome.set(month, monthlyIncome.get(month)! + transaction.amount);
+        
+        // Identify income source
+        const name = transaction.name?.toLowerCase() || '';
+        const basicCategory = transaction.category?.[0]?.toLowerCase() || '';
+        const enrichedCategory = transaction.enriched_data?.category?.[0]?.toLowerCase() || '';
+        const category = enrichedCategory || basicCategory;
+        
+        let source = 'Other Income';
+        if (name.includes('social security') || name.includes('ssa') || category.includes('social security')) {
+          source = 'Social Security';
+        } else if (name.includes('interest') || category.includes('interest')) {
+          source = 'Interest Income';
+        } else if (name.includes('annuity') || name.includes('rmd') || category.includes('annuity')) {
+          source = 'Annuity/RMD';
+        } else if (name.includes('salary') || category.includes('salary')) {
+          source = 'Salary';
+        } else if (name.includes('dividend') || category.includes('dividend')) {
+          source = 'Investment Income';
+        }
+        
+        incomeSources.set(source, (incomeSources.get(source) || 0) + transaction.amount);
+      }
+      
+      if (monthlyIncome.size > 0) {
+        const totalIncome = Array.from(monthlyIncome.values()).reduce((sum, amount) => sum + amount, 0);
+        const avgMonthlyIncome = totalIncome / monthlyIncome.size;
+        
+        const topIncomeSources = Array.from(incomeSources.entries())
+          .sort(([,a], [,b]) => b - a)
+          .slice(0, 5);
+        
+        incomeAnalysis = `\n\nINCOME ANALYSIS (from transaction data):
+- Average Monthly Income: $${avgMonthlyIncome.toFixed(2)}
+- Income Sources: ${topIncomeSources.map(([source, amount]) => `${source}: $${amount.toFixed(2)}`).join(', ')}
+- Total Income Transactions: ${incomeTransactions.length}
+- Analysis Period: ${monthlyIncome.size} month(s)`;
+      }
     }
   }
 
@@ -1056,7 +1115,7 @@ ${anonymizeInvestmentData(combinedHoldings.slice(0, 10))}`;
   }
 
   // Build enhanced system prompt with proactive market context
-  const systemPrompt = buildEnhancedSystemPrompt(tierContext, accountSummary, transactionSummary, marketContextSummary, searchContext, userProfile, investmentSummary);
+  const systemPrompt = buildEnhancedSystemPrompt(tierContext, accountSummary, transactionSummary, marketContextSummary, searchContext, userProfile, investmentSummary, incomeAnalysis);
 
   console.log('OpenAI Enhanced: System prompt length:', systemPrompt.length);
   console.log('OpenAI Enhanced: System prompt preview:', systemPrompt.substring(0, 500));
@@ -1313,7 +1372,8 @@ function buildEnhancedSystemPrompt(
   marketContextSummary: string,
   searchContext?: string,
   userProfile?: string,
-  investmentSummary?: string
+  investmentSummary?: string,
+  incomeAnalysis?: string
 ): string {
   const { tierInfo, upgradeHints } = tierContext;
 
@@ -1371,6 +1431,8 @@ ${accountSummary || 'No accounts found'}
 Recent Transactions:
 ${transactionSummary || 'No transactions found'}
 
+${incomeAnalysis || ''}
+
 ${investmentSummary ? `INVESTMENT DATA:
 ${investmentSummary}` : 'No investment data available'}
 
@@ -1387,8 +1449,10 @@ CRITICAL DATA INTERPRETATION RULES:
 - CRITICAL: If you see "maxed out" or similar language in previous conversations, IGNORE it and only use current, verified data
 
 INCOME IDENTIFICATION RULES:
-- POSITIVE transaction amounts are INCOME (money coming in)
-- Look for positive amounts in transaction history to identify income sources
+- If INCOME ANALYSIS is provided above, USE THOSE EXACT FIGURES - do not guess or estimate
+- The income analysis is calculated from actual transaction data and is more accurate than estimates
+- When INCOME ANALYSIS is available, reference it directly: "Based on your transaction history, your monthly income is $X,XXX"
+- If no income analysis is provided, then look for positive amounts in transaction history
 - Use BOTH transaction names AND categories to identify income types:
   * Transaction names: Look for keywords like "Social Security", "Interest", "Annuity", "Salary", "Dividend"
   * Categories: Look for categories like "Income", "Interest", "Dividend", "Social Security", "Annuity", "Pension"
@@ -1587,9 +1651,14 @@ export async function askOpenAI(
         });
         
         transactions = await prisma.transaction.findMany({
-          where: { account: { userId } },
+          where: { 
+            account: { userId },
+            date: {
+              gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) // 90 days ago
+            }
+          },
           orderBy: { date: 'desc' },
-          take: 50
+          take: 500
         });
         
         // ✅ FIXED: Parse category strings back into arrays for database transactions
@@ -1699,7 +1768,7 @@ export async function askOpenAI(
                 
                 // Fetch transactions from all tokens
                 const endDate = new Date().toISOString().split('T')[0];
-                const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
                 
                 for (const tokenRecord of accessTokens) {
                   try {
@@ -1751,7 +1820,7 @@ export async function askOpenAI(
                         start_date: startDate,
                         end_date: endDate,
                         options: {
-                          count: 50,
+                          count: 500,
                           include_personal_finance_category: true
                         }
                       });

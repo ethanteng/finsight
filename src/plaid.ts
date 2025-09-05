@@ -682,7 +682,7 @@ export const setupPlaidRoutes = (app: any) => {
               // Get investment transactions
               const transactionsResponse = await plaidClient.investmentsTransactionsGet({
                 access_token: access_token,
-                start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Last 30 days
+                start_date: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Last 90 days
                 end_date: new Date().toISOString().split('T')[0],
               });
               console.log(`Retrieved ${transactionsResponse.data.investment_transactions?.length || 0} investment transactions`);
@@ -1240,7 +1240,7 @@ export const setupPlaidRoutes = (app: any) => {
       }
       
       // ✅ PRODUCTION MODE: Handle real user authentication and fetch enhanced transactions
-      const { start_date, end_date, count = '50' } = req.query;
+      const { start_date, end_date, count = '500' } = req.query;
       
       const accessTokens = await getPrismaClient().accessToken.findMany({
         where: { userId: req.user.id },
@@ -1259,7 +1259,7 @@ export const setupPlaidRoutes = (app: any) => {
           // Get transactions for this token
           const transactionsResponse = await plaidClient.transactionsGet({
             access_token: tokenRecord.token,
-            start_date: start_date || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            start_date: start_date || new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             end_date: end_date || new Date().toISOString().split('T')[0],
             options: {
               count: parseInt(count as string),
@@ -2972,7 +2972,7 @@ export const setupPlaidRoutes = (app: any) => {
         try {
           const transactionsResponse = await plaidClient.investmentsTransactionsGet({
             access_token: tokenRecord.token,
-            start_date: start_date || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            start_date: start_date || new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             end_date: end_date || new Date().toISOString().split('T')[0],
           });
           
@@ -3023,7 +3023,7 @@ export const setupPlaidRoutes = (app: any) => {
           totalTransactions: allTransactions.reduce((sum, t) => sum + t.investment_transactions.length, 0),
           totalSecurities: allTransactions.reduce((sum, t) => sum + t.securities.length, 0),
           dateRange: { 
-            start_date: start_date || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            start_date: start_date || new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             end_date: end_date || new Date().toISOString().split('T')[0]
           }
         }
