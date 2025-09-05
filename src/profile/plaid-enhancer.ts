@@ -23,6 +23,10 @@ interface PlaidTransaction {
   merchant_name?: string;
   category?: string[];
   pending: boolean;
+  enriched_data?: {
+    category?: string[];
+    [key: string]: any;
+  };
 }
 
 export class PlaidProfileEnhancer {
@@ -216,6 +220,81 @@ export class PlaidProfileEnhancer {
       const totalSpending = Array.from(monthlySpending.values()).reduce((sum, amount) => sum + amount, 0);
       const avgMonthlySpending = totalSpending / monthlySpending.size;
       insights.push(`The user's average monthly spending is $${avgMonthlySpending.toFixed(2)}`);
+    }
+
+    // Analyze income patterns
+    const incomeTransactions = transactions.filter(transaction => transaction.amount > 0);
+    if (incomeTransactions.length > 0) {
+      const monthlyIncome = new Map<string, number>();
+      
+      for (const transaction of incomeTransactions) {
+        const month = transaction.date.substring(0, 7); // YYYY-MM
+        if (!monthlyIncome.has(month)) {
+          monthlyIncome.set(month, 0);
+        }
+        monthlyIncome.set(month, monthlyIncome.get(month)! + transaction.amount);
+      }
+      
+      if (monthlyIncome.size > 0) {
+        const totalIncome = Array.from(monthlyIncome.values()).reduce((sum, amount) => sum + amount, 0);
+        const avgMonthlyIncome = totalIncome / monthlyIncome.size;
+        insights.push(`The user's average monthly income is $${avgMonthlyIncome.toFixed(2)}`);
+        
+        // Identify specific income sources using both transaction names and categories
+        const incomeSources = new Map<string, number>();
+        for (const transaction of incomeTransactions) {
+          const name = transaction.name?.toLowerCase() || '';
+          const basicCategory = transaction.category?.[0]?.toLowerCase() || '';
+          const enrichedCategory = transaction.enriched_data?.category?.[0]?.toLowerCase() || '';
+          
+          // Use enriched category if available, otherwise fall back to basic category
+          const category = enrichedCategory || basicCategory;
+          
+          let source = 'Other Income';
+          
+          // Check transaction name patterns
+          if (name.includes('social security') || name.includes('ssa')) {
+            source = 'Social Security';
+          } else if (name.includes('annuity') || name.includes('rmd') || name.includes('required minimum distribution')) {
+            source = 'Annuity/RMD';
+          } else if (name.includes('salary') || name.includes('payroll') || name.includes('direct deposit')) {
+            source = 'Salary';
+          } else if (name.includes('dividend')) {
+            source = 'Investment Income';
+          } else if (name.includes('interest') || name.includes('interest credit') || name.includes('interest deposit')) {
+            source = 'Interest Income';
+          }
+          // Check category patterns (both basic and enriched)
+          else if (category.includes('income') || category.includes('salary') || category.includes('payroll')) {
+            source = 'Salary/Income';
+          } else if (category.includes('interest') || category.includes('dividend')) {
+            source = 'Interest/Dividend Income';
+          } else if (category.includes('social security') || category.includes('ssa')) {
+            source = 'Social Security';
+          } else if (category.includes('annuity') || category.includes('pension') || category.includes('retirement')) {
+            source = 'Annuity/Pension';
+          } else if (category.includes('investment') || category.includes('securities')) {
+            source = 'Investment Income';
+          } else if (category.includes('government') || category.includes('benefit')) {
+            source = 'Government Benefits';
+          } else if (category.includes('transfer') && transaction.amount > 0) {
+            source = 'Transfer Income';
+          }
+          
+          incomeSources.set(source, (incomeSources.get(source) || 0) + transaction.amount);
+        }
+        
+        const topIncomeSources = Array.from(incomeSources.entries())
+          .sort(([,a], [,b]) => b - a)
+          .slice(0, 3);
+        
+        if (topIncomeSources.length > 0) {
+          const incomeSourceInsights = topIncomeSources.map(([source, amount]) => 
+            `${source}: $${amount.toFixed(2)}`
+          ).join(', ');
+          insights.push(`The user's income sources include ${incomeSourceInsights}`);
+        }
+      }
     }
 
     return insights.join('. ') + '.';

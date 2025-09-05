@@ -528,6 +528,65 @@ describe('PlaidProfileEnhancer Unit Tests', () => {
       );
     });
 
+    it('should identify income transactions from positive amounts and categories', async () => {
+      const transactions = [
+        {
+          id: 'trans-1',
+          account_id: 'account-1',
+          amount: 1200.00, // Social Security
+          date: '2024-01-15',
+          name: 'SOCIAL SECURITY ADMINISTRATION',
+          category: ['Government Benefits'],
+          pending: false
+        },
+        {
+          id: 'trans-2',
+          account_id: 'account-1',
+          amount: 150.00, // Interest
+          date: '2024-01-20',
+          name: 'Interest Credit',
+          category: ['Interest'],
+          pending: false
+        },
+        {
+          id: 'trans-3',
+          account_id: 'account-1',
+          amount: 800.00, // Annuity
+          date: '2024-01-25',
+          name: 'Riversource Annuity Payment',
+          category: ['Annuity'],
+          pending: false
+        },
+        {
+          id: 'trans-4',
+          account_id: 'account-1',
+          amount: -100.00, // Expense
+          date: '2024-01-30',
+          name: 'Grocery Store',
+          category: ['Food and Drink'],
+          pending: false
+        }
+      ];
+
+      const result = await enhancer.enhanceProfileFromPlaidData(
+        'test-user-id',
+        [],
+        transactions
+      );
+
+      expect(result).toContain('Enhanced profile with Plaid insights');
+      // Should identify income sources and calculate monthly income
+      expect(mockOpenAI.chat.completions.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messages: expect.arrayContaining([
+            expect.objectContaining({
+              content: expect.stringContaining('The user\'s average monthly income is $2150.00')
+            })
+          ])
+        })
+      );
+    });
+
     it('should handle transactions without categories', async () => {
       const transactions = [
         {

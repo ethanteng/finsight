@@ -1386,6 +1386,25 @@ CRITICAL DATA INTERPRETATION RULES:
 - CRITICAL: NEVER infer credit utilization percentages without knowing the actual credit limit
 - CRITICAL: If you see "maxed out" or similar language in previous conversations, IGNORE it and only use current, verified data
 
+INCOME IDENTIFICATION RULES:
+- POSITIVE transaction amounts are INCOME (money coming in)
+- Look for positive amounts in transaction history to identify income sources
+- Use BOTH transaction names AND categories to identify income types:
+  * Transaction names: Look for keywords like "Social Security", "Interest", "Annuity", "Salary", "Dividend"
+  * Categories: Look for categories like "Income", "Interest", "Dividend", "Social Security", "Annuity", "Pension"
+  * Enriched categories (if available) take priority over basic categories
+- Common income transaction patterns include:
+  * Social Security payments (SSA, Social Security, etc.)
+  * Interest payments (Interest, Interest Credit, Interest Deposit, etc.)
+  * Annuity payments (Annuity, RMD, Required Minimum Distribution, etc.)
+  * Salary/direct deposits (Payroll, Salary, Direct Deposit, etc.)
+  * Investment distributions (Dividend, Capital Gains, etc.)
+  * Government benefits (Unemployment, Disability, etc.)
+- When calculating monthly income, sum all positive transaction amounts from the transaction history
+- Include recurring income sources like Social Security, interest, and annuity payments
+- Calculate average monthly income based on the transaction history data provided
+- Group income by source type (Social Security, Interest, Salary, etc.) for better analysis
+
 USER TIER: ${String(tierInfo.currentTier).toUpperCase()}
 
 AVAILABLE DATA SOURCES:
