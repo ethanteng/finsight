@@ -13,6 +13,7 @@ import {
 } from './privacy';
 import { dataOrchestrator, TierAwareContext } from './data/orchestrator';
 import { UserTier } from './data/types';
+import { BalanceService } from './services/balance-service';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 export const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
@@ -288,16 +289,18 @@ export async function askOpenAIWithEnhancedContext(
                       access_token: tokenRecord.token,
                     });
                     
-                    const balancesResponse = await plaidClient.accountsBalanceGet({
-                      access_token: tokenRecord.token,
-                    });
+                    // Use optimized BalanceService (cached, max 1x per day)
+                    const balancesData = await BalanceService.getAccountBalances(
+                      tokenRecord.token,
+                      plaidClient
+                    );
                     
                     // Get institution data for this token
                     const institutionData = await getInstitutionData(tokenRecord.token, plaidClient);
                     
                     // Merge account and balance data with institution information
                     const accountsWithBalances = accountsResponse.data.accounts.map((account: any) => {
-                      const balance = balancesResponse.data.accounts.find((b: any) => b.account_id === account.account_id);
+                      const balance = balancesData.find((b: any) => b.account_id === account.account_id);
                       return {
                         id: account.account_id,
                         name: account.name,
@@ -308,11 +311,11 @@ export async function askOpenAIWithEnhancedContext(
                         institution_logo: institutionData?.logo,
                         institution_url: institutionData?.url,
                         balance: {
-                          available: balance?.balances?.available || account.balances?.available,
-                          current: balance?.balances?.current || account.balances?.current,
-                          limit: balance?.balances?.limit || account.balances?.limit,
-                          iso_currency_code: balance?.balances?.iso_currency_code || account.balances?.iso_currency_code,
-                          unofficial_currency_code: balance?.balances?.unofficial_currency_code || account.balances?.unofficial_currency_code
+                          available: balance?.available || account.balances?.available,
+                          current: balance?.current || account.balances?.current,
+                          limit: balance?.limit || account.balances?.limit,
+                          iso_currency_code: balance?.iso_currency_code || account.balances?.iso_currency_code,
+                          unofficial_currency_code: balance?.unofficial_currency_code || account.balances?.unofficial_currency_code
                         }
                       };
                     });
@@ -1623,16 +1626,18 @@ export async function askOpenAI(
                       access_token: tokenRecord.token,
                     });
                     
-                    const balancesResponse = await plaidClient.accountsBalanceGet({
-                      access_token: tokenRecord.token,
-                    });
+                    // Use optimized BalanceService (cached, max 1x per day)
+                    const balancesData = await BalanceService.getAccountBalances(
+                      tokenRecord.token,
+                      plaidClient
+                    );
                     
                     // Get institution data for this token
                     const institutionData = await getInstitutionData(tokenRecord.token, plaidClient);
                     
                     // Merge account and balance data with institution information
                     const accountsWithBalances = accountsResponse.data.accounts.map((account: any) => {
-                      const balance = balancesResponse.data.accounts.find((b: any) => b.account_id === account.account_id);
+                      const balance = balancesData.find((b: any) => b.account_id === account.account_id);
                       return {
                         id: account.account_id,
                         name: account.name,
@@ -1643,11 +1648,11 @@ export async function askOpenAI(
                         institution_logo: institutionData?.logo,
                         institution_url: institutionData?.url,
                         balance: {
-                          available: balance?.balances?.available || account.balances?.available,
-                          current: balance?.balances?.current || account.balances?.current,
-                          limit: balance?.balances?.limit || account.balances?.limit,
-                          iso_currency_code: balance?.balances?.iso_currency_code || account.balances?.iso_currency_code,
-                          unofficial_currency_code: balance?.balances?.unofficial_currency_code || account.balances?.unofficial_currency_code
+                          available: balance?.available || account.balances?.available,
+                          current: balance?.current || account.balances?.current,
+                          limit: balance?.limit || account.balances?.limit,
+                          iso_currency_code: balance?.iso_currency_code || account.balances?.iso_currency_code,
+                          unofficial_currency_code: balance?.unofficial_currency_code || account.balances?.unofficial_currency_code
                         }
                       };
                     });

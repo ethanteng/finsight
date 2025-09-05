@@ -1,6 +1,7 @@
 import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode } from 'plaid';
 import { PrismaClient } from '@prisma/client';
 import { enhanceProfileWithInvestmentData, enhanceProfileWithLiabilityData, enhanceProfileWithEnrichmentData } from './profile/enhancer';
+import { BalanceService } from './services/balance-service';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
@@ -535,10 +536,11 @@ export const setupPlaidRoutes = (app: any) => {
             access_token: tokenRecord.token,
           });
 
-          // Get balances for each account
-          const balancesResponse = await plaidClient.accountsBalanceGet({
-            access_token: tokenRecord.token,
-          });
+          // Get balances using optimized BalanceService (cached, max 1x per day)
+          const balancesData = await BalanceService.getAccountBalances(
+            tokenRecord.token,
+            plaidClient
+          );
 
           // Get institution information
           let institutionName = 'Unknown Institution';
@@ -564,14 +566,20 @@ export const setupPlaidRoutes = (app: any) => {
               return true;
             })
             .map((account: any) => {
-              const balance = balancesResponse.data.accounts.find((b: any) => b.account_id === account.account_id);
+              const balance = balancesData.find((b: any) => b.account_id === account.account_id);
               return {
                 id: account.account_id,
                 name: account.name,
                 type: account.type,
                 subtype: account.subtype,
                 mask: account.mask,
-                balance: balance?.balances || account.balances,
+                balance: balance ? {
+                  available: balance.available,
+                  current: balance.current,
+                  limit: balance.limit,
+                  iso_currency_code: balance.iso_currency_code,
+                  unofficial_currency_code: balance.unofficial_currency_code
+                } : account.balances,
                 institution: institutionName
               };
             });
@@ -3401,13 +3409,17 @@ export const setupPlaidRoutes = (app: any) => {
       if (needRealtimeBalance) {
         console.log('Fetching real-time balances...');
         try {
-          const bal = await plaidClient.accountsBalanceGet({ access_token: accessToken });
-          result.realtimeBalances = bal.data.accounts.map((a: any) => ({
-            account_id: a.account_id,
-            name: a.name,
-            available: a.balances.available,
-            current: a.balances.current,
-            iso_currency_code: a.balances.iso_currency_code,
+          // Use BalanceService with force refresh for real-time data
+          const balancesData = await BalanceService.getAccountBalances(
+            accessToken,
+            plaidClient,
+            true // Force refresh for real-time data
+          );
+          result.realtimeBalances = balancesData.map((balance: any) => ({
+            account_id: balance.account_id,
+            available: balance.available,
+            current: balance.current,
+            iso_currency_code: balance.iso_currency_code,
           }));
           console.log(`Retrieved real-time balances for ${result.realtimeBalances.length} accounts`);
         } catch (error: any) {
@@ -3426,6 +3438,90 @@ export const setupPlaidRoutes = (app: any) => {
       res.status(500).json({ 
         error: 'SYNC_FAILED',
         details: error?.response?.data || error?.message || 'Unknown error'
+      });
+    }
+  });
+
+  // Manual balance refresh endpoint (for testing and emergency use)
+  app.post('/plaid/refresh-balances', async (req: any, res: any) => {
+    try {
+      // 🔒 CRITICAL SECURITY: Require authentication
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Authentication required for balance refresh' });
+      }
+
+      console.log(`🔄 Manual balance refresh requested by user ${req.user.id}`);
+
+      // Refresh balances for the authenticated user
+      await BalanceService.refreshAllUserBalances(req.user.id, plaidClient);
+
+      // Get cache stats for monitoring
+      const cacheStats = await BalanceService.getCacheStats();
+
+      res.json({
+        success: true,
+        message: 'Balances refreshed successfully',
+        timestamp: new Date().toISOString(),
+        cacheStats: {
+          size: cacheStats.size,
+          keys: cacheStats.keys.slice(0, 5) // Show first 5 keys for debugging
+        }
+      });
+
+    } catch (error: any) {
+      console.error('Manual balance refresh failed:', error);
+      res.status(500).json({
+        success: false,
+        error: 'BALANCE_REFRESH_FAILED',
+        message: error?.message || 'Unknown error occurred during balance refresh'
+      });
+    }
+  });
+
+  // Balance cache management endpoint (for monitoring)
+  app.get('/plaid/balance-cache-stats', async (req: any, res: any) => {
+    try {
+      const cacheStats = await BalanceService.getCacheStats();
+      
+      res.json({
+        success: true,
+        cacheStats,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error: any) {
+      console.error('Failed to get cache stats:', error);
+      res.status(500).json({
+        success: false,
+        error: 'CACHE_STATS_FAILED',
+        message: error?.message || 'Unknown error occurred'
+      });
+    }
+  });
+
+  // Clear balance cache endpoint (for debugging)
+  app.post('/plaid/clear-balance-cache', async (req: any, res: any) => {
+    try {
+      // 🔒 CRITICAL SECURITY: Require authentication
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Authentication required for cache clearing' });
+      }
+
+      console.log(`🗑️ Balance cache clear requested by user ${req.user.id}`);
+
+      await BalanceService.clearCache();
+
+      res.json({
+        success: true,
+        message: 'Balance cache cleared successfully',
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error('Failed to clear balance cache:', error);
+      res.status(500).json({
+        success: false,
+        error: 'CACHE_CLEAR_FAILED',
+        message: error?.message || 'Unknown error occurred during cache clearing'
       });
     }
   });
