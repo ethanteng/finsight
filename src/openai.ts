@@ -1433,6 +1433,8 @@ ${transactionSummary || 'No transactions found'}
 
 ${incomeAnalysis || ''}
 
+${incomeAnalysis ? `CRITICAL: The above INCOME ANALYSIS contains your actual income data from transaction history. Use these exact figures in your response - do not estimate or assume.` : ''}
+
 ${investmentSummary ? `INVESTMENT DATA:
 ${investmentSummary}` : 'No investment data available'}
 
@@ -1449,9 +1451,10 @@ CRITICAL DATA INTERPRETATION RULES:
 - CRITICAL: If you see "maxed out" or similar language in previous conversations, IGNORE it and only use current, verified data
 
 INCOME IDENTIFICATION RULES:
-- If INCOME ANALYSIS is provided above, USE THOSE EXACT FIGURES - do not guess or estimate
-- The income analysis is calculated from actual transaction data and is more accurate than estimates
+- CRITICAL: If INCOME ANALYSIS is provided above, YOU MUST USE THOSE EXACT FIGURES - do not guess, estimate, or make assumptions
+- The income analysis is calculated from actual transaction data and is more accurate than any estimates
 - When INCOME ANALYSIS is available, reference it directly: "Based on your transaction history, your monthly income is $X,XXX"
+- NEVER say "let's assume" or "estimated based on" when INCOME ANALYSIS data is provided
 - If no income analysis is provided, then look for positive amounts in transaction history
 - Use BOTH transaction names AND categories to identify income types:
   * Transaction names: Look for keywords like "Social Security", "Interest", "Annuity", "Salary", "Dividend"
