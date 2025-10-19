@@ -14,7 +14,7 @@ async function getPosts(): Promise<GhostPost[]> {
   
   try {
     const posts = await ghost.posts.browse({ 
-      limit: 20, 
+      limit: 10000, 
       include: ['tags', 'authors'],
       order: 'published_at DESC'
     });
