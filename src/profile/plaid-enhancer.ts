@@ -247,38 +247,50 @@ export class PlaidProfileEnhancer {
           const basicCategory = transaction.category?.[0]?.toLowerCase() || '';
           const enrichedCategory = transaction.enriched_data?.category?.[0]?.toLowerCase() || '';
           
-          // Use enriched category if available, otherwise fall back to basic category
-          const category = enrichedCategory || basicCategory;
+          // IMPORTANT: For income detection, prioritize basic categories over enriched when basic shows income
+          // Enriched categories sometimes misclassify income (e.g., "Interest Credit" as "Bank Fees")
+          let category = basicCategory;
+          if (basicCategory.includes('income') || basicCategory.includes('interest') || basicCategory.includes('dividend')) {
+            // Trust basic category when it explicitly indicates income
+            category = basicCategory;
+          } else if (enrichedCategory && !enrichedCategory.includes('bank fees') && !enrichedCategory.includes('fee')) {
+            // Use enriched only if it doesn't suggest a fee/expense
+            category = enrichedCategory;
+          }
           
           let source = 'Other Income';
           
-          // Check transaction name patterns
+          // Check transaction name first (most reliable)
           if (name.includes('social security') || name.includes('ssa')) {
             source = 'Social Security';
-          } else if (name.includes('annuity') || name.includes('rmd') || name.includes('required minimum distribution')) {
+          } else if (name.includes('interest deposit') || name.includes('interest credit')) {
+            source = 'Interest Income';
+          } else if (name.includes('annuity') || name.includes('amp life') || name.includes('riversource')) {
             source = 'Annuity/RMD';
-          } else if (name.includes('salary') || name.includes('payroll') || name.includes('direct deposit')) {
-            source = 'Salary';
+          } else if (name.includes('vanguard') && name.includes('rmd')) {
+            source = 'Annuity/RMD';
+          } else if (name.includes('vanguard') || name.includes('public')) {
+            source = 'Investment Income';
+          } else if (name.includes('salary') || name.includes('payroll') || name.includes('wages')) {
+            source = 'Salary/Wages';
           } else if (name.includes('dividend')) {
             source = 'Investment Income';
-          } else if (name.includes('interest') || name.includes('interest credit') || name.includes('interest deposit')) {
-            source = 'Interest Income';
           }
-          // Check category patterns (both basic and enriched)
-          else if (category.includes('income') || category.includes('salary') || category.includes('payroll')) {
-            source = 'Salary/Income';
-          } else if (category.includes('interest') || category.includes('dividend')) {
-            source = 'Interest/Dividend Income';
-          } else if (category.includes('social security') || category.includes('ssa')) {
+          // Then check categories if name didn't match
+          else if (category.includes('social security')) {
             source = 'Social Security';
-          } else if (category.includes('annuity') || category.includes('pension') || category.includes('retirement')) {
-            source = 'Annuity/Pension';
-          } else if (category.includes('investment') || category.includes('securities')) {
+          } else if (category.includes('interest')) {
+            source = 'Interest Income';
+          } else if (category.includes('annuity') || category.includes('insurance')) {
+            source = 'Annuity/RMD';
+          } else if (category.includes('wages') || category.includes('salary')) {
+            source = 'Salary/Wages';
+          } else if (category.includes('dividend')) {
             source = 'Investment Income';
-          } else if (category.includes('government') || category.includes('benefit')) {
+          } else if (category.includes('government')) {
             source = 'Government Benefits';
-          } else if (category.includes('transfer') && transaction.amount > 0) {
-            source = 'Transfer Income';
+          } else if (category.includes('transfer in') || category.includes('income')) {
+            source = 'Other Income';
           }
           
           incomeSources.set(source, (incomeSources.get(source) || 0) + transaction.amount);
