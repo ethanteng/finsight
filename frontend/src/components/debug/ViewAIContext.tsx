@@ -64,8 +64,8 @@ export const ViewAIContext: React.FC<ViewAIContextProps> = ({ isOpen, onClose })
       
       const data = await response.json();
       setContext(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch context');
     } finally {
       setLoading(false);
     }
