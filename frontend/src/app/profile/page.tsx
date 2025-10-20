@@ -132,6 +132,16 @@ interface InvestmentData {
   };
 }
 
+interface TokenStatus {
+  id: string;
+  createdAt: string;
+  lastChecked: string | null;
+  isActive: boolean;
+  lastError: string | null;
+  institutionName: string | null;
+  itemId: string | null;
+}
+
 export default function ProfilePage() {
   const [connectedAccounts, setConnectedAccounts] = useState<Account[]>([]);
   const [investmentData, setInvestmentData] = useState<InvestmentData | null>(null);
@@ -139,6 +149,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isDemo, setIsDemo] = useState<boolean | undefined>(undefined); // Start as undefined to prevent premature rendering
+  const [tokenStatuses, setTokenStatuses] = useState<TokenStatus[]>([]);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState<string>('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -164,6 +175,30 @@ export default function ProfilePage() {
   const transactionHistoryRef = useRef<{ refresh: () => void }>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+  // Load token statuses for non-demo users
+  const loadTokenStatuses = useCallback(async () => {
+    if (isDemo) return;
+    
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+      
+      const response = await fetch(`${API_URL}/profile/tokens`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setTokenStatuses(data.tokens || []);
+      }
+    } catch (error) {
+      console.error('Failed to load token statuses:', error);
+    }
+  }, [API_URL, isDemo]);
 
   // Load subscription status for non-demo users
   const loadSubscriptionStatus = useCallback(async () => {
@@ -748,7 +783,7 @@ export default function ProfilePage() {
     }
   }, [loadConnectedAccountsWithDemoMode, loadInvestmentData, API_URL]);
 
-  // Fetch user email and subscription status when not in demo mode
+  // Fetch user email, subscription status, and token statuses when not in demo mode
   useEffect(() => {
     if (!isDemo) {
       const fetchUserData = async () => {
@@ -767,8 +802,11 @@ export default function ProfilePage() {
               setUserEmail(userData.user.email);
             }
             
-            // Fetch subscription status
-            await loadSubscriptionStatus();
+            // Fetch subscription status and token statuses
+            await Promise.all([
+              loadSubscriptionStatus(),
+              loadTokenStatuses()
+            ]);
           }
         } catch (error) {
           console.error('Failed to fetch user data:', error);
@@ -777,7 +815,7 @@ export default function ProfilePage() {
       
       fetchUserData();
     }
-  }, [isDemo, API_URL, loadSubscriptionStatus]);
+  }, [isDemo, API_URL, loadSubscriptionStatus, loadTokenStatuses]);
 
   // Reset Plaid Link flag when forcePlaidReinitialize becomes true
   useEffect(() => {
@@ -1088,41 +1126,72 @@ export default function ProfilePage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {connectedAccounts.map((account) => (
-                    <div 
-                      key={account.id} 
-                      className="bg-gray-700 rounded-lg p-4 border border-gray-600"
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="font-medium text-white">{account.name}</div>
-                          <div className="text-sm text-gray-400">
-                            {account.institution && `${account.institution} • `}{account.type} • {account.subtype}
+                  {connectedAccounts.map((account) => {
+                    // Find token status for this account's institution
+                    const tokenStatus = tokenStatuses.find(t => 
+                      t.institutionName === account.institution
+                    );
+                    
+                    return (
+                      <div 
+                        key={account.id} 
+                        className="bg-gray-700 rounded-lg p-4 border border-gray-600"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <div className="font-medium text-white">{account.name}</div>
+                              {/* Token Status Indicator */}
+                              {tokenStatus && (
+                                <div className="flex items-center gap-1">
+                                  {tokenStatus.isActive ? (
+                                    <span className="text-green-400" title="Connection active">
+                                      ✓
+                                    </span>
+                                  ) : (
+                                    <span className="text-red-400" title={`Connection issue: ${tokenStatus.lastError || 'Unknown error'}`}>
+                                      ✗
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-sm text-gray-400">
+                              {account.institution && `${account.institution} • `}{account.type} • {account.subtype}
+                            </div>
+                            {/* Show error message if token is inactive */}
+                            {tokenStatus && !tokenStatus.isActive && tokenStatus.lastError && (
+                              <div className="text-xs text-red-400 mt-1">
+                                {tokenStatus.lastError === 'ITEM_LOGIN_REQUIRED' ? 
+                                  'Re-authentication required' :
+                                  tokenStatus.lastError}
+                              </div>
+                            )}
                           </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-semibold text-white">
-                            {/* ✅ FIX: Use the correct balance field based on account type */}
-                            {(() => {
-                              let balance;
-                              if (account.type === 'depository' || 
-                                  account.subtype === 'checking' || 
-                                  account.subtype === 'savings') {
-                                // For checking/savings accounts, use available balance
-                                balance = account.balance?.available !== undefined && account.balance?.available !== null 
-                                  ? account.balance.available 
-                                  : account.balance?.current || 0;
-                              } else {
-                                // For investment/credit accounts, use current balance
-                                balance = account.balance?.current || 0;
-                              }
-                              return formatCurrency(balance);
-                            })()}
+                          <div className="text-right">
+                            <div className="font-semibold text-white">
+                              {/* ✅ FIX: Use the correct balance field based on account type */}
+                              {(() => {
+                                let balance;
+                                if (account.type === 'depository' || 
+                                    account.subtype === 'checking' || 
+                                    account.subtype === 'savings') {
+                                  // For checking/savings accounts, use available balance
+                                  balance = account.balance?.available !== undefined && account.balance?.available !== null 
+                                    ? account.balance.available 
+                                    : account.balance?.current || 0;
+                                } else {
+                                  // For investment/credit accounts, use current balance
+                                  balance = account.balance?.current || 0;
+                                }
+                                return formatCurrency(balance);
+                              })()}
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
