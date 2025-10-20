@@ -472,24 +472,27 @@ const NewHomepage = () => {
               name: "Starter",
               price: "$9",
               period: "/month",
-              description: "Simpler than spreadsheets, smarter than budgeting apps.",
+              description: "Get clarity without complexity. Simpler than spreadsheets, smarter than budgeting apps.",
               features: ["Ask anything about your money and get clear, instant answers", "Connect up to 5 accounts — like your checking, savings, credit card, 401(k), and student loans", "See personalized suggestions to reach your goals"],
+              bestFor: "Anyone who wants quick answers about their finances — without setup or spreadsheets.",
               popular: false
             }, {
               id: 'standard',
               name: "Standard",
-              price: "$18",
+              price: "$19",
               period: "/month",
-              description: "Go beyond budgets — see how the economy affects your money.",
+              description: "See your finances in context. Go beyond budgets — see how the economy affects your money.",
               features: ["Everything in Starter","Connect unlimited accounts — from mortgages and student loans to retirement and investment accounts", "Factor in key U.S. economic data like inflation, interest rates, mortgages, APRs, and unemployment", "Get recommendations shaped by real-world events, not just your spending"],
+              bestFor: "People who want to make smarter decisions by seeing the big picture — how their money moves with the economy.",
               popular: true
             }, {
               id: 'premium',
               name: "Premium",
-              price: "$28",
+              price: "$29",
               period: "/month",
               description: "Your personal Bloomberg Terminal — without the $2,000/month price tag.",
               features: ["Everything in Standard", "Live market data: CD rates, Treasury yields, mortgage rates, stocks & crypto", "Real-time news feeds from 60+ trusted sources like Bloomberg and Reuters", "Know how your retirement timeline is impacted by the economy — and what you can do about it", "Get notified when markets move — instantly"],
+              bestFor: "Investors, finance nerds, or anyone who wants a live pulse on the economy — and how it affects their bottom line.",
               popular: false
             }].map((plan, index) => (
               <Card key={index} className={`relative overflow-hidden hover:shadow-2xl transition-all duration-300 hover:scale-105 ${plan.popular ? 'ring-2 ring-primary shadow-xl' : ''}`}>
@@ -537,6 +540,13 @@ const NewHomepage = () => {
                       );
                     })}
                   </ul>
+                  
+                  {/* Best For section */}
+                  <div className="mt-6 pt-4 border-t border-muted/30">
+                    <p className="text-sm text-muted-foreground">
+                      <span className="font-medium text-foreground">Best for:</span> {plan.bestFor}
+                    </p>
+                  </div>
                   
                   <div className={`mt-auto pt-6 ${plan.id === 'premium' ? 'pt-8' : ''}`}>
                     <Button 
