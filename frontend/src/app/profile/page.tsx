@@ -1237,7 +1237,7 @@ export default function ProfilePage() {
                         </div>
                         <div className="text-sm text-gray-400">
                           {(account.institution_name as string) || 'Investment Account'}
-                          {account.number && ` • ${account.number as string}`}
+                          {typeof account.number === 'string' && ` • ${account.number}`}
                         </div>
                       </div>
                     );
