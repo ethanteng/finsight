@@ -1332,6 +1332,9 @@ ${anonymizeInvestmentData(combinedHoldings.slice(0, 15))}`;
   // Log GPT context if enabled (after recentHistory is defined)
   if (process.env.PERSIST_GPT_CONTEXT === 'true') {
     try {
+      console.log('OpenAI Enhanced: About to log context with userId:', userId);
+      console.log('OpenAI Enhanced: userId type:', typeof userId, 'length:', userId?.length, 'contains dlf:', userId?.includes('dlf'), 'contains d1f:', userId?.includes('d1f'));
+      
       await logGPTContext({
         userId,
         question,

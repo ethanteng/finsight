@@ -921,6 +921,7 @@ const handleUserRequest = async (req: Request, res: Response) => {
     const marketContext = await dataOrchestrator.getMarketContext(userTier as any, false);
     
     console.log('Ask endpoint - calling askOpenAIWithEnhancedContext with userId:', user.id);
+    console.log('Ask endpoint - user.id type:', typeof user.id, 'length:', user.id.length, 'contains dlf:', user.id.includes('dlf'), 'contains d1f:', user.id.includes('d1f'));
     const answer = await askOpenAIWithEnhancedContext(question, recentConversations, userTier as any, false, user.id);
     console.log('Ask endpoint - received answer from OpenAI');
     

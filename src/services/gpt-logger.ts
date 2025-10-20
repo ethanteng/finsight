@@ -20,6 +20,9 @@ interface GPTContext {
  */
 export async function logGPTContext(context: GPTContext): Promise<void> {
   try {
+    console.log('GPT Logger: logGPTContext called with userId:', context.userId);
+    console.log('GPT Logger: userId type:', typeof context.userId, 'length:', context.userId?.length, 'contains dlf:', context.userId?.includes('dlf'), 'contains d1f:', context.userId?.includes('d1f'));
+    
     // Determine log directory based on environment
     const logDir = process.env.NODE_ENV === 'production' 
       ? '/opt/render/project/src/logs'
@@ -36,6 +39,8 @@ export async function logGPTContext(context: GPTContext): Promise<void> {
     const userId = context.userId || 'anonymous';
     const filename = `gpt-context-${userId}-${timestamp}.json`;
     const filepath = path.join(logDir, filename);
+    
+    console.log(`GPT Logger: Saving context for userId: ${userId}`);
     
     // Prepare context data
     const logData = {
@@ -120,7 +125,12 @@ export async function getLatestGPTContext(userId: string): Promise<any | null> {
     }
     
     // Get all log files for this user
-    const files = fs.readdirSync(logDir)
+    const allFiles = fs.readdirSync(logDir);
+    console.log(`GPT Logger: All files in ${logDir}:`, allFiles);
+    console.log(`GPT Logger: Looking for files matching: gpt-context-${userId}-*.json`);
+    
+    // First try exact match
+    let files = allFiles
       .filter(file => file.startsWith(`gpt-context-${userId}-`) && file.endsWith('.json'))
       .map(file => ({
         name: file,
@@ -128,6 +138,24 @@ export async function getLatestGPTContext(userId: string): Promise<any | null> {
         stat: fs.statSync(path.join(logDir, file)),
       }))
       .sort((a, b) => b.stat.mtime.getTime() - a.stat.mtime.getTime()); // Sort by modified time, newest first
+    
+    console.log(`GPT Logger: Found ${files.length} matching files for user ${userId}`);
+    
+    // If no exact match and userId looks like it might have 1/l confusion, try fuzzy match
+    if (files.length === 0 && (userId.includes('1') || userId.includes('l'))) {
+      console.log('GPT Logger: Trying fuzzy match for potential 1/l confusion...');
+      // Get all context files and return the most recent one
+      files = allFiles
+        .filter(file => file.startsWith('gpt-context-') && file.endsWith('.json'))
+        .map(file => ({
+          name: file,
+          path: path.join(logDir, file),
+          stat: fs.statSync(path.join(logDir, file)),
+        }))
+        .sort((a, b) => b.stat.mtime.getTime() - a.stat.mtime.getTime()); // Sort by modified time, newest first
+      
+      console.log(`GPT Logger: Fuzzy match found ${files.length} total context files`);
+    }
     
     if (files.length === 0) {
       return null;

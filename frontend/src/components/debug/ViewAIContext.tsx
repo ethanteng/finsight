@@ -58,6 +58,12 @@ export const ViewAIContext: React.FC<ViewAIContextProps> = ({ isOpen, onClose })
       });
       
       if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('No GPT context has been logged for this user yet. Ask a question first, then try again.');
+        }
+        if (response.status === 403) {
+          throw new Error('GPT context logging is not enabled. Set PERSIST_GPT_CONTEXT=true on the backend.');
+        }
         const errorData = await response.json();
         throw new Error(errorData.message || 'Failed to fetch context');
       }

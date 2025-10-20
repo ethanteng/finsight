@@ -14,6 +14,7 @@ const prisma = getPrismaClient();
 router.get('/context/latest', requireAuth, async (req, res) => {
   try {
     const userId = (req as any).user.userId;
+    console.log('AI Routes: Fetching latest context for userId:', userId);
     
     // Check if context logging is enabled
     if (process.env.PERSIST_GPT_CONTEXT !== 'true') {

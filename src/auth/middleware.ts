@@ -37,6 +37,7 @@ export async function authenticateUser(
     }
 
     console.log('🔐 Payload userId:', payload.userId);
+    console.log('🔐 Payload userId type:', typeof payload.userId, 'length:', payload.userId.length, 'contains dlf:', payload.userId.includes('dlf'), 'contains d1f:', payload.userId.includes('d1f'));
 
     // Verify user still exists and is active
     const prisma = getPrismaClient();
