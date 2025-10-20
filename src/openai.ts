@@ -512,21 +512,32 @@ export async function askOpenAIWithEnhancedContext(
                       // Merge enriched data
                       enrichedTransactions = transactionsResponse.data.transactions.map((transaction: any) => {
                         const enriched = enrichedMap.get(transaction.transaction_id);
-                        let enhancedCategories = transaction.category || [];
                         
+                        // PRIORITIZE: Use basic Plaid categories first, then enriched as fallback
+                        let finalCategories = transaction.category || [];
+                        
+                        // Only use enriched categories if basic categories are missing/empty
+                        if ((!finalCategories || finalCategories.length === 0 || !finalCategories[0]) && 
+                            enriched?.enrichments?.personal_finance_category) {
+                          const pfc = enriched.enrichments.personal_finance_category;
+                          finalCategories = [pfc.primary, pfc.detailed].filter(Boolean);
+                        }
+                        
+                        // Extract enriched categories separately for enriched_data
+                        let enrichedOnlyCategories = [];
                         if (enriched?.enrichments?.personal_finance_category) {
                           const pfc = enriched.enrichments.personal_finance_category;
-                          enhancedCategories = [pfc.primary, pfc.detailed].filter(Boolean);
+                          enrichedOnlyCategories = [pfc.primary, pfc.detailed].filter(Boolean);
                         }
                         
                         return {
                           ...transaction,
-                          category: enhancedCategories,
+                          category: finalCategories,
                           enriched_data: enriched ? {
                             merchant_name: enriched.enrichments?.merchant_name || transaction.merchant_name,
                             website: enriched.enrichments?.website,
                             logo_url: enriched.enrichments?.logo_url,
-                            category: enhancedCategories,
+                            category: enrichedOnlyCategories, // Store enriched categories separately
                             brand_name: enriched.enrichments?.brand_name
                           } : null
                         };
