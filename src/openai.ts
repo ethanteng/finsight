@@ -974,6 +974,20 @@ export async function askOpenAIWithEnhancedContext(
     } : 'No transactions'
   });
   
+  // ✅ DEBUG: Log category data BEFORE building summary
+  console.log('OpenAI Enhanced: DEBUG - Sample transaction category data:', {
+    sampleCount: Math.min(3, tierContext.transactions.length),
+    samples: tierContext.transactions.slice(0, 3).map((t: any) => ({
+      name: t.name,
+      category: t.category,
+      categoryType: typeof t.category,
+      categoryIsArray: Array.isArray(t.category),
+      enriched_data_category: t.enriched_data?.category,
+      enriched_category_type: typeof t.enriched_data?.category,
+      enriched_category_isArray: Array.isArray(t.enriched_data?.category)
+    }))
+  });
+  
   const transactionSummary = tierContext.transactions.map(transaction => {
     const name = isDemo ? transaction.description : transaction.name;
     
