@@ -686,11 +686,14 @@ export async function askOpenAIWithEnhancedContext(
       const incomeSources = new Map<string, number>();
       
       for (const transaction of incomeTransactions) {
-        const month = transaction.date.substring(0, 7); // YYYY-MM
-        if (!monthlyIncome.has(month)) {
-          monthlyIncome.set(month, 0);
+        // Handle both Date objects (from DB) and strings (from Plaid API)
+        const dateStr = transaction.date instanceof Date 
+          ? transaction.date.toISOString().substring(0, 7) 
+          : transaction.date.substring(0, 7); // YYYY-MM
+        if (!monthlyIncome.has(dateStr)) {
+          monthlyIncome.set(dateStr, 0);
         }
-        monthlyIncome.set(month, monthlyIncome.get(month)! + transaction.amount);
+        monthlyIncome.set(dateStr, monthlyIncome.get(dateStr)! + transaction.amount);
         
         // Identify income source
         const name = transaction.name?.toLowerCase() || '';
