@@ -1200,15 +1200,51 @@ export default function ProfilePage() {
           {/* Investment Accounts (SnapTrade) Section */}
           <div className="bg-gray-800 rounded-lg p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4">Your Connected Accounts (SnapTrade)</h2>
-            <SnapTradeButton 
-              isDemo={isDemo}
-              onAccountsUpdated={() => {
-                // Refresh investment data when SnapTrade accounts are updated
-                if (!isDemo) {
-                  loadInvestmentData(false);
-                }
-              }} 
-            />
+            <div className="mb-6">
+              <SnapTradeButton 
+                isDemo={isDemo}
+                onAccountsUpdated={() => {
+                  // Refresh investment data when SnapTrade accounts are updated
+                  if (!isDemo) {
+                    loadInvestmentData(false);
+                  }
+                }} 
+              />
+            </div>
+            
+            {/* Connected SnapTrade Accounts List */}
+            {snapTradeHoldings && snapTradeHoldings.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-sm font-medium text-gray-300 mb-3">Connected Investment Accounts</h3>
+                <div className="space-y-3">
+                  {snapTradeHoldings.map((holding: Record<string, unknown>, index: number) => {
+                    const account = holding.account as Record<string, unknown> | undefined;
+                    if (!account) return null;
+                    
+                    return (
+                      <div 
+                        key={index}
+                        className="bg-gray-700 rounded-lg p-4 border border-gray-600"
+                      >
+                        <div className="flex items-center gap-2">
+                          <div className="font-medium text-white">
+                            {account.name as string || 'Investment Account'}
+                          </div>
+                          {/* Status Indicator - Always show green for connected SnapTrade accounts */}
+                          <span className="text-green-400" title="Connection active">
+                            ✓
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-400">
+                          {(account.institution_name as string) || 'Investment Account'}
+                          {account.number && ` • ${account.number as string}`}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             
             {/* Supported Financial Institutions */}
             <div className="mt-6">
