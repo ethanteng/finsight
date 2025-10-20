@@ -81,6 +81,124 @@ interface Conversation {
   createdAt: Date;
 }
 
+/**
+ * Intelligently filter and prioritize transactions for AI context
+ * Focuses on most relevant transactions to improve AI response quality
+ */
+function filterTransactionsForAI(transactions: any[]): any[] {
+  if (transactions.length <= 150) return transactions;
+
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  
+  // Priority 1: All transactions from last 30 days (most relevant)
+  const recent = transactions.filter(t => new Date(t.date) >= thirtyDaysAgo);
+  
+  // Priority 2: Income transactions (for pattern analysis)
+  const older = transactions.filter(t => new Date(t.date) < thirtyDaysAgo);
+  const income = older.filter(t => t.amount > 0);
+  
+  // Priority 3: Large transactions from 31-90 days (high impact)
+  const largeTransactions = older
+    .filter(t => t.amount < 0) // expenses
+    .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+    .slice(0, 30);
+  
+  // Priority 4: Recurring/subscription patterns (spending insights)
+  const merchantCounts = new Map<string, number>();
+  older.forEach(t => {
+    const merchant = t.name || 'unknown';
+    merchantCounts.set(merchant, (merchantCounts.get(merchant) || 0) + 1);
+  });
+  const recurring = older.filter(t => (merchantCounts.get(t.name || 'unknown') || 0) >= 2);
+  
+  // Combine and deduplicate
+  const selected = new Set([
+    ...recent,
+    ...income,
+    ...largeTransactions,
+    ...recurring.slice(0, 20)
+  ]);
+  
+  const filtered = Array.from(selected);
+  console.log(`OpenAI: Filtered ${transactions.length} transactions to ${filtered.length} most relevant`);
+  
+  return filtered.slice(0, 150); // Cap at 150
+}
+
+/**
+ * Group small/old transactions for more concise context
+ */
+function groupSmallTransactions(transactions: any[], displayTransactions: any[]): string {
+  const grouped = transactions.filter(t => !displayTransactions.includes(t));
+  if (grouped.length === 0) return '';
+  
+  const total = grouped.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+  return `\n- ${grouped.length} additional small transactions totaling $${total.toFixed(2)}`;
+}
+
+/**
+ * Intelligently filter conversation history based on relevance to current question
+ * Keeps recent context and relevant older exchanges
+ */
+function filterConversationHistory(
+  history: Conversation[],
+  currentQuestion: string
+): Conversation[] {
+  if (history.length <= 6) return history;
+  
+  // Always keep last 3 exchanges (most recent context)
+  const recent = history.slice(0, 3);
+  const older = history.slice(3);
+  
+  // Extract keywords from current question
+  const keywords = currentQuestion.toLowerCase()
+    .split(/\s+/)
+    .filter(word => word.length > 4) // Filter out small words
+    .filter(word => !['what', 'when', 'where', 'which', 'would', 'should', 'could'].includes(word));
+  
+  // Financial terms that indicate important context
+  const importantTerms = [
+    'account', 'balance', 'portfolio', 'investment', 'savings', 'checking',
+    'retirement', 'ira', 'roth', '401k', 'mortgage', 'loan', 'credit',
+    'debt', 'income', 'expense', 'budget', 'goal', 'treasury', 'bond',
+    'stock', 'etf', 'mutual', 'fund', 'rate', 'interest'
+  ];
+  
+  // Score older conversations by relevance
+  const scored = older.map(conv => {
+    const text = (conv.question + ' ' + conv.answer).toLowerCase();
+    let score = 0;
+    
+    // Match current question keywords
+    keywords.forEach(keyword => {
+      if (text.includes(keyword)) score += 2;
+    });
+    
+    // Match important financial terms
+    importantTerms.forEach(term => {
+      if (text.includes(term)) score += 1;
+    });
+    
+    return { conv, score };
+  });
+  
+  // Take top 5 relevant older conversations
+  const relevant = scored
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5)
+    .map(item => item.conv);
+  
+  // Combine recent + relevant, maintain chronological order
+  const combined = [...recent, ...relevant].sort((a, b) => 
+    b.createdAt.getTime() - a.createdAt.getTime()
+  );
+  
+  console.log(`OpenAI: Filtered conversation history from ${history.length} to ${combined.length} relevant exchanges`);
+  
+  return combined.slice(0, 8); // Cap at 8 exchanges
+}
+
 // Simple regex-based formatting function (alternative to GPT formatting)
 function formatResponseWithRegex(rawResponse: string): string {
   return rawResponse
@@ -748,9 +866,12 @@ export async function askOpenAIWithEnhancedContext(
     }
   }
 
+  // Apply intelligent transaction filtering for better AI focus
+  const filteredTransactions = filterTransactionsForAI(transactions);
+  
   // Build tier-aware context using the new orchestrator
   console.log('OpenAI Enhanced: Building tier-aware context for tier:', tier);
-  const tierContext = await dataOrchestrator.buildTierAwareContext(tier, accounts, transactions, isDemo);
+  const tierContext = await dataOrchestrator.buildTierAwareContext(tier, accounts, filteredTransactions, isDemo);
   
   console.log('OpenAI Enhanced: Tier context built:', {
     tier: tierContext.tierInfo.currentTier,
@@ -982,8 +1103,28 @@ ${assetAllocationArray.map((allocation: any) =>
   `- ${allocation.type}: $${allocation.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${allocation.percentage.toFixed(1)}%)`
 ).join('\n')}
 
-Top Holdings:
-${anonymizeInvestmentData(combinedHoldings.slice(0, 10))}`;
+Top Holdings (Top 15):
+${anonymizeInvestmentData(combinedHoldings.slice(0, 15))}`;
+  
+    // Group remaining holdings by asset type
+    if (combinedHoldings.length > 15) {
+      const remaining = combinedHoldings.slice(15);
+      const groupedByType = new Map<string, { count: number; value: number }>();
+      
+      remaining.forEach((holding: any) => {
+        const type = holding.security_type || 'Other';
+        const current = groupedByType.get(type) || { count: 0, value: 0 };
+        groupedByType.set(type, {
+          count: current.count + 1,
+          value: current.value + (holding.institution_value || 0)
+        });
+      });
+      
+      investmentSummary += '\n\nAdditional Holdings:';
+      groupedByType.forEach((data, type) => {
+        investmentSummary += `\n- ${data.count} ${type} holdings: $${data.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      });
+    }
   }
 
   // Add SnapTrade activities if available
@@ -1150,6 +1291,7 @@ ${anonymizeInvestmentData(combinedHoldings.slice(0, 10))}`;
   const systemPrompt = buildEnhancedSystemPrompt(tierContext, accountSummary, transactionSummary, marketContextSummary, searchContext, userProfile, investmentSummary, incomeAnalysis);
 
   console.log('OpenAI Enhanced: System prompt length:', systemPrompt.length);
+  console.log('OpenAI Enhanced: Context optimization - transactions filtered:', `${transactions.length} → ${filteredTransactions.length}`);
   console.log('OpenAI Enhanced: System prompt preview:', systemPrompt.substring(0, 500));
 
   // Prepare conversation history for OpenAI
@@ -1159,10 +1301,12 @@ ${anonymizeInvestmentData(combinedHoldings.slice(0, 10))}`;
 
   // Enhanced conversation history processing with context analysis
   // Database returns conversations in descending order (newest first), so we need to reverse for chronological order
-  const recentHistory = conversationHistory.slice(0, 10).reverse();
+  const filteredHistory = filterConversationHistory(conversationHistory, question);
+  const recentHistory = filteredHistory.reverse();
   
   console.log('OpenAI Enhanced: Processing conversation history:', {
     totalHistoryLength: conversationHistory.length,
+    filteredHistoryLength: filteredHistory.length,
     recentHistoryLength: recentHistory.length,
     recentQuestions: recentHistory.map(conv => conv.question.substring(0, 50))
   });
@@ -1431,20 +1575,11 @@ CRITICAL INSTRUCTIONS:
 
 IMPORTANT: You have access to the user's financial data and current market conditions based on their subscription tier. Use this data to provide personalized, accurate financial advice.
 
-CRITICAL CONVERSATION CONTEXT INSTRUCTIONS:
-- You MUST analyze the conversation history to build context across multiple turns
-- When a user provides new information (age, income, goals, etc.), immediately connect it to previous questions
-- If a previous question was incomplete due to missing information, proactively offer to complete the analysis
-- Build comprehensive insights by combining information from multiple conversation turns
-- Be proactive about suggesting enhanced analysis when you now have sufficient information
-- Example: If user asked about portfolio analysis earlier and now provides their age, immediately offer a complete age-appropriate portfolio analysis
-- Always reference relevant previous conversation context when providing new insights
-- Use accumulated information to provide more personalized and complete financial advice
-- When you see "CONTEXT BUILDING OPPORTUNITY" instructions, prioritize addressing those opportunities
-- Proactively offer to complete previous incomplete analyses when you now have sufficient information
-- Reference specific details from previous conversations to show you're building on context
-- Use phrases like "Based on your previous question about..." or "Now that I know your age is..." to show context awareness
-- Always ask if the user would like you to complete or enhance previous analyses with the new information they've provided
+CONVERSATION CONTEXT:
+- Analyze conversation history to build context across multiple turns
+- Connect new information (age, income, goals) to previous questions
+- Proactively offer to complete prior incomplete analyses when you now have sufficient information
+- Reference previous conversation details: "Based on your earlier question about..." or "Now that I know..."
 
 ${userProfile && userProfile.trim() ? `USER PROFILE:
 ${userProfile}
@@ -1470,39 +1605,16 @@ ${incomeAnalysis ? `CRITICAL: The above INCOME ANALYSIS contains your actual inc
 ${investmentSummary ? `INVESTMENT DATA:
 ${investmentSummary}` : 'No investment data available'}
 
-CRITICAL DATA INTERPRETATION RULES:
-- For credit card accounts: The "balance" field shows the OUTSTANDING BALANCE (money owed), NOT the credit limit
-- For credit card accounts: The "limit" field (if available) shows the CREDIT LIMIT (maximum spending allowed)
-- For checking/savings accounts: The "balance" field shows the AVAILABLE BALANCE (money you have)
-- When analyzing debt: Use the outstanding balance amount, not the account balance field
-- If liabilities data is available in the user profile, use that for credit limits and debt analysis
-- IMPORTANT: If credit limit information is not available, DO NOT assume the balance equals the credit limit
-- IMPORTANT: When credit limits are unknown, clearly state "Credit Limit: Unknown" and do not make assumptions about card utilization
-- CRITICAL: NEVER say a credit card is "maxed out" unless you have explicit credit limit data showing the balance equals the limit
-- CRITICAL: NEVER infer credit utilization percentages without knowing the actual credit limit
-- CRITICAL: If you see "maxed out" or similar language in previous conversations, IGNORE it and only use current, verified data
+DATA INTERPRETATION:
+- Credit cards: "balance" = outstanding balance (money owed); "limit" = credit limit (if available)
+- Checking/savings: "balance" = available balance (money you have)
+- NEVER say credit cards are "maxed out" or infer utilization % without explicit credit limit data
+- When limits unknown, state "Credit Limit: Unknown" - don't assume balance equals limit
 
-INCOME IDENTIFICATION RULES:
-- CRITICAL: If INCOME ANALYSIS is provided above, YOU MUST USE THOSE EXACT FIGURES - do not guess, estimate, or make assumptions
-- The income analysis is calculated from actual transaction data and is more accurate than any estimates
-- When INCOME ANALYSIS is available, reference it directly: "Based on your transaction history, your monthly income is $X,XXX"
-- NEVER say "let's assume" or "estimated based on" when INCOME ANALYSIS data is provided
-- If no income analysis is provided, then look for positive amounts in transaction history
-- Use BOTH transaction names AND categories to identify income types:
-  * Transaction names: Look for keywords like "Social Security", "Interest", "Annuity", "Salary", "Dividend"
-  * Categories: Look for categories like "Income", "Interest", "Dividend", "Social Security", "Annuity", "Pension"
-  * Enriched categories (if available) take priority over basic categories
-- Common income transaction patterns include:
-  * Social Security payments (SSA, Social Security, etc.)
-  * Interest payments (Interest, Interest Credit, Interest Deposit, etc.)
-  * Annuity payments (Annuity, RMD, Required Minimum Distribution, etc.)
-  * Salary/direct deposits (Payroll, Salary, Direct Deposit, etc.)
-  * Investment distributions (Dividend, Capital Gains, etc.)
-  * Government benefits (Unemployment, Disability, etc.)
-- When calculating monthly income, sum all positive transaction amounts from the transaction history
-- Include recurring income sources like Social Security, interest, and annuity payments
-- Calculate average monthly income based on the transaction history data provided
-- Group income by source type (Social Security, Interest, Salary, etc.) for better analysis
+INCOME DATA:
+- If INCOME ANALYSIS is provided above, use those exact figures - they're pre-calculated from transaction data
+- Never estimate or assume income when INCOME ANALYSIS data is provided
+- Reference it directly: "Based on your transaction history, your monthly income is $X,XXX"
 
 USER TIER: ${String(tierInfo.currentTier).toUpperCase()}
 
@@ -1545,98 +1657,21 @@ ${!searchContext ? `TIER LIMITATIONS:
 ${tierInfo.limitations.map(limitation => `• ${limitation}`).join('\n')}` : ''}
 
 INSTRUCTIONS:
-- Provide clear, actionable financial advice based on available data
-- Use specific numbers from the user's data when possible
-- Reference current market conditions when relevant and available
-- Use real-time financial information when available to provide the most current advice
-- ALWAYS reference relevant previous conversation context when providing new insights
-- When new information allows you to complete a previous incomplete analysis, proactively offer to do so
-- Build comprehensive insights by connecting information across conversation turns
-- IMPORTANT: If investment data is provided in the INVESTMENT DATA section above, you CAN and SHOULD use it to answer questions about the user's investments, regardless of their tier level
-- The tier limitations only apply to external data sources (like market data, economic indicators), not to the user's own connected investment data
-- CRITICAL: When you see "SnapTrade Holdings" in the investment data, these are the user's actual investment holdings and you MUST reference them specifically when answering questions about their investments
-- CRITICAL: If the user asks about Treasuries and you see Treasury-related holdings in the investment data, you MUST provide specific information about those holdings rather than giving generic advice
-- CRITICAL: Treasury securities are identified by symbols like "912797PV3-BOND" or descriptions like "UST 0.0% 03/19/2026" - when you see these in the investment data, they are Treasury securities and you MUST acknowledge them specifically
-- CRITICAL: If you see holdings with "UST" (US Treasury) or bond symbols in the investment data, these are Treasury securities and you should provide specific analysis of these holdings
+- Provide clear, actionable advice using specific numbers from user's data
+- Reference current market conditions and real-time information when available
+- Investment data (SnapTrade Holdings, Treasuries, etc.) in INVESTMENT DATA section is user's actual holdings - reference specifically
+- Treasury securities: Identified by symbols like "912797PV3-BOND" or "UST 0.0%" - provide specific analysis, not generic advice
+- Tier limitations apply to external data sources only, not user's own connected data
 
 RESPONSE FORMATTING:
-- Use **bold** only for main section headers (e.g., "**Financial Overview**", "**Recommendations**")
-- Use *italics* sparingly for sub-section headers only when needed
-- Use bullet points (- ) for lists, keeping bullet and text on same line
-- Use numbered lists (1. 2. 3.) for steps or rankings
-- Use ## for major section headers
-- Keep paragraphs concise with single line breaks between them
-- Format numbers and percentages clearly
-- Make the response clean and professional
-- Avoid excessive blank lines between list items
-- Be conversational but professional
-- If you don't have enough data, ask for more information
-- Always provide source attribution when using external data
-- Focus on the user's specific financial situation and goals
-- Use the enhanced market context to provide more informed recommendations
-- When using search results, prioritize the most recent and relevant information
-
-IMPORTANT FORMATTING RULES:
-- **NEVER highlight or bold descriptive text or common phrases**
-- **ONLY highlight 2-3 critical numbers per section** (e.g., total amounts, key percentages)
-- **Use simple, clean structure** - avoid nested bullet points when possible
-- **Group related information together** in simple formats
-- **Limit each section to 3-4 key points** for readability
-- **Use consistent formatting** for similar types of data throughout the response
-- **Avoid repetitive formatting patterns** that create visual noise
-
-CALCULATION AND MATHEMATICAL FORMATTING:
-- For financial calculations, use clear step-by-step breakdowns with numbered steps
-- Display mathematical formulas in \`code blocks\` for clarity
-- Use **bold** for final calculated values and key percentages
-- Show intermediate calculation steps for complex ratios (e.g., "Step 1: Calculate monthly income", "Step 2: Sum monthly debt payments")
-- Format currency values consistently: $X,XXX.XX
-- Format percentages with 2 decimal places when appropriate (e.g., 15.67%)
-- For ratios and percentages, show both the calculation and the result clearly
-- Use structured formatting for multi-step calculations:
-  \`\`\`
-  Step 1: [Calculation description]
-  Step 2: [Calculation description]
-  Final Result: [Bold final value]
-  \`\`\`
-- Always verify calculations by showing the math: "Verification: $X ÷ $Y = Z%"
-- For debt-to-income ratios, clearly separate numerator (debt) and denominator (income)
-- Use bullet points to list individual debt components before summing
-- Show both the raw calculation and the percentage result
-
-CALCULATION FORMATTING RULES:
-- **Keep calculations simple and readable** - avoid excessive formatting
-- **Use consistent spacing** between calculation steps
-- **Highlight only the final result** in bold, not intermediate steps
-- **Group related calculations together** in logical sections
-- **Avoid nested formatting** that creates visual complexity
-
-VISUAL CALCULATION ENHANCEMENTS:
-- Use "Step 1:", "Step 2:", etc. to trigger calculation block styling
-- Include "Verification:" text to trigger verification block styling
-- Use mathematical expressions with = signs and currency/percentage symbols to trigger math expression styling
-- Structure debt-to-income calculations as:
-  Step 1: Calculate monthly debt payments
-  - Credit card balance: $X.XX
-  - Other debts: $Y.YY
-  Total monthly debt: $Z.ZZ
-  
-  Step 2: Calculate monthly income
-  Annual income: $X,XXX.XX
-  Monthly income: $X,XXX.XX ÷ 12 = $Y,YYY.YY
-  
-  Step 3: Calculate DTI ratio
-  DTI = ($Z.ZZ ÷ $Y,YYY.YY) × 100 = X.XX%
-  
-  Final Result: Your DTI ratio is **X.XX%**
-  
-  Verification: $Z.ZZ ÷ $Y,YYY.YY = X.XX%
-
-ENHANCEMENT RULES:
-- **Keep formatting simple and consistent** throughout calculations
-- **Use clear step labels** but avoid excessive formatting
-- **Maintain readable spacing** between calculation sections
-- **Focus on clarity** rather than visual complexity
+- Structure: Use **bold** for main headers, ## for major sections, bullet points (-) for lists, numbered lists (1. 2. 3.) for steps
+- Emphasis: ONLY bold 2-3 critical numbers per section (totals, key percentages) - never bold descriptive text
+- Lists: Keep bullet/number and text on same line, avoid excessive spacing between items
+- Calculations: Use clear numbered steps (Step 1, Step 2), show formulas in \`code blocks\`, bold final results only
+- For complex ratios: Show calculation breakdown with intermediate steps, then verification: "$X ÷ $Y = Z%"
+- Currency/percentages: Format consistently as $X,XXX.XX and XX.XX%
+- Style: Clean, concise paragraphs; conversational but professional; ask for clarification if data insufficient
+- Source attribution: Always cite external data sources when used
 
 ${!searchContext && tierInfo.unavailableSources.length > 0 ? `
 - Be helpful with current tier limitations
@@ -2198,7 +2233,8 @@ export async function askOpenAI(
   ];
 
   // Enhanced conversation history processing with context analysis
-  const recentHistory = conversationHistory.slice(-10);
+  const filteredHistory = filterConversationHistory(conversationHistory, question);
+  const recentHistory = filteredHistory.slice(-8); // Use filtered history
   
   // Analyze conversation history for context building opportunities
   const contextAnalysis = analyzeConversationContext(recentHistory, question);
@@ -2314,23 +2350,17 @@ CRITICAL INSTRUCTIONS:
 
 IMPORTANT: You have access to the user's financial data and current market conditions based on their subscription tier. Use this data to provide personalized, accurate financial advice.
 
-CRITICAL CONVERSATION CONTEXT INSTRUCTIONS:
-- You MUST analyze the conversation history to build context across multiple turns
-- When a user provides new information (age, income, goals, etc.), immediately connect it to previous questions
-- If a previous question was incomplete due to missing information, proactively offer to complete the analysis
-- Build comprehensive insights by combining information from multiple conversation turns
-- Be proactive about suggesting enhanced analysis when you now have sufficient information
-- Example: If user asked about portfolio analysis earlier and now provides their age, immediately offer a complete age-appropriate portfolio analysis
-- Always reference relevant previous conversation context when providing new insights
-- Use accumulated information to provide more personalized and complete financial advice
+CONVERSATION CONTEXT:
+- Analyze conversation history to build context across multiple turns
+- Connect new information (age, income, goals) to previous questions
+- Proactively offer to complete prior incomplete analyses when you now have sufficient information
+- Reference previous conversation details: "Based on your earlier question about..." or "Now that I know..."
 
 ${userProfile && userProfile.trim() ? `USER PROFILE:
 ${userProfile}
 
 Use this profile information to provide more personalized and relevant financial advice.
 Consider the user's personal situation, family status, occupation, and financial goals when making recommendations.
-
-IMPORTANT: If the profile contains information about credit cards being "maxed out" or credit limits that seem incorrect, IGNORE that information and only use verified data from the current financial data section below.
 
 ` : ''}
 
@@ -2341,17 +2371,11 @@ ${accountSummary || 'No accounts found'}
 Recent Transactions:
 ${transactionSummary || 'No transactions found'}
 
-CRITICAL DATA INTERPRETATION RULES:
-- For credit card accounts: The "balance" field shows the OUTSTANDING BALANCE (money owed), NOT the credit limit
-- For credit card accounts: The "limit" field (if available) shows the CREDIT LIMIT (maximum spending allowed)
-- For checking/savings accounts: The "balance" field shows the AVAILABLE BALANCE (money you have)
-- When analyzing debt: Use the outstanding balance amount, not the account balance field
-- If liabilities data is available in the user profile, use that for credit limits and debt analysis
-- IMPORTANT: If credit limit information is not available, DO NOT assume the balance equals the credit limit
-- IMPORTANT: When credit limits are unknown, clearly state "Credit Limit: Unknown" and do not make assumptions about card utilization
-- CRITICAL: NEVER say a credit card is "maxed out" unless you have explicit credit limit data showing the balance equals the limit
-- CRITICAL: NEVER infer credit utilization percentages without knowing the actual credit limit
-- CRITICAL: If you see "maxed out" or similar language in previous conversations, IGNORE it and only use current, verified data
+DATA INTERPRETATION:
+- Credit cards: "balance" = outstanding balance (money owed); "limit" = credit limit (if available)
+- Checking/savings: "balance" = available balance (money you have)
+- NEVER say credit cards are "maxed out" or infer utilization % without explicit credit limit data
+- When limits unknown, state "Credit Limit: Unknown" - don't assume balance equals limit
 
 USER TIER: ${String(tierInfo.currentTier).toUpperCase()}
 
@@ -2380,91 +2404,20 @@ ${!searchContext ? `TIER LIMITATIONS:
 ${tierInfo.limitations.map(limitation => `• ${limitation}`).join('\n')}` : ''}
 
 INSTRUCTIONS:
-- Provide clear, actionable financial advice based on available data
-- Use specific numbers from the user's data when possible
-- Reference current market conditions when relevant and available
-- Use real-time financial information when available to provide the most current advice
-- Be conversational but professional
-- If you don't have enough data, ask for more information
-- Always provide source attribution when using external data
-- Focus on the user's specific financial situation and goals
+- Provide clear, actionable advice using specific numbers from user's data
+- Reference current market conditions and real-time information when available
+- Be conversational but professional; ask for clarification if data insufficient
+- Always cite external data sources when used
 
 RESPONSE FORMATTING:
-- Use **bold** only for main section headers (e.g., "**Financial Overview**", "**Recommendations**")
-- Use *italics* sparingly for sub-section headers only when needed
-- Use bullet points (- ) for lists, keeping bullet and text on same line
-- Use numbered lists (1. 2. 3.) for steps or rankings
-- Use ## for major section headers
-- Keep paragraphs concise with single line breaks between them
-- Format numbers and percentages clearly
-- Make the response clean and professional
-- Avoid excessive blank lines between list items
-- Be conversational but professional
-- If you don't have enough data, ask for more information
-- Always provide source attribution when using external data
-- Focus on the user's specific financial situation and goals
-
-IMPORTANT FORMATTING RULES:
-- **NEVER highlight or bold descriptive text or common phrases**
-- **ONLY highlight 2-3 critical numbers per section** (e.g., total amounts, key percentages)
-- **Use simple, clean structure** - avoid nested bullet points when possible
-- **Group related information together** in simple formats
-- **Limit each section to 3-4 key points** for readability
-- **Use consistent formatting** for similar types of data throughout the response
-- **Avoid repetitive formatting patterns** that create visual noise
-
-CALCULATION AND MATHEMATICAL FORMATTING:
-- For financial calculations, use clear step-by-step breakdowns with numbered steps
-- Display mathematical formulas in \`code blocks\` for clarity
-- Use **bold** for final calculated values and key percentages
-- Show intermediate calculation steps for complex ratios (e.g., "Step 1: Calculate monthly income", "Step 2: Sum monthly debt payments")
-- Format currency values consistently: $X,XXX.XX
-- Format percentages with 2 decimal places when appropriate (e.g., 15.67%)
-- For ratios and percentages, show both the calculation and the result clearly
-- Use structured formatting for multi-step calculations:
-  \`\`\`
-  Step 1: [Calculation description]
-  Step 2: [Calculation description]
-  Final Result: [Bold final value]
-  \`\`\`
-- Always verify calculations by showing the math: "Verification: $X ÷ $Y = Z%"
-- For debt-to-income ratios, clearly separate numerator (debt) and denominator (income)
-- Use bullet points to list individual debt components before summing
-- Show both the raw calculation and the percentage result
-
-CALCULATION FORMATTING RULES:
-- **Keep calculations simple and readable** - avoid excessive formatting
-- **Use consistent spacing** between calculation steps
-- **Highlight only the final result** in bold, not intermediate steps
-- **Group related calculations together** in logical sections
-- **Avoid nested formatting** that creates visual complexity
-
-VISUAL CALCULATION ENHANCEMENTS:
-- Use "Step 1:", "Step 2:", etc. to trigger calculation block styling
-- Include "Verification:" text to trigger verification block styling
-- Use mathematical expressions with = signs and currency/percentage symbols to trigger math expression styling
-- Structure debt-to-income calculations as:
-  Step 1: Calculate monthly debt payments
-  - Credit card balance: $X.XX
-  - Other debts: $Y.YY
-  Total monthly debt: $Z.ZZ
-  
-  Step 2: Calculate monthly income
-  Annual income: $X,XXX.XX
-  Monthly income: $X,XXX.XX ÷ 12 = $Y,YYY.YY
-  
-  Step 3: Calculate DTI ratio
-  DTI = ($Z.ZZ ÷ $Y,YYY.YY) × 100 = X.XX%
-  
-  Final Result: Your DTI ratio is **X.XX%**
-  
-  Verification: $Z.ZZ ÷ $Y,YYY.YY = X.XX%
-
-ENHANCEMENT RULES:
-- **Keep formatting simple and consistent** throughout calculations
-- **Use clear step labels** but avoid excessive formatting
-- **Maintain readable spacing** between calculation sections
-- **Focus on clarity** rather than visual complexity
+- Structure: Use **bold** for main headers, ## for major sections, bullet points (-) for lists, numbered lists (1. 2. 3.) for steps
+- Emphasis: ONLY bold 2-3 critical numbers per section (totals, key percentages) - never bold descriptive text
+- Lists: Keep bullet/number and text on same line, avoid excessive spacing between items
+- Calculations: Use clear numbered steps (Step 1, Step 2), show formulas in \`code blocks\`, bold final results only
+- For complex ratios: Show calculation breakdown with intermediate steps, then verification: "$X ÷ $Y = Z%"
+- Currency/percentages: Format consistently as $X,XXX.XX and XX.XX%
+- Style: Clean, concise paragraphs; conversational but professional; ask for clarification if data insufficient
+- Source attribution: Always cite external data sources when used
 
 ${!searchContext && tierInfo.unavailableSources.length > 0 ? `
 - Be helpful with current tier limitations
