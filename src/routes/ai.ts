@@ -13,7 +13,7 @@ const prisma = getPrismaClient();
  */
 router.get('/context/latest', requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user.id;
     console.log('AI Routes: Fetching latest context for userId:', userId);
     
     // Check if context logging is enabled
@@ -46,7 +46,7 @@ router.get('/context/latest', requireAuth, async (req, res) => {
  */
 router.get('/context/:contextId', requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user.id;
     const { contextId } = req.params;
     
     // Check if context logging is enabled
@@ -79,7 +79,7 @@ router.get('/context/:contextId', requireAuth, async (req, res) => {
  */
 router.post('/categorize-transactions', requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user.id;
     const { transactionIds } = req.body;
     
     if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
@@ -192,7 +192,7 @@ Reasoning: [brief explanation]`;
  */
 router.get('/transactions/comparison', requireAuth, async (req, res) => {
   try {
-    const userId = (req as any).user.userId;
+    const userId = (req as any).user.id;
     const { filter = 'all', limit = 100 } = req.query;
     
     // Build filter conditions
