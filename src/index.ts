@@ -2641,10 +2641,14 @@ app.put('/profile', requireAuth, async (req: Request, res: Response) => {
 // Get user's Plaid access tokens with status
 app.get('/profile/tokens', requireAuth, async (req: Request, res: Response) => {
   try {
-    const tokens = await getPrismaClient().accessToken.findMany({
+    const prisma = getPrismaClient();
+    const { plaidClient } = await import('./plaid');
+    
+    const tokens = await prisma.accessToken.findMany({
       where: { userId: req.user!.id },
       select: {
         id: true,
+        token: true,
         createdAt: true,
         lastChecked: true,
         isActive: true,
@@ -2655,7 +2659,41 @@ app.get('/profile/tokens', requireAuth, async (req: Request, res: Response) => {
       orderBy: { createdAt: 'desc' }
     });
     
-    res.json({ tokens });
+    // Update institution names for any tokens that don't have them
+    const updatedTokens = await Promise.all(tokens.map(async (token) => {
+      if (!token.institutionName && token.itemId) {
+        try {
+          const itemResponse = await plaidClient.itemGet({
+            access_token: token.token
+          });
+          
+          if (itemResponse.data.item.institution_id) {
+            const institutionResponse = await plaidClient.institutionsGetById({
+              institution_id: itemResponse.data.item.institution_id,
+              country_codes: ['US' as any]
+            });
+            
+            const institutionName = institutionResponse.data.institution.name;
+            
+            // Update in database
+            await prisma.accessToken.update({
+              where: { id: token.id },
+              data: { institutionName }
+            });
+            
+            return { ...token, institutionName, token: undefined }; // Don't return actual token to frontend
+          }
+        } catch (err) {
+          console.warn(`Failed to fetch institution name for token ${token.id}:`, err);
+        }
+      }
+      
+      // Remove actual token from response
+      const { token: _, ...tokenWithoutSecret } = token;
+      return tokenWithoutSecret;
+    }));
+    
+    res.json({ tokens: updatedTokens });
   } catch (error) {
     console.error('Failed to fetch tokens:', error);
     

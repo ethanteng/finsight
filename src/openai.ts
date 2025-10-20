@@ -47,14 +47,28 @@ async function validatePlaidToken(tokenRecord: any, plaidClient: any, prisma: an
       return false;
     }
     
-    // Update token as valid
+    // Fetch institution name from Plaid
+    let institutionName = null;
+    try {
+      if (itemResponse.data.item.institution_id) {
+        const institutionResponse = await plaidClient.institutionsGetById({
+          institution_id: itemResponse.data.item.institution_id,
+          country_codes: ['US' as any]
+        });
+        institutionName = institutionResponse.data.institution.name;
+      }
+    } catch (instError) {
+      console.warn(`Failed to fetch institution name for ${itemResponse.data.item.institution_id}:`, instError);
+    }
+    
+    // Update token as valid with institution name
     await prisma.accessToken.update({
       where: { id: tokenRecord.id },
       data: { 
         isActive: true,
         lastError: null,
         lastChecked: new Date(),
-        institutionName: itemResponse.data.item.institution_id || null
+        institutionName: institutionName
       }
     });
     
