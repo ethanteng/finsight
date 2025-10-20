@@ -4,25 +4,15 @@ import React, { useEffect, useState } from 'react';
 import { CategoryComparison } from '@/components/transactions/CategoryComparison';
 
 export default function TransactionsPage() {
-  const [userId, setUserId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Get user ID from token or auth context
+    // Check if user is authenticated
     const token = localStorage.getItem('auth_token');
-    if (token) {
-      // Decode JWT to get user ID (simple implementation)
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        setUserId(payload.userId || payload.sub);
-      } catch (error) {
-        console.error('Error decoding token:', error);
-      }
-    }
-    setLoading(false);
+    setIsAuthenticated(!!token);
   }, []);
 
-  if (loading) {
+  if (isAuthenticated === null) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-white">Loading...</div>
@@ -30,7 +20,7 @@ export default function TransactionsPage() {
     );
   }
 
-  if (!userId) {
+  if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-center">
@@ -57,7 +47,7 @@ export default function TransactionsPage() {
           </p>
         </div>
         
-        <CategoryComparison userId={userId} />
+        <CategoryComparison />
       </div>
     </div>
   );

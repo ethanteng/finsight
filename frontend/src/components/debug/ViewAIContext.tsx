@@ -81,7 +81,7 @@ export const ViewAIContext: React.FC<ViewAIContextProps> = ({ isOpen, onClose })
     }
   };
 
-  const formatJSON = (obj: any) => {
+  const formatJSON = (obj: unknown) => {
     return JSON.stringify(obj, null, 2);
   };
 

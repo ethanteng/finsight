@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 interface Transaction {
   id: string;
@@ -15,14 +15,10 @@ interface Transaction {
   aiCategoryReason?: string;
   categoryComparedAt?: string;
   match: boolean;
-  enrichedData?: any;
+  enrichedData?: Record<string, unknown>;
 }
 
-interface CategoryComparisonProps {
-  userId: string;
-}
-
-export const CategoryComparison: React.FC<CategoryComparisonProps> = ({ userId }) => {
+export const CategoryComparison: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,11 +26,7 @@ export const CategoryComparison: React.FC<CategoryComparisonProps> = ({ userId }
   const [selectedTransactions, setSelectedTransactions] = useState<Set<string>>(new Set());
   const [categorizing, setCategorizing] = useState(false);
 
-  useEffect(() => {
-    fetchTransactions();
-  }, [filter]);
-
-  const fetchTransactions = async () => {
+  const fetchTransactions = useCallback(async () => {
     setLoading(true);
     setError(null);
     
@@ -54,12 +46,16 @@ export const CategoryComparison: React.FC<CategoryComparisonProps> = ({ userId }
       
       const data = await response.json();
       setTransactions(data.transactions);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
+
+  useEffect(() => {
+    fetchTransactions();
+  }, [fetchTransactions]);
 
   const handleCategorizeSelected = async () => {
     if (selectedTransactions.size === 0) return;
@@ -89,8 +85,8 @@ export const CategoryComparison: React.FC<CategoryComparisonProps> = ({ userId }
       // Refresh the list
       await fetchTransactions();
       setSelectedTransactions(new Set());
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setCategorizing(false);
     }
