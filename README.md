@@ -195,8 +195,8 @@ PERSIST_GPT_CONTEXT="false"         # Toggle GPT context logging to /opt/render/
 
 Create `.env.local` file in the `frontend` directory:
 ```bash
-# Backend API URL
-NEXT_PUBLIC_BACKEND_URL="http://localhost:3000"
+# Backend API URL (already configured in your project)
+NEXT_PUBLIC_API_URL="http://localhost:3000"
 
 # GPT Context Logging (should match backend setting)
 NEXT_PUBLIC_PERSIST_GPT_CONTEXT="false"

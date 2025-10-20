@@ -51,7 +51,7 @@ export const ViewAIContext: React.FC<ViewAIContextProps> = ({ isOpen, onClose })
     setError(null);
     
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3000'}/api/ai/context/latest`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://finsight-backend.onrender.com')}/api/ai/context/latest`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
