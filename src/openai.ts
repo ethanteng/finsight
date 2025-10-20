@@ -565,12 +565,27 @@ export async function askOpenAIWithEnhancedContext(
                         transactions: mappedForEnrichment
                       });
                       
-                      console.log('OpenAI Enhanced: Enrichment successful for', enrichResponse.data.enriched_transactions?.length || 0, 'transactions');
+                      const enrichedCount = enrichResponse.data.enriched_transactions?.length || 0;
+                      console.log('OpenAI Enhanced: Enrichment successful for', enrichedCount, 'of', mappedForEnrichment.length, 'transactions');
+                      
+                      if (enrichedCount === 0) {
+                        console.warn('OpenAI Enhanced: Enrichment returned 0 results - this is unusual');
+                      }
                       
                       // Create map of enriched data
                       const enrichedMap = new Map();
                       enrichResponse.data.enriched_transactions?.forEach((enriched: any, index: number) => {
                         enrichedMap.set(mappedForEnrichment[index].id, enriched);
+                        
+                        // Debug: Log a sample enriched transaction
+                        if (index === 0) {
+                          console.log('OpenAI Enhanced: Sample enrichment data:', {
+                            hasEnrichments: !!enriched.enrichments,
+                            hasPFC: !!enriched.enrichments?.personal_finance_category,
+                            pfc: enriched.enrichments?.personal_finance_category,
+                            merchant: enriched.enrichments?.merchant_name
+                          });
+                        }
                       });
                       
                       // Merge enriched data
@@ -579,6 +594,7 @@ export async function askOpenAIWithEnhancedContext(
                         
                         // PRIORITIZE: Use basic Plaid categories first, then enriched as fallback
                         let finalCategories = transaction.category || [];
+                        const hadBasicCategories = finalCategories && finalCategories.length > 0 && finalCategories[0];
                         
                         // Only use enriched categories if basic categories are missing/empty
                         if ((!finalCategories || finalCategories.length === 0 || !finalCategories[0]) && 
@@ -592,6 +608,19 @@ export async function askOpenAIWithEnhancedContext(
                         if (enriched?.enrichments?.personal_finance_category) {
                           const pfc = enriched.enrichments.personal_finance_category;
                           enrichedOnlyCategories = [pfc.primary, pfc.detailed].filter(Boolean);
+                        }
+                        
+                        // Debug first few transactions
+                        if (transaction === transactionsResponse.data.transactions[0]) {
+                          console.log('OpenAI Enhanced: First transaction category debug:', {
+                            name: transaction.name,
+                            basicCategory: transaction.category,
+                            hadBasicCategories,
+                            hasEnrichedData: !!enriched,
+                            enrichedPFC: enriched?.enrichments?.personal_finance_category,
+                            finalCategories,
+                            enrichedOnlyCategories
+                          });
                         }
                         
                         return {
