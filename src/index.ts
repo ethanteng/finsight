@@ -8,6 +8,7 @@ import { dataOrchestrator } from './data/orchestrator';
 import { isFeatureEnabled } from './config/features';
 import authRoutes from './auth/routes';
 import stripeRoutes from './routes/stripe';
+import aiRoutes from './routes/ai';
 import { optionalAuth, requireAuth, adminAuth } from './auth/middleware';
 import { UserTier } from './data/types';
 import * as Sentry from '@sentry/node';
@@ -177,6 +178,9 @@ console.log('✅ setupSnapTradeRoutes completed successfully');
 
 // Setup Auth routes
 app.use('/auth', authRoutes);
+
+// Setup AI routes
+app.use('/api/ai', aiRoutes);
 
 // Setup Stripe routes (webhook route already registered above)
 app.use('/api/stripe', stripeRoutes);

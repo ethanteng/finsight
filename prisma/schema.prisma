@@ -103,6 +103,10 @@ model Transaction {
   paymentChannel       String?
   paymentMethod        String?
   pendingTransactionId String?
+  enriched_data        Json?
+  aiCategory           String?
+  aiCategoryReason     String?
+  categoryComparedAt   DateTime?
   account              Account   @relation(fields: [accountId], references: [id])
 }
 
@@ -331,14 +335,43 @@ model SubscriptionEvent {
 }
 
 model SnapTradeUser {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  snapTradeUserId String   @unique
+  id              String              @id @default(cuid())
+  userId          String              @unique
+  snapTradeUserId String              @unique
   userSecret      String
-  status          String   @default("registered")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status          String              @default("registered")
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activities      SnapTradeActivity[]
 
   @@map("snaptrade_users")
+}
+
+model SnapTradeActivity {
+  id                 String         @id @default(cuid())
+  snapTradeUserId    String
+  activityId         String         @unique
+  accountId          String?
+  amount             Float?
+  currency           String?
+  description        String?
+  fee                Float?
+  fxRate             Float?
+  institution        String?
+  price              Float?
+  settlementDate     DateTime?
+  symbol             String?
+  tradeDate          DateTime?
+  type               String?
+  units              Float?
+  rawData            Json?
+  aiCategory         String?
+  aiCategoryReason   String?
+  categoryComparedAt DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  snapTradeUser      SnapTradeUser  @relation(fields: [snapTradeUserId], references: [id], onDelete: Cascade)
+
+  @@map("snaptrade_activities")
 }

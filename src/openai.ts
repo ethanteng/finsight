@@ -14,6 +14,8 @@ import {
 import { dataOrchestrator, TierAwareContext } from './data/orchestrator';
 import { UserTier } from './data/types';
 import { BalanceService } from './services/balance-service';
+import { persistTransactionsToDb, persistSnapTradeActivitiesToDb } from './data/persistence';
+import { logGPTContext } from './services/gpt-logger';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 export const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
@@ -509,6 +511,16 @@ export async function askOpenAIWithEnhancedContext(
                   }
                 }
                 
+                // Persist transactions to database if enabled
+                if (process.env.PERSIST_TRANSACTIONS === 'true' && userId && !isDemo && transactions.length > 0) {
+                  try {
+                    await persistTransactionsToDb(userId, transactions, accounts);
+                  } catch (error) {
+                    console.error('OpenAI Enhanced: Error persisting transactions:', error);
+                    // Don't fail the main request if persistence fails
+                  }
+                }
+                
                 // Fetch investment data from all tokens
                 for (const tokenRecord of accessTokens) {
                   try {
@@ -638,13 +650,23 @@ export async function askOpenAIWithEnhancedContext(
                 console.log('OpenAI Enhanced: Fetched SnapTrade activities:', snapTradeActivities.length, 'activities');
                 console.log('OpenAI Enhanced: Sample SnapTrade activity structure:', snapTradeActivities[0]);
               }
-            } else {
-              console.log('OpenAI Enhanced: No SnapTrade user found or no userSecret available');
+              } else {
+                console.log('OpenAI Enhanced: No SnapTrade user found or no userSecret available');
+              }
+            } catch (snapTradeError) {
+              console.error('OpenAI Enhanced: Error fetching SnapTrade data:', snapTradeError);
             }
-          } catch (snapTradeError) {
-            console.error('OpenAI Enhanced: Error fetching SnapTrade data:', snapTradeError);
           }
-        }
+          
+          // Persist SnapTrade activities to database if enabled
+          if (process.env.PERSIST_TRANSACTIONS === 'true' && userId && !isDemo && snapTradeActivities && snapTradeActivities.length > 0) {
+            try {
+              await persistSnapTradeActivitiesToDb(userId, snapTradeActivities);
+            } catch (error) {
+              console.error('OpenAI Enhanced: Error persisting SnapTrade activities:', error);
+              // Don't fail the main request if persistence fails
+            }
+          }
         
         console.log('OpenAI Enhanced: Final count -', accounts.length, 'accounts,', transactions.length, 'transactions, investment data:', investmentData ? 'available' : 'none', 'SnapTrade data:', snapTradeData ? 'available' : 'none', 'SnapTrade activities:', snapTradeActivities ? 'available' : 'none', 'for user', userId);
       } else {
@@ -1303,6 +1325,27 @@ ${anonymizeInvestmentData(combinedHoldings.slice(0, 15))}`;
   // Database returns conversations in descending order (newest first), so we need to reverse for chronological order
   const filteredHistory = filterConversationHistory(conversationHistory, question);
   const recentHistory = filteredHistory.reverse();
+  
+  // Log GPT context if enabled (after recentHistory is defined)
+  if (process.env.PERSIST_GPT_CONTEXT === 'true') {
+    try {
+      await logGPTContext({
+        userId,
+        question,
+        systemPrompt,
+        conversationHistory: recentHistory,
+        accountSummary,
+        transactionSummary,
+        investmentSummary: investmentSummary || '',
+        marketContextSummary,
+        searchContext,
+        timestamp: new Date(),
+      });
+    } catch (error) {
+      console.error('OpenAI Enhanced: Error logging GPT context:', error);
+      // Don't fail the main request if logging fails
+    }
+  }
   
   console.log('OpenAI Enhanced: Processing conversation history:', {
     totalHistoryLength: conversationHistory.length,

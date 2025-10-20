@@ -187,6 +187,19 @@ MAILER_LITE_GROUP_ID="your_mailerlite_group_id"
 
 # JWT Secret
 JWT_SECRET="your_jwt_secret"
+
+# Transaction & Context Persistence (optional, for debugging)
+PERSIST_TRANSACTIONS="false"        # Toggle transaction persistence to database
+PERSIST_GPT_CONTEXT="false"         # Toggle GPT context logging to /opt/render/project/src/logs
+```
+
+Create `.env.local` file in the `frontend` directory:
+```bash
+# Backend API URL
+NEXT_PUBLIC_BACKEND_URL="http://localhost:3000"
+
+# GPT Context Logging (should match backend setting)
+NEXT_PUBLIC_PERSIST_GPT_CONTEXT="false"
 ```
 
 4. **Database Setup**
