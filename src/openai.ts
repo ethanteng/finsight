@@ -20,6 +20,63 @@ import { logGPTContext } from './services/gpt-logger';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 export const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
+/**
+ * Validate Plaid access token and update database status
+ * Returns true if token is valid, false otherwise
+ */
+async function validatePlaidToken(tokenRecord: any, plaidClient: any, prisma: any): Promise<boolean> {
+  try {
+    const itemResponse = await plaidClient.itemGet({
+      access_token: tokenRecord.token
+    });
+    
+    // Check if item has any error states
+    if (itemResponse.data.item.error) {
+      console.warn(`Token ${tokenRecord.id} has error:`, itemResponse.data.item.error.error_code);
+      
+      // Update token status in database
+      await prisma.accessToken.update({
+        where: { id: tokenRecord.id },
+        data: { 
+          isActive: false,
+          lastError: itemResponse.data.item.error.error_code,
+          lastChecked: new Date()
+        }
+      });
+      
+      return false;
+    }
+    
+    // Update token as valid
+    await prisma.accessToken.update({
+      where: { id: tokenRecord.id },
+      data: { 
+        isActive: true,
+        lastError: null,
+        lastChecked: new Date(),
+        institutionName: itemResponse.data.item.institution_id || null
+      }
+    });
+    
+    return true;
+    
+  } catch (itemError: any) {
+    console.error(`Token validation failed for ${tokenRecord.id}:`, itemError.response?.data?.error_code || itemError.message);
+    
+    // Update token status in database
+    await prisma.accessToken.update({
+      where: { id: tokenRecord.id },
+      data: { 
+        isActive: false,
+        lastError: itemError.response?.data?.error_code || 'VALIDATION_FAILED',
+        lastChecked: new Date()
+      }
+    });
+    
+    return false;
+  }
+}
+
 // Safety check: Prevent real OpenAI API calls in test/CI environments
 if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
   console.log('OpenAI: Test/CI environment detected - using mock responses');
@@ -410,6 +467,13 @@ export async function askOpenAIWithEnhancedContext(
                 // Fetch accounts from all tokens
                 for (const tokenRecord of accessTokens) {
                   try {
+                    // Validate token first
+                    const isValid = await validatePlaidToken(tokenRecord, plaidClient, prisma);
+                    if (!isValid) {
+                      console.log(`Skipping invalid token ${tokenRecord.id}`);
+                      continue;
+                    }
+                    
                     const accountsResponse = await plaidClient.accountsGet({
                       access_token: tokenRecord.token,
                     });
@@ -1905,6 +1969,13 @@ export async function askOpenAI(
                 // Fetch accounts from all tokens
                 for (const tokenRecord of accessTokens) {
                   try {
+                    // Validate token first
+                    const isValid = await validatePlaidToken(tokenRecord, plaidClient, prisma);
+                    if (!isValid) {
+                      console.log(`Skipping invalid token ${tokenRecord.id}`);
+                      continue;
+                    }
+                    
                     const accountsResponse = await plaidClient.accountsGet({
                       access_token: tokenRecord.token,
                     });

@@ -2638,6 +2638,38 @@ app.put('/profile', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
+// Get user's Plaid access tokens with status
+app.get('/profile/tokens', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const tokens = await getPrismaClient().accessToken.findMany({
+      where: { userId: req.user!.id },
+      select: {
+        id: true,
+        createdAt: true,
+        lastChecked: true,
+        isActive: true,
+        lastError: true,
+        institutionName: true,
+        itemId: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    res.json({ tokens });
+  } catch (error) {
+    console.error('Failed to fetch tokens:', error);
+    
+    // Capture error in Sentry
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in tokens fetch endpoint', 'error');
+    }
+    
+    res.status(500).json({ error: 'Failed to fetch tokens' });
+  }
+});
+
 // Test endpoint for RAG search functionality
 app.get('/test/search-context', async (req: Request, res: Response) => {
   try {

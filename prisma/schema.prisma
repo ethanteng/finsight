@@ -68,6 +68,10 @@ model AccessToken {
   lastRefreshed DateTime?
   userId        String?
   user          User?     @relation(fields: [userId], references: [id])
+  isActive      Boolean   @default(true)
+  lastError     String?
+  lastChecked   DateTime?
+  institutionName String?
 }
 
 model SyncStatus {
