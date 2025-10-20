@@ -485,7 +485,58 @@ export async function askOpenAIWithEnhancedContext(
                       }
                     });
                     
-                    const processedTransactions = transactionsResponse.data.transactions.map((transaction: any) => ({
+                    // Call enrichment API to get categories and merchant data
+                    let enrichedTransactions = transactionsResponse.data.transactions;
+                    try {
+                      const mappedForEnrichment = transactionsResponse.data.transactions.map((t: any) => ({
+                        id: t.transaction_id,
+                        description: t.name,
+                        amount: Math.abs(t.amount),
+                        direction: t.amount > 0 ? 'INFLOW' as any : 'OUTFLOW' as any,
+                        iso_currency_code: t.iso_currency_code || 'USD'
+                      }));
+                      
+                      const enrichResponse = await plaidClient.transactionsEnrich({
+                        account_type: 'depository',
+                        transactions: mappedForEnrichment
+                      });
+                      
+                      console.log('OpenAI Enhanced: Enrichment successful for', enrichResponse.data.enriched_transactions?.length || 0, 'transactions');
+                      
+                      // Create map of enriched data
+                      const enrichedMap = new Map();
+                      enrichResponse.data.enriched_transactions?.forEach((enriched: any, index: number) => {
+                        enrichedMap.set(mappedForEnrichment[index].id, enriched);
+                      });
+                      
+                      // Merge enriched data
+                      enrichedTransactions = transactionsResponse.data.transactions.map((transaction: any) => {
+                        const enriched = enrichedMap.get(transaction.transaction_id);
+                        let enhancedCategories = transaction.category || [];
+                        
+                        if (enriched?.enrichments?.personal_finance_category) {
+                          const pfc = enriched.enrichments.personal_finance_category;
+                          enhancedCategories = [pfc.primary, pfc.detailed].filter(Boolean);
+                        }
+                        
+                        return {
+                          ...transaction,
+                          category: enhancedCategories,
+                          enriched_data: enriched ? {
+                            merchant_name: enriched.enrichments?.merchant_name || transaction.merchant_name,
+                            website: enriched.enrichments?.website,
+                            logo_url: enriched.enrichments?.logo_url,
+                            category: enhancedCategories,
+                            brand_name: enriched.enrichments?.brand_name
+                          } : null
+                        };
+                      });
+                    } catch (enrichError) {
+                      console.error('OpenAI Enhanced: Enrichment failed:', enrichError);
+                      // Continue with non-enriched data
+                    }
+                    
+                    const processedTransactions = enrichedTransactions.map((transaction: any) => ({
                       id: transaction.transaction_id,
                       account_id: transaction.account_id,
                       amount: transaction.amount,
@@ -501,11 +552,11 @@ export async function askOpenAIWithEnhancedContext(
                       pending_transaction_id: transaction.pending_transaction_id,
                       account_owner: transaction.account_owner,
                       transaction_code: transaction.transaction_code,
-                      enriched_data: transaction.enriched_data // Include enhanced data
+                      enriched_data: transaction.enriched_data
                     }));
                     
                     transactions.push(...processedTransactions);
-                    console.log('OpenAI Enhanced: Fetched', processedTransactions.length, 'transactions from Plaid');
+                    console.log('OpenAI Enhanced: Fetched', processedTransactions.length, 'transactions from Plaid with enrichment');
                   } catch (error) {
                     console.error('OpenAI Enhanced: Error fetching transactions from token:', error);
                   }
