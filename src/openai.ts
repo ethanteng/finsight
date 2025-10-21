@@ -910,6 +910,8 @@ export async function askOpenAIWithEnhancedContext(
               if (holdingsResult.success && holdingsResult.data) {
                 // Extract individual positions from account-level data
                 const allPositions = [];
+                const accountBalances: Array<{name: string; balance: number; hasPositions: boolean}> = [];
+                
                 for (const account of holdingsResult.data) {
                   // Add SnapTrade account to accounts array for Account Summary
                   if (account.account) {
@@ -935,6 +937,14 @@ export async function askOpenAIWithEnhancedContext(
                     };
                     accounts.push(snapTradeAccount);
                     console.log('OpenAI Enhanced: Added SnapTrade account:', snapTradeAccount.name, 'with balance:', snapTradeAccount.balance.current);
+                    
+                    // Track account balance and whether it has positions
+                    const hasPositions = account.positions && Array.isArray(account.positions) && account.positions.length > 0;
+                    accountBalances.push({
+                      name: account.account.name || 'Investment Account',
+                      balance: accountBalance,
+                      hasPositions
+                    });
                   }
                   
                   if (account.positions && Array.isArray(account.positions)) {
@@ -949,8 +959,13 @@ export async function askOpenAIWithEnhancedContext(
                   }
                 }
                 snapTradeData = allPositions;
+                
+                // Store account balances for investment summary calculation
+                (snapTradeData as any).accountBalances = accountBalances;
+                
                 console.log('OpenAI Enhanced: Fetched SnapTrade holdings:', snapTradeData.length, 'positions from', holdingsResult.data.length, 'accounts');
                 console.log('OpenAI Enhanced: Sample SnapTrade position structure:', snapTradeData[0]);
+                console.log('OpenAI Enhanced: SnapTrade account balances:', accountBalances);
               }
               
               // Fetch SnapTrade activities
@@ -1387,62 +1402,92 @@ export async function askOpenAIWithEnhancedContext(
   console.log('🔍 Processing SnapTrade data for portfolio composition...');
   console.log('🔍 SnapTrade data available:', snapTradeData ? snapTradeData.length : 0, 'positions');
   
-  if (snapTradeData && snapTradeData.length > 0) {
+  // Use account-level balances from SnapTrade instead of summing individual positions
+  // This ensures accounts without itemized positions (like cash/money market) are included
+  const snapTradeAccountBalances = (snapTradeData as any)?.accountBalances;
+  if (snapTradeAccountBalances && snapTradeAccountBalances.length > 0) {
+    console.log('🔍 Using SnapTrade account-level balances for accurate portfolio value');
     console.log('🔍 Combined portfolio value BEFORE adding SnapTrade:', combinedPortfolioValue);
-    snapTradeData.forEach((position: any, index: number) => {
-      // Calculate value: units * price
-      const value = (position.units || 0) * (position.price || 0);
-      console.log(`🔍 [${index}] SnapTrade position:`, position.symbol?.symbol?.description || position.symbol?.symbol?.symbol, 
-        '| units:', position.units, '| price:', position.price, '| value:', value, 
-        '| account:', position.account_name);
-      combinedPortfolioValue += value;
-      console.log(`🔍 [${index}] Running total after this position:`, combinedPortfolioValue);
+    
+    // Add account balances to total portfolio value
+    snapTradeAccountBalances.forEach((accountBalance: any, index: number) => {
+      combinedPortfolioValue += accountBalance.balance;
+      console.log(`🔍 [${index}] SnapTrade account:`, accountBalance.name, 
+        '| balance:', accountBalance.balance, '| has positions:', accountBalance.hasPositions,
+        '| running total:', combinedPortfolioValue);
       
-      // Create a holding object for consistency with Plaid format
-      const holding = {
-        security_name: position.symbol?.symbol?.description || position.symbol?.symbol?.symbol || 'Unknown',
-        ticker_symbol: position.symbol?.symbol?.symbol || '',
-        security_type: position.symbol?.symbol?.type?.description || 'Unknown',
-        quantity: position.units || 0,
-        institution_price: position.price || 0,
-        institution_value: value
-      };
-      combinedHoldings.push(holding);
-      
-      // Categorize by security type
-      let assetType = 'Fixed Income'; // Default for treasuries
-      if (position.symbol?.symbol?.type?.description) {
-        const typeDesc = position.symbol.symbol.type.description.toLowerCase();
-        if (typeDesc.includes('bond') || typeDesc.includes('treasury')) {
-          assetType = 'Fixed Income';
-        } else if (typeDesc.includes('equity') || typeDesc.includes('stock')) {
-          assetType = 'Equity';
-        } else if (typeDesc.includes('etf')) {
-          assetType = 'ETF';
-        } else if (typeDesc.includes('mutual fund')) {
-          assetType = 'Mutual Funds';
-        } else {
-          assetType = 'Other';
-        }
-      } else if (position.symbol?.symbol?.symbol) {
-        // Fallback: categorize by symbol
-        const symbol = position.symbol.symbol.symbol.toUpperCase();
-        if (symbol.includes('TREASURY') || symbol.includes('TIPS') || symbol.includes('BOND')) {
-          assetType = 'Fixed Income';
-        } else if (symbol.includes('ETF')) {
-          assetType = 'ETF';
-        } else {
-          assetType = 'Equity';
-        }
+      // If account has no positions, create a cash/money market holding
+      if (!accountBalance.hasPositions && accountBalance.balance > 0) {
+        const cashHolding = {
+          security_name: `${accountBalance.name} - Cash & Equivalents`,
+          ticker_symbol: 'CASH',
+          security_type: 'Cash',
+          quantity: 1,
+          institution_price: accountBalance.balance,
+          institution_value: accountBalance.balance
+        };
+        combinedHoldings.push(cashHolding);
+        
+        // Add to asset allocation
+        const currentValue = combinedAssetAllocation.get('Cash & Equivalents') || 0;
+        combinedAssetAllocation.set('Cash & Equivalents', currentValue + accountBalance.balance);
+        console.log('🔍 Added cash holding for', accountBalance.name, ':', accountBalance.balance);
       }
-      
-      const currentValue = combinedAssetAllocation.get(assetType) || 0;
-      combinedAssetAllocation.set(assetType, currentValue + value);
-      console.log('🔍 Added to', assetType, ':', value, 'Total now:', currentValue + value);
     });
+    
+    // Now process individual positions for holdings list and asset allocation by type
+    if (snapTradeData && snapTradeData.length > 0) {
+      console.log('🔍 Processing', snapTradeData.length, 'individual positions for holdings list');
+      snapTradeData.forEach((position: any, index: number) => {
+        // Calculate value: units * price
+        const value = (position.units || 0) * (position.price || 0);
+        
+        // Create a holding object for consistency with Plaid format
+        const holding = {
+          security_name: position.symbol?.symbol?.description || position.symbol?.symbol?.symbol || 'Unknown',
+          ticker_symbol: position.symbol?.symbol?.symbol || '',
+          security_type: position.symbol?.symbol?.type?.description || 'Unknown',
+          quantity: position.units || 0,
+          institution_price: position.price || 0,
+          institution_value: value
+        };
+        combinedHoldings.push(holding);
+        
+        // Categorize by security type for asset allocation breakdown
+        let assetType = 'Fixed Income'; // Default for treasuries
+        if (position.symbol?.symbol?.type?.description) {
+          const typeDesc = position.symbol.symbol.type.description.toLowerCase();
+          if (typeDesc.includes('bond') || typeDesc.includes('treasury')) {
+            assetType = 'Fixed Income';
+          } else if (typeDesc.includes('equity') || typeDesc.includes('stock')) {
+            assetType = 'Equity';
+          } else if (typeDesc.includes('etf')) {
+            assetType = 'ETF';
+          } else if (typeDesc.includes('mutual fund')) {
+            assetType = 'Mutual Funds';
+          } else {
+            assetType = 'Other';
+          }
+        } else if (position.symbol?.symbol?.symbol) {
+          // Fallback: categorize by symbol
+          const symbol = position.symbol.symbol.symbol.toUpperCase();
+          if (symbol.includes('TREASURY') || symbol.includes('TIPS') || symbol.includes('BOND')) {
+            assetType = 'Fixed Income';
+          } else if (symbol.includes('ETF')) {
+            assetType = 'ETF';
+          } else {
+            assetType = 'Equity';
+          }
+        }
+        
+        const currentValue = combinedAssetAllocation.get(assetType) || 0;
+        combinedAssetAllocation.set(assetType, currentValue + value);
+      });
+    }
     
     console.log('🔍 Final combined portfolio value:', combinedPortfolioValue);
     console.log('🔍 Final asset allocation:', Array.from(combinedAssetAllocation.entries()));
+    console.log('🔍 Total combined holdings:', combinedHoldings.length);
   }
   
   // Create unified portfolio summary
