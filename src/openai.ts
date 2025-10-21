@@ -547,16 +547,44 @@ export async function askOpenAIWithEnhancedContext(
                   }
                 }
                 
-                // Deduplicate accounts by account_id (in case same account linked via multiple tokens)
+                // Deduplicate accounts by account_id AND by description (name + type + balance)
+                // This handles both Plaid duplicates AND database vs Plaid duplicates
                 const accountMap = new Map();
+                const accountDescMap = new Map();
+                
                 accounts.forEach(account => {
-                  // Keep the first occurrence (or you could keep the one with most recent data)
-                  if (!accountMap.has(account.id)) {
+                  // First, try to dedupe by account ID
+                  if (account.id && !accountMap.has(account.id)) {
                     accountMap.set(account.id, account);
+                    
+                    // Also create description-based key for cross-source deduplication
+                    const balance = account.balance?.current || account.balance?.available || account.currentBalance || account.availableBalance || 0;
+                    const descKey = `${account.name}|${account.type}|${account.subtype}|${balance}`;
+                    accountDescMap.set(descKey, account);
+                  } else if (!account.id) {
+                    // For accounts without IDs, use description-based deduplication
+                    const balance = account.balance?.current || account.balance?.available || account.currentBalance || account.availableBalance || 0;
+                    const descKey = `${account.name}|${account.type}|${account.subtype}|${balance}`;
+                    if (!accountDescMap.has(descKey)) {
+                      accountDescMap.set(descKey, account);
+                    }
                   }
                 });
-                accounts = Array.from(accountMap.values());
-                console.log('OpenAI Enhanced: After deduplication:', accounts.length, 'unique accounts');
+                
+                // Combine both maps, preferring account ID based entries
+                const deduplicatedAccounts = new Map();
+                accountMap.forEach((account, id) => {
+                  deduplicatedAccounts.set(id, account);
+                });
+                accountDescMap.forEach((account, descKey) => {
+                  // Only add if not already present by ID
+                  if (!Array.from(deduplicatedAccounts.values()).some(a => a.id === account.id)) {
+                    deduplicatedAccounts.set(descKey, account);
+                  }
+                });
+                
+                accounts = Array.from(deduplicatedAccounts.values());
+                console.log('OpenAI Enhanced: After deduplication:', accounts.length, 'unique accounts (from', accountMap.size, 'by ID +', accountDescMap.size, 'by description)');
                 
                 // Fetch transactions from all tokens
                 for (const tokenRecord of accessTokens) {
@@ -2116,15 +2144,35 @@ export async function askOpenAI(
                   }
                 }
                 
-                // Deduplicate accounts by account_id (in case same account linked via multiple tokens)
+                // Deduplicate accounts by account_id AND by description (name + type + balance)
                 const accountMap2 = new Map();
+                const accountDescMap2 = new Map();
+                
                 accounts.forEach(account => {
-                  if (!accountMap2.has(account.id)) {
+                  if (account.id && !accountMap2.has(account.id)) {
                     accountMap2.set(account.id, account);
+                    const balance = account.balance?.current || account.balance?.available || account.currentBalance || account.availableBalance || 0;
+                    const descKey = `${account.name}|${account.type}|${account.subtype}|${balance}`;
+                    accountDescMap2.set(descKey, account);
+                  } else if (!account.id) {
+                    const balance = account.balance?.current || account.balance?.available || account.currentBalance || account.availableBalance || 0;
+                    const descKey = `${account.name}|${account.type}|${account.subtype}|${balance}`;
+                    if (!accountDescMap2.has(descKey)) {
+                      accountDescMap2.set(descKey, account);
+                    }
                   }
                 });
-                accounts = Array.from(accountMap2.values());
-                console.log('OpenAI Enhanced: After deduplication:', accounts.length, 'unique accounts');
+                
+                const deduplicatedAccounts2 = new Map();
+                accountMap2.forEach((account, id) => deduplicatedAccounts2.set(id, account));
+                accountDescMap2.forEach((account, descKey) => {
+                  if (!Array.from(deduplicatedAccounts2.values()).some(a => a.id === account.id)) {
+                    deduplicatedAccounts2.set(descKey, account);
+                  }
+                });
+                
+                accounts = Array.from(deduplicatedAccounts2.values());
+                console.log('OpenAI Enhanced: After deduplication:', accounts.length, 'unique accounts (from', accountMap2.size, 'by ID +', accountDescMap2.size, 'by description)');
                 
                 // Fetch transactions from all tokens
                 const endDate = new Date().toISOString().split('T')[0];
