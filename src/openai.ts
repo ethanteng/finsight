@@ -1385,16 +1385,88 @@ export async function askOpenAIWithEnhancedContext(
   let combinedHoldings = [];
   let combinedAssetAllocation = new Map();
   
+  // Track which accounts have detailed holdings data
+  const accountsWithHoldings = new Set();
+  
   // Add Plaid investment data
   if (investmentData) {
     const { portfolio, holdings } = investmentData;
     combinedPortfolioValue += portfolio.totalValue;
     combinedHoldings.push(...holdings);
     
+    // Track which accounts have holdings
+    holdings.forEach((holding: any) => {
+      if (holding.account_id) {
+        accountsWithHoldings.add(holding.account_id);
+      }
+    });
+    
     // Add Plaid asset allocation
     portfolio.assetAllocation.forEach((allocation: any) => {
       const currentValue = combinedAssetAllocation.get(allocation.type) || 0;
       combinedAssetAllocation.set(allocation.type, currentValue + allocation.value);
+    });
+    
+    console.log('🔍 Plaid investment data: portfolio value =', portfolio.totalValue, ', holdings =', holdings.length);
+  } else {
+    console.log('🔍 No Plaid investment holdings data available (likely 400 error - tokens without Investments product)');
+  }
+  
+  // Add Plaid investment accounts that don't have detailed holdings
+  // These are investment accounts fetched via the basic accounts API but without holdings data
+  console.log('🔍 Checking for Plaid investment accounts without detailed holdings...');
+  const plaidInvestmentAccountsWithoutHoldings = tierContext.accounts.filter((account: any) => {
+    const isInvestmentAccount = account.type === 'investment';
+    const hasNoDetailedHoldings = !accountsWithHoldings.has(account.id);
+    const hasBalance = account.balance?.current && account.balance.current > 0;
+    const isNotSnapTrade = !account.id?.toString().startsWith('snaptrade-');
+    
+    return isInvestmentAccount && hasNoDetailedHoldings && hasBalance && isNotSnapTrade;
+  });
+  
+  console.log('🔍 Found', plaidInvestmentAccountsWithoutHoldings.length, 'Plaid investment accounts without detailed holdings');
+  
+  if (plaidInvestmentAccountsWithoutHoldings.length > 0) {
+    plaidInvestmentAccountsWithoutHoldings.forEach((account: any, index: number) => {
+      const accountValue = account.balance?.current || 0;
+      combinedPortfolioValue += accountValue;
+      
+      console.log(`🔍 [${index}] Adding Plaid investment account:`, account.name, 
+        '| type:', account.type, '/', account.subtype,
+        '| balance:', accountValue,
+        '| institution:', account.institution,
+        '| running total:', combinedPortfolioValue);
+      
+      // Create a synthetic holding for this account
+      const syntheticHolding = {
+        security_name: `${account.name} (${account.institution || 'Investment'})`,
+        ticker_symbol: account.subtype?.toUpperCase() || 'INVESTMENT',
+        security_type: account.subtype || 'Investment Account',
+        quantity: 1,
+        institution_price: accountValue,
+        institution_value: accountValue,
+        account_id: account.id
+      };
+      combinedHoldings.push(syntheticHolding);
+      
+      // Categorize by subtype
+      let assetType = 'Other Investments';
+      if (account.subtype) {
+        const subtype = account.subtype.toLowerCase();
+        if (subtype.includes('401k') || subtype.includes('403b') || subtype.includes('pension')) {
+          assetType = 'Retirement (401k/403b/Pension)';
+        } else if (subtype.includes('ira') || subtype.includes('roth')) {
+          assetType = 'Retirement (IRA/Roth)';
+        } else if (subtype.includes('brokerage')) {
+          assetType = 'Brokerage Account';
+        } else if (subtype.includes('529')) {
+          assetType = 'Education (529)';
+        }
+      }
+      
+      const currentValue = combinedAssetAllocation.get(assetType) || 0;
+      combinedAssetAllocation.set(assetType, currentValue + accountValue);
+      console.log('🔍 Categorized as', assetType, ':', accountValue, 'Total now:', currentValue + accountValue);
     });
   }
   
@@ -1415,6 +1487,11 @@ export async function askOpenAIWithEnhancedContext(
       console.log(`🔍 [${index}] SnapTrade account:`, accountBalance.name, 
         '| balance:', accountBalance.balance, '| has positions:', accountBalance.hasPositions,
         '| running total:', combinedPortfolioValue);
+      
+      // Mark SnapTrade accounts as having holdings data (even if empty) to prevent double-counting
+      // SnapTrade account IDs are prefixed with 'snaptrade-', but we need to track them
+      const snapTradeAccountId = `snaptrade-${accountBalance.name}`;
+      accountsWithHoldings.add(snapTradeAccountId);
       
       // If account has no positions, create a cash/money market holding
       if (!accountBalance.hasPositions && accountBalance.balance > 0) {
