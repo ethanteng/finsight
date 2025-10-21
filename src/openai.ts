@@ -1385,21 +1385,11 @@ export async function askOpenAIWithEnhancedContext(
   let combinedHoldings = [];
   let combinedAssetAllocation = new Map();
   
-  // Track which accounts have detailed holdings data
-  const accountsWithHoldings = new Set();
-  
   // Add Plaid investment data
   if (investmentData) {
     const { portfolio, holdings } = investmentData;
     combinedPortfolioValue += portfolio.totalValue;
     combinedHoldings.push(...holdings);
-    
-    // Track which accounts have holdings
-    holdings.forEach((holding: any) => {
-      if (holding.account_id) {
-        accountsWithHoldings.add(holding.account_id);
-      }
-    });
     
     // Add Plaid asset allocation
     portfolio.assetAllocation.forEach((allocation: any) => {
@@ -1412,36 +1402,45 @@ export async function askOpenAIWithEnhancedContext(
     console.log('🔍 No Plaid investment holdings data available (likely 400 error - tokens without Investments product)');
   }
   
-  // Add Plaid investment accounts that don't have detailed holdings
-  // These are investment accounts fetched via the basic accounts API but without holdings data
-  console.log('🔍 Checking for Plaid investment accounts without detailed holdings...');
+  // Add Plaid investment accounts if holdings data wasn't available
+  // If investmentData is null, it means Plaid's investmentsHoldingsGet failed (likely 400 error)
+  // In this case, we should add investment account balances from the basic accounts API
+  console.log('🔍 Checking if we need to add Plaid investment account balances...');
+  console.log('🔍 investmentData is null?', investmentData === null);
   console.log('🔍 Total accounts in tierContext:', tierContext.accounts.length);
-  console.log('🔍 Investment accounts in tierContext:', tierContext.accounts.filter((a: any) => a.type === 'investment').length);
-  console.log('🔍 accountsWithHoldings set size:', accountsWithHoldings.size);
-  console.log('🔍 accountsWithHoldings contents:', Array.from(accountsWithHoldings));
   
-  // Debug: Show a few sample investment accounts
-  const sampleInvestmentAccounts = tierContext.accounts.filter((a: any) => a.type === 'investment').slice(0, 3);
-  console.log('🔍 Sample investment accounts:', sampleInvestmentAccounts.map((a: any) => ({
-    id: a.id,
-    name: a.name,
-    type: a.type,
-    subtype: a.subtype,
-    balance: a.balance?.current,
-    isSnapTrade: a.id?.toString().startsWith('snaptrade-')
-  })));
+  let plaidInvestmentAccountsWithoutHoldings: any[] = [];
   
-  const plaidInvestmentAccountsWithoutHoldings = tierContext.accounts.filter((account: any) => {
-    const isInvestmentAccount = account.type === 'investment';
-    const hasNoDetailedHoldings = !accountsWithHoldings.has(account.id);
-    const hasBalance = account.balance?.current && account.balance.current > 0;
-    const isNotSnapTrade = !account.id?.toString().startsWith('snaptrade-');
+  // Only add Plaid investment accounts if we DON'T have detailed holdings data
+  if (!investmentData) {
+    console.log('🔍 No Plaid investment holdings data - will use account balances instead');
+    console.log('🔍 Investment accounts in tierContext:', tierContext.accounts.filter((a: any) => a.type === 'investment').length);
     
-    return isInvestmentAccount && hasNoDetailedHoldings && hasBalance && isNotSnapTrade;
-  });
-  
-  console.log('🔍 Found', plaidInvestmentAccountsWithoutHoldings.length, 'Plaid investment accounts without detailed holdings');
-  console.log('🔍 These accounts are:', plaidInvestmentAccountsWithoutHoldings.map((a: any) => ({ name: a.name, balance: a.balance?.current })));
+    // Debug: Show a few sample investment accounts
+    const sampleInvestmentAccounts = tierContext.accounts.filter((a: any) => a.type === 'investment').slice(0, 3);
+    console.log('🔍 Sample investment accounts:', sampleInvestmentAccounts.map((a: any) => ({
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      subtype: a.subtype,
+      balance: a.balance?.current,
+      isSnapTrade: a.id?.toString().startsWith('snaptrade-')
+    })));
+    
+    // Get all Plaid investment accounts (exclude SnapTrade which is already handled)
+    plaidInvestmentAccountsWithoutHoldings = tierContext.accounts.filter((account: any) => {
+      const isInvestmentAccount = account.type === 'investment';
+      const hasBalance = account.balance?.current && account.balance.current > 0;
+      const isNotSnapTrade = !account.id?.toString().startsWith('snaptrade-');
+      
+      return isInvestmentAccount && hasBalance && isNotSnapTrade;
+    });
+    
+    console.log('🔍 Found', plaidInvestmentAccountsWithoutHoldings.length, 'Plaid investment accounts to add');
+    console.log('🔍 These accounts are:', plaidInvestmentAccountsWithoutHoldings.map((a: any) => ({ name: a.name, balance: a.balance?.current })));
+  } else {
+    console.log('🔍 Plaid investment holdings data available - skipping account-level balances');
+  }
   
   if (plaidInvestmentAccountsWithoutHoldings.length > 0) {
     plaidInvestmentAccountsWithoutHoldings.forEach((account: any, index: number) => {
@@ -1504,11 +1503,6 @@ export async function askOpenAIWithEnhancedContext(
       console.log(`🔍 [${index}] SnapTrade account:`, accountBalance.name, 
         '| balance:', accountBalance.balance, '| has positions:', accountBalance.hasPositions,
         '| running total:', combinedPortfolioValue);
-      
-      // Mark SnapTrade accounts as having holdings data (even if empty) to prevent double-counting
-      // SnapTrade account IDs are prefixed with 'snaptrade-', but we need to track them
-      const snapTradeAccountId = `snaptrade-${accountBalance.name}`;
-      accountsWithHoldings.add(snapTradeAccountId);
       
       // If account has no positions, create a cash/money market holding
       if (!accountBalance.hasPositions && accountBalance.balance > 0) {
