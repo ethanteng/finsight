@@ -178,11 +178,21 @@ export default function ProfilePage() {
 
   // Load token statuses for non-demo users
   const loadTokenStatuses = useCallback(async () => {
-    if (isDemo) return;
+    console.log('🔍 loadTokenStatuses called, isDemo:', isDemo);
+    
+    if (isDemo) {
+      console.log('⏭️ Skipping token status load - demo mode');
+      return;
+    }
     
     try {
       const token = localStorage.getItem('auth_token');
-      if (!token) return;
+      if (!token) {
+        console.log('⚠️ No auth token found');
+        return;
+      }
+      
+      console.log('📡 Fetching token statuses from:', `${API_URL}/profile/tokens`);
       
       const response = await fetch(`${API_URL}/profile/tokens`, {
         headers: {
@@ -191,12 +201,18 @@ export default function ProfilePage() {
         }
       });
       
+      console.log('📥 Token statuses response:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ Token statuses loaded:', data.tokens?.length || 0, 'tokens');
+        console.log('📋 Token statuses data:', data.tokens);
         setTokenStatuses(data.tokens || []);
+      } else {
+        console.error('❌ Failed to load token statuses:', response.status, response.statusText);
       }
     } catch (error) {
-      console.error('Failed to load token statuses:', error);
+      console.error('❌ Error loading token statuses:', error);
     }
   }, [API_URL, isDemo]);
 
