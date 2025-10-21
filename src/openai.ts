@@ -582,19 +582,24 @@ export async function askOpenAIWithEnhancedContext(
                 const seenDescriptions = new Set();
                 const debugLog: Array<{source: string; id: string; name: string; descKey: string; added: boolean}> = [];
                 
-                // Add all accounts from accountMap first
+                // Add all accounts from accountMap first (but only first occurrence of each description)
                 accountMap.forEach((account, id) => {
                   const balance = account.balance?.current || account.balance?.available || account.currentBalance || account.availableBalance || 0;
                   const descKey = `${account.name}|${account.type}|${account.subtype}|${balance}`;
-                  seenDescriptions.add(descKey);
-                  finalAccountMap.set(id, account);
+                  const isNew = !seenDescriptions.has(descKey);
+                  
                   debugLog.push({
                     source: 'ID_MAP',
                     id: id,
                     name: account.name || 'unknown',
                     descKey: descKey,
-                    added: true
+                    added: isNew
                   });
+                  
+                  if (isNew) {
+                    seenDescriptions.add(descKey);
+                    finalAccountMap.set(descKey, account);  // Use descKey to ensure uniqueness
+                  }
                 });
                 
                 // Add accounts from accountDescMap only if their description hasn't been seen
