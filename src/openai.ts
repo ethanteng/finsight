@@ -547,6 +547,17 @@ export async function askOpenAIWithEnhancedContext(
                   }
                 }
                 
+                // Deduplicate accounts by account_id (in case same account linked via multiple tokens)
+                const accountMap = new Map();
+                accounts.forEach(account => {
+                  // Keep the first occurrence (or you could keep the one with most recent data)
+                  if (!accountMap.has(account.id)) {
+                    accountMap.set(account.id, account);
+                  }
+                });
+                accounts = Array.from(accountMap.values());
+                console.log('OpenAI Enhanced: After deduplication:', accounts.length, 'unique accounts');
+                
                 // Fetch transactions from all tokens
                 for (const tokenRecord of accessTokens) {
                   try {
@@ -2104,6 +2115,16 @@ export async function askOpenAI(
                     console.error('OpenAI Enhanced: Error fetching accounts from token:', error);
                   }
                 }
+                
+                // Deduplicate accounts by account_id (in case same account linked via multiple tokens)
+                const accountMap2 = new Map();
+                accounts.forEach(account => {
+                  if (!accountMap2.has(account.id)) {
+                    accountMap2.set(account.id, account);
+                  }
+                });
+                accounts = Array.from(accountMap2.values());
+                console.log('OpenAI Enhanced: After deduplication:', accounts.length, 'unique accounts');
                 
                 // Fetch transactions from all tokens
                 const endDate = new Date().toISOString().split('T')[0];
