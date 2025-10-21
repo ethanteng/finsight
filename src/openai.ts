@@ -1301,19 +1301,11 @@ export async function askOpenAIWithEnhancedContext(
   const transactionSummary = tierContext.transactions.map(transaction => {
     const name = isDemo ? transaction.description : transaction.name;
     
-    // ✅ PRIORITIZE enriched data over basic data for better categorization
+    // ✅ PRIORITIZE basic Plaid categories - they are more accurate than enriched categories
     let category = 'Unknown';
     
-    // First try enriched data
-    if (transaction.enriched_data?.category && Array.isArray(transaction.enriched_data.category)) {
-      const validEnrichedCategory = transaction.enriched_data.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
-      if (validEnrichedCategory) {
-        category = validEnrichedCategory;
-      }
-    }
-    
-    // Fallback to basic category if no enriched data
-    if (category === 'Unknown' && transaction.category) {
+    // First try basic Plaid category (more accurate for income/transfers)
+    if (transaction.category) {
       if (Array.isArray(transaction.category)) {
         const validBasicCategory = transaction.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
         if (validBasicCategory) {
@@ -1321,6 +1313,14 @@ export async function askOpenAIWithEnhancedContext(
         }
       } else if (typeof transaction.category === 'string' && transaction.category.trim() !== '') {
         category = transaction.category;
+      }
+    }
+    
+    // Fallback to enriched category if no basic category
+    if (category === 'Unknown' && transaction.enriched_data?.category && Array.isArray(transaction.enriched_data.category)) {
+      const validEnrichedCategory = transaction.enriched_data.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
+      if (validEnrichedCategory) {
+        category = validEnrichedCategory;
       }
     }
     
@@ -1339,11 +1339,16 @@ export async function askOpenAIWithEnhancedContext(
       if (transaction.enriched_data.website) {
         enhancedInfo += ` [Website: ${transaction.enriched_data.website}]`;
       }
-      if (transaction.enriched_data.category && transaction.enriched_data.category.length > 1) {
-        enhancedInfo += ` [Categories: ${transaction.enriched_data.category.filter((cat: any) => cat && cat.trim() !== '').join(', ')}]`;
-      }
       if (transaction.enriched_data.brand_name && transaction.enriched_data.brand_name !== merchantName) {
         enhancedInfo += ` [Brand: ${transaction.enriched_data.brand_name}]`;
+      }
+    }
+    
+    // Show basic Plaid categories (more accurate than enriched)
+    if (transaction.category && Array.isArray(transaction.category) && transaction.category.length > 0) {
+      const validCategories = transaction.category.filter((cat: any) => cat && cat.trim() !== '' && cat !== '0');
+      if (validCategories.length > 0) {
+        enhancedInfo += ` [Categories: ${validCategories.join(', ')}]`;
       }
     }
     
