@@ -1394,12 +1394,14 @@ export async function askOpenAIWithEnhancedContext(
       console.log('🔍 Processing SnapTrade position:', position.symbol?.symbol?.description || position.symbol?.symbol?.symbol, 'value:', value);
       combinedPortfolioValue += value;
       
-      // Create a holding object for consistency
+      // Create a holding object for consistency with Plaid format
       const holding = {
-        ...position,
-        value: value,
-        name: position.symbol?.symbol?.description || position.symbol?.symbol?.symbol || 'Unknown',
-        type: position.symbol?.symbol?.type?.description || 'Unknown'
+        security_name: position.symbol?.symbol?.description || position.symbol?.symbol?.symbol || 'Unknown',
+        ticker_symbol: position.symbol?.symbol?.symbol || '',
+        security_type: position.symbol?.symbol?.type?.description || 'Unknown',
+        quantity: position.units || 0,
+        institution_price: position.price || 0,
+        institution_value: value
       };
       combinedHoldings.push(holding);
       
