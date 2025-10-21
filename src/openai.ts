@@ -571,20 +571,28 @@ export async function askOpenAIWithEnhancedContext(
                   }
                 });
                 
-                // Combine both maps, preferring account ID based entries
-                const deduplicatedAccounts = new Map();
+                // Combine both maps, using description to prevent duplicates
+                const finalAccountMap = new Map();
+                const seenDescriptions = new Set();
+                
+                // Add all accounts from accountMap first
                 accountMap.forEach((account, id) => {
-                  deduplicatedAccounts.set(id, account);
+                  const balance = account.balance?.current || account.balance?.available || account.currentBalance || account.availableBalance || 0;
+                  const descKey = `${account.name}|${account.type}|${account.subtype}|${balance}`;
+                  seenDescriptions.add(descKey);
+                  finalAccountMap.set(id, account);
                 });
+                
+                // Add accounts from accountDescMap only if their description hasn't been seen
                 accountDescMap.forEach((account, descKey) => {
-                  // Only add if not already present by ID
-                  if (!Array.from(deduplicatedAccounts.values()).some(a => a.id === account.id)) {
-                    deduplicatedAccounts.set(descKey, account);
+                  if (!seenDescriptions.has(descKey)) {
+                    finalAccountMap.set(descKey, account);
+                    seenDescriptions.add(descKey);
                   }
                 });
                 
-                accounts = Array.from(deduplicatedAccounts.values());
-                console.log('OpenAI Enhanced: After deduplication:', accounts.length, 'unique accounts (from', accountMap.size, 'by ID +', accountDescMap.size, 'by description)');
+                accounts = Array.from(finalAccountMap.values());
+                console.log('OpenAI Enhanced: After deduplication:', accounts.length, 'unique accounts (from', accountMap.size, 'by ID,', seenDescriptions.size, 'total unique descriptions)');
                 
                 // Fetch transactions from all tokens
                 for (const tokenRecord of accessTokens) {
@@ -2163,16 +2171,25 @@ export async function askOpenAI(
                   }
                 });
                 
-                const deduplicatedAccounts2 = new Map();
-                accountMap2.forEach((account, id) => deduplicatedAccounts2.set(id, account));
+                const finalAccountMap2 = new Map();
+                const seenDescriptions2 = new Set();
+                
+                accountMap2.forEach((account, id) => {
+                  const balance = account.balance?.current || account.balance?.available || account.currentBalance || account.availableBalance || 0;
+                  const descKey = `${account.name}|${account.type}|${account.subtype}|${balance}`;
+                  seenDescriptions2.add(descKey);
+                  finalAccountMap2.set(id, account);
+                });
+                
                 accountDescMap2.forEach((account, descKey) => {
-                  if (!Array.from(deduplicatedAccounts2.values()).some(a => a.id === account.id)) {
-                    deduplicatedAccounts2.set(descKey, account);
+                  if (!seenDescriptions2.has(descKey)) {
+                    finalAccountMap2.set(descKey, account);
+                    seenDescriptions2.add(descKey);
                   }
                 });
                 
-                accounts = Array.from(deduplicatedAccounts2.values());
-                console.log('OpenAI Enhanced: After deduplication:', accounts.length, 'unique accounts (from', accountMap2.size, 'by ID +', accountDescMap2.size, 'by description)');
+                accounts = Array.from(finalAccountMap2.values());
+                console.log('OpenAI Enhanced: After deduplication:', accounts.length, 'unique accounts (from', accountMap2.size, 'by ID,', seenDescriptions2.size, 'total unique descriptions)');
                 
                 // Fetch transactions from all tokens
                 const endDate = new Date().toISOString().split('T')[0];
