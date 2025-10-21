@@ -574,8 +574,13 @@ export async function askOpenAIWithEnhancedContext(
                 });
                 
                 // Combine both maps, using description to prevent duplicates
+                console.log('⚠️⚠️⚠️ STARTING DETAILED DEDUPLICATION - VERSION 2 ⚠️⚠️⚠️');
+                console.log('Accounts from ID map:', accountMap.size);
+                console.log('Accounts from DESC map:', accountDescMap.size);
+                
                 const finalAccountMap = new Map();
                 const seenDescriptions = new Set();
+                const debugLog: Array<{source: string; id: string; name: string; descKey: string; added: boolean}> = [];
                 
                 // Add all accounts from accountMap first
                 accountMap.forEach((account, id) => {
@@ -583,17 +588,43 @@ export async function askOpenAIWithEnhancedContext(
                   const descKey = `${account.name}|${account.type}|${account.subtype}|${balance}`;
                   seenDescriptions.add(descKey);
                   finalAccountMap.set(id, account);
+                  debugLog.push({
+                    source: 'ID_MAP',
+                    id: id,
+                    name: account.name || 'unknown',
+                    descKey: descKey,
+                    added: true
+                  });
                 });
                 
                 // Add accounts from accountDescMap only if their description hasn't been seen
                 accountDescMap.forEach((account, descKey) => {
-                  if (!seenDescriptions.has(descKey)) {
+                  const isNew = !seenDescriptions.has(descKey);
+                  debugLog.push({
+                    source: 'DESC_MAP',
+                    id: account.id || 'no-id',
+                    name: account.name || 'unknown',
+                    descKey: descKey,
+                    added: isNew
+                  });
+                  if (isNew) {
                     finalAccountMap.set(descKey, account);
                     seenDescriptions.add(descKey);
                   }
                 });
                 
                 accounts = Array.from(finalAccountMap.values());
+                console.log('After deduplication:', accounts.length, 'unique accounts');
+                console.log('Unique descriptions found:', seenDescriptions.size);
+                console.log('⚠️ First 20 accounts in deduplication:');
+                debugLog.slice(0, 20).forEach((entry, idx) => {
+                  console.log(`  [${idx}] ${entry.added ? '✅ ADDED' : '❌ SKIP'} | ${entry.source} | Name: "${entry.name}" | Key: "${entry.descKey}"`);
+                });
+                console.log('⚠️ All unique description keys:');
+                Array.from(seenDescriptions).slice(0, 15).forEach((key, idx) => {
+                  const accountsWithKey = debugLog.filter(e => e.descKey === key);
+                  console.log(`  [${idx}] "${key}" (appears ${accountsWithKey.length} times in total)`);
+                });
                 console.log('OpenAI Enhanced: After deduplication:', accounts.length, 'unique accounts (from', accountMap.size, 'by ID,', seenDescriptions.size, 'total unique descriptions)');
                 
                 // Fetch transactions from all tokens
