@@ -353,6 +353,7 @@ export async function askOpenAIWithEnhancedContext(
   console.log('🚀 askOpenAIWithEnhancedContext called with question:', question.substring(0, 50) + '...');
   console.log('🚀 User ID:', userId, 'Tier:', tier, 'Demo:', isDemo);
   console.log('OpenAI Enhanced: Starting enhanced context request for tier:', tier, 'isDemo:', isDemo);
+  console.log('⚠️⚠️⚠️ DEDUPLICATION FIX VERSION 0bf8668 IS LOADED ⚠️⚠️⚠️');
 
   // Get user-specific data
   let accounts: any[] = [];
@@ -549,6 +550,7 @@ export async function askOpenAIWithEnhancedContext(
                 
                 // Deduplicate accounts by account_id AND by description (name + type + balance)
                 // This handles both Plaid duplicates AND database vs Plaid duplicates
+                console.log('⚠️⚠️⚠️ STARTING DEDUPLICATION - accounts.length BEFORE:', accounts.length);
                 const accountMap = new Map();
                 const accountDescMap = new Map();
                 
@@ -896,13 +898,13 @@ export async function askOpenAIWithEnhancedContext(
                 console.log('OpenAI Enhanced: Fetched SnapTrade activities:', snapTradeActivities.length, 'activities');
                 console.log('OpenAI Enhanced: Sample SnapTrade activity structure:', snapTradeActivities[0]);
               }
-              } else {
-                console.log('OpenAI Enhanced: No SnapTrade user found or no userSecret available');
-              }
-            } catch (snapTradeError) {
-              console.error('OpenAI Enhanced: Error fetching SnapTrade data:', snapTradeError);
+            } else {
+              console.log('OpenAI Enhanced: No SnapTrade user found or no userSecret available');
             }
+          } catch (snapTradeError) {
+            console.error('OpenAI Enhanced: Error fetching SnapTrade data:', snapTradeError);
           }
+        }
           
           // Persist SnapTrade activities to database if enabled
           if (process.env.PERSIST_TRANSACTIONS === 'true' && userId && !isDemo && snapTradeActivities && snapTradeActivities.length > 0) {
