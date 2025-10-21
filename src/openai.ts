@@ -1388,11 +1388,15 @@ export async function askOpenAIWithEnhancedContext(
   console.log('🔍 SnapTrade data available:', snapTradeData ? snapTradeData.length : 0, 'positions');
   
   if (snapTradeData && snapTradeData.length > 0) {
-    snapTradeData.forEach((position: any) => {
+    console.log('🔍 Combined portfolio value BEFORE adding SnapTrade:', combinedPortfolioValue);
+    snapTradeData.forEach((position: any, index: number) => {
       // Calculate value: units * price
       const value = (position.units || 0) * (position.price || 0);
-      console.log('🔍 Processing SnapTrade position:', position.symbol?.symbol?.description || position.symbol?.symbol?.symbol, 'value:', value);
+      console.log(`🔍 [${index}] SnapTrade position:`, position.symbol?.symbol?.description || position.symbol?.symbol?.symbol, 
+        '| units:', position.units, '| price:', position.price, '| value:', value, 
+        '| account:', position.account_name);
       combinedPortfolioValue += value;
+      console.log(`🔍 [${index}] Running total after this position:`, combinedPortfolioValue);
       
       // Create a holding object for consistency with Plaid format
       const holding = {
