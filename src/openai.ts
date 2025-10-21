@@ -911,6 +911,24 @@ export async function askOpenAIWithEnhancedContext(
                 // Extract individual positions from account-level data
                 const allPositions = [];
                 for (const account of holdingsResult.data) {
+                  // Add SnapTrade account to accounts array for Account Summary
+                  if (account.account) {
+                    const snapTradeAccount = {
+                      id: `snaptrade-${account.account.id || account.account.number}`,
+                      name: account.account.name || 'Investment Account',
+                      type: account.account.type || 'investment',
+                      subtype: account.account.meta?.type || account.account.type || 'brokerage',
+                      institution: account.account.institution || 'SnapTrade',
+                      balance: {
+                        current: account.totalValue || 0,
+                        available: account.totalValue || 0,
+                        iso_currency_code: 'USD'
+                      }
+                    };
+                    accounts.push(snapTradeAccount);
+                    console.log('OpenAI Enhanced: Added SnapTrade account:', snapTradeAccount.name, 'with balance:', snapTradeAccount.balance.current);
+                  }
+                  
                   if (account.positions && Array.isArray(account.positions)) {
                     // Add account info to each position
                     const accountPositions = account.positions.map((position: any) => ({
@@ -923,7 +941,7 @@ export async function askOpenAIWithEnhancedContext(
                   }
                 }
                 snapTradeData = allPositions;
-                console.log('OpenAI Enhanced: Fetched SnapTrade holdings:', snapTradeData.length, 'positions');
+                console.log('OpenAI Enhanced: Fetched SnapTrade holdings:', snapTradeData.length, 'positions from', holdingsResult.data.length, 'accounts');
                 console.log('OpenAI Enhanced: Sample SnapTrade position structure:', snapTradeData[0]);
               }
               
