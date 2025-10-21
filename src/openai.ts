@@ -913,6 +913,14 @@ export async function askOpenAIWithEnhancedContext(
                 for (const account of holdingsResult.data) {
                   // Add SnapTrade account to accounts array for Account Summary
                   if (account.account) {
+                    // Extract balance from SnapTrade's total_value structure
+                    let accountBalance = 0;
+                    if (account.total_value && account.total_value.value) {
+                      accountBalance = account.total_value.value;
+                    } else if (account.totalValue) {
+                      accountBalance = account.totalValue;
+                    }
+                    
                     const snapTradeAccount = {
                       id: `snaptrade-${account.account.id || account.account.number}`,
                       name: account.account.name || 'Investment Account',
@@ -920,8 +928,8 @@ export async function askOpenAIWithEnhancedContext(
                       subtype: account.account.meta?.type || account.account.type || 'brokerage',
                       institution: account.account.institution || 'SnapTrade',
                       balance: {
-                        current: account.totalValue || 0,
-                        available: account.totalValue || 0,
+                        current: accountBalance,
+                        available: accountBalance,
                         iso_currency_code: 'USD'
                       }
                     };
