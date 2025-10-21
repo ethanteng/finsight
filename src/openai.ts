@@ -865,18 +865,44 @@ export async function askOpenAIWithEnhancedContext(
                       percentage: totalValue > 0 ? (value / totalValue) * 100 : 0
                     }));
                     
-                    investmentData = {
-                      portfolio: {
-                        totalValue,
-                        assetAllocation,
-                        holdingCount: enrichedHoldings.length,
-                        securityCount: processedSecurities.length
-                      },
-                      holdings: enrichedHoldings
-                    };
+                    // Accumulate investment data from multiple tokens (don't break after first success)
+                    if (!investmentData) {
+                      investmentData = {
+                        portfolio: {
+                          totalValue,
+                          assetAllocation,
+                          holdingCount: enrichedHoldings.length,
+                          securityCount: processedSecurities.length
+                        },
+                        holdings: enrichedHoldings
+                      };
+                    } else {
+                      // Merge with existing investment data from previous tokens
+                      investmentData.portfolio.totalValue += totalValue;
+                      investmentData.portfolio.holdingCount += enrichedHoldings.length;
+                      investmentData.portfolio.securityCount += processedSecurities.length;
+                      investmentData.holdings.push(...enrichedHoldings);
+                      
+                      // Merge asset allocation
+                      assetAllocation.forEach((allocation: any) => {
+                        const existing = investmentData.portfolio.assetAllocation.find((a: any) => a.type === allocation.type);
+                        if (existing) {
+                          existing.value += allocation.value;
+                        } else {
+                          investmentData.portfolio.assetAllocation.push(allocation);
+                        }
+                      });
+                      
+                      // Recalculate percentages
+                      investmentData.portfolio.assetAllocation.forEach((allocation: any) => {
+                        allocation.percentage = investmentData.portfolio.totalValue > 0 
+                          ? (allocation.value / investmentData.portfolio.totalValue) * 100 
+                          : 0;
+                      });
+                    }
                     
-                    console.log('OpenAI Enhanced: Fetched investment data - total value:', totalValue, 'holdings:', enrichedHoldings.length);
-                    break; // Only need to fetch from one token since investments are typically consolidated
+                    console.log('OpenAI Enhanced: Fetched investment data from token - total value:', totalValue, 'holdings:', enrichedHoldings.length);
+                    console.log('OpenAI Enhanced: Cumulative investment data - total value:', investmentData.portfolio.totalValue, 'holdings:', investmentData.holdings.length);
                   } catch (error) {
                     console.error('OpenAI Enhanced: Error fetching investment data from token:', error);
                     // Continue to next token if this one fails
