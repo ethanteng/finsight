@@ -990,8 +990,8 @@ export async function askOpenAIWithEnhancedContext(
             } catch (error) {
               console.error('OpenAI Enhanced: Error persisting SnapTrade activities:', error);
               // Don't fail the main request if persistence fails
-            }
           }
+        }
         
         console.log('OpenAI Enhanced: Final count -', accounts.length, 'accounts,', transactions.length, 'transactions, investment data:', investmentData ? 'available' : 'none', 'SnapTrade data:', snapTradeData ? 'available' : 'none', 'SnapTrade activities:', snapTradeActivities ? 'available' : 'none', 'for user', userId);
       } else {
@@ -1415,6 +1415,22 @@ export async function askOpenAIWithEnhancedContext(
   // Add Plaid investment accounts that don't have detailed holdings
   // These are investment accounts fetched via the basic accounts API but without holdings data
   console.log('🔍 Checking for Plaid investment accounts without detailed holdings...');
+  console.log('🔍 Total accounts in tierContext:', tierContext.accounts.length);
+  console.log('🔍 Investment accounts in tierContext:', tierContext.accounts.filter((a: any) => a.type === 'investment').length);
+  console.log('🔍 accountsWithHoldings set size:', accountsWithHoldings.size);
+  console.log('🔍 accountsWithHoldings contents:', Array.from(accountsWithHoldings));
+  
+  // Debug: Show a few sample investment accounts
+  const sampleInvestmentAccounts = tierContext.accounts.filter((a: any) => a.type === 'investment').slice(0, 3);
+  console.log('🔍 Sample investment accounts:', sampleInvestmentAccounts.map((a: any) => ({
+    id: a.id,
+    name: a.name,
+    type: a.type,
+    subtype: a.subtype,
+    balance: a.balance?.current,
+    isSnapTrade: a.id?.toString().startsWith('snaptrade-')
+  })));
+  
   const plaidInvestmentAccountsWithoutHoldings = tierContext.accounts.filter((account: any) => {
     const isInvestmentAccount = account.type === 'investment';
     const hasNoDetailedHoldings = !accountsWithHoldings.has(account.id);
@@ -1425,6 +1441,7 @@ export async function askOpenAIWithEnhancedContext(
   });
   
   console.log('🔍 Found', plaidInvestmentAccountsWithoutHoldings.length, 'Plaid investment accounts without detailed holdings');
+  console.log('🔍 These accounts are:', plaidInvestmentAccountsWithoutHoldings.map((a: any) => ({ name: a.name, balance: a.balance?.current })));
   
   if (plaidInvestmentAccountsWithoutHoldings.length > 0) {
     plaidInvestmentAccountsWithoutHoldings.forEach((account: any, index: number) => {
@@ -1513,53 +1530,53 @@ export async function askOpenAIWithEnhancedContext(
     });
     
     // Now process individual positions for holdings list and asset allocation by type
-    if (snapTradeData && snapTradeData.length > 0) {
+  if (snapTradeData && snapTradeData.length > 0) {
       console.log('🔍 Processing', snapTradeData.length, 'individual positions for holdings list');
       snapTradeData.forEach((position: any, index: number) => {
-        // Calculate value: units * price
-        const value = (position.units || 0) * (position.price || 0);
-        
+      // Calculate value: units * price
+      const value = (position.units || 0) * (position.price || 0);
+      
         // Create a holding object for consistency with Plaid format
-        const holding = {
+      const holding = {
           security_name: position.symbol?.symbol?.description || position.symbol?.symbol?.symbol || 'Unknown',
           ticker_symbol: position.symbol?.symbol?.symbol || '',
           security_type: position.symbol?.symbol?.type?.description || 'Unknown',
           quantity: position.units || 0,
           institution_price: position.price || 0,
           institution_value: value
-        };
-        combinedHoldings.push(holding);
-        
+      };
+      combinedHoldings.push(holding);
+      
         // Categorize by security type for asset allocation breakdown
-        let assetType = 'Fixed Income'; // Default for treasuries
-        if (position.symbol?.symbol?.type?.description) {
-          const typeDesc = position.symbol.symbol.type.description.toLowerCase();
-          if (typeDesc.includes('bond') || typeDesc.includes('treasury')) {
-            assetType = 'Fixed Income';
-          } else if (typeDesc.includes('equity') || typeDesc.includes('stock')) {
-            assetType = 'Equity';
-          } else if (typeDesc.includes('etf')) {
-            assetType = 'ETF';
-          } else if (typeDesc.includes('mutual fund')) {
-            assetType = 'Mutual Funds';
-          } else {
-            assetType = 'Other';
-          }
-        } else if (position.symbol?.symbol?.symbol) {
-          // Fallback: categorize by symbol
-          const symbol = position.symbol.symbol.symbol.toUpperCase();
-          if (symbol.includes('TREASURY') || symbol.includes('TIPS') || symbol.includes('BOND')) {
-            assetType = 'Fixed Income';
-          } else if (symbol.includes('ETF')) {
-            assetType = 'ETF';
-          } else {
-            assetType = 'Equity';
-          }
+      let assetType = 'Fixed Income'; // Default for treasuries
+      if (position.symbol?.symbol?.type?.description) {
+        const typeDesc = position.symbol.symbol.type.description.toLowerCase();
+        if (typeDesc.includes('bond') || typeDesc.includes('treasury')) {
+          assetType = 'Fixed Income';
+        } else if (typeDesc.includes('equity') || typeDesc.includes('stock')) {
+          assetType = 'Equity';
+        } else if (typeDesc.includes('etf')) {
+          assetType = 'ETF';
+        } else if (typeDesc.includes('mutual fund')) {
+          assetType = 'Mutual Funds';
+        } else {
+          assetType = 'Other';
         }
-        
-        const currentValue = combinedAssetAllocation.get(assetType) || 0;
-        combinedAssetAllocation.set(assetType, currentValue + value);
-      });
+      } else if (position.symbol?.symbol?.symbol) {
+        // Fallback: categorize by symbol
+        const symbol = position.symbol.symbol.symbol.toUpperCase();
+        if (symbol.includes('TREASURY') || symbol.includes('TIPS') || symbol.includes('BOND')) {
+          assetType = 'Fixed Income';
+        } else if (symbol.includes('ETF')) {
+          assetType = 'ETF';
+        } else {
+          assetType = 'Equity';
+        }
+      }
+      
+      const currentValue = combinedAssetAllocation.get(assetType) || 0;
+      combinedAssetAllocation.set(assetType, currentValue + value);
+    });
     }
     
     console.log('🔍 Final combined portfolio value:', combinedPortfolioValue);
