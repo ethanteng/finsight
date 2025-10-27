@@ -74,10 +74,10 @@ export const dataSourceRegistry: Record<string, DataSourceConfig> = {
     name: 'Home Valuations',
     description: 'Track your home value and include it in Net Worth calculations',
     tiers: [UserTier.STARTER, UserTier.STANDARD, UserTier.PREMIUM],
-    category: 'external',
+    category: 'account',
     provider: 'rentcast',
     cacheDuration: 30 * 24 * 60 * 60 * 1000, // 30 days
-    isLive: true
+    isLive: false
   },
 
   // Economic Indicators (Standard+)
