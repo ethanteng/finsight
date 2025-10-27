@@ -2638,6 +2638,184 @@ app.put('/profile', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
+// Home value endpoints
+app.get('/profile/home', requireAuth, async (req: Request, res: Response) => {
+  try {
+    console.log('🏠 GET /profile/home called for user:', req.user!.id);
+    
+    const { ProfileManager } = await import('./profile/manager');
+    const profileManager = new ProfileManager();
+    
+    const profileText = await profileManager.getOriginalProfile(req.user!.id);
+    console.log('🏠 Profile text length:', profileText.length);
+    console.log('🏠 Profile text preview:', profileText.substring(0, 200));
+    
+    const homeData = profileManager.extractHomeData(profileText);
+    console.log('🏠 Extracted home data:', homeData);
+    
+    if (!homeData.address) {
+      console.log('🏠 No home address found, returning hasHome: false');
+      return res.json({ 
+        hasHome: false,
+        homeData: null 
+      });
+    }
+    
+    console.log('🏠 Returning home data:', {
+      address: homeData.address,
+      value: homeData.value,
+      valueLow: homeData.valueLow,
+      valueHigh: homeData.valueHigh
+    });
+    
+    res.json({ 
+      hasHome: true,
+      homeData: {
+        address: homeData.address,
+        value: homeData.value,
+        valueLow: homeData.valueLow,
+        valueHigh: homeData.valueHigh,
+        lastUpdated: homeData.lastUpdated
+      }
+    });
+  } catch (error) {
+    console.error('Failed to fetch home data:', error);
+    
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in home data fetch endpoint', 'error');
+    }
+    
+    res.status(500).json({ error: 'Failed to fetch home data' });
+  }
+});
+
+app.post('/profile/home', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { address, ownsHome } = req.body;
+    
+    if (!address || typeof address !== 'string') {
+      return res.status(400).json({ error: 'address is required and must be a string' });
+    }
+    
+    if (typeof ownsHome !== 'boolean') {
+      return res.status(400).json({ error: 'ownsHome is required and must be a boolean' });
+    }
+    
+    if (!ownsHome) {
+      return res.status(400).json({ error: 'ownsHome must be true to add home data' });
+    }
+    
+    const { ProfileManager } = await import('./profile/manager');
+    const profileManager = new ProfileManager();
+    
+    // Fetch home value from RentCast and update profile
+    const homeValue = await profileManager.updateHomeValue(req.user!.id, address);
+    
+    if (!homeValue) {
+      return res.status(404).json({ 
+        error: 'Unable to fetch home value for the provided address. Please verify the address is correct.' 
+      });
+    }
+    
+    // Get updated home data
+    const profileText = await profileManager.getOriginalProfile(req.user!.id);
+    const homeData = profileManager.extractHomeData(profileText);
+    
+    res.json({ 
+      success: true,
+      homeData: {
+        address: homeData.address,
+        value: homeData.value,
+        valueLow: homeData.valueLow,
+        valueHigh: homeData.valueHigh,
+        lastUpdated: homeData.lastUpdated
+      }
+    });
+  } catch (error) {
+    console.error('Failed to add home data:', error);
+    
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+      res.status(500).json({ error: error.message });
+    } else {
+      Sentry.captureMessage('Unknown error in home data add endpoint', 'error');
+      res.status(500).json({ error: 'Failed to add home data' });
+    }
+  }
+});
+
+app.post('/profile/home/refresh', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { ProfileManager } = await import('./profile/manager');
+    const profileManager = new ProfileManager();
+    
+    // Get current home address from profile
+    const profileText = await profileManager.getOriginalProfile(req.user!.id);
+    const currentHomeData = profileManager.extractHomeData(profileText);
+    
+    if (!currentHomeData.address) {
+      return res.status(404).json({ error: 'No home address found in profile' });
+    }
+    
+    // Refresh home value from RentCast
+    const homeValue = await profileManager.updateHomeValue(req.user!.id, currentHomeData.address);
+    
+    if (!homeValue) {
+      return res.status(500).json({ 
+        error: 'Unable to refresh home value. The RentCast API may be temporarily unavailable.' 
+      });
+    }
+    
+    // Get updated home data
+    const updatedProfileText = await profileManager.getOriginalProfile(req.user!.id);
+    const homeData = profileManager.extractHomeData(updatedProfileText);
+    
+    res.json({ 
+      success: true,
+      homeData: {
+        address: homeData.address,
+        value: homeData.value,
+        valueLow: homeData.valueLow,
+        valueHigh: homeData.valueHigh,
+        lastUpdated: homeData.lastUpdated
+      }
+    });
+  } catch (error) {
+    console.error('Failed to refresh home value:', error);
+    
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+      res.status(500).json({ error: error.message });
+    } else {
+      Sentry.captureMessage('Unknown error in home value refresh endpoint', 'error');
+      res.status(500).json({ error: 'Failed to refresh home value' });
+    }
+  }
+});
+
+app.delete('/profile/home', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { ProfileManager } = await import('./profile/manager');
+    const profileManager = new ProfileManager();
+    
+    await profileManager.removeHomeData(req.user!.id);
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to remove home data:', error);
+    
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in home data remove endpoint', 'error');
+    }
+    
+    res.status(500).json({ error: 'Failed to remove home data' });
+  }
+});
+
 // Get user's Plaid access tokens with status
 app.get('/profile/tokens', requireAuth, async (req: Request, res: Response) => {
   try {

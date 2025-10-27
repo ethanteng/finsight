@@ -13,8 +13,10 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
 - **AI Integration**: OpenAI GPT-4 for financial analysis
 - **External APIs**: 
   - Plaid (banking data)
+  - SnapTrade (investment data)
   - FRED (economic indicators)
   - Alpha Vantage (market data)
+  - RentCast (home valuations)
   - **Brave Search API** (real-time financial information)
 
 ### **Frontend (Next.js/React)**
@@ -100,10 +102,19 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
 - **Features**:
     - Daily automated sync at 3 AM EST
     - Non-destructive upsert operations
+
+### **9. Home Value Tracking System**
+- **Purpose**: Track and include home values in Net Worth calculations
+- **Data Source**: RentCast API for real-time property valuations
+- **Features**:
+    - AI-powered address detection from conversations
+    - Manual home address entry in profile settings
+    - Automatic valuation with price ranges (low, mid, high)
+    - Monthly automatic value refresh
+    - Manual refresh capability
+    - Integrated into Financial Overview Net Worth calculation
+    - Encrypted storage in user profile
     - Production users only (excludes demo data)
-    - Comprehensive user data sync (email, tier, subscription status, conversation count, account creation date, last login)
-    - Robust error handling with Sentry integration
-    - Rate limiting to respect API constraints
 
 ## 🚀 **Quick Start**
 
@@ -177,6 +188,9 @@ SNAPTRADE_CONSUMER_KEY="your_snaptrade_consumer_key"
 # Market Data APIs
 FRED_API_KEY="your_fred_api_key"
 ALPHA_VANTAGE_API_KEY="your_alpha_vantage_api_key"
+
+# Home Valuation API
+RENTCAST_API_KEY="your_rentcast_api_key"
 
 # Search API (for RAG system)
 SEARCH_API_KEY="your_search_api_key"

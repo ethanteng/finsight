@@ -94,3 +94,6 @@ test-database-setup.log
 
 # Schema backups
 prisma/schema.prisma.backup.*
+
+# GPT context logs
+gpt-context-*.json

@@ -7,6 +7,14 @@ interface UserProfileProps {
   isDemo?: boolean;
 }
 
+interface HomeData {
+  address: string;
+  value: number;
+  valueLow: number;
+  valueHigh: number;
+  lastUpdated: string;
+}
+
 export default function UserProfile({ userId, isDemo }: UserProfileProps) {
   const [profileText, setProfileText] = useState<string>('');
   const [originalProfileText, setOriginalProfileText] = useState<string>('');
@@ -14,6 +22,16 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  
+  // Home data state
+  const [homeData, setHomeData] = useState<HomeData | null>(null);
+  const [homeAddress, setHomeAddress] = useState('');
+  const [ownsHome, setOwnsHome] = useState(false);
+  const [homeLoading, setHomeLoading] = useState(false);
+  const [homeSaving, setHomeSaving] = useState(false);
+  const [homeRefreshing, setHomeRefreshing] = useState(false);
+  const [homeError, setHomeError] = useState('');
+  const [homeSuccess, setHomeSuccess] = useState('');
   
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -50,11 +68,56 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
     }
   }, [API_URL]);
 
+  const loadHomeData = useCallback(async () => {
+    console.log('🏠 Frontend: loadHomeData called');
+    setHomeLoading(true);
+    setHomeError('');
+    try {
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      console.log('🏠 Frontend: Fetching from', `${API_URL}/profile/home`);
+      const response = await fetch(`${API_URL}/profile/home`, {
+        headers,
+      });
+      
+      console.log('🏠 Frontend: Response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('🏠 Frontend: Response data:', data);
+        
+        if (data.hasHome && data.homeData) {
+          console.log('🏠 Frontend: Setting home data:', data.homeData);
+          setHomeData(data.homeData);
+          setHomeAddress(data.homeData.address);
+          setOwnsHome(true);
+        } else {
+          console.log('🏠 Frontend: No home data available');
+        }
+      } else {
+        console.error('🏠 Frontend: Failed to load home data:', response.status);
+      }
+    } catch (error) {
+      console.error('🏠 Frontend: Error loading home data:', error);
+      // Don't set error - home data is optional
+    } finally {
+      setHomeLoading(false);
+    }
+  }, [API_URL]);
+
   useEffect(() => {
     if (userId && !isDemo) {
       loadProfile();
+      loadHomeData();
     }
-  }, [userId, isDemo, loadProfile]);
+  }, [userId, isDemo, loadProfile, loadHomeData]);
 
   const saveProfile = async (newText: string) => {
     setSaving(true);
@@ -97,6 +160,101 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
   const handleCancel = () => {
     setProfileText(originalProfileText);
     setEditing(false);
+  };
+
+  const saveHomeData = async () => {
+    setHomeSaving(true);
+    setHomeError('');
+    setHomeSuccess('');
+    
+    try {
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${API_URL}/profile/home`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ 
+          address: homeAddress.trim(), 
+          ownsHome 
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setHomeData(data.homeData);
+        setHomeSuccess('Home value added successfully!');
+        setTimeout(() => setHomeSuccess(''), 3000);
+      } else {
+        const errorData = await response.json();
+        setHomeError(errorData.error || 'Failed to save home data');
+      }
+    } catch (error) {
+      console.error('Failed to save home data:', error);
+      setHomeError('Failed to save home data');
+    } finally {
+      setHomeSaving(false);
+    }
+  };
+
+  const refreshHomeValue = async () => {
+    setHomeRefreshing(true);
+    setHomeError('');
+    setHomeSuccess('');
+    
+    try {
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${API_URL}/profile/home/refresh`, {
+        method: 'POST',
+        headers
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setHomeData(data.homeData);
+        setHomeSuccess('Home value refreshed successfully!');
+        setTimeout(() => setHomeSuccess(''), 3000);
+      } else {
+        const errorData = await response.json();
+        setHomeError(errorData.error || 'Failed to refresh home value');
+      }
+    } catch (error) {
+      console.error('Failed to refresh home value:', error);
+      setHomeError('Failed to refresh home value');
+    } finally {
+      setHomeRefreshing(false);
+    }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
   };
 
   // Don't show anything if not in demo mode and no userId
@@ -201,6 +359,102 @@ Note: This profile reflects our financial situation as of August 2025.`;
             </div>
           )}
         </div>
+      )}
+
+      {/* Home Information Section - Only for non-demo users */}
+      {!isDemo && (
+        <>
+          <div className="mt-6 pt-6 border-t border-gray-700">
+            <h4 className="text-md font-semibold text-white mb-4">Home Information</h4>
+            
+            {homeLoading ? (
+              <div className="text-gray-400">Loading home data...</div>
+            ) : homeData ? (
+              <div>
+                <div className="bg-gray-700 rounded-lg p-4 mb-4">
+                  <div className="mb-2">
+                    <span className="text-gray-400 text-sm">Address:</span>
+                    <div className="text-white">{homeData.address}</div>
+                  </div>
+                  <div className="mb-2">
+                    <span className="text-gray-400 text-sm">Estimated Value:</span>
+                    <div className="text-white font-medium text-lg">
+                      {formatCurrency(homeData.valueLow)} - {formatCurrency(homeData.valueHigh)}
+                    </div>
+                    <div className="text-gray-500 text-xs">
+                      (Mid-range estimate: {formatCurrency(homeData.value)})
+                    </div>
+                  </div>
+                  <div className="text-gray-500 text-xs">
+                    Last updated: {formatDate(homeData.lastUpdated)}
+                  </div>
+                </div>
+                
+                <button
+                  onClick={refreshHomeValue}
+                  disabled={homeRefreshing}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-blue-800 transition-colors text-sm"
+                >
+                  {homeRefreshing ? 'Refreshing...' : 'Refresh Home Value'}
+                </button>
+              </div>
+            ) : (
+              <div>
+                <p className="text-gray-400 text-sm mb-4">
+                  Add your home address to track your home value and include it in your Net Worth calculation.
+                </p>
+                
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-gray-300 text-sm mb-2">
+                      Home Address
+                    </label>
+                    <input
+                      type="text"
+                      value={homeAddress}
+                      onChange={(e) => setHomeAddress(e.target.value)}
+                      placeholder="123 Main St, City, State, Zip"
+                      className="w-full p-3 border border-gray-600 rounded-lg bg-gray-700 text-white placeholder-gray-400"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="ownsHome"
+                      checked={ownsHome}
+                      onChange={(e) => setOwnsHome(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="ownsHome" className="ml-2 text-gray-300 text-sm">
+                      I own this home
+                    </label>
+                  </div>
+                  
+                  <button
+                    onClick={saveHomeData}
+                    disabled={homeSaving || !homeAddress.trim() || !ownsHome}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-blue-800 transition-colors text-sm"
+                  >
+                    {homeSaving ? 'Adding...' : 'Add Home Value'}
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            {/* Success/Error Messages */}
+            {homeSuccess && (
+              <div className="mt-3 p-3 bg-green-900/20 border border-green-700 rounded-lg text-green-300 text-sm">
+                {homeSuccess}
+              </div>
+            )}
+            {homeError && (
+              <div className="mt-3 p-3 bg-red-900/20 border border-red-700 rounded-lg text-red-300 text-sm">
+                {homeError}
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );

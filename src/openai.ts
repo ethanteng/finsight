@@ -2098,6 +2098,35 @@ function buildEnhancedSystemPrompt(
 
   let systemPrompt = '';
 
+  // Extract home value data from profile if present
+  let homeValueSection = '';
+  if (userProfile) {
+    const homeAddressMatch = userProfile.match(/HOME_ADDRESS:\s*(.+?)(?:\n|$)/);
+    const homeValueMatch = userProfile.match(/HOME_VALUE:\s*(\d+)/);
+    const homeValueLowMatch = userProfile.match(/HOME_VALUE_LOW:\s*(\d+)/);
+    const homeValueHighMatch = userProfile.match(/HOME_VALUE_HIGH:\s*(\d+)/);
+    const homeValueUpdatedMatch = userProfile.match(/HOME_VALUE_LAST_UPDATED:\s*(.+?)(?:\n|$)/);
+    
+    if (homeAddressMatch && homeValueMatch) {
+      const address = homeAddressMatch[1].trim();
+      const value = parseInt(homeValueMatch[1], 10);
+      const valueLow = homeValueLowMatch ? parseInt(homeValueLowMatch[1], 10) : null;
+      const valueHigh = homeValueHighMatch ? parseInt(homeValueHighMatch[1], 10) : null;
+      const lastUpdated = homeValueUpdatedMatch ? homeValueUpdatedMatch[1].trim() : 'Unknown';
+      
+      homeValueSection = `
+HOME VALUE DATA (Available):
+- Address: ${address}
+- Estimated Value: $${value.toLocaleString()}
+${valueLow && valueHigh ? `- Value Range: $${valueLow.toLocaleString()} - $${valueHigh.toLocaleString()}` : ''}
+- Last Updated: ${new Date(lastUpdated).toLocaleDateString()}
+- Source: RentCast API
+
+IMPORTANT: When the user asks about their home value, use this data above to provide the current estimate.
+`;
+    }
+  }
+
   // Add search context at the very top with clear delimiters if available
   if (searchContext) {
     systemPrompt += `=== REAL-TIME FINANCIAL DATA ===
@@ -2110,6 +2139,13 @@ CRITICAL INSTRUCTIONS:
 - When the user asks about rates, prices, or current information, use the specific data from the search results above
 - Provide the current information from the search results directly
 - If the search results contain the answer, use that information instead of your training data
+
+`;
+  }
+
+  // Add home value data if available
+  if (homeValueSection) {
+    systemPrompt += `${homeValueSection}
 
 `;
   }
@@ -2205,6 +2241,7 @@ INSTRUCTIONS:
 - Investment data (SnapTrade Holdings, Treasuries, etc.) in INVESTMENT DATA section is user's actual holdings - reference specifically
 - Treasury securities: Identified by symbols like "912797PV3-BOND" or "UST 0.0%" - provide specific analysis, not generic advice
 - Tier limitations apply to external data sources only, not user's own connected data
+- HOME VALUATIONS: If user asks about home value and it's in HOME VALUE DATA above, provide that estimate. If not available, tell them to mention their home address (e.g., "I own a home at [address]") and you'll automatically fetch the valuation
 
 RESPONSE FORMATTING:
 - Structure: Use **bold** for main headers, ## for major sections, bullet points (-) for lists, numbered lists (1. 2. 3.) for steps

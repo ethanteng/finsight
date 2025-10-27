@@ -6,7 +6,7 @@ export interface DataSourceConfig {
   description: string;
   tiers: UserTier[];
   category: 'account' | 'market' | 'external' | 'economic';
-  provider: 'plaid' | 'fred' | 'alpha-vantage' | 'internal' | 'brave';
+  provider: 'plaid' | 'fred' | 'alpha-vantage' | 'internal' | 'brave' | 'rentcast';
   cacheDuration: number; // milliseconds
   rateLimit?: number; // requests per minute
   isLive: boolean;
@@ -65,6 +65,18 @@ export const dataSourceRegistry: Record<string, DataSourceConfig> = {
     category: 'account',
     provider: 'plaid',
     cacheDuration: 15 * 60 * 1000, // 15 minutes
+    isLive: true
+  },
+
+  // Home Valuations (All tiers)
+  'home-valuations': {
+    id: 'home-valuations',
+    name: 'Home Valuations',
+    description: 'Track your home value and include it in Net Worth calculations',
+    tiers: [UserTier.STARTER, UserTier.STANDARD, UserTier.PREMIUM],
+    category: 'external',
+    provider: 'rentcast',
+    cacheDuration: 30 * 24 * 60 * 60 * 1000, // 30 days
     isLive: true
   },
 

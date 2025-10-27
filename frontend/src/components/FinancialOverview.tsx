@@ -42,10 +42,19 @@ interface FinancialOverviewProps {
   isDemo?: boolean;
 }
 
+interface HomeData {
+  address: string;
+  value: number;
+  valueLow: number;
+  valueHigh: number;
+  lastUpdated: string;
+}
+
 export default function FinancialOverview({ isDemo = false }: FinancialOverviewProps) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [snapTradeAccounts, setSnapTradeAccounts] = useState<SnapTradeAccount[]>([]);
   const [investmentData, setInvestmentData] = useState<InvestmentData | null>(null);
+  const [homeData, setHomeData] = useState<HomeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const router = useRouter();
@@ -128,6 +137,29 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
         } else {
           console.log('Failed to load investment data:', investmentsRes.status);
           // Don't set error as this is optional
+        }
+
+        // Load home data (only for authenticated users, not demo)
+        if (!isDemo) {
+          try {
+            const homeRes = await fetch(`${API_URL}/profile/home`, {
+              headers,
+            });
+
+            if (homeRes.ok) {
+              const homeDataRes = await homeRes.json();
+              if (homeDataRes.hasHome && homeDataRes.homeData) {
+                setHomeData(homeDataRes.homeData);
+                console.log('Home data loaded:', homeDataRes.homeData);
+              }
+            } else {
+              console.log('Failed to load home data:', homeRes.status);
+              // Don't set error as this is optional
+            }
+          } catch (homeError) {
+            console.log('Error loading home data:', homeError);
+            // Don't set error as this is optional
+          }
         }
       } catch (error) {
         console.error('Error loading financial data:', error);
@@ -269,11 +301,18 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
       }
     }
 
-    console.log('Final totals - totalCash:', totalCash, 'totalDebt:', totalDebt, 'totalInvestments:', totalInvestments);
-    return { totalCash, totalDebt, totalInvestments, uncategorizedAccounts };
+    // Add home value if available
+    let totalHomeValue = 0;
+    if (homeData?.value) {
+      totalHomeValue = homeData.value;
+      console.log('Home value included:', totalHomeValue);
+    }
+
+    console.log('Final totals - totalCash:', totalCash, 'totalDebt:', totalDebt, 'totalInvestments:', totalInvestments, 'totalHomeValue:', totalHomeValue);
+    return { totalCash, totalDebt, totalInvestments, totalHomeValue, uncategorizedAccounts };
   };
 
-  const { totalCash, totalDebt, totalInvestments, uncategorizedAccounts } = calculateTotals();
+  const { totalCash, totalDebt, totalInvestments, totalHomeValue, uncategorizedAccounts } = calculateTotals();
   const hasAccounts = accounts.length > 0 || snapTradeAccounts.length > 0;
 
   const formatCurrency = (amount: number) => {
@@ -346,7 +385,7 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
         )}
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-blue-800 rounded p-3">
           <div className="text-blue-300 text-sm mb-1">Total Cash</div>
           <div className="text-white font-medium text-lg">
@@ -366,6 +405,18 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
           <div className="text-white font-medium text-lg">
             {formatCurrency(totalInvestments)}
           </div>
+        </div>
+
+        <div className="bg-blue-800 rounded p-3">
+          <div className="text-blue-300 text-sm mb-1">Home Value</div>
+          <div className="text-white font-medium text-lg">
+            {totalHomeValue > 0 ? formatCurrency(totalHomeValue) : '$0'}
+          </div>
+          {homeData && (
+            <div className="text-blue-400 text-xs mt-1" title={`Range: ${formatCurrency(homeData.valueLow)} - ${formatCurrency(homeData.valueHigh)}`}>
+              Range: {formatCurrency(homeData.valueLow)} - {formatCurrency(homeData.valueHigh)}
+            </div>
+          )}
         </div>
       </div>
 
@@ -392,7 +443,7 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
           <div className="bg-blue-800 rounded p-2">
             <div className="text-blue-300">Net Worth</div>
             <div className="text-white font-medium">
-              {formatCurrency(totalCash + totalInvestments - totalDebt)}
+              {formatCurrency(totalCash + totalInvestments + totalHomeValue - totalDebt)}
             </div>
           </div>
           

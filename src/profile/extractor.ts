@@ -47,6 +47,7 @@ export class ProfileExtractor {
     - Investment preferences or strategies
     - Spending patterns or budget concerns
     - Financial challenges or questions
+    - Home ownership and address (if mentioned with indicators like "I own", "my home", "our house")
     - Any other relevant personal or financial information
     
     IMPORTANT: 
@@ -56,6 +57,7 @@ export class ProfileExtractor {
     - If the conversation reveals financial context (like asking about asset allocation), note this as part of their financial profile
     - Combine new information with existing information intelligently
     - Make the profile more detailed and useful over time
+    - If the user mentions owning a home with an address, include the full address in the profile
     
     If no new information is found, return the existing profile unchanged.
     `;
@@ -74,11 +76,89 @@ export class ProfileExtractor {
         console.warn('ProfileExtractor: Extracted profile appears to be raw conversation, returning existing profile');
         return existingProfile || '';
       }
+
+      // Check if home ownership and address were detected in the conversation
+      await this.detectAndFetchHomeValue(userId, conversation.question, extractedProfile);
       
       return extractedProfile;
     } catch (error) {
       console.error('Error extracting profile from conversation:', error);
       return existingProfile || '';
+    }
+  }
+
+  /**
+   * Detect if user mentioned home ownership with address and fetch home value
+   */
+  private async detectAndFetchHomeValue(
+    userId: string,
+    question: string,
+    profileText: string
+  ): Promise<void> {
+    try {
+      // Check if profile already has home data
+      const hasHomeData = /HOME_ADDRESS:/.test(profileText);
+      if (hasHomeData) {
+        console.log('ProfileExtractor: Home data already exists in profile, skipping detection');
+        return;
+      }
+
+      // Detect ownership indicators
+      const ownershipIndicators = [
+        /\b(I|we) own (a|my|our) (home|house|property)\b/i,
+        /\bmy (home|house|property)\b/i,
+        /\bour (home|house|property)\b/i,
+        /\bowned? (home|house|property)\b/i
+      ];
+
+      const hasOwnership = ownershipIndicators.some(pattern => pattern.test(question));
+      
+      if (!hasOwnership) {
+        return;
+      }
+
+      // Detect address patterns
+      // Pattern: street number + street name (with ordinals like 10th) + city + state + optional zip
+      const addressPatterns = [
+        // Pattern with explicit street type (Street, Ave, Dr, etc.)
+        /\b(\d+\s+[\w\s]+?(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Lane|Ln|Boulevard|Blvd|Way|Court|Ct|Circle|Cir|Place|Pl|Highway|Hwy|Parkway|Pkwy),?\s+[\w\s]+?,?\s+[A-Z]{2}(?:,?\s+\d{5})?)\b/i,
+        // Pattern after "at" keyword (more flexible)
+        /\bat\s+(\d+\s+[\w\s]+?,\s+[\w\s]+?,\s+[A-Z]{2}(?:,?\s+\d{5})?)\b/i,
+        // Pattern for standard format: number + street, city, state zip
+        /\b(\d+(?:\s+[NSEW]\.?)?\s+\d+(?:st|nd|rd|th)?\s+[\w\s]+?,\s+[\w\s]+?,\s+[A-Z]{2}(?:,?\s+\d{5})?)\b/i
+      ];
+
+      let detectedAddress: string | null = null;
+      
+      for (const pattern of addressPatterns) {
+        const match = question.match(pattern);
+        if (match) {
+          detectedAddress = match[1].trim();
+          break;
+        }
+      }
+
+      if (!detectedAddress) {
+        console.log('ProfileExtractor: Ownership detected but no address found');
+        return;
+      }
+
+      console.log('ProfileExtractor: Detected home ownership with address:', detectedAddress);
+
+      // Import ProfileManager to update home value
+      const { ProfileManager } = await import('./manager');
+      const profileManager = new ProfileManager();
+      
+      const homeValue = await profileManager.updateHomeValue(userId, detectedAddress);
+      
+      if (homeValue) {
+        console.log(`ProfileExtractor: Successfully fetched and stored home value: $${homeValue}`);
+      } else {
+        console.log('ProfileExtractor: Failed to fetch home value, but ownership detected');
+      }
+    } catch (error) {
+      console.error('ProfileExtractor: Error detecting and fetching home value:', error);
+      // Don't throw - this is a non-critical enhancement
     }
   }
 } 

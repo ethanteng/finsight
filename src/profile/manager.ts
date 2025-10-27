@@ -296,9 +296,42 @@ export class ProfileManager {
       currentProfile
     );
     
+    // After extraction, check if home value was added by detectAndFetchHomeValue
+    // Get the latest profile which may now have structured home data
+    const latestProfile = await this.getOriginalProfile(userId);
+    const existingHomeData = this.extractHomeData(latestProfile);
+    
     // Only update if the profile actually changed
     if (updatedProfile !== currentProfile) {
-      await this.updateProfile(userId, updatedProfile);
+      // Preserve structured home data if it exists
+      let finalProfile = updatedProfile;
+      
+      // Check if the updated profile has home data
+      const updatedHomeData = this.extractHomeData(updatedProfile);
+      
+      // If we have home data in the DB but not in the AI-generated profile, preserve it
+      if (existingHomeData.address && !updatedHomeData.address) {
+        console.log('💾 Preserving structured home data that was added during extraction');
+        
+        // Remove any existing home data markers (shouldn't be any, but just in case)
+        finalProfile = finalProfile.replace(
+          /HOME_ADDRESS:.*?\n|HOME_VALUE:.*?\n|HOME_VALUE_LOW:.*?\n|HOME_VALUE_HIGH:.*?\n|HOME_VALUE_LAST_UPDATED:.*?\n/g,
+          ''
+        ).trim();
+        
+        // Re-add the structured home data
+        const homeDataSection = `
+
+HOME_ADDRESS: ${existingHomeData.address}
+HOME_VALUE: ${existingHomeData.value}
+HOME_VALUE_LOW: ${existingHomeData.valueLow}
+HOME_VALUE_HIGH: ${existingHomeData.valueHigh}
+HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString()}`;
+        
+        finalProfile = finalProfile + homeDataSection;
+      }
+      
+      await this.updateProfile(userId, finalProfile);
       console.log(`Profile intelligently updated for user: ${userId}`);
     } else {
       console.log(`No new profile information found for user: ${userId}`);
@@ -347,5 +380,147 @@ export class ProfileManager {
     // For now, return current profile as single history item
     const currentProfile = await this.getOriginalProfile(userId);
     return currentProfile ? [currentProfile] : [];
+  }
+
+  /**
+   * Extract home data from profile text
+   * Returns structured home data if found in profile
+   */
+  extractHomeData(profileText: string): {
+    address: string | null;
+    value: number | null;
+    valueLow: number | null;
+    valueHigh: number | null;
+    lastUpdated: Date | null;
+  } {
+    const result = {
+      address: null as string | null,
+      value: null as number | null,
+      valueLow: null as number | null,
+      valueHigh: null as number | null,
+      lastUpdated: null as Date | null
+    };
+
+    // Extract home address
+    const addressMatch = profileText.match(/HOME_ADDRESS:\s*(.+?)(?:\n|$)/);
+    if (addressMatch) {
+      result.address = addressMatch[1].trim();
+    }
+
+    // Extract home value
+    const valueMatch = profileText.match(/HOME_VALUE:\s*(\d+)/);
+    if (valueMatch) {
+      result.value = parseInt(valueMatch[1], 10);
+    }
+
+    // Extract home value low
+    const valueLowMatch = profileText.match(/HOME_VALUE_LOW:\s*(\d+)/);
+    if (valueLowMatch) {
+      result.valueLow = parseInt(valueLowMatch[1], 10);
+    }
+
+    // Extract home value high
+    const valueHighMatch = profileText.match(/HOME_VALUE_HIGH:\s*(\d+)/);
+    if (valueHighMatch) {
+      result.valueHigh = parseInt(valueHighMatch[1], 10);
+    }
+
+    // Extract last updated timestamp
+    const lastUpdatedMatch = profileText.match(/HOME_VALUE_LAST_UPDATED:\s*(.+?)(?:\n|$)/);
+    if (lastUpdatedMatch) {
+      try {
+        result.lastUpdated = new Date(lastUpdatedMatch[1].trim());
+      } catch (error) {
+        console.error('Failed to parse HOME_VALUE_LAST_UPDATED:', error);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Update home value for a user by fetching from RentCast API
+   * @param userId - User ID
+   * @param address - Home address
+   * @returns Updated home value or null if fetch failed
+   */
+  async updateHomeValue(userId: string, address: string): Promise<number | null> {
+    try {
+      // Import RentCast service
+      const { RentCastService } = await import('../services/rentcast');
+      const rentCastService = new RentCastService();
+
+      // Validate address
+      if (!rentCastService.validateAddress(address)) {
+        console.error('Invalid address format:', address);
+        return null;
+      }
+
+      // Fetch home value from RentCast
+      const homeValueData = await rentCastService.getHomeValue(address);
+      
+      if (!homeValueData) {
+        console.log('No home value data found for address:', address);
+        return null;
+      }
+
+      // Get current profile
+      const currentProfile = await this.getOriginalProfile(userId);
+      
+      // Remove any existing home data
+      let updatedProfile = currentProfile.replace(
+        /HOME_ADDRESS:.*?\n|HOME_VALUE:.*?\n|HOME_VALUE_LOW:.*?\n|HOME_VALUE_HIGH:.*?\n|HOME_VALUE_LAST_UPDATED:.*?\n/g,
+        ''
+      ).trim();
+
+      // Add new home data to profile
+      const homeDataSection = `
+
+HOME_ADDRESS: ${address}
+HOME_VALUE: ${homeValueData.price}
+HOME_VALUE_LOW: ${homeValueData.priceRangeLow}
+HOME_VALUE_HIGH: ${homeValueData.priceRangeHigh}
+HOME_VALUE_LAST_UPDATED: ${new Date().toISOString()}`;
+
+      updatedProfile = updatedProfile + homeDataSection;
+
+      // Save updated profile
+      await this.updateProfile(userId, updatedProfile);
+
+      console.log(`Home value updated for user ${userId}: $${homeValueData.price}`);
+      
+      return homeValueData.price;
+    } catch (error) {
+      console.error('Failed to update home value:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get current home value for a user
+   * @param userId - User ID
+   * @returns Home value or null if not set
+   */
+  async getHomeValue(userId: string): Promise<number | null> {
+    const profile = await this.getOriginalProfile(userId);
+    const homeData = this.extractHomeData(profile);
+    return homeData.value;
+  }
+
+  /**
+   * Remove home data from user profile
+   * @param userId - User ID
+   */
+  async removeHomeData(userId: string): Promise<void> {
+    const currentProfile = await this.getOriginalProfile(userId);
+    
+    // Remove home data
+    const updatedProfile = currentProfile.replace(
+      /HOME_ADDRESS:.*?\n|HOME_VALUE:.*?\n|HOME_VALUE_LOW:.*?\n|HOME_VALUE_HIGH:.*?\n|HOME_VALUE_LAST_UPDATED:.*?\n/g,
+      ''
+    ).trim();
+
+    await this.updateProfile(userId, updatedProfile);
+    console.log(`Home data removed for user ${userId}`);
   }
 }
