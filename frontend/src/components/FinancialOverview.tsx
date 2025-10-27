@@ -366,9 +366,12 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
     );
   }
 
+  // Calculate Net Worth
+  const netWorth = totalCash + totalInvestments + totalHomeValue - totalDebt;
+
   return (
     <div className="bg-blue-900 border border-blue-700 rounded-lg p-4 mb-6">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-2">
           <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
           <h3 className="text-lg font-semibold text-blue-100">Your Financial Overview</h3>
@@ -385,7 +388,16 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
         )}
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Net Worth - Featured Card */}
+      <div className="bg-gradient-to-br from-blue-700 to-blue-800 rounded-lg p-6 mb-4 border border-blue-600">
+        <div className="text-blue-300 text-sm font-medium mb-2">Net Worth</div>
+        <div className="text-white font-bold text-3xl">
+          {formatCurrency(netWorth)}
+        </div>
+      </div>
+      
+      {/* Financial Metrics Row */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
         <div className="bg-blue-800 rounded p-3">
           <div className="text-blue-300 text-sm mb-1">Total Cash</div>
           <div className="text-white font-medium text-lg">
@@ -420,38 +432,32 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
         </div>
       </div>
 
+      {/* Account Statistics Row */}
       {hasAccounts && (
-        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-          <div className="bg-blue-800 rounded p-2">
-            <div className="text-blue-300">Accounts</div>
-            <div className="text-white font-medium">{accounts.length + snapTradeAccounts.length}</div>
+        <div className="grid grid-cols-3 md:grid-cols-3 gap-4">
+          <div className="bg-blue-800 rounded p-3">
+            <div className="text-blue-300 text-sm mb-1">Accounts</div>
+            <div className="text-white font-medium text-lg">{accounts.length + snapTradeAccounts.length}</div>
           </div>
           
           {investmentData?.portfolio && (
             <>
-              <div className="bg-blue-800 rounded p-2">
-                <div className="text-blue-300">Holdings</div>
-                <div className="text-white font-medium">{investmentData.portfolio.holdingCount}</div>
+              <div className="bg-blue-800 rounded p-3">
+                <div className="text-blue-300 text-sm mb-1">Holdings</div>
+                <div className="text-white font-medium text-lg">{investmentData.portfolio.holdingCount}</div>
               </div>
-              <div className="bg-blue-800 rounded p-2">
-                <div className="text-blue-300">Securities</div>
-                <div className="text-white font-medium">{investmentData.portfolio.securityCount}</div>
+              <div className="bg-blue-800 rounded p-3">
+                <div className="text-blue-300 text-sm mb-1">Securities</div>
+                <div className="text-white font-medium text-lg">{investmentData.portfolio.securityCount}</div>
               </div>
             </>
           )}
           
-          <div className="bg-blue-800 rounded p-2">
-            <div className="text-blue-300">Net Worth</div>
-            <div className="text-white font-medium">
-              {formatCurrency(totalCash + totalInvestments + totalHomeValue - totalDebt)}
-            </div>
-          </div>
-          
           {/* Show uncategorized accounts count if any exist */}
           {uncategorizedAccounts > 0 && (
-            <div className="bg-yellow-800 rounded p-2">
-              <div className="text-yellow-300">Uncategorized</div>
-              <div className="text-white font-medium">{uncategorizedAccounts}</div>
+            <div className="bg-yellow-800 rounded p-3">
+              <div className="text-yellow-300 text-sm mb-1">Uncategorized</div>
+              <div className="text-white font-medium text-lg">{uncategorizedAccounts}</div>
             </div>
           )}
         </div>

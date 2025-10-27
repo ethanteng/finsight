@@ -188,8 +188,9 @@ describe('FinancialOverview', () => {
     }, { timeout: 3000 });
 
     // Now check all the other values
-    expect(screen.getByText('$0')).toBeInTheDocument(); // Total Debt
+    expect(screen.getAllByText('$0')).toHaveLength(2); // Total Debt and Home Value
     expect(screen.getByText('$50,000')).toBeInTheDocument(); // Total Investments
+    expect(screen.getByText('$60,000')).toBeInTheDocument(); // Net Worth
   });
 
   it('calculates totals correctly for different account types (demo mode)', async () => {
