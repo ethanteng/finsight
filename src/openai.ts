@@ -272,46 +272,6 @@ function filterConversationHistory(
   return combined.slice(0, 8); // Cap at 8 exchanges
 }
 
-// Simple regex-based formatting function (alternative to GPT formatting)
-function formatResponseWithRegex(rawResponse: string): string {
-  return rawResponse
-    // Fix bullet lists - ensure bullet and text are on same line
-    .replace(/(\n)(\s*[-*+]\s*)(\n)(\s*)/g, '\n$2')
-    .replace(/([-*+])\s*\n\s*(.+)/g, '$1 $2')
-    
-    // Fix numbered lists - ensure number and text are on same line
-    .replace(/(\n)(\s*\d+\.\s*)(\n)(\s*)/g, '\n$2')
-    .replace(/(\d+\.)\s*\n\s*(.+)/g, '$1 $2')
-    
-    // Remove extra blank lines between list items
-    .replace(/([-*+] .+)\n\n(?=[-*+] )/g, '$1\n')
-    .replace(/(\d+\. .+)\n\n(?=\d+\. )/g, '$1\n')
-    
-    // Ensure proper spacing around headers
-    .replace(/(\n)(#{1,6}\s)/g, '\n\n$2')
-    
-    // Ensure proper spacing around code blocks
-    .replace(/(\n)(```)/g, '\n\n$2')
-    
-    // Fix multiple consecutive line breaks
-    .replace(/\n{3,}/g, '\n\n')
-    
-    // Remove extra spaces at beginning of lines
-    .replace(/^\s+/gm, '')
-    
-    // Ensure consistent list formatting
-    .replace(/^\s*[-*+]\s+/gm, '- ')
-    .replace(/^\s*\d+\.\s+/gm, (match) => {
-      const number = match.match(/\d+/)?.[0] || '1';
-      return `${number}. `;
-    })
-    
-    // Clean up any remaining formatting issues
-    .trim();
-}
-
-
-
 // Enhanced post-processing function with tier-aware upgrade suggestions
 function enhanceResponseWithUpgrades(answer: string, tierContext: TierAwareContext, searchContext?: string): string {
   // Don't add upgrade suggestions if search context is available (user already has access to real-time data)
@@ -1899,17 +1859,6 @@ ${anonymizeInvestmentData(combinedHoldings.slice(0, 15))}`;
     let answer = completion.choices[0]?.message?.content || 'I apologize, but I was unable to generate a response.';
 
     console.log('🔧 TEST: Got OpenAI response, length:', answer.length);
-    console.log('🔧 PREPROCESSING: Starting response formatting fix...');
-    console.log('🔧 PREPROCESSING: Original answer length:', answer.length);
-    console.log('🔧 PREPROCESSING: Original answer preview:', answer.substring(0, 200));
-    
-          try {
-        // Fix list formatting issues
-        answer = formatResponseWithRegex(answer);
-        console.log('🔧 PREPROCESSING: Response formatting fix completed');
-      } catch (error) {
-        console.error('🔧 PREPROCESSING: Error in formatResponseWithRegex:', error);
-      }
 
     // Enhance response with upgrade suggestions
     answer = enhanceResponseWithUpgrades(answer, tierContext, searchContext);
@@ -2244,13 +2193,15 @@ INSTRUCTIONS:
 - HOME VALUATIONS: If user asks about home value and it's in HOME VALUE DATA above, provide that estimate. If not available, tell them to mention their home address (e.g., "I own a home at [address]") and you'll automatically fetch the valuation
 
 RESPONSE FORMATTING:
-- Structure: Use **bold** for main headers, ## for major sections, bullet points (-) for lists, numbered lists (1. 2. 3.) for steps
-- Emphasis: ONLY bold 2-3 critical numbers per section (totals, key percentages) - never bold descriptive text
-- Lists: Keep bullet/number and text on same line, avoid excessive spacing between items
-- Calculations: Use clear numbered steps (Step 1, Step 2), show formulas in \`code blocks\`, bold final results only
-- For complex ratios: Show calculation breakdown with intermediate steps, then verification: "$X ÷ $Y = Z%"
-- Currency/percentages: Format consistently as $X,XXX.XX and XX.XX%
-- Style: Clean, concise paragraphs; conversational but professional; ask for clarification if data insufficient
+- Use ## for section headers (always on own line with blank lines before/after)
+- Use **bold** only for critical values (totals, key percentages)
+- Use bullet points (-) for lists, numbered lists (1. 2. 3.) for sequential steps
+- For calculations: Show in plain text or use code blocks. Example:
+    Monthly Shortfall = $10,680.29 - $7,062.98 = $3,617.31
+    Financial Runway = $1,401,438.42 / $3,617.31 = 387.4 months
+- Format currency as $X,XXX.XX and percentages as XX.XX%
+- NO LaTeX syntax - use plain text only
+- Style: Clean, concise paragraphs; conversational but professional
 - Source attribution: Always cite external data sources when used
 
 ${!searchContext && tierInfo.unavailableSources.length > 0 ? `
@@ -2901,17 +2852,6 @@ export async function askOpenAI(
     let answer = completion.choices[0]?.message?.content || 'I apologize, but I was unable to generate a response.';
 
     console.log('🔧 TEST: Got OpenAI response, length:', answer.length);
-    console.log('🔧 PREPROCESSING: Starting response formatting fix...');
-    console.log('🔧 PREPROCESSING: Original answer length:', answer.length);
-    console.log('🔧 PREPROCESSING: Original answer preview:', answer.substring(0, 200));
-    
-          try {
-        // Fix list formatting issues
-        answer = formatResponseWithRegex(answer);
-        console.log('🔧 PREPROCESSING: Response formatting fix completed');
-      } catch (error) {
-        console.error('🔧 PREPROCESSING: Error in formatResponseWithRegex:', error);
-      }
 
     // Enhance response with upgrade suggestions
     answer = enhanceResponseWithUpgrades(answer, tierContext, searchContext);
@@ -3036,13 +2976,15 @@ INSTRUCTIONS:
 - Always cite external data sources when used
 
 RESPONSE FORMATTING:
-- Structure: Use **bold** for main headers, ## for major sections, bullet points (-) for lists, numbered lists (1. 2. 3.) for steps
-- Emphasis: ONLY bold 2-3 critical numbers per section (totals, key percentages) - never bold descriptive text
-- Lists: Keep bullet/number and text on same line, avoid excessive spacing between items
-- Calculations: Use clear numbered steps (Step 1, Step 2), show formulas in \`code blocks\`, bold final results only
-- For complex ratios: Show calculation breakdown with intermediate steps, then verification: "$X ÷ $Y = Z%"
-- Currency/percentages: Format consistently as $X,XXX.XX and XX.XX%
-- Style: Clean, concise paragraphs; conversational but professional; ask for clarification if data insufficient
+- Use ## for section headers (always on own line with blank lines before/after)
+- Use **bold** only for critical values (totals, key percentages)
+- Use bullet points (-) for lists, numbered lists (1. 2. 3.) for sequential steps
+- For calculations: Show in plain text or use code blocks. Example:
+    Monthly Shortfall = $10,680.29 - $7,062.98 = $3,617.31
+    Financial Runway = $1,401,438.42 / $3,617.31 = 387.4 months
+- Format currency as $X,XXX.XX and percentages as XX.XX%
+- NO LaTeX syntax - use plain text only
+- Style: Clean, concise paragraphs; conversational but professional
 - Source attribution: Always cite external data sources when used
 
 ${!searchContext && tierInfo.unavailableSources.length > 0 ? `
