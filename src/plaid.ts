@@ -2,6 +2,7 @@ import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode } fro
 import { PrismaClient } from '@prisma/client';
 import { enhanceProfileWithInvestmentData, enhanceProfileWithLiabilityData, enhanceProfileWithEnrichmentData } from './profile/enhancer';
 import { BalanceService } from './services/balance-service';
+import { SnapTradeService } from './snaptrade';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
@@ -2431,12 +2432,82 @@ export const setupPlaidRoutes = (app: any) => {
       }
 
       // Combine all data into the format expected by the frontend
-      const combinedHoldings = allInvestments.flatMap(inv => inv.holdings);
-      const combinedSecurities = allInvestments.flatMap(inv => inv.securities);
+      let combinedHoldings = allInvestments.flatMap(inv => inv.holdings);
+      let combinedSecurities = allInvestments.flatMap(inv => inv.securities);
       const combinedTransactions = allInvestments.flatMap(inv => inv.investment_transactions);
       
-      // ✅ FIXED: Recalculate portfolio analysis using combined data from all tokens
-      // This ensures Robinhood + Betterment data is properly aggregated
+      // ✅ Fetch and merge SnapTrade holdings if user has SnapTrade connected
+      try {
+        const snapTradeService = new SnapTradeService();
+        const snapTradeUser = await getPrismaClient().snapTradeUser.findUnique({
+          where: { userId: req.user.id }
+        });
+        
+        if (snapTradeUser && snapTradeUser.userSecret) {
+          console.log('Fetching SnapTrade holdings for user:', req.user.id);
+          const holdingsResult = await snapTradeService.getUserHoldings(req.user.id, snapTradeUser.userSecret);
+          
+          if (holdingsResult.success && holdingsResult.data) {
+            console.log('Successfully fetched SnapTrade holdings, merging with Plaid data');
+            
+            // Convert SnapTrade holdings to the format expected by the frontend
+            for (const accountHolding of holdingsResult.data) {
+              if (accountHolding.positions && Array.isArray(accountHolding.positions)) {
+                for (const position of accountHolding.positions) {
+                  const holding = {
+                    id: `snaptrade-${accountHolding.account?.id || 'unknown'}-${position.symbol?.id || position.symbol?.symbol?.symbol || 'unknown'}`,
+                    account_id: `snaptrade-${accountHolding.account?.id || accountHolding.account?.number || 'unknown'}`,
+                    security_id: position.symbol?.id || position.symbol?.symbol?.symbol || 'unknown',
+                    institution_value: (position.price || 0) * (position.units || 0),
+                    institution_price: position.price || 0,
+                    institution_price_as_of: new Date().toISOString(),
+                    cost_basis: (position.average_purchase_price || 0) * (position.units || 0),
+                    quantity: position.units || 0,
+                    iso_currency_code: position.currency?.code || 'USD',
+                    security_name: position.symbol?.symbol?.description || position.symbol?.description || 'Unknown',
+                    security_type: position.symbol?.type?.description || 'Unknown',
+                    ticker_symbol: position.symbol?.symbol?.symbol || position.symbol?.symbol || undefined,
+                    snapTradeData: {
+                      open_pnl: position.open_pnl,
+                      average_purchase_price: position.average_purchase_price,
+                      account_name: accountHolding.account?.name,
+                      account_number: accountHolding.account?.number
+                    }
+                  };
+                  
+                  combinedHoldings.push(holding);
+                  
+                  // Add security to the securities list if not already there
+                  const securityExists = combinedSecurities.some(
+                    sec => sec.security_id === holding.security_id
+                  );
+                  
+                  if (!securityExists) {
+                    combinedSecurities.push({
+                      security_id: holding.security_id,
+                      name: holding.security_name,
+                      type: holding.security_type,
+                      ticker_symbol: holding.ticker_symbol,
+                      iso_currency_code: holding.iso_currency_code,
+                      close_price: holding.institution_price,
+                      close_price_as_of: holding.institution_price_as_of,
+                      unofficial_currency_code: null
+                    });
+                  }
+                }
+              }
+            }
+            
+            console.log(`Merged SnapTrade holdings. Total holdings: ${combinedHoldings.length}`);
+          }
+        }
+      } catch (snapTradeError) {
+        console.error('Error fetching SnapTrade holdings:', snapTradeError);
+        // Don't fail the request if SnapTrade fetch fails, just continue with Plaid data only
+      }
+      
+      // ✅ FIXED: Recalculate portfolio analysis using combined data from all tokens AND SnapTrade
+      // This ensures Robinhood + Betterment + SnapTrade data is properly aggregated
       const portfolioAnalysis = analyzePortfolio(combinedHoldings, combinedSecurities);
       
       res.json({
