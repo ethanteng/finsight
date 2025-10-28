@@ -310,11 +310,15 @@ const analyzePortfolio = (holdings: any[], securities: any[]) => {
     percentage: portfolioValue > 0 ? ((value as number) / portfolioValue) * 100 : 0
   }));
 
+  // ✅ FIX: Calculate securityCount from unique security_ids in holdings, not from securities array length
+  // This ensures accurate counting even when securities array has duplicates or mismatches
+  const uniqueSecurityIds = new Set(holdings.map(h => h.security_id));
+
   return {
     totalValue: portfolioValue,
     assetAllocation: allocationPercentages,
     holdingCount: holdings.length,
-    securityCount: securities.length
+    securityCount: uniqueSecurityIds.size
   };
 };
 
