@@ -91,6 +91,20 @@ Both backend and frontend compile successfully:
 - ✅ Frontend Next.js build succeeds
 - ✅ No linter errors in modified files
 - ✅ No orphaned imports or dependencies
+- ✅ All 553 CI/CD tests pass
+
+## Updates (Post-Production)
+
+After initial deployment, GPT was still generating LaTeX syntax. **Strengthened the anti-LaTeX instructions** with:
+
+1. **"CRITICAL" warning** at the top of formatting rules
+2. **Explicit ban list**: Never use `\text{}`, `\div`, `\frac`, or any LaTeX commands
+3. **Side-by-side examples** showing CORRECT vs WRONG formatting:
+   - CORRECT: `Monthly Income = (8,237 / 12) = $686.42`
+   - WRONG: `Monthly Income = (8,237 \div 12) = \text{$686.42}`
+4. **Moved instruction to beginning** of formatting section for higher visibility
+
+The original instruction "NO LaTeX syntax - use plain text only" was too weak. GPT models need explicit, prominent warnings with concrete examples of what NOT to do.
 
 ## Migration Notes
 

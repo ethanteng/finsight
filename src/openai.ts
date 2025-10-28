@@ -2193,14 +2193,18 @@ INSTRUCTIONS:
 - HOME VALUATIONS: If user asks about home value and it's in HOME VALUE DATA above, provide that estimate. If not available, tell them to mention their home address (e.g., "I own a home at [address]") and you'll automatically fetch the valuation
 
 RESPONSE FORMATTING:
+CRITICAL: Do NOT use LaTeX syntax. Never use \\text{}, \\div, \\frac, or any LaTeX commands.
+
 - Use ## for section headers (always on own line with blank lines before/after)
 - Use **bold** only for critical values (totals, key percentages)
 - Use bullet points (-) for lists, numbered lists (1. 2. 3.) for sequential steps
-- For calculations: Show in plain text or use code blocks. Example:
-    Monthly Shortfall = $10,680.29 - $7,062.98 = $3,617.31
-    Financial Runway = $1,401,438.42 / $3,617.31 = 387.4 months
+- For calculations: Show math using plain text with / for division, * for multiplication
+  CORRECT: Monthly Income = (8,237 / 12) = $686.42
+  WRONG: Monthly Income = (8,237 \\div 12) = \\text{$686.42}
+- For calculation results: Use **bold** for emphasis, NOT \\text{}
+  CORRECT: Total = **$7,062.98**
+  WRONG: Total = \\text{**$7,062.98**}
 - Format currency as $X,XXX.XX and percentages as XX.XX%
-- NO LaTeX syntax - use plain text only
 - Style: Clean, concise paragraphs; conversational but professional
 - Source attribution: Always cite external data sources when used
 
@@ -2976,14 +2980,18 @@ INSTRUCTIONS:
 - Always cite external data sources when used
 
 RESPONSE FORMATTING:
+CRITICAL: Do NOT use LaTeX syntax. Never use \\text{}, \\div, \\frac, or any LaTeX commands.
+
 - Use ## for section headers (always on own line with blank lines before/after)
 - Use **bold** only for critical values (totals, key percentages)
 - Use bullet points (-) for lists, numbered lists (1. 2. 3.) for sequential steps
-- For calculations: Show in plain text or use code blocks. Example:
-    Monthly Shortfall = $10,680.29 - $7,062.98 = $3,617.31
-    Financial Runway = $1,401,438.42 / $3,617.31 = 387.4 months
+- For calculations: Show math using plain text with / for division, * for multiplication
+  CORRECT: Monthly Income = (8,237 / 12) = $686.42
+  WRONG: Monthly Income = (8,237 \\div 12) = \\text{$686.42}
+- For calculation results: Use **bold** for emphasis, NOT \\text{}
+  CORRECT: Total = **$7,062.98**
+  WRONG: Total = \\text{**$7,062.98**}
 - Format currency as $X,XXX.XX and percentages as XX.XX%
-- NO LaTeX syntax - use plain text only
 - Style: Clean, concise paragraphs; conversational but professional
 - Source attribution: Always cite external data sources when used
 
