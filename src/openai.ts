@@ -272,6 +272,26 @@ function filterConversationHistory(
   return combined.slice(0, 8); // Cap at 8 exchanges
 }
 
+// Safety net: Strip LaTeX syntax from GPT output (in case GPT ignores instructions)
+function stripLatexSyntax(text: string): string {
+  return text
+    // Remove \text{...} - capture content and remove wrapper
+    .replace(/\\text\{([^}]*)\}/g, '$1')
+    // Replace \div with /
+    .replace(/\\div/g, '/')
+    // Replace \frac{A}{B} with (A / B)
+    .replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1 / $2)')
+    // Replace \approx with ~
+    .replace(/\\approx/g, '~')
+    // Remove [ ... ] brackets around calculations (but keep content)
+    .replace(/\[\s*\*\*([^[]*?)\*\*\s*\]/g, '**$1**')
+    .replace(/\[\s*([^[]*?)\s*\]/g, '$1')
+    // Clean up any remaining backslash commands
+    .replace(/\\[a-zA-Z]+\{([^}]*)\}/g, '$1')
+    .replace(/\\[a-zA-Z]+/g, '')
+    .trim();
+}
+
 // Enhanced post-processing function with tier-aware upgrade suggestions
 function enhanceResponseWithUpgrades(answer: string, tierContext: TierAwareContext, searchContext?: string): string {
   // Don't add upgrade suggestions if search context is available (user already has access to real-time data)
@@ -1860,6 +1880,10 @@ ${anonymizeInvestmentData(combinedHoldings.slice(0, 15))}`;
 
     console.log('🔧 TEST: Got OpenAI response, length:', answer.length);
 
+    // Strip LaTeX syntax (safety net in case GPT ignores instructions)
+    answer = stripLatexSyntax(answer);
+    console.log('🔧 LaTeX stripped, new length:', answer.length);
+
     // Enhance response with upgrade suggestions
     answer = enhanceResponseWithUpgrades(answer, tierContext, searchContext);
 
@@ -2192,21 +2216,29 @@ INSTRUCTIONS:
 - Tier limitations apply to external data sources only, not user's own connected data
 - HOME VALUATIONS: If user asks about home value and it's in HOME VALUE DATA above, provide that estimate. If not available, tell them to mention their home address (e.g., "I own a home at [address]") and you'll automatically fetch the valuation
 
-RESPONSE FORMATTING:
-CRITICAL: Do NOT use LaTeX syntax. Never use \\text{}, \\div, \\frac, or any LaTeX commands.
+RESPONSE FORMATTING - CRITICAL RULES:
 
-- Use ## for section headers (always on own line with blank lines before/after)
-- Use **bold** only for critical values (totals, key percentages)
-- Use bullet points (-) for lists, numbered lists (1. 2. 3.) for sequential steps
-- For calculations: Show math using plain text with / for division, * for multiplication
-  CORRECT: Monthly Income = (8,237 / 12) = $686.42
-  WRONG: Monthly Income = (8,237 \\div 12) = \\text{$686.42}
-- For calculation results: Use **bold** for emphasis, NOT \\text{}
-  CORRECT: Total = **$7,062.98**
-  WRONG: Total = \\text{**$7,062.98**}
-- Format currency as $X,XXX.XX and percentages as XX.XX%
-- Style: Clean, concise paragraphs; conversational but professional
-- Source attribution: Always cite external data sources when used
+RULE #1: NEVER USE LATEX OR MATH NOTATION
+- Do NOT use: \\text{}, \\div, \\frac{}, \\approx, or ANY LaTeX commands
+- Do NOT wrap calculations in [ ] brackets
+- Use plain text ONLY: / for division, * for multiplication, ~ for approximately
+
+RULE #2: Show calculations as plain text
+  CORRECT: Shortfall = $10,680.29 - $7,062.98 = **$3,617.31**
+  WRONG: Shortfall = [ **10,680.29 - 7,062.98 = \\text{$3,617.31}** ]
+  
+  CORRECT: Runway = (1,401,438.42 / 3,617.31) = **387.4 months**
+  WRONG: [ **\\frac{1,401,438.42}{3,617.31} \\approx \\text{387.4 months}** ]
+
+RULE #3: Use standard markdown only
+- Use ## for section headers (on own line with blank lines before/after)
+- Use **bold** for critical values only
+- Use bullet points (-) for lists, numbers (1. 2. 3.) for steps
+
+Other formatting:
+- Currency: $X,XXX.XX | Percentages: XX.XX%
+- Style: Clean, concise, professional
+- Always cite external sources
 
 ${!searchContext && tierInfo.unavailableSources.length > 0 ? `
 - Be helpful with current tier limitations
@@ -2857,6 +2889,10 @@ export async function askOpenAI(
 
     console.log('🔧 TEST: Got OpenAI response, length:', answer.length);
 
+    // Strip LaTeX syntax (safety net in case GPT ignores instructions)
+    answer = stripLatexSyntax(answer);
+    console.log('🔧 LaTeX stripped, new length:', answer.length);
+
     // Enhance response with upgrade suggestions
     answer = enhanceResponseWithUpgrades(answer, tierContext, searchContext);
 
@@ -2979,21 +3015,29 @@ INSTRUCTIONS:
 - Be conversational but professional; ask for clarification if data insufficient
 - Always cite external data sources when used
 
-RESPONSE FORMATTING:
-CRITICAL: Do NOT use LaTeX syntax. Never use \\text{}, \\div, \\frac, or any LaTeX commands.
+RESPONSE FORMATTING - CRITICAL RULES:
 
-- Use ## for section headers (always on own line with blank lines before/after)
-- Use **bold** only for critical values (totals, key percentages)
-- Use bullet points (-) for lists, numbered lists (1. 2. 3.) for sequential steps
-- For calculations: Show math using plain text with / for division, * for multiplication
-  CORRECT: Monthly Income = (8,237 / 12) = $686.42
-  WRONG: Monthly Income = (8,237 \\div 12) = \\text{$686.42}
-- For calculation results: Use **bold** for emphasis, NOT \\text{}
-  CORRECT: Total = **$7,062.98**
-  WRONG: Total = \\text{**$7,062.98**}
-- Format currency as $X,XXX.XX and percentages as XX.XX%
-- Style: Clean, concise paragraphs; conversational but professional
-- Source attribution: Always cite external data sources when used
+RULE #1: NEVER USE LATEX OR MATH NOTATION
+- Do NOT use: \\text{}, \\div, \\frac{}, \\approx, or ANY LaTeX commands
+- Do NOT wrap calculations in [ ] brackets
+- Use plain text ONLY: / for division, * for multiplication, ~ for approximately
+
+RULE #2: Show calculations as plain text
+  CORRECT: Shortfall = $10,680.29 - $7,062.98 = **$3,617.31**
+  WRONG: Shortfall = [ **10,680.29 - 7,062.98 = \\text{$3,617.31}** ]
+  
+  CORRECT: Runway = (1,401,438.42 / 3,617.31) = **387.4 months**
+  WRONG: [ **\\frac{1,401,438.42}{3,617.31} \\approx \\text{387.4 months}** ]
+
+RULE #3: Use standard markdown only
+- Use ## for section headers (on own line with blank lines before/after)
+- Use **bold** for critical values only
+- Use bullet points (-) for lists, numbers (1. 2. 3.) for steps
+
+Other formatting:
+- Currency: $X,XXX.XX | Percentages: XX.XX%
+- Style: Clean, concise, professional
+- Always cite external sources
 
 ${!searchContext && tierInfo.unavailableSources.length > 0 ? `
 - Be helpful with current tier limitations

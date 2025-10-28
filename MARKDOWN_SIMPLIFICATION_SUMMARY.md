@@ -95,16 +95,42 @@ Both backend and frontend compile successfully:
 
 ## Updates (Post-Production)
 
-After initial deployment, GPT was still generating LaTeX syntax. **Strengthened the anti-LaTeX instructions** with:
+### Issue: GPT Ignoring Instructions
 
-1. **"CRITICAL" warning** at the top of formatting rules
-2. **Explicit ban list**: Never use `\text{}`, `\div`, `\frac`, or any LaTeX commands
-3. **Side-by-side examples** showing CORRECT vs WRONG formatting:
-   - CORRECT: `Monthly Income = (8,237 / 12) = $686.42`
-   - WRONG: `Monthly Income = (8,237 \div 12) = \text{$686.42}`
-4. **Moved instruction to beginning** of formatting section for higher visibility
+After initial deployment, GPT was still generating LaTeX syntax despite explicit instructions. Even after strengthening the prompt multiple times, the model continued to ignore the anti-LaTeX rules.
 
-The original instruction "NO LaTeX syntax - use plain text only" was too weak. GPT models need explicit, prominent warnings with concrete examples of what NOT to do.
+### Solution: Hybrid Approach
+
+**1. Further Strengthened GPT Instructions** with numbered rules:
+
+```
+RESPONSE FORMATTING - CRITICAL RULES:
+
+RULE #1: NEVER USE LATEX OR MATH NOTATION
+- Do NOT use: \text{}, \div, \frac{}, \approx, or ANY LaTeX commands
+- Do NOT wrap calculations in [ ] brackets
+- Use plain text ONLY: / for division, * for multiplication, ~ for approximately
+
+RULE #2: Show calculations as plain text
+  CORRECT: Shortfall = $10,680.29 - $7,062.98 = **$3,617.31**
+  WRONG: Shortfall = [ **10,680.29 - 7,062.98 = \text{$3,617.31}** ]
+  
+  CORRECT: Runway = (1,401,438.42 / 3,617.31) = **387.4 months**
+  WRONG: [ **\frac{1,401,438.42}{3,617.31} \approx \text{387.4 months}** ]
+```
+
+**2. Added Safety Net** - Post-processing function `stripLatexSyntax()`:
+- Automatically strips LaTeX syntax from GPT output if instructions are ignored
+- Converts:
+  - `\text{X}` → `X`
+  - `\div` → `/`
+  - `\frac{A}{B}` → `(A / B)`
+  - `\approx` → `~`
+  - `[ calculation ]` → `calculation`
+- Tested with 9 unit tests covering all edge cases
+- Runs on EVERY GPT response before returning to user
+
+This hybrid approach ensures clean output even when the GPT model misbehaves.
 
 ## Migration Notes
 
