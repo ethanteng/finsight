@@ -2221,24 +2221,32 @@ RESPONSE FORMATTING - CRITICAL RULES:
 RULE #1: NEVER USE LATEX OR MATH NOTATION
 - Do NOT use: \\text{}, \\div, \\frac{}, \\approx, or ANY LaTeX commands
 - Do NOT wrap calculations in [ ] brackets
-- Use plain text ONLY: / for division, * for multiplication, ~ for approximately
+- Use plain text: / for division, * for multiplication, ~ for approximately
 
-RULE #2: Show calculations as plain text
-  CORRECT: Shortfall = $10,680.29 - $7,062.98 = **$3,617.31**
-  WRONG: Shortfall = [ **10,680.29 - 7,062.98 = \\text{$3,617.31}** ]
+RULE #2: CALCULATIONS MUST NOT BE IN BULLET LISTS
+Do NOT put calculations as bullet points. Show them as standalone paragraphs.
+
+CORRECT - calculations as paragraphs:
+  ## Financial Runway Calculation
   
-  CORRECT: Runway = (1,401,438.42 / 3,617.31) = **387.4 months**
-  WRONG: [ **\\frac{1,401,438.42}{3,617.31} \\approx \\text{387.4 months}** ]
+  Monthly Shortfall = $10,680.29 - $7,062.98 = **$3,617.31**
+  
+  Financial Runway = $1,401,438.42 / $3,617.31 = **387.4 months** or **32.3 years**
 
-RULE #3: Use standard markdown only
-- Use ## for section headers (on own line with blank lines before/after)
-- Use **bold** for critical values only
-- Use bullet points (-) for lists, numbers (1. 2. 3.) for steps
+WRONG - do NOT do this:
+  ## Financial Runway Calculation
+  - Monthly Shortfall: $10,680.29 - $7,062.98 = $3,617.31
+  - Financial Runway: $1,401,438.42 / $3,617.31 = 387.4 months
+
+RULE #3: When to use bullet lists
+- Use bullets ONLY for listing items, steps, or distinct points
+- Do NOT use bullets for calculations, formulas, or math
+- Use **bold** for critical values in calculations
 
 Other formatting:
+- Headers: ## on own line with blank lines before/after
 - Currency: $X,XXX.XX | Percentages: XX.XX%
 - Style: Clean, concise, professional
-- Always cite external sources
 
 ${!searchContext && tierInfo.unavailableSources.length > 0 ? `
 - Be helpful with current tier limitations
@@ -3020,24 +3028,32 @@ RESPONSE FORMATTING - CRITICAL RULES:
 RULE #1: NEVER USE LATEX OR MATH NOTATION
 - Do NOT use: \\text{}, \\div, \\frac{}, \\approx, or ANY LaTeX commands
 - Do NOT wrap calculations in [ ] brackets
-- Use plain text ONLY: / for division, * for multiplication, ~ for approximately
+- Use plain text: / for division, * for multiplication, ~ for approximately
 
-RULE #2: Show calculations as plain text
-  CORRECT: Shortfall = $10,680.29 - $7,062.98 = **$3,617.31**
-  WRONG: Shortfall = [ **10,680.29 - 7,062.98 = \\text{$3,617.31}** ]
+RULE #2: CALCULATIONS MUST NOT BE IN BULLET LISTS
+Do NOT put calculations as bullet points. Show them as standalone paragraphs.
+
+CORRECT - calculations as paragraphs:
+  ## Financial Runway Calculation
   
-  CORRECT: Runway = (1,401,438.42 / 3,617.31) = **387.4 months**
-  WRONG: [ **\\frac{1,401,438.42}{3,617.31} \\approx \\text{387.4 months}** ]
+  Monthly Shortfall = $10,680.29 - $7,062.98 = **$3,617.31**
+  
+  Financial Runway = $1,401,438.42 / $3,617.31 = **387.4 months** or **32.3 years**
 
-RULE #3: Use standard markdown only
-- Use ## for section headers (on own line with blank lines before/after)
-- Use **bold** for critical values only
-- Use bullet points (-) for lists, numbers (1. 2. 3.) for steps
+WRONG - do NOT do this:
+  ## Financial Runway Calculation
+  - Monthly Shortfall: $10,680.29 - $7,062.98 = $3,617.31
+  - Financial Runway: $1,401,438.42 / $3,617.31 = 387.4 months
+
+RULE #3: When to use bullet lists
+- Use bullets ONLY for listing items, steps, or distinct points
+- Do NOT use bullets for calculations, formulas, or math
+- Use **bold** for critical values in calculations
 
 Other formatting:
+- Headers: ## on own line with blank lines before/after
 - Currency: $X,XXX.XX | Percentages: XX.XX%
 - Style: Clean, concise, professional
-- Always cite external sources
 
 ${!searchContext && tierInfo.unavailableSources.length > 0 ? `
 - Be helpful with current tier limitations

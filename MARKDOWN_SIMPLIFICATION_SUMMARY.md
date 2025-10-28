@@ -132,6 +132,31 @@ RULE #2: Show calculations as plain text
 
 This hybrid approach ensures clean output even when the GPT model misbehaves.
 
+### Issue 2: Calculations in Bullet Lists
+
+User feedback: Calculations were still appearing as bullet points instead of standalone text.
+
+**Solution: Added explicit RULE #2** with side-by-side correct/wrong examples:
+
+```
+RULE #2: CALCULATIONS MUST NOT BE IN BULLET LISTS
+Do NOT put calculations as bullet points. Show them as standalone paragraphs.
+
+CORRECT - calculations as paragraphs:
+  ## Financial Runway Calculation
+  
+  Monthly Shortfall = $10,680.29 - $7,062.98 = **$3,617.31**
+  
+  Financial Runway = $1,401,438.42 / $3,617.31 = **387.4 months**
+
+WRONG - do NOT do this:
+  ## Financial Runway Calculation
+  - Monthly Shortfall: $10,680.29 - $7,062.98 = $3,617.31
+  - Financial Runway: $1,401,438.42 / $3,617.31 = 387.4 months
+```
+
+This clarifies that bullet lists should only be used for inventory items, steps, or distinct points - NOT for calculations or formulas.
+
 ## Migration Notes
 
 - Existing conversations with LaTeX syntax will still display (just as plain text)
