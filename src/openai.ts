@@ -1592,10 +1592,13 @@ export async function askOpenAIWithEnhancedContext(
       percentage: (value / combinedPortfolioValue) * 100
     }));
     
+    // Calculate unique securities count
+    const uniqueSecurityIds = new Set(combinedHoldings.map((h: any) => h.security_id));
+    
     investmentSummary += `Portfolio Overview:
 - Total Value: $${combinedPortfolioValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
 - Number of Holdings: ${combinedHoldings.length}
-- Number of Securities: ${combinedHoldings.length}
+- Number of Securities: ${uniqueSecurityIds.size}
 
 Portfolio Composition:
 ${assetAllocationArray.map((allocation: any) => 
