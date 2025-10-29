@@ -2456,6 +2456,7 @@ export const setupPlaidRoutes = (app: any) => {
             
             // Convert SnapTrade holdings to the format expected by the frontend
             for (const accountHolding of holdingsResult.data) {
+              // Process investment positions (stocks, bonds, ETFs, etc.)
               if (accountHolding.positions && Array.isArray(accountHolding.positions)) {
                 for (const position of accountHolding.positions) {
                   const holding = {
@@ -2495,6 +2496,48 @@ export const setupPlaidRoutes = (app: any) => {
                       iso_currency_code: holding.iso_currency_code,
                       close_price: holding.institution_price,
                       close_price_as_of: holding.institution_price_as_of,
+                      unofficial_currency_code: null
+                    });
+                  }
+                }
+              }
+              
+              // ✅ Process cash balances (accounts with only cash, no positions)
+              if (accountHolding.balances && Array.isArray(accountHolding.balances)) {
+                const cashBalance = accountHolding.balances.find((b: any) => b.currency?.code === 'USD' && b.cash > 0);
+                if (cashBalance) {
+                  const cashHolding = {
+                    id: `snaptrade-${accountHolding.account?.id || 'unknown'}-cash`,
+                    account_id: `snaptrade-${accountHolding.account?.id || accountHolding.account?.number || 'unknown'}`,
+                    security_id: 'cash',
+                    institution_value: cashBalance.cash,
+                    institution_price: 1,
+                    institution_price_as_of: new Date().toISOString(),
+                    cost_basis: cashBalance.cash,
+                    quantity: cashBalance.cash,
+                    iso_currency_code: 'USD',
+                    security_name: 'Cash',
+                    security_type: 'Cash',
+                    ticker_symbol: 'CASH',
+                    snapTradeData: {
+                      account_name: accountHolding.account?.name,
+                      account_number: accountHolding.account?.number
+                    }
+                  };
+                  
+                  combinedHoldings.push(cashHolding);
+                  
+                  // Add cash security if not already there
+                  const cashSecurityExists = combinedSecurities.some(sec => sec.security_id === 'cash');
+                  if (!cashSecurityExists) {
+                    combinedSecurities.push({
+                      security_id: 'cash',
+                      name: 'Cash',
+                      type: 'Cash',
+                      ticker_symbol: 'CASH',
+                      iso_currency_code: 'USD',
+                      close_price: 1,
+                      close_price_as_of: new Date().toISOString(),
                       unofficial_currency_code: null
                     });
                   }
