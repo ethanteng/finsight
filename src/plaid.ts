@@ -519,83 +519,36 @@ export const setupPlaidRoutes = (app: any) => {
         return res.json({ accounts: [] });
       }
 
-      // Real Plaid integration
-      const accessTokens = await getPrismaClient().accessToken.findMany({
-        where: { userId: req.user.id }
+      // ✅ Use unified FinancialDataService for consistent data
+      const { FinancialDataService } = await import('./services/financial-data-service');
+      const financialDataService = new FinancialDataService();
+      
+      console.log(`🔍 Fetching accounts for user ${req.user.id} using FinancialDataService`);
+      
+      const financialData = await financialDataService.getUserFinancialData(req.user.id, {
+        includeTransactions: false,
+        includeInvestments: false,
+        includeHomeValue: false
       });
 
-      console.log(`🔍 Fetching accounts for user ${req.user.id} with ${accessTokens.length} access tokens`);
+      // Format accounts for frontend (matching expected format)
+      const formattedAccounts = financialData.accounts.map(account => ({
+        id: account.id,
+        name: account.name,
+        type: account.type,
+        subtype: account.subtype,
+        mask: account.id.slice(-4), // Use last 4 characters as mask
+        balance: {
+          available: account.balance.available,
+          current: account.balance.current,
+          limit: account.balance.limit,
+          iso_currency_code: account.balance.iso_currency_code,
+          unofficial_currency_code: account.balance.unofficial_currency_code
+        },
+        institution: account.institution
+      }));
 
-      if (accessTokens.length === 0) {
-        // User has no linked accounts
-        return res.json({ accounts: [] });
-      }
-
-      const allAccounts: any[] = [];
-      const seenAccountIds = new Set<string>();
-
-      for (const tokenRecord of accessTokens) {
-        try {
-          // Get accounts
-          const accountsResponse = await plaidClient.accountsGet({
-            access_token: tokenRecord.token,
-          });
-
-          // Get balances using optimized BalanceService (cached, max 1x per day)
-          const balancesData = await BalanceService.getAccountBalances(
-            tokenRecord.token,
-            plaidClient
-          );
-
-          // Get institution information
-          let institutionName = 'Unknown Institution';
-          try {
-            if (accountsResponse.data.item?.institution_id) {
-              // Try to get institution details
-              const institutionResponse = await plaidClient.institutionsGetById({
-                institution_id: accountsResponse.data.item.institution_id,
-                country_codes: [CountryCode.Us]
-              });
-              institutionName = institutionResponse.data.institution.name;
-            }
-          } catch (institutionError) {
-            console.log('Could not fetch institution name, using default');
-          }
-
-          // Process accounts
-          const accountsWithBalances = accountsResponse.data.accounts
-            .filter((account: any) => {
-              if (!account.account_id || !account.name) return false;
-              if (seenAccountIds.has(account.account_id)) return false;
-              seenAccountIds.add(account.account_id);
-              return true;
-            })
-            .map((account: any) => {
-              const balance = balancesData.find((b: any) => b.account_id === account.account_id);
-              return {
-                id: account.account_id,
-                name: account.name,
-                type: account.type,
-                subtype: account.subtype,
-                mask: account.mask,
-                balance: balance ? {
-                  available: balance.available,
-                  current: balance.current,
-                  limit: balance.limit,
-                  iso_currency_code: balance.iso_currency_code,
-                  unofficial_currency_code: balance.unofficial_currency_code
-                } : account.balances,
-                institution: institutionName
-              };
-            });
-
-          allAccounts.push(...accountsWithBalances);
-        } catch (error: any) {
-          console.error(`❌ Error fetching accounts for token ${tokenRecord.id}:`, error);
-        }
-      }
-
-      res.json({ accounts: allAccounts });
+      res.json({ accounts: formattedAccounts });
     } catch (error) {
       const errorResponse = handlePlaidError(error, 'get all accounts');
       res.status(500).json(errorResponse);
