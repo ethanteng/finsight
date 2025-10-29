@@ -2382,185 +2382,21 @@ export const setupPlaidRoutes = (app: any) => {
         return res.status(401).json({ error: 'Authentication required for accessing investment data' });
       }
 
-      const accessTokens = await getPrismaClient().accessToken.findMany({
-        where: { userId: req.user.id }
+      // ✅ Use unified FinancialDataService for consistent data
+      const { FinancialDataService } = await import('./services/financial-data-service');
+      const financialDataService = new FinancialDataService();
+      
+      const financialData = await financialDataService.getUserFinancialData(req.user.id, {
+        includeTransactions: false,
+        includeInvestments: true,
+        includeHomeValue: false
       });
-      const allInvestments: any[] = [];
 
-      for (const tokenRecord of accessTokens) {
-        try {
-          // Get investment holdings
-          const holdingsResponse = await plaidClient.investmentsHoldingsGet({
-            access_token: tokenRecord.token,
-          });
-
-          // Get investment transactions
-          const transactionsResponse = await plaidClient.investmentsTransactionsGet({
-            access_token: tokenRecord.token,
-            start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Last 30 days
-            end_date: new Date().toISOString().split('T')[0],
-          });
-
-          // Process and analyze the data
-          const processedHoldings = holdingsResponse.data.holdings.map(processInvestmentHolding);
-          const processedSecurities = holdingsResponse.data.securities.map(processSecurity);
-          const processedTransactions = transactionsResponse.data.investment_transactions.map(processInvestmentTransaction);
-
-          // Merge security information with holdings
-          const securitiesMap = new Map(processedSecurities.map(sec => [sec.security_id, sec]));
-          const enrichedHoldings = processedHoldings.map(holding => ({
-            ...holding,
-            security_name: securitiesMap.get(holding.security_id)?.name || 'Unknown Security',
-            security_type: securitiesMap.get(holding.security_id)?.type || 'Unknown Type',
-            ticker_symbol: securitiesMap.get(holding.security_id)?.ticker_symbol
-          }));
-
-          // Generate portfolio analysis
-          const portfolioAnalysis = analyzePortfolio(enrichedHoldings, processedSecurities);
-          const activityAnalysis = analyzeInvestmentActivity(processedTransactions);
-
-          allInvestments.push({
-            holdings: enrichedHoldings,
-            securities: processedSecurities,
-            accounts: holdingsResponse.data.accounts,
-            investment_transactions: processedTransactions,
-            total_investment_transactions: transactionsResponse.data.total_investment_transactions,
-            analysis: {
-              portfolio: portfolioAnalysis,
-              activity: activityAnalysis
-            }
-          });
-        } catch (error) {
-          console.error(`Error fetching investments for token ${tokenRecord.id}:`, error);
-        }
-      }
-
-      // Combine all data into the format expected by the frontend
-      let combinedHoldings = allInvestments.flatMap(inv => inv.holdings);
-      let combinedSecurities = allInvestments.flatMap(inv => inv.securities);
-      const combinedTransactions = allInvestments.flatMap(inv => inv.investment_transactions);
-      
-      // ✅ Fetch and merge SnapTrade holdings if user has SnapTrade connected
-      try {
-        const snapTradeService = new SnapTradeService();
-        const snapTradeUser = await getPrismaClient().snapTradeUser.findUnique({
-          where: { userId: req.user.id }
-        });
-        
-        if (snapTradeUser && snapTradeUser.userSecret) {
-          console.log('Fetching SnapTrade holdings for user:', req.user.id);
-          const holdingsResult = await snapTradeService.getUserHoldings(req.user.id, snapTradeUser.userSecret);
-          
-          if (holdingsResult.success && holdingsResult.data) {
-            console.log('Successfully fetched SnapTrade holdings, merging with Plaid data');
-            
-            // Convert SnapTrade holdings to the format expected by the frontend
-            for (const accountHolding of holdingsResult.data) {
-              // Process investment positions (stocks, bonds, ETFs, etc.)
-              if (accountHolding.positions && Array.isArray(accountHolding.positions)) {
-                for (const position of accountHolding.positions) {
-                  const holding = {
-                    id: `snaptrade-${accountHolding.account?.id || 'unknown'}-${position.symbol?.id || position.symbol?.symbol?.symbol || 'unknown'}`,
-                    account_id: `snaptrade-${accountHolding.account?.id || accountHolding.account?.number || 'unknown'}`,
-                    security_id: position.symbol?.id || position.symbol?.symbol?.symbol || 'unknown',
-                    institution_value: (position.price || 0) * (position.units || 0),
-                    institution_price: position.price || 0,
-                    institution_price_as_of: new Date().toISOString(),
-                    cost_basis: (position.average_purchase_price || 0) * (position.units || 0),
-                    quantity: position.units || 0,
-                    iso_currency_code: position.currency?.code || 'USD',
-                    security_name: position.symbol?.symbol?.description || position.symbol?.description || 'Unknown',
-                    security_type: position.symbol?.type?.description || 'Unknown',
-                    ticker_symbol: position.symbol?.symbol?.symbol || position.symbol?.symbol || undefined,
-                    snapTradeData: {
-                      open_pnl: position.open_pnl,
-                      average_purchase_price: position.average_purchase_price,
-                      account_name: accountHolding.account?.name,
-                      account_number: accountHolding.account?.number
-                    }
-                  };
-                  
-                  combinedHoldings.push(holding);
-                  
-                  // Add security to the securities list if not already there
-                  const securityExists = combinedSecurities.some(
-                    sec => sec.security_id === holding.security_id
-                  );
-                  
-                  if (!securityExists) {
-                    combinedSecurities.push({
-                      security_id: holding.security_id,
-                      name: holding.security_name,
-                      type: holding.security_type,
-                      ticker_symbol: holding.ticker_symbol,
-                      iso_currency_code: holding.iso_currency_code,
-                      close_price: holding.institution_price,
-                      close_price_as_of: holding.institution_price_as_of,
-                      unofficial_currency_code: null
-                    });
-                  }
-                }
-              }
-              
-              // ✅ Process cash balances (accounts with only cash, no positions)
-              if (accountHolding.balances && Array.isArray(accountHolding.balances)) {
-                const cashBalance = accountHolding.balances.find((b: any) => b.currency?.code === 'USD' && b.cash > 0);
-                if (cashBalance) {
-                  const cashHolding = {
-                    id: `snaptrade-${accountHolding.account?.id || 'unknown'}-cash`,
-                    account_id: `snaptrade-${accountHolding.account?.id || accountHolding.account?.number || 'unknown'}`,
-                    security_id: 'cash',
-                    institution_value: cashBalance.cash,
-                    institution_price: 1,
-                    institution_price_as_of: new Date().toISOString(),
-                    cost_basis: cashBalance.cash,
-                    quantity: cashBalance.cash,
-                    iso_currency_code: 'USD',
-                    security_name: 'Cash',
-                    security_type: 'Cash',
-                    ticker_symbol: 'CASH',
-                    snapTradeData: {
-                      account_name: accountHolding.account?.name,
-                      account_number: accountHolding.account?.number
-                    }
-                  };
-                  
-                  combinedHoldings.push(cashHolding);
-                  
-                  // Add cash security if not already there
-                  const cashSecurityExists = combinedSecurities.some(sec => sec.security_id === 'cash');
-                  if (!cashSecurityExists) {
-                    combinedSecurities.push({
-                      security_id: 'cash',
-                      name: 'Cash',
-                      type: 'Cash',
-                      ticker_symbol: 'CASH',
-                      iso_currency_code: 'USD',
-                      close_price: 1,
-                      close_price_as_of: new Date().toISOString(),
-                      unofficial_currency_code: null
-                    });
-                  }
-                }
-              }
-            }
-            
-            console.log(`Merged SnapTrade holdings. Total holdings: ${combinedHoldings.length}`);
-          }
-        }
-      } catch (snapTradeError) {
-        console.error('Error fetching SnapTrade holdings:', snapTradeError);
-        // Don't fail the request if SnapTrade fetch fails, just continue with Plaid data only
-      }
-      
-      // ✅ FIXED: Recalculate portfolio analysis using combined data from all tokens AND SnapTrade
-      // This ensures Robinhood + Betterment + SnapTrade data is properly aggregated
-      const portfolioAnalysis = analyzePortfolio(combinedHoldings, combinedSecurities);
-      
+      // Return investment data in the format expected by frontend
       res.json({
-        portfolio: portfolioAnalysis,
-        holdings: combinedHoldings,
-        transactions: combinedTransactions
+        portfolio: financialData.investments.portfolio,
+        holdings: financialData.investments.holdings,
+        transactions: financialData.investments.transactions
       });
     } catch (error) {
       const errorResponse = handlePlaidError(error, 'get investments');
