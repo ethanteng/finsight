@@ -613,45 +613,55 @@ export default function ProfilePage() {
         }
       }
 
-      // Load Plaid investment data
-      const plaidRes = await fetch(`${API_URL}/plaid/investments`, {
+      // Load investment data (already includes both Plaid + SnapTrade merged on backend)
+      const investmentsRes = await fetch(`${API_URL}/plaid/investments`, {
         method: 'GET',
         headers,
       });
 
-      let plaidData = null;
-      if (plaidRes.ok) {
-        plaidData = await plaidRes.json();
-        console.log('Received Plaid investment data:', plaidData);
+      if (investmentsRes.ok) {
+        const investmentsData = await investmentsRes.json();
+        console.log('Received investment data (Plaid + SnapTrade merged):', investmentsData);
+        
+        // Transform backend data format to match frontend expectations
+        const formattedData = {
+          portfolio: investmentsData.portfolio,
+          holdings: investmentsData.holdings || [],
+          transactions: investmentsData.transactions || [],
+          investment_transactions: investmentsData.transactions || [],
+          total_investment_transactions: investmentsData.transactions?.length || 0,
+          securities: [], // Securities info is embedded in holdings
+          accounts: [], // Account info is embedded in holdings
+          item: {},
+          analysis: {
+            portfolio: investmentsData.portfolio,
+            activity: {
+              totalTransactions: investmentsData.transactions?.length || 0,
+              totalVolume: 0,
+              activityByType: {},
+              averageTransactionSize: 0
+            }
+          }
+        };
+        
+        setInvestmentData(formattedData);
+        setSnapTradeHoldings(null); // No longer needed since data is merged on backend
+        
+        console.log('Investment data loaded:', {
+          totalValue: formattedData.portfolio?.totalValue,
+          holdingCount: formattedData.portfolio?.holdingCount,
+          securityCount: formattedData.portfolio?.securityCount,
+          holdingsLength: formattedData.holdings?.length
+        });
       } else {
-        console.log('Failed to load Plaid investment data:', plaidRes.status);
+        console.log('Failed to load investment data:', investmentsRes.status);
+        setInvestmentData(null);
       }
-
-              // Load SnapTrade holdings data (only if not in demo mode)
-        let snapTradeData = null;
-        let snapTradeActivities = null;
-        if (!demoMode) {
-          snapTradeData = await loadSnapTradeHoldings();
-          snapTradeActivities = await loadSnapTradeActivities();
-        }
-
-        // Merge the data
-        const mergedData = mergeInvestmentData(plaidData, snapTradeData, snapTradeActivities);
-      setInvestmentData(mergedData);
-      setSnapTradeHoldings(snapTradeData);
-      
-      console.log('Merged investment data:', mergedData);
-      console.log('Portfolio metrics:', {
-        totalValue: mergedData?.analysis?.portfolio?.totalValue,
-        holdingCount: mergedData?.analysis?.portfolio?.holdingCount,
-        securityCount: mergedData?.analysis?.portfolio?.securityCount,
-        holdingsLength: mergedData?.holdings?.length
-      });
     } catch (err) {
       console.error('Error loading investment data:', err);
       // Don't set error here as this is optional data
     }
-  }, [API_URL, loadSnapTradeHoldings, loadSnapTradeActivities, mergeInvestmentData]);
+  }, [API_URL]);
 
   // Function to refresh all data after successful Plaid connection with retry logic
   const refreshAllData = useCallback(async (isRetry = false, currentRetryCount = 0) => {
