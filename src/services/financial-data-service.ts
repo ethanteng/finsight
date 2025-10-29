@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid';
+import { Configuration, PlaidApi, PlaidEnvironments, CountryCode } from 'plaid';
 import { SnapTradeService } from '../snaptrade';
 import { BalanceService } from './balance-service';
 import { TokenValidationService, TokenStatus, PlaidTokenHealth, SnapTradeTokenHealth } from './token-validation-service';
@@ -43,6 +43,7 @@ const plaidClient = new PlaidApi(configuration);
 // Type definitions
 export interface Account {
   account_id: string;
+  id: string; // Alias for account_id for compatibility
   name: string;
   type: string;
   subtype: string;
@@ -51,8 +52,12 @@ export interface Account {
     available?: number;
     limit?: number;
     iso_currency_code: string;
+    unofficial_currency_code?: string;
   };
   institution?: string;
+  institution_id?: string;
+  institution_logo?: string;
+  institution_url?: string;
   source: 'plaid' | 'snaptrade';
 }
 
@@ -309,9 +314,17 @@ export class FinancialDataService {
             access_token: tokenRecord.token
           });
 
+          // Get institution data for these accounts
+          const item = await plaidClient.itemGet({ access_token: tokenRecord.token });
+          const institution = await plaidClient.institutionsGetById({
+            institution_id: item.data.item.institution_id!,
+            country_codes: ['US' as CountryCode]
+          });
+
           for (const account of accountsResponse.data.accounts) {
             accounts.push({
               account_id: account.account_id,
+              id: account.account_id, // Alias for compatibility
               name: account.name,
               type: account.type,
               subtype: account.subtype,
@@ -319,8 +332,13 @@ export class FinancialDataService {
                 current: account.balances.current || 0,
                 available: account.balances.available,
                 limit: account.balances.limit,
-                iso_currency_code: account.balances.iso_currency_code || 'USD'
+                iso_currency_code: account.balances.iso_currency_code || 'USD',
+                unofficial_currency_code: account.balances.unofficial_currency_code
               },
+              institution: institution.data.institution.name,
+              institution_id: institution.data.institution.institution_id,
+              institution_logo: institution.data.institution.logo || undefined,
+              institution_url: institution.data.institution.url || undefined,
               source: 'plaid'
             });
 
@@ -485,8 +503,10 @@ export class FinancialDataService {
         if (accountsResult.success && accountsResult.data?.accounts) {
           for (const account of accountsResult.data.accounts) {
             const balance = account.balance?.value || account.currentBalance || 0;
+            const accountId = `snaptrade-${account.id}`;
             accounts.push({
-              account_id: `snaptrade-${account.id}`,
+              account_id: accountId,
+              id: accountId, // Alias for compatibility
               name: account.name,
               type: 'investment',
               subtype: 'brokerage',

@@ -399,607 +399,140 @@ export async function askOpenAIWithEnhancedContext(
       console.error('OpenAI Enhanced: Error loading demo data:', error);
     }
   } else {
-    // For authenticated users, fetch from database first, then Plaid if needed
+    // For authenticated users, use unified FinancialDataService
     try {
       if (userId) {
         console.log('OpenAI Enhanced: Fetching user-specific data for userId:', userId);
-        const { getPrismaClient } = await import('./prisma-client');
-        const prisma = getPrismaClient();
         
-        // First try to get data from database
-        accounts = await prisma.account.findMany({
-          where: { userId },
-          include: { transactions: true }
-        });
-        
-        transactions = await prisma.transaction.findMany({
-          where: { 
-            account: { userId },
-            date: {
-              gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) // 90 days ago
-            }
-          },
-          orderBy: { date: 'desc' },
-          take: 500
-        });
-        
-        console.log('OpenAI Enhanced: Found', accounts.length, 'accounts and', transactions.length, 'transactions in database for user', userId);
-        
-        // If no data in database, try to fetch from Plaid directly
-        // eslint-disable-next-line no-constant-condition
-        if (true) {
-          console.log('OpenAI Enhanced: No data in database, fetching from Plaid directly');
-          
-          // CRITICAL SECURITY FIX: Never call Plaid APIs in demo mode
-          if (isDemo) {
-            console.log('OpenAI Enhanced: DEMO MODE - Skipping Plaid API calls for security');
-          } else {
-            try {
-              // Import Plaid functions directly
-              const { Configuration, PlaidApi, PlaidEnvironments } = await import('plaid');
-              
-              const credentials = getPlaidCredentials();
-              const configuration = new Configuration({
-                basePath: PlaidEnvironments[credentials.env],
-                baseOptions: {
-                  headers: {
-                    'PLAID-CLIENT-ID': credentials.clientId,
-                    'PLAID-SECRET': credentials.secret,
-                  },
-                },
-              });
-              
-              const plaidClient = new PlaidApi(configuration);
-              
-              // Get access tokens for the current user only
-              const accessTokens = await prisma.accessToken.findMany({
-                where: { userId }
-              });
-              
-              if (accessTokens.length > 0) {
-                console.log('OpenAI Enhanced: Found', accessTokens.length, 'access tokens for user', userId);
-                
-                // Fetch accounts from all tokens
-                for (const tokenRecord of accessTokens) {
-                  try {
-                    // Validate token first
-                    const isValid = await validatePlaidToken(tokenRecord, plaidClient, prisma);
-                    if (!isValid) {
-                      console.log(`Skipping invalid token ${tokenRecord.id}`);
-                      continue;
-                    }
-                    
-                    const accountsResponse = await plaidClient.accountsGet({
-                      access_token: tokenRecord.token,
-                    });
-                    
-                    // Use optimized BalanceService (cached, max 1x per day)
-                    const balancesData = await BalanceService.getAccountBalances(
-                      tokenRecord.token,
-                      plaidClient
-                    );
-                    
-                    // Get institution data for this token
-                    const institutionData = await getInstitutionData(tokenRecord.token, plaidClient);
-                    
-                    // Merge account and balance data with institution information
-                    const accountsWithBalances = accountsResponse.data.accounts.map((account: any) => {
-                      const balance = balancesData.find((b: any) => b.account_id === account.account_id);
-                      return {
-                        id: account.account_id,
-                        name: account.name,
-                        type: account.type,
-                        subtype: account.subtype,
-                        institution: institutionData?.name || account.institution_name || 'Unknown',
-                        institution_id: institutionData?.institution_id,
-                        institution_logo: institutionData?.logo,
-                        institution_url: institutionData?.url,
-                        balance: {
-                          available: balance?.available || account.balances?.available,
-                          current: balance?.current || account.balances?.current,
-                          limit: balance?.limit || account.balances?.limit,
-                          iso_currency_code: balance?.iso_currency_code || account.balances?.iso_currency_code,
-                          unofficial_currency_code: balance?.unofficial_currency_code || account.balances?.unofficial_currency_code
-                        }
-                      };
-                    });
-
-                    // DEBUG: Log the accountsWithBalances
-                    console.log('OpenAI Enhanced: Processed accounts with balances and institution data:', accountsWithBalances);
-                    
-                    // ✅ DEBUG: Log account data being processed
-                    console.log('OpenAI Enhanced: Raw Plaid accounts for token:', tokenRecord.id);
-                    accountsResponse.data.accounts.forEach((account: any, index: number) => {
-                      console.log(`OpenAI Enhanced: Account ${index}:`, {
-                        id: account.account_id,
-                        name: account.name,
-                        type: account.type,
-                        subtype: account.subtype,
-                        institution: institutionData?.name || account.institution_name || 'Unknown'
-                      });
-                    });
-                    
-                    console.log('OpenAI Enhanced: Processed accounts with balances and institution data:', accountsWithBalances);
-                    
-                    accounts.push(...accountsWithBalances);
-                    console.log('OpenAI Enhanced: Fetched', accountsWithBalances.length, 'accounts from Plaid with institution data');
-                  } catch (error) {
-                    console.error('OpenAI Enhanced: Error fetching accounts from token:', error);
-                  }
-                }
-                
-                // Deduplicate accounts by account_id AND by description (name + type + balance)
-                // This handles both Plaid duplicates AND database vs Plaid duplicates
-                console.log('⚠️⚠️⚠️ STARTING DEDUPLICATION - accounts.length BEFORE:', accounts.length);
-                const accountMap = new Map();
-                const accountDescMap = new Map();
-                
-                accounts.forEach(account => {
-                  // First, try to dedupe by account ID
-                  if (account.id && !accountMap.has(account.id)) {
-                    accountMap.set(account.id, account);
-                    
-                    // Also create description-based key for cross-source deduplication
-                    const balance = account.balance?.current || account.balance?.available || account.currentBalance || account.availableBalance || 0;
-                    const descKey = `${account.name}|${account.type}|${account.subtype}|${balance}`;
-                    accountDescMap.set(descKey, account);
-                  } else if (!account.id) {
-                    // For accounts without IDs, use description-based deduplication
-                    const balance = account.balance?.current || account.balance?.available || account.currentBalance || account.availableBalance || 0;
-                    const descKey = `${account.name}|${account.type}|${account.subtype}|${balance}`;
-                    if (!accountDescMap.has(descKey)) {
-                      accountDescMap.set(descKey, account);
-                    }
-                  }
-                });
-                
-                // Combine both maps, using description to prevent duplicates
-                console.log('⚠️⚠️⚠️ STARTING DETAILED DEDUPLICATION - VERSION 2 ⚠️⚠️⚠️');
-                console.log('Accounts from ID map:', accountMap.size);
-                console.log('Accounts from DESC map:', accountDescMap.size);
-                
-                const finalAccountMap = new Map();
-                const seenDescriptions = new Set();
-                const debugLog: Array<{source: string; id: string; name: string; descKey: string; added: boolean}> = [];
-                
-                // Add all accounts from accountMap first (but only first occurrence of each description)
-                accountMap.forEach((account, id) => {
-                  const balance = account.balance?.current || account.balance?.available || account.currentBalance || account.availableBalance || 0;
-                  const descKey = `${account.name}|${account.type}|${account.subtype}|${balance}`;
-                  const isNew = !seenDescriptions.has(descKey);
-                  
-                  debugLog.push({
-                    source: 'ID_MAP',
-                    id: id,
-                    name: account.name || 'unknown',
-                    descKey: descKey,
-                    added: isNew
-                  });
-                  
-                  if (isNew) {
-                    seenDescriptions.add(descKey);
-                    finalAccountMap.set(descKey, account);  // Use descKey to ensure uniqueness
-                  }
-                });
-                
-                // Add accounts from accountDescMap only if their description hasn't been seen
-                accountDescMap.forEach((account, descKey) => {
-                  const isNew = !seenDescriptions.has(descKey);
-                  debugLog.push({
-                    source: 'DESC_MAP',
-                    id: account.id || 'no-id',
-                    name: account.name || 'unknown',
-                    descKey: descKey,
-                    added: isNew
-                  });
-                  if (isNew) {
-                    finalAccountMap.set(descKey, account);
-                    seenDescriptions.add(descKey);
-                  }
-                });
-                
-                accounts = Array.from(finalAccountMap.values());
-                console.log('After deduplication:', accounts.length, 'unique accounts');
-                console.log('Unique descriptions found:', seenDescriptions.size);
-                console.log('⚠️ First 20 accounts in deduplication:');
-                debugLog.slice(0, 20).forEach((entry, idx) => {
-                  console.log(`  [${idx}] ${entry.added ? '✅ ADDED' : '❌ SKIP'} | ${entry.source} | Name: "${entry.name}" | Key: "${entry.descKey}"`);
-                });
-                console.log('⚠️ All unique description keys:');
-                Array.from(seenDescriptions).slice(0, 15).forEach((key, idx) => {
-                  const accountsWithKey = debugLog.filter(e => e.descKey === key);
-                  console.log(`  [${idx}] "${key}" (appears ${accountsWithKey.length} times in total)`);
-                });
-                console.log('OpenAI Enhanced: After deduplication:', accounts.length, 'unique accounts (from', accountMap.size, 'by ID,', seenDescriptions.size, 'total unique descriptions)');
-                
-                // Fetch transactions from all tokens
-                for (const tokenRecord of accessTokens) {
-                  try {
-                    const endDate = new Date().toISOString().split('T')[0];
-                    const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-                    
-                    const transactionsResponse = await plaidClient.transactionsGet({
-                      access_token: tokenRecord.token,
-                      start_date: startDate,
-                      end_date: endDate,
-                      options: {
-                        count: 500,
-                        include_personal_finance_category: true
-                      }
-                    });
-                    
-                    // ✅ FIRST: Process personal_finance_category from transactionsGet response
-                    // This ensures we have categories even if enrichment fails
-                    const transactionsWithBasicCategories = transactionsResponse.data.transactions.map((t: any) => {
-                      let basicCategory = t.category || [];
-                      let basicCategoryId = t.category_id;
-                      
-                      // Extract from personal_finance_category if legacy category is empty
-                      if ((!basicCategory || basicCategory.length === 0 || basicCategory[0] === null) && 
-                          t.personal_finance_category) {
-                        basicCategory = [
-                          t.personal_finance_category.primary,
-                          t.personal_finance_category.detailed
-                        ].filter(Boolean);
-                        basicCategoryId = t.personal_finance_category.primary;
-                      }
-                      
-                      return {
-                        ...t,
-                        category: basicCategory,
-                        category_id: basicCategoryId
-                      };
-                    });
-                    
-                    console.log('OpenAI Enhanced: Processed personal_finance_category for', transactionsWithBasicCategories.length, 'transactions');
-                    console.log('OpenAI Enhanced: Sample after PFC processing:', {
-                      name: transactionsWithBasicCategories[0]?.name,
-                      category: transactionsWithBasicCategories[0]?.category,
-                      hadPFC: !!transactionsResponse.data.transactions[0]?.personal_finance_category
-                    });
-                    
-                    // Call enrichment API to get additional merchant data
-                    let enrichedTransactions = transactionsWithBasicCategories;
-                    try {
-                      const mappedForEnrichment = transactionsWithBasicCategories.map((t: any) => ({
-                        id: t.transaction_id,
-                        description: t.name,
-                        amount: Math.abs(t.amount),
-                        direction: t.amount > 0 ? 'INFLOW' as any : 'OUTFLOW' as any,
-                        iso_currency_code: t.iso_currency_code || 'USD'
-                      }));
-                      
-                      const enrichResponse = await plaidClient.transactionsEnrich({
-                        account_type: 'depository',
-                        transactions: mappedForEnrichment
-                      });
-                      
-                      const enrichedCount = enrichResponse.data.enriched_transactions?.length || 0;
-                      console.log('OpenAI Enhanced: Enrichment successful for', enrichedCount, 'of', mappedForEnrichment.length, 'transactions');
-                      
-                      if (enrichedCount === 0) {
-                        console.warn('OpenAI Enhanced: Enrichment returned 0 results - this is unusual');
-                      }
-                      
-                      // Create map of enriched data
-                      const enrichedMap = new Map();
-                      enrichResponse.data.enriched_transactions?.forEach((enriched: any, index: number) => {
-                        enrichedMap.set(mappedForEnrichment[index].id, enriched);
-                        
-                        // Debug: Log a sample enriched transaction
-                        if (index === 0) {
-                          console.log('OpenAI Enhanced: Sample enrichment data:', {
-                            hasEnrichments: !!enriched.enrichments,
-                            hasPFC: !!enriched.enrichments?.personal_finance_category,
-                            pfc: enriched.enrichments?.personal_finance_category,
-                            merchant: enriched.enrichments?.merchant_name
-                          });
-                        }
-                      });
-                      
-                      // Merge enriched data with the transactions that already have basic categories
-                      enrichedTransactions = transactionsWithBasicCategories.map((transaction: any) => {
-                        const enriched = enrichedMap.get(transaction.transaction_id);
-                        
-                        // PRIORITIZE: Use basic Plaid categories first, then enriched as fallback
-                        let finalCategories = transaction.category || [];
-                        const hadBasicCategories = finalCategories && finalCategories.length > 0 && finalCategories[0];
-                        
-                        // Only use enriched categories if basic categories are missing/empty
-                        if ((!finalCategories || finalCategories.length === 0 || !finalCategories[0]) && 
-                            enriched?.enrichments?.personal_finance_category) {
-                          const pfc = enriched.enrichments.personal_finance_category;
-                          finalCategories = [pfc.primary, pfc.detailed].filter(Boolean);
-                        }
-                        
-                        // Extract enriched categories separately for enriched_data
-                        let enrichedOnlyCategories = [];
-                        if (enriched?.enrichments?.personal_finance_category) {
-                          const pfc = enriched.enrichments.personal_finance_category;
-                          enrichedOnlyCategories = [pfc.primary, pfc.detailed].filter(Boolean);
-                        }
-                        
-                        // Debug first few transactions
-                        if (transaction === transactionsWithBasicCategories[0]) {
-                          console.log('OpenAI Enhanced: First transaction category debug:', {
-                            name: transaction.name,
-                            basicCategory: transaction.category,
-                            hadBasicCategories,
-                            hasEnrichedData: !!enriched,
-                            enrichedPFC: enriched?.enrichments?.personal_finance_category,
-                            finalCategories,
-                            enrichedOnlyCategories
-                          });
-                        }
-                        
-                        return {
-                          ...transaction,
-                          category: finalCategories,
-                          enriched_data: enriched ? {
-                            merchant_name: enriched.enrichments?.merchant_name || transaction.merchant_name,
-                            website: enriched.enrichments?.website,
-                            logo_url: enriched.enrichments?.logo_url,
-                            category: enrichedOnlyCategories, // Store enriched categories separately
-                            brand_name: enriched.enrichments?.brand_name
-                          } : null
-                        };
-                      });
-                    } catch (enrichError) {
-                      console.error('OpenAI Enhanced: Enrichment failed:', enrichError);
-                      // Continue with non-enriched data
-                    }
-                    
-                    const processedTransactions = enrichedTransactions.map((transaction: any) => ({
-                      id: transaction.transaction_id,
-                      account_id: transaction.account_id,
-                      amount: transaction.amount,
-                      date: transaction.date,
-                      name: transaction.name,
-                      merchant_name: transaction.merchant_name,
-                      category: transaction.category,
-                      category_id: transaction.category_id,
-                      pending: transaction.pending,
-                      payment_channel: transaction.payment_channel,
-                      location: transaction.location,
-                      payment_meta: transaction.payment_meta,
-                      pending_transaction_id: transaction.pending_transaction_id,
-                      account_owner: transaction.account_owner,
-                      transaction_code: transaction.transaction_code,
-                      enriched_data: transaction.enriched_data
-                    }));
-                    
-                    transactions.push(...processedTransactions);
-                    console.log('OpenAI Enhanced: Fetched', processedTransactions.length, 'transactions from Plaid with enrichment');
-                  } catch (error) {
-                    console.error('OpenAI Enhanced: Error fetching transactions from token:', error);
-                  }
-                }
-                
-                // Persist transactions to database if enabled
-                if (process.env.PERSIST_TRANSACTIONS === 'true' && userId && !isDemo && transactions.length > 0) {
-                  try {
-                    await persistTransactionsToDb(userId, transactions, accounts);
-                  } catch (error) {
-                    console.error('OpenAI Enhanced: Error persisting transactions:', error);
-                    // Don't fail the main request if persistence fails
-                  }
-                }
-                
-                // Fetch investment data from all tokens
-                for (const tokenRecord of accessTokens) {
-                  try {
-                    console.log('OpenAI Enhanced: Fetching investment data from Plaid for token');
-                    
-                    // Fetch holdings (this also includes securities data)
-                    const holdingsResponse = await plaidClient.investmentsHoldingsGet({
-                      access_token: tokenRecord.token,
-                    });
-                    
-                    // Process and merge the data
-                    const processedHoldings = holdingsResponse.data.holdings.map((holding: any) => ({
-                      id: `${holding.account_id}_${holding.security_id}_${holding.quantity}_${holding.institution_value}`,
-                      account_id: holding.account_id,
-                      security_id: holding.security_id,
-                      institution_value: holding.institution_value,
-                      institution_price: holding.institution_price,
-                      institution_price_as_of: holding.institution_price_as_of,
-                      cost_basis: holding.cost_basis,
-                      quantity: holding.quantity,
-                      iso_currency_code: holding.iso_currency_code,
-                      unofficial_currency_code: holding.unofficial_currency_code
-                    }));
-                    
-                    const processedSecurities = holdingsResponse.data.securities.map((security: any) => ({
-                      id: security.security_id,
-                      security_id: security.security_id,
-                      name: security.name,
-                      ticker_symbol: security.ticker_symbol,
-                      type: security.type,
-                      close_price: security.close_price,
-                      close_price_as_of: security.close_price_as_of,
-                      iso_currency_code: security.iso_currency_code,
-                      unofficial_currency_code: security.unofficial_currency_code
-                    }));
-                    
-                    // Merge security information with holdings
-                    const securitiesMap = new Map(processedSecurities.map((sec: any) => [sec.security_id, sec]));
-                    const enrichedHoldings = processedHoldings.map(holding => ({
-                      ...holding,
-                      security_name: securitiesMap.get(holding.security_id)?.name || 'Unknown Security',
-                      security_type: securitiesMap.get(holding.security_id)?.type || 'Unknown',
-                      ticker_symbol: securitiesMap.get(holding.security_id)?.ticker_symbol || 'N/A'
-                    }));
-                    
-                    // Calculate portfolio summary
-                    const totalValue = enrichedHoldings.reduce((sum, holding) => sum + (holding.institution_value || 0), 0);
-                    const assetTypes = new Map<string, number>();
-                    
-                    enrichedHoldings.forEach(holding => {
-                      const type = holding.security_type || 'Unknown';
-                      assetTypes.set(type, (assetTypes.get(type) || 0) + (holding.institution_value || 0));
-                    });
-                    
-                    const assetAllocation = Array.from(assetTypes.entries()).map(([type, value]: [string, number]) => ({
-                      type,
-                      value,
-                      percentage: totalValue > 0 ? (value / totalValue) * 100 : 0
-                    }));
-                    
-                    // Accumulate investment data from multiple tokens (don't break after first success)
-                    if (!investmentData) {
-                      investmentData = {
-                        portfolio: {
-                          totalValue,
-                          assetAllocation,
-                          holdingCount: enrichedHoldings.length,
-                          securityCount: processedSecurities.length
-                        },
-                        holdings: enrichedHoldings
-                      };
-                    } else {
-                      // Merge with existing investment data from previous tokens
-                      investmentData.portfolio.totalValue += totalValue;
-                      investmentData.portfolio.holdingCount += enrichedHoldings.length;
-                      investmentData.portfolio.securityCount += processedSecurities.length;
-                      investmentData.holdings.push(...enrichedHoldings);
-                      
-                      // Merge asset allocation
-                      assetAllocation.forEach((allocation: any) => {
-                        const existing = investmentData.portfolio.assetAllocation.find((a: any) => a.type === allocation.type);
-                        if (existing) {
-                          existing.value += allocation.value;
-                        } else {
-                          investmentData.portfolio.assetAllocation.push(allocation);
-                        }
-                      });
-                      
-                      // Recalculate percentages
-                      investmentData.portfolio.assetAllocation.forEach((allocation: any) => {
-                        allocation.percentage = investmentData.portfolio.totalValue > 0 
-                          ? (allocation.value / investmentData.portfolio.totalValue) * 100 
-                          : 0;
-                      });
-                    }
-                    
-                    console.log('OpenAI Enhanced: Fetched investment data from token - total value:', totalValue, 'holdings:', enrichedHoldings.length);
-                    console.log('OpenAI Enhanced: Cumulative investment data - total value:', investmentData.portfolio.totalValue, 'holdings:', investmentData.holdings.length);
-                  } catch (error) {
-                    console.error('OpenAI Enhanced: Error fetching investment data from token:', error);
-                    // Continue to next token if this one fails
-                  }
-                }
-              }
-            } catch (plaidError) {
-              console.error('OpenAI Enhanced: Error fetching from Plaid directly:', plaidError);
-            }
-          }
-        }
-        
-        // Fetch SnapTrade data for authenticated users
-        if (userId && !isDemo) {
+        // CRITICAL SECURITY FIX: Never call external APIs in demo mode
+        if (isDemo) {
+          console.log('OpenAI Enhanced: DEMO MODE - Skipping external API calls for security');
+        } else {
           try {
-            console.log('OpenAI Enhanced: Fetching SnapTrade data for user:', userId);
-            const { snapTradeService } = await import('./snaptrade');
+            // ✅ Use unified FinancialDataService for all data
+            const { FinancialDataService } = await import('./services/financial-data-service');
+            const financialDataService = new FinancialDataService();
             
-            // Get SnapTrade user record to get userSecret
-            const { getPrismaClient } = await import('./prisma-client');
-            const prisma = getPrismaClient();
-            const snapTradeUser = await prisma.snapTradeUser.findUnique({
-              where: { userId }
+            console.log('OpenAI Enhanced: Fetching unified financial data from FinancialDataService');
+            const financialData = await financialDataService.getUserFinancialData(userId, {
+              includeTransactions: true,
+              includeInvestments: true,
+              includeHomeValue: true
             });
             
-            if (snapTradeUser && snapTradeUser.userSecret) {
-              console.log('OpenAI Enhanced: Found SnapTrade user, fetching holdings and activities');
-              
-              // Fetch SnapTrade holdings
-              const holdingsResult = await snapTradeService.getUserHoldings(userId, snapTradeUser.userSecret);
-              if (holdingsResult.success && holdingsResult.data) {
-                // Extract individual positions from account-level data
-                const allPositions = [];
-                const accountBalances: Array<{name: string; balance: number; hasPositions: boolean}> = [];
-                
-                for (const account of holdingsResult.data) {
-                  // Add SnapTrade account to accounts array for Account Summary
-                  if (account.account) {
-                    // Extract balance from SnapTrade's total_value structure
-                    let accountBalance = 0;
-                    if (account.total_value && account.total_value.value) {
-                      accountBalance = account.total_value.value;
-                    } else if (account.totalValue) {
-                      accountBalance = account.totalValue;
-                    }
-                    
-                    const snapTradeAccount = {
-                      id: `snaptrade-${account.account.id || account.account.number}`,
-                      name: account.account.name || 'Investment Account',
-                      type: account.account.type || 'investment',
-                      subtype: account.account.meta?.type || account.account.type || 'brokerage',
-                      institution: account.account.institution || 'SnapTrade',
-                      balance: {
-                        current: accountBalance,
-                        available: accountBalance,
-                        iso_currency_code: 'USD'
-                      }
-                    };
-                    accounts.push(snapTradeAccount);
-                    console.log('OpenAI Enhanced: Added SnapTrade account:', snapTradeAccount.name, 'with balance:', snapTradeAccount.balance.current);
-                    
-                    // Track account balance and whether it has positions
-                    const hasPositions = account.positions && Array.isArray(account.positions) && account.positions.length > 0;
-                    accountBalances.push({
-                      name: account.account.name || 'Investment Account',
-                      balance: accountBalance,
-                      hasPositions
-                    });
-                  }
-                  
-                  if (account.positions && Array.isArray(account.positions)) {
-                    // Add account info to each position
-                    const accountPositions = account.positions.map((position: any) => ({
-                      ...position,
-                      account_name: account.account?.name || 'Unknown Account',
-                      account_number: account.account?.number || '',
-                      institution: account.account?.institution || 'SnapTrade'
-                    }));
-                    allPositions.push(...accountPositions);
-                  }
-                }
-                snapTradeData = allPositions;
-                
-                // Store account balances for investment summary calculation
-                (snapTradeData as any).accountBalances = accountBalances;
-                
-                console.log('OpenAI Enhanced: Fetched SnapTrade holdings:', snapTradeData.length, 'positions from', holdingsResult.data.length, 'accounts');
-                console.log('OpenAI Enhanced: Sample SnapTrade position structure:', snapTradeData[0]);
-                console.log('OpenAI Enhanced: SnapTrade account balances:', accountBalances);
+            // Extract data from unified structure
+            accounts = financialData.accounts.map(acc => ({
+              id: acc.id,
+              name: acc.name,
+              type: acc.type,
+              subtype: acc.subtype,
+              institution: acc.institution,
+              institution_id: acc.institution_id,
+              institution_logo: acc.institution_logo,
+              institution_url: acc.institution_url,
+              balance: {
+                available: acc.balance.available,
+                current: acc.balance.current,
+                limit: acc.balance.limit,
+                iso_currency_code: acc.balance.iso_currency_code,
+                unofficial_currency_code: acc.balance.unofficial_currency_code
               }
-              
-              // Fetch SnapTrade activities
-              const activitiesResult = await snapTradeService.getUserActivities(userId, snapTradeUser.userSecret);
-              if (activitiesResult.success && activitiesResult.data && activitiesResult.data.activities) {
-                snapTradeActivities = activitiesResult.data.activities;
-                console.log('OpenAI Enhanced: Fetched SnapTrade activities:', snapTradeActivities.length, 'activities');
-                console.log('OpenAI Enhanced: Sample SnapTrade activity structure:', snapTradeActivities[0]);
-              }
-            } else {
-              console.log('OpenAI Enhanced: No SnapTrade user found or no userSecret available');
+            }));
+            
+            transactions = financialData.bankingTransactions.map(tx => ({
+              id: tx.id,
+              account_id: tx.account_id,
+              amount: tx.amount,
+              date: tx.date,
+              name: tx.name,
+              merchant_name: tx.merchant_name,
+              category: tx.category,
+              category_id: tx.category_id,
+              pending: tx.pending,
+              payment_channel: tx.payment_channel,
+              location: tx.location,
+              payment_meta: tx.payment_meta,
+              pending_transaction_id: tx.pending_transaction_id,
+              account_owner: tx.account_owner,
+              transaction_code: tx.transaction_code,
+              enriched_data: tx.enriched_data
+            }));
+            
+            // Set investment data if available
+            if (financialData.investments.holdings.length > 0) {
+              investmentData = {
+                portfolio: financialData.investments.portfolio,
+                holdings: financialData.investments.holdings
+              };
             }
-          } catch (snapTradeError) {
-            console.error('OpenAI Enhanced: Error fetching SnapTrade data:', snapTradeError);
+            
+            // Extract SnapTrade-specific data for context building
+            // The holdings already include both Plaid and SnapTrade merged
+            const snapTradeHoldings = financialData.investments.holdings.filter(h => 
+              h.account_id.toString().startsWith('snaptrade-')
+            );
+            
+            if (snapTradeHoldings.length > 0) {
+              // Create SnapTrade data structure for existing investment summary logic
+              snapTradeData = snapTradeHoldings.map(holding => ({
+                symbol: {
+                  symbol: {
+                    symbol: holding.ticker_symbol,
+                    description: holding.security_name,
+                    type: {
+                      description: holding.security_type
+                    }
+                  }
+                },
+                units: holding.quantity,
+                price: holding.institution_price,
+                account_name: (holding as any).snapTradeData?.account_name,
+                account_number: (holding as any).snapTradeData?.account_number,
+                institution: 'SnapTrade'
+              }));
+              
+              // Calculate account-level balances for SnapTrade
+              const snapTradeAccountsMap = new Map<string, {name: string; balance: number; hasPositions: boolean}>();
+              snapTradeHoldings.forEach(holding => {
+                const accountId = holding.account_id;
+                if (!snapTradeAccountsMap.has(accountId)) {
+                  snapTradeAccountsMap.set(accountId, {
+                    name: (holding as any).snapTradeData?.account_name || 'Investment Account',
+                    balance: 0,
+                    hasPositions: false
+                  });
+                }
+                const account = snapTradeAccountsMap.get(accountId)!;
+                account.balance += holding.institution_value;
+                account.hasPositions = true;
+              });
+              
+              (snapTradeData as any).accountBalances = Array.from(snapTradeAccountsMap.values());
+              console.log('OpenAI Enhanced: Extracted SnapTrade data:', snapTradeData.length, 'positions');
+            }
+            
+            // Extract SnapTrade activities from investment transactions
+            const snapTradeTransactions = financialData.investments.transactions.filter(tx =>
+              tx.account_id.toString().startsWith('snaptrade-')
+            );
+            
+            if (snapTradeTransactions.length > 0) {
+              snapTradeActivities = snapTradeTransactions;
+              console.log('OpenAI Enhanced: Extracted SnapTrade activities:', snapTradeActivities.length, 'activities');
+            }
+            
+            console.log('OpenAI Enhanced: Unified data fetched -', accounts.length, 'accounts,', transactions.length, 'transactions');
+            console.log('OpenAI Enhanced: Investment data:', investmentData ? 'available' : 'none');
+            console.log('OpenAI Enhanced: SnapTrade data:', snapTradeData ? 'available' : 'none');
+            console.log('OpenAI Enhanced: SnapTrade activities:', snapTradeActivities ? 'available' : 'none');
+            console.log('OpenAI Enhanced: Token health:', financialData.metadata.tokenHealth);
+            console.log('OpenAI Enhanced: Data fetch duration:', financialData.metadata.performance.totalDuration, 'ms');
+            console.log('OpenAI Enhanced: Partial data:', financialData.metadata.partialData);
+            
+          } catch (error) {
+            console.error('OpenAI Enhanced: Error fetching unified financial data:', error);
           }
         }
-          
-          // Persist SnapTrade activities to database if enabled
-          if (process.env.PERSIST_TRANSACTIONS === 'true' && userId && !isDemo && snapTradeActivities && snapTradeActivities.length > 0) {
-            try {
-              await persistSnapTradeActivitiesToDb(userId, snapTradeActivities);
-            } catch (error) {
-              console.error('OpenAI Enhanced: Error persisting SnapTrade activities:', error);
-              // Don't fail the main request if persistence fails
-          }
-        }
-        
-        console.log('OpenAI Enhanced: Final count -', accounts.length, 'accounts,', transactions.length, 'transactions, investment data:', investmentData ? 'available' : 'none', 'SnapTrade data:', snapTradeData ? 'available' : 'none', 'SnapTrade activities:', snapTradeActivities ? 'available' : 'none', 'for user', userId);
       } else {
         console.log('OpenAI Enhanced: No userId provided, fetching all data (this should not happen for authenticated users)');
       }
