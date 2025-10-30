@@ -426,6 +426,14 @@ export class SnapTradeService {
             limit: 1000 // Get up to 1000 activities per account
           });
           
+          console.log(`🔍 SnapTrade API response for ${account.name}:`, {
+            hasData: !!activities.data,
+            isArray: Array.isArray(activities.data),
+            dataType: typeof activities.data,
+            length: activities.data?.length,
+            sample: activities.data?.slice(0, 1)
+          });
+          
           if (activities.data && Array.isArray(activities.data)) {
             // ✅ Add account info to each activity (including account_id for transaction mapping)
             const accountActivities = activities.data.map((activity: any) => ({
@@ -438,6 +446,8 @@ export class SnapTradeService {
             
             allActivities.push(...accountActivities);
             console.log(`🔍 Found ${accountActivities.length} activities for account ${account.name}`);
+          } else {
+            console.log(`⚠️  No activities data returned for ${account.name} - data is ${activities.data === null ? 'null' : activities.data === undefined ? 'undefined' : 'not an array'}`);
           }
         } catch (accountError) {
           console.error(`🔍 Error getting activities for account ${account.name}:`, accountError);
