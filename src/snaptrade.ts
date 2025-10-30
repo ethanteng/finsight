@@ -385,12 +385,20 @@ export class SnapTradeService {
   }
 
   // Get user activities (transactions) for all accounts
-  async getUserActivities(userId: string, userSecret: string): Promise<{ success: boolean; data?: any; error?: string }> {
+  // ✅ Accepts optional pre-fetched accounts to avoid redundant API calls
+  async getUserActivities(userId: string, userSecret: string, prefetchedAccounts?: any): Promise<{ success: boolean; data?: any; error?: string }> {
     try {
       console.log('🔍 Getting activities for user:', userId);
       
-      // First get all accounts
-      const accountsResult = await this.getUserAccounts(userId, userSecret);
+      // ✅ Use pre-fetched accounts if provided, otherwise fetch them
+      let accountsResult = prefetchedAccounts;
+      if (!accountsResult) {
+        console.log('🔍 No pre-fetched accounts, fetching now...');
+        accountsResult = await this.getUserAccounts(userId, userSecret);
+      } else {
+        console.log('✅ Using pre-fetched accounts, skipping redundant API call');
+      }
+      
       if (!accountsResult.success || !accountsResult.data?.accounts) {
         return { success: false, error: 'Failed to get accounts for activities' };
       }

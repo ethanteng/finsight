@@ -543,9 +543,12 @@ export class FinancialDataService {
       const securities: any[] = [];
       const transactions: any[] = [];
 
-      // Get accounts
+      // ✅ Get accounts once and reuse them for holdings and activities
+      let accountsData: any = null;
+      
       try {
         const accountsResult = await snapTradeService.getUserAccounts(userId, snapTradeUser.userSecret);
+        accountsData = accountsResult; // Store for later reuse
         
         if (accountsResult.success && accountsResult.data?.accounts) {
           for (const account of accountsResult.data.accounts) {
@@ -755,9 +758,10 @@ export class FinancialDataService {
       }
 
       // ✅ Get transactions/activities if option is enabled
-      if (options.includeTransactions) {
+      if (options.includeTransactions && accountsData) {
         try {
-          const activitiesResult = await snapTradeService.getUserActivities(userId, snapTradeUser.userSecret);
+          // ✅ Pass pre-fetched accounts to avoid redundant API call
+          const activitiesResult = await snapTradeService.getUserActivities(userId, snapTradeUser.userSecret, accountsData);
           
           if (activitiesResult.success && activitiesResult.data?.activities) {
             for (const activity of activitiesResult.data.activities) {

@@ -144,6 +144,9 @@ export class TokenValidationService {
       }
 
       const snapTradeService = new SnapTradeService();
+      // NOTE: This makes an API call to validate the token. If this is called in parallel
+      // with FinancialDataService.fetchSnapTradeData, there will be redundant API calls.
+      // Future optimization: Cache account validation results for a short time (e.g., 5 minutes)
       const result = await snapTradeService.getUserAccounts(userId, snapTradeUser.userSecret);
 
       if (result.success) {
