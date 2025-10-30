@@ -426,17 +426,21 @@ export class SnapTradeService {
             limit: 1000 // Get up to 1000 activities per account
           });
           
+          // ✅ SnapTrade API returns: { data: { data: [...], pagination: {...} } }
+          // So activities.data.data is the actual array of activities
+          const activitiesArray = activities.data?.data || activities.data;
+          
           console.log(`🔍 SnapTrade API response for ${account.name}:`, {
             hasData: !!activities.data,
-            isArray: Array.isArray(activities.data),
-            dataType: typeof activities.data,
-            length: activities.data?.length,
-            sample: activities.data?.slice(0, 1)
+            hasNestedData: !!activities.data?.data,
+            isArray: Array.isArray(activitiesArray),
+            length: Array.isArray(activitiesArray) ? activitiesArray.length : 'N/A',
+            pagination: activities.data?.pagination
           });
           
-          if (activities.data && Array.isArray(activities.data)) {
+          if (activitiesArray && Array.isArray(activitiesArray)) {
             // ✅ Add account info to each activity (including account_id for transaction mapping)
-            const accountActivities = activities.data.map((activity: any) => ({
+            const accountActivities = activitiesArray.map((activity: any) => ({
               ...activity,
               account_id: account.id,  // ✅ Add account ID for linking
               account_name: account.name,
@@ -447,7 +451,7 @@ export class SnapTradeService {
             allActivities.push(...accountActivities);
             console.log(`🔍 Found ${accountActivities.length} activities for account ${account.name}`);
           } else {
-            console.log(`⚠️  No activities data returned for ${account.name} - data is ${activities.data === null ? 'null' : activities.data === undefined ? 'undefined' : 'not an array'}`);
+            console.log(`⚠️  No activities data returned for ${account.name} - activitiesArray is ${activitiesArray === null ? 'null' : activitiesArray === undefined ? 'undefined' : 'not an array (type: ' + typeof activitiesArray + ')'}`);
           }
         } catch (accountError) {
           console.error(`🔍 Error getting activities for account ${account.name}:`, accountError);
