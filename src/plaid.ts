@@ -531,8 +531,14 @@ export const setupPlaidRoutes = (app: any) => {
         includeHomeValue: false
       });
 
+      // ✅ Filter to ONLY Plaid accounts (exclude SnapTrade accounts)
+      // SnapTrade accounts have account_id starting with "snaptrade-"
+      const plaidOnlyAccounts = financialData.accounts.filter(account => 
+        account.source === 'plaid' || !account.account_id.toString().startsWith('snaptrade-')
+      );
+
       // Format accounts for frontend (matching expected format)
-      const formattedAccounts = financialData.accounts.map(account => ({
+      const formattedAccounts = plaidOnlyAccounts.map(account => ({
         id: account.id,
         name: account.name,
         type: account.type,
@@ -547,6 +553,8 @@ export const setupPlaidRoutes = (app: any) => {
         },
         institution: account.institution
       }));
+
+      console.log(`🔍 Returning ${formattedAccounts.length} Plaid accounts (filtered out ${financialData.accounts.length - plaidOnlyAccounts.length} SnapTrade accounts)`);
 
       res.json({ accounts: formattedAccounts });
     } catch (error) {
