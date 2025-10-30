@@ -461,20 +461,26 @@ export async function askOpenAIWithEnhancedContext(
             }));
             
             // ✅ CRITICAL: Only include INCOME-generating investment transactions (dividends, interest)
-            // Do NOT include buy/sell transactions as they are asset conversions, not income
+            // Do NOT include buy/sell/deposit/withdrawal/cash adjustments - those are asset movements, not income
             const investmentTxs = financialData.investments.transactions
               .filter(tx => {
                 const txType = (tx.type || '').toLowerCase();
                 const txName = (tx.name || '').toLowerCase();
-                // Only include: dividends, interest, and income distributions
-                // Exclude: buy, sell, transfer, fee transactions
+                
+                // Exclude ALL non-income transaction types FIRST
+                const excludeTypes = ['buy', 'sell', 'transfer', 'deposit', 'withdrawal', 'cash', 'fee', 'adjustment', 'contribution'];
+                if (excludeTypes.some(type => txType.includes(type) || txName.includes(type))) {
+                  return false; // Explicitly exclude cash movements
+                }
+                
+                // Then only include explicit income types
                 return (
                   txType.includes('dividend') ||
                   txType.includes('interest') ||
                   txType.includes('income') ||
+                  txType.includes('distribution') ||
                   txName.includes('dividend') ||
-                  txName.includes('interest') ||
-                  (tx.amount > 0 && !txType.includes('buy') && !txType.includes('sell') && !txType.includes('transfer'))
+                  txName.includes('interest')
                 );
               })
               .map(tx => ({

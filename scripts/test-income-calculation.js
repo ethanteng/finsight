@@ -45,6 +45,15 @@ const sampleTransactions = {
     // Transfer - should NOT be counted
     { id: 'inv8', account_id: 'brokerage1', amount: 10000.00, date: '2025-07-01', name: 'Transfer from savings', type: 'transfer', subtype: 'transfer' },
     
+    // DEPOSITS (cash movements) - should NOT be counted as income!
+    { id: 'inv10', account_id: 'brokerage1', amount: 100000.00, date: '2025-05-01', name: 'Deposit $100000.00', type: 'deposit', subtype: 'deposit' },
+    { id: 'inv11', account_id: 'brokerage1', amount: 50000.00, date: '2025-06-15', name: 'Deposit $50000.00', type: 'deposit', subtype: 'deposit' },
+    { id: 'inv12', account_id: 'brokerage1', amount: 22000.00, date: '2025-01-10', name: 'Deposit $22000.00', type: 'deposit', subtype: 'deposit' },
+    
+    // CASH ADJUSTMENTS - should NOT be counted as income!
+    { id: 'inv13', account_id: 'brokerage1', amount: 2254.60, date: '2025-03-20', name: 'Cash adjusted', type: 'cash', subtype: 'cash' },
+    { id: 'inv14', account_id: 'brokerage1', amount: 1642.50, date: '2025-04-12', name: 'Cash adjusted', type: 'cash', subtype: 'adjustment' },
+    
     // Fees - should NOT be counted (negative)
     { id: 'inv9', account_id: 'brokerage1', amount: -83.34, date: '2025-04-16', name: 'Management Fee', type: 'fee', subtype: 'fee' },
   ]
@@ -60,15 +69,20 @@ const filteredInvestmentTxs = sampleTransactions.investment.filter(tx => {
   const txType = (tx.type || '').toLowerCase();
   const txName = (tx.name || '').toLowerCase();
   
-  // Only include: dividends, interest, and income distributions
-  // Exclude: buy, sell, transfer, fee transactions
+  // Exclude ALL non-income transaction types FIRST
+  const excludeTypes = ['buy', 'sell', 'transfer', 'deposit', 'withdrawal', 'cash', 'fee', 'adjustment', 'contribution'];
+  if (excludeTypes.some(type => txType.includes(type) || txName.includes(type))) {
+    return false; // Explicitly exclude cash movements
+  }
+  
+  // Then only include explicit income types
   const shouldInclude = (
     txType.includes('dividend') ||
     txType.includes('interest') ||
     txType.includes('income') ||
+    txType.includes('distribution') ||
     txName.includes('dividend') ||
-    txName.includes('interest') ||
-    (tx.amount > 0 && !txType.includes('buy') && !txType.includes('sell') && !txType.includes('transfer'))
+    txName.includes('interest')
   );
   
   const status = shouldInclude ? '✅ INCLUDE' : '❌ EXCLUDE';
@@ -164,10 +178,20 @@ const totalStockSales = sampleTransactions.investment
   .filter(tx => tx.type === 'sell')
   .reduce((sum, tx) => sum + tx.amount, 0);
 
-console.log(`Stock sales that were EXCLUDED: $${totalStockSales.toLocaleString()}`);
-console.log(`(These are $${totalStockSales} in asset conversions, NOT income)`);
+const totalDeposits = sampleTransactions.investment
+  .filter(tx => tx.type === 'deposit')
+  .reduce((sum, tx) => sum + tx.amount, 0);
 
-const wouldHaveBeenWrong = totalIncome + totalStockSales;
+const totalCashAdjustments = sampleTransactions.investment
+  .filter(tx => tx.type === 'cash' || tx.subtype === 'adjustment')
+  .reduce((sum, tx) => sum + tx.amount, 0);
+
+console.log(`Stock sales that were EXCLUDED: $${totalStockSales.toLocaleString()}`);
+console.log(`Deposits that were EXCLUDED: $${totalDeposits.toLocaleString()}`);
+console.log(`Cash adjustments that were EXCLUDED: $${totalCashAdjustments.toLocaleString()}`);
+console.log(`(These are asset movements, NOT income)`);
+
+const wouldHaveBeenWrong = totalIncome + totalStockSales + totalDeposits + totalCashAdjustments;
 const monthlyWrong = wouldHaveBeenWrong / uniqueMonths;
 
 console.log(`\n❌ WITHOUT FIX:`);
