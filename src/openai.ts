@@ -439,7 +439,9 @@ export async function askOpenAIWithEnhancedContext(
               }
             }));
             
-            transactions = financialData.bankingTransactions.map(tx => ({
+            // ✅ CRITICAL: Include BOTH banking AND investment transactions for complete income analysis
+            // Investment transactions can include important income sources like dividends, capital gains, etc.
+            const bankingTxs = financialData.bankingTransactions.map(tx => ({
               id: tx.id,
               account_id: tx.account_id,
               amount: tx.amount,
@@ -457,6 +459,21 @@ export async function askOpenAIWithEnhancedContext(
               transaction_code: tx.transaction_code,
               enriched_data: tx.enriched_data
             }));
+            
+            const investmentTxs = financialData.investments.transactions.map(tx => ({
+              id: tx.id,
+              account_id: tx.account_id,
+              amount: tx.amount,
+              date: tx.date,
+              name: tx.name,
+              category: tx.category || ['Investment'],
+              pending: false,
+              enriched_data: tx.enriched_data || {}
+            }));
+            
+            // Merge both arrays for complete transaction history
+            transactions = [...bankingTxs, ...investmentTxs];
+            console.log(`OpenAI Enhanced: Merged transactions - Banking: ${bankingTxs.length}, Investment: ${investmentTxs.length}, Total: ${transactions.length}`);
             
             // Set investment data if available
             if (financialData.investments.holdings.length > 0) {
@@ -504,6 +521,7 @@ export async function askOpenAIWithEnhancedContext(
   let incomeAnalysis = '';
   if (!isDemo && transactions.length > 0) {
     const incomeTransactions = transactions.filter(transaction => transaction.amount > 0);
+    console.log(`OpenAI Enhanced: Analyzing income from ${incomeTransactions.length} positive transactions out of ${transactions.length} total`);
     if (incomeTransactions.length > 0) {
       const monthlyIncome = new Map<string, number>();
       const incomeSources = new Map<string, number>();
@@ -570,7 +588,14 @@ export async function askOpenAIWithEnhancedContext(
         }
         
         incomeSources.set(source, (incomeSources.get(source) || 0) + transaction.amount);
+        
+        // Debug logging for large income transactions
+        if (transaction.amount > 1000) {
+          console.log(`OpenAI Enhanced: Large income detected - $${transaction.amount.toFixed(2)} from "${transaction.name}" → categorized as "${source}"`);
+        }
       }
+      
+      console.log(`OpenAI Enhanced: Income sources identified:`, Array.from(incomeSources.entries()).map(([source, amount]) => `${source}: $${amount.toFixed(2)}`).join(', '));
       
       if (monthlyIncome.size > 0) {
         const totalIncome = Array.from(monthlyIncome.values()).reduce((sum, amount) => sum + amount, 0);
