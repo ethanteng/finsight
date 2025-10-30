@@ -357,23 +357,11 @@ export class FinancialDataService {
                   access_token: tokenRecord.token
                 });
 
-                // Process holdings
-                for (const holding of holdingsResponse.data.holdings) {
-                  holdings.push({
-                    id: `${holding.account_id}_${holding.security_id}_${holding.quantity}_${holding.institution_value}`,
-                    account_id: holding.account_id,
-                    security_id: holding.security_id,
-                    institution_value: holding.institution_value,
-                    institution_price: holding.institution_price,
-                    institution_price_as_of: holding.institution_price_as_of,
-                    cost_basis: holding.cost_basis,
-                    quantity: holding.quantity,
-                    iso_currency_code: holding.iso_currency_code
-                  });
-                }
-
-                // Process securities
+                // ✅ First, process securities into a lookup map for efficient access
+                const securityMap = new Map();
                 for (const security of holdingsResponse.data.securities) {
+                  securityMap.set(security.security_id, security);
+                  
                   securities.push({
                     security_id: security.security_id,
                     name: security.name,
@@ -383,6 +371,27 @@ export class FinancialDataService {
                     close_price: security.close_price,
                     close_price_as_of: security.close_price_as_of,
                     unofficial_currency_code: security.unofficial_currency_code
+                  });
+                }
+
+                // ✅ Process holdings and include security details from the securityMap
+                for (const holding of holdingsResponse.data.holdings) {
+                  const security = securityMap.get(holding.security_id);
+                  
+                  holdings.push({
+                    id: `${holding.account_id}_${holding.security_id}_${holding.quantity}_${holding.institution_value}`,
+                    account_id: holding.account_id,
+                    security_id: holding.security_id,
+                    institution_value: holding.institution_value,
+                    institution_price: holding.institution_price,
+                    institution_price_as_of: holding.institution_price_as_of,
+                    cost_basis: holding.cost_basis,
+                    quantity: holding.quantity,
+                    iso_currency_code: holding.iso_currency_code,
+                    // ✅ CRITICAL FIX: Add security details to each holding so frontend can display them
+                    security_name: security?.name || 'Unknown Security',
+                    security_type: security?.type || 'Unknown',
+                    ticker_symbol: security?.ticker_symbol || undefined
                   });
                 }
                 
