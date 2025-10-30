@@ -282,23 +282,10 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
     console.log('After processing SnapTrade accounts - totalInvestments:', totalInvestments);
 
     // Add investment portfolio value if available
+    // ✅ The backend FinancialDataService already merges Plaid + SnapTrade, so just use totalValue directly
     if (investmentData?.portfolio?.totalValue) {
-      console.log('Investment data portfolio value:', investmentData.portfolio.totalValue);
-      console.log('Calculated totalInvestments before override:', totalInvestments);
-      
-      // If we have SnapTrade accounts, use the sum of both
-      // If no SnapTrade accounts, use the Plaid investment value
-      if (snapTradeAccounts.length > 0) {
-        console.log('SnapTrade accounts found - using sum of Plaid investment value and SnapTrade accounts');
-        // Don't double-count - use the investment data value plus SnapTrade accounts
-        const plaidInvestmentValue = investmentData.portfolio.totalValue;
-        const snapTradeValue = snapTradeAccounts.reduce((sum, account) => sum + (account.balance || 0), 0);
-        totalInvestments = plaidInvestmentValue + snapTradeValue;
-        console.log('Combined total: Plaid investment value', plaidInvestmentValue, '+ SnapTrade value', snapTradeValue, '=', totalInvestments);
-      } else {
-        console.log('No SnapTrade accounts - using Plaid investment value as total');
-        totalInvestments = investmentData.portfolio.totalValue;
-      }
+      console.log('Investment data portfolio value (already includes Plaid + SnapTrade merged):', investmentData.portfolio.totalValue);
+      totalInvestments = investmentData.portfolio.totalValue;
     }
 
     // Add home value if available
