@@ -716,11 +716,59 @@ export class FinancialDataService {
     snapTradeData: any | null,
     homeValue: HomeData | null
   ): Omit<UnifiedFinancialData, 'metadata'> {
-    // Merge accounts
-    const accounts = [
+    // Merge accounts with deduplication
+    const rawAccounts = [
       ...(plaidData?.accounts || []),
       ...(snapTradeData?.accounts || [])
     ];
+
+    // ✅ Deduplicate accounts by account_id AND by description (name + type + balance)
+    // This handles both direct duplicates AND cross-source duplicates
+    console.log('FinancialDataService: Deduplicating accounts', {
+      rawCount: rawAccounts.length
+    });
+
+    const accountMap = new Map<string, any>();
+    const seenDescriptions = new Set<string>();
+
+    for (const account of rawAccounts) {
+      const accountId = account.account_id || account.id;
+      const balance = account.balance?.current || account.balance?.available || 0;
+      const descKey = `${account.name}|${account.type}|${account.subtype}|${Math.round(balance * 100)}`;
+
+      // Skip if we've already seen this description (handles duplicates)
+      if (seenDescriptions.has(descKey)) {
+        console.log('FinancialDataService: Skipping duplicate account', {
+          name: account.name,
+          balance,
+          descKey
+        });
+        continue;
+      }
+
+      // Skip if we've already seen this account_id
+      if (accountId && accountMap.has(accountId)) {
+        console.log('FinancialDataService: Skipping duplicate account_id', {
+          accountId,
+          name: account.name
+        });
+        continue;
+      }
+
+      // Add this account
+      if (accountId) {
+        accountMap.set(accountId, account);
+      }
+      seenDescriptions.add(descKey);
+    }
+
+    const accounts = Array.from(accountMap.values());
+
+    console.log('FinancialDataService: Deduplication complete', {
+      rawCount: rawAccounts.length,
+      uniqueCount: accounts.length,
+      removed: rawAccounts.length - accounts.length
+    });
 
     // Merge balances
     const balances = {
@@ -728,16 +776,40 @@ export class FinancialDataService {
       // SnapTrade balances are already in account objects
     };
 
-    // Merge holdings and securities
-    const holdings = [
+    // Merge holdings with deduplication by holding ID
+    const rawHoldings = [
       ...(plaidData?.holdings || []),
       ...(snapTradeData?.holdings || [])
     ];
 
-    const securities = [
+    const holdingMap = new Map<string, any>();
+    for (const holding of rawHoldings) {
+      const holdingId = holding.id || `${holding.account_id}_${holding.security_id}_${holding.quantity}`;
+      if (!holdingMap.has(holdingId)) {
+        holdingMap.set(holdingId, holding);
+      }
+    }
+    const holdings = Array.from(holdingMap.values());
+
+    // Merge securities with deduplication by security_id
+    const rawSecurities = [
       ...(plaidData?.securities || []),
       ...(snapTradeData?.securities || [])
     ];
+
+    const securityMap = new Map<string, any>();
+    for (const security of rawSecurities) {
+      if (security.security_id && !securityMap.has(security.security_id)) {
+        securityMap.set(security.security_id, security);
+      }
+    }
+    const securities = Array.from(securityMap.values());
+
+    console.log('FinancialDataService: Data merged', {
+      accounts: accounts.length,
+      holdings: holdings.length,
+      securities: securities.length
+    });
 
     // Calculate portfolio analysis
     const portfolio = this.analyzePortfolio(holdings, securities);
