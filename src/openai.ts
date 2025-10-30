@@ -460,20 +460,45 @@ export async function askOpenAIWithEnhancedContext(
               enriched_data: tx.enriched_data
             }));
             
-            const investmentTxs = financialData.investments.transactions.map(tx => ({
-              id: tx.id,
-              account_id: tx.account_id,
-              amount: tx.amount,
-              date: tx.date,
-              name: tx.name,
-              category: tx.category || ['Investment'],
-              pending: false,
-              enriched_data: tx.enriched_data || {}
-            }));
+            // ✅ CRITICAL: Only include INCOME-generating investment transactions (dividends, interest)
+            // Do NOT include buy/sell transactions as they are asset conversions, not income
+            const investmentTxs = financialData.investments.transactions
+              .filter(tx => {
+                const txType = (tx.type || '').toLowerCase();
+                const txName = (tx.name || '').toLowerCase();
+                // Only include: dividends, interest, and income distributions
+                // Exclude: buy, sell, transfer, fee transactions
+                return (
+                  txType.includes('dividend') ||
+                  txType.includes('interest') ||
+                  txType.includes('income') ||
+                  txName.includes('dividend') ||
+                  txName.includes('interest') ||
+                  (tx.amount > 0 && !txType.includes('buy') && !txType.includes('sell') && !txType.includes('transfer'))
+                );
+              })
+              .map(tx => ({
+                id: tx.id,
+                account_id: tx.account_id,
+                amount: tx.amount,
+                date: tx.date,
+                name: tx.name,
+                category: tx.category || ['Investment', 'Income'],
+                pending: false,
+                enriched_data: tx.enriched_data || {}
+              }));
             
             // Merge both arrays for complete transaction history
             transactions = [...bankingTxs, ...investmentTxs];
-            console.log(`OpenAI Enhanced: Merged transactions - Banking: ${bankingTxs.length}, Investment: ${investmentTxs.length}, Total: ${transactions.length}`);
+            console.log(`OpenAI Enhanced: Merged transactions - Banking: ${bankingTxs.length}, Investment (income only): ${investmentTxs.length}, Total: ${transactions.length}`);
+            
+            // Debug: Show filtered investment transactions
+            if (investmentTxs.length > 0) {
+              console.log(`OpenAI Enhanced: Investment income transactions:`, investmentTxs.slice(0, 5).map(tx => `${tx.name}: $${tx.amount}`));
+            }
+            if (financialData.investments.transactions.length - investmentTxs.length > 0) {
+              console.log(`OpenAI Enhanced: Filtered out ${financialData.investments.transactions.length - investmentTxs.length} non-income investment transactions (buy/sell/transfer)`);
+            }
             
             // Set investment data if available
             if (financialData.investments.holdings.length > 0) {
@@ -610,6 +635,12 @@ export async function askOpenAIWithEnhancedContext(
 - Income Sources: ${topIncomeSources.map(([source, amount]) => `${source}: $${amount.toFixed(2)}`).join(', ')}
 - Total Income Transactions: ${incomeTransactions.length}
 - Analysis Period: ${monthlyIncome.size} month(s)`;
+        
+        console.log(`OpenAI Enhanced: INCOME ANALYSIS SUMMARY:`);
+        console.log(`  - Total Income over ${monthlyIncome.size} months: $${totalIncome.toFixed(2)}`);
+        console.log(`  - Average Monthly Income: $${avgMonthlyIncome.toFixed(2)}`);
+        console.log(`  - Income Transactions: ${incomeTransactions.length} positive transactions`);
+        console.log(`  - Top Sources:`, topIncomeSources.map(([source, amount]) => `${source}: $${amount.toFixed(2)}`).join(', '));
       }
     }
   }
