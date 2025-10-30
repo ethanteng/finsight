@@ -21,12 +21,20 @@ interface SnapTradeAccount {
   balance?: number;
 }
 
+interface SnapTradeTokenStatus {
+  connected: boolean;
+  status: string;
+  error?: string;
+  lastChecked?: string;
+}
+
 interface SnapTradeButtonProps {
   onAccountsUpdated?: () => void;
   isDemo?: boolean;
+  snapTradeStatus?: SnapTradeTokenStatus | null;
 }
 
-export default function SnapTradeButton({ onAccountsUpdated, isDemo = false }: SnapTradeButtonProps) {
+export default function SnapTradeButton({ onAccountsUpdated, isDemo = false, snapTradeStatus: snapTradeTokenStatus }: SnapTradeButtonProps) {
   const [status, setStatus] = useState<string>('loading');
   const [snapTradeStatus, setSnapTradeStatus] = useState<SnapTradeStatus | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<SnapTradeAccount[]>([]);
@@ -375,26 +383,51 @@ export default function SnapTradeButton({ onAccountsUpdated, isDemo = false }: S
       {connectedAccounts.length > 0 && (
         <div className="mt-4">
           <div className="space-y-3">
-            {connectedAccounts.map((account) => (
-              <div key={account.id} className="bg-gray-700 border border-gray-600 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="font-semibold text-white text-base mb-1">{account.name}</div>
-                    <div className="text-gray-400 text-sm">
-                      {account.institution && `${account.institution} • `}{account.type}
-                      {account.subtype && ` • ${account.subtype}`}
-                    </div>
-                  </div>
-                  {account.balance && (
-                    <div className="text-right">
-                      <div className="font-semibold text-white text-base">
-                        ${account.balance.toLocaleString()}
+            {connectedAccounts.map((account) => {
+              // Determine if SnapTrade connection is healthy
+              const isHealthy = snapTradeTokenStatus?.connected && 
+                               (snapTradeTokenStatus?.status === 'VALID' || 
+                                snapTradeTokenStatus?.status === 'valid');
+              
+              return (
+                <div key={account.id} className="bg-gray-700 border border-gray-600 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="font-semibold text-white text-base">{account.name}</div>
+                        {/* Status Indicator based on SnapTrade connection health */}
+                        {isHealthy ? (
+                          <span className="text-green-400" title="Connection active">
+                            ✓
+                          </span>
+                        ) : (
+                          <span className="text-red-400" title={`Connection issue: ${snapTradeTokenStatus?.error || 'Unknown error'}`}>
+                            ✗
+                          </span>
+                        )}
                       </div>
+                      <div className="text-gray-400 text-sm">
+                        {account.institution && `${account.institution} • `}{account.type}
+                        {account.subtype && ` • ${account.subtype}`}
+                      </div>
+                      {/* Show error message if connection is unhealthy */}
+                      {!isHealthy && snapTradeTokenStatus?.error && (
+                        <div className="text-xs text-red-400 mt-1">
+                          {snapTradeTokenStatus.error}
+                        </div>
+                      )}
                     </div>
-                  )}
+                    {account.balance && (
+                      <div className="text-right">
+                        <div className="font-semibold text-white text-base">
+                          ${account.balance.toLocaleString()}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

@@ -1330,6 +1330,7 @@ export default function ProfilePage() {
             <div className="mb-6">
               <SnapTradeButton 
                 isDemo={isDemo}
+                snapTradeStatus={snapTradeStatus}
                 onAccountsUpdated={() => {
                   // Refresh investment data when SnapTrade accounts are updated
                   if (!isDemo) {
