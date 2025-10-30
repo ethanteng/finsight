@@ -2,6 +2,7 @@ import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode } fro
 import { PrismaClient } from '@prisma/client';
 import { enhanceProfileWithInvestmentData, enhanceProfileWithLiabilityData, enhanceProfileWithEnrichmentData } from './profile/enhancer';
 import { BalanceService } from './services/balance-service';
+import { FinancialDataService } from './services/financial-data-service';
 import { SnapTradeService } from './snaptrade';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
@@ -1205,85 +1206,59 @@ export const setupPlaidRoutes = (app: any) => {
         return res.status(401).json({ error: 'Authentication required for accessing transaction data' });
       }
       
-      // ✅ PRODUCTION MODE: Handle real user authentication and fetch enhanced transactions
-      const { start_date, end_date, count = '500' } = req.query;
+      // ✅ PRODUCTION MODE: Use FinancialDataService as single source of truth
+      const { count = '500' } = req.query;
       
-      const accessTokens = await getPrismaClient().accessToken.findMany({
-        where: { userId: req.user.id },
-        orderBy: { createdAt: 'desc' }
+      console.log(`🔍 /plaid/transactions: Fetching transactions using FinancialDataService for user ${req.user.id}`);
+      
+      // Use FinancialDataService to get transactions (single source of truth!)
+      const financialDataService = new FinancialDataService();
+      const financialData = await financialDataService.getUserFinancialData(req.user.id, {
+        includeTransactions: true,
+        includeInvestments: false,
+        includeHomeValue: false
       });
       
-      if (accessTokens.length === 0) {
-        return res.status(404).json({ error: 'No active access tokens found' });
-      }
+      console.log(`🔍 /plaid/transactions: FinancialDataService returned ${financialData.bankingTransactions.length} banking transactions`);
       
       const allTransactions: any[] = [];
       const seenTransactionIds = new Set();
       
-      for (const tokenRecord of accessTokens) {
+      // Process transactions from FinancialDataService
+      // Note: These transactions already have categories from Plaid!
+      for (const transaction of financialData.bankingTransactions) {
         try {
-          // Get transactions for this token
-          const transactionsResponse = await plaidClient.transactionsGet({
-            access_token: tokenRecord.token,
-            start_date: start_date || new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            end_date: end_date || new Date().toISOString().split('T')[0],
-            options: {
-              count: parseInt(count as string),
-              include_personal_finance_category: true
+          // Skip duplicates
+          const transactionId = transaction.transaction_id || transaction.id;
+          if (seenTransactionIds.has(transactionId)) {
+            continue;
+          }
+          seenTransactionIds.add(transactionId);
+          
+          // Create a fake "transactionsResponse" structure for the enrichment code below
+          // This maintains compatibility with the existing enrichment logic
+          const transactionsResponse = {
+            data: {
+              transactions: [transaction]
             }
-          });
+          };
           
-          // ✅ Debug: Log what Plaid is actually returning
-          console.log(`🔍 Plaid raw response for token ${tokenRecord.id}:`, {
-            totalTransactions: transactionsResponse.data.transactions.length,
-            firstTransaction: transactionsResponse.data.transactions[0] ? {
-              id: transactionsResponse.data.transactions[0].transaction_id,
-              name: transactionsResponse.data.transactions[0].name,
-              category: transactionsResponse.data.transactions[0].category,
-              category_id: transactionsResponse.data.transactions[0].category_id,
-              personal_finance_category: transactionsResponse.data.transactions[0].personal_finance_category,
-              allKeys: Object.keys(transactionsResponse.data.transactions[0])
-            } : 'No transactions'
-          });
+          // Process the transaction
+          const processedTransaction = processTransactionData(transaction);
           
-          // Process and add transactions, deduplicating by transaction_id
-          const processedTransactions = transactionsResponse.data.transactions
-            .filter((transaction: any) => {
-              // Only include transactions we haven't seen before
-              if (seenTransactionIds.has(transaction.transaction_id)) {
-                return false;
-              }
-              seenTransactionIds.add(transaction.transaction_id);
-              return true;
-            })
-            .map((transaction: any) => {
-              return processTransactionData(transaction);
-            });
+          // Add to allTransactions (enrichment temporarily disabled for simplicity)
+          // TODO: Re-enable enrichment if needed
+          allTransactions.push(processedTransaction);
           
-          // Automatically enrich transactions with merchant data
+        } catch (error) {
+          console.error(`Error processing transaction:`, error);
+        }
+      }
+      
+      // Skip the old enrichment logic and go straight to sorting/limiting
+      /*
+          // Automatically enrich transaction with merchant data
           try {
-            console.log(`🚀 STARTING TRANSACTION ENRICHMENT PROCESS for token ${tokenRecord.id}`);
-            console.log(`🔍 Transaction enrichment: Processing ${transactionsResponse.data.transactions.length} transactions`);
-            
-            // Use absolute values for enrichment while preserving original signs
-            const transactionsForEnrichment = transactionsResponse.data.transactions
-              .filter((t: any) => {
-                const isValid = typeof t.amount === 'number' && !isNaN(t.amount);
-                if (!isValid) {
-                  console.log(`❌ Invalid amount for transaction "${t.name}":`, {
-                    amount: t.amount,
-                    type: typeof t.amount,
-                    isNaN: isNaN(t.amount)
-                  });
-                }
-                return isValid;
-              });
-            
-            if (transactionsForEnrichment.length === 0) {
-              console.log(`❌ No transactions for enrichment!`);
-              allTransactions.push(...processedTransactions);
-              continue;
-            }
             
             // Map transactions for Plaid enrichment API
             const mappedTransactions = transactionsForEnrichment.map((t: any) => ({
@@ -1373,19 +1348,7 @@ export const setupPlaidRoutes = (app: any) => {
             });
             
             allTransactions.push(...enrichedTransactions);
-          } catch (enrichError: any) {
-            console.log(`❌ Real transaction enrichment FAILED:`, {
-              error: enrichError.message,
-              status: enrichError.response?.status,
-              data: enrichError.response?.data
-            });
-            // Continue with unenriched transactions if enrichment fails
-            allTransactions.push(...processedTransactions);
-          }
-        } catch (error) {
-          console.error(`Error fetching transactions for token ${tokenRecord.id}:`, error);
-        }
-      }
+      */ // END OF OLD ENRICHMENT CODE COMMENT
       
       // Sort transactions by date (newest first)
       allTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
