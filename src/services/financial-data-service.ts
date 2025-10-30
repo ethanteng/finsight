@@ -390,7 +390,9 @@ export class FinancialDataService {
                 if (options.includeTransactions) {
                   try {
                     const endDate = new Date().toISOString().split('T')[0];
-                    const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                    const startDate = new Date(Date.now() - 730 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // 2 years ago
+                    
+                    console.log(`FinancialDataService: Fetching Plaid investment transactions from ${startDate} to ${endDate}`);
                     
                     const investmentTransactionsResponse = await plaidClient.investmentsTransactionsGet({
                       access_token: tokenRecord.token,

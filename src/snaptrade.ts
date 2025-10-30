@@ -398,9 +398,9 @@ export class SnapTradeService {
       // Get activities for each account
       const allActivities = [];
       
-      // ✅ Set date range for activities (last 90 days to match typical transaction history)
+      // ✅ Set date range for activities (last 2 years to capture all historical transactions)
       const endDate = new Date().toISOString().split('T')[0]; // Today (YYYY-MM-DD)
-      const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // 90 days ago
+      const startDate = new Date(Date.now() - 730 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // 2 years ago (730 days)
       
       console.log(`🔍 Fetching activities from ${startDate} to ${endDate}`);
       
