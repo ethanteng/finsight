@@ -686,11 +686,82 @@ export class FinancialDataService {
         }
       }
 
+      // ✅ Get transactions/activities if option is enabled
+      if (options.includeTransactions) {
+        try {
+          const activitiesResult = await snapTradeService.getUserActivities(userId, snapTradeUser.userSecret);
+          
+          if (activitiesResult.success && activitiesResult.data?.activities) {
+            for (const activity of activitiesResult.data.activities) {
+              // SnapTrade activities can have different structures depending on the type
+              // Handle both order structure and activity structure
+              
+              // Get security information from universal_symbol or symbol
+              const symbol = activity.universal_symbol || activity.symbol;
+              const securityId = symbol?.id || symbol?.symbol || activity.symbol || 'unknown';
+              const securityName = symbol?.description || symbol?.raw_symbol || symbol?.symbol || 'Unknown';
+              
+              // Get action/type (BUY, SELL, BUY_COVER, SELL_SHORT, etc.)
+              const action = activity.action || activity.type || 'unknown';
+              
+              // Get quantity - could be filled_quantity (orders) or units (activities)
+              const quantity = parseFloat(activity.filled_quantity || activity.units || activity.quantity || '0');
+              
+              // Get price - could be execution_price (orders) or price (activities)
+              const price = activity.execution_price || activity.price || 0;
+              
+              // Get date - could be time_executed (orders) or trade_date/settlement_date (activities)
+              const date = activity.time_executed || activity.trade_date || activity.settlement_date || activity.time_placed || new Date().toISOString();
+              
+              // Calculate amount (positive for buys, negative for sells to match Plaid convention)
+              const amount = price * quantity;
+              const normalizedAmount = (action.includes('SELL') || action.includes('sell')) ? -Math.abs(amount) : Math.abs(amount);
+              
+              // Convert SnapTrade activity to standard transaction format
+              transactions.push({
+                id: activity.id || activity.brokerage_order_id || `snaptrade-${date}-${securityId}`,
+                account_id: activity.account ? `snaptrade-${activity.account}` : 'snaptrade-unknown',
+                security_id: securityId,
+                amount: normalizedAmount,
+                date: date,
+                name: `${action} ${securityName}`.trim(),
+                quantity: quantity,
+                price: price,
+                fees: activity.fee || activity.commission || 0,
+                type: action.toLowerCase(),
+                iso_currency_code: activity.currency?.code || symbol?.currency?.code || 'USD',
+                snapTradeData: {
+                  action: action,
+                  status: activity.status,
+                  order_type: activity.order_type,
+                  account_name: activity.account_name,
+                  description: activity.description,
+                  institution: activity.institution,
+                  brokerage_order_id: activity.brokerage_order_id
+                }
+              });
+            }
+          } else {
+            errors.push({
+              error: activitiesResult.error || 'Failed to fetch SnapTrade activities',
+              timestamp: new Date()
+            });
+          }
+        } catch (activityError: any) {
+          console.error('Error fetching SnapTrade activities:', activityError);
+          errors.push({
+            error: activityError.message || 'Failed to fetch SnapTrade activities',
+            timestamp: new Date()
+          });
+        }
+      }
+
       const duration = Date.now() - startTime;
       console.log('FinancialDataService: SnapTrade fetch complete', {
         duration,
         accountCount: accounts.length,
         holdingCount: holdings.length,
+        transactionCount: transactions.length,
         errorCount: errors.length,
         success: errors.length === 0
       });

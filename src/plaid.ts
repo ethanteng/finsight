@@ -2348,7 +2348,7 @@ export const setupPlaidRoutes = (app: any) => {
       const financialDataService = new FinancialDataService();
       
       const financialData = await financialDataService.getUserFinancialData(req.user.id, {
-        includeTransactions: false,
+        includeTransactions: true, // ✅ Include investment transactions for the Transactions tab
         includeInvestments: true,
         includeHomeValue: false
       });
