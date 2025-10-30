@@ -162,7 +162,7 @@ interface Conversation {
  */
 function filterTransactionsForAI(transactions: any[]): any[] {
   if (transactions.length <= 200) return transactions; // Cap at 200 for context window optimization
-  
+
   const now = new Date();
   const transactionHistoryDays = parseInt(process.env.TRANSACTION_HISTORY_DAYS || '90', 10);
   const cutoffDate = new Date(now.getTime() - transactionHistoryDays * 24 * 60 * 60 * 1000);
@@ -181,23 +181,23 @@ function filterTransactionsForAI(transactions: any[]): any[] {
     // Priority 2: Large expenses (high impact)
     const expenses = recent.filter(t => t.amount < 0);
     const largeExpenses = expenses
-      .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+    .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
       .slice(0, 100); // Keep top 100 largest expenses
     
     // Priority 3: Most recent 30 days (regardless of size)
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const veryRecent = recent.filter(t => new Date(t.date) >= thirtyDaysAgo);
-    
-    // Combine and deduplicate
-    const selected = new Set([
+  
+  // Combine and deduplicate
+  const selected = new Set([
       ...veryRecent,      // All from last 30 days
       ...income,          // All income transactions
       ...largeExpenses    // Large expenses from 31-90 days
-    ]);
-    
-    const filtered = Array.from(selected);
+  ]);
+  
+  const filtered = Array.from(selected);
     console.log(`OpenAI: Prioritized to ${filtered.length} transactions (all income + large expenses + recent 30 days)`);
-    
+  
     return filtered.slice(0, 200); // Cap at 200
   }
   
@@ -410,10 +410,10 @@ export async function askOpenAIWithEnhancedContext(
         console.log('OpenAI Enhanced: Fetching user-specific data for userId:', userId);
         
         // CRITICAL SECURITY FIX: Never call external APIs in demo mode
-        if (isDemo) {
+          if (isDemo) {
           console.log('OpenAI Enhanced: DEMO MODE - Skipping external API calls for security');
-        } else {
-          try {
+          } else {
+            try {
             // ✅ Use unified FinancialDataService for all data
             const { FinancialDataService } = await import('./services/financial-data-service');
             const financialDataService = new FinancialDataService();
@@ -435,7 +435,7 @@ export async function askOpenAIWithEnhancedContext(
               institution_id: acc.institution_id,
               institution_logo: acc.institution_logo,
               institution_url: acc.institution_url,
-              balance: {
+                        balance: {
                 available: acc.balance.available,
                 current: acc.balance.current,
                 limit: acc.balance.limit,
@@ -553,14 +553,14 @@ export async function askOpenAIWithEnhancedContext(
             console.log('OpenAI Enhanced: Data fetch duration:', financialData.metadata.performance.totalDuration, 'ms');
             console.log('OpenAI Enhanced: Partial data:', financialData.metadata.partialData);
             
-          } catch (error) {
+                  } catch (error) {
             console.error('OpenAI Enhanced: Error fetching unified financial data:', error);
           }
         }
       } else {
         console.log('OpenAI Enhanced: No userId provided, fetching all data (this should not happen for authenticated users)');
       }
-    } catch (error) {
+                  } catch (error) {
       console.error('OpenAI Enhanced: Error fetching user data:', error);
     }
   }
@@ -575,14 +575,14 @@ export async function askOpenAIWithEnhancedContext(
       
       const name = transaction.name?.toLowerCase() || '';
       
-      // ✅ Check ALL categories in the array, not just the first one
-      const allBasicCategories = Array.isArray(transaction.category) 
-        ? transaction.category.map((c: any) => c?.toLowerCase() || '').join(' ')
-        : (transaction.category?.[0]?.toLowerCase() || '');
-      
-      const allEnrichedCategories = Array.isArray(transaction.enriched_data?.category)
-        ? transaction.enriched_data.category.map((c: any) => c?.toLowerCase() || '').join(' ')
-        : (transaction.enriched_data?.category?.[0]?.toLowerCase() || '');
+      // ✅ Check ALL categories from multiple sources (basic, enriched, personal_finance_category)
+      const basicCatsArray = Array.isArray(transaction.category) ? transaction.category : (transaction.category ? [transaction.category] : []);
+      const enrichedCatsArray = Array.isArray(transaction.enriched_data?.category) ? transaction.enriched_data.category : (transaction.enriched_data?.category ? [transaction.enriched_data.category] : []);
+      const pfcPrimary = (transaction as any).personal_finance_category?.primary || '';
+      const pfcDetailed = (transaction as any).personal_finance_category?.detailed || '';
+      const combinedBasic = [...basicCatsArray, pfcPrimary, pfcDetailed].filter(Boolean) as string[];
+      const allBasicCategories = combinedBasic.map(c => c.toLowerCase()).join(' ');
+      const allEnrichedCategories = enrichedCatsArray.map((c: any) => (c || '').toLowerCase()).join(' ');
       
       // ✅ STEP 1: Check if Plaid explicitly categorized this as INCOME
       // Trust Plaid's basic income categorization - they know what they're doing!
@@ -705,14 +705,14 @@ export async function askOpenAIWithEnhancedContext(
         // Identify income source
         const name = transaction.name?.toLowerCase() || '';
         
-        // ✅ Check ALL categories in the array for better matching
-        const allBasicCats = Array.isArray(transaction.category) 
-          ? transaction.category.map((c: any) => c?.toLowerCase() || '').join(' ')
-          : (transaction.category?.[0]?.toLowerCase() || '');
-        
-        const allEnrichedCats = Array.isArray(transaction.enriched_data?.category)
-          ? transaction.enriched_data.category.map((c: any) => c?.toLowerCase() || '').join(' ')
-          : (transaction.enriched_data?.category?.[0]?.toLowerCase() || '');
+        // ✅ Check ALL categories from multiple sources (basic, enriched, personal_finance_category)
+        const basicCatsArray2 = Array.isArray(transaction.category) ? transaction.category : (transaction.category ? [transaction.category] : []);
+        const enrichedCatsArray2 = Array.isArray(transaction.enriched_data?.category) ? transaction.enriched_data.category : (transaction.enriched_data?.category ? [transaction.enriched_data.category] : []);
+        const pfcPrimary2 = (transaction as any).personal_finance_category?.primary || '';
+        const pfcDetailed2 = (transaction as any).personal_finance_category?.detailed || '';
+        const combinedBasic2 = [...basicCatsArray2, pfcPrimary2, pfcDetailed2].filter(Boolean) as string[];
+        const allBasicCats = combinedBasic2.map(c => c.toLowerCase()).join(' ');
+        const allEnrichedCats = enrichedCatsArray2.map((c: any) => (c || '').toLowerCase()).join(' ');
         
         // IMPORTANT: For income detection, prioritize basic categories over enriched when basic shows income
         // Enriched categories sometimes misclassify income (e.g., "Interest Credit" as "Bank Fees")
@@ -1191,9 +1191,9 @@ export async function askOpenAIWithEnhancedContext(
   // ✅ NO NEED to process SnapTrade data separately - holdings already merged by FinancialDataService
   // The combinedHoldings and combinedPortfolioValue already include both Plaid and SnapTrade data
   console.log('🔍 Using unified holdings data (already includes both Plaid and SnapTrade)');
-  console.log('🔍 Final combined portfolio value:', combinedPortfolioValue);
-  console.log('🔍 Final asset allocation:', Array.from(combinedAssetAllocation.entries()));
-  console.log('🔍 Total combined holdings:', combinedHoldings.length);
+    console.log('🔍 Final combined portfolio value:', combinedPortfolioValue);
+    console.log('🔍 Final asset allocation:', Array.from(combinedAssetAllocation.entries()));
+    console.log('🔍 Total combined holdings:', combinedHoldings.length);
   
   // Create unified portfolio summary
   if (combinedPortfolioValue > 0) {
