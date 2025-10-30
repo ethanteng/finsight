@@ -556,8 +556,68 @@ export async function askOpenAIWithEnhancedContext(
   // Analyze income patterns BEFORE anonymization
   let incomeAnalysis = '';
   if (!isDemo && transactions.length > 0) {
-    const incomeTransactions = transactions.filter(transaction => transaction.amount > 0);
-    console.log(`OpenAI Enhanced: Analyzing income from ${incomeTransactions.length} positive transactions out of ${transactions.length} total`);
+    // ✅ CRITICAL: Filter for actual INCOME, not just positive amounts
+    // Exclude transfers, deposits, refunds, and other non-income positive transactions
+    const incomeTransactions = transactions.filter(transaction => {
+      if (transaction.amount <= 0) return false; // Must be positive
+      
+      const name = transaction.name?.toLowerCase() || '';
+      const basicCategory = transaction.category?.[0]?.toLowerCase() || '';
+      const enrichedCategory = transaction.enriched_data?.category?.[0]?.toLowerCase() || '';
+      
+      // ❌ EXCLUDE: Transfers (moving money between accounts is NOT income)
+      if (name.includes('transfer') || basicCategory.includes('transfer') || enrichedCategory.includes('transfer')) {
+        return false;
+      }
+      
+      // ❌ EXCLUDE: Deposits (moving money into account is NOT income)
+      if (name.includes('deposit') && !name.includes('interest deposit')) {
+        return false;
+      }
+      
+      // ❌ EXCLUDE: Refunds and returns (getting your money back is NOT income)
+      if (name.includes('refund') || name.includes('return') || basicCategory.includes('refund')) {
+        return false;
+      }
+      
+      // ❌ EXCLUDE: Merchant/payment reversals
+      if (name.includes('reversal') || name.includes('correction')) {
+        return false;
+      }
+      
+      // ✅ INCLUDE: Explicit income categories
+      const isIncome = 
+        basicCategory.includes('income') ||
+        basicCategory.includes('salary') ||
+        basicCategory.includes('wages') ||
+        basicCategory.includes('interest') ||
+        basicCategory.includes('dividend') ||
+        basicCategory.includes('social security') ||
+        basicCategory.includes('government benefits') ||
+        enrichedCategory.includes('income') ||
+        enrichedCategory.includes('salary') ||
+        enrichedCategory.includes('wages');
+      
+      // ✅ INCLUDE: Common income transaction names
+      const isIncomeByName =
+        name.includes('salary') ||
+        name.includes('wages') ||
+        name.includes('payroll') ||
+        name.includes('social security') ||
+        name.includes('ssa ') ||
+        name.includes('interest credit') ||
+        name.includes('interest deposit') ||
+        name.includes('dividend') ||
+        name.includes('annuity') ||
+        name.includes('rmd') ||
+        name.includes('pension') ||
+        name.includes('unemployment') ||
+        name.includes('disability');
+      
+      return isIncome || isIncomeByName;
+    });
+    
+    console.log(`OpenAI Enhanced: Analyzing income from ${incomeTransactions.length} actual income transactions (filtered out ${transactions.filter(t => t.amount > 0).length - incomeTransactions.length} non-income positive transactions)`);
     if (incomeTransactions.length > 0) {
       const monthlyIncome = new Map<string, number>();
       const incomeSources = new Map<string, number>();
