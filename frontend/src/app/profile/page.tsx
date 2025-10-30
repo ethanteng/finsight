@@ -142,6 +142,16 @@ interface TokenStatus {
   itemId: string | null;
 }
 
+interface SnapTradeStatus {
+  connected: boolean;
+  status: string;
+  error?: string;
+  lastChecked?: string;
+  snapTradeUserId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export default function ProfilePage() {
   const [connectedAccounts, setConnectedAccounts] = useState<Account[]>([]);
   const [investmentData, setInvestmentData] = useState<InvestmentData | null>(null);
@@ -150,6 +160,7 @@ export default function ProfilePage() {
   const [error, setError] = useState('');
   const [isDemo, setIsDemo] = useState<boolean | undefined>(undefined); // Start as undefined to prevent premature rendering
   const [tokenStatuses, setTokenStatuses] = useState<TokenStatus[]>([]);
+  const [snapTradeStatus, setSnapTradeStatus] = useState<SnapTradeStatus | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState<string>('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -213,6 +224,45 @@ export default function ProfilePage() {
       }
     } catch (error) {
       console.error('❌ Error loading token statuses:', error);
+    }
+  }, [API_URL, isDemo]);
+
+  // Load SnapTrade status for non-demo users
+  const loadSnapTradeStatus = useCallback(async () => {
+    console.log('🔍 loadSnapTradeStatus called, isDemo:', isDemo);
+    
+    if (isDemo) {
+      console.log('⏭️ Skipping SnapTrade status load - demo mode');
+      return;
+    }
+    
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        console.log('⚠️ No auth token found');
+        return;
+      }
+      
+      console.log('📡 Fetching SnapTrade status from:', `${API_URL}/profile/snaptrade-status`);
+      
+      const response = await fetch(`${API_URL}/profile/snaptrade-status`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('📥 SnapTrade status response:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ SnapTrade status loaded:', data);
+        setSnapTradeStatus(data);
+      } else {
+        console.error('❌ Failed to load SnapTrade status:', response.status, response.statusText);
+      }
+    } catch (error) {
+      console.error('❌ Error loading SnapTrade status:', error);
     }
   }, [API_URL, isDemo]);
 
@@ -678,6 +728,14 @@ export default function ProfilePage() {
         await loadConnectedAccountsWithDemoMode(isDemo);
         await loadInvestmentData(isDemo);
         
+        // Load token statuses for non-demo users
+        if (!isDemo) {
+          await Promise.all([
+            loadTokenStatuses(),
+            loadSnapTradeStatus()
+          ]);
+        }
+        
         // Try to refresh transaction history
         if (transactionHistoryRef.current?.refresh) {
           try {
@@ -753,7 +811,7 @@ export default function ProfilePage() {
         }
       }
     }
-  }, [isDemo, loadConnectedAccountsWithDemoMode, loadInvestmentData]);
+  }, [isDemo, loadConnectedAccountsWithDemoMode, loadInvestmentData, loadTokenStatuses, loadSnapTradeStatus]);
 
   useEffect(() => {
     // Check if demo mode is explicitly requested via URL parameter
@@ -828,10 +886,11 @@ export default function ProfilePage() {
               setUserEmail(userData.user.email);
             }
             
-            // Fetch subscription status and token statuses
+            // Fetch subscription status, token statuses, and SnapTrade status
             await Promise.all([
               loadSubscriptionStatus(),
-              loadTokenStatuses()
+              loadTokenStatuses(),
+              loadSnapTradeStatus()
             ]);
           }
         } catch (error) {
@@ -841,7 +900,7 @@ export default function ProfilePage() {
       
       fetchUserData();
     }
-  }, [isDemo, API_URL, loadSubscriptionStatus, loadTokenStatuses]);
+  }, [isDemo, API_URL, loadSubscriptionStatus, loadTokenStatuses, loadSnapTradeStatus]);
 
   // Reset Plaid Link flag when forcePlaidReinitialize becomes true
   useEffect(() => {
@@ -1146,12 +1205,13 @@ export default function ProfilePage() {
                 <div className="text-gray-400">
                   {error}
                 </div>
-              ) : connectedAccounts.length === 0 ? (
+              ) : connectedAccounts.length === 0 && tokenStatuses.length === 0 ? (
                 <div className="text-gray-400 text-sm">
                   No accounts connected yet. Use the button above to connect your first account.
                 </div>
               ) : (
                 <div className="space-y-3">
+                  {/* Display connected accounts */}
                   {connectedAccounts.map((account) => {
                     // Find token status for this account's institution
                     const tokenStatus = tokenStatuses.find(t => 
@@ -1218,6 +1278,47 @@ export default function ProfilePage() {
                       </div>
                     );
                   })}
+
+                  {/* Display orphaned tokens (tokens without accounts) */}
+                  {tokenStatuses
+                    .filter(token => {
+                      // Find tokens that don't have any associated accounts
+                      const hasAccounts = connectedAccounts.some(account => 
+                        account.institution === token.institutionName
+                      );
+                      return !hasAccounts;
+                    })
+                    .map(token => (
+                      <div 
+                        key={token.id} 
+                        className="bg-gray-800/50 rounded-lg p-4 border-2 border-red-500/30"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <div className="font-medium text-white">{token.institutionName || 'Unknown Institution'}</div>
+                              <span className="text-red-400" title={`Connection issue: ${token.lastError || 'Unknown error'}`}>
+                                ✗
+                              </span>
+                            </div>
+                            <div className="text-sm text-gray-400 mt-1">
+                              No accounts available
+                            </div>
+                            <div className="text-xs text-red-400 mt-1">
+                              {token.lastError === 'ITEM_LOGIN_REQUIRED' ? 
+                                'Re-authentication required - Click "Connect Account" above to reconnect' :
+                                token.lastError || 'Connection expired'}
+                            </div>
+                            {!token.isActive && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                Last checked: {token.lastChecked ? new Date(token.lastChecked).toLocaleString() : 'Never'}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  }
                 </div>
               )}
             </div>
@@ -1239,38 +1340,86 @@ export default function ProfilePage() {
             </div>
             
             {/* Connected SnapTrade Accounts List */}
-            {snapTradeHoldings && snapTradeHoldings.length > 0 && (
-              <div className="mb-6">
-                <h3 className="text-sm font-medium text-gray-300 mb-3">Connected Investment Accounts</h3>
-                <div className="space-y-3">
-                  {snapTradeHoldings.map((holding: Record<string, unknown>, index: number) => {
-                    const account = holding.account as Record<string, unknown> | undefined;
-                    if (!account) return null;
-                    
-                    return (
-                      <div 
-                        key={index}
-                        className="bg-gray-700 rounded-lg p-4 border border-gray-600"
-                      >
-                        <div className="flex items-center gap-2">
-                          <div className="font-medium text-white">
-                            {account.name as string || 'Investment Account'}
+            <div className="mb-6">
+              {snapTradeHoldings && snapTradeHoldings.length > 0 ? (
+                <>
+                  <h3 className="text-sm font-medium text-gray-300 mb-3">Connected Investment Accounts</h3>
+                  <div className="space-y-3">
+                    {snapTradeHoldings.map((holding: Record<string, unknown>, index: number) => {
+                      const account = holding.account as Record<string, unknown> | undefined;
+                      if (!account) return null;
+                      
+                      // Determine if SnapTrade connection is healthy
+                      const isHealthy = snapTradeStatus?.connected && 
+                                       (snapTradeStatus?.status === 'VALID' || 
+                                        snapTradeStatus?.status === 'valid');
+                      
+                      return (
+                        <div 
+                          key={index}
+                          className="bg-gray-700 rounded-lg p-4 border border-gray-600"
+                        >
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <div className="font-medium text-white">
+                                  {account.name as string || 'Investment Account'}
+                                </div>
+                                {/* Status Indicator based on SnapTrade connection health */}
+                                {isHealthy ? (
+                                  <span className="text-green-400" title="Connection active">
+                                    ✓
+                                  </span>
+                                ) : (
+                                  <span className="text-red-400" title={`Connection issue: ${snapTradeStatus?.error || 'Unknown error'}`}>
+                                    ✗
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-sm text-gray-400">
+                                {(account.institution_name as string) || 'Investment Account'}
+                                {typeof account.number === 'string' && ` • ${account.number}`}
+                              </div>
+                              {/* Show error message if connection is unhealthy */}
+                              {!isHealthy && snapTradeStatus?.error && (
+                                <div className="text-xs text-red-400 mt-1">
+                                  {snapTradeStatus.error}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          {/* Status Indicator - Always show green for connected SnapTrade accounts */}
-                          <span className="text-green-400" title="Connection active">
-                            ✓
-                          </span>
                         </div>
-                        <div className="text-sm text-gray-400">
-                          {(account.institution_name as string) || 'Investment Account'}
-                          {typeof account.number === 'string' && ` • ${account.number}`}
-                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : snapTradeStatus?.connected && snapTradeStatus?.status !== 'VALID' && snapTradeStatus?.status !== 'valid' ? (
+                /* Display orphaned SnapTrade connection (connected but no accounts or unhealthy) */
+                <div className="bg-gray-800/50 rounded-lg p-4 border-2 border-red-500/30 mb-6">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <div className="font-medium text-white">SnapTrade Connection</div>
+                        <span className="text-red-400" title={`Connection issue: ${snapTradeStatus.error || 'Unknown error'}`}>
+                          ✗
+                        </span>
                       </div>
-                    );
-                  })}
+                      <div className="text-sm text-gray-400 mt-1">
+                        No investment accounts available
+                      </div>
+                      <div className="text-xs text-red-400 mt-1">
+                        {snapTradeStatus.error || 'Connection issue - Click "Connect Account" above to reconnect'}
+                      </div>
+                      {snapTradeStatus.lastChecked && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          Last checked: {new Date(snapTradeStatus.lastChecked).toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : null}
+            </div>
             
             {/* Supported Financial Institutions */}
             <div className="mt-6">

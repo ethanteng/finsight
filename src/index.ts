@@ -2886,6 +2886,56 @@ app.get('/profile/tokens', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
+// Get SnapTrade connection status
+app.get('/profile/snaptrade-status', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const prisma = getPrismaClient();
+    
+    const snapTradeUser = await prisma.snapTradeUser.findUnique({
+      where: { userId: req.user!.id },
+      select: {
+        id: true,
+        snapTradeUserId: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+    
+    if (!snapTradeUser) {
+      return res.json({ 
+        connected: false,
+        status: 'not_connected'
+      });
+    }
+    
+    // Validate the SnapTrade connection by checking token health
+    const { TokenValidationService } = await import('./services/token-validation-service');
+    const tokenValidationService = new TokenValidationService();
+    const tokenHealth = await tokenValidationService.validateSnapTradeToken(req.user!.id);
+    
+    res.json({
+      connected: true,
+      status: tokenHealth.status,
+      error: tokenHealth.error,
+      lastChecked: tokenHealth.lastChecked,
+      snapTradeUserId: snapTradeUser.snapTradeUserId,
+      createdAt: snapTradeUser.createdAt,
+      updatedAt: snapTradeUser.updatedAt
+    });
+  } catch (error) {
+    console.error('Failed to fetch SnapTrade status:', error);
+    
+    // Capture error in Sentry
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in SnapTrade status endpoint', 'error');
+    }
+    
+    res.status(500).json({ error: 'Failed to fetch SnapTrade status' });
+  }
+});
+
 // Test endpoint for RAG search functionality
 app.get('/test/search-context', async (req: Request, res: Response) => {
   try {
