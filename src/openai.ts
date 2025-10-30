@@ -158,19 +158,20 @@ interface Conversation {
  * Intelligently filter and prioritize transactions for AI context
  * Focuses on most relevant transactions to improve AI response quality
  * 
- * Uses full 90-day transaction history for better income pattern analysis
+ * Uses configurable transaction history (TRANSACTION_HISTORY_DAYS env var)
  */
 function filterTransactionsForAI(transactions: any[]): any[] {
-  if (transactions.length <= 200) return transactions; // Increased from 150 to accommodate 90 days
+  if (transactions.length <= 200) return transactions; // Cap at 200 for context window optimization
   
   const now = new Date();
-  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+  const transactionHistoryDays = parseInt(process.env.TRANSACTION_HISTORY_DAYS || '90', 10);
+  const cutoffDate = new Date(now.getTime() - transactionHistoryDays * 24 * 60 * 60 * 1000);
   
-  // ✅ Include ALL transactions from last 90 days (full available history)
+  // ✅ Include ALL transactions from configured history window (full available history)
   // This ensures income analysis can see all income patterns over time
-  const recent = transactions.filter(t => new Date(t.date) >= ninetyDaysAgo);
+  const recent = transactions.filter(t => new Date(t.date) >= cutoffDate);
   
-  console.log(`OpenAI: Using ${recent.length} transactions from last 90 days (out of ${transactions.length} total)`);
+  console.log(`OpenAI: Using ${recent.length} transactions from last ${transactionHistoryDays} days (out of ${transactions.length} total)`);
   
   // If still too many transactions, prioritize but keep more
   if (recent.length > 200) {

@@ -390,9 +390,11 @@ export class FinancialDataService {
                 if (options.includeTransactions) {
                   try {
                     const endDate = new Date().toISOString().split('T')[0];
-                    const startDate = new Date(Date.now() - 730 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // 2 years ago
+                    const investmentHistoryYears = parseInt(process.env.INVESTMENT_HISTORY_YEARS || '2', 10);
+                    const investmentHistoryDays = investmentHistoryYears * 365;
+                    const startDate = new Date(Date.now() - investmentHistoryDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
                     
-                    console.log(`FinancialDataService: Fetching Plaid investment transactions from ${startDate} to ${endDate}`);
+                    console.log(`FinancialDataService: Fetching Plaid investment transactions from ${startDate} to ${endDate} (${investmentHistoryYears} years)`);
                     
                     const investmentTransactionsResponse = await plaidClient.investmentsTransactionsGet({
                       access_token: tokenRecord.token,
@@ -450,9 +452,10 @@ export class FinancialDataService {
           if (options.includeTransactions) {
             try {
               const endDate = new Date().toISOString().split('T')[0];
-              const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // 90 days
+              const transactionHistoryDays = parseInt(process.env.TRANSACTION_HISTORY_DAYS || '90', 10);
+              const startDate = new Date(Date.now() - transactionHistoryDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
               
-              console.log(`FinancialDataService: Fetching Plaid banking transactions from ${startDate} to ${endDate}`);
+              console.log(`FinancialDataService: Fetching Plaid banking transactions from ${startDate} to ${endDate} (${transactionHistoryDays} days)`);
 
               const transactionsResponse = await plaidClient.transactionsGet({
                 access_token: tokenRecord.token,

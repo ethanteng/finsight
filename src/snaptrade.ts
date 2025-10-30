@@ -406,11 +406,13 @@ export class SnapTradeService {
       // Get activities for each account
       const allActivities = [];
       
-      // ✅ Set date range for activities (last 2 years to capture all historical transactions)
+      // ✅ Set date range for activities (configurable via INVESTMENT_HISTORY_YEARS env var)
       const endDate = new Date().toISOString().split('T')[0]; // Today (YYYY-MM-DD)
-      const startDate = new Date(Date.now() - 730 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // 2 years ago (730 days)
+      const investmentHistoryYears = parseInt(process.env.INVESTMENT_HISTORY_YEARS || '2', 10);
+      const investmentHistoryDays = investmentHistoryYears * 365;
+      const startDate = new Date(Date.now() - investmentHistoryDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       
-      console.log(`🔍 Fetching activities from ${startDate} to ${endDate}`);
+      console.log(`🔍 Fetching SnapTrade activities from ${startDate} to ${endDate} (${investmentHistoryYears} years)`);
       
       for (const account of accountsResult.data.accounts) {
         try {

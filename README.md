@@ -192,6 +192,10 @@ ALPHA_VANTAGE_API_KEY="your_alpha_vantage_api_key"
 # Home Valuation API
 RENTCAST_API_KEY="your_rentcast_api_key"
 
+# Transaction History Configuration
+TRANSACTION_HISTORY_DAYS="90"           # Number of days to fetch banking transactions (default: 90)
+INVESTMENT_HISTORY_YEARS="2"            # Number of years to fetch investment transactions (default: 2)
+
 # Search API (for RAG system)
 SEARCH_API_KEY="your_search_api_key"
 
