@@ -539,7 +539,17 @@ export class FinancialDataService {
           const holdingsResult = await snapTradeService.getUserHoldings(userId, snapTradeUser.userSecret);
           
           if (holdingsResult.success && holdingsResult.data) {
+            // ✅ Build a map to update account balances with total_value from holdings
+            const accountBalanceMap = new Map<string, number>();
+            
             for (const accountHolding of holdingsResult.data) {
+              // ✅ Store total_value for this account if available
+              const accountId = `snaptrade-${accountHolding.account?.id}`;
+              const totalValue = accountHolding.total_value?.value || 0;
+              if (totalValue > 0) {
+                accountBalanceMap.set(accountId, totalValue);
+              }
+              
               // Process positions
               if (accountHolding.positions && Array.isArray(accountHolding.positions)) {
                 for (const position of accountHolding.positions) {
@@ -669,6 +679,17 @@ export class FinancialDataService {
                     });
                   }
                 }
+              }
+            }
+            
+            // ✅ Update account balances with total_value from holdings
+            console.log(`FinancialDataService: Updating ${accountBalanceMap.size} SnapTrade account balances`);
+            for (const account of accounts) {
+              if (account.source === 'snaptrade' && accountBalanceMap.has(account.account_id)) {
+                const totalValue = accountBalanceMap.get(account.account_id)!;
+                console.log(`FinancialDataService: Updating account ${account.name} balance from ${account.balance.current} to ${totalValue}`);
+                account.balance.current = totalValue;
+                account.balance.available = totalValue;
               }
             }
           } else {
