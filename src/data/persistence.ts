@@ -19,7 +19,9 @@ export async function persistTransactionsToDb(
     
     // First ensure all accounts exist in the database
     for (const account of accounts) {
-      const plaidAccountId = account.id || account.account_id;
+      // ✅ CRITICAL: Always use account_id (Plaid ID), NEVER use id (database ID)
+      // Using account.id causes chaining where each sync creates a duplicate with the previous DB ID
+      const plaidAccountId = account.account_id || account.plaidAccountId;
       
       // Upsert account
       const dbAccount = await prisma.account.upsert({
