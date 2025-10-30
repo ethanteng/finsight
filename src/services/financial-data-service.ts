@@ -543,6 +543,54 @@ export class FinancialDataService {
               // Process positions
               if (accountHolding.positions && Array.isArray(accountHolding.positions)) {
                 for (const position of accountHolding.positions) {
+                  // ✅ Get security type from SnapTrade API (correct path: position.symbol.symbol.type.description)
+                  let securityType = position.symbol?.symbol?.type?.description || position.symbol?.type?.description;
+                  
+                  // If type not provided, infer from account name and security details
+                  if (!securityType || securityType === 'Unknown') {
+                    const accountName = (accountHolding.account?.name || '').toLowerCase();
+                    const securityName = (position.symbol?.symbol?.description || position.symbol?.description || '').toLowerCase();
+                    const ticker = (position.symbol?.symbol?.symbol || position.symbol?.symbol || '').toUpperCase();
+                    
+                    // Infer from account name
+                    if (accountName.includes('treasury') || accountName.includes('bond')) {
+                      securityType = 'Fixed Income';
+                    } else if (accountName.includes('brokerage')) {
+                      // For brokerage accounts, try to infer from security name
+                      if (securityName.includes('treasury') || securityName.includes('bond') || securityName.includes('fixed income')) {
+                        securityType = 'Fixed Income';
+                      } else if (securityName.includes('etf') || ticker.includes('ETF')) {
+                        securityType = 'ETF';
+                      } else if (securityName.includes('mutual fund') || securityName.includes('fund')) {
+                        securityType = 'Mutual Fund';
+                      } else if (securityName.includes('stock') || securityName.includes('equity')) {
+                        securityType = 'Equity';
+                      } else {
+                        securityType = 'Equity'; // Default for brokerage accounts
+                      }
+                    } else {
+                      securityType = 'Unknown';
+                    }
+                  }
+                  
+                  // ✅ Normalize security type descriptions to standard categories
+                  // SnapTrade returns types like "Common Stock", "Preferred Stock", "ETF", etc.
+                  const typeNormalized = (securityType || '').toLowerCase();
+                  if (typeNormalized.includes('stock') || typeNormalized.includes('equity')) {
+                    securityType = 'Equity';
+                  } else if (typeNormalized.includes('bond') || typeNormalized.includes('treasury') || typeNormalized.includes('fixed income')) {
+                    securityType = 'Fixed Income';
+                  } else if (typeNormalized.includes('etf')) {
+                    securityType = 'ETF';
+                  } else if (typeNormalized.includes('mutual fund') || typeNormalized.includes('fund')) {
+                    securityType = 'Mutual Fund';
+                  } else if (typeNormalized.includes('option')) {
+                    securityType = 'Options';
+                  } else if (typeNormalized.includes('crypto')) {
+                    securityType = 'Cryptocurrency';
+                  }
+                  // If still Unknown after all checks, keep it as Unknown
+                  
                   const holding = {
                     id: `snaptrade-${accountHolding.account?.id}-${position.symbol?.id || position.symbol?.symbol?.symbol}`,
                     account_id: `snaptrade-${accountHolding.account?.id}`,
@@ -554,7 +602,7 @@ export class FinancialDataService {
                     quantity: position.units || 0,
                     iso_currency_code: position.currency?.code || 'USD',
                     security_name: position.symbol?.symbol?.description || position.symbol?.description || 'Unknown',
-                    security_type: position.symbol?.type?.description || 'Unknown',
+                    security_type: securityType,
                     ticker_symbol: position.symbol?.symbol?.symbol || position.symbol?.symbol,
                     snapTradeData: {
                       open_pnl: position.open_pnl,
