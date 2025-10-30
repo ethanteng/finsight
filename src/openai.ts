@@ -466,50 +466,9 @@ export async function askOpenAIWithEnhancedContext(
               };
             }
             
-            // Extract SnapTrade-specific data for context building
-            // The holdings already include both Plaid and SnapTrade merged
-            const snapTradeHoldings = financialData.investments.holdings.filter(h => 
-              h.account_id.toString().startsWith('snaptrade-')
-            );
-            
-            if (snapTradeHoldings.length > 0) {
-              // Create SnapTrade data structure for existing investment summary logic
-              snapTradeData = snapTradeHoldings.map(holding => ({
-                symbol: {
-                  symbol: {
-                    symbol: holding.ticker_symbol,
-                    description: holding.security_name,
-                    type: {
-                      description: holding.security_type
-                    }
-                  }
-                },
-                units: holding.quantity,
-                price: holding.institution_price,
-                account_name: (holding as any).snapTradeData?.account_name,
-                account_number: (holding as any).snapTradeData?.account_number,
-                institution: 'SnapTrade'
-              }));
-              
-              // Calculate account-level balances for SnapTrade
-              const snapTradeAccountsMap = new Map<string, {name: string; balance: number; hasPositions: boolean}>();
-              snapTradeHoldings.forEach(holding => {
-                const accountId = holding.account_id;
-                if (!snapTradeAccountsMap.has(accountId)) {
-                  snapTradeAccountsMap.set(accountId, {
-                    name: (holding as any).snapTradeData?.account_name || 'Investment Account',
-                    balance: 0,
-                    hasPositions: false
-                  });
-                }
-                const account = snapTradeAccountsMap.get(accountId)!;
-                account.balance += holding.institution_value;
-                account.hasPositions = true;
-              });
-              
-              (snapTradeData as any).accountBalances = Array.from(snapTradeAccountsMap.values());
-              console.log('OpenAI Enhanced: Extracted SnapTrade data:', snapTradeData.length, 'positions');
-            }
+            // ✅ NO NEED to extract SnapTrade separately - holdings already merged by FinancialDataService
+            // The financialData.investments.holdings already includes both Plaid AND SnapTrade merged
+            console.log('OpenAI Enhanced: Holdings already include both Plaid and SnapTrade (merged by FinancialDataService)');
             
             // Extract SnapTrade activities from investment transactions
             const snapTradeTransactions = financialData.investments.transactions.filter(tx =>
@@ -1025,97 +984,12 @@ export async function askOpenAIWithEnhancedContext(
     });
   }
   
-  // Add SnapTrade data to portfolio composition
-  console.log('🔍 Processing SnapTrade data for portfolio composition...');
-  console.log('🔍 SnapTrade data available:', snapTradeData ? snapTradeData.length : 0, 'positions');
-  
-  // Use account-level balances from SnapTrade instead of summing individual positions
-  // This ensures accounts without itemized positions (like cash/money market) are included
-  const snapTradeAccountBalances = (snapTradeData as any)?.accountBalances;
-  if (snapTradeAccountBalances && snapTradeAccountBalances.length > 0) {
-    console.log('🔍 Using SnapTrade account-level balances for accurate portfolio value');
-    console.log('🔍 Combined portfolio value BEFORE adding SnapTrade:', combinedPortfolioValue);
-    
-    // Add account balances to total portfolio value
-    snapTradeAccountBalances.forEach((accountBalance: any, index: number) => {
-      combinedPortfolioValue += accountBalance.balance;
-      console.log(`🔍 [${index}] SnapTrade account:`, accountBalance.name, 
-        '| balance:', accountBalance.balance, '| has positions:', accountBalance.hasPositions,
-        '| running total:', combinedPortfolioValue);
-      
-      // If account has no positions, create a cash/money market holding
-      if (!accountBalance.hasPositions && accountBalance.balance > 0) {
-        const cashHolding = {
-          security_name: `${accountBalance.name} - Cash & Equivalents`,
-          ticker_symbol: 'CASH',
-          security_type: 'Cash',
-          quantity: 1,
-          institution_price: accountBalance.balance,
-          institution_value: accountBalance.balance
-        };
-        combinedHoldings.push(cashHolding);
-        
-        // Add to asset allocation
-        const currentValue = combinedAssetAllocation.get('Cash & Equivalents') || 0;
-        combinedAssetAllocation.set('Cash & Equivalents', currentValue + accountBalance.balance);
-        console.log('🔍 Added cash holding for', accountBalance.name, ':', accountBalance.balance);
-      }
-    });
-    
-    // Now process individual positions for holdings list and asset allocation by type
-  if (snapTradeData && snapTradeData.length > 0) {
-      console.log('🔍 Processing', snapTradeData.length, 'individual positions for holdings list');
-      snapTradeData.forEach((position: any, index: number) => {
-      // Calculate value: units * price
-      const value = (position.units || 0) * (position.price || 0);
-      
-        // Create a holding object for consistency with Plaid format
-      const holding = {
-          security_name: position.symbol?.symbol?.description || position.symbol?.symbol?.symbol || 'Unknown',
-          ticker_symbol: position.symbol?.symbol?.symbol || '',
-          security_type: position.symbol?.symbol?.type?.description || 'Unknown',
-          quantity: position.units || 0,
-          institution_price: position.price || 0,
-          institution_value: value
-      };
-      combinedHoldings.push(holding);
-      
-        // Categorize by security type for asset allocation breakdown
-      let assetType = 'Fixed Income'; // Default for treasuries
-      if (position.symbol?.symbol?.type?.description) {
-        const typeDesc = position.symbol.symbol.type.description.toLowerCase();
-        if (typeDesc.includes('bond') || typeDesc.includes('treasury')) {
-          assetType = 'Fixed Income';
-        } else if (typeDesc.includes('equity') || typeDesc.includes('stock')) {
-          assetType = 'Equity';
-        } else if (typeDesc.includes('etf')) {
-          assetType = 'ETF';
-        } else if (typeDesc.includes('mutual fund')) {
-          assetType = 'Mutual Funds';
-        } else {
-          assetType = 'Other';
-        }
-      } else if (position.symbol?.symbol?.symbol) {
-        // Fallback: categorize by symbol
-        const symbol = position.symbol.symbol.symbol.toUpperCase();
-        if (symbol.includes('TREASURY') || symbol.includes('TIPS') || symbol.includes('BOND')) {
-          assetType = 'Fixed Income';
-        } else if (symbol.includes('ETF')) {
-          assetType = 'ETF';
-        } else {
-          assetType = 'Equity';
-        }
-      }
-      
-      const currentValue = combinedAssetAllocation.get(assetType) || 0;
-      combinedAssetAllocation.set(assetType, currentValue + value);
-    });
-    }
-    
-    console.log('🔍 Final combined portfolio value:', combinedPortfolioValue);
-    console.log('🔍 Final asset allocation:', Array.from(combinedAssetAllocation.entries()));
-    console.log('🔍 Total combined holdings:', combinedHoldings.length);
-  }
+  // ✅ NO NEED to process SnapTrade data separately - holdings already merged by FinancialDataService
+  // The combinedHoldings and combinedPortfolioValue already include both Plaid and SnapTrade data
+  console.log('🔍 Using unified holdings data (already includes both Plaid and SnapTrade)');
+  console.log('🔍 Final combined portfolio value:', combinedPortfolioValue);
+  console.log('🔍 Final asset allocation:', Array.from(combinedAssetAllocation.entries()));
+  console.log('🔍 Total combined holdings:', combinedHoldings.length);
   
   // Create unified portfolio summary
   if (combinedPortfolioValue > 0) {
