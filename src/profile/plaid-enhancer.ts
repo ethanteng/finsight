@@ -223,7 +223,85 @@ export class PlaidProfileEnhancer {
     }
 
     // Analyze income patterns
-    const incomeTransactions = transactions.filter(transaction => transaction.amount > 0);
+    // ✅ CRITICAL: Filter for actual INCOME, not just positive amounts
+    // Trust Plaid's basic categories FIRST, then apply smart exclusions
+    const incomeTransactions = transactions.filter(transaction => {
+      if (transaction.amount <= 0) return false; // Must be positive
+      
+      const name = transaction.name?.toLowerCase() || '';
+      
+      // ✅ Check ALL categories in the array, not just the first one
+      const allBasicCategories = Array.isArray(transaction.category) 
+        ? transaction.category.map(c => (c || '').toLowerCase()).join(' ')
+        : ((transaction.category?.[0] || '').toLowerCase());
+      
+      const allEnrichedCategories = Array.isArray(transaction.enriched_data?.category)
+        ? transaction.enriched_data.category.map(c => (c || '').toLowerCase()).join(' ')
+        : ((transaction.enriched_data?.category?.[0] || '').toLowerCase());
+      
+      // ✅ STEP 1: Check if Plaid explicitly categorized this as INCOME
+      const plaidSaysIncome = 
+        allBasicCategories.includes('income') ||
+        allBasicCategories.includes('salary') ||
+        allBasicCategories.includes('wages') ||
+        allBasicCategories.includes('paycheck') ||
+        allBasicCategories.includes('interest') ||
+        allBasicCategories.includes('dividend') ||
+        allBasicCategories.includes('social security') ||
+        allBasicCategories.includes('government benefits') ||
+        allBasicCategories.includes('retirement') ||
+        allBasicCategories.includes('pension');
+      
+      // If Plaid says it's income, trust it! (unless it's explicitly a refund)
+      if (plaidSaysIncome) {
+        if (name.includes('refund') || name.includes('reversal') || name.includes('return payment')) {
+          return false;
+        }
+        return true;
+      }
+      
+      // ✅ STEP 2: Check transaction name for known income sources
+      const isIncomeByName =
+        name.includes('salary') ||
+        name.includes('wages') ||
+        name.includes('payroll') ||
+        name.includes('social security') ||
+        name.includes('ssa ') ||
+        name.includes('interest credit') ||
+        name.includes('interest deposit') ||
+        name.includes('dividend') ||
+        name.includes('annuity') ||
+        name.includes('rmd') ||
+        name.includes('pension') ||
+        name.includes('unemployment') ||
+        name.includes('disability') ||
+        name.includes('vanguard') && (name.includes('distribution') || name.includes('rmd')) ||
+        name.includes('fidelity') && (name.includes('distribution') || name.includes('rmd')) ||
+        name.includes('schwab') && (name.includes('distribution') || name.includes('rmd')) ||
+        name.includes('equitable') && (name.includes('distribution') || name.includes('rmd')) ||
+        name.includes('riversource') ||
+        name.includes('amp life');
+      
+      if (isIncomeByName) {
+        return true;
+      }
+      
+      // ❌ STEP 3: Exclude non-income positive transactions
+      if (allBasicCategories.includes('transfer') || allEnrichedCategories.includes('transfer')) {
+        return false;
+      }
+      
+      if (name.includes('deposit') || name.includes('cash deposit') || name.includes('check deposit')) {
+        return false;
+      }
+      
+      if (name.includes('refund') || name.includes('return') || name.includes('reversal') || name.includes('correction')) {
+        return false;
+      }
+      
+      return false; // Default: exclude if unsure
+    });
+    
     if (incomeTransactions.length > 0) {
       const monthlyIncome = new Map<string, number>();
       
@@ -244,18 +322,25 @@ export class PlaidProfileEnhancer {
         const incomeSources = new Map<string, number>();
         for (const transaction of incomeTransactions) {
           const name = transaction.name?.toLowerCase() || '';
-          const basicCategory = transaction.category?.[0]?.toLowerCase() || '';
-          const enrichedCategory = transaction.enriched_data?.category?.[0]?.toLowerCase() || '';
+          
+          // ✅ Check ALL categories in the array for better matching
+          const allBasicCats = Array.isArray(transaction.category) 
+            ? transaction.category.map(c => (c || '').toLowerCase()).join(' ')
+            : ((transaction.category?.[0] || '').toLowerCase());
+          
+          const allEnrichedCats = Array.isArray(transaction.enriched_data?.category)
+            ? transaction.enriched_data.category.map(c => (c || '').toLowerCase()).join(' ')
+            : ((transaction.enriched_data?.category?.[0] || '').toLowerCase());
           
           // IMPORTANT: For income detection, prioritize basic categories over enriched when basic shows income
           // Enriched categories sometimes misclassify income (e.g., "Interest Credit" as "Bank Fees")
-          let category = basicCategory;
-          if (basicCategory.includes('income') || basicCategory.includes('interest') || basicCategory.includes('dividend')) {
+          let category = allBasicCats;
+          if (allBasicCats.includes('income') || allBasicCats.includes('interest') || allBasicCats.includes('dividend')) {
             // Trust basic category when it explicitly indicates income
-            category = basicCategory;
-          } else if (enrichedCategory && !enrichedCategory.includes('bank fees') && !enrichedCategory.includes('fee')) {
+            category = allBasicCats;
+          } else if (allEnrichedCats && !allEnrichedCats.includes('bank fees') && !allEnrichedCats.includes('fee')) {
             // Use enriched only if it doesn't suggest a fee/expense
-            category = enrichedCategory;
+            category = allEnrichedCats;
           }
           
           let source = 'Other Income';

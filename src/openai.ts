@@ -590,8 +590,10 @@ export async function askOpenAIWithEnhancedContext(
       if (plaidSaysIncome) {
         // Only exclude if it's clearly NOT income (refund/reversal)
         if (name.includes('refund') || name.includes('reversal') || name.includes('return payment')) {
+          console.log(`OpenAI Income Filter: EXCLUDED (refund) - ${name}: $${transaction.amount}`);
           return false;
         }
+        console.log(`OpenAI Income Filter: INCLUDED (Plaid says income) - ${name}: $${transaction.amount}, categories: ${allBasicCategories}`);
         return true; // Trust Plaid!
       }
       
@@ -618,6 +620,7 @@ export async function askOpenAIWithEnhancedContext(
         name.includes('amp life');
       
       if (isIncomeByName) {
+        console.log(`OpenAI Income Filter: INCLUDED (by name) - ${name}: $${transaction.amount}`);
         return true; // Known income source by name
       }
       
@@ -626,24 +629,53 @@ export async function askOpenAIWithEnhancedContext(
       
       // Exclude internal transfers
       if (allBasicCategories.includes('transfer') || allEnrichedCategories.includes('transfer')) {
+        console.log(`OpenAI Income Filter: EXCLUDED (transfer) - ${name}: $${transaction.amount}, categories: ${allBasicCategories}`);
         return false;
       }
       
       // Exclude deposits (moving money, not earning it)
       if (name.includes('deposit') || name.includes('cash deposit') || name.includes('check deposit')) {
+        console.log(`OpenAI Income Filter: EXCLUDED (deposit) - ${name}: $${transaction.amount}`);
         return false;
       }
       
       // Exclude refunds and returns
       if (name.includes('refund') || name.includes('return') || name.includes('reversal') || name.includes('correction')) {
+        console.log(`OpenAI Income Filter: EXCLUDED (refund/reversal) - ${name}: $${transaction.amount}`);
         return false;
       }
       
       // If we get here, it's a positive transaction that we're not sure about - exclude it to be safe
+      console.log(`OpenAI Income Filter: EXCLUDED (unknown positive) - ${name}: $${transaction.amount}, categories: ${allBasicCategories}`);
       return false;
     });
     
-    console.log(`OpenAI Enhanced: Analyzing income from ${incomeTransactions.length} actual income transactions (filtered out ${transactions.filter(t => t.amount > 0).length - incomeTransactions.length} non-income positive transactions)`);
+    const totalPositive = transactions.filter(t => t.amount > 0).length;
+    const filteredOut = totalPositive - incomeTransactions.length;
+    
+    console.log(`OpenAI Enhanced: Analyzing income from ${incomeTransactions.length} actual income transactions (filtered out ${filteredOut} non-income positive transactions out of ${totalPositive} total positive)`);
+    
+    // ✅ DEBUG: Log sample of what was included vs excluded
+    if (incomeTransactions.length > 0) {
+      console.log(`OpenAI Enhanced: Sample INCLUDED transactions:`, incomeTransactions.slice(0, 3).map(t => ({
+        name: t.name,
+        amount: t.amount,
+        category: t.category,
+        enriched_category: t.enriched_data?.category
+      })));
+    }
+    
+    if (filteredOut > 0) {
+      const excludedSample = transactions
+        .filter(t => t.amount > 0 && !incomeTransactions.includes(t))
+        .slice(0, 3);
+      console.log(`OpenAI Enhanced: Sample EXCLUDED transactions:`, excludedSample.map(t => ({
+        name: t.name,
+        amount: t.amount,
+        category: t.category,
+        enriched_category: t.enriched_data?.category
+      })));
+    }
     if (incomeTransactions.length > 0) {
       const monthlyIncome = new Map<string, number>();
       const incomeSources = new Map<string, number>();
