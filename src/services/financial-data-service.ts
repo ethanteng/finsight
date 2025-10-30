@@ -469,8 +469,25 @@ export class FinancialDataService {
               const transactionsResponse = await plaidClient.transactionsGet({
                 access_token: tokenRecord.token,
                 start_date: startDate,
-                end_date: endDate
+                end_date: endDate,
+                options: {
+                  count: 500, // Get up to 500 transactions
+                  include_personal_finance_category: true // ✅ CRITICAL: Include categories from Plaid!
+                }
               });
+
+              // ✅ DEBUG: Check if Plaid is returning categories
+              if (transactionsResponse.data.transactions.length > 0) {
+                const sampleTxn = transactionsResponse.data.transactions[0];
+                console.log(`FinancialDataService: Sample Plaid transaction structure:`, {
+                  name: sampleTxn.name,
+                  amount: sampleTxn.amount,
+                  category: sampleTxn.category,
+                  category_id: sampleTxn.category_id,
+                  personal_finance_category: (sampleTxn as any).personal_finance_category,
+                  allKeys: Object.keys(sampleTxn)
+                });
+              }
 
               transactions.push(...transactionsResponse.data.transactions);
             } catch (transactionError: any) {

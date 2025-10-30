@@ -444,26 +444,38 @@ export async function askOpenAIWithEnhancedContext(
               }
             }));
             
-            // ✅ CRITICAL: Include BOTH banking AND investment transactions for complete income analysis
-            // Investment transactions can include important income sources like dividends, capital gains, etc.
-            const bankingTxs = financialData.bankingTransactions.map(tx => ({
-              id: tx.id,
-              account_id: tx.account_id,
-              amount: tx.amount,
-              date: tx.date,
-              name: tx.name,
-              merchant_name: tx.merchant_name,
-              category: tx.category,
-              category_id: tx.category_id,
-              pending: tx.pending,
-              payment_channel: tx.payment_channel,
-              location: tx.location,
-              payment_meta: tx.payment_meta,
-              pending_transaction_id: tx.pending_transaction_id,
-              account_owner: tx.account_owner,
-              transaction_code: tx.transaction_code,
-              enriched_data: tx.enriched_data
-            }));
+    // ✅ CRITICAL: Include BOTH banking AND investment transactions for complete income analysis
+    // Investment transactions can include important income sources like dividends, capital gains, etc.
+    
+    // DEBUG: Check what category data is actually in the source transactions
+    console.log(`OpenAI Enhanced: Sample banking transaction structure:`, financialData.bankingTransactions[0] ? {
+      id: financialData.bankingTransactions[0].id,
+      name: financialData.bankingTransactions[0].name,
+      amount: financialData.bankingTransactions[0].amount,
+      category: financialData.bankingTransactions[0].category,
+      category_id: financialData.bankingTransactions[0].category_id,
+      enriched_data: financialData.bankingTransactions[0].enriched_data,
+      allKeys: Object.keys(financialData.bankingTransactions[0])
+    } : 'No banking transactions');
+    
+    const bankingTxs = financialData.bankingTransactions.map(tx => ({
+      id: tx.id,
+      account_id: tx.account_id,
+      amount: tx.amount,
+      date: tx.date,
+      name: tx.name,
+      merchant_name: tx.merchant_name,
+      category: tx.category,
+      category_id: tx.category_id,
+      pending: tx.pending,
+      payment_channel: tx.payment_channel,
+      location: tx.location,
+      payment_meta: tx.payment_meta,
+      pending_transaction_id: tx.pending_transaction_id,
+      account_owner: tx.account_owner,
+      transaction_code: tx.transaction_code,
+      enriched_data: tx.enriched_data
+    }));
             
             // ✅ CRITICAL: Only include INCOME-generating investment transactions (dividends, interest)
             // Do NOT include buy/sell/deposit/withdrawal/cash adjustments - those are asset movements, not income
