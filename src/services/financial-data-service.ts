@@ -385,6 +385,51 @@ export class FinancialDataService {
                     unofficial_currency_code: security.unofficial_currency_code
                   });
                 }
+                
+                // ✅ Fetch investment transactions if includeTransactions is enabled
+                if (options.includeTransactions) {
+                  try {
+                    const endDate = new Date().toISOString().split('T')[0];
+                    const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                    
+                    const investmentTransactionsResponse = await plaidClient.investmentsTransactionsGet({
+                      access_token: tokenRecord.token,
+                      start_date: startDate,
+                      end_date: endDate
+                    });
+                    
+                    console.log(`FinancialDataService: Found ${investmentTransactionsResponse.data.investment_transactions.length} investment transactions for token ${tokenRecord.id}`);
+                    
+                    // Add investment transactions to the transactions array
+                    // These will be distinguished from banking transactions by their structure
+                    for (const invTxn of investmentTransactionsResponse.data.investment_transactions) {
+                      transactions.push({
+                        id: invTxn.investment_transaction_id,
+                        account_id: invTxn.account_id,
+                        security_id: invTxn.security_id,
+                        amount: invTxn.amount,
+                        date: invTxn.date,
+                        name: invTxn.name,
+                        quantity: invTxn.quantity,
+                        price: invTxn.price,
+                        fees: invTxn.fees,
+                        type: invTxn.type,
+                        subtype: invTxn.subtype,
+                        iso_currency_code: invTxn.iso_currency_code,
+                        unofficial_currency_code: invTxn.unofficial_currency_code,
+                        // Mark as investment transaction for processing
+                        isInvestmentTransaction: true
+                      });
+                    }
+                  } catch (invTransactionError: any) {
+                    console.error('Error fetching investment transactions for token:', invTransactionError?.response?.data?.error_code);
+                    errors.push({
+                      tokenId: tokenRecord.id,
+                      error: invTransactionError?.response?.data?.error_message || invTransactionError.message,
+                      timestamp: new Date()
+                    });
+                  }
+                }
               } catch (investmentError: any) {
                 const errorCode = investmentError?.response?.data?.error_code;
                 if (errorCode !== 'PRODUCTS_NOT_SUPPORTED') {
@@ -714,54 +759,74 @@ export class FinancialDataService {
           
           if (activitiesResult.success && activitiesResult.data?.activities) {
             for (const activity of activitiesResult.data.activities) {
-              // SnapTrade activities can have different structures depending on the type
-              // Handle both order structure and activity structure
+              // ✅ SnapTrade getAccountActivities API response structure
+              // Documentation: https://docs.snaptrade.com/reference/account-information_getaccountactivities
               
-              // Get security information from universal_symbol or symbol
-              const symbol = activity.universal_symbol || activity.symbol;
-              const securityId = symbol?.id || symbol?.symbol || activity.symbol || 'unknown';
-              const securityName = symbol?.description || symbol?.raw_symbol || symbol?.symbol || 'Unknown';
+              // Get security information from symbol object
+              const symbol = activity.symbol;
+              const securityId = symbol?.id || symbol?.symbol || 'unknown';
+              const securityName = symbol?.description || symbol?.raw_symbol || 'Unknown';
               
-              // Get action/type (BUY, SELL, BUY_COVER, SELL_SHORT, etc.)
-              const action = activity.action || activity.type || 'unknown';
+              // Get transaction type (BUY, SELL, DIVIDEND, CONTRIBUTION, WITHDRAWAL, REI, INTEREST, FEE, etc.)
+              const transactionType = activity.type || 'unknown';
               
-              // Get quantity - could be filled_quantity (orders) or units (activities)
-              const quantity = parseFloat(activity.filled_quantity || activity.units || activity.quantity || '0');
+              // Get quantity (units field)
+              const quantity = activity.units || 0;
               
-              // Get price - could be execution_price (orders) or price (activities)
-              const price = activity.execution_price || activity.price || 0;
+              // Get price per unit
+              const price = activity.price || 0;
               
-              // Get date - could be time_executed (orders) or trade_date/settlement_date (activities)
-              const date = activity.time_executed || activity.trade_date || activity.settlement_date || activity.time_placed || new Date().toISOString();
+              // Get total amount (already calculated by SnapTrade)
+              const amount = activity.amount || (price * quantity);
               
-              // Calculate amount (positive for buys, negative for sells to match Plaid convention)
-              const amount = price * quantity;
-              const normalizedAmount = (action.includes('SELL') || action.includes('sell')) ? -Math.abs(amount) : Math.abs(amount);
+              // Get date (prefer trade_date, fallback to settlement_date)
+              const date = activity.trade_date || activity.settlement_date || new Date().toISOString();
+              
+              // Normalize amount sign based on transaction type
+              // SELL/WITHDRAWAL/FEE should be negative, BUY/CONTRIBUTION/DIVIDEND should be positive
+              let normalizedAmount = amount;
+              if (transactionType === 'SELL' || transactionType === 'WITHDRAWAL' || transactionType === 'FEE') {
+                normalizedAmount = -Math.abs(amount);
+              } else if (transactionType === 'BUY' || transactionType === 'CONTRIBUTION' || transactionType === 'DIVIDEND' || transactionType === 'INTEREST' || transactionType === 'REI') {
+                normalizedAmount = Math.abs(amount);
+              }
+              
+              // Build transaction name
+              let transactionName = activity.description || `${transactionType} ${securityName}`;
+              if (activity.option_type) {
+                transactionName = `${activity.option_type} ${securityName}`;
+              }
               
               // Convert SnapTrade activity to standard transaction format
               transactions.push({
-                id: activity.id || activity.brokerage_order_id || `snaptrade-${date}-${securityId}`,
-                account_id: activity.account ? `snaptrade-${activity.account}` : 'snaptrade-unknown',
+                id: activity.id || `snaptrade-${date}-${securityId}`,
+                account_id: `snaptrade-${activity.account_id || 'unknown'}`,
                 security_id: securityId,
                 amount: normalizedAmount,
                 date: date,
-                name: `${action} ${securityName}`.trim(),
+                name: transactionName.trim(),
                 quantity: quantity,
                 price: price,
-                fees: activity.fee || activity.commission || 0,
-                type: action.toLowerCase(),
+                fees: activity.fee || 0,
+                type: transactionType.toLowerCase(),
+                subtype: activity.option_type?.toLowerCase(),
                 iso_currency_code: activity.currency?.code || symbol?.currency?.code || 'USD',
+                unofficial_currency_code: activity.currency?.code !== 'USD' ? activity.currency?.code : undefined,
                 snapTradeData: {
-                  action: action,
-                  status: activity.status,
-                  order_type: activity.order_type,
-                  account_name: activity.account_name,
+                  type: transactionType,
+                  option_type: activity.option_type,
                   description: activity.description,
+                  trade_date: activity.trade_date,
+                  settlement_date: activity.settlement_date,
+                  fx_rate: activity.fx_rate,
                   institution: activity.institution,
-                  brokerage_order_id: activity.brokerage_order_id
+                  external_reference_id: activity.external_reference_id,
+                  account_name: activity.account_name
                 }
               });
             }
+            
+            console.log(`FinancialDataService: Processed ${transactions.length} SnapTrade transactions`);
           } else {
             errors.push({
               error: activitiesResult.error || 'Failed to fetch SnapTrade activities',
@@ -954,9 +1019,29 @@ export class FinancialDataService {
     // Calculate portfolio analysis
     const portfolio = this.analyzePortfolio(holdings, securities);
 
-    // Merge transactions (investment transactions separate from banking)
-    const investmentTransactions: Transaction[] = [];
-    const bankingTransactions: Transaction[] = plaidData?.transactions || [];
+    // ✅ Merge transactions and separate investment from banking transactions
+    const allPlaidTransactions = plaidData?.transactions || [];
+    const snapTradeTransactions = snapTradeData?.transactions || [];
+    
+    // Separate Plaid transactions into investment and banking
+    const plaidInvestmentTransactions = allPlaidTransactions.filter((txn: any) => txn.isInvestmentTransaction);
+    const plaidBankingTransactions = allPlaidTransactions.filter((txn: any) => !txn.isInvestmentTransaction);
+    
+    // Combine all investment transactions (Plaid + SnapTrade)
+    const investmentTransactions: Transaction[] = [
+      ...plaidInvestmentTransactions,
+      ...snapTradeTransactions
+    ];
+    
+    // Banking transactions are only from Plaid
+    const bankingTransactions: Transaction[] = plaidBankingTransactions;
+    
+    console.log('FinancialDataService: Transactions separated', {
+      plaidInvestmentTransactions: plaidInvestmentTransactions.length,
+      snapTradeTransactions: snapTradeTransactions.length,
+      totalInvestmentTransactions: investmentTransactions.length,
+      bankingTransactions: bankingTransactions.length
+    });
 
     return {
       accounts,

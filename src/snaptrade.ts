@@ -397,6 +397,13 @@ export class SnapTradeService {
       
       // Get activities for each account
       const allActivities = [];
+      
+      // ✅ Set date range for activities (last 90 days to match typical transaction history)
+      const endDate = new Date().toISOString().split('T')[0]; // Today (YYYY-MM-DD)
+      const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // 90 days ago
+      
+      console.log(`🔍 Fetching activities from ${startDate} to ${endDate}`);
+      
       for (const account of accountsResult.data.accounts) {
         try {
           console.log(`🔍 Getting activities for account: ${account.name} (${account.id})`);
@@ -405,16 +412,20 @@ export class SnapTradeService {
             accountId: account.id,
             userId,
             userSecret,
+            startDate,  // ✅ Required parameter
+            endDate,    // ✅ Required parameter
+            type: "BUY,SELL,DIVIDEND,CONTRIBUTION,WITHDRAWAL,REI,INTEREST,FEE,OPTIONEXPIRATION,OPTIONASSIGNMENT,OPTIONEXERCISE", // ✅ All transaction types
             limit: 1000 // Get up to 1000 activities per account
           });
           
           if (activities.data && Array.isArray(activities.data)) {
-            // Add account info to each activity
+            // ✅ Add account info to each activity (including account_id for transaction mapping)
             const accountActivities = activities.data.map((activity: any) => ({
               ...activity,
+              account_id: account.id,  // ✅ Add account ID for linking
               account_name: account.name,
               account_number: account.accountNumber,
-              institution: account.institution
+              institution: activity.institution || account.institution
             }));
             
             allActivities.push(...accountActivities);
