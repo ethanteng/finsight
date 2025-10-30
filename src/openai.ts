@@ -157,46 +157,50 @@ interface Conversation {
 /**
  * Intelligently filter and prioritize transactions for AI context
  * Focuses on most relevant transactions to improve AI response quality
+ * 
+ * Uses full 90-day transaction history for better income pattern analysis
  */
 function filterTransactionsForAI(transactions: any[]): any[] {
-  if (transactions.length <= 150) return transactions;
-
+  if (transactions.length <= 200) return transactions; // Increased from 150 to accommodate 90 days
+  
   const now = new Date();
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
   
-  // Priority 1: All transactions from last 30 days (most relevant)
-  const recent = transactions.filter(t => new Date(t.date) >= thirtyDaysAgo);
+  // ✅ Include ALL transactions from last 90 days (full available history)
+  // This ensures income analysis can see all income patterns over time
+  const recent = transactions.filter(t => new Date(t.date) >= ninetyDaysAgo);
   
-  // Priority 2: Income transactions (for pattern analysis)
-  const older = transactions.filter(t => new Date(t.date) < thirtyDaysAgo);
-  const income = older.filter(t => t.amount > 0);
+  console.log(`OpenAI: Using ${recent.length} transactions from last 90 days (out of ${transactions.length} total)`);
   
-  // Priority 3: Large transactions from 31-90 days (high impact)
-  const largeTransactions = older
-    .filter(t => t.amount < 0) // expenses
-    .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
-    .slice(0, 30);
+  // If still too many transactions, prioritize but keep more
+  if (recent.length > 200) {
+    // Priority 1: All income transactions (critical for income analysis)
+    const income = recent.filter(t => t.amount > 0);
+    
+    // Priority 2: Large expenses (high impact)
+    const expenses = recent.filter(t => t.amount < 0);
+    const largeExpenses = expenses
+      .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+      .slice(0, 100); // Keep top 100 largest expenses
+    
+    // Priority 3: Most recent 30 days (regardless of size)
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const veryRecent = recent.filter(t => new Date(t.date) >= thirtyDaysAgo);
+    
+    // Combine and deduplicate
+    const selected = new Set([
+      ...veryRecent,      // All from last 30 days
+      ...income,          // All income transactions
+      ...largeExpenses    // Large expenses from 31-90 days
+    ]);
+    
+    const filtered = Array.from(selected);
+    console.log(`OpenAI: Prioritized to ${filtered.length} transactions (all income + large expenses + recent 30 days)`);
+    
+    return filtered.slice(0, 200); // Cap at 200
+  }
   
-  // Priority 4: Recurring/subscription patterns (spending insights)
-  const merchantCounts = new Map<string, number>();
-  older.forEach(t => {
-    const merchant = t.name || 'unknown';
-    merchantCounts.set(merchant, (merchantCounts.get(merchant) || 0) + 1);
-  });
-  const recurring = older.filter(t => (merchantCounts.get(t.name || 'unknown') || 0) >= 2);
-  
-  // Combine and deduplicate
-  const selected = new Set([
-    ...recent,
-    ...income,
-    ...largeTransactions,
-    ...recurring.slice(0, 20)
-  ]);
-  
-  const filtered = Array.from(selected);
-  console.log(`OpenAI: Filtered ${transactions.length} transactions to ${filtered.length} most relevant`);
-  
-  return filtered.slice(0, 150); // Cap at 150
+  return recent; // Return all 90-day transactions if under limit
 }
 
 /**
