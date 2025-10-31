@@ -653,8 +653,15 @@ export async function askOpenAIWithEnhancedContext(
           return false;
         }
         
+        // ❌ EXCLUDE: SELL transactions (selling investments is a capital transaction, not income)
+        if (name.includes('sell') || name.includes('sale')) {
+          console.log(`OpenAI Income Filter: EXCLUDED (asset sale, not income) - ${name}: $${transaction.amount}, categories: ${allBasicCategories}`);
+          return false;
+        }
+        
         // ❌ EXCLUDE: Most transfers (but TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS is income - e.g., RMDs, distributions)
         // TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS represents distributions from retirement accounts/annuities which ARE income
+        // BUT we'll check for SELL transactions separately in Step 2.5
         if ((allBasicCategories.includes('transfer') || 
              allBasicCategories.includes('transfer_in') || 
              allBasicCategories.includes('transfer_out')) &&
@@ -722,8 +729,16 @@ export async function askOpenAIWithEnhancedContext(
           console.log(`OpenAI Income Filter: EXCLUDED (negative amount for investment transfer) - ${name}: $${transaction.amount}`);
           return false;
         }
+        
+        // ❌ EXCLUDE: SELL transactions (selling investments is a capital transaction, not income)
+        // Only distributions/RMDs/withdrawals are income, not asset sales
+        if (name.includes('sell') || name.includes('sale')) {
+          console.log(`OpenAI Income Filter: EXCLUDED (asset sale, not income) - ${name}: $${transaction.amount}, categories: ${allBasicCategories}`);
+          return false;
+        }
+        
         console.log(`OpenAI Income Filter: INCLUDED (investment/retirement transfer is income) - ${name}: $${transaction.amount}, categories: ${allBasicCategories}`);
-        return true; // Investment/retirement distributions are income
+        return true; // Investment/retirement distributions are income (but not sales)
       }
       
       // ❌ STEP 3: Exclude non-income positive transactions
