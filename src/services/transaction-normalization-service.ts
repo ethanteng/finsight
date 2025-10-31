@@ -136,21 +136,45 @@ export class TransactionNormalizationService {
    * Check if a transaction is an inflow (for depository/investment accounts)
    */
   private isInflow(transaction: Transaction): boolean {
+    // ✅ CRITICAL: Check personal_finance_category FIRST (before category conversion)
+    // Plaid categorizes income in personal_finance_category, which we convert to category later
+    // Income transactions should ALWAYS be positive, even if Plaid returns them as negative
+    const pfc = (transaction as any).personal_finance_category;
+    if (pfc) {
+      const pfcPrimary = (pfc.primary || '').toLowerCase();
+      const pfcDetailed = (pfc.detailed || '').toLowerCase();
+      if (pfcPrimary.includes('income') || pfcDetailed.includes('income')) {
+        return true; // Income is ALWAYS an inflow, regardless of amount sign from Plaid
+      }
+    }
+    
     // Check transaction name
     const nameLower = transaction.name?.toLowerCase() || '';
-    const inflowKeywords = ['deposit', 'transfer from', 'dividend', 'interest', 'refund', 'credit'];
+    const inflowKeywords = ['deposit', 'transfer from', 'dividend', 'interest', 'refund', 'credit', 'social security', 'wages', 'salary', 'payroll'];
     
     if (inflowKeywords.some(keyword => nameLower.includes(keyword))) {
       return true;
     }
 
-    // Check categories
+    // Check categories (including converted ones)
     if (transaction.category && Array.isArray(transaction.category)) {
       const categoryString = transaction.category.join(' ').toLowerCase();
+      // ✅ TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS is income (distributions/RMDs) - treat as inflow
+      if (categoryString.includes('transfer_in_investment_and_retirement_funds')) {
+        return true;
+      }
       if (categoryString.includes('deposit') || 
           categoryString.includes('transfer') || 
           categoryString.includes('income')) {
         return true;
+      }
+    }
+    
+    // ✅ Also check personal_finance_category for TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS
+    if (pfc) {
+      const pfcDetailed = (pfc.detailed || '').toLowerCase();
+      if (pfcDetailed.includes('transfer_in_investment_and_retirement_funds')) {
+        return true; // Investment/retirement distributions are inflows
       }
     }
 

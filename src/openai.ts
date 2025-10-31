@@ -510,23 +510,35 @@ export async function askOpenAIWithEnhancedContext(
               }));
             
             // ✅ DEBUG: Check if our specific transactions are in bankingTxs
-            const socialSecurityTx = bankingTxs.find(t => t.name?.toLowerCase().includes('social security') || t.amount === 3732);
-            const ampLifeTx = bankingTxs.find(t => t.name?.toLowerCase().includes('amp life') || t.name?.toLowerCase().includes('ann payout') || t.amount === 1117.99);
-            const vanguardTx = bankingTxs.find(t => t.name?.toLowerCase().includes('vanguard') && (t.amount === 842.53 || t.amount === 842));
+            // Search by amount with tolerance for rounding/sign changes (amounts might be normalized)
+            const socialSecurityTx = bankingTxs.find(t => Math.abs(Math.abs(t.amount) - 3732) < 1);
+            const ampLifeTx = bankingTxs.find(t => Math.abs(Math.abs(t.amount) - 1117.99) < 1);
+            const vanguardTx = bankingTxs.find(t => Math.abs(Math.abs(t.amount) - 842.53) < 1);
+            
+            // Also log ALL transactions with these amounts to see what we're working with
+            const all3732 = bankingTxs.filter(t => Math.abs(Math.abs(t.amount) - 3732) < 1);
+            const all1117 = bankingTxs.filter(t => Math.abs(Math.abs(t.amount) - 1117.99) < 1);
+            const all842 = bankingTxs.filter(t => Math.abs(Math.abs(t.amount) - 842.53) < 1);
             
             console.log(`OpenAI Enhanced: DEBUG - Looking for specific transactions:`, {
               socialSecurityFound: !!socialSecurityTx,
               socialSecurityAmount: socialSecurityTx?.amount,
               socialSecurityDate: socialSecurityTx?.date,
               socialSecurityCategory: socialSecurityTx?.category,
+              socialSecurityMatches: all3732.length,
+              allSocialSecurityTxs: all3732.map(t => ({ amount: t.amount, date: t.date, name: t.name, category: t.category })),
               ampLifeFound: !!ampLifeTx,
               ampLifeAmount: ampLifeTx?.amount,
               ampLifeDate: ampLifeTx?.date,
               ampLifeCategory: ampLifeTx?.category,
+              ampLifeMatches: all1117.length,
+              allAmpLifeTxs: all1117.map(t => ({ amount: t.amount, date: t.date, name: t.name, category: t.category })),
               vanguardFound: !!vanguardTx,
               vanguardAmount: vanguardTx?.amount,
               vanguardDate: vanguardTx?.date,
               vanguardCategory: vanguardTx?.category,
+              vanguardMatches: all842.length,
+              allVanguardTxs: all842.map(t => ({ amount: t.amount, date: t.date, name: t.name, category: t.category })),
               totalBankingTxs: bankingTxs.length
             });
             
@@ -641,10 +653,12 @@ export async function askOpenAIWithEnhancedContext(
           return false;
         }
         
-        // ❌ EXCLUDE: Transfers (TRANSFER_IN, TRANSFER_OUT, etc. are NOT income)
-        if (allBasicCategories.includes('transfer') || 
-            allBasicCategories.includes('transfer_in') || 
-            allBasicCategories.includes('transfer_out')) {
+        // ❌ EXCLUDE: Most transfers (but TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS is income - e.g., RMDs, distributions)
+        // TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS represents distributions from retirement accounts/annuities which ARE income
+        if ((allBasicCategories.includes('transfer') || 
+             allBasicCategories.includes('transfer_in') || 
+             allBasicCategories.includes('transfer_out')) &&
+            !allBasicCategories.includes('transfer_in_investment_and_retirement_funds')) {
           console.log(`OpenAI Income Filter: EXCLUDED (transfer, not income) - ${name}: $${transaction.amount}, categories: ${allBasicCategories}`);
           return false;
         }
@@ -688,10 +702,11 @@ export async function askOpenAIWithEnhancedContext(
           return false;
         }
         
-        // ❌ EXCLUDE: Transfers (even if name suggests income source)
-        if (allBasicCategories.includes('transfer') || 
-            allBasicCategories.includes('transfer_in') || 
-            allBasicCategories.includes('transfer_out')) {
+        // ❌ EXCLUDE: Most transfers (but TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS is income)
+        if ((allBasicCategories.includes('transfer') || 
+             allBasicCategories.includes('transfer_in') || 
+             allBasicCategories.includes('transfer_out')) &&
+            !allBasicCategories.includes('transfer_in_investment_and_retirement_funds')) {
           console.log(`OpenAI Income Filter: EXCLUDED (transfer despite income name) - ${name}: $${transaction.amount}, categories: ${allBasicCategories}`);
           return false;
         }
@@ -700,15 +715,27 @@ export async function askOpenAIWithEnhancedContext(
         return true; // Known income source by name
       }
       
+      // ✅ STEP 2.5: Check for TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS (distributions/RMDs are income)
+      if (allBasicCategories.includes('transfer_in_investment_and_retirement_funds')) {
+        // ❌ EXCLUDE: Negative amounts
+        if (transaction.amount <= 0) {
+          console.log(`OpenAI Income Filter: EXCLUDED (negative amount for investment transfer) - ${name}: $${transaction.amount}`);
+          return false;
+        }
+        console.log(`OpenAI Income Filter: INCLUDED (investment/retirement transfer is income) - ${name}: $${transaction.amount}, categories: ${allBasicCategories}`);
+        return true; // Investment/retirement distributions are income
+      }
+      
       // ❌ STEP 3: Exclude non-income positive transactions
       // Only reach here if Plaid didn't say it's income AND name doesn't match known sources
       
-      // Exclude transfers (TRANSFER_IN, TRANSFER_OUT, etc. are NOT income)
-      if (allBasicCategories.includes('transfer') || 
+      // Exclude transfers (but NOT TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS - already handled above)
+      if ((allBasicCategories.includes('transfer') || 
           allBasicCategories.includes('transfer ') || 
           allBasicCategories.includes('transfer_in') || 
           allBasicCategories.includes('transfer_out') ||
-          allEnrichedCategories.includes('transfer')) {
+          allEnrichedCategories.includes('transfer')) &&
+          !allBasicCategories.includes('transfer_in_investment_and_retirement_funds')) {
         console.log(`OpenAI Income Filter: EXCLUDED (transfer) - ${name}: $${transaction.amount}, categories: ${allBasicCategories}`);
         return false;
       }
