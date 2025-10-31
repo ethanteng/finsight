@@ -219,6 +219,10 @@ const processTransactionData = (transaction: any) => {
     }
   }
   
+  // ✅ IMPORTANT: Don't include Plaid's transaction_type field here!
+  // Plaid's transaction_type refers to payment method (place, digital, atm, special, etc.)
+  // Our transaction_type (from categorization service) refers to transaction category (income, expense, etc.)
+  // Including Plaid's transaction_type causes confusion in the UI
   return {
     id: transaction.transaction_id,
     account_id: transaction.account_id,
@@ -229,8 +233,8 @@ const processTransactionData = (transaction: any) => {
     category_id: basicCategoryId,
     pending: transaction.pending,
     merchant_name: transaction.merchant_name,
-    payment_channel: transaction.payment_channel,
-    transaction_type: transaction.transaction_type,
+    payment_channel: transaction.payment_channel, // This is Plaid's payment method indicator
+    // ❌ REMOVED: transaction_type: transaction.transaction_type, // This is Plaid's payment method, not our categorization!
     // Don't pre-populate enriched_data here - let the enrichment process handle it
     enriched_data: null
   };

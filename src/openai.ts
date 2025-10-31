@@ -231,7 +231,7 @@ function filterTransactionsForAI(transactions: any[]): any[] {
   if (recent.length > 200) {
     // Priority 1: All income transactions (critical for income analysis)
     const income = recent.filter(t => t.amount > 0);
-    
+  
     // Priority 2: Large expenses (high impact)
     const expenses = recent.filter(t => t.amount < 0);
     const largeExpenses = expenses
@@ -484,12 +484,14 @@ export async function askOpenAIWithEnhancedContext(
             
             console.log('OpenAI Enhanced: Fetching unified financial data from FinancialDataService');
             // ✅ Conditional fetching based on question needs (performance optimization)
+            // NOTE: Always fetch investments to get account balances, even if we don't need full holdings data
+            // SnapTrade account balances come from holdings data, so we need to fetch it for accurate balances
             const financialData = await financialDataService.getUserFinancialData(userId, {
               includeTransactions: true,
-              includeInvestments: questionNeeds.needsInvestments, // ✅ Only fetch if needed
+              includeInvestments: true, // ✅ Always fetch to get SnapTrade account balances
               includeHomeValue: questionNeeds.needsHomeValue // ✅ Only fetch if needed
             });
-            
+                    
             // Extract data from unified structure
             accounts = financialData.accounts.map(acc => ({
               id: acc.id,
@@ -506,9 +508,9 @@ export async function askOpenAIWithEnhancedContext(
                 limit: acc.balance.limit,
                 iso_currency_code: acc.balance.iso_currency_code,
                 unofficial_currency_code: acc.balance.unofficial_currency_code
-              }
+                        }
             }));
-            
+
     // ✅ CRITICAL: Include BOTH banking AND investment transactions for complete income analysis
     // Investment transactions can include important income sources like dividends, capital gains, etc.
     
@@ -605,8 +607,8 @@ export async function askOpenAIWithEnhancedContext(
               vanguardMatches: all842.length,
               allVanguardTxs: all842.map(t => ({ amount: t.amount, date: t.date, name: t.name, category: t.category })),
               totalBankingTxs: bankingTxs.length
-            });
-            
+                    });
+                    
             // Merge both arrays for complete transaction history
             transactions = [...bankingTxs, ...investmentTxs];
             console.log(`OpenAI Enhanced: Merged transactions - Banking: ${bankingTxs.length}, Investment (income only): ${investmentTxs.length}, Total: ${transactions.length}`);
@@ -617,7 +619,7 @@ export async function askOpenAIWithEnhancedContext(
             }
             if (financialData.investments.transactions.length - investmentTxs.length > 0) {
               console.log(`OpenAI Enhanced: Filtered out ${financialData.investments.transactions.length - investmentTxs.length} non-income investment transactions (buy/sell/transfer)`);
-            }
+                        }
             
             // Set investment data if available
             if (financialData.investments.holdings.length > 0) {
@@ -639,8 +641,8 @@ export async function askOpenAIWithEnhancedContext(
             if (snapTradeTransactions.length > 0) {
               snapTradeActivities = snapTradeTransactions;
               console.log('OpenAI Enhanced: Extracted SnapTrade activities:', snapTradeActivities.length, 'activities');
-            }
-            
+                        }
+                        
             console.log('OpenAI Enhanced: Unified data fetched -', accounts.length, 'accounts,', transactions.length, 'transactions');
             console.log('OpenAI Enhanced: Investment data:', investmentData ? 'available' : 'none');
             console.log('OpenAI Enhanced: SnapTrade data:', snapTradeData ? 'available' : 'none');
@@ -658,8 +660,8 @@ export async function askOpenAIWithEnhancedContext(
       }
                   } catch (error) {
       console.error('OpenAI Enhanced: Error fetching user data:', error);
-    }
-  }
+                  }
+                }
 
   // Analyze income patterns BEFORE anonymization
   let incomeAnalysis = '';
@@ -679,14 +681,14 @@ export async function askOpenAIWithEnhancedContext(
       // Debug log for transactions that look like income but aren't categorized as such
       if (amount > 0 && !transactionType) {
         console.log(`OpenAI Income Filter: WARNING - Transaction has no transaction_type: ${transaction.name || 'Unknown'}: $${amount}`);
-      }
-      
+                  }
+                  
       return false;
     });
     
     const totalPositive = transactions.filter(t => t.amount > 0).length;
     const filteredOut = totalPositive - incomeTransactions.length;
-    
+                
     console.log(`OpenAI Enhanced: Analyzing income from ${incomeTransactions.length} actual income transactions (filtered out ${filteredOut} non-income positive transactions out of ${totalPositive} total positive)`);
     
     // ✅ DEBUG: Log sample of what was included vs excluded
@@ -869,21 +871,21 @@ export async function askOpenAIWithEnhancedContext(
   
   // Only fetch market context if question suggests it's needed
   if (questionNeeds.needsMarketContext) {
+  try {
+    const { MarketNewsManager } = await import('./market-news/manager');
+    const marketNewsManager = new MarketNewsManager();
+    marketContextSummary = await marketNewsManager.getMarketContext(tier);
+    console.log('OpenAI Enhanced: Market news context length:', marketContextSummary.length);
+  } catch (error) {
+    console.error('OpenAI Enhanced: Error getting market news context:', error);
+    // Fallback to data orchestrator if market news manager fails
     try {
-      const { MarketNewsManager } = await import('./market-news/manager');
-      const marketNewsManager = new MarketNewsManager();
-      marketContextSummary = await marketNewsManager.getMarketContext(tier);
-      console.log('OpenAI Enhanced: Market news context length:', marketContextSummary.length);
-    } catch (error) {
-      console.error('OpenAI Enhanced: Error getting market news context:', error);
-      // Fallback to data orchestrator if market news manager fails
-      try {
-        marketContextSummary = await dataOrchestrator.getMarketContextSummary(tier, isDemo);
-        console.log('OpenAI Enhanced: Fallback to data orchestrator market context length:', marketContextSummary.length);
-      } catch (fallbackError) {
-        console.error('OpenAI Enhanced: Fallback market context also failed:', fallbackError);
-        marketContextSummary = '';
-      }
+      marketContextSummary = await dataOrchestrator.getMarketContextSummary(tier, isDemo);
+      console.log('OpenAI Enhanced: Fallback to data orchestrator market context length:', marketContextSummary.length);
+    } catch (fallbackError) {
+      console.error('OpenAI Enhanced: Fallback market context also failed:', fallbackError);
+      marketContextSummary = '';
+    }
     }
   } else {
     console.log('OpenAI Enhanced: Skipping market context (not needed for this question)');

@@ -248,8 +248,11 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                       })}
                     </div>
                     
-                    {/* Transaction Type */}
-                    {transaction.transaction_type && (
+                    {/* Transaction Type - Only show if it's from our categorization service (not Plaid's payment method) */}
+                    {/* Plaid's transaction_type is payment method (place, digital, etc.) - we don't want to show that */}
+                    {/* Our categorization service sets transaction_type to income, expense, transfer_in, etc. */}
+                    {transaction.transaction_type && 
+                     !['place', 'special', 'digital', 'atm', 'other'].includes(transaction.transaction_type.toLowerCase()) && (
                       <div className="mb-2">
                         <span className="inline-block px-2 py-1 bg-purple-900/30 text-purple-300 text-xs rounded border border-purple-700/50 font-medium">
                           {transaction.transaction_type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
