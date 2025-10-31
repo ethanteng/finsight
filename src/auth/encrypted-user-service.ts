@@ -21,7 +21,7 @@ export class EncryptedUserService {
     const encryptedEmail = this.encryptionService.encrypt(email);
 
     // Create user and encrypted data in a transaction
-    return await prisma.$transaction(async (tx) => {
+    return await prisma.$transaction(async (tx: any) => {
       const user = await tx.user.create({
         data: {
           email: email, // Keep plain text for now, will be encrypted in separate table
@@ -97,7 +97,7 @@ export class EncryptedUserService {
     const token = this.generateSecureToken();
     const encryptedToken = this.encryptionService.encrypt(token);
 
-    return await prisma.$transaction(async (tx) => {
+    return await prisma.$transaction(async (tx: any) => {
       const resetToken = await tx.passwordResetToken.create({
         data: {
           token: token, // Keep plain text for now, will be encrypted in separate table
@@ -186,7 +186,7 @@ export class EncryptedUserService {
     const code = this.generateVerificationCode();
     const encryptedCode = this.encryptionService.encrypt(code);
 
-    return await prisma.$transaction(async (tx) => {
+    return await prisma.$transaction(async (tx: any) => {
       const verificationCode = await tx.emailVerificationCode.create({
         data: {
           code: code, // Keep plain text for now, will be encrypted in separate table

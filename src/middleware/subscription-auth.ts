@@ -53,7 +53,7 @@ export const subscriptionAuthMiddleware = (requiredTier: string, requiredStatus:
       const subscriptionStatus = user.subscriptionStatus;
       
       // Check if subscription has expired by looking at the subscription record
-      const activeSubscription = user.subscriptions.find(sub => sub.status === 'active');
+      const activeSubscription = user.subscriptions.find((sub: any) => sub.status === 'active');
       const isExpired = activeSubscription ? 
         (activeSubscription.currentPeriodEnd && new Date() > activeSubscription.currentPeriodEnd) : 
         false;

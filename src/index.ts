@@ -1160,7 +1160,7 @@ app.get('/demo/conversations', async (req: Request, res: Response) => {
     }
     
     res.json({ 
-      conversations: demoSession.conversations.map(conv => ({
+      conversations: demoSession.conversations.map((conv: any) => ({
         id: conv.id,
         question: conv.question,
         answer: conv.answer,
@@ -1240,10 +1240,10 @@ app.get('/conversations', async (req: Request, res: Response) => {
     });
 
     console.log(`Found ${conversations.length} conversations for user ${user.id}`);
-    console.log('Conversations:', conversations.map(c => ({ id: c.id, question: c.question.substring(0, 50) })));
+    console.log('Conversations:', conversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) })));
 
     res.json({ 
-      conversations: conversations.map(conv => ({
+      conversations: conversations.map((conv: any) => ({
         id: conv.id,
         question: conv.question,
         answer: conv.answer,
@@ -1726,7 +1726,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
               in: await prisma.userProfile.findMany({
                 where: { userId },
                 select: { profileHash: true }
-              }).then(profiles => profiles.map(p => p.profileHash))
+              }).then((profiles: any[]) => profiles.map((p: any) => p.profileHash))
             }
           }
         });
@@ -1880,7 +1880,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
 
         console.log('Admin: Found sessions:', sessions.length);
 
-        const sessionStats = sessions.map(session => {
+        const sessionStats = sessions.map((session: any) => {
           const conversations = session.conversations;
           const firstConversation = conversations[0];
           const lastConversation = conversations[conversations.length - 1];
@@ -2021,7 +2021,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
 
         console.log('Admin: Found production users:', users.length);
 
-        const userStats = users.map(user => {
+        const userStats = users.map((user: any) => {
           const conversations = user.conversations;
           const firstConversation = conversations[0];
           const lastConversation = conversations[conversations.length - 1];
@@ -2083,7 +2083,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         console.log('Admin: Found conversations:', conversations.length);
         
         // Log any conversations that might still have issues
-        const conversationsWithoutUsers = conversations.filter(conv => !conv.user);
+        const conversationsWithoutUsers = conversations.filter((conv: any) => !conv.user);
         if (conversationsWithoutUsers.length > 0) {
           console.warn('Admin: Found conversations without users:', conversationsWithoutUsers.length);
         }
@@ -2126,7 +2126,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
           orderBy: { createdAt: 'desc' }
         });
 
-        console.log('Admin: Raw users from database:', users.map(u => ({ email: u.email, id: u.id, tier: u.tier })));
+        console.log('Admin: Raw users from database:', users.map((u: any) => ({ email: u.email, id: u.id, tier: u.tier })));
 
         // Enhance users with subscription status from Stripe service
         console.log('Admin: Starting subscription status enhancement...');
@@ -2134,7 +2134,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         console.log('Admin: Stripe service imported successfully');
         
         const enhancedUsers = await Promise.all(
-          users.map(async (user) => {
+          users.map(async (user: any) => {
             try {
               console.log(`Admin: Processing user ${user.email} (${user.id}) with tier ${user.tier}`);
               const subscriptionStatus = await stripeService.getUserSubscriptionStatus(user.id);
@@ -2277,7 +2277,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
 
         console.log('Admin: Found accounts in database:', accounts.length, 'for user:', userId);
         if (accounts.length > 0) {
-          console.log('Admin: Account details from database:', accounts.map(a => ({
+          console.log('Admin: Account details from database:', accounts.map((a: any) => ({
             name: a.name,
             institution: a.institution,
             type: a.type
@@ -2380,9 +2380,9 @@ app.get('/sync/status', async (req: Request, res: Response) => {
           }
         });
         console.log('Admin: Total accounts in database:', allAccountsInDb.length);
-        console.log('Admin: Accounts without userId:', allAccountsInDb.filter(a => !a.userId).length);
-        if (allAccountsInDb.filter(a => !a.userId).length > 0) {
-          console.log('Admin: Orphaned accounts:', allAccountsInDb.filter(a => !a.userId).map(a => ({
+        console.log('Admin: Accounts without userId:', allAccountsInDb.filter((a: any) => !a.userId).length);
+        if (allAccountsInDb.filter((a: any) => !a.userId).length > 0) {
+          console.log('Admin: Orphaned accounts:', allAccountsInDb.filter((a: any) => !a.userId).map((a: any) => ({
             name: a.name,
             institution: a.institution
           })));
@@ -2838,7 +2838,7 @@ app.get('/profile/tokens', requireAuth, async (req: Request, res: Response) => {
     });
     
     // Update institution names for any tokens that don't have them
-    const updatedTokens = await Promise.all(tokens.map(async (token) => {
+    const updatedTokens = await Promise.all(tokens.map(async (token: any) => {
       if (!token.institutionName && token.itemId) {
         try {
           const itemResponse = await plaidClient.itemGet({
@@ -3386,7 +3386,7 @@ app.delete('/admin/delete-user-account/:userId', adminAuth, async (req: Request,
           in: await prisma.userProfile.findMany({
             where: { userId },
             select: { profileHash: true }
-          }).then(profiles => profiles.map(p => p.profileHash))
+          }).then((profiles: any[]) => profiles.map((p: any) => p.profileHash))
         }
       }
     });

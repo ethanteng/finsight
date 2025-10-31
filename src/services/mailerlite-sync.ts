@@ -109,7 +109,7 @@ export class MailerLiteSyncService {
             hasActiveSubscription = true;
           } else {
             // Check if any subscription is active
-            hasActiveSubscription = user.subscriptions.some(sub => sub.status === 'active');
+            hasActiveSubscription = user.subscriptions.some((sub: any) => sub.status === 'active');
           }
           
           // Get current tier (from subscription or user default)
@@ -235,7 +235,7 @@ export class MailerLiteSyncService {
 
       // Check both the subscriptionStatus field and if there are active subscriptions
       const hasActiveSubscription = user.subscriptionStatus === 'active' || 
-        user.subscriptions.some(sub => sub.status === 'active');
+        user.subscriptions.some((sub: any) => sub.status === 'active');
       const currentTier = hasActiveSubscription && user.subscriptions.length > 0
         ? user.subscriptions[0].tier 
         : user.tier;

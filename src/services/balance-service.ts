@@ -164,7 +164,7 @@ export class BalanceService {
       }
     });
 
-    return accounts.map(account => ({
+    return accounts.map((account: any) => ({
       account_id: account.plaidAccountId,
       available: account.availableBalance,
       current: account.currentBalance,

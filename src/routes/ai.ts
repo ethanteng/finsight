@@ -231,7 +231,7 @@ router.get('/transactions/comparison', requireAuth, async (req, res) => {
       take: Number(limit),
     });
     
-    const results = transactions.map(transaction => ({
+    const results = transactions.map((transaction: any) => ({
       id: transaction.id,
       name: transaction.name,
       merchantName: transaction.merchantName,
