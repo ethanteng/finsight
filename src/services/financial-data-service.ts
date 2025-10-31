@@ -193,6 +193,7 @@ export class FinancialDataService {
     includeTransactions?: boolean;
     includeInvestments?: boolean;
     includeHomeValue?: boolean;
+    skipCategorization?: boolean; // ✅ NEW: Skip categorization for UI-only requests (performance optimization)
   }): Promise<UnifiedFinancialData> {
     const startTime = Date.now();
     console.log('FinancialDataService: Starting fetch', { userId, timestamp: new Date().toISOString() });
@@ -220,9 +221,9 @@ export class FinancialDataService {
     // Merge data
     const mergedData = this.mergeFinancialData(plaidData, snapTradeData, homeValue);
 
-    // ✅ STEP 1: Categorize transactions BEFORE normalization
+    // ✅ STEP 1: Categorize transactions BEFORE normalization (skip for UI-only requests)
     // This ensures we have transaction_type available for normalization and filtering
-    if (mergedData.bankingTransactions.length > 0 || mergedData.investments.transactions.length > 0) {
+    if (!options?.skipCategorization && (mergedData.bankingTransactions.length > 0 || mergedData.investments.transactions.length > 0)) {
       const accountsMap = new Map(mergedData.accounts.map(acc => [acc.account_id, acc]));
       
       console.log('FinancialDataService: Categorizing transactions before normalization');
@@ -254,6 +255,8 @@ export class FinancialDataService {
       }
       
       console.log('FinancialDataService: Categorization complete');
+    } else if (options?.skipCategorization) {
+      console.log('FinancialDataService: Skipping categorization (UI-only request)');
     }
 
     // ✅ STEP 2: Normalize transactions (now with transaction_type available)

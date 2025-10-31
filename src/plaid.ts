@@ -1212,11 +1212,14 @@ export const setupPlaidRoutes = (app: any) => {
       console.log(`🔍 /plaid/transactions: Fetching transactions using FinancialDataService for user ${req.user.id}`);
       
       // Use FinancialDataService to get transactions (single source of truth!)
+      // ✅ Skip categorization for UI-only requests (performance optimization)
+      // Only personal_finance_category is needed for UI display
       const financialDataService = new FinancialDataService();
       const financialData = await financialDataService.getUserFinancialData(req.user.id, {
         includeTransactions: true,
         includeInvestments: false,
-        includeHomeValue: false
+        includeHomeValue: false,
+        skipCategorization: true // ✅ UI doesn't need full categorization, just personal_finance_category from Plaid
       });
       
       console.log(`🔍 /plaid/transactions: FinancialDataService returned ${financialData.bankingTransactions.length} banking transactions`);

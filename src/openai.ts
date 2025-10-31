@@ -587,7 +587,7 @@ export async function askOpenAIWithEnhancedContext(
             console.error('OpenAI Enhanced: Error fetching unified financial data:', error);
           }
         }
-      } else {
+                    } else {
         console.log('OpenAI Enhanced: No userId provided, fetching all data (this should not happen for authenticated users)');
       }
                   } catch (error) {
@@ -769,10 +769,30 @@ export async function askOpenAIWithEnhancedContext(
     
     transactions = transactions.map(transaction => {
       const tokenizedName = transaction.name ? anonymizationService.tokenizeMerchant(userId, transaction.name) : 'Unknown';
+      const tokenizedMerchantName = transaction.merchantName ? anonymizationService.tokenizeMerchant(userId, transaction.merchantName) : undefined;
+      
+      // ✅ Also anonymize enriched_data fields (merchant_name, brand_name, website, etc.)
+      let anonymizedEnrichedData = undefined;
+      if (transaction.enriched_data) {
+        anonymizedEnrichedData = {
+          ...transaction.enriched_data,
+          merchant_name: transaction.enriched_data.merchant_name 
+            ? anonymizationService.tokenizeMerchant(userId, transaction.enriched_data.merchant_name)
+            : undefined,
+          brand_name: transaction.enriched_data.brand_name
+            ? anonymizationService.tokenizeMerchant(userId, transaction.enriched_data.brand_name)
+            : undefined,
+          website: transaction.enriched_data.website
+            ? `website_${transaction.enriched_data.website.split('.').slice(-2).join('_')}`
+            : undefined,
+        };
+      }
+      
       return {
         ...transaction,
         name: tokenizedName,
-        merchantName: transaction.merchantName ? anonymizationService.tokenizeMerchant(userId, transaction.merchantName) : 'Unknown'
+        merchantName: tokenizedMerchantName,
+        enriched_data: anonymizedEnrichedData
       };
     });
   }
