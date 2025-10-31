@@ -174,8 +174,10 @@ beforeEach(async () => {
     await prisma.account.deleteMany();
     await prisma.accessToken.deleteMany();
     await prisma.privacySettings.deleteMany();
-    await prisma.userProfile.deleteMany(); // Add UserProfile cleanup
-    await prisma.syncStatus.deleteMany(); // Add SyncStatus cleanup
+    // Delete encrypted_profile_data BEFORE UserProfile (foreign key constraint)
+    await (prisma as any).encrypted_profile_data.deleteMany();
+    await prisma.userProfile.deleteMany();
+    await prisma.syncStatus.deleteMany();
     await prisma.user.deleteMany();
   } catch (error) {
     // Ignore cleanup errors in unit tests

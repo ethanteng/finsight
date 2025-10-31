@@ -95,9 +95,6 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Explicitly handle OPTIONS requests for all routes (CORS preflight)
-app.options('*', cors(corsOptions));
-
 // IMPORTANT: Register Stripe webhook route BEFORE JSON middleware
 // This ensures raw body is available for signature verification
 app.use('/api/stripe/webhooks', express.raw({ type: 'application/json' }), stripeRoutes);
