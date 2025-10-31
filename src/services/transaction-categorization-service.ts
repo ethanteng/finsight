@@ -143,8 +143,8 @@ export class TransactionCategorizationService {
       const prompt = `You are a financial transaction categorization expert. Analyze the following transaction and categorize it into ONE of these types:
 - income: Wages, salary, dividends, interest, distributions, RMDs, Social Security, pensions (money earned)
 - expense: Purchases, bills, services, insurance, rent, utilities (money spent)
-- transfer_in: Money moving into account from another account (NOT income-generating)
-- transfer_out: Money moving out of account to another account (NOT expense-generating)
+- transfer_in: Money moving into account from another account (NOT income-generating - just moving money between accounts)
+- transfer_out: Money moving out of account to another account (NOT expense-generating - just moving money between accounts)
 - buy: Purchasing investments/securities (capital transaction)
 - sell: Selling investments/securities (capital transaction, NOT income)
 - deposit: Cash deposits (moving money, not earning)
@@ -163,11 +163,15 @@ Transaction details:
 
 IMPORTANT RULES:
 1. If transaction name contains "SELL" or "SALE", it must be categorized as "sell" (capital transaction, NOT income)
-2. TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS that are SELL transactions should be "sell", not "income"
-3. Social Security, wages, salary, dividends, interest are "income"
+2. TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS transactions:
+   - If it's a SELL transaction: categorize as "sell" (capital transaction)
+   - If it's NOT a sell (RMD, distribution, dividend payout, annuity payment): categorize as "income" (money earned, not just moving money)
+   - RMDs (Required Minimum Distributions), distributions, dividend payouts, and annuity payments are INCOME, not transfers
+3. Social Security, wages, salary, dividends, interest, RMDs, distributions are "income"
 4. Purchases, bills, services are "expense"
-5. Transfers between accounts are "transfer_in" or "transfer_out" (NOT income/expense)
+5. Simple transfers between your own accounts (moving money from checking to savings, etc.) are "transfer_in" or "transfer_out" (NOT income/expense)
 6. Buying investments is "buy", selling investments is "sell"
+7. Income-generating transfers (RMDs, distributions, annuity payments) from investment/retirement accounts should be "income", not "transfer_in"
 
 Respond with ONLY a valid JSON object in this exact format (no markdown, no explanation):
 {
@@ -253,10 +257,28 @@ Respond with ONLY a valid JSON object in this exact format (no markdown, no expl
         transactionType = mappedType;
         mapped = true;
 
-        // Special handling: Check if it's a SELL transaction
+        // Special handling: Check transaction name for specific indicators
         const nameLower = (transaction.name || '').toLowerCase();
+        
+        // SELL transactions should be "sell", not "transfer_in"
         if (nameLower.includes('sell') || nameLower.includes('sale')) {
           transactionType = 'sell';
+        }
+        // RMDs, distributions, dividend payouts, annuity payments are income, not transfers
+        else if (
+          mappedType === 'transfer_in' &&
+          pfcDetailed?.toLowerCase().includes('investment_and_retirement_funds') &&
+          (
+            nameLower.includes('rmd') ||
+            nameLower.includes('required minimum') ||
+            nameLower.includes('distribution') ||
+            nameLower.includes('dividend') ||
+            nameLower.includes('annuity') ||
+            nameLower.includes('payout')
+          )
+        ) {
+          // Income-generating transfer (RMD, distribution, etc.) - categorize as income
+          transactionType = 'income';
         }
       }
     }

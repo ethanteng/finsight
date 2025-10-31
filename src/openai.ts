@@ -1095,9 +1095,16 @@ export async function askOpenAIWithEnhancedContext(
                          transaction.merchant_name || 
                          name;
     
-    // Fix: Invert the transaction amount sign to match expected behavior
-    // Positive amounts should be negative (money leaving account) and vice versa
-    const correctedAmount = -(transaction.amount || 0);
+    // ✅ Amount is already normalized correctly by TransactionNormalizationService:
+    // - Positive = inflows/income (money coming in)
+    // - Negative = outflows/expenses (money going out)
+    // DO NOT invert - amounts are already correct!
+    const amount = transaction.amount || 0;
+    
+    // ✅ Include transaction_type if available (from categorization service)
+    // This helps GPT distinguish transfers from expenses/income
+    const transactionType = (transaction as any).transaction_type;
+    const typeInfo = transactionType ? ` (${transactionType.toUpperCase()})` : '';
     
     // ✅ Include enhanced information when available
     let enhancedInfo = '';
@@ -1118,7 +1125,7 @@ export async function askOpenAIWithEnhancedContext(
       }
     }
     
-    return `- ${merchantName} (${category}): $${correctedAmount?.toFixed(2) || '0.00'} on ${transaction.date}${enhancedInfo}`;
+    return `- ${merchantName}${typeInfo} (${category}): $${amount.toFixed(2)} on ${transaction.date}${enhancedInfo}`;
   }).join('\n');
 
   // ✅ DEBUG: Log the final transaction summary to see what the AI receives
@@ -1830,6 +1837,24 @@ INCOME DATA:
 - If INCOME ANALYSIS is provided above, use those exact figures - they're pre-calculated from transaction data
 - Never estimate or assume income when INCOME ANALYSIS data is provided
 - Reference it directly: "Based on your transaction history, your monthly income is $X,XXX"
+
+SPENDING CALCULATIONS:
+- Transaction types are shown in the format: "Merchant (TRANSACTION_TYPE) (Category): $Amount"
+- CRITICAL: When calculating spending or expenses, EXCLUDE the following transaction types (these are NOT expenses):
+  • transfer_in: Money moving between accounts (NOT an expense)
+  • transfer_out: Money moving between accounts (NOT an expense)
+  • deposit: Cash deposits (moving money, NOT spending)
+  • withdrawal: Cash withdrawals (moving money, NOT spending)
+  • buy: Investment purchases (capital transactions, NOT expenses)
+  • sell: Investment sales (capital transactions, NOT expenses)
+  • refund: Money returned (NOT an expense)
+- ONLY count these transaction types as expenses:
+  • expense: Purchases, bills, services, rent, utilities
+  • fee: Charges, fees, commissions
+- SPECIAL CASE: TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS:
+  - If transaction_type is "income": This is income-generating (RMDs, distributions) - count as income, NOT as transfer
+  - If transaction_type is "transfer_in": This is just moving money - exclude from expenses and income
+- When providing spending breakdowns, explicitly state: "Excluding transfers and investment transactions"
 
 USER TIER: ${String(tierInfo.currentTier).toUpperCase()}
 
