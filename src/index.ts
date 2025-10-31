@@ -63,15 +63,40 @@ Sentry.init({
   enableLogs: true,
 });
 
-// CORS setup
-app.use(cors({
-  origin: [
-    'https://asklinc.com', // your Vercel frontend URL
-    'https://www.asklinc.com', // www version
-    'http://localhost:3001' // for localdev, optional
-  ],
-  credentials: true
-}));
+// CORS setup with explicit configuration for preflight requests
+const allowedOrigins = [
+  'https://asklinc.com',
+  'https://www.asklinc.com',
+  'http://localhost:3001'
+];
+
+const corsOptions = {
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS: Blocked origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  exposedHeaders: ['Content-Length', 'X-AI-Response-Time', 'X-AI-Mode'],
+  maxAge: 86400, // 24 hours - cache preflight responses
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+};
+
+app.use(cors(corsOptions));
+
+// Explicitly handle OPTIONS requests for all routes (CORS preflight)
+app.options('*', cors(corsOptions));
 
 // IMPORTANT: Register Stripe webhook route BEFORE JSON middleware
 // This ensures raw body is available for signature verification
