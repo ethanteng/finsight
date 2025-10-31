@@ -509,6 +509,27 @@ export async function askOpenAIWithEnhancedContext(
                 enriched_data: tx.enriched_data || {}
               }));
             
+            // ✅ DEBUG: Check if our specific transactions are in bankingTxs
+            const socialSecurityTx = bankingTxs.find(t => t.name?.toLowerCase().includes('social security') || t.amount === 3732);
+            const ampLifeTx = bankingTxs.find(t => t.name?.toLowerCase().includes('amp life') || t.name?.toLowerCase().includes('ann payout') || t.amount === 1117.99);
+            const vanguardTx = bankingTxs.find(t => t.name?.toLowerCase().includes('vanguard') && (t.amount === 842.53 || t.amount === 842));
+            
+            console.log(`OpenAI Enhanced: DEBUG - Looking for specific transactions:`, {
+              socialSecurityFound: !!socialSecurityTx,
+              socialSecurityAmount: socialSecurityTx?.amount,
+              socialSecurityDate: socialSecurityTx?.date,
+              socialSecurityCategory: socialSecurityTx?.category,
+              ampLifeFound: !!ampLifeTx,
+              ampLifeAmount: ampLifeTx?.amount,
+              ampLifeDate: ampLifeTx?.date,
+              ampLifeCategory: ampLifeTx?.category,
+              vanguardFound: !!vanguardTx,
+              vanguardAmount: vanguardTx?.amount,
+              vanguardDate: vanguardTx?.date,
+              vanguardCategory: vanguardTx?.category,
+              totalBankingTxs: bankingTxs.length
+            });
+            
             // Merge both arrays for complete transaction history
             transactions = [...bankingTxs, ...investmentTxs];
             console.log(`OpenAI Enhanced: Merged transactions - Banking: ${bankingTxs.length}, Investment (income only): ${investmentTxs.length}, Total: ${transactions.length}`);
@@ -572,6 +593,22 @@ export async function askOpenAIWithEnhancedContext(
       if (transaction.amount <= 0) return false; // Must be positive
       
       const name = transaction.name?.toLowerCase() || '';
+      
+      // ✅ DEBUG: Check if this is one of our specific transactions
+      const isSocialSecurity = (name.includes('social security') || transaction.amount === 3732) && transaction.amount === 3732;
+      const isAmpLife = (name.includes('amp life') || name.includes('ann payout') || transaction.amount === 1117.99) && transaction.amount === 1117.99;
+      const isVanguard = name.includes('vanguard') && (transaction.amount === 842.53 || transaction.amount === 842);
+      
+      if (isSocialSecurity || isAmpLife || isVanguard) {
+        console.log(`OpenAI Income Filter: DEBUG - Checking specific transaction:`, {
+          name: transaction.name,
+          amount: transaction.amount,
+          date: transaction.date,
+          category: transaction.category,
+          personal_finance_category: (transaction as any).personal_finance_category,
+          allBasicCategories: Array.isArray(transaction.category) ? transaction.category.map((c: any) => c?.toLowerCase() || '').join(' ') : ''
+        });
+      }
       
       // ✅ Check ALL categories from multiple sources (basic, enriched, personal_finance_category)
       const basicCatsArray = Array.isArray(transaction.category) ? transaction.category : (transaction.category ? [transaction.category] : []);
