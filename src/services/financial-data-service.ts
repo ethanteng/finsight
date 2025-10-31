@@ -4,6 +4,7 @@ import { SnapTradeService } from '../snaptrade';
 import { BalanceService } from './balance-service';
 import { TokenValidationService, TokenStatus, PlaidTokenHealth, SnapTradeTokenHealth } from './token-validation-service';
 import { TransactionNormalizationService } from './transaction-normalization-service';
+import { TransactionCategorizationService } from './transaction-categorization-service';
 
 const prisma = new PrismaClient();
 
@@ -176,11 +177,13 @@ export class FinancialDataService {
   private balanceService: BalanceService;
   private tokenValidationService: TokenValidationService;
   private transactionNormalizationService: TransactionNormalizationService;
+  private transactionCategorizationService: TransactionCategorizationService;
 
   constructor() {
     this.balanceService = new BalanceService();
     this.tokenValidationService = new TokenValidationService();
     this.transactionNormalizationService = new TransactionNormalizationService();
+    this.transactionCategorizationService = new TransactionCategorizationService();
   }
 
   /**
@@ -217,7 +220,33 @@ export class FinancialDataService {
     // Merge data
     const mergedData = this.mergeFinancialData(plaidData, snapTradeData, homeValue);
 
-    // Normalize transactions
+    // ✅ STEP 1: Categorize transactions BEFORE normalization
+    // This ensures we have transaction_type available for normalization and filtering
+    if (mergedData.bankingTransactions.length > 0 || mergedData.investments.transactions.length > 0) {
+      const accountsMap = new Map(mergedData.accounts.map(acc => [acc.account_id, acc]));
+      
+      console.log('FinancialDataService: Categorizing transactions before normalization');
+      
+      // Categorize banking transactions
+      if (mergedData.bankingTransactions.length > 0) {
+        mergedData.bankingTransactions = await this.transactionCategorizationService.categorizeTransactionBatch(
+          mergedData.bankingTransactions,
+          accountsMap
+        );
+      }
+      
+      // Categorize investment transactions
+      if (mergedData.investments.transactions.length > 0) {
+        mergedData.investments.transactions = await this.transactionCategorizationService.categorizeTransactionBatch(
+          mergedData.investments.transactions,
+          accountsMap
+        );
+      }
+      
+      console.log('FinancialDataService: Categorization complete');
+    }
+
+    // ✅ STEP 2: Normalize transactions (now with transaction_type available)
     if (mergedData.bankingTransactions.length > 0 || mergedData.investments.transactions.length > 0) {
       const accountsMap = new Map(mergedData.accounts.map(acc => [acc.account_id, acc]));
       

@@ -599,176 +599,23 @@ export async function askOpenAIWithEnhancedContext(
   // Analyze income patterns BEFORE anonymization
   let incomeAnalysis = '';
   if (!isDemo && transactions.length > 0) {
-    // ✅ CRITICAL: Filter for actual INCOME, not just positive amounts
-    // Trust Plaid's basic categories FIRST, then apply smart exclusions
+    // ✅ SIMPLIFIED: Use transaction_type from categorization service
+    // All complex filtering logic has been moved to TransactionCategorizationService
     const incomeTransactions = transactions.filter(transaction => {
-      if (transaction.amount <= 0) return false; // Must be positive
+      const transactionType = (transaction as any).transaction_type;
+      const amount = transaction.amount || 0;
       
-      const name = transaction.name?.toLowerCase() || '';
-      
-      // ✅ DEBUG: Check if this is one of our specific transactions
-      const isSocialSecurity = (name.includes('social security') || transaction.amount === 3732) && transaction.amount === 3732;
-      const isAmpLife = (name.includes('amp life') || name.includes('ann payout') || transaction.amount === 1117.99) && transaction.amount === 1117.99;
-      const isVanguard = name.includes('vanguard') && (transaction.amount === 842.53 || transaction.amount === 842);
-      
-      if (isSocialSecurity || isAmpLife || isVanguard) {
-        console.log(`OpenAI Income Filter: DEBUG - Checking specific transaction:`, {
-          name: transaction.name,
-          amount: transaction.amount,
-          date: transaction.date,
-          category: transaction.category,
-          personal_finance_category: (transaction as any).personal_finance_category,
-          allBasicCategories: Array.isArray(transaction.category) ? transaction.category.map((c: any) => c?.toLowerCase() || '').join(' ') : ''
-        });
+      // Only include transactions explicitly categorized as income with positive amounts
+      if (transactionType === 'income' && amount > 0) {
+        console.log(`OpenAI Income Filter: INCLUDED - ${transaction.name || 'Unknown'}: $${amount}, type: ${transactionType}`);
+        return true;
       }
       
-      // ✅ Check ALL categories from multiple sources (basic, enriched, personal_finance_category)
-      const basicCatsArray = Array.isArray(transaction.category) ? transaction.category : (transaction.category ? [transaction.category] : []);
-      const enrichedCatsArray = Array.isArray(transaction.enriched_data?.category) ? transaction.enriched_data.category : (transaction.enriched_data?.category ? [transaction.enriched_data.category] : []);
-      const pfcPrimary = (transaction as any).personal_finance_category?.primary || '';
-      const pfcDetailed = (transaction as any).personal_finance_category?.detailed || '';
-      const combinedBasic = [...basicCatsArray, pfcPrimary, pfcDetailed].filter(Boolean) as string[];
-      const allBasicCategories = combinedBasic.map(c => c.toLowerCase()).join(' ');
-      const allEnrichedCategories = enrichedCatsArray.map((c: any) => (c || '').toLowerCase()).join(' ');
-      
-      // ✅ STEP 1: Check if Plaid explicitly categorized this as INCOME
-      // Trust Plaid's basic income categorization - they know what they're doing!
-      const plaidSaysIncome = 
-        allBasicCategories.includes('income') ||
-        allBasicCategories.includes('salary') ||
-        allBasicCategories.includes('wages') ||
-        allBasicCategories.includes('paycheck') ||
-        allBasicCategories.includes('interest') ||
-        allBasicCategories.includes('dividend') ||
-        allBasicCategories.includes('social security') ||
-        allBasicCategories.includes('government benefits') ||
-        allBasicCategories.includes('retirement') ||
-        allBasicCategories.includes('pension');
-      
-      // If Plaid says it's income, trust it! (but check for edge cases)
-      if (plaidSaysIncome) {
-        // ❌ EXCLUDE: Negative amounts (even if categorized as income - likely normalization issues or expenses)
-        if (transaction.amount <= 0) {
-          console.log(`OpenAI Income Filter: EXCLUDED (negative amount despite income category) - ${name}: $${transaction.amount}, categories: ${allBasicCategories}`);
-          return false;
-        }
-        
-        // ❌ EXCLUDE: SELL transactions (selling investments is a capital transaction, not income)
-        if (name.includes('sell') || name.includes('sale')) {
-          console.log(`OpenAI Income Filter: EXCLUDED (asset sale, not income) - ${name}: $${transaction.amount}, categories: ${allBasicCategories}`);
-          return false;
-        }
-        
-        // ❌ EXCLUDE: Most transfers (but TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS is income - e.g., RMDs, distributions)
-        // TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS represents distributions from retirement accounts/annuities which ARE income
-        // BUT we'll check for SELL transactions separately in Step 2.5
-        if ((allBasicCategories.includes('transfer') || 
-             allBasicCategories.includes('transfer_in') || 
-             allBasicCategories.includes('transfer_out')) &&
-            !allBasicCategories.includes('transfer_in_investment_and_retirement_funds')) {
-          console.log(`OpenAI Income Filter: EXCLUDED (transfer, not income) - ${name}: $${transaction.amount}, categories: ${allBasicCategories}`);
-          return false;
-        }
-        
-        // ❌ EXCLUDE: Refunds/reversals
-        if (name.includes('refund') || name.includes('reversal') || name.includes('return payment')) {
-          console.log(`OpenAI Income Filter: EXCLUDED (refund) - ${name}: $${transaction.amount}`);
-          return false;
-        }
-        
-        console.log(`OpenAI Income Filter: INCLUDED (Plaid says income) - ${name}: $${transaction.amount}, categories: ${allBasicCategories}`);
-        return true; // Trust Plaid!
+      // Debug log for transactions that look like income but aren't categorized as such
+      if (amount > 0 && !transactionType) {
+        console.log(`OpenAI Income Filter: WARNING - Transaction has no transaction_type: ${transaction.name || 'Unknown'}: $${amount}`);
       }
       
-      // ✅ STEP 2: If Plaid didn't categorize as income, check transaction name for known income sources
-      const isIncomeByName =
-        name.includes('salary') ||
-        name.includes('wages') ||
-        name.includes('payroll') ||
-        name.includes('social security') ||
-        name.includes('ssa ') ||
-        name.includes('interest credit') ||
-        name.includes('interest deposit') ||
-        name.includes('dividend') ||
-        name.includes('annuity') ||
-        name.includes('rmd') ||
-        name.includes('pension') ||
-        name.includes('unemployment') ||
-        name.includes('disability') ||
-        name.includes('vanguard') && (name.includes('distribution') || name.includes('rmd')) ||
-        name.includes('fidelity') && (name.includes('distribution') || name.includes('rmd')) ||
-        name.includes('schwab') && (name.includes('distribution') || name.includes('rmd')) ||
-        name.includes('equitable') && (name.includes('distribution') || name.includes('rmd')) ||
-        name.includes('riversource') ||
-        name.includes('amp life');
-      
-      if (isIncomeByName) {
-        // ❌ EXCLUDE: Negative amounts (even if name suggests income)
-        if (transaction.amount <= 0) {
-          console.log(`OpenAI Income Filter: EXCLUDED (negative amount despite income name) - ${name}: $${transaction.amount}`);
-          return false;
-        }
-        
-        // ❌ EXCLUDE: Most transfers (but TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS is income)
-        if ((allBasicCategories.includes('transfer') || 
-             allBasicCategories.includes('transfer_in') || 
-             allBasicCategories.includes('transfer_out')) &&
-            !allBasicCategories.includes('transfer_in_investment_and_retirement_funds')) {
-          console.log(`OpenAI Income Filter: EXCLUDED (transfer despite income name) - ${name}: $${transaction.amount}, categories: ${allBasicCategories}`);
-          return false;
-        }
-        
-        console.log(`OpenAI Income Filter: INCLUDED (by name) - ${name}: $${transaction.amount}`);
-        return true; // Known income source by name
-      }
-      
-      // ✅ STEP 2.5: Check for TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS (distributions/RMDs are income)
-      if (allBasicCategories.includes('transfer_in_investment_and_retirement_funds')) {
-        // ❌ EXCLUDE: Negative amounts
-        if (transaction.amount <= 0) {
-          console.log(`OpenAI Income Filter: EXCLUDED (negative amount for investment transfer) - ${name}: $${transaction.amount}`);
-          return false;
-        }
-        
-        // ❌ EXCLUDE: SELL transactions (selling investments is a capital transaction, not income)
-        // Only distributions/RMDs/withdrawals are income, not asset sales
-        if (name.includes('sell') || name.includes('sale')) {
-          console.log(`OpenAI Income Filter: EXCLUDED (asset sale, not income) - ${name}: $${transaction.amount}, categories: ${allBasicCategories}`);
-          return false;
-        }
-        
-        console.log(`OpenAI Income Filter: INCLUDED (investment/retirement transfer is income) - ${name}: $${transaction.amount}, categories: ${allBasicCategories}`);
-        return true; // Investment/retirement distributions are income (but not sales)
-      }
-      
-      // ❌ STEP 3: Exclude non-income positive transactions
-      // Only reach here if Plaid didn't say it's income AND name doesn't match known sources
-      
-      // Exclude transfers (but NOT TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS - already handled above)
-      if ((allBasicCategories.includes('transfer') || 
-          allBasicCategories.includes('transfer ') || 
-          allBasicCategories.includes('transfer_in') || 
-          allBasicCategories.includes('transfer_out') ||
-          allEnrichedCategories.includes('transfer')) &&
-          !allBasicCategories.includes('transfer_in_investment_and_retirement_funds')) {
-        console.log(`OpenAI Income Filter: EXCLUDED (transfer) - ${name}: $${transaction.amount}, categories: ${allBasicCategories}`);
-        return false;
-      }
-      
-      // Exclude deposits (moving money, not earning it)
-      if (name.includes('deposit') || name.includes('cash deposit') || name.includes('check deposit')) {
-        console.log(`OpenAI Income Filter: EXCLUDED (deposit) - ${name}: $${transaction.amount}`);
-        return false;
-      }
-      
-      // Exclude refunds and returns
-      if (name.includes('refund') || name.includes('return') || name.includes('reversal') || name.includes('correction')) {
-        console.log(`OpenAI Income Filter: EXCLUDED (refund/reversal) - ${name}: $${transaction.amount}`);
-        return false;
-      }
-      
-      // If we get here, it's a positive transaction that we're not sure about - exclude it to be safe
-      console.log(`OpenAI Income Filter: EXCLUDED (unknown positive) - ${name}: $${transaction.amount}, categories: "${allBasicCategories}", personal_finance_category:`, (transaction as any).personal_finance_category);
       return false;
     });
     

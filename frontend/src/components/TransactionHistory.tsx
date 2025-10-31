@@ -13,6 +13,7 @@ interface Transaction {
   category_id?: string;
   pending: boolean;
   payment_channel?: string;
+  transaction_type?: string; // From categorization service: income, expense, transfer_in, transfer_out, buy, sell, etc.
   location?: {
     address?: string;
     city?: string;
@@ -236,7 +237,7 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                     </div>
                   </div>
                   
-                  {/* Date and categories row */}
+                    {/* Date and categories row */}
                   <div className="mb-3">
                     {/* Date */}
                     <div className="text-sm text-gray-400 mb-2">
@@ -246,6 +247,15 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                         year: 'numeric'
                       })}
                     </div>
+                    
+                    {/* Transaction Type */}
+                    {transaction.transaction_type && (
+                      <div className="mb-2">
+                        <span className="inline-block px-2 py-1 bg-purple-900/30 text-purple-300 text-xs rounded border border-purple-700/50 font-medium">
+                          {transaction.transaction_type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
+                        </span>
+                      </div>
+                    )}
                     
                     {/* Categories section */}
                     <div className="space-y-2">

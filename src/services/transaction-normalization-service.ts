@@ -136,7 +136,23 @@ export class TransactionNormalizationService {
    * Check if a transaction is an inflow (for depository/investment accounts)
    */
   private isInflow(transaction: Transaction): boolean {
-    // ✅ CRITICAL: Check personal_finance_category FIRST (before category conversion)
+    // ✅ PREFER: Check transaction_type if available (from categorization service)
+    // This is the most reliable indicator since it was determined before normalization
+    const transactionType = (transaction as any).transaction_type;
+    if (transactionType) {
+      // Income, deposits, transfers_in are inflows
+      if (transactionType === 'income' || transactionType === 'deposit' || transactionType === 'transfer_in') {
+        return true;
+      }
+      // Expenses, withdrawals, transfers_out are outflows
+      if (transactionType === 'expense' || transactionType === 'withdrawal' || transactionType === 'transfer_out') {
+        return false;
+      }
+      // Buy/sell/fee/refund/adjustment need further context (check amount sign)
+      // For these, continue to check other indicators below
+    }
+
+    // ✅ FALLBACK: Check personal_finance_category (if transaction_type not available)
     // Plaid categorizes income in personal_finance_category, which we convert to category later
     // Income transactions should ALWAYS be positive, even if Plaid returns them as negative
     const pfc = (transaction as any).personal_finance_category;
