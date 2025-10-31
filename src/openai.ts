@@ -454,26 +454,24 @@ export async function askOpenAIWithEnhancedContext(
       amount: financialData.bankingTransactions[0].amount,
       category: financialData.bankingTransactions[0].category,
       category_id: financialData.bankingTransactions[0].category_id,
+      personal_finance_category: (financialData.bankingTransactions[0] as any).personal_finance_category, // ✅ Check this field!
       enriched_data: financialData.bankingTransactions[0].enriched_data,
       allKeys: Object.keys(financialData.bankingTransactions[0])
     } : 'No banking transactions');
     
+    // ✅ CRITICAL: Preserve ALL fields from FinancialDataService, especially personal_finance_category!
+    // Use spread operator to ensure we don't lose any Plaid data (categories, personal_finance_category, etc.)
     const bankingTxs = financialData.bankingTransactions.map(tx => ({
-      id: tx.id,
+      ...tx, // Spread all fields first to preserve everything from Plaid
+      // Explicitly ensure critical fields are present (these override if needed)
+      id: tx.id || tx.transaction_id,
       account_id: tx.account_id,
       amount: tx.amount,
       date: tx.date,
       name: tx.name,
-      merchant_name: tx.merchant_name,
       category: tx.category,
       category_id: tx.category_id,
-      pending: tx.pending,
-      payment_channel: tx.payment_channel,
-      location: tx.location,
-      payment_meta: tx.payment_meta,
-      pending_transaction_id: tx.pending_transaction_id,
-      account_owner: tx.account_owner,
-      transaction_code: tx.transaction_code,
+      personal_finance_category: (tx as any).personal_finance_category, // ✅ CRITICAL: Preserve this!
       enriched_data: tx.enriched_data
     }));
             
@@ -658,7 +656,7 @@ export async function askOpenAIWithEnhancedContext(
       }
       
       // If we get here, it's a positive transaction that we're not sure about - exclude it to be safe
-      console.log(`OpenAI Income Filter: EXCLUDED (unknown positive) - ${name}: $${transaction.amount}, categories: ${allBasicCategories}`);
+      console.log(`OpenAI Income Filter: EXCLUDED (unknown positive) - ${name}: $${transaction.amount}, categories: "${allBasicCategories}", personal_finance_category:`, (transaction as any).personal_finance_category);
       return false;
     });
     
@@ -673,6 +671,7 @@ export async function askOpenAIWithEnhancedContext(
         name: t.name,
         amount: t.amount,
         category: t.category,
+        personal_finance_category: (t as any).personal_finance_category,
         enriched_category: t.enriched_data?.category
       })));
     }
@@ -685,6 +684,7 @@ export async function askOpenAIWithEnhancedContext(
         name: t.name,
         amount: t.amount,
         category: t.category,
+        personal_finance_category: (t as any).personal_finance_category,
         enriched_category: t.enriched_data?.category
       })));
     }

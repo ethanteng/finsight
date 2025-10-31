@@ -1225,7 +1225,8 @@ export const setupPlaidRoutes = (app: any) => {
       const seenTransactionIds = new Set();
       
       // Process transactions from FinancialDataService
-      // Note: These transactions already have categories from Plaid!
+      // Note: These transactions are already normalized by TransactionNormalizationService
+      // which converts personal_finance_category to category and normalizes amounts
       for (const transaction of financialData.bankingTransactions) {
         try {
           // Skip duplicates
@@ -1235,20 +1236,10 @@ export const setupPlaidRoutes = (app: any) => {
           }
           seenTransactionIds.add(transactionId);
           
-          // Create a fake "transactionsResponse" structure for the enrichment code below
-          // This maintains compatibility with the existing enrichment logic
-          const transactionsResponse = {
-            data: {
-              transactions: [transaction]
-            }
-          };
-          
-          // Process the transaction
-          const processedTransaction = processTransactionData(transaction);
-          
-          // Add to allTransactions (enrichment temporarily disabled for simplicity)
-          // TODO: Re-enable enrichment if needed
-          allTransactions.push(processedTransaction);
+          // ✅ Transactions from FinancialDataService are already normalized!
+          // No need to call processTransactionData() again - it would be redundant
+          // and might overwrite the already-normalized category data
+          allTransactions.push(transaction);
           
         } catch (error) {
           console.error(`Error processing transaction:`, error);

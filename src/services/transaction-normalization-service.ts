@@ -34,6 +34,24 @@ export class TransactionNormalizationService {
   normalizeTransaction(transaction: Transaction, accountType: string, accountSubtype?: string): Transaction {
     const normalized = { ...transaction };
 
+    // ✅ CRITICAL: Convert personal_finance_category to category if category is empty
+    // This matches the logic in processTransactionData from plaid.ts
+    // Plaid returns categories in personal_finance_category, but we need them in the category field
+    let basicCategory = transaction.category || [];
+    let basicCategoryId = transaction.category_id;
+    
+    const pfc = (transaction as any).personal_finance_category;
+    if ((!basicCategory || basicCategory.length === 0 || basicCategory[0] === null) && pfc) {
+      basicCategory = [
+        pfc.primary,
+        pfc.detailed
+      ].filter(Boolean);
+      basicCategoryId = pfc.primary;
+      // Update the normalized transaction with the converted category
+      normalized.category = basicCategory;
+      normalized.category_id = basicCategoryId;
+    }
+
     // Credit card normalization
     if (accountType === 'credit') {
       // For credit cards:
