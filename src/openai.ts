@@ -148,13 +148,74 @@ interface Conversation {
 }
 
 /**
+ * Analyze question to determine what context is needed
+ * Returns flags indicating which data sources to fetch
+ */
+function analyzeQuestionNeeds(question: string): {
+  needsMarketContext: boolean;
+  needsSearchContext: boolean;
+  needsHomeValue: boolean;
+  needsInvestments: boolean;
+} {
+  const qLower = question.toLowerCase();
+  
+  // Market context: investment, stock, market, portfolio, asset allocation questions
+  const needsMarketContext = 
+    qLower.includes('investment') || 
+    qLower.includes('portfolio') || 
+    qLower.includes('stock') || 
+    qLower.includes('market') ||
+    qLower.includes('asset allocation') ||
+    qLower.includes('holdings') ||
+    qLower.includes('securities') ||
+    qLower.includes('retirement') ||
+    qLower.includes('401k') ||
+    qLower.includes('ira');
+  
+  // Search context: real-time rates, current prices, specific institution info
+  const needsSearchContext =
+    qLower.includes('rate') ||
+    qLower.includes('apr') ||
+    qLower.includes('current') ||
+    qLower.includes('today') ||
+    qLower.includes('now') ||
+    qLower.includes('mortgage') ||
+    qLower.includes('refinance') ||
+    qLower.includes('yield') ||
+    qLower.includes('return');
+  
+  // Home value: property, home, house, real estate questions
+  const needsHomeValue =
+    qLower.includes('home') ||
+    qLower.includes('house') ||
+    qLower.includes('property') ||
+    qLower.includes('real estate') ||
+    qLower.includes('mortgage');
+  
+  // Investments: portfolio, holdings, investments questions
+  const needsInvestments =
+    qLower.includes('portfolio') ||
+    qLower.includes('holding') ||
+    qLower.includes('investment') ||
+    qLower.includes('stock') ||
+    qLower.includes('securities');
+  
+  return {
+    needsMarketContext,
+    needsSearchContext,
+    needsHomeValue,
+    needsInvestments
+  };
+}
+
+/**
  * Intelligently filter and prioritize transactions for AI context
  * Focuses on most relevant transactions to improve AI response quality
  * 
  * Uses configurable transaction history (TRANSACTION_HISTORY_DAYS env var)
  */
 function filterTransactionsForAI(transactions: any[]): any[] {
-  if (transactions.length <= 200) return transactions; // Cap at 200 for context window optimization
+  if (transactions.length <= 150) return transactions; // ✅ Reduced cap from 200 to 150 for faster processing
 
   const now = new Date();
   const transactionHistoryDays = parseInt(process.env.TRANSACTION_HISTORY_DAYS || '90', 10);
@@ -191,7 +252,7 @@ function filterTransactionsForAI(transactions: any[]): any[] {
   const filtered = Array.from(selected);
     console.log(`OpenAI: Prioritized to ${filtered.length} transactions (all income + large expenses + recent 30 days)`);
   
-    return filtered.slice(0, 200); // Cap at 200
+    return filtered.slice(0, 150); // ✅ Reduced cap from 200 to 150
   }
   
   return recent; // Return all 90-day transactions if under limit
@@ -339,6 +400,10 @@ export async function askOpenAIWithEnhancedContext(
   const deanonymizationService = new DeanonymizationService(anonymizationService);
   console.log('⚠️⚠️⚠️ DEDUPLICATION FIX VERSION 0bf8668 IS LOADED ⚠️⚠️⚠️');
 
+  // ✅ Analyze question to determine what context is needed (performance optimization)
+  const questionNeeds = analyzeQuestionNeeds(question);
+  console.log('OpenAI Enhanced: Question analysis:', questionNeeds);
+
   // Get user-specific data
   let accounts: any[] = [];
   let transactions: any[] = [];
@@ -418,10 +483,11 @@ export async function askOpenAIWithEnhancedContext(
             const financialDataService = new FinancialDataService();
             
             console.log('OpenAI Enhanced: Fetching unified financial data from FinancialDataService');
+            // ✅ Conditional fetching based on question needs (performance optimization)
             const financialData = await financialDataService.getUserFinancialData(userId, {
               includeTransactions: true,
-              includeInvestments: true,
-              includeHomeValue: true
+              includeInvestments: questionNeeds.needsInvestments, // ✅ Only fetch if needed
+              includeHomeValue: questionNeeds.needsHomeValue // ✅ Only fetch if needed
             });
             
             // Extract data from unified structure
@@ -797,25 +863,30 @@ export async function askOpenAIWithEnhancedContext(
     });
   }
 
-  // Get enhanced market context from MarketNewsManager
+  // ✅ OPTIMIZATION: Conditionally fetch market context only if needed (parallel with other operations)
   console.log('OpenAI Enhanced: Getting market news context for tier:', tier);
   let marketContextSummary = '';
   
-  try {
-    const { MarketNewsManager } = await import('./market-news/manager');
-    const marketNewsManager = new MarketNewsManager();
-    marketContextSummary = await marketNewsManager.getMarketContext(tier);
-    console.log('OpenAI Enhanced: Market news context length:', marketContextSummary.length);
-  } catch (error) {
-    console.error('OpenAI Enhanced: Error getting market news context:', error);
-    // Fallback to data orchestrator if market news manager fails
+  // Only fetch market context if question suggests it's needed
+  if (questionNeeds.needsMarketContext) {
     try {
-      marketContextSummary = await dataOrchestrator.getMarketContextSummary(tier, isDemo);
-      console.log('OpenAI Enhanced: Fallback to data orchestrator market context length:', marketContextSummary.length);
-    } catch (fallbackError) {
-      console.error('OpenAI Enhanced: Fallback market context also failed:', fallbackError);
-      marketContextSummary = '';
+      const { MarketNewsManager } = await import('./market-news/manager');
+      const marketNewsManager = new MarketNewsManager();
+      marketContextSummary = await marketNewsManager.getMarketContext(tier);
+      console.log('OpenAI Enhanced: Market news context length:', marketContextSummary.length);
+    } catch (error) {
+      console.error('OpenAI Enhanced: Error getting market news context:', error);
+      // Fallback to data orchestrator if market news manager fails
+      try {
+        marketContextSummary = await dataOrchestrator.getMarketContextSummary(tier, isDemo);
+        console.log('OpenAI Enhanced: Fallback to data orchestrator market context length:', marketContextSummary.length);
+      } catch (fallbackError) {
+        console.error('OpenAI Enhanced: Fallback market context also failed:', fallbackError);
+        marketContextSummary = '';
+      }
     }
+  } else {
+    console.log('OpenAI Enhanced: Skipping market context (not needed for this question)');
   }
 
   // Get search context for real-time financial information
@@ -890,6 +961,8 @@ export async function askOpenAIWithEnhancedContext(
     } catch (error) {
       console.error('OpenAI Enhanced: Error getting search context:', error);
     }
+  } else if (!questionNeeds.needsSearchContext) {
+    console.log('OpenAI Enhanced: Skipping search context (not needed for this question)');
   }
 
   // Apply intelligent transaction filtering for better AI focus
@@ -2471,7 +2544,7 @@ export async function askOpenAI(
   messages.push({ role: 'user', content: question });
 
   console.log('OpenAI: Sending request to OpenAI with', messages.length, 'messages');
-  console.log('OpenAI: Using model:', model || 'gpt-4o');
+  console.log('OpenAI: Using model:', model || 'gpt-4o-mini');
 
   try {
     const completion = await openai.chat.completions.create({

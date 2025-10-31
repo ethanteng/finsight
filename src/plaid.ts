@@ -2307,7 +2307,8 @@ export const setupPlaidRoutes = (app: any) => {
       const financialData = await financialDataService.getUserFinancialData(req.user.id, {
         includeTransactions: true, // ✅ Include investment transactions for the Transactions tab
         includeInvestments: true,
-        includeHomeValue: false
+        includeHomeValue: false,
+        skipCategorization: true // ✅ UI doesn't need full categorization, just personal_finance_category from Plaid
       });
 
       // Return investment data in the format expected by frontend

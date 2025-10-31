@@ -223,6 +223,7 @@ export class FinancialDataService {
 
     // ✅ STEP 1: Categorize transactions BEFORE normalization (skip for UI-only requests)
     // This ensures we have transaction_type available for normalization and filtering
+    console.log(`FinancialDataService: skipCategorization flag = ${options?.skipCategorization}, banking transactions = ${mergedData.bankingTransactions.length}, investment transactions = ${mergedData.investments.transactions.length}`);
     if (!options?.skipCategorization && (mergedData.bankingTransactions.length > 0 || mergedData.investments.transactions.length > 0)) {
       const accountsMap = new Map(mergedData.accounts.map(acc => [acc.account_id, acc]));
       
