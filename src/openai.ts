@@ -410,6 +410,7 @@ export async function askOpenAIWithEnhancedContext(
   let investmentData: any = null;
   let snapTradeData: any = null;
   let snapTradeActivities: any = null;
+  let categorizationDetails: any = undefined; // ✅ Store for logging
 
   // For demo mode, use demo data instead of database data
   if (isDemo) {
@@ -492,6 +493,9 @@ export async function askOpenAIWithEnhancedContext(
               includeHomeValue: questionNeeds.needsHomeValue, // ✅ Only fetch if needed
               collectCategorizationDetails: true // ✅ Collect detailed categorization results for debugging
             });
+            
+            // Store categorization details for later logging
+            categorizationDetails = financialData.categorizationDetails;
                     
             // Extract data from unified structure
             accounts = financialData.accounts.map(acc => ({
@@ -1490,7 +1494,7 @@ ${userId ? anonymizationService.anonymizeInvestmentData(userId, combinedHoldings
         investmentSummary: investmentSummary || '',
         marketContextSummary,
         searchContext,
-        categorizationDetails: financialData.categorizationDetails || undefined,
+        categorizationDetails: categorizationDetails,
         timestamp: new Date(),
       });
     } catch (error) {
