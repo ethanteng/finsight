@@ -229,18 +229,28 @@ export class FinancialDataService {
       
       // Categorize banking transactions
       if (mergedData.bankingTransactions.length > 0) {
-        mergedData.bankingTransactions = await this.transactionCategorizationService.categorizeTransactionBatch(
+        const categorized = await this.transactionCategorizationService.categorizeTransactionBatch(
           mergedData.bankingTransactions,
           accountsMap
         );
+        // Ensure iso_currency_code is a string for each transaction
+        mergedData.bankingTransactions = categorized.map(tx => ({
+          ...tx,
+          iso_currency_code: tx.iso_currency_code || 'USD'
+        }));
       }
       
       // Categorize investment transactions
       if (mergedData.investments.transactions.length > 0) {
-        mergedData.investments.transactions = await this.transactionCategorizationService.categorizeTransactionBatch(
+        const categorized = await this.transactionCategorizationService.categorizeTransactionBatch(
           mergedData.investments.transactions,
           accountsMap
         );
+        // Ensure iso_currency_code is a string for each transaction
+        mergedData.investments.transactions = categorized.map(tx => ({
+          ...tx,
+          iso_currency_code: tx.iso_currency_code || 'USD'
+        }));
       }
       
       console.log('FinancialDataService: Categorization complete');

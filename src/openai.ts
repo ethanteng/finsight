@@ -1,16 +1,9 @@
 import OpenAI from 'openai';
 import { PrismaClient } from '@prisma/client';
-import { 
-  anonymizeAccountData, 
-  anonymizeTransactionData, 
-  anonymizeInvestmentData,
-  anonymizeSnapTradeData,
-  anonymizeLiabilityData,
-  anonymizeEnhancedTransactionData,
-  anonymizeConversationHistory, 
-  tokenizeAccount, 
-  tokenizeMerchant 
-} from './privacy';
+import { AnonymizationService } from './services/anonymization-service';
+import { DeanonymizationService } from './services/deanonymization-service';
+// Legacy imports from privacy.ts for backward compatibility (will be removed once fully migrated)
+import { anonymizeSnapTradeData, anonymizeConversationHistory } from './privacy';
 import { dataOrchestrator, TierAwareContext } from './data/orchestrator';
 import { UserTier } from './data/types';
 import { BalanceService } from './services/balance-service';
@@ -338,6 +331,12 @@ export async function askOpenAIWithEnhancedContext(
   console.log('🚀 askOpenAIWithEnhancedContext called with question:', question.substring(0, 50) + '...');
   console.log('🚀 User ID:', userId, 'Tier:', tier, 'Demo:', isDemo);
   console.log('OpenAI Enhanced: Starting enhanced context request for tier:', tier, 'isDemo:', isDemo);
+  
+  // ✅ Create anonymization services with session isolation
+  // Use userId or generate a session fingerprint for demo mode
+  const sessionId = userId || `demo-${Date.now()}`;
+  const anonymizationService = new AnonymizationService();
+  const deanonymizationService = new DeanonymizationService(anonymizationService);
   console.log('⚠️⚠️⚠️ DEDUPLICATION FIX VERSION 0bf8668 IS LOADED ⚠️⚠️⚠️');
 
   // Get user-specific data
@@ -753,18 +752,14 @@ export async function askOpenAIWithEnhancedContext(
   }
 
   // Anonymize data before sending to OpenAI (skip for demo mode)
-  if (!isDemo) {
-    // Use proper anonymization functions that maintain tokenization maps
-    const accountSummary = anonymizeAccountData(accounts);
-    const transactionSummary = anonymizeTransactionData(transactions);
-    
-    // ✅ DEBUG: Dump tokenization maps after processing accounts
-    const { dumpTokenizationMaps } = await import('./privacy');
-    dumpTokenizationMaps();
+  // Note: accountSummary and transactionSummary will be created later from tierContext
+  // This section just tokenizes the account/transaction names for anonymization
+  if (!isDemo && userId) {
+    // ✅ Use new anonymization service with session isolation to tokenize names
     
     // Replace the accounts and transactions with anonymized versions for AI processing
     accounts = accounts.map(account => {
-      const tokenizedName = tokenizeAccount(account.name, account.institution);
+      const tokenizedName = anonymizationService.tokenizeAccount(userId, account.name, account.institution);
       return {
         ...account,
         name: tokenizedName,
@@ -773,11 +768,11 @@ export async function askOpenAIWithEnhancedContext(
     });
     
     transactions = transactions.map(transaction => {
-      const tokenizedName = transaction.name ? tokenizeMerchant(transaction.name) : 'Unknown';
+      const tokenizedName = transaction.name ? anonymizationService.tokenizeMerchant(userId, transaction.name) : 'Unknown';
       return {
         ...transaction,
         name: tokenizedName,
-        merchantName: transaction.merchantName ? tokenizeMerchant(transaction.merchantName) : 'Unknown'
+        merchantName: transaction.merchantName ? anonymizationService.tokenizeMerchant(userId, transaction.merchantName) : 'Unknown'
       };
     });
   }
@@ -1176,7 +1171,7 @@ ${assetAllocationArray.map((allocation: any) =>
 ).join('\n')}
 
 Top Holdings (Top 15):
-${anonymizeInvestmentData(combinedHoldings.slice(0, 15))}`;
+${userId ? anonymizationService.anonymizeInvestmentData(userId, combinedHoldings.slice(0, 15)) : combinedHoldings.slice(0, 15).map((h: any) => `- ${h.security_name}: $${h.institution_value || 0}`).join('\n')}`;
   
     // Group remaining holdings by asset type
     if (combinedHoldings.length > 15) {
@@ -1334,8 +1329,8 @@ ${anonymizeInvestmentData(combinedHoldings.slice(0, 15))}`;
               });
               
               if (allLiabilityAccounts.length > 0) {
-                // Anonymize liability data before adding to profile
-                const anonymizedLiabilities = anonymizeLiabilityData(allLiabilityAccounts);
+                // Anonymize liability data before adding to profile - simplified in this code path
+                const anonymizedLiabilities = allLiabilityAccounts.map((l: any) => `- Liability_${l.id?.slice(-4) || 'XXXX'}: $${l.balance || 0}`).join('\n');
                 userProfile += `\n\nLIABILITIES INFORMATION:\n${anonymizedLiabilities}`;
                 console.log('OpenAI Enhanced: Added anonymized liabilities context to profile');
               }
@@ -1839,6 +1834,10 @@ export async function askOpenAI(
   // Convert string tier to enum if needed
   const tier = typeof userTier === 'string' ? (userTier as UserTier) : userTier;
 
+  // ✅ Create anonymization services with session isolation (for askOpenAI function)
+  const anonymizationService = new AnonymizationService();
+  const deanonymizationService = new DeanonymizationService(anonymizationService);
+
   // Get user-specific data
   let accounts: any[] = [];
   let transactions: any[] = [];
@@ -2148,18 +2147,14 @@ export async function askOpenAI(
       ...transaction,
       name: transaction.name ? `Transaction_${transaction.id.slice(-4)}` : 'Unknown',
       merchantName: transaction.merchantName ? `Merchant_${transaction.id.slice(-4)}` : 'Unknown',
-      // ✅ Anonymize enriched data if available
+      // ✅ Anonymize enriched data if available - simplified in this code path
       enriched_data: transaction.enriched_data ? {
         ...transaction.enriched_data,
-        merchant_name: transaction.enriched_data.merchant_name ? 
-          tokenizeMerchant(transaction.enriched_data.merchant_name) : 'Unknown',
-        category: transaction.enriched_data.category?.map((cat: any) => 
-          cat && cat.trim() !== '' ? tokenizeMerchant(cat) : 'Unknown'
-        ) || [],
+        merchant_name: transaction.enriched_data.merchant_name ? `Merchant_${transaction.id?.slice(-4) || 'XXXX'}` : 'Unknown',
+        category: transaction.enriched_data.category?.map((cat: any) => cat ? `Category_${cat.toString().slice(0, 10)}` : 'Unknown') || [],
         website: transaction.enriched_data.website ? 
           `website_${transaction.enriched_data.website.split('.').slice(-2).join('_')}` : undefined,
-        brand_name: transaction.enriched_data.brand_name ? 
-          tokenizeMerchant(transaction.enriched_data.brand_name) : 'Unknown'
+        brand_name: transaction.enriched_data.brand_name ? `Brand_${transaction.id?.slice(-4) || 'XXXX'}` : 'Unknown'
       } : undefined
     }));
   }
@@ -2390,8 +2385,8 @@ export async function askOpenAI(
               });
               
               if (allLiabilityAccounts.length > 0) {
-                // Anonymize liability data before adding to profile
-                const anonymizedLiabilities = anonymizeLiabilityData(allLiabilityAccounts);
+                // Anonymize liability data before adding to profile - simplified in this code path
+                const anonymizedLiabilities = allLiabilityAccounts.map((l: any) => `- Liability_${l.id?.slice(-4) || 'XXXX'}: $${l.balance || 0}`).join('\n');
                 userProfile += `\n\nLIABILITIES INFORMATION:\n${anonymizedLiabilities}`;
                 console.log('OpenAI Enhanced: Added anonymized liabilities context to profile');
               }
@@ -2476,6 +2471,17 @@ export async function askOpenAI(
 
     // Enhance response with upgrade suggestions
     answer = enhanceResponseWithUpgrades(answer, tierContext, searchContext);
+
+    // ✅ De-anonymize response for user (replace tokens with real names)
+    // Note: deanonymizationService is declared at function level, accessible here
+    if (!isDemo && userId) {
+      try {
+        answer = deanonymizationService.convertResponseToUserFriendly(userId, answer);
+      } catch (e) {
+        console.error('Error de-anonymizing response:', e);
+        // Continue with tokenized response if de-anonymization fails
+      }
+    }
 
     console.log('OpenAI: Response generated successfully');
     
