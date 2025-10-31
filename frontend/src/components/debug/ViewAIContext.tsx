@@ -1,5 +1,43 @@
 import React, { useState, useEffect } from 'react';
 
+interface CategorizationDetail {
+  transaction: {
+    id: string;
+    name: string;
+    amount: number;
+    date: string;
+    category: string[];
+    category_id?: string;
+    personal_finance_category: { primary: string; detailed: string } | null;
+    payment_channel?: string;
+    merchant_name?: string;
+    iso_currency_code?: string;
+    pending?: boolean;
+  };
+  account: {
+    account_id: string;
+    type: string;
+    subtype?: string;
+    name: string;
+  };
+  categorization: {
+    transaction_type: string;
+    confidence: number;
+    method: 'gpt' | 'plaid';
+    reason?: string;
+  };
+}
+
+interface CategorizationDetails {
+  transactions: CategorizationDetail[];
+  summary: {
+    total: number;
+    gptCategorized: number;
+    plaidFallback: number;
+    averageConfidence: number;
+  };
+}
+
 interface GPTContextData {
   userId?: string;
   timestamp: string;
@@ -17,6 +55,7 @@ interface GPTContextData {
     marketContextSummary?: string;
     searchContext?: string;
   };
+  categorizationDetails?: CategorizationDetails;
   metadata: {
     systemPromptLength: number;
     conversationHistoryLength: number;
@@ -25,6 +64,7 @@ interface GPTContextData {
     investmentSummaryLength: number;
     marketContextSummaryLength: number;
     searchContextLength: number;
+    categorizationDetailsLength?: number;
   };
 }
 
@@ -121,6 +161,7 @@ export const ViewAIContext: React.FC<ViewAIContextProps> = ({ isOpen, onClose })
                 { id: 'investmentSummary', label: 'Investment Summary', key: 'context.investmentSummary' },
                 { id: 'marketContext', label: 'Market Context', key: 'context.marketContextSummary' },
                 { id: 'searchContext', label: 'Search Context', key: 'context.searchContext' },
+                { id: 'categorizationDetails', label: 'Transaction Categorization', key: 'categorizationDetails' },
                 { id: 'conversationHistory', label: 'Conversation History', key: 'conversationHistory' },
                 { id: 'metadata', label: 'Metadata', key: 'metadata' },
               ].map(section => (
@@ -228,6 +269,8 @@ export const ViewAIContext: React.FC<ViewAIContextProps> = ({ isOpen, onClose })
         return context.context.marketContextSummary || 'No market context available';
       case 'searchContext':
         return context.context.searchContext || 'No search context available';
+      case 'categorizationDetails':
+        return formatCategorizationDetails(context.categorizationDetails);
       case 'conversationHistory':
         return formatJSON(context.conversationHistory);
       case 'metadata':
@@ -235,6 +278,57 @@ export const ViewAIContext: React.FC<ViewAIContextProps> = ({ isOpen, onClose })
       default:
         return '';
     }
+  }
+
+  function formatCategorizationDetails(details?: CategorizationDetails): string {
+    if (!details || !details.transactions || details.transactions.length === 0) {
+      return 'No categorization details available';
+    }
+
+    const { summary, transactions } = details;
+
+    let formatted = 'TRANSACTION CATEGORIZATION DETAILS\n\n';
+    formatted += 'Summary:\n';
+    formatted += `- Total Transactions: ${summary.total}\n`;
+    formatted += `- GPT Categorized: ${summary.gptCategorized} (${summary.total > 0 ? Math.round((summary.gptCategorized / summary.total) * 100) : 0}%)\n`;
+    formatted += `- Plaid Fallback: ${summary.plaidFallback} (${summary.total > 0 ? Math.round((summary.plaidFallback / summary.total) * 100) : 0}%)\n`;
+    formatted += `- Average Confidence: ${summary.averageConfidence.toFixed(2)}\n\n`;
+    formatted += 'Detailed Results:\n';
+    formatted += '═'.repeat(80) + '\n\n';
+
+    for (let i = 0; i < transactions.length; i++) {
+      const { transaction, account, categorization } = transactions[i];
+      const pfc = transaction.personal_finance_category;
+      
+      formatted += `${i + 1}. Transaction: ${transaction.name}\n`;
+      formatted += `   Amount: $${transaction.amount.toFixed(2)} | Date: ${transaction.date}\n`;
+      
+      if (pfc) {
+        formatted += `   Plaid Category: ${pfc.primary}${pfc.detailed ? ` / ${pfc.detailed}` : ''}\n`;
+      }
+      
+      if (transaction.category && transaction.category.length > 0) {
+        formatted += `   Categories: ${transaction.category.join(', ')}\n`;
+      }
+      
+      formatted += `   Account: ${account.name} (${account.type}${account.subtype ? `/${account.subtype}` : ''})\n`;
+      formatted += `   ────────────────────────────────────────────────────────────────\n`;
+      formatted += `   ✓ Categorized as: ${categorization.transaction_type.toUpperCase()}\n`;
+      formatted += `   Confidence: ${categorization.confidence.toFixed(2)} | Method: ${categorization.method.toUpperCase()}\n`;
+      
+      if (categorization.reason) {
+        formatted += `   Reason: ${categorization.reason}\n`;
+      }
+      
+      formatted += '\n';
+      
+      // Add separator between transactions
+      if (i < transactions.length - 1) {
+        formatted += '─'.repeat(80) + '\n\n';
+      }
+    }
+
+    return formatted;
   }
 
   function getContentLength(): number {

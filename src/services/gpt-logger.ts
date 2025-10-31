@@ -1,6 +1,44 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+interface CategorizationDetail {
+  transaction: {
+    id: string;
+    name: string;
+    amount: number;
+    date: string;
+    category: string[];
+    category_id?: string;
+    personal_finance_category: { primary: string; detailed: string } | null;
+    payment_channel?: string;
+    merchant_name?: string;
+    iso_currency_code?: string;
+    pending?: boolean;
+  };
+  account: {
+    account_id: string;
+    type: string;
+    subtype?: string;
+    name: string;
+  };
+  categorization: {
+    transaction_type: string;
+    confidence: number;
+    method: 'gpt' | 'plaid';
+    reason?: string;
+  };
+}
+
+interface CategorizationDetails {
+  transactions: CategorizationDetail[];
+  summary: {
+    total: number;
+    gptCategorized: number;
+    plaidFallback: number;
+    averageConfidence: number;
+  };
+}
+
 interface GPTContext {
   userId?: string;
   question: string;
@@ -11,6 +49,7 @@ interface GPTContext {
   investmentSummary?: string;
   marketContextSummary?: string;
   searchContext?: string;
+  categorizationDetails?: CategorizationDetails;
   timestamp: Date;
 }
 
@@ -60,6 +99,7 @@ export async function logGPTContext(context: GPTContext): Promise<void> {
         marketContextSummary: context.marketContextSummary?.substring(0, 2000) + (context.marketContextSummary && context.marketContextSummary.length > 2000 ? '...' : ''),
         searchContext: context.searchContext?.substring(0, 2000) + (context.searchContext && context.searchContext.length > 2000 ? '...' : ''),
       },
+      categorizationDetails: context.categorizationDetails || undefined,
       metadata: {
         systemPromptLength: context.systemPrompt.length,
         conversationHistoryLength: context.conversationHistory.length,
@@ -68,6 +108,7 @@ export async function logGPTContext(context: GPTContext): Promise<void> {
         investmentSummaryLength: context.investmentSummary?.length || 0,
         marketContextSummaryLength: context.marketContextSummary?.length || 0,
         searchContextLength: context.searchContext?.length || 0,
+        categorizationDetailsLength: context.categorizationDetails ? context.categorizationDetails.transactions.length : 0,
       },
     };
     

@@ -55,6 +55,46 @@ export interface CategorizedTransaction extends Transaction {
   categorization_reason?: string;
 }
 
+// Detailed categorization result for debugging/logging
+export interface CategorizationDetail {
+  transaction: {
+    id: string;
+    name: string;
+    amount: number;
+    date: string;
+    category: string[];
+    category_id?: string;
+    personal_finance_category: { primary: string; detailed: string } | null;
+    payment_channel?: string;
+    merchant_name?: string;
+    iso_currency_code?: string;
+    pending?: boolean;
+  };
+  account: {
+    account_id: string;
+    type: string;
+    subtype?: string;
+    name: string;
+  };
+  categorization: {
+    transaction_type: TransactionType;
+    confidence: number;
+    method: 'gpt' | 'plaid';
+    reason?: string;
+  };
+}
+
+export interface CategorizationBatchResult {
+  transactions: CategorizedTransaction[];
+  details: CategorizationDetail[];
+  summary: {
+    total: number;
+    gptCategorized: number;
+    plaidFallback: number;
+    averageConfidence: number;
+  };
+}
+
 interface GPTCategorizationResponse {
   transaction_type: TransactionType;
   confidence: number;
@@ -340,5 +380,100 @@ Respond with ONLY a valid JSON object in this exact format (no markdown, no expl
     console.log(`TransactionCategorizationService: Categorized ${transactions.length} transactions - GPT: ${gptCount}, Plaid fallback: ${plaidCount}`);
 
     return categorized;
+  }
+
+  /**
+   * Categorize a batch of transactions with detailed results for logging/debugging
+   * Returns both categorized transactions and detailed categorization information
+   */
+  async categorizeTransactionBatchWithDetails(
+    transactions: Transaction[],
+    accountsMap: Map<string, Account>
+  ): Promise<CategorizationBatchResult> {
+    if (transactions.length === 0) {
+      return {
+        transactions: [],
+        details: [],
+        summary: {
+          total: 0,
+          gptCategorized: 0,
+          plaidFallback: 0,
+          averageConfidence: 0
+        }
+      };
+    }
+
+    console.log(`TransactionCategorizationService: Categorizing ${transactions.length} transactions with details`);
+
+    const categorized: CategorizedTransaction[] = [];
+    const details: CategorizationDetail[] = [];
+    let gptCount = 0;
+    let plaidCount = 0;
+    let totalConfidence = 0;
+
+    for (const transaction of transactions) {
+      const account = accountsMap.get(transaction.account_id);
+      const categorizedTx = await this.categorizeTransaction(transaction, account);
+      
+      if (categorizedTx.categorization_method === 'gpt') {
+        gptCount++;
+      } else {
+        plaidCount++;
+      }
+      
+      categorized.push(categorizedTx);
+      totalConfidence += categorizedTx.categorization_confidence;
+
+      // Build detailed result for logging
+      const pfc = (transaction as any).personal_finance_category;
+      details.push({
+        transaction: {
+          id: transaction.id || transaction.transaction_id || 'unknown',
+          name: transaction.name,
+          amount: transaction.amount,
+          date: transaction.date,
+          category: transaction.category || [],
+          category_id: transaction.category_id,
+          personal_finance_category: pfc ? {
+            primary: pfc.primary || '',
+            detailed: pfc.detailed || ''
+          } : null,
+          payment_channel: transaction.payment_channel,
+          merchant_name: transaction.merchant_name,
+          iso_currency_code: transaction.iso_currency_code,
+          pending: transaction.pending
+        },
+        account: {
+          account_id: account?.account_id || transaction.account_id,
+          type: account?.type || 'unknown',
+          subtype: account?.subtype,
+          name: account?.name || 'Unknown Account'
+        },
+        categorization: {
+          transaction_type: categorizedTx.transaction_type,
+          confidence: categorizedTx.categorization_confidence,
+          method: categorizedTx.categorization_method,
+          reason: categorizedTx.categorization_reason
+        }
+      });
+
+      // Add small delay to avoid rate limiting
+      if (gptCount % 10 === 0 && gptCount > 0) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+
+    console.log(`TransactionCategorizationService: Categorized ${transactions.length} transactions - GPT: ${gptCount}, Plaid fallback: ${plaidCount}`);
+
+    return {
+      transactions: categorized,
+      details,
+      summary: {
+        total: transactions.length,
+        gptCategorized: gptCount,
+        plaidFallback: plaidCount,
+        averageConfidence: transactions.length > 0 ? totalConfidence / transactions.length : 0
+      }
+    };
   }
 }

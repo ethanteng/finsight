@@ -489,7 +489,8 @@ export async function askOpenAIWithEnhancedContext(
             const financialData = await financialDataService.getUserFinancialData(userId, {
               includeTransactions: true,
               includeInvestments: true, // ✅ Always fetch to get SnapTrade account balances
-              includeHomeValue: questionNeeds.needsHomeValue // ✅ Only fetch if needed
+              includeHomeValue: questionNeeds.needsHomeValue, // ✅ Only fetch if needed
+              collectCategorizationDetails: true // ✅ Collect detailed categorization results for debugging
             });
                     
             // Extract data from unified structure
@@ -1489,6 +1490,7 @@ ${userId ? anonymizationService.anonymizeInvestmentData(userId, combinedHoldings
         investmentSummary: investmentSummary || '',
         marketContextSummary,
         searchContext,
+        categorizationDetails: financialData.categorizationDetails || undefined,
         timestamp: new Date(),
       });
     } catch (error) {

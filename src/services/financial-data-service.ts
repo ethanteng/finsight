@@ -4,7 +4,7 @@ import { SnapTradeService } from '../snaptrade';
 import { BalanceService } from './balance-service';
 import { TokenValidationService, TokenStatus, PlaidTokenHealth, SnapTradeTokenHealth } from './token-validation-service';
 import { TransactionNormalizationService } from './transaction-normalization-service';
-import { TransactionCategorizationService } from './transaction-categorization-service';
+import { TransactionCategorizationService, CategorizationDetail } from './transaction-categorization-service';
 
 const prisma = new PrismaClient();
 
@@ -146,6 +146,15 @@ export interface UnifiedFinancialData {
   };
   bankingTransactions: Transaction[];
   homeValue: HomeData | null;
+  categorizationDetails?: {
+    transactions: CategorizationDetail[];
+    summary: {
+      total: number;
+      gptCategorized: number;
+      plaidFallback: number;
+      averageConfidence: number;
+    };
+  };
   metadata: {
     lastUpdated: Date;
     tokenHealth: {
@@ -194,6 +203,7 @@ export class FinancialDataService {
     includeInvestments?: boolean;
     includeHomeValue?: boolean;
     skipCategorization?: boolean; // ✅ NEW: Skip categorization for UI-only requests (performance optimization)
+    collectCategorizationDetails?: boolean; // ✅ NEW: Collect detailed categorization results for logging/debugging
   }): Promise<UnifiedFinancialData> {
     const startTime = Date.now();
     console.log('FinancialDataService: Starting fetch', { userId, timestamp: new Date().toISOString() });
@@ -229,33 +239,85 @@ export class FinancialDataService {
       
       console.log('FinancialDataService: Categorizing transactions before normalization');
       
+      // Collect all categorization details if requested
+      const allCategorizationDetails: CategorizationDetail[] = [];
+      let gptCategorizedCount = 0;
+      let plaidFallbackCount = 0;
+      let totalConfidence = 0;
+      
       // Categorize banking transactions
       if (mergedData.bankingTransactions.length > 0) {
-        const categorized = await this.transactionCategorizationService.categorizeTransactionBatch(
-          mergedData.bankingTransactions,
-          accountsMap
-        );
-        // Ensure iso_currency_code is a string for each transaction
-        mergedData.bankingTransactions = categorized.map(tx => ({
-          ...tx,
-          iso_currency_code: tx.iso_currency_code || 'USD'
-        }));
+        if (options?.collectCategorizationDetails) {
+          // Use detailed categorization method
+          const result = await this.transactionCategorizationService.categorizeTransactionBatchWithDetails(
+            mergedData.bankingTransactions,
+            accountsMap
+          );
+          mergedData.bankingTransactions = result.transactions.map(tx => ({
+            ...tx,
+            iso_currency_code: tx.iso_currency_code || 'USD'
+          }));
+          allCategorizationDetails.push(...result.details);
+          gptCategorizedCount += result.summary.gptCategorized;
+          plaidFallbackCount += result.summary.plaidFallback;
+          totalConfidence += result.summary.averageConfidence * result.summary.total;
+        } else {
+          // Use regular categorization method (faster)
+          const categorized = await this.transactionCategorizationService.categorizeTransactionBatch(
+            mergedData.bankingTransactions,
+            accountsMap
+          );
+          mergedData.bankingTransactions = categorized.map(tx => ({
+            ...tx,
+            iso_currency_code: tx.iso_currency_code || 'USD'
+          }));
+        }
       }
       
       // Categorize investment transactions
       if (mergedData.investments.transactions.length > 0) {
-        const categorized = await this.transactionCategorizationService.categorizeTransactionBatch(
-          mergedData.investments.transactions,
-          accountsMap
-        );
-        // Ensure iso_currency_code is a string for each transaction
-        mergedData.investments.transactions = categorized.map(tx => ({
-          ...tx,
-          iso_currency_code: tx.iso_currency_code || 'USD'
-        }));
+        if (options?.collectCategorizationDetails) {
+          // Use detailed categorization method
+          const result = await this.transactionCategorizationService.categorizeTransactionBatchWithDetails(
+            mergedData.investments.transactions,
+            accountsMap
+          );
+          mergedData.investments.transactions = result.transactions.map(tx => ({
+            ...tx,
+            iso_currency_code: tx.iso_currency_code || 'USD'
+          }));
+          allCategorizationDetails.push(...result.details);
+          gptCategorizedCount += result.summary.gptCategorized;
+          plaidFallbackCount += result.summary.plaidFallback;
+          totalConfidence += result.summary.averageConfidence * result.summary.total;
+        } else {
+          // Use regular categorization method (faster)
+          const categorized = await this.transactionCategorizationService.categorizeTransactionBatch(
+            mergedData.investments.transactions,
+            accountsMap
+          );
+          mergedData.investments.transactions = categorized.map(tx => ({
+            ...tx,
+            iso_currency_code: tx.iso_currency_code || 'USD'
+          }));
+        }
       }
       
       console.log('FinancialDataService: Categorization complete');
+      
+      // Store categorization details if collected
+      if (options?.collectCategorizationDetails && allCategorizationDetails.length > 0) {
+        mergedData.categorizationDetails = {
+          transactions: allCategorizationDetails,
+          summary: {
+            total: allCategorizationDetails.length,
+            gptCategorized: gptCategorizedCount,
+            plaidFallback: plaidFallbackCount,
+            averageConfidence: allCategorizationDetails.length > 0 ? totalConfidence / allCategorizationDetails.length : 0
+          }
+        };
+        console.log('FinancialDataService: Categorization details collected:', mergedData.categorizationDetails.summary);
+      }
     } else if (options?.skipCategorization) {
       console.log('FinancialDataService: Skipping categorization (UI-only request)');
     }
