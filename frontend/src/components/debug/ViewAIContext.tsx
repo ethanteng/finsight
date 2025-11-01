@@ -293,38 +293,154 @@ export const ViewAIContext: React.FC<ViewAIContextProps> = ({ isOpen, onClose })
     formatted += `- GPT Categorized: ${summary.gptCategorized} (${summary.total > 0 ? Math.round((summary.gptCategorized / summary.total) * 100) : 0}%)\n`;
     formatted += `- Plaid Fallback: ${summary.plaidFallback} (${summary.total > 0 ? Math.round((summary.plaidFallback / summary.total) * 100) : 0}%)\n`;
     formatted += `- Average Confidence: ${summary.averageConfidence.toFixed(2)}\n\n`;
-    formatted += 'Detailed Results:\n';
+    formatted += 'Detailed Results (Grouped by Category, then by Month & Year):\n';
     formatted += '═'.repeat(80) + '\n\n';
 
-    for (let i = 0; i < transactions.length; i++) {
-      const { transaction, account, categorization } = transactions[i];
-      const pfc = transaction.personal_finance_category;
-      
-      formatted += `${i + 1}. Transaction: ${transaction.name}\n`;
-      formatted += `   Amount: $${transaction.amount.toFixed(2)} | Date: ${transaction.date}\n`;
-      
-      if (pfc) {
-        formatted += `   Plaid Category: ${pfc.primary}${pfc.detailed ? ` / ${pfc.detailed}` : ''}\n`;
+    // Helper function to get month/year key from date string (YYYY-MM-DD format)
+    const getMonthYearKey = (dateStr: string): string => {
+      const date = new Date(dateStr);
+      const year = date.getFullYear();
+      const month = date.getMonth(); // 0-11
+      return `${year}-${String(month + 1).padStart(2, '0')}`; // YYYY-MM format for sorting
+    };
+
+    // Helper function to format month/year for display
+    const formatMonthYear = (dateStr: string): string => {
+      const date = new Date(dateStr);
+      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+      return `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+    };
+
+    // Group transactions by transaction_type
+    const groupedByType = new Map<string, typeof transactions>();
+    for (const transaction of transactions) {
+      const type = transaction.categorization.transaction_type.toLowerCase();
+      if (!groupedByType.has(type)) {
+        groupedByType.set(type, []);
       }
+      groupedByType.get(type)!.push(transaction);
+    }
+
+    // Define preferred order for categories (income-related first, then expenses, then others)
+    const categoryOrder = [
+      'income',
+      'expense',
+      'transfer_in',
+      'transfer_out',
+      'deposit',
+      'withdrawal',
+      'buy',
+      'sell',
+      'refund',
+      'fee',
+      'adjustment'
+    ];
+
+    // Sort grouped transactions by category order, then alphabetically for unknown categories
+    const sortedGroups = Array.from(groupedByType.entries()).sort(([typeA], [typeB]) => {
+      const indexA = categoryOrder.indexOf(typeA);
+      const indexB = categoryOrder.indexOf(typeB);
       
-      if (transaction.category && transaction.category.length > 0) {
-        formatted += `   Categories: ${transaction.category.join(', ')}\n`;
+      // If both are in the order list, sort by index
+      if (indexA !== -1 && indexB !== -1) {
+        return indexA - indexB;
       }
+      // If only A is in the list, it comes first
+      if (indexA !== -1) return -1;
+      // If only B is in the list, it comes first
+      if (indexB !== -1) return 1;
+      // If neither is in the list, sort alphabetically
+      return typeA.localeCompare(typeB);
+    });
+
+    // Format each category group
+    for (let groupIndex = 0; groupIndex < sortedGroups.length; groupIndex++) {
+      const [categoryType, categoryTransactions] = sortedGroups[groupIndex];
       
-      formatted += `   Account: ${account.name} (${account.type}${account.subtype ? `/${account.subtype}` : ''})\n`;
-      formatted += `   ────────────────────────────────────────────────────────────────\n`;
-      formatted += `   ✓ Categorized as: ${categorization.transaction_type.toUpperCase()}\n`;
-      formatted += `   Confidence: ${categorization.confidence.toFixed(2)} | Method: ${categorization.method.toUpperCase()}\n`;
-      
-      if (categorization.reason) {
-        formatted += `   Reason: ${categorization.reason}\n`;
+      // Group transactions within this category by month/year
+      const groupedByMonthYear = new Map<string, typeof transactions>();
+      for (const transaction of categoryTransactions) {
+        const monthYearKey = getMonthYearKey(transaction.transaction.date);
+        if (!groupedByMonthYear.has(monthYearKey)) {
+          groupedByMonthYear.set(monthYearKey, []);
+        }
+        groupedByMonthYear.get(monthYearKey)!.push(transaction);
       }
+
+      // Sort month/year groups (newest first)
+      const sortedMonthYears = Array.from(groupedByMonthYear.entries()).sort(([keyA], [keyB]) => {
+        return keyB.localeCompare(keyA); // Descending (newest first)
+      });
+
+      // Category header
+      const categoryDisplayName = categoryType.toUpperCase();
+      const categoryCount = categoryTransactions.length;
+      const categoryTotal = categoryTransactions.reduce((sum, t) => sum + Math.abs(t.transaction.amount), 0);
       
-      formatted += '\n';
-      
-      // Add separator between transactions
-      if (i < transactions.length - 1) {
-        formatted += '─'.repeat(80) + '\n\n';
+      formatted += `\n${'═'.repeat(80)}\n`;
+      formatted += `${categoryDisplayName} (${categoryCount} transaction${categoryCount !== 1 ? 's' : ''} | Total: $${categoryTotal.toFixed(2)})\n`;
+      formatted += `${'═'.repeat(80)}\n\n`;
+
+      // Format each month/year group within this category
+      for (let monthIndex = 0; monthIndex < sortedMonthYears.length; monthIndex++) {
+        const [monthYearKey, monthTransactions] = sortedMonthYears[monthIndex];
+        
+        // Sort transactions within this month by date (newest first)
+        monthTransactions.sort((a, b) => {
+          return b.transaction.date.localeCompare(a.transaction.date);
+        });
+
+        // Month/Year header
+        const monthYearDisplay = formatMonthYear(monthTransactions[0].transaction.date);
+        const monthCount = monthTransactions.length;
+        const monthTotal = monthTransactions.reduce((sum, t) => sum + Math.abs(t.transaction.amount), 0);
+        
+        formatted += `  ${'─'.repeat(76)}\n`;
+        formatted += `  ${monthYearDisplay} (${monthCount} transaction${monthCount !== 1 ? 's' : ''} | Total: $${monthTotal.toFixed(2)})\n`;
+        formatted += `  ${'─'.repeat(76)}\n\n`;
+
+        // List transactions in this month
+        for (let i = 0; i < monthTransactions.length; i++) {
+          const { transaction, account, categorization } = monthTransactions[i];
+          const pfc = transaction.personal_finance_category;
+          
+          formatted += `  ${i + 1}. Transaction: ${transaction.name}\n`;
+          formatted += `     Amount: $${transaction.amount.toFixed(2)} | Date: ${transaction.date}\n`;
+          
+          if (pfc) {
+            formatted += `     Plaid Category: ${pfc.primary}${pfc.detailed ? ` / ${pfc.detailed}` : ''}\n`;
+          }
+          
+          if (transaction.category && transaction.category.length > 0) {
+            formatted += `     Categories: ${transaction.category.join(', ')}\n`;
+          }
+          
+          formatted += `     Account: ${account.name} (${account.type}${account.subtype ? `/${account.subtype}` : ''})\n`;
+          formatted += `     ────────────────────────────────────────────────────────────────\n`;
+          formatted += `     ✓ Categorized as: ${categorization.transaction_type.toUpperCase()}\n`;
+          formatted += `     Confidence: ${categorization.confidence.toFixed(2)} | Method: ${categorization.method.toUpperCase()}\n`;
+          
+          if (categorization.reason) {
+            formatted += `     Reason: ${categorization.reason}\n`;
+          }
+          
+          // Add separator between transactions in the same month
+          if (i < monthTransactions.length - 1) {
+            formatted += '\n';
+            formatted += '  ' + '·'.repeat(74) + '\n\n';
+          }
+        }
+
+        // Add separator between months
+        if (monthIndex < sortedMonthYears.length - 1) {
+          formatted += '\n\n';
+        }
+      }
+
+      // Add separator between categories
+      if (groupIndex < sortedGroups.length - 1) {
+        formatted += '\n\n';
       }
     }
 

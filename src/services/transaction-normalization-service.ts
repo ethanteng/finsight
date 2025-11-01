@@ -71,9 +71,15 @@ export class TransactionNormalizationService {
       // - Money in (deposits, dividends) should be positive
       // - Money out (withdrawals, purchases) should be negative
       // Plaid typically returns this correctly, but ensure consistency
-      if (this.isInflow(transaction)) {
+      const isInflowResult = this.isInflow(transaction);
+      if (isInflowResult) {
         // Inflow: should be positive
+        const originalAmount = normalized.amount;
         normalized.amount = Math.abs(transaction.amount);
+        // ✅ DEBUG: Log if we're correcting a negative income transaction
+        if (originalAmount < 0 && (transaction as any).transaction_type?.toLowerCase() === 'income') {
+          console.log(`TransactionNormalizationService: Corrected negative income transaction "${transaction.name}": ${originalAmount} → ${normalized.amount}`);
+        }
       } else {
         // Outflow: should be negative
         normalized.amount = -Math.abs(transaction.amount);
@@ -140,12 +146,14 @@ export class TransactionNormalizationService {
     // This is the most reliable indicator since it was determined before normalization
     const transactionType = (transaction as any).transaction_type;
     if (transactionType) {
+      // ✅ CRITICAL FIX: Make check case-insensitive to handle any case variations
+      const typeLower = String(transactionType).toLowerCase();
       // Income, deposits, transfers_in are inflows
-      if (transactionType === 'income' || transactionType === 'deposit' || transactionType === 'transfer_in') {
+      if (typeLower === 'income' || typeLower === 'deposit' || typeLower === 'transfer_in') {
         return true;
       }
       // Expenses, withdrawals, transfers_out are outflows
-      if (transactionType === 'expense' || transactionType === 'withdrawal' || transactionType === 'transfer_out') {
+      if (typeLower === 'expense' || typeLower === 'withdrawal' || typeLower === 'transfer_out') {
         return false;
       }
       // Buy/sell/fee/refund/adjustment need further context (check amount sign)
