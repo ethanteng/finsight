@@ -335,6 +335,30 @@ export class FinancialDataService {
         mergedData.investments.transactions,
         accountsMap
       );
+      
+      // ✅ CRITICAL FIX: Update categorization details with normalized amounts
+      // The categorization details were collected before normalization, so we need to sync the amounts
+      if (mergedData.categorizationDetails && mergedData.categorizationDetails.transactions.length > 0) {
+        // Create a map of normalized transactions by ID for quick lookup
+        const normalizedTxMap = new Map<string, { amount: number }>();
+        [...mergedData.bankingTransactions, ...mergedData.investments.transactions].forEach(tx => {
+          const txId = (tx as any).id || (tx as any).transaction_id || '';
+          if (txId) {
+            normalizedTxMap.set(txId, { amount: tx.amount });
+          }
+        });
+        
+        // Update categorization details with normalized amounts
+        mergedData.categorizationDetails.transactions.forEach(detail => {
+          const txId = detail.transaction.id;
+          const normalizedTx = normalizedTxMap.get(txId);
+          if (normalizedTx) {
+            detail.transaction.amount = normalizedTx.amount;
+          }
+        });
+        
+        console.log('FinancialDataService: Updated categorization details with normalized amounts');
+      }
     }
 
     // Calculate performance metrics
