@@ -214,7 +214,11 @@ export const CategoryComparison: React.FC = () => {
               {transactions.map(transaction => {
                 const isEditing = editingTransactionId === transaction.id;
                 const isSaving = savingTransactionId === transaction.id;
-                const currentType = localTransactionTypes.get(transaction.id) || transaction.transaction_type as TransactionType | undefined;
+                // Get the transaction type, but validate it's actually a valid TransactionType
+                const rawType = localTransactionTypes.get(transaction.id) || transaction.transaction_type;
+                const currentType = rawType && TRANSACTION_TYPES.includes(rawType.toLowerCase() as TransactionType) 
+                  ? (rawType.toLowerCase() as TransactionType)
+                  : undefined;
                 
                 return (
                   <tr

@@ -297,7 +297,10 @@ router.get('/transactions/comparison', requireAuth, async (req, res) => {
           },
         },
       },
-      orderBy: { date: 'desc' },
+      orderBy: [
+        { date: 'desc' },
+        { id: 'desc' } // Secondary sort by ID for consistent ordering
+      ],
       take: Number(limit),
     });
     
