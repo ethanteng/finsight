@@ -69,10 +69,14 @@ export const CategoryComparison: React.FC = () => {
       setTransactions(data.transactions);
       
       // Initialize local state with current transaction types
+      // Only store valid transaction types (filter out old category names like "Special", "Place")
       const typesMap = new Map<string, TransactionType>();
       data.transactions.forEach((tx: Transaction) => {
-        if (tx.transaction_type && TRANSACTION_TYPES.includes(tx.transaction_type as TransactionType)) {
-          typesMap.set(tx.id, tx.transaction_type as TransactionType);
+        if (tx.transaction_type) {
+          const normalized = String(tx.transaction_type).toLowerCase().trim();
+          if (TRANSACTION_TYPES.includes(normalized as TransactionType)) {
+            typesMap.set(tx.id, normalized as TransactionType);
+          }
         }
       });
       setLocalTransactionTypes(typesMap);
@@ -215,9 +219,11 @@ export const CategoryComparison: React.FC = () => {
                 const isEditing = editingTransactionId === transaction.id;
                 const isSaving = savingTransactionId === transaction.id;
                 // Get the transaction type, but validate it's actually a valid TransactionType
+                // Filter out invalid values like "Special", "Place" (old category names) or payment channels
                 const rawType = localTransactionTypes.get(transaction.id) || transaction.transaction_type;
-                const currentType = rawType && TRANSACTION_TYPES.includes(rawType.toLowerCase() as TransactionType) 
-                  ? (rawType.toLowerCase() as TransactionType)
+                const normalizedRawType = rawType ? String(rawType).toLowerCase().trim() : null;
+                const currentType = normalizedRawType && TRANSACTION_TYPES.includes(normalizedRawType as TransactionType) 
+                  ? (normalizedRawType as TransactionType)
                   : undefined;
                 
                 return (

@@ -75,115 +75,23 @@ router.get('/context/:contextId', requireAuth, async (req, res) => {
 
 /**
  * POST /api/ai/categorize-transactions
- * Generate AI categories for transactions
+ * @deprecated This endpoint is deprecated and should not be used.
+ * 
+ * This endpoint stored category names (like "Groceries", "Special", "Place") in the aiCategory field,
+ * but we now use transaction types (like "income", "expense", "transfer_in") instead.
+ * 
+ * Transaction categorization is now handled automatically by TransactionCategorizationService
+ * when financial data is fetched. Manual corrections can be made via:
+ * PUT /api/ai/transactions/:transactionId/transaction-type
+ * 
+ * This endpoint is kept for backwards compatibility but returns an error to prevent data pollution.
  */
 router.post('/categorize-transactions', requireAuth, async (req, res) => {
-  try {
-    const userId = (req as any).user.id;
-    const { transactionIds } = req.body;
-    
-    if (!Array.isArray(transactionIds) || transactionIds.length === 0) {
-      return res.status(400).json({ error: 'transactionIds must be a non-empty array' });
-    }
-    
-    // Fetch transactions from database
-    const transactions = await prisma.transaction.findMany({
-      where: {
-        id: { in: transactionIds },
-        account: { userId },
-      },
-      include: {
-        account: true,
-      },
-    });
-    
-    if (transactions.length === 0) {
-      return res.status(404).json({ error: 'No transactions found' });
-    }
-    
-    // Generate AI categories for each transaction
-    const results = [];
-    
-    for (const transaction of transactions) {
-      try {
-        // Build a prompt for AI categorization
-        const prompt = `Analyze this financial transaction and provide:
-1. A clear, specific category (e.g., "Groceries", "Dining", "Transportation", "Healthcare", "Entertainment")
-2. A brief explanation of why you chose this category
-
-Transaction Details:
-- Name: ${transaction.name}
-- Merchant: ${transaction.merchantName || 'Unknown'}
-- Amount: $${Math.abs(transaction.amount).toFixed(2)}
-- Date: ${transaction.date.toISOString().split('T')[0]}
-- Original Category: ${transaction.category || 'Unknown'}
-${transaction.enriched_data ? `- Enhanced Data: ${JSON.stringify(transaction.enriched_data)}` : ''}
-
-Respond in this exact format:
-Category: [category name]
-Reasoning: [brief explanation]`;
-        
-        const completion = await openai.chat.completions.create({
-          model: 'gpt-4o-mini', // Use cheaper model for categorization
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a financial transaction categorization expert. Provide accurate, specific categories.',
-            },
-            {
-              role: 'user',
-              content: prompt,
-            },
-          ],
-          temperature: 0.3,
-          max_tokens: 200,
-        });
-        
-        const response = completion.choices[0]?.message?.content || '';
-        
-        // Parse the response
-        const categoryMatch = response.match(/Category:\s*(.+)/i);
-        const reasoningMatch = response.match(/Reasoning:\s*(.+)/i);
-        
-        const aiCategory = categoryMatch ? categoryMatch[1].trim() : 'Unknown';
-        const aiCategoryReason = reasoningMatch ? reasoningMatch[1].trim() : 'No reasoning provided';
-        
-        // Update transaction with AI category
-        await prisma.transaction.update({
-          where: { id: transaction.id },
-          data: {
-            aiCategory,
-            aiCategoryReason,
-            categoryComparedAt: new Date(),
-          },
-        });
-        
-        results.push({
-          id: transaction.id,
-          name: transaction.name,
-          originalCategory: transaction.category,
-          aiCategory,
-          aiCategoryReason,
-          match: transaction.category === aiCategory,
-        });
-      } catch (error) {
-        console.error(`Error categorizing transaction ${transaction.id}:`, error);
-        results.push({
-          id: transaction.id,
-          name: transaction.name,
-          originalCategory: transaction.category,
-          aiCategory: null,
-          aiCategoryReason: 'Error during categorization',
-          match: false,
-        });
-      }
-    }
-    
-    res.json({ results });
-  } catch (error) {
-    console.error('Error categorizing transactions:', error);
-    res.status(500).json({ error: 'Failed to categorize transactions' });
-  }
+  res.status(410).json({ 
+    error: 'This endpoint has been deprecated. Transaction categorization is now handled automatically. Use PUT /api/ai/transactions/:transactionId/transaction-type for manual corrections.',
+    deprecated: true,
+    replacement: 'Transaction categorization is automatic via TransactionCategorizationService. Manual corrections: PUT /api/ai/transactions/:transactionId/transaction-type'
+  });
 });
 
 /**
@@ -304,26 +212,44 @@ router.get('/transactions/comparison', requireAuth, async (req, res) => {
       take: Number(limit),
     });
     
-    const results = transactions.map((transaction: any) => ({
-      id: transaction.id,
-      name: transaction.name,
-      merchantName: transaction.merchantName,
-      amount: transaction.amount,
-      date: transaction.date,
-      account: transaction.account,
-      originalCategory: transaction.category,
-      // aiCategory now stores transaction_type (repurposed field)
-      transaction_type: transaction.aiCategory || null,
-      aiCategory: transaction.aiCategory, // Keep for backwards compatibility
-      aiCategoryReason: transaction.aiCategoryReason,
-      categoryComparedAt: transaction.categoryComparedAt,
-      // Only mark as manual correction if the reason explicitly indicates manual correction
-      isManualCorrection: transaction.aiCategoryReason?.toLowerCase().includes('manually corrected') ||
-                         transaction.aiCategoryReason?.toLowerCase().includes('corrected by user') ||
-                         false,
-      match: transaction.category === transaction.aiCategory,
-      enrichedData: transaction.enriched_data,
-    }));
+    // Valid transaction types (used to filter out old category names like "Special", "Place")
+    const validTransactionTypes = ['income', 'expense', 'transfer_in', 'transfer_out', 'buy', 'sell', 
+                                   'deposit', 'withdrawal', 'fee', 'refund', 'adjustment'];
+    
+    const results = transactions.map((transaction: any) => {
+      // Filter out invalid values stored in aiCategory (old category names, payment channels, etc.)
+      let transactionType = null;
+      if (transaction.aiCategory) {
+        const normalized = String(transaction.aiCategory).toLowerCase().trim();
+        if (validTransactionTypes.includes(normalized)) {
+          transactionType = normalized;
+        }
+        // If aiCategory contains an invalid value (like "special", "place", "groceries", etc.),
+        // treat it as null so it shows as "Not categorized"
+      }
+      
+      return {
+        id: transaction.id,
+        name: transaction.name,
+        merchantName: transaction.merchantName,
+        amount: transaction.amount,
+        date: transaction.date,
+        account: transaction.account,
+        originalCategory: transaction.category,
+        // aiCategory now stores transaction_type (repurposed field)
+        // Only return valid transaction types, filter out old category names
+        transaction_type: transactionType,
+        aiCategory: transactionType, // Only return valid transaction types
+        aiCategoryReason: transaction.aiCategoryReason,
+        categoryComparedAt: transaction.categoryComparedAt,
+        // Only mark as manual correction if the reason explicitly indicates manual correction
+        isManualCorrection: transaction.aiCategoryReason?.toLowerCase().includes('manually corrected') ||
+                           transaction.aiCategoryReason?.toLowerCase().includes('corrected by user') ||
+                           false,
+        match: transaction.category === transactionType,
+        enrichedData: transaction.enriched_data,
+      };
+    });
     
     res.json({
       transactions: results,
