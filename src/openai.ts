@@ -491,7 +491,8 @@ export async function askOpenAIWithEnhancedContext(
               includeTransactions: true,
               includeInvestments: true, // ✅ Always fetch to get SnapTrade account balances
               includeHomeValue: questionNeeds.needsHomeValue, // ✅ Only fetch if needed
-              collectCategorizationDetails: true // ✅ Collect detailed categorization results for debugging
+              collectCategorizationDetails: true, // ✅ Collect detailed categorization results for debugging
+              shouldPersistTransactions: true // ✅ Persist transactions when called from GPT prompts
             });
             
             // Store categorization details for later logging

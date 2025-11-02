@@ -533,7 +533,8 @@ export const setupPlaidRoutes = (app: any) => {
       const financialData = await financialDataService.getUserFinancialData(req.user.id, {
         includeTransactions: false,
         includeInvestments: false,
-        includeHomeValue: false
+        includeHomeValue: false,
+        shouldPersistTransactions: false // ✅ Display-only: don't persist transactions
       });
 
       // ✅ Filter to ONLY Plaid accounts (exclude SnapTrade accounts)
@@ -1223,7 +1224,8 @@ export const setupPlaidRoutes = (app: any) => {
         includeTransactions: true,
         includeInvestments: false,
         includeHomeValue: false,
-        skipCategorization: true // ✅ UI doesn't need full categorization, just personal_finance_category from Plaid
+        skipCategorization: true, // ✅ UI doesn't need full categorization, just personal_finance_category from Plaid
+        shouldPersistTransactions: false // ✅ Display-only: don't persist transactions
       });
       
       console.log(`🔍 /plaid/transactions: FinancialDataService returned ${financialData.bankingTransactions.length} banking transactions`);
@@ -2312,7 +2314,8 @@ export const setupPlaidRoutes = (app: any) => {
         includeTransactions: true, // ✅ Include investment transactions for the Transactions tab
         includeInvestments: true,
         includeHomeValue: false,
-        skipCategorization: true // ✅ UI doesn't need full categorization, just personal_finance_category from Plaid
+        skipCategorization: true, // ✅ UI doesn't need full categorization, just personal_finance_category from Plaid
+        shouldPersistTransactions: false // ✅ Display-only: don't persist transactions
       });
 
       // Return investment data in the format expected by frontend

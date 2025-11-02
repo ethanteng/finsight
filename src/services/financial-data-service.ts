@@ -205,6 +205,7 @@ export class FinancialDataService {
     includeHomeValue?: boolean;
     skipCategorization?: boolean; // ✅ NEW: Skip categorization for UI-only requests (performance optimization)
     collectCategorizationDetails?: boolean; // ✅ NEW: Collect detailed categorization results for logging/debugging
+    shouldPersistTransactions?: boolean; // ✅ NEW: Only persist transactions when called from GPT prompts, not display-only views
   }): Promise<UnifiedFinancialData> {
     const startTime = Date.now();
     console.log('FinancialDataService: Starting fetch', { userId, timestamp: new Date().toISOString() });
@@ -479,8 +480,13 @@ export class FinancialDataService {
       }
     }
 
-    // ✅ STEP 3: Persist transactions to database if enabled
-    if (process.env.PERSIST_TRANSACTIONS === 'true' && (mergedData.bankingTransactions.length > 0 || mergedData.investments.transactions.length > 0)) {
+    // ✅ STEP 3: Persist transactions to database ONLY when:
+    // 1. PERSIST_TRANSACTIONS env var is set to 'true'
+    // 2. shouldPersistTransactions option is explicitly true (called from GPT prompts, not display-only views)
+    // This prevents saving transactions when just displaying data in /app or /profile pages
+    if (process.env.PERSIST_TRANSACTIONS === 'true' && 
+        options?.shouldPersistTransactions === true &&
+        (mergedData.bankingTransactions.length > 0 || mergedData.investments.transactions.length > 0)) {
       try {
         console.log('FinancialDataService: Persisting transactions to database');
         
