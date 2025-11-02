@@ -186,8 +186,8 @@ export const CategoryComparison: React.FC = () => {
           No transactions found for this filter.
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
+        <div className="bg-white rounded-lg shadow overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200" style={{ tableLayout: 'auto' }}>
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -236,17 +236,17 @@ export const CategoryComparison: React.FC = () => {
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {new Date(transaction.date).toLocaleDateString()}
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900">
+                    <td className="px-6 py-4 min-w-[250px]">
+                      <div className="text-sm text-gray-900 break-words">
                         {transaction.originalCategory || 'N/A'}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 min-w-[200px]">
                       {isEditing ? (
                         <select
                           value={currentType || ''}
                           onChange={(e) => handleTransactionTypeChange(transaction.id, e.target.value as TransactionType)}
-                          className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="text-sm border border-gray-300 rounded-md px-3 py-2 bg-white min-w-[180px] focus:outline-none focus:ring-2 focus:ring-blue-500"
                           disabled={isSaving}
                           onClick={(e) => e.stopPropagation()}
                         >
@@ -258,25 +258,31 @@ export const CategoryComparison: React.FC = () => {
                           ))}
                         </select>
                       ) : (
-                        <div>
+                        <div className="min-w-[200px]">
                           {currentType ? (
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-gray-900">
-                                {formatTransactionType(currentType)}
-                              </span>
-                              {transaction.isManualCorrection && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                  Manual
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-medium text-gray-900">
+                                  {formatTransactionType(currentType)}
                                 </span>
+                                {transaction.isManualCorrection ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                    Manual
+                                  </span>
+                                ) : transaction.aiCategoryReason ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                    AI
+                                  </span>
+                                ) : null}
+                              </div>
+                              {transaction.aiCategoryReason && (
+                                <div className="text-xs text-gray-500 mt-1 break-words">
+                                  {transaction.aiCategoryReason}
+                                </div>
                               )}
                             </div>
                           ) : (
                             <span className="text-sm text-gray-400">Not categorized</span>
-                          )}
-                          {transaction.aiCategoryReason && (
-                            <div className="text-xs text-gray-500 mt-1">
-                              {transaction.aiCategoryReason}
-                            </div>
                           )}
                         </div>
                       )}

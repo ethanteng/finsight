@@ -314,7 +314,10 @@ router.get('/transactions/comparison', requireAuth, async (req, res) => {
       aiCategory: transaction.aiCategory, // Keep for backwards compatibility
       aiCategoryReason: transaction.aiCategoryReason,
       categoryComparedAt: transaction.categoryComparedAt,
-      isManualCorrection: !!transaction.aiCategory, // If aiCategory exists, it's a manual correction or GPT categorization
+      // Only mark as manual correction if the reason explicitly indicates manual correction
+      isManualCorrection: transaction.aiCategoryReason?.toLowerCase().includes('manually corrected') ||
+                         transaction.aiCategoryReason?.toLowerCase().includes('corrected by user') ||
+                         false,
       match: transaction.category === transaction.aiCategory,
       enrichedData: transaction.enriched_data,
     }));

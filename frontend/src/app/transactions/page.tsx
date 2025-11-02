@@ -39,7 +39,7 @@ export default function TransactionsPage() {
 
   return (
     <div className="min-h-screen bg-gray-900">
-      <div className="max-w-7xl mx-auto py-8">
+      <div className="max-w-[95vw] xl:max-w-[1400px] mx-auto py-8 px-4">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Transaction Type Correction</h1>
           <p className="text-gray-400">
