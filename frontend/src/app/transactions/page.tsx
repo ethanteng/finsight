@@ -41,9 +41,9 @@ export default function TransactionsPage() {
     <div className="min-h-screen bg-gray-900">
       <div className="max-w-7xl mx-auto py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Transaction Analysis</h1>
+          <h1 className="text-3xl font-bold text-white mb-2">Transaction Type Correction</h1>
           <p className="text-gray-400">
-            Compare how Plaid and our AI categorize your transactions. Select transactions to get AI categorizations.
+            Review and manually correct transaction categorizations (income, expense, transfers, etc.). Your corrections improve GPT responses and persist across all prompts.
           </p>
         </div>
         

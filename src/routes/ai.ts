@@ -187,6 +187,76 @@ Reasoning: [brief explanation]`;
 });
 
 /**
+ * PUT /api/ai/transactions/:transactionId/transaction-type
+ * Update transaction type manually (user correction)
+ */
+router.put('/transactions/:transactionId/transaction-type', requireAuth, async (req, res) => {
+  try {
+    const userId = (req as any).user.id;
+    const { transactionId } = req.params;
+    const { transaction_type, reason } = req.body;
+
+    // Validate transaction_type
+    const validTypes = ['income', 'expense', 'transfer_in', 'transfer_out', 'buy', 'sell', 
+                        'deposit', 'withdrawal', 'fee', 'refund', 'adjustment'];
+    
+    if (!transaction_type || !validTypes.includes(transaction_type.toLowerCase())) {
+      return res.status(400).json({ 
+        error: 'Invalid transaction_type. Must be one of: ' + validTypes.join(', ') 
+      });
+    }
+
+    // Verify transaction belongs to user
+    const transaction = await prisma.transaction.findFirst({
+      where: {
+        id: transactionId,
+        account: { userId }
+      }
+    });
+
+    if (!transaction) {
+      return res.status(404).json({ error: 'Transaction not found' });
+    }
+
+    // Update transaction with manual correction
+    // Store transaction_type in aiCategory field (repurposed)
+    const updatedTransaction = await prisma.transaction.update({
+      where: { id: transactionId },
+      data: {
+        aiCategory: transaction_type.toLowerCase(),
+        aiCategoryReason: reason || 'Manually corrected by user',
+        categoryComparedAt: new Date()
+      },
+      include: {
+        account: {
+          select: {
+            name: true,
+            institution: true,
+          },
+        },
+      },
+    });
+
+    res.json({
+      id: updatedTransaction.id,
+      name: updatedTransaction.name,
+      merchantName: updatedTransaction.merchantName,
+      amount: updatedTransaction.amount,
+      date: updatedTransaction.date,
+      account: updatedTransaction.account,
+      originalCategory: updatedTransaction.category,
+      transaction_type: updatedTransaction.aiCategory, // aiCategory now stores transaction_type
+      aiCategoryReason: updatedTransaction.aiCategoryReason,
+      categoryComparedAt: updatedTransaction.categoryComparedAt,
+      isManualCorrection: true
+    });
+  } catch (error) {
+    console.error('Error updating transaction type:', error);
+    res.status(500).json({ error: 'Failed to update transaction type' });
+  }
+});
+
+/**
  * GET /api/transactions/comparison
  * Get transactions with category comparison data
  */
@@ -239,9 +309,12 @@ router.get('/transactions/comparison', requireAuth, async (req, res) => {
       date: transaction.date,
       account: transaction.account,
       originalCategory: transaction.category,
-      aiCategory: transaction.aiCategory,
+      // aiCategory now stores transaction_type (repurposed field)
+      transaction_type: transaction.aiCategory || null,
+      aiCategory: transaction.aiCategory, // Keep for backwards compatibility
       aiCategoryReason: transaction.aiCategoryReason,
       categoryComparedAt: transaction.categoryComparedAt,
+      isManualCorrection: !!transaction.aiCategory, // If aiCategory exists, it's a manual correction or GPT categorization
       match: transaction.category === transaction.aiCategory,
       enrichedData: transaction.enriched_data,
     }));

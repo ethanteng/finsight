@@ -5,6 +5,7 @@ import { BalanceService } from './balance-service';
 import { TokenValidationService, TokenStatus, PlaidTokenHealth, SnapTradeTokenHealth } from './token-validation-service';
 import { TransactionNormalizationService } from './transaction-normalization-service';
 import { TransactionCategorizationService, CategorizationDetail } from './transaction-categorization-service';
+import { persistTransactionsToDb, persistSnapTradeActivitiesToDb } from '../data/persistence';
 
 const prisma = new PrismaClient();
 
@@ -237,6 +238,123 @@ export class FinancialDataService {
     if (!options?.skipCategorization && (mergedData.bankingTransactions.length > 0 || mergedData.investments.transactions.length > 0)) {
       const accountsMap = new Map(mergedData.accounts.map(acc => [acc.account_id, acc]));
       
+      // ✅ CRITICAL: Load manual corrections from database before categorizing
+      // Merge aiCategory (transaction_type) from database into transactions to preserve manual corrections
+      try {
+        // ✅ Get all transaction IDs - Plaid uses transaction_id, investment uses investment_transaction_id or id
+        // We need to normalize to what's stored as plaidTransactionId in DB
+        const transactionIds: string[] = [];
+        const transactionIdMap = new Map<string, { source: 'banking' | 'investment', index: number }>();
+        
+        // Banking transactions: use transaction_id (Plaid's field) or id if set
+        mergedData.bankingTransactions.forEach((tx, idx) => {
+          const txId = (tx as any).transaction_id || tx.id || tx.transaction_id;
+          if (txId && !txId.startsWith('snaptrade-')) {
+            transactionIds.push(txId);
+            transactionIdMap.set(txId, { source: 'banking', index: idx });
+          }
+        });
+        
+        // Investment transactions: use id or transaction_id, but handle Plaid investment_transaction_id
+        mergedData.investments.transactions.forEach((tx, idx) => {
+          // Plaid investment transactions use investment_transaction_id, but we might have stored as id
+          const txId = (tx as any).investment_transaction_id || (tx as any).id || tx.transaction_id || tx.id;
+          if (txId) {
+            transactionIds.push(txId);
+            transactionIdMap.set(txId, { source: 'investment', index: idx });
+          }
+        });
+        
+        if (transactionIds.length > 0) {
+          // ✅ Load ALL existing categorizations (both manual corrections and previous GPT categorizations)
+          // We need to preserve all of them, not just manual corrections
+          // Manual corrections will override GPT, but we also want to preserve previous GPT categorizations
+          // if the user hasn't manually corrected them
+          const dbTransactions = await prisma.transaction.findMany({
+            where: {
+              plaidTransactionId: { in: transactionIds },
+              aiCategory: { not: null } // Fetch all transactions with any categorization (manual or GPT)
+            },
+            select: {
+              plaidTransactionId: true,
+              aiCategory: true,
+              aiCategoryReason: true
+            }
+          });
+          
+          // Create a map of transaction ID -> existing categorization
+          // These will be loaded into transactions before categorization
+          // If aiCategoryReason contains "Manually corrected", categorization service will use it
+          // Otherwise, categorization will re-run (allowing GPT to update previous categorizations)
+          const existingCategorizationsMap = new Map(
+            dbTransactions.map(dbTx => [dbTx.plaidTransactionId, {
+              aiCategory: dbTx.aiCategory,
+              aiCategoryReason: dbTx.aiCategoryReason
+            }])
+          );
+          
+          // Merge existing categorizations into transactions using the map
+          // The categorization service will check for aiCategory and use it if it's a manual correction
+          // If it's a previous GPT categorization, it will be overwritten by new GPT categorization
+          mergedData.bankingTransactions = mergedData.bankingTransactions.map(tx => {
+            const txId = (tx as any).transaction_id || tx.id || tx.transaction_id;
+            if (!txId || txId.startsWith('snaptrade-')) return tx;
+            const existingCategorization = existingCategorizationsMap.get(txId);
+            if (existingCategorization) {
+              // ✅ Check if this is a manual correction (user explicitly set it)
+              // Manual corrections have reason containing "Manually corrected" or "corrected by user"
+              const isManualCorrection = existingCategorization.aiCategoryReason?.toLowerCase().includes('manually corrected') ||
+                                       existingCategorization.aiCategoryReason?.toLowerCase().includes('corrected by user');
+              
+              if (isManualCorrection) {
+                // Manual correction - always preserve it
+                return { 
+                  ...tx, 
+                  aiCategory: existingCategorization.aiCategory, 
+                  aiCategoryReason: existingCategorization.aiCategoryReason 
+                };
+              }
+              // Previous GPT categorization - let categorization service re-categorize
+              // Don't set aiCategory here, so GPT can update it
+            }
+            return tx;
+          });
+          
+          mergedData.investments.transactions = mergedData.investments.transactions.map(tx => {
+            // For investment transactions, try both investment_transaction_id and id
+            const txId = (tx as any).investment_transaction_id || (tx as any).id || tx.transaction_id || tx.id;
+            if (!txId) return tx;
+            const existingCategorization = existingCategorizationsMap.get(txId);
+            if (existingCategorization) {
+              // ✅ Check if this is a manual correction
+              const isManualCorrection = existingCategorization.aiCategoryReason?.toLowerCase().includes('manually corrected') ||
+                                       existingCategorization.aiCategoryReason?.toLowerCase().includes('corrected by user');
+              
+              if (isManualCorrection) {
+                // Manual correction - always preserve it
+                return { 
+                  ...tx, 
+                  aiCategory: existingCategorization.aiCategory, 
+                  aiCategoryReason: existingCategorization.aiCategoryReason 
+                };
+              }
+              // Previous GPT categorization - let categorization service re-categorize
+            }
+            return tx;
+          });
+          
+          const manualCorrectionCount = Array.from(existingCategorizationsMap.values())
+            .filter(ec => ec.aiCategoryReason?.toLowerCase().includes('manually corrected') || 
+                         ec.aiCategoryReason?.toLowerCase().includes('corrected by user'))
+            .length;
+          
+          console.log(`FinancialDataService: Loaded ${existingCategorizationsMap.size} existing categorizations (${manualCorrectionCount} manual corrections) from database`);
+        }
+      } catch (error) {
+        console.error('FinancialDataService: Error loading manual corrections from database:', error);
+        // Continue with categorization even if loading corrections fails
+      }
+      
       console.log('FinancialDataService: Categorizing transactions before normalization');
       
       // Collect all categorization details if requested
@@ -358,6 +476,81 @@ export class FinancialDataService {
         });
         
         console.log('FinancialDataService: Updated categorization details with normalized amounts');
+      }
+    }
+
+    // ✅ STEP 3: Persist transactions to database if enabled
+    if (process.env.PERSIST_TRANSACTIONS === 'true' && (mergedData.bankingTransactions.length > 0 || mergedData.investments.transactions.length > 0)) {
+      try {
+        console.log('FinancialDataService: Persisting transactions to database');
+        
+        // Persist banking transactions (from Plaid)
+        if (mergedData.bankingTransactions.length > 0) {
+          // Extract Plaid transactions (those with transaction_id or id that matches plaidTransactionId pattern)
+          const plaidBankingTransactions = mergedData.bankingTransactions
+            .filter(tx => {
+              const txId = (tx as any).transaction_id || (tx as any).id;
+              // Plaid transactions have IDs like "abc123" (not "snaptrade-...")
+              return txId && !txId.startsWith('snaptrade-');
+            })
+            .map(tx => {
+              // ✅ Ensure transaction_id is set correctly (this is what we use as plaidTransactionId in DB)
+              const plaidTransactionId = (tx as any).transaction_id || (tx as any).id;
+              
+              return {
+                ...tx,
+                id: plaidTransactionId,
+                transaction_id: plaidTransactionId, // ✅ Use transaction_id as the canonical ID
+                // Ensure all required fields are present for persistence
+                account_id: tx.account_id,
+                amount: tx.amount,
+                date: tx.date,
+                name: tx.name,
+                category: tx.category || [],
+                pending: (tx as any).pending || false,
+                iso_currency_code: tx.iso_currency_code || 'USD',
+                merchant_name: (tx as any).merchant_name || (tx as any).merchantName,
+                payment_channel: (tx as any).payment_channel,
+                enriched_data: (tx as any).enriched_data,
+                // Include transaction_type (stored in aiCategory field for persistence)
+                // ✅ CRITICAL: Only set aiCategory if transaction was categorized
+                // If transaction already has aiCategory (manual correction), preserve it
+                // Otherwise, use transaction_type from categorization
+                // Use undefined if neither exists (so persistence logic can preserve existing manual corrections)
+                aiCategory: (tx as any).aiCategory || (tx as any).transaction_type || undefined,
+                aiCategoryReason: (tx as any).aiCategoryReason || (tx as any).categorization_reason || undefined,
+                categoryComparedAt: ((tx as any).transaction_type || (tx as any).aiCategory) ? new Date() : undefined
+              };
+            });
+          
+          if (plaidBankingTransactions.length > 0) {
+            await persistTransactionsToDb(userId, plaidBankingTransactions, mergedData.accounts);
+          }
+        }
+        
+        // Persist SnapTrade activities (investment transactions)
+        if (mergedData.investments.transactions.length > 0) {
+          const snapTradeTransactions = mergedData.investments.transactions
+            .filter(tx => {
+              const txId = (tx as any).id || (tx as any).transaction_id;
+              return txId && txId.startsWith('snaptrade-');
+            })
+            .map(tx => ({
+              ...tx,
+              id: (tx as any).id || (tx as any).transaction_id,
+              // Extract SnapTrade activity ID from transaction id format "snaptrade-{activityId}"
+              activityId: ((tx as any).id || '').replace('snaptrade-', '')
+            }));
+          
+          if (snapTradeTransactions.length > 0) {
+            await persistSnapTradeActivitiesToDb(userId, snapTradeTransactions);
+          }
+        }
+        
+        console.log('FinancialDataService: Transaction persistence complete');
+      } catch (error) {
+        console.error('FinancialDataService: Error persisting transactions to database:', error);
+        // Don't throw - persistence errors shouldn't block data retrieval
       }
     }
 
@@ -547,6 +740,8 @@ export class FinancialDataService {
                     for (const invTxn of investmentTransactionsResponse.data.investment_transactions) {
                       transactions.push({
                         id: invTxn.investment_transaction_id,
+                        transaction_id: invTxn.investment_transaction_id, // ✅ Add both id and transaction_id for consistency
+                        investment_transaction_id: invTxn.investment_transaction_id, // ✅ Preserve original field
                         account_id: invTxn.account_id,
                         security_id: invTxn.security_id,
                         amount: invTxn.amount,
@@ -618,7 +813,13 @@ export class FinancialDataService {
                 });
               }
 
-              transactions.push(...transactionsResponse.data.transactions);
+              // ✅ CRITICAL: Ensure Plaid transactions have both id and transaction_id fields for consistent ID matching
+              // Plaid returns transaction_id, but we also set id for consistency
+              transactions.push(...transactionsResponse.data.transactions.map((tx: any) => ({
+                ...tx,
+                id: tx.transaction_id, // ✅ Set id to transaction_id for consistency
+                transaction_id: tx.transaction_id // ✅ Ensure transaction_id is present
+              })));
             } catch (transactionError: any) {
               console.error('Error fetching transactions for token:', transactionError?.response?.data?.error_code);
               errors.push({

@@ -106,6 +106,22 @@ export class TransactionCategorizationService {
   private readonly confidenceThreshold = 0.7;
 
   /**
+   * Valid transaction types
+   */
+  private readonly validTransactionTypes: TransactionType[] = [
+    'income', 'expense', 'transfer_in', 'transfer_out', 'buy', 'sell', 
+    'deposit', 'withdrawal', 'fee', 'refund', 'adjustment'
+  ];
+
+  /**
+   * Check if a string is a valid TransactionType
+   */
+  private isValidTransactionType(value: any): value is TransactionType {
+    return typeof value === 'string' && 
+           this.validTransactionTypes.includes(value.toLowerCase() as TransactionType);
+  }
+
+  /**
    * Map Plaid's personal_finance_category to our transaction types
    * Simple mapping - no complex logic
    */
@@ -172,6 +188,20 @@ export class TransactionCategorizationService {
     transaction: Transaction,
     account?: Account
   ): Promise<CategorizedTransaction> {
+    // ✅ CRITICAL: Check for manual correction first (stored in aiCategory field)
+    // Manual corrections completely override GPT categorization
+    const manualCategory = (transaction as any).aiCategory;
+    if (manualCategory && this.isValidTransactionType(manualCategory)) {
+      console.log(`TransactionCategorizationService: Using manual correction for transaction "${transaction.name}": ${manualCategory}`);
+      return {
+        ...transaction,
+        transaction_type: manualCategory.toLowerCase() as TransactionType,
+        categorization_confidence: 1.0, // Manual corrections have full confidence
+        categorization_method: 'gpt', // Keep as 'gpt' for consistency, but we could add 'manual' if needed
+        categorization_reason: (transaction as any).aiCategoryReason || 'Manually corrected by user'
+      };
+    }
+
     try {
       // Build context for GPT
       const accountType = account?.type || 'unknown';

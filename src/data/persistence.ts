@@ -93,20 +93,74 @@ export async function persistTransactionsToDb(
         
         if (existing) {
           // Update existing transaction
+          // ✅ CRITICAL: Preserve existing aiCategory and aiCategoryReason if transaction has manual correction
+          // Only update these fields if explicitly provided AND not preserving a manual correction
+          const updateData: any = {
+            amount: transaction.amount,
+            date: new Date(transaction.date),
+            name: transaction.name,
+            category: categoryStr,
+            pending: transaction.pending || false,
+            currency: transaction.iso_currency_code || transaction.currency || 'USD',
+            merchantName: transaction.merchant_name || transaction.merchantName || null,
+            paymentChannel: transaction.payment_channel || transaction.paymentChannel || null,
+            enriched_data: transaction.enriched_data || null,
+            lastSynced: new Date(),
+          };
+          
+          // ✅ CRITICAL: Preserve existing manual corrections
+          // When syncing transactions, we always get fresh data from Plaid
+          // If a transaction was manually corrected, we want to preserve that correction
+          // The aiCategory field will contain the transaction_type (either from manual correction or GPT)
+          
+          // Check if existing transaction has a manual correction
+          const existingIsManualCorrection = existing.aiCategoryReason?.toLowerCase().includes('manually corrected') ||
+                                           existing.aiCategoryReason?.toLowerCase().includes('corrected by user');
+          
+          if (transaction.aiCategory !== undefined) {
+            // Transaction data includes aiCategory (from manual correction or categorization)
+            // Check if this is a manual correction by checking the reason
+            const newIsManualCorrection = transaction.aiCategoryReason?.toLowerCase().includes('manually corrected') ||
+                                         transaction.aiCategoryReason?.toLowerCase().includes('corrected by user');
+            
+            if (existingIsManualCorrection && !newIsManualCorrection) {
+              // Existing is manual correction, but new one is not - preserve the manual correction
+              updateData.aiCategory = existing.aiCategory;
+              updateData.aiCategoryReason = existing.aiCategoryReason;
+            } else {
+              // New value is provided (either manual correction or new categorization)
+              // Update with new value
+              updateData.aiCategory = transaction.aiCategory;
+              
+              // Preserve reason if it's a manual correction, otherwise update it
+              if (newIsManualCorrection) {
+                // New manual correction - always use it
+                updateData.aiCategoryReason = transaction.aiCategoryReason;
+              } else if (transaction.aiCategoryReason !== undefined) {
+                // New categorization with reason - use it
+                updateData.aiCategoryReason = transaction.aiCategoryReason;
+              } else if (existingIsManualCorrection) {
+                // Existing is manual correction, new has no reason - preserve existing
+                updateData.aiCategoryReason = existing.aiCategoryReason;
+              }
+            }
+          } else {
+            // No aiCategory in transaction data - preserve existing if it's a manual correction
+            if (existingIsManualCorrection && existing.aiCategory) {
+              updateData.aiCategory = existing.aiCategory;
+              updateData.aiCategoryReason = existing.aiCategoryReason;
+            }
+          }
+          
+          // Handle categoryComparedAt separately
+          
+          if (transaction.categoryComparedAt !== undefined) {
+            updateData.categoryComparedAt = transaction.categoryComparedAt ? new Date(transaction.categoryComparedAt) : null;
+          }
+          
           await prisma.transaction.update({
             where: { plaidTransactionId },
-            data: {
-              amount: transaction.amount,
-              date: new Date(transaction.date),
-              name: transaction.name,
-              category: categoryStr,
-              pending: transaction.pending || false,
-              currency: transaction.iso_currency_code || transaction.currency || 'USD',
-              merchantName: transaction.merchant_name || transaction.merchantName || null,
-              paymentChannel: transaction.payment_channel || transaction.paymentChannel || null,
-              enriched_data: transaction.enriched_data || null,
-              lastSynced: new Date(),
-            },
+            data: updateData,
           });
           updatedCount++;
         } else {
@@ -128,6 +182,10 @@ export async function persistTransactionsToDb(
               location: transaction.location ? JSON.stringify(transaction.location) : null,
               originalDescription: transaction.original_description || null,
               enriched_data: transaction.enriched_data || null,
+              // Include transaction_type (stored in aiCategory field) and related fields if present
+              aiCategory: transaction.aiCategory || null,
+              aiCategoryReason: transaction.aiCategoryReason || null,
+              categoryComparedAt: transaction.categoryComparedAt ? new Date(transaction.categoryComparedAt) : null,
               lastSynced: new Date(),
             },
           });

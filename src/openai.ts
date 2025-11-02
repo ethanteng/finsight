@@ -544,6 +544,7 @@ export async function askOpenAIWithEnhancedContext(
       category: tx.category,
       category_id: tx.category_id,
       personal_finance_category: (tx as any).personal_finance_category, // ✅ CRITICAL: Preserve this!
+      transaction_type: (tx as any).transaction_type, // ✅ CRITICAL: Preserve transaction_type (includes manual corrections)
       enriched_data: tx.enriched_data
     }));
             
@@ -571,6 +572,7 @@ export async function askOpenAIWithEnhancedContext(
                 );
               })
               .map(tx => ({
+                ...tx, // Spread all fields to preserve transaction_type and other categorization data
                 id: tx.id,
                 account_id: tx.account_id,
                 amount: tx.amount,
@@ -578,7 +580,8 @@ export async function askOpenAIWithEnhancedContext(
                 name: tx.name,
                 category: tx.category || ['Investment', 'Income'],
                 pending: false,
-                enriched_data: tx.enriched_data || {}
+                enriched_data: tx.enriched_data || {},
+                transaction_type: (tx as any).transaction_type // ✅ CRITICAL: Preserve transaction_type (includes manual corrections)
               }));
             
             // ✅ DEBUG: Check if our specific transactions are in bankingTxs

@@ -1,5 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
+const TRANSACTION_TYPES = [
+  'income',
+  'expense',
+  'transfer_in',
+  'transfer_out',
+  'buy',
+  'sell',
+  'deposit',
+  'withdrawal',
+  'fee',
+  'refund',
+  'adjustment'
+] as const;
+
+type TransactionType = typeof TRANSACTION_TYPES[number];
+
 interface Transaction {
   id: string;
   name: string;
@@ -11,9 +27,11 @@ interface Transaction {
     institution?: string;
   };
   originalCategory?: string;
-  aiCategory?: string;
+  transaction_type?: string | null;
+  aiCategory?: string; // Legacy field, kept for backwards compatibility
   aiCategoryReason?: string;
   categoryComparedAt?: string;
+  isManualCorrection?: boolean;
   match: boolean;
   enrichedData?: Record<string, unknown>;
 }
@@ -23,8 +41,11 @@ export const CategoryComparison: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'matched' | 'mismatched' | 'uncategorized'>('all');
-  const [selectedTransactions, setSelectedTransactions] = useState<Set<string>>(new Set());
-  const [categorizing, setCategorizing] = useState(false);
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
+  const [savingTransactionId, setSavingTransactionId] = useState<string | null>(null);
+  const [localTransactionTypes, setLocalTransactionTypes] = useState<Map<string, TransactionType>>(new Map());
+
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://finsight-backend.onrender.com');
 
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
@@ -32,7 +53,7 @@ export const CategoryComparison: React.FC = () => {
     
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://finsight-backend.onrender.com')}/api/ai/transactions/comparison?filter=${filter}&limit=100`,
+        `${apiUrl}/api/ai/transactions/comparison?filter=${filter}&limit=100`,
         {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
@@ -46,77 +67,83 @@ export const CategoryComparison: React.FC = () => {
       
       const data = await response.json();
       setTransactions(data.transactions);
+      
+      // Initialize local state with current transaction types
+      const typesMap = new Map<string, TransactionType>();
+      data.transactions.forEach((tx: Transaction) => {
+        if (tx.transaction_type && TRANSACTION_TYPES.includes(tx.transaction_type as TransactionType)) {
+          typesMap.set(tx.id, tx.transaction_type as TransactionType);
+        }
+      });
+      setLocalTransactionTypes(typesMap);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
-  }, [filter]);
+  }, [filter, apiUrl]);
 
   useEffect(() => {
     fetchTransactions();
   }, [fetchTransactions]);
 
-  const handleCategorizeSelected = async () => {
-    if (selectedTransactions.size === 0) return;
+  const handleTransactionTypeChange = (transactionId: string, newType: TransactionType) => {
+    const updatedMap = new Map(localTransactionTypes);
+    updatedMap.set(transactionId, newType);
+    setLocalTransactionTypes(updatedMap);
+  };
+
+  const handleSaveTransactionType = async (transactionId: string) => {
+    const transactionType = localTransactionTypes.get(transactionId);
     
-    setCategorizing(true);
+    if (!transactionType) {
+      setError('Please select a transaction type');
+      return;
+    }
+
+    setSavingTransactionId(transactionId);
     setError(null);
     
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://finsight-backend.onrender.com')}/api/ai/categorize-transactions`,
+        `${apiUrl}/api/ai/transactions/${transactionId}/transaction-type`,
         {
-          method: 'POST',
+          method: 'PUT',
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            transactionIds: Array.from(selectedTransactions),
+            transaction_type: transactionType,
+            reason: 'Manually corrected by user'
           }),
         }
       );
       
       if (!response.ok) {
-        throw new Error('Failed to categorize transactions');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update transaction type');
       }
-      
-      // Refresh the list
+
+      // Refresh the list to get updated data
       await fetchTransactions();
-      setSelectedTransactions(new Set());
+      setEditingTransactionId(null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
-      setCategorizing(false);
+      setSavingTransactionId(null);
     }
   };
 
-  const toggleSelection = (transactionId: string) => {
-    const newSelection = new Set(selectedTransactions);
-    if (newSelection.has(transactionId)) {
-      newSelection.delete(transactionId);
-    } else {
-      newSelection.add(transactionId);
-    }
-    setSelectedTransactions(newSelection);
-  };
-
-  const selectAll = () => {
-    if (selectedTransactions.size === transactions.length) {
-      setSelectedTransactions(new Set());
-    } else {
-      setSelectedTransactions(new Set(transactions.map(t => t.id)));
-    }
+  const formatTransactionType = (type: string): string => {
+    return type
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   };
 
   return (
     <div className="p-6">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">Transaction Category Comparison</h2>
-        <p className="text-gray-600">Compare Plaid's categories with AI-generated categories</p>
-      </div>
-      
       {/* Filters */}
       <div className="mb-6 flex items-center gap-4 flex-wrap">
         <div className="flex gap-2">
@@ -136,18 +163,6 @@ export const CategoryComparison: React.FC = () => {
         </div>
         
         <div className="flex-1" />
-        
-        {selectedTransactions.size > 0 && (
-          <button
-            onClick={handleCategorizeSelected}
-            disabled={categorizing}
-            className="px-4 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50"
-          >
-            {categorizing
-              ? `Categorizing ${selectedTransactions.size}...`
-              : `Categorize Selected (${selectedTransactions.size})`}
-          </button>
-        )}
         
         <button
           onClick={fetchTransactions}
@@ -175,14 +190,6 @@ export const CategoryComparison: React.FC = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left">
-                  <input
-                    type="checkbox"
-                    checked={selectedTransactions.size === transactions.length}
-                    onChange={selectAll}
-                    className="rounded border-gray-300"
-                  />
-                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Transaction
                 </th>
@@ -190,83 +197,143 @@ export const CategoryComparison: React.FC = () => {
                   Amount
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Date
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Plaid Category
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  AI Category
+                  Transaction Type
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
+                  Actions
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {transactions.map(transaction => (
-                <tr
-                  key={transaction.id}
-                  className="hover:bg-gray-50 cursor-pointer"
-                  onClick={() => toggleSelection(transaction.id)}
-                >
-                  <td className="px-4 py-4">
-                    <input
-                      type="checkbox"
-                      checked={selectedTransactions.has(transaction.id)}
-                      onChange={() => toggleSelection(transaction.id)}
-                      className="rounded border-gray-300"
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm font-medium text-gray-900">
-                      {transaction.merchantName || transaction.name}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      {new Date(transaction.date).toLocaleDateString()} • {transaction.account.name}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-900">
-                    ${Math.abs(transaction.amount).toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-900">
-                      {transaction.originalCategory || 'N/A'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    {transaction.aiCategory ? (
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {transaction.aiCategory}
-                        </div>
-                        {transaction.aiCategoryReason && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            {transaction.aiCategoryReason}
-                          </div>
-                        )}
+              {transactions.map(transaction => {
+                const isEditing = editingTransactionId === transaction.id;
+                const isSaving = savingTransactionId === transaction.id;
+                const currentType = localTransactionTypes.get(transaction.id) || transaction.transaction_type as TransactionType | undefined;
+                
+                return (
+                  <tr
+                    key={transaction.id}
+                    className="hover:bg-gray-50"
+                  >
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-medium text-gray-900">
+                        {transaction.merchantName || transaction.name}
                       </div>
-                    ) : (
-                      <span className="text-sm text-gray-400">Not categorized</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    {transaction.aiCategory ? (
-                      transaction.match ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          Match
-                        </span>
+                      <div className="text-sm text-gray-500">
+                        {transaction.account.name}
+                        {transaction.account.institution && ` • ${transaction.account.institution}`}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-900">
+                      ${Math.abs(transaction.amount).toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-500">
+                      {new Date(transaction.date).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900">
+                        {transaction.originalCategory || 'N/A'}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      {isEditing ? (
+                        <select
+                          value={currentType || ''}
+                          onChange={(e) => handleTransactionTypeChange(transaction.id, e.target.value as TransactionType)}
+                          className="text-sm border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          disabled={isSaving}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <option value="">Select type...</option>
+                          {TRANSACTION_TYPES.map(type => (
+                            <option key={type} value={type}>
+                              {formatTransactionType(type)}
+                            </option>
+                          ))}
+                        </select>
                       ) : (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                          Different
-                        </span>
-                      )
-                    ) : (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                        Pending
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                        <div>
+                          {currentType ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-gray-900">
+                                {formatTransactionType(currentType)}
+                              </span>
+                              {transaction.isManualCorrection && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                  Manual
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-sm text-gray-400">Not categorized</span>
+                          )}
+                          {transaction.aiCategoryReason && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              {transaction.aiCategoryReason}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {isEditing ? (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSaveTransactionType(transaction.id);
+                            }}
+                            disabled={isSaving || !currentType}
+                            className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isSaving ? 'Saving...' : 'Save'}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingTransactionId(null);
+                              // Reset to original value
+                              if (transaction.transaction_type) {
+                                setLocalTransactionTypes(prev => {
+                                  const updated = new Map(prev);
+                                  updated.set(transaction.id, transaction.transaction_type as TransactionType);
+                                  return updated;
+                                });
+                              } else {
+                                setLocalTransactionTypes(prev => {
+                                  const updated = new Map(prev);
+                                  updated.delete(transaction.id);
+                                  return updated;
+                                });
+                              }
+                            }}
+                            disabled={isSaving}
+                            className="px-3 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingTransactionId(transaction.id);
+                          }}
+                          className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -274,4 +341,3 @@ export const CategoryComparison: React.FC = () => {
     </div>
   );
 };
-

@@ -23,7 +23,7 @@ jest.mock('../../profile/encryption', () => ({
 
 jest.mock('../../profile/extractor', () => ({
   ProfileExtractor: jest.fn().mockImplementation(() => ({
-    extractAndUpdateProfile: jest.fn().mockResolvedValue('extracted-profile-text')
+    extractAndUpdateProfile: jest.fn().mockImplementation(async () => 'extracted-profile-text')
   }))
 }));
 

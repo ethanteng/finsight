@@ -201,15 +201,25 @@ export const ViewAIContext: React.FC<ViewAIContextProps> = ({ isOpen, onClose })
                   <h3 className="text-lg font-semibold text-gray-800">
                     {activeSection.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
                   </h3>
-                  <button
-                    onClick={() => {
-                      const content = getActiveContent();
-                      if (content) copyToClipboard(content);
-                    }}
-                    className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-md"
-                  >
-                    {copied ? 'Copied!' : 'Copy'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {activeSection === 'categorizationDetails' && (
+                      <a
+                        href="/transactions"
+                        className="px-3 py-1 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded-md transition-colors"
+                      >
+                        Manage Transactions
+                      </a>
+                    )}
+                    <button
+                      onClick={() => {
+                        const content = getActiveContent();
+                        if (content) copyToClipboard(content);
+                      }}
+                      className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-md"
+                    >
+                      {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
                 </div>
                 
                 <div className="bg-gray-50 rounded-lg p-4 overflow-x-auto">
