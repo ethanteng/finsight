@@ -146,8 +146,38 @@ export class PlaidProfileEnhancer {
     // Only count actual expenses (not transfers, deposits, etc.)
     const isExpenseTransaction = (transaction: PlaidTransaction): boolean => {
       const transactionType = (transaction as any).transaction_type;
-      // Only count expense and fee transaction types
-      return transactionType === 'expense' || transactionType === 'fee';
+      
+      // ✅ Primary: Use transaction_type if available (respects manual corrections)
+      if (transactionType) {
+        return transactionType === 'expense' || transactionType === 'fee';
+      }
+      
+      // ✅ Fallback: If no transaction_type (backwards compatibility), use heuristics
+      // This handles test data and old data that hasn't been categorized yet
+      const category = transaction.category?.[0]?.toLowerCase() || '';
+      const name = transaction.name?.toLowerCase() || '';
+      
+      // Exclude transfers, deposits, and investment transactions
+      if (category.includes('transfer') || name.includes('transfer')) return false;
+      if (category.includes('deposit') || name.includes('deposit')) return false;
+      if (category.includes('investment') || category.includes('securities')) return false;
+      if (name.includes('vanguard') || name.includes('fidelity') || name.includes('public.com')) return false;
+      
+      // If amount is negative, it's likely an expense
+      // If amount is positive but category suggests expense (e.g., "Food and Drink"), also count it
+      // This handles test data where expenses might be positive before normalization
+      if (transaction.amount < 0) {
+        return true; // Negative amount is likely expense
+      }
+      
+      // For positive amounts, check if category suggests it's an expense category
+      const expenseCategories = ['food', 'drink', 'restaurant', 'transportation', 'gas', 'shopping', 
+                                  'clothing', 'medical', 'rent', 'utilities', 'entertainment', 'service'];
+      const isExpenseCategory = expenseCategories.some(expCat => 
+        category.includes(expCat) || name.includes(expCat)
+      );
+      
+      return isExpenseCategory; // Only count positive amounts as expenses if category suggests it
     };
     
     for (const transaction of transactions) {
