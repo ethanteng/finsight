@@ -142,45 +142,12 @@ export class PlaidProfileEnhancer {
     const spendingByCategory: Record<string, number> = {};
     const monthlySpending = new Map<string, number>();
     
-    // Helper function to determine if a transaction should be excluded from expenditure calculation
-    const shouldExcludeFromExpenditure = (transaction: PlaidTransaction): boolean => {
-      const amount = Math.abs(transaction.amount);
-      const category = transaction.category?.[0] || 'Unknown';
-      const name = transaction.name?.toLowerCase() || '';
-      
-      // Exclude investment-related categories
-      const investmentCategories = [
-        'Investment', 'Securities', 'Brokerage', 'Investment and Retirement',
-        'Transfer', 'Deposit', 'Payment', 'Interest', 'Dividend'
-      ];
-      
-      // Exclude investment-related merchant names
-      const investmentMerchants = [
-        'vanguard', 'fidelity', 'schwab', 'etrade', 'ameritrade', 'public.com',
-        'bread financial', 'bread savings', 'cd', 'certificate of deposit',
-        'annuity', 'payout', 'rmd', 'required minimum distribution'
-      ];
-      
-      // Exclude very large amounts (likely investment transactions)
-      const isLargeAmount = amount > 10000;
-      
-      // Exclude if it's an investment category
-      const isInvestmentCategory = investmentCategories.some(cat => 
-        category.toLowerCase().includes(cat.toLowerCase())
-      );
-      
-      // Exclude if it's an investment merchant
-      const isInvestmentMerchant = investmentMerchants.some(merchant => 
-        name.includes(merchant)
-      );
-      
-      // Exclude transfers and deposits
-      const isTransferOrDeposit = category.toLowerCase().includes('transfer') || 
-                                 category.toLowerCase().includes('deposit') ||
-                                 name.includes('transfer') ||
-                                 name.includes('deposit');
-      
-      return isLargeAmount || isInvestmentCategory || isInvestmentMerchant || isTransferOrDeposit;
+    // ✅ Use transaction_type to filter transactions correctly
+    // Only count actual expenses (not transfers, deposits, etc.)
+    const isExpenseTransaction = (transaction: PlaidTransaction): boolean => {
+      const transactionType = (transaction as any).transaction_type;
+      // Only count expense and fee transaction types
+      return transactionType === 'expense' || transactionType === 'fee';
     };
     
     for (const transaction of transactions) {
@@ -188,14 +155,16 @@ export class PlaidProfileEnhancer {
       const category = transaction.category?.[0] || 'Unknown';
       const month = transaction.date.substring(0, 7); // YYYY-MM
       
-      // Always add to category analysis for insights
-      if (!spendingByCategory[category]) {
-        spendingByCategory[category] = 0;
+      // ✅ Only add to category analysis if it's an actual expense transaction
+      if (isExpenseTransaction(transaction)) {
+        if (!spendingByCategory[category]) {
+          spendingByCategory[category] = 0;
+        }
+        spendingByCategory[category] += amount;
       }
-      spendingByCategory[category] += amount;
       
-      // Only add to monthly spending if it's not an investment transaction
-      if (!shouldExcludeFromExpenditure(transaction)) {
+      // Only add to monthly spending if it's an expense transaction
+      if (isExpenseTransaction(transaction)) {
         if (!monthlySpending.has(month)) {
           monthlySpending.set(month, 0);
         }
@@ -223,9 +192,17 @@ export class PlaidProfileEnhancer {
     }
 
     // Analyze income patterns
-    // ✅ CRITICAL: Filter for actual INCOME, not just positive amounts
-    // Trust Plaid's basic categories FIRST, then apply smart exclusions
+    // ✅ CRITICAL: Use transaction_type to filter for actual INCOME transactions
+    // This respects manual corrections and ensures accuracy
     const incomeTransactions = transactions.filter(transaction => {
+      // ✅ First check transaction_type (most reliable, includes manual corrections)
+      const transactionType = (transaction as any).transaction_type;
+      if (transactionType === 'income') {
+        return true;
+      }
+      
+      // If no transaction_type, fall back to legacy logic for backwards compatibility
+      // (This shouldn't happen if categorization is running, but included as safety net)
       if (transaction.amount <= 0) return false; // Must be positive
       
       const name = transaction.name?.toLowerCase() || '';
@@ -296,6 +273,11 @@ export class PlaidProfileEnhancer {
       }
       
       if (name.includes('refund') || name.includes('return') || name.includes('reversal') || name.includes('correction')) {
+        return false;
+      }
+      
+      // If transaction_type is set but not 'income', exclude it
+      if (transactionType && transactionType !== 'income') {
         return false;
       }
       

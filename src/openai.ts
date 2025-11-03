@@ -230,10 +230,18 @@ function filterTransactionsForAI(transactions: any[]): any[] {
   // If still too many transactions, prioritize but keep more
   if (recent.length > 200) {
     // Priority 1: All income transactions (critical for income analysis)
-    const income = recent.filter(t => t.amount > 0);
+    // ✅ Use transaction_type instead of amount sign
+    const income = recent.filter(t => {
+      const transactionType = (t as any).transaction_type;
+      return transactionType === 'income' && (t.amount || 0) > 0;
+    });
   
     // Priority 2: Large expenses (high impact)
-    const expenses = recent.filter(t => t.amount < 0);
+    // ✅ Use transaction_type instead of amount sign - only include actual expenses, not transfers
+    const expenses = recent.filter(t => {
+      const transactionType = (t as any).transaction_type;
+      return (transactionType === 'expense' || transactionType === 'fee') && (t.amount || 0) < 0;
+    });
     const largeExpenses = expenses
     .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
       .slice(0, 100); // Keep top 100 largest expenses
@@ -806,8 +814,60 @@ export async function askOpenAIWithEnhancedContext(
       console.log(`OpenAI Enhanced: Income sources identified:`, Array.from(incomeSources.entries()).map(([source, amount]) => `${source}: $${amount.toFixed(2)}`).join(', '));
       
       if (monthlyIncome.size > 0) {
-        const totalIncome = Array.from(monthlyIncome.values()).reduce((sum, amount) => sum + amount, 0);
-        const avgMonthlyIncome = totalIncome / monthlyIncome.size;
+        // ✅ Calculate which months are "complete" (exclude partial months)
+        // A month is complete if:
+        // 1. It's not the current month, OR
+        // 2. It has transactions spanning at least 15 days
+        const today = new Date();
+        const currentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        
+        // Track date ranges for each month
+        const monthDateRanges = new Map<string, { min: Date | null, max: Date | null, count: number }>();
+        for (const transaction of incomeTransactions) {
+          const dateStr = transaction.date instanceof Date 
+            ? transaction.date.toISOString().substring(0, 7) 
+            : transaction.date.substring(0, 7);
+          
+          if (!monthDateRanges.has(dateStr)) {
+            monthDateRanges.set(dateStr, { min: null, max: null, count: 0 });
+          }
+          
+          const range = monthDateRanges.get(dateStr)!;
+          const txDate = transaction.date instanceof Date ? transaction.date : new Date(transaction.date);
+          
+          if (!range.min || txDate < range.min) range.min = txDate;
+          if (!range.max || txDate > range.max) range.max = txDate;
+          range.count++;
+        }
+        
+        // Filter to complete months only
+        const completeMonths = Array.from(monthlyIncome.entries()).filter(([month]) => {
+          const range = monthDateRanges.get(month);
+          if (!range || !range.min || !range.max) return false;
+          
+          // Exclude current month if it's not complete
+          if (month === currentMonthStr) {
+            const daysSinceMonthStart = Math.floor((today.getTime() - range.min.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+            // Consider current month complete only if we're past day 15 and have good coverage
+            return daysSinceMonthStart >= 15 && (range.count >= 3 || daysSinceMonthStart >= daysInMonth * 0.5);
+          }
+          
+          // For past months, check if transactions span at least 15 days
+          const daysSpan = Math.floor((range.max.getTime() - range.min.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+          return daysSpan >= 15 || range.count >= 5; // At least 15 days OR 5+ transactions indicates complete month
+        });
+        
+        const totalIncome = completeMonths.reduce((sum, [, amount]) => sum + amount, 0);
+        const avgMonthlyIncome = completeMonths.length > 0 ? totalIncome / completeMonths.length : 0;
+        
+        console.log(`OpenAI Enhanced: Month analysis - Total months with income: ${monthlyIncome.size}, Complete months: ${completeMonths.length}`);
+        if (completeMonths.length < monthlyIncome.size) {
+          const excludedMonths = Array.from(monthlyIncome.entries())
+            .filter(([month]) => !completeMonths.some(([m]) => m === month))
+            .map(([month, amt]) => `${month} ($${amt.toFixed(2)})`);
+          console.log(`OpenAI Enhanced: Excluded partial months: ${excludedMonths.join(', ')}`);
+        }
         
         const topIncomeSources = Array.from(incomeSources.entries())
           .sort(([,a], [,b]) => b - a)
@@ -817,12 +877,13 @@ export async function askOpenAIWithEnhancedContext(
 - Average Monthly Income: $${avgMonthlyIncome.toFixed(2)}
 - Income Sources: ${topIncomeSources.map(([source, amount]) => `${source}: $${amount.toFixed(2)}`).join(', ')}
 - Total Income Transactions: ${incomeTransactions.length}
-- Analysis Period: ${monthlyIncome.size} month(s)`;
+- Analysis Period: ${completeMonths.length} complete month(s) (${monthlyIncome.size} total months with transactions)`;
         
         console.log(`OpenAI Enhanced: INCOME ANALYSIS SUMMARY:`);
-        console.log(`  - Total Income over ${monthlyIncome.size} months: $${totalIncome.toFixed(2)}`);
+        console.log(`  - Total Income over ${completeMonths.length} complete months: $${totalIncome.toFixed(2)}`);
         console.log(`  - Average Monthly Income: $${avgMonthlyIncome.toFixed(2)}`);
-        console.log(`  - Income Transactions: ${incomeTransactions.length} positive transactions`);
+        console.log(`  - Income Transactions: ${incomeTransactions.length} transactions`);
+        console.log(`  - Complete Months Used: ${completeMonths.length} (${completeMonths.map(([m]) => m).join(', ')})`);
         console.log(`  - Top Sources:`, topIncomeSources.map(([source, amount]) => `${source}: $${amount.toFixed(2)}`).join(', '));
       }
     }

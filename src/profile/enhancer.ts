@@ -279,11 +279,17 @@ const analyzeDebtOptimization = (liabilities: any[]) => {
 };
 
 const analyzeSpendingPatterns = (enrichedTransactions: any[]) => {
-  const totalSpending = enrichedTransactions.reduce((total, transaction) => {
+  // ✅ Filter to only expense and fee transactions
+  const expenseTransactions = enrichedTransactions.filter((transaction: any) => {
+    const transactionType = transaction.transaction_type;
+    return transactionType === 'expense' || transactionType === 'fee';
+  });
+
+  const totalSpending = expenseTransactions.reduce((total, transaction) => {
     return total + Math.abs(transaction.amount || 0);
   }, 0);
 
-  const spendingByCategory = enrichedTransactions.reduce((categories, transaction) => {
+  const spendingByCategory = expenseTransactions.reduce((categories, transaction) => {
     // ✅ FIXED: Handle category arrays properly
     let category = 'Unknown';
     if (transaction.category) {
@@ -305,11 +311,11 @@ const analyzeSpendingPatterns = (enrichedTransactions: any[]) => {
     return categories;
   }, {} as Record<string, number>);
 
-  const averageTransactionSize = enrichedTransactions.length > 0 
-    ? totalSpending / enrichedTransactions.length 
+  const averageTransactionSize = expenseTransactions.length > 0 
+    ? totalSpending / expenseTransactions.length 
     : 0;
 
-  const merchantInsights = enrichedTransactions.reduce((insights, transaction) => {
+  const merchantInsights = expenseTransactions.reduce((insights, transaction) => {
     const merchant = transaction.merchant_name || 'Unknown';
     if (!insights[merchant]) {
       insights[merchant] = {

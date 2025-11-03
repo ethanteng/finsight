@@ -240,10 +240,11 @@ export class FinancialDataService {
       const accountsMap = new Map(mergedData.accounts.map(acc => [acc.account_id, acc]));
       
       // ✅ CRITICAL: Load manual corrections from database before categorizing
-      // Merge aiCategory (transaction_type) from database into transactions to preserve manual corrections
-      try {
-        // ✅ Get all transaction IDs - Plaid uses transaction_id, investment uses investment_transaction_id or id
-        // We need to normalize to what's stored as plaidTransactionId in DB
+          // ✅ CRITICAL: Map aiCategory to transaction_type so income filter can find them
+          // Merge aiCategory (transaction_type) from database into transactions to preserve manual corrections
+          try {
+            // ✅ Get all transaction IDs - Plaid uses transaction_id, investment uses investment_transaction_id or id
+            // We need to normalize to what's stored as plaidTransactionId in DB
         const transactionIds: string[] = [];
         const transactionIdMap = new Map<string, { source: 'banking' | 'investment', index: number }>();
         
@@ -309,14 +310,22 @@ export class FinancialDataService {
               
               if (isManualCorrection) {
                 // Manual correction - always preserve it
-                return { 
-                  ...tx, 
-                  aiCategory: existingCategorization.aiCategory, 
+                return {
+                  ...tx,
+                  aiCategory: existingCategorization.aiCategory,
+                  transaction_type: existingCategorization.aiCategory, // ✅ Map aiCategory to transaction_type
                   aiCategoryReason: existingCategorization.aiCategoryReason 
                 };
               }
               // Previous GPT categorization - let categorization service re-categorize
               // Don't set aiCategory here, so GPT can update it
+              // But still map existing aiCategory to transaction_type for income filter
+              if (existingCategorization.aiCategory) {
+                return {
+                  ...tx,
+                  transaction_type: existingCategorization.aiCategory // ✅ Map aiCategory to transaction_type
+                };
+              }
             }
             return tx;
           });
@@ -335,11 +344,19 @@ export class FinancialDataService {
                 // Manual correction - always preserve it
                 return { 
                   ...tx, 
-                  aiCategory: existingCategorization.aiCategory, 
+                  aiCategory: existingCategorization.aiCategory,
+                  transaction_type: existingCategorization.aiCategory, // ✅ Map aiCategory to transaction_type
                   aiCategoryReason: existingCategorization.aiCategoryReason 
                 };
               }
               // Previous GPT categorization - let categorization service re-categorize
+              // But still map existing aiCategory to transaction_type for income filter
+              if (existingCategorization.aiCategory) {
+                return {
+                  ...tx,
+                  transaction_type: existingCategorization.aiCategory // ✅ Map aiCategory to transaction_type
+                };
+              }
             }
             return tx;
           });
