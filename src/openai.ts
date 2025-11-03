@@ -1137,26 +1137,34 @@ export async function askOpenAIWithEnhancedContext(
   const transactionSummary = tierContext.transactions.map(transaction => {
     const name = isDemo ? transaction.description : transaction.name;
     
-    // ✅ PRIORITIZE basic Plaid categories - they are more accurate than enriched categories
+    // ✅ CRITICAL: Use transaction_type (from aiCategory) as the authoritative category
+    // This respects manual corrections and GPT categorizations
+    const transactionType = (transaction as any).transaction_type || (transaction as any).aiCategory;
+    
+    // ✅ Use transaction_type for the category display (this is what GPT should use)
+    // Fallback to Plaid category only if transaction_type is not available
     let category = 'Unknown';
-    
-    // First try basic Plaid category (more accurate for income/transfers)
-    if (transaction.category) {
-      if (Array.isArray(transaction.category)) {
-        const validBasicCategory = transaction.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
-        if (validBasicCategory) {
-          category = validBasicCategory;
+    if (transactionType) {
+      category = transactionType.toUpperCase();
+    } else {
+      // Fallback to Plaid category only if no transaction_type
+      if (transaction.category) {
+        if (Array.isArray(transaction.category)) {
+          const validBasicCategory = transaction.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
+          if (validBasicCategory) {
+            category = validBasicCategory;
+          }
+        } else if (typeof transaction.category === 'string' && transaction.category.trim() !== '') {
+          category = transaction.category;
         }
-      } else if (typeof transaction.category === 'string' && transaction.category.trim() !== '') {
-        category = transaction.category;
       }
-    }
-    
-    // Fallback to enriched category if no basic category
-    if (category === 'Unknown' && transaction.enriched_data?.category && Array.isArray(transaction.enriched_data.category)) {
-      const validEnrichedCategory = transaction.enriched_data.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
-      if (validEnrichedCategory) {
-        category = validEnrichedCategory;
+      
+      // Fallback to enriched category if no basic category
+      if (category === 'Unknown' && transaction.enriched_data?.category && Array.isArray(transaction.enriched_data.category)) {
+        const validEnrichedCategory = transaction.enriched_data.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
+        if (validEnrichedCategory) {
+          category = validEnrichedCategory;
+        }
       }
     }
     
@@ -1173,7 +1181,6 @@ export async function askOpenAIWithEnhancedContext(
     
     // ✅ Include transaction_type if available (from categorization service)
     // This helps GPT distinguish transfers from expenses/income
-    const transactionType = (transaction as any).transaction_type;
     const typeInfo = transactionType ? ` (${transactionType.toUpperCase()})` : '';
     
     // ✅ Include enhanced information when available
@@ -1187,12 +1194,20 @@ export async function askOpenAIWithEnhancedContext(
       }
     }
     
-    // Show basic Plaid categories (more accurate than enriched)
+    // ✅ Show Plaid categories for reference, but mark transaction_type as authoritative
+    // Include aiCategory in the categories list to make it clear
+    const categoryParts: string[] = [];
+    if (transactionType) {
+      categoryParts.push(`${transactionType.toUpperCase()} (from aiCategory)`);
+    }
     if (transaction.category && Array.isArray(transaction.category) && transaction.category.length > 0) {
       const validCategories = transaction.category.filter((cat: any) => cat && cat.trim() !== '' && cat !== '0');
       if (validCategories.length > 0) {
-        enhancedInfo += ` [Categories: ${validCategories.join(', ')}]`;
+        categoryParts.push(...validCategories);
       }
+    }
+    if (categoryParts.length > 0) {
+      enhancedInfo += ` [Categories: ${categoryParts.join(', ')}]`;
     }
     
     return `- ${merchantName}${typeInfo} (${category}): $${amount.toFixed(2)} on ${transaction.date}${enhancedInfo}`;
@@ -1911,6 +1926,8 @@ INCOME DATA:
 
 SPENDING CALCULATIONS:
 - Transaction types are shown in the format: "Merchant (TRANSACTION_TYPE) (Category): $Amount"
+- CRITICAL: The (Category) field uses transaction_type from aiCategory (which respects manual corrections) - this is the AUTHORITATIVE category to use
+- When in doubt, use the transaction_type shown in parentheses, NOT the Plaid categories listed in [Categories: ...]
 - CRITICAL: When calculating spending or expenses, EXCLUDE the following transaction types (these are NOT expenses):
   • transfer_in: Money moving between accounts (NOT an expense)
   • transfer_out: Money moving between accounts (NOT an expense)
