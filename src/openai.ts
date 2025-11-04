@@ -1210,7 +1210,12 @@ export async function askOpenAIWithEnhancedContext(
       enhancedInfo += ` [Categories: ${categoryParts.join(', ')}]`;
     }
     
-    return `- ${merchantName}${typeInfo} (${category}): $${amount.toFixed(2)} on ${transaction.date}${enhancedInfo}`;
+    // ✅ Add explicit warning for transfers to prevent GPT from counting them as income
+    const transferWarning = transactionType && ['transfer_in', 'transfer_out', 'deposit', 'withdrawal'].includes(transactionType.toLowerCase()) 
+      ? ' [NOT INCOME - MONEY MOVEMENT]' 
+      : '';
+    
+    return `- ${merchantName}${typeInfo} (${category}): $${amount.toFixed(2)} on ${transaction.date}${transferWarning}${enhancedInfo}`;
   }).join('\n');
 
   // ✅ DEBUG: Log the final transaction summary to see what the AI receives
@@ -1904,11 +1909,15 @@ Accounts:
 ${accountSummary || 'No accounts found'}
 
 Recent Transactions:
+IMPORTANT: When calculating income, use ONLY transactions marked with (INCOME) - EXCLUDE all transactions marked with (TRANSFER_IN), (TRANSFER_OUT), (DEPOSIT), or (WITHDRAWAL). These are money movements, not income.
 ${transactionSummary || 'No transactions found'}
 
 ${incomeAnalysis || ''}
 
-${incomeAnalysis ? `CRITICAL: The above INCOME ANALYSIS contains your actual income data from transaction history. Use these exact figures in your response - do not estimate or assume.` : ''}
+${incomeAnalysis ? `CRITICAL: The above INCOME ANALYSIS contains your actual income data from transaction history. This is pre-calculated and excludes transfers, deposits, and other non-income transactions. 
+- You MUST use these exact figures in your response - do NOT recalculate income from the transaction list below
+- Do NOT include any transactions marked as (TRANSFER_IN), (TRANSFER_OUT), (DEPOSIT), or (WITHDRAWAL) in income calculations
+- The INCOME ANALYSIS section is the ONLY source of truth for income - ignore any positive amounts in the transaction list that are not explicitly categorized as "income"` : ''}
 
 ${investmentSummary ? `INVESTMENT DATA:
 ${investmentSummary}` : 'No investment data available'}
@@ -1920,7 +1929,11 @@ DATA INTERPRETATION:
 - When limits unknown, state "Credit Limit: Unknown" - don't assume balance equals limit
 
 INCOME DATA:
-- If INCOME ANALYSIS is provided above, use those exact figures - they're pre-calculated from transaction data
+- CRITICAL: If INCOME ANALYSIS is provided above, you MUST use those exact figures - they are pre-calculated from transaction data
+- DO NOT recalculate income from the transaction list - use the INCOME ANALYSIS section only
+- DO NOT include any transactions with transaction_type "transfer_in", "transfer_out", "deposit", or "withdrawal" in income calculations
+- These transaction types represent money movement, NOT actual income
+- If a transaction shows (TRANSFER_IN) or (TRANSFER_OUT), it is NOT income - exclude it completely
 - Never estimate or assume income when INCOME ANALYSIS data is provided
 - Reference it directly: "Based on your transaction history, your monthly income is $X,XXX"
 
@@ -1928,7 +1941,21 @@ SPENDING CALCULATIONS:
 - Transaction types are shown in the format: "Merchant (TRANSACTION_TYPE) (Category): $Amount"
 - CRITICAL: The (Category) field uses transaction_type from aiCategory (which respects manual corrections) - this is the AUTHORITATIVE category to use
 - When in doubt, use the transaction_type shown in parentheses, NOT the Plaid categories listed in [Categories: ...]
-- CRITICAL: When calculating spending or expenses, EXCLUDE the following transaction types (these are NOT expenses):
+
+INCOME CALCULATION RULES (CRITICAL):
+- DO NOT count the following transaction types as income (they are money movement, NOT income):
+  • transfer_in: Money moving between accounts - EXCLUDE from income calculations
+  • transfer_out: Money moving between accounts - EXCLUDE from income calculations
+  • deposit: Cash deposits - EXCLUDE from income calculations
+  • withdrawal: Cash withdrawals - EXCLUDE from income calculations
+  • buy: Investment purchases - EXCLUDE from income calculations
+  • sell: Investment sales - EXCLUDE from income calculations
+- ONLY count transactions with transaction_type "income" as actual income
+- If a transaction shows (TRANSFER_IN) in the format, it is NOT income - do NOT include it in any income calculations
+- If INCOME ANALYSIS is provided, use those exact figures - do NOT recalculate from transactions
+
+EXPENSE CALCULATION RULES (CRITICAL):
+- When calculating spending or expenses, EXCLUDE the following transaction types (these are NOT expenses):
   • transfer_in: Money moving between accounts (NOT an expense)
   • transfer_out: Money moving between accounts (NOT an expense)
   • deposit: Cash deposits (moving money, NOT spending)
