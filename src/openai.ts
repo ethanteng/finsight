@@ -1134,15 +1134,18 @@ export async function askOpenAIWithEnhancedContext(
     }))
   });
   
+  // ✅ Use already-anonymized transaction fields (transactions were anonymized at lines 908-936)
+  // The anonymization service has already tokenized name, merchantName, and enriched_data.merchant_name
+  // We just need to use those already-anonymized fields directly
   const transactionSummary = tierContext.transactions.map(transaction => {
-    const name = isDemo ? transaction.description : transaction.name;
-    
     // ✅ CRITICAL: Use transaction_type (from aiCategory) as the authoritative category
-    // This respects manual corrections and GPT categorizations
     const transactionType = (transaction as any).transaction_type || (transaction as any).aiCategory;
     
+    // ✅ Use already-anonymized name field (guaranteed to be anonymized if anonymization ran)
+    // transaction.name was tokenized at line 909, so use it directly
+    const merchantName = isDemo ? (transaction.description || transaction.name) : transaction.name;
+    
     // ✅ Use transaction_type for the category display (this is what GPT should use)
-    // Fallback to Plaid category only if transaction_type is not available
     let category = 'Unknown';
     if (transactionType) {
       category = transactionType.toUpperCase();
@@ -1168,34 +1171,25 @@ export async function askOpenAIWithEnhancedContext(
       }
     }
     
-    // ✅ Use enhanced merchant name when available
-    const merchantName = transaction.enriched_data?.merchant_name || 
-                         transaction.merchant_name || 
-                         name;
-    
     // ✅ Amount is already normalized correctly by TransactionNormalizationService:
-    // - Positive = inflows/income (money coming in)
-    // - Negative = outflows/expenses (money going out)
-    // DO NOT invert - amounts are already correct!
     const amount = transaction.amount || 0;
     
     // ✅ Include transaction_type if available (from categorization service)
-    // This helps GPT distinguish transfers from expenses/income
     const typeInfo = transactionType ? ` (${transactionType.toUpperCase()})` : '';
     
-    // ✅ Include enhanced information when available
+    // ✅ Include enhanced information when available (already anonymized if anonymization ran)
     let enhancedInfo = '';
     if (transaction.enriched_data) {
       if (transaction.enriched_data.website) {
         enhancedInfo += ` [Website: ${transaction.enriched_data.website}]`;
       }
+      // enriched_data.brand_name was already anonymized at line 921 if anonymization ran
       if (transaction.enriched_data.brand_name && transaction.enriched_data.brand_name !== merchantName) {
         enhancedInfo += ` [Brand: ${transaction.enriched_data.brand_name}]`;
       }
     }
     
-    // ✅ Show Plaid categories for reference, but mark transaction_type as authoritative
-    // Include aiCategory in the categories list to make it clear
+    // ✅ Show Plaid categories for reference
     const categoryParts: string[] = [];
     if (transactionType) {
       categoryParts.push(`${transactionType.toUpperCase()} (from aiCategory)`);
@@ -1215,7 +1209,11 @@ export async function askOpenAIWithEnhancedContext(
       ? ' [NOT INCOME - MONEY MOVEMENT]' 
       : '';
     
-    return `- ${merchantName}${typeInfo} (${category}): $${amount.toFixed(2)} on ${transaction.date}${transferWarning}${enhancedInfo}`;
+    const dateStr = transaction.date instanceof Date 
+      ? transaction.date.toISOString().slice(0, 10)
+      : (transaction.date || '').substring(0, 10);
+    
+    return `- ${merchantName}${typeInfo} (${category}): $${amount.toFixed(2)} on ${dateStr}${transferWarning}${enhancedInfo}`;
   }).join('\n');
 
   // ✅ DEBUG: Log the final transaction summary to see what the AI receives
@@ -1647,6 +1645,18 @@ ${userId ? anonymizationService.anonymizeInvestmentData(userId, combinedHoldings
 
     // Enhance response with upgrade suggestions
     answer = enhanceResponseWithUpgrades(answer, tierContext, searchContext);
+
+    // ✅ De-anonymize response for user (replace tokens with real names)
+    // This ensures Merchant_X, Account_X, etc. are converted back to real names for the user
+    if (!isDemo && userId) {
+      try {
+        answer = deanonymizationService.convertResponseToUserFriendly(userId, answer);
+        console.log('OpenAI Enhanced: Response deanonymized successfully');
+      } catch (e) {
+        console.error('OpenAI Enhanced: Error de-anonymizing response:', e);
+        // Continue with tokenized response if de-anonymization fails
+      }
+    }
 
     console.log('OpenAI Enhanced: Response generated successfully');
     
@@ -2485,10 +2495,13 @@ export async function askOpenAI(
       }
     }
     
-    // ✅ Use enhanced merchant name when available
-    const merchantName = transaction.enriched_data?.merchant_name || 
+    // ✅ Use anonymized name first (guaranteed to be anonymized if anonymization ran)
+    // Only use enriched_data or merchant_name if name is not available
+    // Note: enriched_data.merchant_name and merchant_name should also be anonymized, 
+    // but name is the safest fallback since it's always anonymized when userId is present
+    const merchantName = name || 
                          transaction.merchant_name || 
-                         name;
+                         transaction.enriched_data?.merchant_name;
     
     // Fix: Invert the transaction amount sign to match expected behavior
     // Positive amounts should be negative (money leaving account) and vice versa
