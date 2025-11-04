@@ -2,13 +2,15 @@ import { PrismaClient } from '@prisma/client';
 import { ProfileEncryptionService } from './encryption';
 import { ProfileExtractor } from './extractor';
 import { ProfileAnonymizer } from './anonymizer';
+import { AnonymizationService } from '../services/anonymization-service';
 
 export class ProfileManager {
   private encryptionService: ProfileEncryptionService;
   private profileExtractor: ProfileExtractor;
-  private anonymizer: ProfileAnonymizer;
+  private anonymizationService?: AnonymizationService;
+  private anonymizer?: ProfileAnonymizer;
 
-  constructor(sessionId?: string) {
+  constructor(sessionId?: string, anonymizationService?: AnonymizationService) {
     const encryptionKey = process.env.PROFILE_ENCRYPTION_KEY;
     if (!encryptionKey) {
       throw new Error('PROFILE_ENCRYPTION_KEY environment variable is required');
@@ -21,7 +23,8 @@ export class ProfileManager {
     
     this.encryptionService = new ProfileEncryptionService(encryptionKey);
     this.profileExtractor = new ProfileExtractor();
-    this.anonymizer = new ProfileAnonymizer(sessionId || 'default-session');
+    this.anonymizationService = anonymizationService;
+    // ProfileAnonymizer will be created on-demand when needed with userId
   }
 
   async getOrCreateProfile(userId: string): Promise<string> {
@@ -89,7 +92,10 @@ export class ProfileManager {
       }
       
       // Anonymize the profile before returning for AI use
-      const anonymizationResult = this.anonymizer.anonymizeProfile(profileText);
+      // Create anonymizer with AnonymizationService if available, otherwise create a new one
+      const anonymizationService = this.anonymizationService || new AnonymizationService();
+      const anonymizer = new ProfileAnonymizer(anonymizationService, userId);
+      const anonymizationResult = anonymizer.anonymizeProfile(profileText);
       
       console.log('ProfileManager: Profile anonymized, original length:', profileText.length, 'anonymized length:', anonymizationResult.anonymizedProfile.length);
       
@@ -145,46 +151,12 @@ export class ProfileManager {
       return '';
     }
     
-    // Anonymize the profile for AI consumption
-    return this.anonymizeProfile(originalProfile);
-  }
-
-  // Anonymize profile by replacing sensitive values with tokens (for AI services)
-  private anonymizeProfile(profileText: string): string {
-    let anonymizedProfile = profileText;
+    // Anonymize the profile for AI consumption using ProfileAnonymizer
+    const anonymizationService = this.anonymizationService || new AnonymizationService();
+    const anonymizer = new ProfileAnonymizer(anonymizationService, userId);
+    const anonymizationResult = anonymizer.anonymizeProfile(originalProfile);
     
-    // Replace amounts with tokens
-    anonymizedProfile = anonymizedProfile.replace(/\$[\d,]+(?:\.\d{2})?/g, (match, index) => {
-      return `$AMOUNT_${index + 1}`;
-    });
-    
-    // Replace rates with tokens
-    anonymizedProfile = anonymizedProfile.replace(/(\d+(?:\.\d+)?)%/g, (match, index) => {
-      return `RATE_${index + 1}%`;
-    });
-    
-    // Replace locations with tokens
-    anonymizedProfile = anonymizedProfile.replace(/([A-Z][a-z]+(?:[\s,]+[A-Z]{2})?)/g, (match, index) => {
-      if (match.length > 2 && /^[A-Z][a-z]/.test(match)) {
-        return `LOCATION_${index + 1}`;
-      }
-      return match;
-    });
-    
-    // Replace ages with tokens
-    anonymizedProfile = anonymizedProfile.replace(/(\d+)-year-old|age (\d+)/gi, (match, index) => {
-      return `AGE_${index + 1}`;
-    });
-    
-    // Replace names with tokens
-    anonymizedProfile = anonymizedProfile.replace(/\b([A-Z][a-z]+)\b/g, (match, index) => {
-      if (match.length > 2 && !['The', 'Our', 'We', 'You', 'Your'].includes(match)) {
-        return `PERSON_${index + 1}`;
-      }
-      return match;
-    });
-    
-    return anonymizedProfile;
+    return anonymizationResult.anonymizedProfile;
   }
 
   async updateProfile(userId: string, newProfileText: string): Promise<void> {
@@ -319,16 +291,18 @@ export class ProfileManager {
           ''
         ).trim();
         
-        // Re-add the structured home data
-        const homeDataSection = `
+        // Re-add the structured home data (only if we have all required fields)
+        if (existingHomeData.address && existingHomeData.value !== null) {
+          const homeDataSection = `
 
 HOME_ADDRESS: ${existingHomeData.address}
 HOME_VALUE: ${existingHomeData.value}
-HOME_VALUE_LOW: ${existingHomeData.valueLow}
-HOME_VALUE_HIGH: ${existingHomeData.valueHigh}
-HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString()}`;
-        
-        finalProfile = finalProfile + homeDataSection;
+HOME_VALUE_LOW: ${existingHomeData.valueLow ?? existingHomeData.value}
+HOME_VALUE_HIGH: ${existingHomeData.valueHigh ?? existingHomeData.value}
+HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Date().toISOString()}`;
+          
+          finalProfile = finalProfile + homeDataSection;
+        }
       }
       
       await this.updateProfile(userId, finalProfile);
@@ -407,22 +381,22 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString()}`;
       result.address = addressMatch[1].trim();
     }
 
-    // Extract home value
-    const valueMatch = profileText.match(/HOME_VALUE:\s*(\d+)/);
+    // Extract home value (supports both integers and decimals)
+    const valueMatch = profileText.match(/HOME_VALUE:\s*(\d+(?:\.\d+)?)/);
     if (valueMatch) {
-      result.value = parseInt(valueMatch[1], 10);
+      result.value = parseFloat(valueMatch[1]);
     }
 
-    // Extract home value low
-    const valueLowMatch = profileText.match(/HOME_VALUE_LOW:\s*(\d+)/);
+    // Extract home value low (supports both integers and decimals)
+    const valueLowMatch = profileText.match(/HOME_VALUE_LOW:\s*(\d+(?:\.\d+)?)/);
     if (valueLowMatch) {
-      result.valueLow = parseInt(valueLowMatch[1], 10);
+      result.valueLow = parseFloat(valueLowMatch[1]);
     }
 
-    // Extract home value high
-    const valueHighMatch = profileText.match(/HOME_VALUE_HIGH:\s*(\d+)/);
+    // Extract home value high (supports both integers and decimals)
+    const valueHighMatch = profileText.match(/HOME_VALUE_HIGH:\s*(\d+(?:\.\d+)?)/);
     if (valueHighMatch) {
-      result.valueHigh = parseInt(valueHighMatch[1], 10);
+      result.valueHigh = parseFloat(valueHighMatch[1]);
     }
 
     // Extract last updated timestamp

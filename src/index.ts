@@ -2690,14 +2690,18 @@ app.get('/profile/home', requireAuth, async (req: Request, res: Response) => {
       valueHigh: homeData.valueHigh
     });
     
+    // Ensure valueLow and valueHigh are always numbers (use value as fallback if null)
+    const valueLow = homeData.valueLow ?? homeData.value ?? 0;
+    const valueHigh = homeData.valueHigh ?? homeData.value ?? 0;
+    
     res.json({ 
       hasHome: true,
       homeData: {
-        address: homeData.address,
-        value: homeData.value,
-        valueLow: homeData.valueLow,
-        valueHigh: homeData.valueHigh,
-        lastUpdated: homeData.lastUpdated
+        address: homeData.address || '',
+        value: homeData.value ?? 0,
+        valueLow: valueLow,
+        valueHigh: valueHigh,
+        lastUpdated: homeData.lastUpdated?.toISOString() || new Date().toISOString()
       }
     });
   } catch (error) {
@@ -2745,14 +2749,18 @@ app.post('/profile/home', requireAuth, async (req: Request, res: Response) => {
     const profileText = await profileManager.getOriginalProfile(req.user!.id);
     const homeData = profileManager.extractHomeData(profileText);
     
+    // Ensure valueLow and valueHigh are always numbers (use value as fallback if null)
+    const valueLow = homeData.valueLow ?? homeData.value ?? 0;
+    const valueHigh = homeData.valueHigh ?? homeData.value ?? 0;
+    
     res.json({ 
       success: true,
       homeData: {
-        address: homeData.address,
-        value: homeData.value,
-        valueLow: homeData.valueLow,
-        valueHigh: homeData.valueHigh,
-        lastUpdated: homeData.lastUpdated
+        address: homeData.address || '',
+        value: homeData.value ?? 0,
+        valueLow: valueLow,
+        valueHigh: valueHigh,
+        lastUpdated: homeData.lastUpdated?.toISOString() || new Date().toISOString()
       }
     });
   } catch (error) {
@@ -2794,14 +2802,18 @@ app.post('/profile/home/refresh', requireAuth, async (req: Request, res: Respons
     const updatedProfileText = await profileManager.getOriginalProfile(req.user!.id);
     const homeData = profileManager.extractHomeData(updatedProfileText);
     
+    // Ensure valueLow and valueHigh are always numbers (use value as fallback if null)
+    const valueLow = homeData.valueLow ?? homeData.value ?? 0;
+    const valueHigh = homeData.valueHigh ?? homeData.value ?? 0;
+    
     res.json({ 
       success: true,
       homeData: {
-        address: homeData.address,
-        value: homeData.value,
-        valueLow: homeData.valueLow,
-        valueHigh: homeData.valueHigh,
-        lastUpdated: homeData.lastUpdated
+        address: homeData.address || '',
+        value: homeData.value ?? 0,
+        valueLow: valueLow,
+        valueHigh: valueHigh,
+        lastUpdated: homeData.lastUpdated?.toISOString() || new Date().toISOString()
       }
     });
   } catch (error) {

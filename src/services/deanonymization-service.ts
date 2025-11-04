@@ -31,25 +31,28 @@ export class DeanonymizationService {
     
     let userFriendlyResponse = response;
     
-    // Replace account tokens with real names
+    // Replace account tokens with real names (use word boundaries to avoid partial matches)
     sessionMaps.accountRealDataMap.forEach((realData, token) => {
       const replacement = realData.institution 
         ? `${realData.name} at ${realData.institution}`
         : realData.name;
-      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(token, 'g'), replacement);
+      const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`\\b${escapedToken}\\b`, 'g'), replacement);
     });
     
-    // Replace institution tokens with real names
+    // Replace institution tokens with real names (use word boundaries to avoid partial matches)
     sessionMaps.institutionRealDataMap.forEach((realName, token) => {
-      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(token, 'g'), realName);
+      const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`\\b${escapedToken}\\b`, 'g'), realName);
     });
     
-    // Replace merchant tokens with real names
+    // Replace merchant tokens with real names (use word boundaries to avoid partial matches)
     sessionMaps.merchantRealDataMap.forEach((realName, token) => {
-      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(token, 'g'), realName);
+      const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`\\b${escapedToken}\\b`, 'g'), realName);
     });
     
-    // Replace security tokens with real names
+    // Replace security tokens with real names (use word boundaries to avoid partial matches)
     sessionMaps.securityRealDataMap.forEach((realData, token) => {
       let replacement = realData.name;
       if (realData.ticker && realData.ticker !== 'N/A') {
@@ -58,10 +61,11 @@ export class DeanonymizationService {
       if (realData.type && realData.type !== 'Unknown') {
         replacement += ` - ${realData.type}`;
       }
-      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(token, 'g'), replacement);
+      const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`\\b${escapedToken}\\b`, 'g'), replacement);
     });
     
-    // Replace liability tokens with real names
+    // Replace liability tokens with real names (use word boundaries to avoid partial matches)
     sessionMaps.liabilityRealDataMap.forEach((realData, token) => {
       let replacement = realData.name;
       if (realData.type && realData.type !== 'Unknown') {
@@ -70,7 +74,69 @@ export class DeanonymizationService {
       if (realData.institution) {
         replacement += ` at ${realData.institution}`;
       }
-      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(token, 'g'), replacement);
+      const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`\\b${escapedToken}\\b`, 'g'), replacement);
+    });
+    
+    // Replace profile tokens with real data
+    // Person tokens (use word boundaries to avoid partial matches)
+    sessionMaps.personRealDataMap.forEach((realName, token) => {
+      const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`\\b${escapedToken}\\b`, 'g'), realName);
+    });
+    
+    // Spouse tokens (use word boundaries to avoid partial matches)
+    sessionMaps.spouseRealDataMap.forEach((realName, token) => {
+      const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`\\b${escapedToken}\\b`, 'g'), realName);
+    });
+    
+    // Location tokens (stored as "City, State" format)
+    sessionMaps.locationRealDataMap.forEach((realLocation, token) => {
+      const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`\\b${escapedToken}\\b`, 'g'), realLocation);
+    });
+    
+    // Income tokens (stored as numeric amount, format as currency)
+    // Note: ProfileAnonymizer replaces "$amount" with "$Income_X", so we need to match "$Income_X"
+    // Must replace $Income_X pattern first (with $ prefix) before replacing Income_X alone
+    sessionMaps.incomeRealDataMap.forEach((realAmount, token) => {
+      const formattedAmount = `$${realAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      // Escape special regex characters in token
+      const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Replace "$Income_X" pattern first (token with $ prefix), then the token alone (if it appears without $)
+      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`\\$${escapedToken}`, 'g'), formattedAmount);
+      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`\\b${escapedToken}\\b`, 'g'), formattedAmount);
+    });
+    
+    // Goal tokens (stored as numeric amount, format as currency)
+    // Note: ProfileAnonymizer replaces "$amount" with "$Goal_X", so we need to match "$Goal_X"
+    // Must replace $Goal_X pattern first (with $ prefix) before replacing Goal_X alone
+    sessionMaps.goalRealDataMap.forEach((realAmount, token) => {
+      const formattedAmount = `$${realAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      // Escape special regex characters in token
+      const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Replace "$Goal_X" pattern first (token with $ prefix), then the token alone (if it appears without $)
+      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`\\$${escapedToken}`, 'g'), formattedAmount);
+      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`\\b${escapedToken}\\b`, 'g'), formattedAmount);
+    });
+    
+    // Age tokens (stored as numeric age)
+    sessionMaps.ageRealDataMap.forEach((realAge, token) => {
+      const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`\\b${escapedToken}\\b`, 'g'), realAge.toString());
+    });
+    
+    // Ages tokens (stored as string like "5 and 8")
+    sessionMaps.agesRealDataMap.forEach((realAges, token) => {
+      const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`\\b${escapedToken}\\b`, 'g'), realAges);
+    });
+    
+    // Children tokens (stored as children info string)
+    sessionMaps.childrenRealDataMap.forEach((realChildrenInfo, token) => {
+      const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`\\b${escapedToken}\\b`, 'g'), realChildrenInfo);
     });
     
     return userFriendlyResponse;

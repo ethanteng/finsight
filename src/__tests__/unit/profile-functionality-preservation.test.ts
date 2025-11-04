@@ -344,13 +344,13 @@ describe('Profile Functionality Preservation', () => {
       
       const aiProfile = await profileManager.getOrCreateProfile('test-user');
       
-      // Should return anonymized profile for AI
+      // Should return anonymized profile for AI (using new token format)
       expect(aiProfile).not.toContain('Sarah Chen');
       expect(aiProfile).not.toContain('$100,000');
       expect(aiProfile).not.toContain('New York, NY');
-      expect(aiProfile).toContain('PERSON_');
-      expect(aiProfile).toContain('INCOME_');
-      expect(aiProfile).toContain('LOCATION_');
+      expect(aiProfile).toContain('Person_');
+      expect(aiProfile).toContain('Income_');
+      expect(aiProfile).toContain('Location_');
     });
 
     test('User display must receive original profiles', async () => {

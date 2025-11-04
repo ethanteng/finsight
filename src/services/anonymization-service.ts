@@ -12,6 +12,16 @@ interface SessionMaps {
   securityTokenMap: Map<string, string>;
   liabilityTokenMap: Map<string, string>;
   
+  // Profile token maps
+  personTokenMap: Map<string, string>;
+  spouseTokenMap: Map<string, string>;
+  locationTokenMap: Map<string, string>;
+  incomeTokenMap: Map<string, string>;
+  goalTokenMap: Map<string, string>;
+  ageTokenMap: Map<string, string>;
+  agesTokenMap: Map<string, string>;
+  childrenTokenMap: Map<string, string>;
+  
   // Reverse mappings for de-anonymization
   accountRealDataMap: Map<string, { name: string; institution?: string }>;
   institutionRealDataMap: Map<string, string>;
@@ -19,12 +29,30 @@ interface SessionMaps {
   securityRealDataMap: Map<string, { name: string; ticker?: string; type?: string }>;
   liabilityRealDataMap: Map<string, { name: string; type?: string; institution?: string }>;
   
+  // Profile reverse mappings
+  personRealDataMap: Map<string, string>;
+  spouseRealDataMap: Map<string, string>;
+  locationRealDataMap: Map<string, string>; // Stores "City, State" format
+  incomeRealDataMap: Map<string, number>; // Stores numeric amount
+  goalRealDataMap: Map<string, number>; // Stores numeric amount
+  ageRealDataMap: Map<string, number>; // Stores numeric age
+  agesRealDataMap: Map<string, string>; // Stores "5 and 8" format
+  childrenRealDataMap: Map<string, string>; // Stores children info string
+  
   // Counters for token generation
   accountCounter: number;
   institutionCounter: number;
   merchantCounter: number;
   securityCounter: number;
   liabilityCounter: number;
+  personCounter: number;
+  spouseCounter: number;
+  locationCounter: number;
+  incomeCounter: number;
+  goalCounter: number;
+  ageCounter: number;
+  agesCounter: number;
+  childrenCounter: number;
 }
 
 export class AnonymizationService {
@@ -42,16 +70,40 @@ export class AnonymizationService {
         merchantTokenMap: new Map(),
         securityTokenMap: new Map(),
         liabilityTokenMap: new Map(),
+        personTokenMap: new Map(),
+        spouseTokenMap: new Map(),
+        locationTokenMap: new Map(),
+        incomeTokenMap: new Map(),
+        goalTokenMap: new Map(),
+        ageTokenMap: new Map(),
+        agesTokenMap: new Map(),
+        childrenTokenMap: new Map(),
         accountRealDataMap: new Map(),
         institutionRealDataMap: new Map(),
         merchantRealDataMap: new Map(),
         securityRealDataMap: new Map(),
         liabilityRealDataMap: new Map(),
+        personRealDataMap: new Map(),
+        spouseRealDataMap: new Map(),
+        locationRealDataMap: new Map(),
+        incomeRealDataMap: new Map(),
+        goalRealDataMap: new Map(),
+        ageRealDataMap: new Map(),
+        agesRealDataMap: new Map(),
+        childrenRealDataMap: new Map(),
         accountCounter: 1,
         institutionCounter: 1,
         merchantCounter: 1,
         securityCounter: 1,
-        liabilityCounter: 1
+        liabilityCounter: 1,
+        personCounter: 1,
+        spouseCounter: 1,
+        locationCounter: 1,
+        incomeCounter: 1,
+        goalCounter: 1,
+        ageCounter: 1,
+        agesCounter: 1,
+        childrenCounter: 1
       });
     }
     return this.sessionMaps.get(userId)!;
@@ -331,6 +383,136 @@ export class AnonymizationService {
    */
   clearSession(userId: string): void {
     this.sessionMaps.delete(userId);
+  }
+
+  /**
+   * Tokenize a person name
+   */
+  tokenizePerson(userId: string, personName: string): string {
+    const maps = this.getSessionMaps(userId);
+    const safePersonName = String(personName || '');
+    
+    if (!maps.personTokenMap.has(safePersonName)) {
+      const token = `Person_${maps.personCounter++}`;
+      maps.personTokenMap.set(safePersonName, token);
+      maps.personRealDataMap.set(token, safePersonName);
+    }
+    
+    return maps.personTokenMap.get(safePersonName)!;
+  }
+
+  /**
+   * Tokenize a spouse name
+   */
+  tokenizeSpouse(userId: string, spouseName: string): string {
+    const maps = this.getSessionMaps(userId);
+    const safeSpouseName = String(spouseName || '');
+    
+    if (!maps.spouseTokenMap.has(safeSpouseName)) {
+      const token = `Spouse_${maps.spouseCounter++}`;
+      maps.spouseTokenMap.set(safeSpouseName, token);
+      maps.spouseRealDataMap.set(token, safeSpouseName);
+    }
+    
+    return maps.spouseTokenMap.get(safeSpouseName)!;
+  }
+
+  /**
+   * Tokenize a location (city, state)
+   */
+  tokenizeLocation(userId: string, city: string, state: string): string {
+    const maps = this.getSessionMaps(userId);
+    const safeCity = String(city || '');
+    const safeState = String(state || '');
+    const locationKey = `${safeCity}, ${safeState}`;
+    
+    if (!maps.locationTokenMap.has(locationKey)) {
+      const token = `Location_${maps.locationCounter++}`;
+      maps.locationTokenMap.set(locationKey, token);
+      maps.locationRealDataMap.set(token, locationKey);
+    }
+    
+    return maps.locationTokenMap.get(locationKey)!;
+  }
+
+  /**
+   * Tokenize an income amount
+   */
+  tokenizeIncome(userId: string, amount: number): string {
+    const maps = this.getSessionMaps(userId);
+    const amountKey = amount.toString();
+    
+    if (!maps.incomeTokenMap.has(amountKey)) {
+      const token = `Income_${maps.incomeCounter++}`;
+      maps.incomeTokenMap.set(amountKey, token);
+      maps.incomeRealDataMap.set(token, amount);
+    }
+    
+    return maps.incomeTokenMap.get(amountKey)!;
+  }
+
+  /**
+   * Tokenize a goal amount
+   */
+  tokenizeGoal(userId: string, amount: number): string {
+    const maps = this.getSessionMaps(userId);
+    const amountKey = amount.toString();
+    
+    if (!maps.goalTokenMap.has(amountKey)) {
+      const token = `Goal_${maps.goalCounter++}`;
+      maps.goalTokenMap.set(amountKey, token);
+      maps.goalRealDataMap.set(token, amount);
+    }
+    
+    return maps.goalTokenMap.get(amountKey)!;
+  }
+
+  /**
+   * Tokenize an age
+   */
+  tokenizeAge(userId: string, age: number): string {
+    const maps = this.getSessionMaps(userId);
+    const ageKey = age.toString();
+    
+    if (!maps.ageTokenMap.has(ageKey)) {
+      const token = `Age_${maps.ageCounter++}`;
+      maps.ageTokenMap.set(ageKey, token);
+      maps.ageRealDataMap.set(token, age);
+    }
+    
+    return maps.ageTokenMap.get(ageKey)!;
+  }
+
+  /**
+   * Tokenize children ages (e.g., "5 and 8")
+   */
+  tokenizeAges(userId: string, ages: string): string {
+    const maps = this.getSessionMaps(userId);
+    const safeAges = String(ages || '');
+    
+    if (!maps.agesTokenMap.has(safeAges)) {
+      const token = `Ages_${maps.agesCounter++}`;
+      maps.agesTokenMap.set(safeAges, token);
+      maps.agesRealDataMap.set(token, safeAges);
+    }
+    
+    return maps.agesTokenMap.get(safeAges)!;
+  }
+
+  /**
+   * Tokenize children information
+   */
+  tokenizeChildren(userId: string, childrenInfo: string): string {
+    const maps = this.getSessionMaps(userId);
+    const safeChildrenInfo = String(childrenInfo || '');
+    
+    if (!maps.childrenTokenMap.has(safeChildrenInfo)) {
+      const token = `Children_${maps.childrenCounter++}`;
+      maps.childrenTokenMap.set(safeChildrenInfo, token);
+      maps.childrenRealDataMap.set(token, safeChildrenInfo);
+    }
+    
+    return maps.childrenTokenMap.get(safeChildrenInfo)!;
   }
 
   /**

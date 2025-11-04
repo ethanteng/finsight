@@ -1175,7 +1175,8 @@ export async function askOpenAIWithEnhancedContext(
     const amount = transaction.amount || 0;
     
     // ✅ Include transaction_type if available (from categorization service)
-    const typeInfo = transactionType ? ` (${transactionType.toUpperCase()})` : '';
+    // Only show it once - transaction_type is the authoritative category
+    const typeInfo = transactionType ? ` (${transactionType.toUpperCase()})` : (category !== 'Unknown' ? ` (${category})` : '');
     
     // ✅ Include enhanced information when available (already anonymized if anonymization ran)
     let enhancedInfo = '';
@@ -1189,7 +1190,7 @@ export async function askOpenAIWithEnhancedContext(
       }
     }
     
-    // ✅ Show Plaid categories for reference
+    // ✅ Show Plaid categories for reference (only if different from transaction_type)
     const categoryParts: string[] = [];
     if (transactionType) {
       categoryParts.push(`${transactionType.toUpperCase()} (from aiCategory)`);
@@ -1213,7 +1214,7 @@ export async function askOpenAIWithEnhancedContext(
       ? transaction.date.toISOString().slice(0, 10)
       : (transaction.date || '').substring(0, 10);
     
-    return `- ${merchantName}${typeInfo} (${category}): $${amount.toFixed(2)} on ${dateStr}${transferWarning}${enhancedInfo}`;
+    return `- ${merchantName}${typeInfo}: $${amount.toFixed(2)} on ${dateStr}${transferWarning}${enhancedInfo}`;
   }).join('\n');
 
   // ✅ DEBUG: Log the final transaction summary to see what the AI receives
@@ -1449,11 +1450,14 @@ ${userId ? anonymizationService.anonymizeInvestmentData(userId, combinedHoldings
   } else if (userId && !isDemo) {
     try {
       const { ProfileManager } = await import('./profile/manager');
-      const profileManager = new ProfileManager(userId); // Use userId as sessionId
-      userProfile = await profileManager.getOrCreateProfile(userId);
-      console.log('OpenAI Enhanced: User profile retrieved and anonymized, length:', userProfile.length);
+      // ✅ Pass the same AnonymizationService instance to ProfileManager for unified token management
+      const profileManager = new ProfileManager(userId, anonymizationService);
       
-      // Enhance profile with Plaid data if available (for AI context only - don't overwrite original profile)
+      // ✅ CRITICAL FIX: Get ORIGINAL (non-anonymized) profile first for enhancement
+      // We need the real profile to enhance it with real Plaid data
+      let originalProfile = await profileManager.getOriginalProfile(userId);
+      
+      // Enhance profile with Plaid data if available (using ORIGINAL profile, not anonymized)
       if (accounts.length > 0 || transactions.length > 0) {
         try {
           const { PlaidProfileEnhancer } = await import('./profile/plaid-enhancer');
@@ -1462,20 +1466,51 @@ ${userId ? anonymizationService.anonymizeInvestmentData(userId, combinedHoldings
             userId,
             accounts,
             transactions,
-            userProfile
+            originalProfile
           );
           
-          if (enhancedProfile !== userProfile) {
-            // Use enhanced profile for AI context
-            userProfile = enhancedProfile;
-            console.log('OpenAI Enhanced: User profile enhanced with Plaid data for AI context');
-            
-            // ALSO update the persistent profile with Plaid insights
+          if (enhancedProfile !== originalProfile) {
+            // Update the persistent profile with enhanced REAL data (not anonymized)
             try {
               const { ProfileManager } = await import('./profile/manager');
+              // ProfileManager for update doesn't need AnonymizationService (not anonymizing)
               const profileManager = new ProfileManager();
-              await profileManager.updateProfile(userId, enhancedProfile);
-              console.log('OpenAI Enhanced: Persistent profile updated with Plaid insights');
+              
+              // ✅ CRITICAL: Preserve structured home data when enhancing profile
+              // The AI-enhanced profile might not include the structured HOME_* fields
+              const existingHomeData = profileManager.extractHomeData(originalProfile);
+              const enhancedHomeData = profileManager.extractHomeData(enhancedProfile);
+              
+              let finalProfile = enhancedProfile;
+              
+              // If we have home data in the original profile but not in the enhanced profile, preserve it
+              if (existingHomeData.address && !enhancedHomeData.address) {
+                console.log('💾 Preserving structured home data during Plaid profile enhancement');
+                
+                // Remove any existing home data markers from enhanced profile (shouldn't be any, but just in case)
+                finalProfile = finalProfile.replace(
+                  /HOME_ADDRESS:.*?\n|HOME_VALUE:.*?\n|HOME_VALUE_LOW:.*?\n|HOME_VALUE_HIGH:.*?\n|HOME_VALUE_LAST_UPDATED:.*?\n/g,
+                  ''
+                ).trim();
+                
+                // Re-add the structured home data (only if we have all required fields)
+                if (existingHomeData.address && existingHomeData.value !== null) {
+                  const homeDataSection = `
+
+HOME_ADDRESS: ${existingHomeData.address}
+HOME_VALUE: ${existingHomeData.value}
+HOME_VALUE_LOW: ${existingHomeData.valueLow ?? existingHomeData.value}
+HOME_VALUE_HIGH: ${existingHomeData.valueHigh ?? existingHomeData.value}
+HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Date().toISOString()}`;
+                  
+                  finalProfile = finalProfile + homeDataSection;
+                }
+              }
+              
+              await profileManager.updateProfile(userId, finalProfile);
+              console.log('OpenAI Enhanced: Persistent profile updated with Plaid insights (real data)');
+              // Update local variable to use the enhanced profile
+              originalProfile = finalProfile;
             } catch (profileUpdateError) {
               console.error('OpenAI Enhanced: Failed to update persistent profile with Plaid insights:', profileUpdateError);
               // Don't fail the main request if profile update fails
@@ -1486,6 +1521,12 @@ ${userId ? anonymizationService.anonymizeInvestmentData(userId, combinedHoldings
           // Don't fail the main request if Plaid enhancement fails
         }
       }
+      
+      // ✅ NOW anonymize the profile for GPT use (after enhancement with real data)
+      // This ensures the profile stored in DB is always real, and anonymization only happens for GPT
+      // Use getAnonymizedProfile which will retrieve the updated profile and anonymize it using the shared AnonymizationService
+      userProfile = await profileManager.getAnonymizedProfile(userId);
+      console.log('OpenAI Enhanced: User profile retrieved, enhanced, and anonymized for GPT, length:', userProfile.length);
       
       // ✅ NEW: Fetch liabilities data for credit accounts
       const liabilitiesData = '';
@@ -1948,8 +1989,8 @@ INCOME DATA:
 - Reference it directly: "Based on your transaction history, your monthly income is $X,XXX"
 
 SPENDING CALCULATIONS:
-- Transaction types are shown in the format: "Merchant (TRANSACTION_TYPE) (Category): $Amount"
-- CRITICAL: The (Category) field uses transaction_type from aiCategory (which respects manual corrections) - this is the AUTHORITATIVE category to use
+- Transaction types are shown in the format: "Merchant (TRANSACTION_TYPE): $Amount"
+- CRITICAL: The (TRANSACTION_TYPE) field uses transaction_type from aiCategory (which respects manual corrections) - this is the AUTHORITATIVE category to use
 - When in doubt, use the transaction_type shown in parentheses, NOT the Plaid categories listed in [Categories: ...]
 
 INCOME CALCULATION RULES (CRITICAL):
@@ -2563,11 +2604,14 @@ export async function askOpenAI(
   if (userId && !isDemo) {
     try {
       const { ProfileManager } = await import('./profile/manager');
-      const profileManager = new ProfileManager(userId); // Use userId as sessionId
-      userProfile = await profileManager.getOrCreateProfile(userId);
-      console.log('OpenAI: User profile retrieved and anonymized, length:', userProfile.length);
+      // ✅ Pass the same AnonymizationService instance to ProfileManager for unified token management
+      const profileManager = new ProfileManager(userId, anonymizationService);
       
-      // Enhance profile with Plaid data if available (for AI context only - don't overwrite original profile)
+      // ✅ CRITICAL FIX: Get ORIGINAL (non-anonymized) profile first for enhancement
+      // We need the real profile to enhance it with real Plaid data
+      let originalProfile = await profileManager.getOriginalProfile(userId);
+      
+      // Enhance profile with Plaid data if available (using ORIGINAL profile, not anonymized)
       if (accounts.length > 0 || transactions.length > 0) {
         try {
           const { PlaidProfileEnhancer } = await import('./profile/plaid-enhancer');
@@ -2576,20 +2620,51 @@ export async function askOpenAI(
             userId,
             accounts,
             transactions,
-            userProfile
+            originalProfile
           );
           
-          if (enhancedProfile !== userProfile) {
-            // Use enhanced profile for AI context
-            userProfile = enhancedProfile;
-            console.log('OpenAI: User profile enhanced with Plaid data for AI context');
-            
-            // ALSO update the persistent profile with Plaid insights
+          if (enhancedProfile !== originalProfile) {
+            // Update the persistent profile with enhanced REAL data (not anonymized)
             try {
               const { ProfileManager } = await import('./profile/manager');
+              // ProfileManager for update doesn't need AnonymizationService (not anonymizing)
               const profileManager = new ProfileManager();
-              await profileManager.updateProfile(userId, enhancedProfile);
-              console.log('OpenAI: Persistent profile updated with Plaid insights');
+              
+              // ✅ CRITICAL: Preserve structured home data when enhancing profile
+              // The AI-enhanced profile might not include the structured HOME_* fields
+              const existingHomeData = profileManager.extractHomeData(originalProfile);
+              const enhancedHomeData = profileManager.extractHomeData(enhancedProfile);
+              
+              let finalProfile = enhancedProfile;
+              
+              // If we have home data in the original profile but not in the enhanced profile, preserve it
+              if (existingHomeData.address && !enhancedHomeData.address) {
+                console.log('💾 Preserving structured home data during Plaid profile enhancement');
+                
+                // Remove any existing home data markers from enhanced profile (shouldn't be any, but just in case)
+                finalProfile = finalProfile.replace(
+                  /HOME_ADDRESS:.*?\n|HOME_VALUE:.*?\n|HOME_VALUE_LOW:.*?\n|HOME_VALUE_HIGH:.*?\n|HOME_VALUE_LAST_UPDATED:.*?\n/g,
+                  ''
+                ).trim();
+                
+                // Re-add the structured home data (only if we have all required fields)
+                if (existingHomeData.address && existingHomeData.value !== null) {
+                  const homeDataSection = `
+
+HOME_ADDRESS: ${existingHomeData.address}
+HOME_VALUE: ${existingHomeData.value}
+HOME_VALUE_LOW: ${existingHomeData.valueLow ?? existingHomeData.value}
+HOME_VALUE_HIGH: ${existingHomeData.valueHigh ?? existingHomeData.value}
+HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Date().toISOString()}`;
+                  
+                  finalProfile = finalProfile + homeDataSection;
+                }
+              }
+              
+              await profileManager.updateProfile(userId, finalProfile);
+              console.log('OpenAI: Persistent profile updated with Plaid insights (real data)');
+              // Update local variable to use the enhanced profile
+              originalProfile = finalProfile;
             } catch (profileUpdateError) {
               console.error('OpenAI: Failed to update persistent profile with Plaid insights:', profileUpdateError);
               // Don't fail the main request if profile update fails
@@ -2600,6 +2675,12 @@ export async function askOpenAI(
           // Don't fail the main request if Plaid enhancement fails
         }
       }
+      
+      // ✅ NOW anonymize the profile for GPT use (after enhancement with real data)
+      // This ensures the profile stored in DB is always real, and anonymization only happens for GPT
+      // Use getAnonymizedProfile which will retrieve the updated profile and anonymize it using the shared AnonymizationService
+      userProfile = await profileManager.getAnonymizedProfile(userId);
+      console.log('OpenAI: User profile retrieved, enhanced, and anonymized for GPT, length:', userProfile.length);
       
       // ✅ NEW: Fetch liabilities data for credit accounts
       const liabilitiesData = '';

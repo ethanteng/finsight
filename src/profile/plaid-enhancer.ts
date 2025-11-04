@@ -444,8 +444,9 @@ export class PlaidProfileEnhancer {
     - Add financial context like account balances, spending patterns, and institutions
     - Keep the profile in natural language format
     - Don't duplicate information that's already in the profile
+    - CRITICAL: If you see structured data fields like HOME_ADDRESS, HOME_VALUE, HOME_VALUE_LOW, HOME_VALUE_HIGH, or HOME_VALUE_LAST_UPDATED, you MUST preserve them exactly as they appear at the end of the profile. These are system fields that must not be removed or modified.
     
-    Return ONLY the updated profile text in natural language format.
+    Return ONLY the updated profile text in natural language format, preserving any structured data fields exactly as they appear.
     `;
     
     try {
