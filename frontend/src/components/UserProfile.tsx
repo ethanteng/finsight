@@ -30,6 +30,7 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
   const [homeLoading, setHomeLoading] = useState(false);
   const [homeSaving, setHomeSaving] = useState(false);
   const [homeRefreshing, setHomeRefreshing] = useState(false);
+  const [homeEditing, setHomeEditing] = useState(false);
   const [homeError, setHomeError] = useState('');
   const [homeSuccess, setHomeSuccess] = useState('');
   
@@ -162,6 +163,22 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
     setEditing(false);
   };
 
+  const handleEditHome = () => {
+    if (homeData) {
+      setHomeAddress(homeData.address);
+      setOwnsHome(true);
+      setHomeEditing(true);
+    }
+  };
+
+  const handleCancelEditHome = () => {
+    if (homeData) {
+      setHomeAddress(homeData.address);
+      setOwnsHome(true);
+    }
+    setHomeEditing(false);
+  };
+
   const saveHomeData = async () => {
     setHomeSaving(true);
     setHomeError('');
@@ -189,7 +206,8 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
       if (response.ok) {
         const data = await response.json();
         setHomeData(data.homeData);
-        setHomeSuccess('Home value added successfully!');
+        setHomeEditing(false);
+        setHomeSuccess('Home value updated successfully!');
         setTimeout(() => setHomeSuccess(''), 3000);
       } else {
         const errorData = await response.json();
@@ -226,6 +244,8 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
       if (response.ok) {
         const data = await response.json();
         setHomeData(data.homeData);
+        setHomeAddress(data.homeData.address);
+        setOwnsHome(true);
         setHomeSuccess('Home value refreshed successfully!');
         setTimeout(() => setHomeSuccess(''), 3000);
       } else {
@@ -369,7 +389,7 @@ Note: This profile reflects our financial situation as of August 2025.`;
             
             {homeLoading ? (
               <div className="text-gray-400">Loading home data...</div>
-            ) : homeData ? (
+            ) : homeData && !homeEditing ? (
               <div>
                 <div className="bg-gray-700 rounded-lg p-4 mb-4">
                   <div className="mb-2">
@@ -390,13 +410,72 @@ Note: This profile reflects our financial situation as of August 2025.`;
                   </div>
                 </div>
                 
-                <button
-                  onClick={refreshHomeValue}
-                  disabled={homeRefreshing}
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-blue-800 transition-colors text-sm"
-                >
-                  {homeRefreshing ? 'Refreshing...' : 'Refresh Home Value'}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleEditHome}
+                    className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors text-sm"
+                  >
+                    Edit Address
+                  </button>
+                  <button
+                    onClick={refreshHomeValue}
+                    disabled={homeRefreshing}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-blue-800 transition-colors text-sm"
+                  >
+                    {homeRefreshing ? 'Refreshing...' : 'Refresh Home Value'}
+                  </button>
+                </div>
+              </div>
+            ) : homeEditing ? (
+              <div>
+                <p className="text-gray-400 text-sm mb-4">
+                  Update your home address to refresh the home value.
+                </p>
+                
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-gray-300 text-sm mb-2">
+                      Home Address
+                    </label>
+                    <input
+                      type="text"
+                      value={homeAddress}
+                      onChange={(e) => setHomeAddress(e.target.value)}
+                      placeholder="123 Main St, City, State, Zip"
+                      className="w-full p-3 border border-gray-600 rounded-lg bg-gray-700 text-white placeholder-gray-400"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="ownsHomeEdit"
+                      checked={ownsHome}
+                      onChange={(e) => setOwnsHome(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="ownsHomeEdit" className="ml-2 text-gray-300 text-sm">
+                      I own this home
+                    </label>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <button
+                      onClick={saveHomeData}
+                      disabled={homeSaving || !homeAddress.trim() || !ownsHome}
+                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-blue-800 transition-colors text-sm"
+                    >
+                      {homeSaving ? 'Saving...' : 'Save Changes'}
+                    </button>
+                    <button
+                      onClick={handleCancelEditHome}
+                      disabled={homeSaving}
+                      className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:bg-gray-800 transition-colors text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
               </div>
             ) : (
               <div>
