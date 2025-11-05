@@ -1,4 +1,6 @@
 import { AnonymizationService } from '../services/anonymization-service';
+import { FINANCIAL_INSTITUTIONS } from '../data/financial-institutions';
+import { SNAPTRADE_BROKERAGES } from '../data/snaptrade-brokerages';
 
 interface ProfileAnonymizationResult {
   anonymizedProfile: string;
@@ -171,13 +173,8 @@ export class ProfileAnonymizer {
   }
 
   private anonymizeInstitutions(text: string): string {
-    // Common financial institutions - match base names even when followed by suffixes like "- Personal"
-    const institutions = [
-      'Chase', 'Bank of America', 'Wells Fargo', 'Citibank', 'US Bank', 'PNC', 'Capital One',
-      'Ally Bank', 'Marcus', 'Fidelity', 'Vanguard', 'Schwab', 'TD Ameritrade', 'Robinhood',
-      'Navy Federal', 'PenFed', 'Alliant', 'State Employees', 'CFG Bank', 'Popular Direct',
-      'Bread Savings', 'UFB Direct', 'SnapTrade'
-    ];
+    // Combine financial institutions and SnapTrade brokerages for comprehensive coverage
+    const institutions = [...FINANCIAL_INSTITUTIONS, ...SNAPTRADE_BROKERAGES];
 
     // First, try to match institution names that might have suffixes like "- Personal" or "- Business"
     // Pattern: "CFG Bank - Personal" should match "CFG Bank" and tokenize it
