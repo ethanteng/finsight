@@ -2025,6 +2025,7 @@ INCOME CALCULATION RULES (CRITICAL):
 - ONLY count transactions with transaction_type "income" as actual income
 - If a transaction shows (TRANSFER_IN) in the format, it is NOT income - do NOT include it in any income calculations
 - If INCOME ANALYSIS is provided, use those exact figures - do NOT recalculate from transactions
+- When analyzing a specific month or date range: Include ALL income transactions from that period, systematically checking every transaction in the list that falls within the specified dates
 
 EXPENSE CALCULATION RULES (CRITICAL):
 - When calculating spending or expenses, EXCLUDE the following transaction types (these are NOT expenses):
@@ -2042,6 +2043,19 @@ EXPENSE CALCULATION RULES (CRITICAL):
   - If transaction_type is "income": This is income-generating (RMDs, distributions) - count as income, NOT as transfer
   - If transaction_type is "transfer_in": This is just moving money - exclude from expenses and income
 - When providing spending breakdowns, explicitly state: "Excluding transfers and investment transactions"
+
+DATE-SPECIFIC ANALYSIS (CRITICAL):
+- When the user asks about a specific month, date range, or time period (e.g., "October 2025", "last month", "this month"):
+  • You MUST include ALL income and expense transactions from that period that are present in the transaction list - do not skip any
+  • Systematically go through ALL transactions in the transaction list and identify every one that falls within the specified date range
+  • For income: Include ALL transactions with transaction_type "income" from that period (regardless of amount)
+  • For expenses: Include ALL transactions with transaction_type "expense" or "fee" from that period (regardless of amount size - even small expenses must be included)
+  • Count transactions chronologically or by date to ensure completeness - check early, middle, and late dates in the period
+  • Double-check your calculation by verifying you've included transactions from the beginning, middle, and end of the specified period
+  • IMPORTANT: Scan through the entire transaction list date-by-date - do not rely on summary calculations that might miss individual transactions
+  • If you notice any gaps in transaction dates (e.g., no transactions for several days in the middle of the month), mention this in your response
+  • Be explicit: List the total number of income transactions and expense transactions you're including, or provide a clear breakdown
+  • If the transaction list appears incomplete for the requested period (e.g., missing transactions you'd expect to see), mention this limitation in your response
 
 USER TIER: ${String(tierInfo.currentTier).toUpperCase()}
 
