@@ -55,16 +55,28 @@ export class TransactionNormalizationService {
     // Credit card normalization
     if (accountType === 'credit') {
       // For credit cards:
-      // - Charges (purchases) should be positive (increases debt)
+      // - Charges (purchases/expenses) should be positive (increases debt)
       // - Payments should be negative (decreases debt)
-      // Plaid typically returns charges as positive and payments as negative, so keep as-is
-      // But ensure consistency
-      if (this.isPayment(transaction)) {
-        // Payment: should be negative (reduces debt)
-        normalized.amount = -Math.abs(transaction.amount);
+      // ✅ CRITICAL: Use transaction_type if available to correctly identify expenses vs payments
+      const transactionType = (transaction as any).transaction_type;
+      if (transactionType) {
+        const typeLower = String(transactionType).toLowerCase();
+        // Payments reduce debt (negative)
+        if (typeLower === 'transfer_out' || typeLower === 'withdrawal') {
+          normalized.amount = -Math.abs(transaction.amount);
+        } else {
+          // Charges/expenses increase debt (positive)
+          normalized.amount = Math.abs(transaction.amount);
+        }
       } else {
-        // Charge: should be positive (increases debt)
-        normalized.amount = Math.abs(transaction.amount);
+        // Fallback to isPayment() if transaction_type not available
+        if (this.isPayment(transaction)) {
+          // Payment: should be negative (reduces debt)
+          normalized.amount = -Math.abs(transaction.amount);
+        } else {
+          // Charge: should be positive (increases debt)
+          normalized.amount = Math.abs(transaction.amount);
+        }
       }
     } else {
       // Depository and Investment accounts:

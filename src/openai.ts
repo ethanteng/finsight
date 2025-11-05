@@ -1171,8 +1171,25 @@ export async function askOpenAIWithEnhancedContext(
       }
     }
     
-    // ✅ Amount is already normalized correctly by TransactionNormalizationService:
-    const amount = transaction.amount || 0;
+    // ✅ Amount normalization for GPT context:
+    // For GPT, expenses should be negative (money spent) regardless of account type
+    // This provides a unified view where expenses = negative, income = positive
+    let amount = transaction.amount || 0;
+    if (transactionType) {
+      const typeLower = String(transactionType).toLowerCase();
+      // For expenses, ensure negative sign for GPT context (money spent)
+      if (typeLower === 'expense' && amount > 0) {
+        amount = -Math.abs(amount);
+      }
+      // For fees, also treat as negative (money spent)
+      if (typeLower === 'fee' && amount > 0) {
+        amount = -Math.abs(amount);
+      }
+      // For income, ensure positive sign (money earned)
+      if (typeLower === 'income' && amount < 0) {
+        amount = Math.abs(amount);
+      }
+    }
     
     // ✅ Include transaction_type if available (from categorization service)
     // Only show it once - transaction_type is the authoritative category
@@ -1992,6 +2009,10 @@ SPENDING CALCULATIONS:
 - Transaction types are shown in the format: "Merchant (TRANSACTION_TYPE): $Amount"
 - CRITICAL: The (TRANSACTION_TYPE) field uses transaction_type from aiCategory (which respects manual corrections) - this is the AUTHORITATIVE category to use
 - When in doubt, use the transaction_type shown in parentheses, NOT the Plaid categories listed in [Categories: ...]
+- AMOUNT SIGN CONVENTION: All amounts follow a unified format regardless of account type:
+  • Expenses and fees are always negative (e.g., -$100.00) - represents money spent
+  • Income is always positive (e.g., $100.00) - represents money earned
+  • Transfers, deposits, and withdrawals follow their natural flow (positive = money in, negative = money out)
 
 INCOME CALCULATION RULES (CRITICAL):
 - DO NOT count the following transaction types as income (they are money movement, NOT income):
