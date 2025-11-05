@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 const TRANSACTION_TYPES = [
   'income',
@@ -44,10 +44,18 @@ export const CategoryComparison: React.FC = () => {
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [savingTransactionId, setSavingTransactionId] = useState<string | null>(null);
   const [localTransactionTypes, setLocalTransactionTypes] = useState<Map<string, TransactionType>>(new Map());
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const scrollPositionRef = useRef<number>(0);
+  const lastEditedTransactionIdRef = useRef<string | null>(null);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3000' : 'https://finsight-backend.onrender.com');
 
-  const fetchTransactions = useCallback(async () => {
+  const fetchTransactions = useCallback(async (preserveScroll: boolean = false, scrollToTransactionId: string | null = null) => {
+    // Save scroll position before fetching if we want to preserve it
+    if (preserveScroll && tableContainerRef.current) {
+      scrollPositionRef.current = tableContainerRef.current.scrollTop;
+    }
+    
     setLoading(true);
     setError(null);
     
@@ -72,14 +80,21 @@ export const CategoryComparison: React.FC = () => {
       // Only store valid transaction types (filter out old category names like "Special", "Place")
       const typesMap = new Map<string, TransactionType>();
       data.transactions.forEach((tx: Transaction) => {
-        if (tx.transaction_type) {
-          const normalized = String(tx.transaction_type).toLowerCase().trim();
+        // Check both transaction_type and aiCategory (legacy field) for backwards compatibility
+        const typeToUse = tx.transaction_type || tx.aiCategory;
+        if (typeToUse) {
+          const normalized = String(typeToUse).toLowerCase().trim();
           if (TRANSACTION_TYPES.includes(normalized as TransactionType)) {
             typesMap.set(tx.id, normalized as TransactionType);
           }
         }
       });
       setLocalTransactionTypes(typesMap);
+      
+      // Store the transaction ID to scroll to after render
+      if (scrollToTransactionId) {
+        lastEditedTransactionIdRef.current = scrollToTransactionId;
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Unknown error');
     } finally {
@@ -90,6 +105,55 @@ export const CategoryComparison: React.FC = () => {
   useEffect(() => {
     fetchTransactions();
   }, [fetchTransactions]);
+
+  // Restore scroll position after transactions are loaded and rendered
+  useEffect(() => {
+    if (!loading && transactions.length > 0 && tableContainerRef.current) {
+      // Use requestAnimationFrame to ensure DOM is fully rendered, with a small delay for React to finish rendering
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          if (!tableContainerRef.current) return;
+          
+          if (lastEditedTransactionIdRef.current) {
+            // Scroll to the specific transaction that was just edited
+            const transactionElement = document.querySelector(`[data-transaction-id="${lastEditedTransactionIdRef.current}"]`) as HTMLElement;
+            if (transactionElement && tableContainerRef.current) {
+              // Get the table element to find the header height
+              const table = tableContainerRef.current.querySelector('table');
+              const thead = table?.querySelector('thead');
+              const headerHeight = thead?.offsetHeight || 0;
+              
+              // Calculate position relative to the scroll container
+              // offsetTop is relative to the offsetParent (table), so we need to account for the header
+              let elementTop = transactionElement.offsetTop + headerHeight;
+              
+              // If the table is inside the scroll container, we need to adjust
+              // The scroll container's scrollTop should position the element
+              const containerHeight = tableContainerRef.current.clientHeight;
+              const elementHeight = transactionElement.offsetHeight;
+              
+              // Center the element in the visible area
+              const scrollTo = elementTop - (containerHeight / 2) + (elementHeight / 2);
+              
+              tableContainerRef.current.scrollTo({
+                top: Math.max(0, scrollTo),
+                behavior: 'smooth'
+              });
+              
+              lastEditedTransactionIdRef.current = null;
+              return;
+            }
+          }
+          
+          // Otherwise, restore the saved scroll position
+          if (scrollPositionRef.current > 0) {
+            tableContainerRef.current.scrollTop = scrollPositionRef.current;
+            scrollPositionRef.current = 0;
+          }
+        }, 50); // Small delay to ensure DOM is fully updated
+      });
+    }
+  }, [loading, transactions]);
 
   const handleTransactionTypeChange = (transactionId: string, newType: TransactionType) => {
     const updatedMap = new Map(localTransactionTypes);
@@ -129,8 +193,8 @@ export const CategoryComparison: React.FC = () => {
         throw new Error(errorData.error || 'Failed to update transaction type');
       }
 
-      // Refresh the list to get updated data
-      await fetchTransactions();
+      // Refresh the list to get updated data, preserving scroll position and scrolling to this transaction
+      await fetchTransactions(true, transactionId);
       setEditingTransactionId(null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Unknown error');
@@ -190,7 +254,10 @@ export const CategoryComparison: React.FC = () => {
           No transactions found for this filter.
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-x-auto">
+        <div 
+          ref={tableContainerRef}
+          className="bg-white rounded-lg shadow overflow-x-auto max-h-[calc(100vh-250px)] overflow-y-auto"
+        >
           <table className="min-w-full divide-y divide-gray-200" style={{ tableLayout: 'auto' }}>
             <thead className="bg-gray-50">
               <tr>
@@ -220,7 +287,8 @@ export const CategoryComparison: React.FC = () => {
                 const isSaving = savingTransactionId === transaction.id;
                 // Get the transaction type, but validate it's actually a valid TransactionType
                 // Filter out invalid values like "Special", "Place" (old category names) or payment channels
-                const rawType = localTransactionTypes.get(transaction.id) || transaction.transaction_type;
+                // Check both transaction_type and aiCategory (legacy field) for backwards compatibility
+                const rawType = localTransactionTypes.get(transaction.id) || transaction.transaction_type || transaction.aiCategory;
                 const normalizedRawType = rawType ? String(rawType).toLowerCase().trim() : null;
                 const currentType = normalizedRawType && TRANSACTION_TYPES.includes(normalizedRawType as TransactionType) 
                   ? (normalizedRawType as TransactionType)
@@ -229,6 +297,7 @@ export const CategoryComparison: React.FC = () => {
                 return (
                   <tr
                     key={transaction.id}
+                    data-transaction-id={transaction.id}
                     className="hover:bg-gray-50"
                   >
                     <td className="px-6 py-4">
@@ -256,7 +325,7 @@ export const CategoryComparison: React.FC = () => {
                         <select
                           value={currentType || ''}
                           onChange={(e) => handleTransactionTypeChange(transaction.id, e.target.value as TransactionType)}
-                          className="text-sm border border-gray-300 rounded-md px-3 py-2 bg-white min-w-[180px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="text-sm border border-blue-500 rounded-md px-3 py-2 bg-white text-gray-900 min-w-[180px] focus:outline-none focus:ring-2 focus:ring-blue-500"
                           disabled={isSaving}
                           onClick={(e) => e.stopPropagation()}
                         >
@@ -314,14 +383,26 @@ export const CategoryComparison: React.FC = () => {
                             onClick={(e) => {
                               e.stopPropagation();
                               setEditingTransactionId(null);
-                              // Reset to original value
-                              if (transaction.transaction_type) {
-                                setLocalTransactionTypes(prev => {
-                                  const updated = new Map(prev);
-                                  updated.set(transaction.id, transaction.transaction_type as TransactionType);
-                                  return updated;
-                                });
+                              // Reset to original value from transaction data
+                              const originalType = transaction.transaction_type || transaction.aiCategory;
+                              if (originalType) {
+                                const normalized = String(originalType).toLowerCase().trim();
+                                if (TRANSACTION_TYPES.includes(normalized as TransactionType)) {
+                                  setLocalTransactionTypes(prev => {
+                                    const updated = new Map(prev);
+                                    updated.set(transaction.id, normalized as TransactionType);
+                                    return updated;
+                                  });
+                                } else {
+                                  // Invalid type, remove from local state
+                                  setLocalTransactionTypes(prev => {
+                                    const updated = new Map(prev);
+                                    updated.delete(transaction.id);
+                                    return updated;
+                                  });
+                                }
                               } else {
+                                // No original type, remove from local state
                                 setLocalTransactionTypes(prev => {
                                   const updated = new Map(prev);
                                   updated.delete(transaction.id);
@@ -339,6 +420,18 @@ export const CategoryComparison: React.FC = () => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
+                            // Ensure the current transaction type is loaded into local state when entering edit mode
+                            const typeToUse = transaction.transaction_type || transaction.aiCategory;
+                            if (typeToUse) {
+                              const normalized = String(typeToUse).toLowerCase().trim();
+                              if (TRANSACTION_TYPES.includes(normalized as TransactionType)) {
+                                setLocalTransactionTypes(prev => {
+                                  const updated = new Map(prev);
+                                  updated.set(transaction.id, normalized as TransactionType);
+                                  return updated;
+                                });
+                              }
+                            }
                             setEditingTransactionId(transaction.id);
                           }}
                           className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
