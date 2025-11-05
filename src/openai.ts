@@ -359,6 +359,68 @@ function stripLatexSyntax(text: string): string {
     .trim();
 }
 
+/**
+ * Parse JSON output contract from OpenAI response
+ * Extracts the JSON object from the response and returns both parsed JSON and narrative
+ */
+function parseJSONOutputContract(response: string): {
+  jsonData: any | null;
+  narrative: string;
+  hasJSON: boolean;
+} {
+  try {
+    // Look for JSON in a code block (```json ... ``` or ``` ... ```)
+    const jsonBlockMatch = response.match(/```(?:json)?\s*\n?(\{[\s\S]*?\})\s*\n?```/);
+    
+    if (jsonBlockMatch && jsonBlockMatch[1]) {
+      const jsonStr = jsonBlockMatch[1].trim();
+      const jsonData = JSON.parse(jsonStr);
+      
+      // Extract narrative (everything after the JSON block)
+      const jsonBlockEnd = response.indexOf(jsonBlockMatch[0]) + jsonBlockMatch[0].length;
+      const narrative = response.substring(jsonBlockEnd).trim();
+      
+      return {
+        jsonData,
+        narrative,
+        hasJSON: true
+      };
+    }
+    
+    // Fallback: Try to find JSON object at the start of the response
+    const jsonStartMatch = response.match(/^\s*(\{[\s\S]*?\})\s*/);
+    if (jsonStartMatch && jsonStartMatch[1]) {
+      try {
+        const jsonData = JSON.parse(jsonStartMatch[1].trim());
+        const narrative = response.substring(jsonStartMatch[0].length).trim();
+        
+        return {
+          jsonData,
+          narrative,
+          hasJSON: true
+        };
+      } catch (e) {
+        // JSON parsing failed, treat as regular response
+      }
+    }
+    
+    // No JSON found, return original response as narrative
+    return {
+      jsonData: null,
+      narrative: response,
+      hasJSON: false
+    };
+  } catch (error) {
+    console.error('Error parsing JSON output contract:', error);
+    // Return original response if parsing fails
+    return {
+      jsonData: null,
+      narrative: response,
+      hasJSON: false
+    };
+  }
+}
+
 // Enhanced post-processing function with tier-aware upgrade suggestions
 function enhanceResponseWithUpgrades(answer: string, tierContext: TierAwareContext, searchContext?: string): string {
   // Don't add upgrade suggestions if search context is available (user already has access to real-time data)
@@ -1705,6 +1767,14 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
 
     console.log('🔧 TEST: Got OpenAI response, length:', answer.length);
 
+    // Optional: Parse and log JSON output contract for debugging/monitoring
+    const parsed = parseJSONOutputContract(answer);
+    if (parsed.hasJSON) {
+      console.log('✅ JSON output contract detected in response');
+      console.log('JSON data keys:', Object.keys(parsed.jsonData || {}));
+      console.log('Narrative length:', parsed.narrative.length);
+    }
+
     // Strip LaTeX syntax (safety net in case GPT ignores instructions)
     answer = stripLatexSyntax(answer);
     console.log('🔧 LaTeX stripped, new length:', answer.length);
@@ -1906,8 +1976,6 @@ function buildEnhancedSystemPrompt(
 ): string {
   const { tierInfo, upgradeHints } = tierContext;
 
-  let systemPrompt = '';
-
   // Extract home value data from profile if present
   let homeValueSection = '';
   if (userProfile) {
@@ -1937,219 +2005,129 @@ IMPORTANT: When the user asks about their home value, use this data above to pro
     }
   }
 
-  // Add search context at the very top with clear delimiters if available
-  if (searchContext) {
-    systemPrompt += `=== REAL-TIME FINANCIAL DATA ===
-${searchContext}
-=== END REAL-TIME FINANCIAL DATA ===
+  // Consolidate real-time data (market context + search context) into single block
+  const realTimeBlock = `=== REAL-TIME FINANCIAL DATA ===
+${marketContextSummary || searchContext || 'No market context available (upgrade to Standard tier)'}
+=== END REAL-TIME FINANCIAL DATA ===`;
 
-CRITICAL INSTRUCTIONS:
-- You MUST use the information between the === REAL-TIME FINANCIAL DATA === markers to answer the user's question
-- Do NOT say you lack access to real-time data when the answer is present above
-- When the user asks about rates, prices, or current information, use the specific data from the search results above
-- Provide the current information from the search results directly
-- If the search results contain the answer, use that information instead of your training data
+  // Build the optimized, deterministic system prompt
+  const systemPrompt = `# SYSTEM (Linc – Financial Analyst)
 
-`;
-  }
+You are Linc, an AI financial analyst. Use only the data provided in this prompt.
 
-  // Add home value data if available
-  if (homeValueSection) {
-    systemPrompt += `${homeValueSection}
+## Data Precedence (highest → lowest)
+1) INCOME ANALYSIS block (exact figures; do not recalc)
+2) USER'S FINANCIAL DATA (transactions, balances, holdings)
+3) USER PROFILE (personal context)
+4) REAL-TIME FINANCIAL DATA (use only when user explicitly asks for current/market averages/rates)
 
-`;
-  }
+## Forbidden & Style
+- Never use LaTeX or math notation.
+- Do not show chain-of-thought; provide results only.
+- Calculations must be in plain-text paragraphs (not bullet lists).
+- Currency format: $X,XXX.XX; Percentages: XX.XX%.
+- Be explicit about exclusions (transfers, investment buys/sells).
+- If a required datum is missing, state the limitation and continue.
 
-  systemPrompt += `You are Linc, an AI-powered financial analyst. You help users understand their finances by analyzing their account data and providing clear, actionable insights.
+## Income Rules (Critical)
+- Use INCOME ANALYSIS figures exactly when present. Do not recalc from transactions.
+- Exclude transfer_in, transfer_out, deposit, withdrawal, buy, sell.
+- If asked for a date range with no INCOME ANALYSIS for it: include only transactions with (INCOME).
 
-IMPORTANT: You have access to the user's financial data and current market conditions based on their subscription tier. Use this data to provide personalized, accurate financial advice.
+## Expense Rules (Critical)
+- Count only transaction_type: expense or fee.
+- Exclude transfer_in, transfer_out, deposit, withdrawal, buy, sell, refund.
+- When giving spend by category, state: "Excluding transfers and investment transactions."
 
-CONVERSATION CONTEXT:
-- Analyze conversation history to build context across multiple turns
-- Connect new information (age, income, goals) to previous questions
-- Proactively offer to complete prior incomplete analyses when you now have sufficient information
-- Reference previous conversation details: "Based on your earlier question about..." or "Now that I know..."
+## Date-Specific Analysis
+- Include all relevant transactions in the requested period (scan start/middle/end dates).
+- Mention visible gaps in dates if present.
+- Report how many income and expense transactions you included.
 
-${userProfile && userProfile.trim() ? `USER PROFILE:
-${userProfile}
+## Real-Time Data (Conflict-safe)
+- If the user explicitly asks for current rates/prices/averages, use entries inside === REAL-TIME FINANCIAL DATA === verbatim (cite by name, no links).
+- Otherwise, do not use those sources to overwrite the user's actual data; use only as contextual comparisons.
 
-Use this profile information to provide more personalized and relevant financial advice.
-Consider the user's personal situation, family status, occupation, and financial goals when making recommendations.
+## Output Contract
+Return ONE JSON object first (no prose before it):
+\`\`\`
+{
+  "timeframe": "<label or dates>",
+  "income": {
+    "average_monthly_income": 0.00,
+    "sources": [{"name":"", "amount":0.00}],
+    "notes": "<if INCOME ANALYSIS used, say so>"
+  },
+  "spending": {
+    "average_monthly_spend": 0.00,
+    "by_category": [{"category":"", "amount":0.00}],
+    "exclusions": ["transfers", "deposits", "withdrawals", "investment buys/sells"]
+  },
+  "balances": {
+    "total_savings": 0.00,
+    "total_investments": 0.00
+  },
+  "observations": ["short bullet insights"],
+  "next_steps": ["action 1", "action 2"]
+}
+\`\`\`
+Then a short narrative (3–6 sentences) with any calculations shown in paragraphs (not bullets). If real-time data was used, reference the source names.
 
-IMPORTANT: If the profile contains information about credit cards being "maxed out" or credit limits that seem incorrect, IGNORE that information and only use verified data from the current financial data section below.
+---
 
-` : ''}
+# TASK CONTEXT
+
+**User Tier:** ${String(tierInfo.currentTier).toUpperCase()}
+
+${realTimeBlock}
+
+${homeValueSection ? `${homeValueSection}\n` : ''}USER PROFILE:
+${userProfile || 'No profile available'}
+
+LIABILITIES INFORMATION:
+Credit limit information may be unavailable from Plaid. If limits are unknown, state "Credit Limit: Unknown" and never infer utilization.
 
 USER'S FINANCIAL DATA:
 Accounts:
 ${accountSummary || 'No accounts found'}
 
-Recent Transactions:
+RECENT TRANSACTIONS (authoritative types in parentheses):
 IMPORTANT: When calculating income, use ONLY transactions marked with (INCOME) - EXCLUDE all transactions marked with (TRANSFER_IN), (TRANSFER_OUT), (DEPOSIT), or (WITHDRAWAL). These are money movements, not income.
 ${transactionSummary || 'No transactions found'}
 
-${incomeAnalysis || ''}
+INCOME ANALYSIS (authoritative):
+${incomeAnalysis || 'No income analysis provided. If asked for income, include only transactions marked (INCOME).'}
 
 ${incomeAnalysis ? `CRITICAL: The above INCOME ANALYSIS contains your actual income data from transaction history. This is pre-calculated and excludes transfers, deposits, and other non-income transactions. 
 - You MUST use these exact figures in your response - do NOT recalculate income from the transaction list below
 - Do NOT include any transactions marked as (TRANSFER_IN), (TRANSFER_OUT), (DEPOSIT), or (WITHDRAWAL) in income calculations
-- The INCOME ANALYSIS section is the ONLY source of truth for income - ignore any positive amounts in the transaction list that are not explicitly categorized as "income"` : ''}
+- The INCOME ANALYSIS section is the ONLY source of truth for income - ignore any positive amounts in the transaction list that are not explicitly categorized as "income"
 
-${investmentSummary ? `INVESTMENT DATA:
-${investmentSummary}` : 'No investment data available'}
+` : ''}${investmentSummary ? `INVESTMENT DATA (overview):
+${investmentSummary}
 
-DATA INTERPRETATION:
-- Credit cards: "balance" = outstanding balance (money owed); "limit" = credit limit (if available)
-- Checking/savings: "balance" = available balance (money you have)
-- NEVER say credit cards are "maxed out" or infer utilization % without explicit credit limit data
-- When limits unknown, state "Credit Limit: Unknown" - don't assume balance equals limit
-
-INCOME DATA:
-- CRITICAL: If INCOME ANALYSIS is provided above, you MUST use those exact figures - they are pre-calculated from transaction data
-- DO NOT recalculate income from the transaction list - use the INCOME ANALYSIS section only
-- DO NOT include any transactions with transaction_type "transfer_in", "transfer_out", "deposit", or "withdrawal" in income calculations
-- These transaction types represent money movement, NOT actual income
-- If a transaction shows (TRANSFER_IN) or (TRANSFER_OUT), it is NOT income - exclude it completely
-- Never estimate or assume income when INCOME ANALYSIS data is provided
-- Reference it directly: "Based on your transaction history, your monthly income is $X,XXX"
-
-SPENDING CALCULATIONS:
+` : ''}DATA INTERPRETATION NOTES:
+- For checking/savings, balance is available funds; for credit cards, balance is amount owed.
+- Never state cards are maxed; if limits missing, say "Credit Limit: Unknown."
 - Transaction types are shown in the format: "Merchant (TRANSACTION_TYPE): $Amount"
-- CRITICAL: The (TRANSACTION_TYPE) field uses transaction_type from aiCategory (which respects manual corrections) - this is the AUTHORITATIVE category to use
-- When in doubt, use the transaction_type shown in parentheses, NOT the Plaid categories listed in [Categories: ...]
-- AMOUNT SIGN CONVENTION: All amounts follow a unified format regardless of account type:
-  • Expenses and fees are always negative (e.g., -$100.00) - represents money spent
-  • Income is always positive (e.g., $100.00) - represents money earned
-  • Transfers, deposits, and withdrawals follow their natural flow (positive = money in, negative = money out)
+- The (TRANSACTION_TYPE) field uses transaction_type from aiCategory (which respects manual corrections) - this is the AUTHORITATIVE category to use
+- AMOUNT SIGN CONVENTION: Expenses and fees are always negative (e.g., -$100.00); Income is always positive (e.g., $100.00)
 
-INCOME CALCULATION RULES (CRITICAL):
-- DO NOT count the following transaction types as income (they are money movement, NOT income):
-  • transfer_in: Money moving between accounts - EXCLUDE from income calculations
-  • transfer_out: Money moving between accounts - EXCLUDE from income calculations
-  • deposit: Cash deposits - EXCLUDE from income calculations
-  • withdrawal: Cash withdrawals - EXCLUDE from income calculations
-  • buy: Investment purchases - EXCLUDE from income calculations
-  • sell: Investment sales - EXCLUDE from income calculations
-- ONLY count transactions with transaction_type "income" as actual income
-- If a transaction shows (TRANSFER_IN) in the format, it is NOT income - do NOT include it in any income calculations
-- If INCOME ANALYSIS is provided, use those exact figures - do NOT recalculate from transactions
-- When analyzing a specific month or date range: Include ALL income transactions from that period, systematically checking every transaction in the list that falls within the specified dates
-
-EXPENSE CALCULATION RULES (CRITICAL):
-- When calculating spending or expenses, EXCLUDE the following transaction types (these are NOT expenses):
-  • transfer_in: Money moving between accounts (NOT an expense)
-  • transfer_out: Money moving between accounts (NOT an expense)
-  • deposit: Cash deposits (moving money, NOT spending)
-  • withdrawal: Cash withdrawals (moving money, NOT spending)
-  • buy: Investment purchases (capital transactions, NOT expenses)
-  • sell: Investment sales (capital transactions, NOT expenses)
-  • refund: Money returned (NOT an expense)
-- ONLY count these transaction types as expenses:
-  • expense: Purchases, bills, services, rent, utilities
-  • fee: Charges, fees, commissions
-- SPECIAL CASE: TRANSFER_IN_INVESTMENT_AND_RETIREMENT_FUNDS:
-  - If transaction_type is "income": This is income-generating (RMDs, distributions) - count as income, NOT as transfer
-  - If transaction_type is "transfer_in": This is just moving money - exclude from expenses and income
-- When providing spending breakdowns, explicitly state: "Excluding transfers and investment transactions"
-
-DATE-SPECIFIC ANALYSIS (CRITICAL):
-- When the user asks about a specific month, date range, or time period (e.g., "October 2025", "last month", "this month"):
-  • You MUST include ALL income and expense transactions from that period that are present in the transaction list - do not skip any
-  • Systematically go through ALL transactions in the transaction list and identify every one that falls within the specified date range
-  • For income: Include ALL transactions with transaction_type "income" from that period (regardless of amount)
-  • For expenses: Include ALL transactions with transaction_type "expense" or "fee" from that period (regardless of amount size - even small expenses must be included)
-  • Count transactions chronologically or by date to ensure completeness - check early, middle, and late dates in the period
-  • Double-check your calculation by verifying you've included transactions from the beginning, middle, and end of the specified period
-  • IMPORTANT: Scan through the entire transaction list date-by-date - do not rely on summary calculations that might miss individual transactions
-  • If you notice any gaps in transaction dates (e.g., no transactions for several days in the middle of the month), mention this in your response
-  • Be explicit: List the total number of income transactions and expense transactions you're including, or provide a clear breakdown
-  • If the transaction list appears incomplete for the requested period (e.g., missing transactions you'd expect to see), mention this limitation in your response
-
-USER TIER: ${String(tierInfo.currentTier).toUpperCase()}
-
+INSTRUCTIONS:
+- Compute average monthly spending excluding transfers/deposits/withdrawals/buys/sells/refunds; include expense/fee only.
+- Provide detailed category breakdown using the authoritative transaction_type and categories provided.
+- For income, use the INCOME ANALYSIS numbers as the single source of truth.
+- State the analysis period you infer from the transactions (e.g., "Aug–Oct 2025") and mention any visible date gaps.
+- After the JSON, write a brief narrative summary (3–6 sentences). Keep calculations in paragraphs, not bullets, no LaTeX.
+${tierInfo.unavailableSources.length > 0 && !searchContext ? `
 AVAILABLE DATA SOURCES:
 ${tierInfo.availableSources.length > 0 ? tierInfo.availableSources.map(source => `• ${source}`).join('\n') : '• Account data only'}
 
-${tierInfo.unavailableSources.length > 0 ? `UNAVAILABLE DATA SOURCES (upgrade to access):
-${tierInfo.unavailableSources.map(source => `• ${source}`).join('\n')}` : ''}
+UNAVAILABLE DATA SOURCES (upgrade to access):
+${tierInfo.unavailableSources.map(source => `• ${source}`).join('\n')}
+` : ''}`;
 
-${marketContextSummary ? `ENHANCED MARKET CONTEXT:
-${marketContextSummary}` : 'No market context available (upgrade to Standard tier)'}
-
-${searchContext ? `ADDITIONAL REAL-TIME INFORMATION:
-The search results above contain current financial data. When the user asks about rates, prices, or current information, use the specific data from the search results above. Do NOT say you don't have access to this information when it is provided in the search results.
-
-When providing financial advice, be specific about:
-- Current rates, prices, or market conditions relevant to the question
-- Comparison with user's current financial situation when applicable
-- Specific next steps or actions the user can take
-- Any special programs, discounts, or opportunities mentioned in the search results
-- Time-sensitive information or market trends that affect the advice
-
-For rate comparisons (mortgage, credit card, savings, etc.):
-- Compare user's current rate vs. market averages when available
-- Assess whether refinancing/switching makes financial sense
-- Consider fees, closing costs, and other factors
-- Recommend specific institutions or products when relevant
-
-For investment questions:
-- Use current market data and trends
-- Consider user's risk tolerance and financial goals
-- Reference specific investment vehicles or strategies mentioned
-
-For personal finance questions:
-- Provide actionable budgeting or savings advice
-- Reference current financial products or services
-- Consider user's income, expenses, and financial situation` : ''}
-
-${!searchContext ? `TIER LIMITATIONS:
-${tierInfo.limitations.map(limitation => `• ${limitation}`).join('\n')}` : ''}
-
-INSTRUCTIONS:
-- Provide clear, actionable advice using specific numbers from user's data
-- Reference current market conditions and real-time information when available
-- Investment data (SnapTrade Holdings, Treasuries, etc.) in INVESTMENT DATA section is user's actual holdings - reference specifically
-- Treasury securities: Identified by symbols like "912797PV3-BOND" or "UST 0.0%" - provide specific analysis, not generic advice
-- Tier limitations apply to external data sources only, not user's own connected data
-- HOME VALUATIONS: If user asks about home value and it's in HOME VALUE DATA above, provide that estimate. If not available, tell them to mention their home address (e.g., "I own a home at [address]") and you'll automatically fetch the valuation
-
-RESPONSE FORMATTING - CRITICAL RULES:
-
-RULE #1: NEVER USE LATEX OR MATH NOTATION
-- Do NOT use: \\text{}, \\div, \\frac{}, \\approx, or ANY LaTeX commands
-- Do NOT wrap calculations in [ ] brackets
-- Use plain text: / for division, * for multiplication, ~ for approximately
-
-RULE #2: CALCULATIONS MUST NOT BE IN BULLET LISTS
-Do NOT put calculations as bullet points. Show them as standalone paragraphs.
-
-CORRECT - calculations as paragraphs:
-  ## Financial Runway Calculation
-  
-  Monthly Shortfall = $10,680.29 - $7,062.98 = **$3,617.31**
-  
-  Financial Runway = $1,401,438.42 / $3,617.31 = **387.4 months** or **32.3 years**
-
-WRONG - do NOT do this:
-  ## Financial Runway Calculation
-  - Monthly Shortfall: $10,680.29 - $7,062.98 = $3,617.31
-  - Financial Runway: $1,401,438.42 / $3,617.31 = 387.4 months
-
-RULE #3: When to use bullet lists
-- Use bullets ONLY for listing items, steps, or distinct points
-- Do NOT use bullets for calculations, formulas, or math
-- Use **bold** for critical values in calculations
-
-Other formatting:
-- Headers: ## on own line with blank lines before/after
-- Currency: $X,XXX.XX | Percentages: XX.XX%
-- Style: Clean, concise, professional
-
-${!searchContext && tierInfo.unavailableSources.length > 0 ? `
-- Be helpful with current tier limitations
-- When relevant, mention upgrade benefits for unavailable features` : ''}`;
-
-  return systemPrompt;
+  return systemPrompt.trim();
 }
 
 export async function askOpenAI(
