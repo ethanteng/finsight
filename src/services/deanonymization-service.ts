@@ -44,11 +44,19 @@ export class DeanonymizationService {
     // Note: Institution tokens may appear in lists or comma-separated contexts
     sessionMaps.institutionRealDataMap.forEach((realName, token) => {
       const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      // Use word boundary for most cases
+      
+      // Handle cases where token appears in comma-separated lists FIRST (before general word boundary)
+      // Pattern: "CFG Bank - Personal, Institution_1, Popular Direct" or "... Institution_1, and ..."
+      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`(,|and|or)\\s+${escapedToken}\\b`, 'gi'), `$1 ${realName}`);
+      
+      // Pattern: "Institution_1, Institution_2" - token followed by comma or "and/or"
+      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`\\b${escapedToken}(?=\\s*[,]|\\s+and|\\s+or)`, 'gi'), realName);
+      
+      // Pattern: "Institution_1" at end of list: "... and Institution_1."
+      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`(and|or)\\s+${escapedToken}(?=\\s*[.,]|\\s*$)`, 'gi'), `$1 ${realName}`);
+      
+      // General word boundary match (most common case) - do this LAST to avoid conflicts
       userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`\\b${escapedToken}\\b`, 'g'), realName);
-      // Also handle cases where token appears in comma-separated lists (e.g., "CFG Bank - Personal, Institution_1, Popular Direct")
-      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`(,|and|or)\\s*${escapedToken}\\b`, 'g'), `$1 ${realName}`);
-      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`\\b${escapedToken}(?=,|and|or)`, 'g'), realName);
     });
     
     // Replace merchant tokens with real names (use word boundaries to avoid partial matches)
@@ -127,13 +135,14 @@ export class DeanonymizationService {
     });
     
     // Age tokens (stored as numeric age)
-    // Note: Age tokens may appear in contexts like "Age_1-year-old", so we need to handle underscores
+    // Note: Age tokens may appear in contexts like "Age_1-year-old" or "76-year-old", so we need to handle various patterns
     sessionMaps.ageRealDataMap.forEach((realAge, token) => {
       const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      // Use word boundary OR underscore/hyphen patterns to catch "Age_1-year-old" type contexts
-      // First try word boundary match (most common)
+      // Handle "Age_1-year-old" pattern - replace token before "-year-old" with real age
+      userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`${escapedToken}(?=-year-old)`, 'gi'), realAge.toString());
+      // Handle "Age_1-year-old" with word boundary for standalone cases
       userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`\\b${escapedToken}\\b`, 'g'), realAge.toString());
-      // Also handle cases where token appears before hyphen (e.g., "Age_1-year-old")
+      // Also handle cases where token appears before any hyphen (fallback)
       userFriendlyResponse = userFriendlyResponse.replace(new RegExp(`${escapedToken}(?=-)`, 'g'), realAge.toString());
     });
     

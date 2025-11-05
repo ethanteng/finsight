@@ -171,18 +171,38 @@ export class ProfileAnonymizer {
   }
 
   private anonymizeInstitutions(text: string): string {
-    // Common financial institutions
+    // Common financial institutions - match base names even when followed by suffixes like "- Personal"
     const institutions = [
       'Chase', 'Bank of America', 'Wells Fargo', 'Citibank', 'US Bank', 'PNC', 'Capital One',
       'Ally Bank', 'Marcus', 'Fidelity', 'Vanguard', 'Schwab', 'TD Ameritrade', 'Robinhood',
-      'Navy Federal', 'PenFed', 'Alliant', 'State Employees'
+      'Navy Federal', 'PenFed', 'Alliant', 'State Employees', 'CFG Bank', 'Popular Direct',
+      'Bread Savings', 'UFB Direct', 'SnapTrade'
     ];
 
+    // First, try to match institution names that might have suffixes like "- Personal" or "- Business"
+    // Pattern: "CFG Bank - Personal" should match "CFG Bank" and tokenize it
     institutions.forEach(institution => {
-      const regex = new RegExp(`\\b${institution}\\b`, 'gi');
-      text = text.replace(regex, (match) => {
+      // Escape special regex characters in institution name
+      const escapedInstitution = institution.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      
+      // Match institution name followed by optional suffix (e.g., " - Personal", " - Business")
+      // This handles cases like "CFG Bank - Personal" where we want to tokenize "CFG Bank"
+      const regexWithSuffix = new RegExp(`\\b${escapedInstitution}(?=\\s*-\\s*[\\w\\s]+|\\s*[,]|\\s*and|\\s*or|\\s*$)`, 'gi');
+      text = text.replace(regexWithSuffix, (match) => {
         const token = this.anonymizationService.tokenizeInstitution(this.userId, institution);
         return token;
+      });
+      
+      // Also match standalone institution names (fallback for cases without suffixes)
+      const regexStandalone = new RegExp(`\\b${escapedInstitution}\\b`, 'gi');
+      text = text.replace(regexStandalone, (match) => {
+        // Check if this wasn't already replaced by the previous regex
+        // If it starts with "Institution_", it was already tokenized
+        if (!match.startsWith('Institution_')) {
+          const token = this.anonymizationService.tokenizeInstitution(this.userId, institution);
+          return token;
+        }
+        return match;
       });
     });
 

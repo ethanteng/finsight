@@ -1084,6 +1084,14 @@ export async function askOpenAIWithEnhancedContext(
     const subtype = isDemo ? account.type : (account.subtype || account.type);
     let summary = `- ${account.name} (${account.type}/${subtype}): $${balance?.toFixed(2) || '0.00'}`;
     
+    // Add institution information if available (account.institution is already anonymized if anonymization ran)
+    if (!isDemo && account.institution && userId) {
+      // Use the anonymization service to tokenize the institution if not already tokenized
+      // Note: account.institution should already be tokenized from line 900, but check if it's still a real name
+      const institutionToken = anonymizationService.tokenizeInstitution(userId, String(account.institution));
+      summary += ` at ${institutionToken}`;
+    }
+    
     // Add interest rate for loans in demo mode
     if (isDemo && account.type === 'loan' && (account as any).interestRate) {
       summary += ` (Rate: ${(account as any).interestRate}%)`;
