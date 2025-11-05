@@ -125,7 +125,7 @@ export const CategoryComparison: React.FC = () => {
               
               // Calculate position relative to the scroll container
               // offsetTop is relative to the offsetParent (table), so we need to account for the header
-              let elementTop = transactionElement.offsetTop + headerHeight;
+              const elementTop = transactionElement.offsetTop + headerHeight;
               
               // If the table is inside the scroll container, we need to adjust
               // The scroll container's scrollTop should position the element
