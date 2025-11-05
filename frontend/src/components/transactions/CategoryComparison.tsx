@@ -233,7 +233,7 @@ export const CategoryComparison: React.FC = () => {
         <div className="flex-1" />
         
         <button
-          onClick={fetchTransactions}
+          onClick={() => fetchTransactions()}
           disabled={loading}
           className="px-4 py-2 bg-gray-600 text-white rounded-md text-sm font-medium hover:bg-gray-700 disabled:opacity-50"
         >
