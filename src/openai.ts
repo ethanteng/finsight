@@ -935,8 +935,7 @@ export async function askOpenAIWithEnhancedContext(
           .sort(([,a], [,b]) => b - a)
           .slice(0, 5);
         
-        incomeAnalysis = `\n\nINCOME ANALYSIS (from transaction data):
-- Average Monthly Income: $${avgMonthlyIncome.toFixed(2)}
+        incomeAnalysis = `- Average Monthly Income: $${avgMonthlyIncome.toFixed(2)}
 - Income Sources: ${topIncomeSources.map(([source, amount]) => `${source}: $${amount.toFixed(2)}`).join(', ')}
 - Total Income Transactions: ${incomeTransactions.length}
 - Analysis Period: ${completeMonths.length} complete month(s) (${monthlyIncome.size} total months with transactions)`;
@@ -1003,21 +1002,23 @@ export async function askOpenAIWithEnhancedContext(
   
   // Only fetch market context if question suggests it's needed
   if (questionNeeds.needsMarketContext) {
-  try {
-    const { MarketNewsManager } = await import('./market-news/manager');
-    const marketNewsManager = new MarketNewsManager();
-    marketContextSummary = await marketNewsManager.getMarketContext(tier);
-    console.log('OpenAI Enhanced: Market news context length:', marketContextSummary.length);
-  } catch (error) {
-    console.error('OpenAI Enhanced: Error getting market news context:', error);
-    // Fallback to data orchestrator if market news manager fails
     try {
-      marketContextSummary = await dataOrchestrator.getMarketContextSummary(tier, isDemo);
-      console.log('OpenAI Enhanced: Fallback to data orchestrator market context length:', marketContextSummary.length);
-    } catch (fallbackError) {
-      console.error('OpenAI Enhanced: Fallback market context also failed:', fallbackError);
-      marketContextSummary = '';
-    }
+      const { MarketNewsManager } = await import('./market-news/manager');
+      const marketNewsManager = new MarketNewsManager();
+      marketContextSummary = await marketNewsManager.getMarketContext(tier);
+      console.log('OpenAI Enhanced: Market news context length:', marketContextSummary.length);
+      console.log('OpenAI Enhanced: Market news context preview:', marketContextSummary.substring(0, 200));
+    } catch (error) {
+      console.error('OpenAI Enhanced: Error getting market news context:', error);
+      // Fallback to data orchestrator if market news manager fails
+      try {
+        marketContextSummary = await dataOrchestrator.getMarketContextSummary(tier, isDemo);
+        console.log('OpenAI Enhanced: Fallback to data orchestrator market context length:', marketContextSummary.length);
+        console.log('OpenAI Enhanced: Fallback market context preview:', marketContextSummary.substring(0, 200));
+      } catch (fallbackError) {
+        console.error('OpenAI Enhanced: Fallback market context also failed:', fallbackError);
+        marketContextSummary = '';
+      }
     }
   } else {
     console.log('OpenAI Enhanced: Skipping market context (not needed for this question)');
@@ -2005,7 +2006,21 @@ IMPORTANT: When the user asks about their home value, use this data above to pro
     }
   }
 
-  // Consolidate real-time data (market context + search context) into single block
+  // Build market context section separately (for logging/viewing)
+  const marketContextSection = marketContextSummary 
+    ? `MARKET CONTEXT:
+${marketContextSummary}
+` 
+    : '';
+  
+  // Build search context section separately (for logging/viewing)
+  const searchContextSection = searchContext 
+    ? `SEARCH CONTEXT (Real-Time Data):
+${searchContext}
+` 
+    : '';
+  
+  // Consolidate real-time data for prompt (combines both for efficiency)
   const realTimeBlock = `=== REAL-TIME FINANCIAL DATA ===
 ${marketContextSummary || searchContext || 'No market context available (upgrade to Standard tier)'}
 === END REAL-TIME FINANCIAL DATA ===`;
@@ -2019,7 +2034,8 @@ You are Linc, an AI financial analyst. Use only the data provided in this prompt
 1) INCOME ANALYSIS block (exact figures; do not recalc)
 2) USER'S FINANCIAL DATA (transactions, balances, holdings)
 3) USER PROFILE (personal context)
-4) REAL-TIME FINANCIAL DATA (use only when user explicitly asks for current/market averages/rates)
+4) MARKET CONTEXT (current market conditions and trends)
+5) REAL-TIME FINANCIAL DATA (use only when user explicitly asks for current/market averages/rates)
 
 ## Forbidden & Style
 - Never use LaTeX or math notation.
@@ -2079,7 +2095,7 @@ Then a short narrative (3–6 sentences) with any calculations shown in paragrap
 
 **User Tier:** ${String(tierInfo.currentTier).toUpperCase()}
 
-${realTimeBlock}
+${marketContextSection}${searchContextSection}${realTimeBlock}
 
 ${homeValueSection ? `${homeValueSection}\n` : ''}USER PROFILE:
 ${userProfile || 'No profile available'}
