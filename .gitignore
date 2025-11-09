@@ -97,3 +97,6 @@ prisma/schema.prisma.backup.*
 
 # GPT context logs
 gpt-context-*.json
+
+.cursorignore
+.DS_Store
