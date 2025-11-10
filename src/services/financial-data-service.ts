@@ -4,7 +4,7 @@ import { SnapTradeService } from '../snaptrade';
 import { BalanceService } from './balance-service';
 import { TokenValidationService, TokenStatus, PlaidTokenHealth, SnapTradeTokenHealth } from './token-validation-service';
 import { TransactionNormalizationService } from './transaction-normalization-service';
-import { TransactionCategorizationService, CategorizationDetail } from './transaction-categorization-service';
+import { TransactionCategorizationService, CategorizationDetail, CategorizedTransaction } from './transaction-categorization-service';
 import { persistTransactionsToDb, persistSnapTradeActivitiesToDb } from '../data/persistence';
 import { cacheService } from '../data/cache';
 
@@ -302,7 +302,10 @@ export class FinancialDataService {
     // This ensures we have transaction_type available for normalization and filtering
     console.log(`FinancialDataService: skipCategorization flag = ${options?.skipCategorization}, banking transactions = ${mergedData.bankingTransactions.length}, investment transactions = ${mergedData.investments.transactions.length}`);
     if (!options?.skipCategorization && (mergedData.bankingTransactions.length > 0 || mergedData.investments.transactions.length > 0)) {
-      const accountsMap = new Map(mergedData.accounts.map(acc => [acc.account_id, acc]));
+      const accountsMap = new Map<string, Account>();
+      mergedData.accounts.forEach((acc: Account) => {
+        accountsMap.set(acc.account_id, acc);
+      });
       
       console.log('FinancialDataService: Categorizing transactions before normalization');
       
@@ -372,7 +375,7 @@ export class FinancialDataService {
       
       console.log(`FinancialDataService: Loaded ${existingCategorizationsMap.size} existing categorizations (${manualCorrectionCount} manual corrections) from database`);
       
-      const buildDetail = (originalTx: any, categorizedTx: any): CategorizationDetail => {
+      const buildDetail = (originalTx: any, categorizedTx: CategorizedTransaction): CategorizationDetail => {
             const account = accountsMap.get(originalTx.account_id);
             const pfc = (originalTx as any).personal_finance_category;
                 return {
@@ -407,9 +410,9 @@ export class FinancialDataService {
             };
           };
           
-      const processTransactionGroup = async (
-            transactions: any[],
-            getTransactionId: (tx: any) => string | undefined,
+          const processTransactionGroup = async (
+            transactions: Array<Record<string, any>>,
+            getTransactionId: (tx: Record<string, any>) => string | undefined,
             label: 'banking' | 'investment'
           ): Promise<{
             results: any[];
