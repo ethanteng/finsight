@@ -4,7 +4,7 @@ import { SnapTradeService } from '../snaptrade';
 import { BalanceService } from './balance-service';
 import { TokenValidationService, TokenStatus, PlaidTokenHealth, SnapTradeTokenHealth } from './token-validation-service';
 import { TransactionNormalizationService } from './transaction-normalization-service';
-import { TransactionCategorizationService, CategorizationDetail } from './transaction-categorization-service';
+import { TransactionCategorizationService, CategorizationDetail, TransactionType } from './transaction-categorization-service';
 import { persistTransactionsToDb, persistSnapTradeActivitiesToDb } from '../data/persistence';
 import { cacheService } from '../data/cache';
 
@@ -410,6 +410,28 @@ export class FinancialDataService {
             };
           };
           
+      const inferInvestmentTransactionType = (tx: Record<string, any>): TransactionType => {
+        const amount = Number(tx.amount) || 0;
+        const rawType = `${tx.type || ''} ${tx.subtype || ''}`.toLowerCase();
+
+        if (rawType.includes('dividend') || rawType.includes('interest') || rawType.includes('distribution')) {
+          return 'income';
+        }
+        if (rawType.includes('sell') || rawType.includes('redemption') || rawType.includes('liquidation')) {
+          return 'sell';
+        }
+        if (rawType.includes('buy') || rawType.includes('purchase')) {
+          return 'buy';
+        }
+        if (amount > 0) {
+          return 'sell';
+        }
+        if (amount < 0) {
+          return 'buy';
+        }
+        return 'adjustment';
+      };
+
           const processTransactionGroup = async (
             transactions: Array<Record<string, any>>,
             getTransactionId: (tx: Record<string, any>) => string | undefined,
@@ -485,38 +507,67 @@ export class FinancialDataService {
             if (toCategorize.length > 0) {
               const transactionsToCategorize = toCategorize.map(item => item.tx);
               recategorizedCount = transactionsToCategorize.length;
-              
-        if (options?.collectCategorizationDetails) {
-          const result = await this.transactionCategorizationService.categorizeTransactionBatchWithDetails(
-                  transactionsToCategorize,
-            accountsMap
-          );
-                
-                result.transactions.forEach((categorizedTx, idx) => {
-                  const originalIndex = toCategorize[idx].index;
-                  output[originalIndex] = {
-                    ...categorizedTx,
-                    iso_currency_code: categorizedTx.iso_currency_code || 'USD'
-                  };
+
+              if (label === 'investment') {
+                console.log('FinancialDataService: Using fallback categorization for investment transactions', {
+                  total: transactions.length,
+                  fallbackCount: transactionsToCategorize.length
                 });
-                
-          allCategorizationDetails.push(...result.details);
-          gptCategorizedCount += result.summary.gptCategorized;
-          plaidFallbackCount += result.summary.plaidFallback;
-          totalConfidence += result.summary.averageConfidence * result.summary.total;
-        } else {
-          const categorized = await this.transactionCategorizationService.categorizeTransactionBatch(
-                  transactionsToCategorize,
-            accountsMap
-          );
-                
-                categorized.forEach((categorizedTx, idx) => {
-                  const originalIndex = toCategorize[idx].index;
-                  output[originalIndex] = {
-                    ...categorizedTx,
-                    iso_currency_code: categorizedTx.iso_currency_code || 'USD'
+
+                transactionsToCategorize.forEach((tx, idx) => {
+                  const transactionType = inferInvestmentTransactionType(tx);
+                  const fallbackCategorized = {
+                    ...tx,
+                    transaction_type: transactionType,
+                    categorization_confidence: 0.6,
+                    categorization_method: 'fallback',
+                    categorization_reason: 'Investment fallback categorization',
+                    iso_currency_code: tx.iso_currency_code || 'USD'
                   };
+
+                  const originalIndex = toCategorize[idx].index;
+                  output[originalIndex] = fallbackCategorized;
+
+                  if (options?.collectCategorizationDetails) {
+                    allCategorizationDetails.push(buildDetail(tx, fallbackCategorized));
+                    totalConfidence += fallbackCategorized.categorization_confidence ?? 0.6;
+                  }
                 });
+
+                recategorizedCount = 0;
+              } else {
+                if (options?.collectCategorizationDetails) {
+                  const result = await this.transactionCategorizationService.categorizeTransactionBatchWithDetails(
+                    transactionsToCategorize,
+                    accountsMap
+                  );
+
+                  result.transactions.forEach((categorizedTx, idx) => {
+                    const originalIndex = toCategorize[idx].index;
+                    output[originalIndex] = {
+                      ...categorizedTx,
+                      iso_currency_code: categorizedTx.iso_currency_code || 'USD'
+                    };
+                  });
+
+                  allCategorizationDetails.push(...result.details);
+                  gptCategorizedCount += result.summary.gptCategorized;
+                  plaidFallbackCount += result.summary.plaidFallback;
+                  totalConfidence += result.summary.averageConfidence * result.summary.total;
+                } else {
+                  const categorized = await this.transactionCategorizationService.categorizeTransactionBatch(
+                    transactionsToCategorize,
+                    accountsMap
+                  );
+
+                  categorized.forEach((categorizedTx, idx) => {
+                    const originalIndex = toCategorize[idx].index;
+                    output[originalIndex] = {
+                      ...categorizedTx,
+                      iso_currency_code: categorizedTx.iso_currency_code || 'USD'
+                    };
+                  });
+                }
               }
             }
             
