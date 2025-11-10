@@ -2004,6 +2004,28 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
       totalParagraphs: paragraphSegments.length,
       uniqueParagraphs: uniqueParagraphs.size
     });
+    if (paragraphSegments.length > 0 && uniqueParagraphs.size < paragraphSegments.length) {
+      const dedupedSegments: string[] = [];
+      const seen = new Set<string>();
+
+      for (const segment of paragraphSegments) {
+        const normalized = segment.trim();
+        if (!seen.has(normalized)) {
+          dedupedSegments.push(segment);
+          seen.add(normalized);
+        }
+      }
+
+      const dedupedAnswer = dedupedSegments.join('\n\n');
+      if (dedupedAnswer.length > 0 && dedupedAnswer.length < answer.length) {
+        console.log('OpenAI Enhanced: Deduplicated repeated paragraphs', {
+          originalLength: answer.length,
+          dedupedLength: dedupedAnswer.length,
+          removedParagraphs: paragraphSegments.length - dedupedSegments.length
+        });
+        answer = dedupedAnswer;
+      }
+    }
     console.log('OpenAI Enhanced: Final answer preview:', answer.substring(0, 400));
   } finally {
     pipelineTracker.endStage(postProcessStage, {
