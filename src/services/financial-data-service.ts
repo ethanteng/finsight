@@ -223,8 +223,6 @@ export class FinancialDataService {
     shouldPersistTransactions?: boolean; // ✅ NEW: Only persist transactions when called from GPT prompts, not display-only views
   }): Promise<UnifiedFinancialData> {
     const startTime = Date.now();
-    console.log('FinancialDataService: Starting fetch', { userId, timestamp: new Date().toISOString() });
-
     const opts = {
       includeTransactions: options?.includeTransactions ?? true,
       includeInvestments: options?.includeInvestments ?? true,
@@ -243,34 +241,17 @@ export class FinancialDataService {
     if (shouldUseCache) {
       const cachedData = await cacheService.get<UnifiedFinancialData>(cacheKey);
       if (cachedData) {
-        console.log('FinancialDataService: Cache hit', { userId, cacheKey });
         return cachedData;
       }
     }
 
     let usingPersistedPlaidData = false;
-    let persistedPlaidSnapshot: { data: any; lastSynced: Date | null; isFresh: boolean } | null = null;
+    const persistedPlaidSnapshot = await this.tryLoadPersistedPlaidData(userId, opts);
 
     let plaidPromise: Promise<any>;
-    if (process.env.PERSIST_TRANSACTIONS === 'true') {
-      persistedPlaidSnapshot = await this.tryLoadPersistedPlaidData(userId, opts);
-      if (persistedPlaidSnapshot?.isFresh) {
-        usingPersistedPlaidData = true;
-        console.log('FinancialDataService: Using persisted Plaid snapshot', {
-          lastSynced: persistedPlaidSnapshot.lastSynced?.toISOString(),
-          transactions: persistedPlaidSnapshot.data.transactions.length,
-          accounts: persistedPlaidSnapshot.data.accounts.length
-        });
-        plaidPromise = Promise.resolve(persistedPlaidSnapshot.data);
-      } else {
-        if (persistedPlaidSnapshot) {
-          console.log('FinancialDataService: Persisted Plaid snapshot is stale, fetching live data', {
-            lastSynced: persistedPlaidSnapshot.lastSynced?.toISOString(),
-            maxAgeMinutes: process.env.PERSISTED_DATA_MAX_AGE_MINUTES || '120'
-          });
-        }
-        plaidPromise = this.fetchPlaidData(userId, opts);
-      }
+    if (persistedPlaidSnapshot?.isFresh) {
+      usingPersistedPlaidData = true;
+      plaidPromise = Promise.resolve(persistedPlaidSnapshot.data);
     } else {
       plaidPromise = this.fetchPlaidData(userId, opts);
     }
@@ -300,14 +281,11 @@ export class FinancialDataService {
 
     // ✅ STEP 1: Categorize transactions BEFORE normalization (skip for UI-only requests)
     // This ensures we have transaction_type available for normalization and filtering
-    console.log(`FinancialDataService: skipCategorization flag = ${options?.skipCategorization}, banking transactions = ${mergedData.bankingTransactions.length}, investment transactions = ${mergedData.investments.transactions.length}`);
     if (!options?.skipCategorization && (mergedData.bankingTransactions.length > 0 || mergedData.investments.transactions.length > 0)) {
       const accountsMap = new Map<string, Account>();
       mergedData.accounts.forEach((acc: Account) => {
         accountsMap.set(acc.account_id, acc);
       });
-      
-      console.log('FinancialDataService: Categorizing transactions before normalization');
       
       const allCategorizationDetails: CategorizationDetail[] = [];
       let gptCategorizedCount = 0;
@@ -372,8 +350,6 @@ export class FinancialDataService {
         .filter(ec => ec.aiCategoryReason?.toLowerCase().includes('manually corrected') || 
                      ec.aiCategoryReason?.toLowerCase().includes('corrected by user'))
         .length;
-      
-      console.log(`FinancialDataService: Loaded ${existingCategorizationsMap.size} existing categorizations (${manualCorrectionCount} manual corrections) from database`);
       
       const buildDetail = (originalTx: any, categorizedTx: any): CategorizationDetail => {
             const account = accountsMap.get(originalTx.account_id);
@@ -508,12 +484,7 @@ export class FinancialDataService {
               const transactionsToCategorize = toCategorize.map(item => item.tx);
               recategorizedCount = transactionsToCategorize.length;
 
-              if (label === 'investment') {
-                console.log('FinancialDataService: Using fallback categorization for investment transactions', {
-                  total: transactions.length,
-                  fallbackCount: transactionsToCategorize.length
-                });
-
+          if (label === 'investment') {
                 transactionsToCategorize.forEach((tx, idx) => {
                   const transactionType = inferInvestmentTransactionType(tx);
                   const fallbackCategorized = {
@@ -581,12 +552,6 @@ export class FinancialDataService {
               }
             });
             
-            if (reusedCount > 0 || manualCountLocal > 0) {
-              console.log(`FinancialDataService: Reused ${reusedCount} cached categorizations` +
-                (manualCountLocal > 0 ? ` and preserved ${manualCountLocal} manual corrections` : '') +
-                ` for ${label} transactions (recategorized ${recategorizedCount})`);
-            }
-            
             return {
               results: output,
               reusedCount,
@@ -634,23 +599,6 @@ export class FinancialDataService {
             investmentManual = investmentResult.manualCount;
           }
           
-          console.log('FinancialDataService: Categorization reuse summary', {
-            banking: {
-              total: mergedData.bankingTransactions.length,
-              reused: bankingReused,
-              manual: bankingManual,
-              recategorized: bankingRecategorized
-            },
-            investment: {
-              total: mergedData.investments.transactions.length,
-              reused: investmentReused,
-              manual: investmentManual,
-              recategorized: investmentRecategorized
-            }
-          });
-      
-      console.log('FinancialDataService: Categorization complete');
-      
       // Store categorization details if collected
       if (options?.collectCategorizationDetails && allCategorizationDetails.length > 0) {
         mergedData.categorizationDetails = {
@@ -663,8 +611,6 @@ export class FinancialDataService {
           }
         };
       }
-    } else if (options?.skipCategorization) {
-      console.log('FinancialDataService: Skipping categorization (UI-only request)');
     }
 
     // ✅ STEP 2: Normalize transactions (now with transaction_type available)
@@ -702,7 +648,6 @@ export class FinancialDataService {
           }
         });
         
-        console.log('FinancialDataService: Updated categorization details with normalized amounts');
       }
     }
 
@@ -712,7 +657,6 @@ export class FinancialDataService {
     // This prevents saving transactions when just displaying data in /app or /profile pages
     if (process.env.PERSIST_TRANSACTIONS === 'true' && options?.shouldPersistTransactions === true) {
       try {
-        console.log('FinancialDataService: Persisting transactions to database');
         
         // Persist banking transactions (from Plaid)
         if (!usingPersistedPlaidData && mergedData.bankingTransactions.length > 0) {
@@ -776,9 +720,7 @@ export class FinancialDataService {
             await persistSnapTradeActivitiesToDb(userId, snapTradeTransactions);
           }
         }
-        
         await cacheService.invalidate(`financial-data:${userId}`);
-        console.log('FinancialDataService: Transaction persistence complete');
       } catch (error) {
         console.error('FinancialDataService: Error persisting transactions to database:', error);
         // Don't throw - persistence errors shouldn't block data retrieval
@@ -801,15 +743,6 @@ export class FinancialDataService {
     };
 
     const partialData = errors.plaid.length > 0 || errors.snaptrade.length > 0 || errors.homeValue !== null;
-
-    console.log('FinancialDataService: Merge complete', {
-      totalAccounts: mergedData.accounts.length,
-      totalHoldings: mergedData.investments.holdings.length,
-      totalBankingTransactions: mergedData.bankingTransactions.length,
-      totalInvestmentTransactions: mergedData.investments.transactions.length,
-      partialData,
-      duration: totalDuration
-    });
 
     const result: UnifiedFinancialData = {
       ...mergedData,
@@ -1005,7 +938,6 @@ export class FinancialDataService {
 
   private async fetchPlaidData(userId: string, options: any): Promise<any> {
     const startTime = Date.now();
-    console.log('FinancialDataService: Fetching Plaid data', { userId });
 
     try {
       const accessTokens = await prisma.accessToken.findMany({
@@ -1013,7 +945,6 @@ export class FinancialDataService {
       });
 
       if (accessTokens.length === 0) {
-        console.log('FinancialDataService: No Plaid tokens found');
         return {
           accounts: [],
           balances: {},
@@ -1168,15 +1099,11 @@ export class FinancialDataService {
                     const investmentHistoryDays = investmentHistoryYears * 365;
                     const startDate = new Date(Date.now() - investmentHistoryDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
                     
-                    console.log(`FinancialDataService: Fetching Plaid investment transactions from ${startDate} to ${endDate} (${investmentHistoryYears} years)`);
-                    
                     const investmentTransactionsResponse = await plaidClient.investmentsTransactionsGet({
                       access_token: tokenRecord.token,
                       start_date: startDate,
                       end_date: endDate
                     });
-                    
-                    console.log(`FinancialDataService: Found ${investmentTransactionsResponse.data.investment_transactions.length} investment transactions for token ${tokenRecord.id}`);
                     
                     for (const invTxn of investmentTransactionsResponse.data.investment_transactions) {
                       transactions.push({
@@ -1228,8 +1155,6 @@ export class FinancialDataService {
               const transactionHistoryDays = parseInt(process.env.TRANSACTION_HISTORY_DAYS || '90', 10);
               const startDate = new Date(Date.now() - transactionHistoryDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
               
-              console.log(`FinancialDataService: Fetching Plaid banking transactions from ${startDate} to ${endDate} (${transactionHistoryDays} days)`);
-
                 const mapTransaction = (tx: any) => {
                   const normalized = {
                     ...tx,
@@ -1249,18 +1174,6 @@ export class FinancialDataService {
                     include_personal_finance_category: true
                 }
               });
-
-              if (transactionsResponse.data.transactions.length > 0) {
-                const sampleTxn = transactionsResponse.data.transactions[0];
-                console.log(`FinancialDataService: Sample Plaid transaction structure:`, {
-                  name: sampleTxn.name,
-                  amount: sampleTxn.amount,
-                  category: sampleTxn.category,
-                  category_id: sampleTxn.category_id,
-                  personal_finance_category: (sampleTxn as any).personal_finance_category,
-                  allKeys: Object.keys(sampleTxn)
-                });
-              }
 
                 transactions.push(...transactionsResponse.data.transactions.map(mapTransaction));
 
@@ -1282,10 +1195,6 @@ export class FinancialDataService {
                   transactions.push(...pagedResponse.data.transactions.map(mapTransaction));
 
                   fetchedTransactions += pagedResponse.data.transactions.length;
-                  console.log('FinancialDataService: Streaming Plaid transactions', {
-                    fetchedTransactions,
-                    totalTransactions
-                  });
                 }
             } catch (transactionError: any) {
               console.error('Error fetching transactions for token:', transactionError?.response?.data?.error_code);
@@ -1313,15 +1222,6 @@ export class FinancialDataService {
       }
 
       const duration = Date.now() - startTime;
-      console.log('FinancialDataService: Plaid fetch complete', {
-        duration,
-        accountCount: accounts.length,
-        holdingCount: holdings.length,
-        transactionCount: transactions.length,
-        errorCount: errors.length,
-        success: errors.length === 0
-      });
-
       return {
         accounts,
         balances,
@@ -1354,7 +1254,6 @@ export class FinancialDataService {
    */
   private async fetchSnapTradeData(userId: string, options: any): Promise<any> {
     const startTime = Date.now();
-    console.log('FinancialDataService: Fetching SnapTrade data', { userId });
 
     try {
       const snapTradeUser = await prisma.snapTradeUser.findUnique({
@@ -1362,7 +1261,6 @@ export class FinancialDataService {
       });
 
       if (!snapTradeUser || !snapTradeUser.userSecret) {
-        console.log('FinancialDataService: No SnapTrade user found');
         return {
           accounts: [],
           holdings: [],
@@ -1570,11 +1468,9 @@ export class FinancialDataService {
             }
             
             // ✅ Update account balances with total_value from holdings
-            console.log(`FinancialDataService: Updating ${accountBalanceMap.size} SnapTrade account balances`);
             for (const account of accounts) {
               if (account.source === 'snaptrade' && accountBalanceMap.has(account.account_id)) {
                 const totalValue = accountBalanceMap.get(account.account_id)!;
-                console.log(`FinancialDataService: Updating account ${account.name} balance from ${account.balance.current} to ${totalValue}`);
                 account.balance.current = totalValue;
                 account.balance.available = totalValue;
               }
@@ -1669,7 +1565,6 @@ export class FinancialDataService {
               });
             }
             
-            console.log(`FinancialDataService: Processed ${transactions.length} SnapTrade transactions`);
           } else {
             errors.push({
               error: activitiesResult.error || 'Failed to fetch SnapTrade activities',
@@ -1686,14 +1581,6 @@ export class FinancialDataService {
       }
 
       const duration = Date.now() - startTime;
-      console.log('FinancialDataService: SnapTrade fetch complete', {
-        duration,
-        accountCount: accounts.length,
-        holdingCount: holdings.length,
-        transactionCount: transactions.length,
-        errorCount: errors.length,
-        success: errors.length === 0
-      });
 
       return {
         accounts,
@@ -1772,9 +1659,6 @@ export class FinancialDataService {
 
     // ✅ Deduplicate accounts by account_id AND by description (name + type + balance)
     // This handles both direct duplicates AND cross-source duplicates
-    console.log('FinancialDataService: Deduplicating accounts', {
-      rawCount: rawAccounts.length
-    });
 
     const accountMap = new Map<string, any>();
     const seenDescriptions = new Set<string>();
@@ -1786,20 +1670,11 @@ export class FinancialDataService {
 
       // Skip if we've already seen this description (handles duplicates)
       if (seenDescriptions.has(descKey)) {
-        console.log('FinancialDataService: Skipping duplicate account', {
-          name: account.name,
-          balance,
-          descKey
-        });
         continue;
       }
 
       // Skip if we've already seen this account_id
       if (accountId && accountMap.has(accountId)) {
-        console.log('FinancialDataService: Skipping duplicate account_id', {
-          accountId,
-          name: account.name
-        });
         continue;
       }
 
@@ -1812,11 +1687,6 @@ export class FinancialDataService {
 
     const accounts = Array.from(accountMap.values());
 
-    console.log('FinancialDataService: Deduplication complete', {
-      rawCount: rawAccounts.length,
-      uniqueCount: accounts.length,
-      removed: rawAccounts.length - accounts.length
-    });
 
     // Merge balances
     const balances = {
@@ -1853,11 +1723,6 @@ export class FinancialDataService {
     }
     const securities = Array.from(securityMap.values());
 
-    console.log('FinancialDataService: Data merged', {
-      accounts: accounts.length,
-      holdings: holdings.length,
-      securities: securities.length
-    });
 
     // Calculate portfolio analysis
     const portfolio = this.analyzePortfolio(holdings, securities);
@@ -1881,12 +1746,6 @@ export class FinancialDataService {
 
     const transactionAggregates = plaidData?.transactionAggregates;
     
-    console.log('FinancialDataService: Transactions separated', {
-      plaidInvestmentTransactions: plaidInvestmentTransactions.length,
-      snapTradeTransactions: snapTradeTransactions.length,
-      totalInvestmentTransactions: investmentTransactions.length,
-      bankingTransactions: bankingTransactions.length
-    });
 
     return {
       accounts,
