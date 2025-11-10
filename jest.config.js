@@ -1,10 +1,11 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/src'],
+  roots: ['<rootDir>/src', '<rootDir>/specs'],
   testMatch: [
     '**/__tests__/unit/**/*.test.ts',
-    '**/__tests__/unit/**/*.spec.ts'
+    '**/__tests__/unit/**/*.spec.ts',
+    '**/perf/**/*.spec.ts'
   ],
   testPathIgnorePatterns: [
     '/node_modules/',

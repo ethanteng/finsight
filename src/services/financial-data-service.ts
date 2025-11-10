@@ -6,6 +6,7 @@ import { TokenValidationService, TokenStatus, PlaidTokenHealth, SnapTradeTokenHe
 import { TransactionNormalizationService } from './transaction-normalization-service';
 import { TransactionCategorizationService, CategorizationDetail } from './transaction-categorization-service';
 import { persistTransactionsToDb, persistSnapTradeActivitiesToDb } from '../data/persistence';
+import { cacheService } from '../data/cache';
 
 const prisma = new PrismaClient();
 
@@ -147,6 +148,10 @@ export interface UnifiedFinancialData {
   };
   bankingTransactions: Transaction[];
   homeValue: HomeData | null;
+  transactionAggregates?: {
+    income: Array<[string, number]>;
+    expense: Array<[string, number]>;
+  };
   categorizationDetails?: {
     transactions: CategorizationDetail[];
     summary: {
@@ -216,19 +221,69 @@ export class FinancialDataService {
       includeHomeValue: options?.includeHomeValue ?? true
     };
 
+    const cacheKeyParts = [
+      'financial-data',
+      userId,
+      opts.includeTransactions ? 'tx' : 'no-tx',
+      opts.includeInvestments ? 'inv' : 'no-inv',
+      opts.includeHomeValue ? 'home' : 'no-home'
+    ];
+    const cacheKey = cacheKeyParts.join(':');
+    const shouldUseCache = !options?.skipCategorization;
+    if (shouldUseCache) {
+      const cachedData = await cacheService.get<UnifiedFinancialData>(cacheKey);
+      if (cachedData) {
+        console.log('FinancialDataService: Cache hit', { userId, cacheKey });
+        return cachedData;
+      }
+    }
+
+    let usingPersistedPlaidData = false;
+    let persistedPlaidSnapshot: { data: any; lastSynced: Date | null; isFresh: boolean } | null = null;
+
+    let plaidPromise: Promise<any>;
+    if (process.env.PERSIST_TRANSACTIONS === 'true') {
+      persistedPlaidSnapshot = await this.tryLoadPersistedPlaidData(userId, opts);
+      if (persistedPlaidSnapshot?.isFresh) {
+        usingPersistedPlaidData = true;
+        console.log('FinancialDataService: Using persisted Plaid snapshot', {
+          lastSynced: persistedPlaidSnapshot.lastSynced?.toISOString(),
+          transactions: persistedPlaidSnapshot.data.transactions.length,
+          accounts: persistedPlaidSnapshot.data.accounts.length
+        });
+        plaidPromise = Promise.resolve(persistedPlaidSnapshot.data);
+      } else {
+        if (persistedPlaidSnapshot) {
+          console.log('FinancialDataService: Persisted Plaid snapshot is stale, fetching live data', {
+            lastSynced: persistedPlaidSnapshot.lastSynced?.toISOString(),
+            maxAgeMinutes: process.env.PERSISTED_DATA_MAX_AGE_MINUTES || '120'
+          });
+        }
+        plaidPromise = this.fetchPlaidData(userId, opts);
+      }
+    } else {
+      plaidPromise = this.fetchPlaidData(userId, opts);
+    }
+
     // Fetch data from all sources in parallel
     const [plaidResult, snapTradeResult, homeValueResult, tokenHealth] = await Promise.allSettled([
-      this.fetchPlaidData(userId, opts),
+      plaidPromise,
       this.fetchSnapTradeData(userId, opts),
       opts.includeHomeValue ? this.fetchHomeValue(userId) : Promise.resolve(null),
       this.tokenValidationService.getTokenHealth(userId)
     ]);
 
     // Process results
-    const plaidData = plaidResult.status === 'fulfilled' ? plaidResult.value : null;
+    let plaidData = plaidResult.status === 'fulfilled' ? plaidResult.value : null;
     const snapTradeData = snapTradeResult.status === 'fulfilled' ? snapTradeResult.value : null;
     const homeValue = homeValueResult.status === 'fulfilled' ? homeValueResult.value : null;
     const tokens = tokenHealth.status === 'fulfilled' ? tokenHealth.value : { plaid: [], snaptrade: { userId, status: TokenStatus.ERROR, error: 'Unknown', lastChecked: new Date() } };
+
+    if (!plaidData && persistedPlaidSnapshot?.data) {
+      usingPersistedPlaidData = true;
+      plaidData = persistedPlaidSnapshot.data;
+      console.warn('FinancialDataService: Falling back to persisted Plaid data after live fetch failure');
+    }
 
     // Merge data
     const mergedData = this.mergeFinancialData(plaidData, snapTradeData, homeValue);
@@ -501,14 +556,12 @@ export class FinancialDataService {
     // 1. PERSIST_TRANSACTIONS env var is set to 'true'
     // 2. shouldPersistTransactions option is explicitly true (called from GPT prompts, not display-only views)
     // This prevents saving transactions when just displaying data in /app or /profile pages
-    if (process.env.PERSIST_TRANSACTIONS === 'true' && 
-        options?.shouldPersistTransactions === true &&
-        (mergedData.bankingTransactions.length > 0 || mergedData.investments.transactions.length > 0)) {
+    if (process.env.PERSIST_TRANSACTIONS === 'true' && options?.shouldPersistTransactions === true) {
       try {
         console.log('FinancialDataService: Persisting transactions to database');
         
         // Persist banking transactions (from Plaid)
-        if (mergedData.bankingTransactions.length > 0) {
+        if (!usingPersistedPlaidData && mergedData.bankingTransactions.length > 0) {
           // Extract Plaid transactions (those with transaction_id or id that matches plaidTransactionId pattern)
           const plaidBankingTransactions = mergedData.bankingTransactions
             .filter(tx => {
@@ -570,6 +623,7 @@ export class FinancialDataService {
           }
         }
         
+        await cacheService.invalidate(`financial-data:${userId}`);
         console.log('FinancialDataService: Transaction persistence complete');
       } catch (error) {
         console.error('FinancialDataService: Error persisting transactions to database:', error);
@@ -603,7 +657,7 @@ export class FinancialDataService {
       duration: totalDuration
     });
 
-    return {
+    const result: UnifiedFinancialData = {
       ...mergedData,
       metadata: {
         lastUpdated: new Date(),
@@ -614,14 +668,183 @@ export class FinancialDataService {
           totalDuration,
           plaidDuration,
           snaptradeDuration
-        }
+        },
+        dataSources: {
+          plaid: usingPersistedPlaidData ? 'persisted' : 'live',
+          snaptrade: (snapTradeData?.performance?.source as string) || 'live'
+        },
+        transactionAggregates: mergedData.transactionAggregates,
+        persistedAsOf: usingPersistedPlaidData && persistedPlaidSnapshot?.lastSynced
+          ? persistedPlaidSnapshot.lastSynced
+          : null
       }
     };
+
+    if (shouldUseCache) {
+      const cacheTtl = parseInt(process.env.FINANCIAL_DATA_CACHE_TTL_MS || '300000', 10);
+      await cacheService.set(cacheKey, result, cacheTtl);
+    }
+
+    return result;
   }
 
   /**
    * Fetch data from Plaid
    */
+  private async tryLoadPersistedPlaidData(
+    userId: string,
+    options: { includeTransactions: boolean; includeInvestments: boolean }
+  ): Promise<{ data: any; lastSynced: Date | null; isFresh: boolean } | null> {
+    try {
+      const historyDays = parseInt(process.env.TRANSACTION_HISTORY_DAYS || '90', 10);
+      const startDate = new Date(Date.now() - historyDays * 24 * 60 * 60 * 1000);
+      const accountInclude = options.includeTransactions
+        ? {
+            transactions: {
+              orderBy: { date: 'desc' },
+              where: {
+                date: {
+                  gte: startDate
+                }
+              }
+            }
+          }
+        : undefined;
+
+      const accountRecords = await prisma.account.findMany({
+        where: { userId },
+        include: accountInclude
+      });
+
+      if (accountRecords.length === 0) {
+        return null;
+      }
+
+      const lastSyncedTimestamps = accountRecords
+        .map(record => record.lastSynced || record.updatedAt)
+        .filter((value): value is Date => Boolean(value))
+        .map(value => value.getTime());
+
+      const lastSynced =
+        lastSyncedTimestamps.length > 0
+          ? new Date(Math.max(...lastSyncedTimestamps))
+          : null;
+
+      const maxAgeMinutes = parseInt(process.env.PERSISTED_DATA_MAX_AGE_MINUTES || '120', 10);
+      const isFresh = lastSynced
+        ? Date.now() - lastSynced.getTime() <= maxAgeMinutes * 60 * 1000
+        : false;
+
+      const accounts = accountRecords.map(record => ({
+        account_id: record.plaidAccountId,
+        id: record.plaidAccountId,
+        name: record.name,
+        type: record.type,
+        subtype: record.subtype || undefined,
+        balance: {
+          current: record.currentBalance || 0,
+          available: record.availableBalance ?? undefined,
+          limit: record.limit ?? undefined,
+          iso_currency_code: record.currency || 'USD',
+          unofficial_currency_code: undefined
+        },
+        institution: record.institution || undefined,
+        institution_id: undefined,
+        institution_logo: undefined,
+        institution_url: undefined,
+        source: 'plaid',
+        persisted: true
+      }));
+
+      const balances: Record<string, Balance> = {};
+      accounts.forEach(account => {
+        balances[account.account_id] = {
+          current: account.balance.current,
+          available: account.balance.available,
+          limit: account.balance.limit,
+          iso_currency_code: account.balance.iso_currency_code
+        };
+      });
+
+      const transactions: any[] = [];
+      const aggregateTotals = {
+        income: new Map<string, number>(),
+        expense: new Map<string, number>()
+      };
+      if (options.includeTransactions) {
+        accountRecords.forEach(record => {
+          const plaidAccountId = record.plaidAccountId;
+          record.transactions?.forEach(dbTx => {
+            const categoryArray =
+              typeof dbTx.category === 'string'
+                ? dbTx.category.split(',').map(item => item.trim()).filter(Boolean)
+                : undefined;
+
+            const normalizedType = dbTx.aiCategory ? dbTx.aiCategory.toLowerCase() : undefined;
+            if (normalizedType === 'income') {
+              const label = (categoryArray?.[0] || normalizedType || 'uncategorized').toLowerCase();
+              aggregateTotals.income.set(
+                label,
+                (aggregateTotals.income.get(label) || 0) + (dbTx.amount || 0)
+              );
+            } else if (normalizedType === 'expense' || normalizedType === 'fee') {
+              const label = (categoryArray?.[0] || normalizedType || 'uncategorized').toLowerCase();
+              aggregateTotals.expense.set(
+                label,
+                (aggregateTotals.expense.get(label) || 0) + Math.abs(dbTx.amount || 0)
+              );
+            }
+
+            transactions.push({
+              id: dbTx.plaidTransactionId,
+              transaction_id: dbTx.plaidTransactionId,
+              account_id: plaidAccountId,
+              amount: dbTx.amount,
+              date: dbTx.date.toISOString().split('T')[0],
+              name: dbTx.name,
+              category: categoryArray,
+              pending: dbTx.pending,
+              iso_currency_code: dbTx.currency || 'USD',
+              merchant_name: dbTx.merchantName || undefined,
+              payment_channel: dbTx.paymentChannel || undefined,
+              enriched_data: dbTx.enriched_data || undefined,
+              aiCategory: dbTx.aiCategory || undefined,
+              aiCategoryReason: dbTx.aiCategoryReason || undefined,
+              transaction_type: dbTx.aiCategory || undefined,
+              categoryComparedAt: dbTx.categoryComparedAt || undefined,
+              persisted: true
+            });
+          });
+        });
+      }
+
+      return {
+        data: {
+          accounts,
+          balances,
+          holdings: [],
+          securities: [],
+          transactions,
+          transactionAggregates: {
+            income: Array.from(aggregateTotals.income.entries()),
+            expense: Array.from(aggregateTotals.expense.entries())
+          },
+          errors: [],
+          performance: {
+            duration: 0,
+            source: 'persisted',
+            lastSynced: lastSynced ? lastSynced.toISOString() : undefined
+          }
+        },
+        lastSynced,
+        isFresh
+      };
+    } catch (error) {
+      console.error('FinancialDataService: Failed to load persisted Plaid data:', error);
+      return null;
+    }
+  }
+
   private async fetchPlaidData(userId: string, options: any): Promise<any> {
     const startTime = Date.now();
     console.log('FinancialDataService: Fetching Plaid data', { userId });
@@ -649,6 +872,48 @@ export class FinancialDataService {
       const holdings: any[] = [];
       const securities: any[] = [];
       const transactions: any[] = [];
+      const aggregateTotals = {
+        income: new Map<string, number>(),
+        expense: new Map<string, number>()
+      };
+      const deriveCategoryLabel = (tx: any): string => {
+        const detailed = tx.personal_finance_category?.detailed;
+        if (detailed) {
+          return detailed;
+        }
+        if (Array.isArray(tx.category) && tx.category.length > 0) {
+          return tx.category[0];
+        }
+        if (typeof tx.category === 'string' && tx.category.trim() !== '') {
+          return tx.category;
+        }
+        return 'uncategorized';
+      };
+      const addToAggregates = (tx: any) => {
+        const amount = Number(tx.amount) || 0;
+        const absAmount = Math.abs(amount);
+        if (absAmount === 0) {
+          return;
+        }
+        const label = deriveCategoryLabel(tx).toLowerCase();
+        const primaryCategory = (tx.personal_finance_category?.primary || '').toLowerCase();
+        if (primaryCategory === 'income') {
+          aggregateTotals.income.set(label, (aggregateTotals.income.get(label) || 0) + absAmount);
+          return;
+        }
+        if (primaryCategory.includes('transfer')) {
+          return;
+        }
+        if (primaryCategory) {
+          aggregateTotals.expense.set(label, (aggregateTotals.expense.get(label) || 0) + absAmount);
+          return;
+        }
+        if (amount < 0) {
+          aggregateTotals.income.set(label, (aggregateTotals.income.get(label) || 0) + absAmount);
+        } else {
+          aggregateTotals.expense.set(label, (aggregateTotals.expense.get(label) || 0) + absAmount);
+        }
+      };
       const errors: ErrorDetail[] = [];
 
       // Fetch data for each token
@@ -690,19 +955,19 @@ export class FinancialDataService {
             balances[account.account_id] = account.balances;
           }
 
-          // Get investments if this is an investment account and option is enabled
-          if (options.includeInvestments) {
-            const hasInvestmentAccounts = accountsResponse.data.accounts.some(acc =>
-              acc.type === 'investment' || (acc.subtype && INVESTMENT_SUBTYPES.includes(acc.subtype.toLowerCase()))
-            );
+          const hasInvestmentAccounts = accountsResponse.data.accounts.some(acc =>
+            acc.type === 'investment' || (acc.subtype && INVESTMENT_SUBTYPES.includes(acc.subtype.toLowerCase()))
+          );
 
-            if (hasInvestmentAccounts) {
+          const asyncTasks: Promise<void>[] = [];
+
+          if (options.includeInvestments && hasInvestmentAccounts) {
+            asyncTasks.push((async () => {
               try {
                 const holdingsResponse = await plaidClient.investmentsHoldingsGet({
                   access_token: tokenRecord.token
                 });
 
-                // ✅ First, process securities into a lookup map for efficient access
                 const securityMap = new Map();
                 for (const security of holdingsResponse.data.securities) {
                   securityMap.set(security.security_id, security);
@@ -719,7 +984,6 @@ export class FinancialDataService {
                   });
                 }
 
-                // ✅ Process holdings and include security details from the securityMap
                 for (const holding of holdingsResponse.data.holdings) {
                   const security = securityMap.get(holding.security_id);
                   
@@ -733,14 +997,12 @@ export class FinancialDataService {
                     cost_basis: holding.cost_basis,
                     quantity: holding.quantity,
                     iso_currency_code: holding.iso_currency_code,
-                    // ✅ CRITICAL FIX: Add security details to each holding so frontend can display them
                     security_name: security?.name || 'Unknown Security',
                     security_type: security?.type || 'Unknown',
                     ticker_symbol: security?.ticker_symbol || undefined
                   });
                 }
                 
-                // ✅ Fetch investment transactions if includeTransactions is enabled
                 if (options.includeTransactions) {
                   try {
                     const endDate = new Date().toISOString().split('T')[0];
@@ -758,13 +1020,11 @@ export class FinancialDataService {
                     
                     console.log(`FinancialDataService: Found ${investmentTransactionsResponse.data.investment_transactions.length} investment transactions for token ${tokenRecord.id}`);
                     
-                    // Add investment transactions to the transactions array
-                    // These will be distinguished from banking transactions by their structure
                     for (const invTxn of investmentTransactionsResponse.data.investment_transactions) {
                       transactions.push({
                         id: invTxn.investment_transaction_id,
-                        transaction_id: invTxn.investment_transaction_id, // ✅ Add both id and transaction_id for consistency
-                        investment_transaction_id: invTxn.investment_transaction_id, // ✅ Preserve original field
+                        transaction_id: invTxn.investment_transaction_id,
+                        investment_transaction_id: invTxn.investment_transaction_id,
                         account_id: invTxn.account_id,
                         security_id: invTxn.security_id,
                         amount: invTxn.amount,
@@ -777,7 +1037,6 @@ export class FinancialDataService {
                         subtype: invTxn.subtype,
                         iso_currency_code: invTxn.iso_currency_code,
                         unofficial_currency_code: invTxn.unofficial_currency_code,
-                        // Mark as investment transaction for processing
                         isInvestmentTransaction: true
                       });
                     }
@@ -801,56 +1060,88 @@ export class FinancialDataService {
                   });
                 }
               }
-            }
+            })());
           }
 
-          // Get transactions if option is enabled
           if (options.includeTransactions) {
-            try {
-              const endDate = new Date().toISOString().split('T')[0];
-              const transactionHistoryDays = parseInt(process.env.TRANSACTION_HISTORY_DAYS || '90', 10);
-              const startDate = new Date(Date.now() - transactionHistoryDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-              
-              console.log(`FinancialDataService: Fetching Plaid banking transactions from ${startDate} to ${endDate} (${transactionHistoryDays} days)`);
+            asyncTasks.push((async () => {
+              try {
+                const endDate = new Date().toISOString().split('T')[0];
+                const transactionHistoryDays = parseInt(process.env.TRANSACTION_HISTORY_DAYS || '90', 10);
+                const startDate = new Date(Date.now() - transactionHistoryDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                
+                console.log(`FinancialDataService: Fetching Plaid banking transactions from ${startDate} to ${endDate} (${transactionHistoryDays} days)`);
 
-              const transactionsResponse = await plaidClient.transactionsGet({
-                access_token: tokenRecord.token,
-                start_date: startDate,
-                end_date: endDate,
-                options: {
-                  count: 500, // Get up to 500 transactions
-                  include_personal_finance_category: true // ✅ CRITICAL: Include categories from Plaid!
+                const mapTransaction = (tx: any) => {
+                  const normalized = {
+                    ...tx,
+                    id: tx.transaction_id,
+                    transaction_id: tx.transaction_id
+                  };
+                  addToAggregates(normalized);
+                  return normalized;
+                };
+
+                const transactionsResponse = await plaidClient.transactionsGet({
+                  access_token: tokenRecord.token,
+                  start_date: startDate,
+                  end_date: endDate,
+                  options: {
+                    count: 500,
+                    include_personal_finance_category: true
+                  }
+                });
+
+                if (transactionsResponse.data.transactions.length > 0) {
+                  const sampleTxn = transactionsResponse.data.transactions[0];
+                  console.log(`FinancialDataService: Sample Plaid transaction structure:`, {
+                    name: sampleTxn.name,
+                    amount: sampleTxn.amount,
+                    category: sampleTxn.category,
+                    category_id: sampleTxn.category_id,
+                    personal_finance_category: (sampleTxn as any).personal_finance_category,
+                    allKeys: Object.keys(sampleTxn)
+                  });
                 }
-              });
 
-              // ✅ DEBUG: Check if Plaid is returning categories
-              if (transactionsResponse.data.transactions.length > 0) {
-                const sampleTxn = transactionsResponse.data.transactions[0];
-                console.log(`FinancialDataService: Sample Plaid transaction structure:`, {
-                  name: sampleTxn.name,
-                  amount: sampleTxn.amount,
-                  category: sampleTxn.category,
-                  category_id: sampleTxn.category_id,
-                  personal_finance_category: (sampleTxn as any).personal_finance_category,
-                  allKeys: Object.keys(sampleTxn)
+                transactions.push(...transactionsResponse.data.transactions.map(mapTransaction));
+
+                let fetchedTransactions = transactionsResponse.data.transactions.length;
+                const totalTransactions = transactionsResponse.data.total_transactions;
+
+                while (fetchedTransactions < totalTransactions) {
+                  const pagedResponse = await plaidClient.transactionsGet({
+                    access_token: tokenRecord.token,
+                    start_date: startDate,
+                    end_date: endDate,
+                    options: {
+                      count: 500,
+                      offset: fetchedTransactions,
+                      include_personal_finance_category: true
+                    }
+                  });
+
+                  transactions.push(...pagedResponse.data.transactions.map(mapTransaction));
+
+                  fetchedTransactions += pagedResponse.data.transactions.length;
+                  console.log('FinancialDataService: Streaming Plaid transactions', {
+                    fetchedTransactions,
+                    totalTransactions
+                  });
+                }
+              } catch (transactionError: any) {
+                console.error('Error fetching transactions for token:', transactionError?.response?.data?.error_code);
+                errors.push({
+                  tokenId: tokenRecord.id,
+                  error: transactionError?.response?.data?.error_message || transactionError.message,
+                  timestamp: new Date()
                 });
               }
+            })());
+          }
 
-              // ✅ CRITICAL: Ensure Plaid transactions have both id and transaction_id fields for consistent ID matching
-              // Plaid returns transaction_id, but we also set id for consistency
-              transactions.push(...transactionsResponse.data.transactions.map((tx: any) => ({
-                ...tx,
-                id: tx.transaction_id, // ✅ Set id to transaction_id for consistency
-                transaction_id: tx.transaction_id // ✅ Ensure transaction_id is present
-              })));
-            } catch (transactionError: any) {
-              console.error('Error fetching transactions for token:', transactionError?.response?.data?.error_code);
-              errors.push({
-                tokenId: tokenRecord.id,
-                error: transactionError?.response?.data?.error_message || transactionError.message,
-                timestamp: new Date()
-              });
-            }
+          if (asyncTasks.length > 0) {
+            await Promise.all(asyncTasks);
           }
         } catch (error: any) {
           const errorCode = error?.response?.data?.error_code;
@@ -879,6 +1170,10 @@ export class FinancialDataService {
         holdings,
         securities,
         transactions,
+        transactionAggregates: {
+          income: Array.from(aggregateTotals.income.entries()),
+          expense: Array.from(aggregateTotals.expense.entries())
+        },
         errors,
         performance: { duration }
       };
@@ -1425,6 +1720,8 @@ export class FinancialDataService {
     
     // Banking transactions are only from Plaid
     const bankingTransactions: Transaction[] = plaidBankingTransactions;
+
+    const transactionAggregates = plaidData?.transactionAggregates;
     
     console.log('FinancialDataService: Transactions separated', {
       plaidInvestmentTransactions: plaidInvestmentTransactions.length,
@@ -1443,7 +1740,8 @@ export class FinancialDataService {
         transactions: investmentTransactions
       },
       bankingTransactions,
-      homeValue
+      homeValue,
+      transactionAggregates
     };
   }
 

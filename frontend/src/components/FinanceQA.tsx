@@ -31,6 +31,8 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const [showContextModal, setShowContextModal] = useState(false);
+  const [streamingSegments, setStreamingSegments] = useState<string[]>([]);
+  const [isStreaming, setIsStreaming] = useState(false);
   const { trackEvent } = useAnalytics();
 
   // Demo placeholder questions that rotate
@@ -133,6 +135,9 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     setLoading(true);
     setLoadingMessageIndex(0); // Reset to first message
     setError('');
+    setStreamingSegments([]);
+    setIsStreaming(false);
+    setAnswer('');
     
     // Track question submission
     trackEvent('question_asked', {
@@ -189,7 +194,17 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
 
       const data = await res.json();
       if (data.answer) {
-        setAnswer(data.answer);
+        const segments = data.answer
+          .split(/\n{2,}/)
+          .map(segment => segment.trim())
+          .filter(segment => segment.length > 0);
+        
+        if (segments.length > 0) {
+          setStreamingSegments(segments);
+          setIsStreaming(true);
+        } else {
+          setAnswer(data.answer);
+        }
         // Store conversation ID for feedback
         if (data.conversationId) {
           setConversationId(data.conversationId);
@@ -232,6 +247,21 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       setLoading(false);
     }
   };
+  useEffect(() => {
+    if (!isStreaming) return;
+    if (streamingSegments.length === 0) {
+      setIsStreaming(false);
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setAnswer(prev => (prev ? `${prev}\n\n${streamingSegments[0]}` : streamingSegments[0]));
+      setStreamingSegments(prev => prev.slice(1));
+    }, 200);
+
+    return () => clearTimeout(timeout);
+  }, [isStreaming, streamingSegments]);
+
 
   return (
     <div className="space-y-6">

@@ -1,5 +1,7 @@
 import OpenAI from 'openai';
 import { PrismaClient } from '@prisma/client';
+import * as Sentry from '@sentry/node';
+import { performance } from 'perf_hooks';
 import { AnonymizationService } from './services/anonymization-service';
 import { DeanonymizationService } from './services/deanonymization-service';
 // Legacy imports from privacy.ts for backward compatibility (will be removed once fully migrated)
@@ -339,6 +341,98 @@ function filterConversationHistory(
   return combined.slice(0, 8); // Cap at 8 exchanges
 }
 
+/**
+ * Analyze recent conversation history for opportunities to reference prior threads
+ */
+export function analyzeConversationContext(
+  conversationHistory: Conversation[],
+  currentQuestion: string
+): {
+  hasContextOpportunities: boolean;
+  instruction: string;
+} {
+  if (conversationHistory.length === 0) {
+    return { hasContextOpportunities: false, instruction: '' };
+  }
+
+  const lowerQuestion = currentQuestion.toLowerCase();
+  const contextOpportunities: string[] = [];
+
+  const matchesAny = (patterns: (string | RegExp)[]): boolean =>
+    patterns.some(pattern =>
+      typeof pattern === 'string'
+        ? lowerQuestion.includes(pattern)
+        : pattern.test(lowerQuestion)
+    );
+
+  const questionMentions = (...patterns: (string | RegExp)[]) => matchesAny(patterns);
+
+  const hasPriorQuestion = (...patterns: (string | RegExp)[]) =>
+    conversationHistory.some(conv => {
+      const lower = conv.question.toLowerCase();
+      return patterns.some(pattern =>
+        typeof pattern === 'string' ? lower.includes(pattern) : pattern.test(lower)
+      );
+    });
+
+  const ageInfo = lowerQuestion.match(/\b(\d+)\s*(years?\s*old|y\.?o\.?|age)\b/);
+  const incomeInfo = lowerQuestion.match(/\b(?:income|salary|earn|make)\s*\$?(\d+(?:,\d{3})*(?:\.\d{2})?)\b/);
+  const expenseInfo = lowerQuestion.match(/\b(?:expense|spend|cost)\s*\$?(\d+(?:,\d{3})*(?:\.\d{2})?)\b/);
+  const goalInfo = questionMentions('goal', 'target', 'planning for', 'saving for');
+  const timelineInfo = lowerQuestion.match(/\b(?:in\s+(\d+)\s+years?|(\d+)\s+years?\s+from\s+now)\b/);
+
+  if (hasPriorQuestion('portfolio', 'investment', 'asset allocation') && (ageInfo || incomeInfo || goalInfo)) {
+    contextOpportunities.push(
+      'User previously asked about portfolio analysis and now provided key personal information. Offer to complete the portfolio analysis with this new context.'
+    );
+  }
+
+  if (hasPriorQuestion('plan', 'retirement', 'savings') && (ageInfo || timelineInfo)) {
+    contextOpportunities.push(
+      'User previously asked about financial planning and now provided timeline or age information. Offer to create a comprehensive financial plan.'
+    );
+  }
+
+  if (hasPriorQuestion('debt', 'credit', 'loan') && (incomeInfo || expenseInfo)) {
+    contextOpportunities.push(
+      'User previously asked about debt analysis and now provided income/expense information. Offer to complete the debt-to-income analysis.'
+    );
+  }
+
+  if (hasPriorQuestion('budget', 'spending', 'expense') && (incomeInfo || expenseInfo)) {
+    contextOpportunities.push(
+      'User previously asked about budgeting and provided income/expense data. Offer to build a budget breakdown.'
+    );
+  }
+
+  if (
+    hasPriorQuestion('business', 'business banking', 'business account', 'business savings', 'llc') &&
+    questionMentions('rate', 'interest', 'apy', 'yield', 'compare', 'which', 'better', 'best')
+  ) {
+    contextOpportunities.push(
+      'User previously asked about business banking/savings accounts and is now asking about rates or comparing options. Compare current business account and savings rates with a recommendation.'
+    );
+  }
+
+  if (
+    hasPriorQuestion('savings account', 'high-yield savings', 'bank account', 'cd', 'certificate of deposit') &&
+    questionMentions('rate', 'interest', 'apy', 'yield', 'compare', 'which')
+  ) {
+    contextOpportunities.push(
+      'User previously asked about savings, banking, or accounts and now wants rate information. Offer current high-yield savings rates, compare options, and reference earlier savings discussion when talking about rates or comparing options.'
+    );
+  }
+
+  if (contextOpportunities.length === 0) {
+    return { hasContextOpportunities: false, instruction: '' };
+  }
+
+  return {
+    hasContextOpportunities: true,
+    instruction: contextOpportunities.join(' ')
+  };
+}
+
 // Safety net: Strip LaTeX syntax from GPT output (in case GPT ignores instructions)
 function stripLatexSyntax(text: string): string {
   return text
@@ -421,6 +515,107 @@ function parseJSONOutputContract(response: string): {
   }
 }
 
+type PipelineSpan = ReturnType<typeof Sentry.startSpan> | undefined;
+
+interface PipelineStageTiming {
+  name: string;
+  durationMs: number;
+  metadata?: Record<string, unknown>;
+}
+
+interface PipelineStageHandle {
+  name: string;
+  startedAt: number;
+  span?: PipelineSpan;
+}
+
+class PipelineTracker {
+  private readonly label: string;
+  private readonly startedAt: number;
+  private readonly stageTimings: PipelineStageTiming[] = [];
+  private readonly pipelineSpan?: PipelineSpan;
+
+  constructor(label: string) {
+    this.label = label;
+    this.startedAt = performance.now();
+    const sentryHub = (Sentry as any).getCurrentHub?.();
+    const parentSpan = sentryHub?.getScope?.().getSpan?.() as any;
+    if (parentSpan?.startChild) {
+      this.pipelineSpan = parentSpan.startChild({
+        op: 'ai.pipeline',
+        description: label
+      });
+    }
+  }
+
+  startStage(name: string, attributes?: Record<string, unknown>): PipelineStageHandle {
+    const span: any = (this.pipelineSpan as any)?.startChild?.({
+      op: `ai.${name}`,
+      description: `${this.label}:${name}`
+    });
+    if (span && attributes) {
+      Object.entries(attributes).forEach(([key, value]) => {
+        span.setAttribute(`ai.stage.${key}`, value as any);
+      });
+    }
+    return {
+      name,
+      startedAt: performance.now(),
+      span: span as PipelineSpan
+    };
+  }
+
+  endStage(handle: PipelineStageHandle, metadata?: Record<string, unknown>): void {
+    const duration = performance.now() - handle.startedAt;
+    this.stageTimings.push({
+      name: handle.name,
+      durationMs: Number(duration.toFixed(2)),
+      metadata
+    });
+    if (handle.span) {
+      const stageSpan: any = handle.span;
+      stageSpan.setAttribute?.('ai.stage.duration_ms', duration);
+      if (metadata) {
+        Object.entries(metadata).forEach(([key, value]) => {
+          stageSpan.setAttribute?.(`ai.stage.${key}`, value as any);
+        });
+      }
+      stageSpan.finish?.();
+    }
+  }
+
+  finish(status: 'ok' | 'error'): void {
+    const totalDuration = performance.now() - this.startedAt;
+    if (this.pipelineSpan) {
+      const span: any = this.pipelineSpan;
+      span.setAttribute?.('ai.pipeline.status', status);
+      span.setAttribute?.('ai.pipeline.total_ms', totalDuration);
+      span.setAttribute?.('ai.pipeline.stage_count', this.stageTimings.length);
+      for (const stage of this.stageTimings) {
+        span.setAttribute?.(`ai.pipeline.stage.${stage.name}.duration_ms`, stage.durationMs);
+        if (stage.metadata) {
+          Object.entries(stage.metadata).forEach(([key, value]) => {
+            span.setAttribute?.(`ai.pipeline.stage.${stage.name}.${key}`, value as any);
+          });
+        }
+      }
+      span.finish?.();
+    }
+
+    const stageBreakdown = this.stageTimings.reduce<Record<string, unknown>>((acc, stage) => {
+      acc[stage.name] = stage.metadata
+        ? { durationMs: stage.durationMs, ...stage.metadata }
+        : { durationMs: stage.durationMs };
+      return acc;
+    }, {});
+
+    console.log(`⏱️ AI Pipeline [${this.label}]`, {
+      totalMs: Number(totalDuration.toFixed(2)),
+      stages: stageBreakdown
+    });
+  }
+}
+
 // Enhanced post-processing function with tier-aware upgrade suggestions
 function enhanceResponseWithUpgrades(answer: string, tierContext: TierAwareContext, searchContext?: string): string {
   // Don't add upgrade suggestions if search context is available (user already has access to real-time data)
@@ -456,6 +651,9 @@ export async function askOpenAIWithEnhancedContext(
   model?: string,
   demoProfile?: string
 ): Promise<string> {
+  const pipelineTracker = new PipelineTracker('askOpenAIWithEnhancedContext');
+  let pipelineStatus: 'ok' | 'error' = 'ok';
+
   // Convert string tier to enum if needed
   const tier = typeof userTier === 'string' ? (userTier as UserTier) : userTier;
 
@@ -463,6 +661,7 @@ export async function askOpenAIWithEnhancedContext(
   console.log('🚀 User ID:', userId, 'Tier:', tier, 'Demo:', isDemo);
   console.log('OpenAI Enhanced: Starting enhanced context request for tier:', tier, 'isDemo:', isDemo);
   
+  try {
   // ✅ Create anonymization services with session isolation
   // Use userId or generate a session fingerprint for demo mode
   const sessionId = userId || `demo-${Date.now()}`;
@@ -470,8 +669,9 @@ export async function askOpenAIWithEnhancedContext(
   const deanonymizationService = new DeanonymizationService(anonymizationService);
   console.log('⚠️⚠️⚠️ DEDUPLICATION FIX VERSION 0bf8668 IS LOADED ⚠️⚠️⚠️');
 
-  // ✅ Analyze question to determine what context is needed (performance optimization)
+    const questionAnalysisStage = pipelineTracker.startStage('question_analysis');
   const questionNeeds = analyzeQuestionNeeds(question);
+    pipelineTracker.endStage(questionAnalysisStage);
   console.log('OpenAI Enhanced: Question analysis:', questionNeeds);
 
   // Get user-specific data
@@ -481,8 +681,11 @@ export async function askOpenAIWithEnhancedContext(
   let snapTradeData: any = null;
   let snapTradeActivities: any = null;
   let categorizationDetails: any = undefined; // ✅ Store for logging
+    let financialData: any = null;
 
   // For demo mode, use demo data instead of database data
+    const dataFetchStage = pipelineTracker.startStage('data_fetch');
+    try {
   if (isDemo) {
     console.log('OpenAI Enhanced: Using demo data for accounts, transactions, and investments');
     try {
@@ -490,7 +693,6 @@ export async function askOpenAIWithEnhancedContext(
       accounts = demoData.accounts || [];
       transactions = demoData.transactions || [];
       
-      // Demo investment data
       investmentData = {
         portfolio: {
           totalValue: 619951.34,
@@ -508,7 +710,7 @@ export async function askOpenAIWithEnhancedContext(
             account_id: 'demo_account_1',
             security_id: 'demo_security_1',
             institution_value: 50000,
-            institution_price: 500.00,
+                institution_price: 500.0,
             institution_price_as_of: new Date().toISOString(),
             cost_basis: 48000,
             quantity: 100,
@@ -522,7 +724,7 @@ export async function askOpenAIWithEnhancedContext(
             account_id: 'demo_account_1',
             security_id: 'demo_security_2',
             institution_value: 75000,
-            institution_price: 375.00,
+                institution_price: 375.0,
             institution_price_as_of: new Date().toISOString(),
             cost_basis: 70000,
             quantity: 200,
@@ -534,42 +736,35 @@ export async function askOpenAIWithEnhancedContext(
         ]
       };
       
-      console.log('OpenAI Enhanced: Demo data loaded - accounts:', accounts.length, 'transactions:', transactions.length, 'investments:', investmentData ? 'available' : 'none');
+          console.log(
+            'OpenAI Enhanced: Demo data loaded - accounts:',
+            accounts.length,
+            'transactions:',
+            transactions.length,
+            'investments:',
+            investmentData ? 'available' : 'none'
+          );
     } catch (error) {
       console.error('OpenAI Enhanced: Error loading demo data:', error);
     }
-  } else {
-    // For authenticated users, use unified FinancialDataService
-    try {
-      if (userId) {
+      } else if (userId) {
         console.log('OpenAI Enhanced: Fetching user-specific data for userId:', userId);
-        
-        // CRITICAL SECURITY FIX: Never call external APIs in demo mode
-          if (isDemo) {
-          console.log('OpenAI Enhanced: DEMO MODE - Skipping external API calls for security');
-          } else {
             try {
-            // ✅ Use unified FinancialDataService for all data
             const { FinancialDataService } = await import('./services/financial-data-service');
             const financialDataService = new FinancialDataService();
             
             console.log('OpenAI Enhanced: Fetching unified financial data from FinancialDataService');
-            // ✅ Conditional fetching based on question needs (performance optimization)
-            // NOTE: Always fetch investments to get account balances, even if we don't need full holdings data
-            // SnapTrade account balances come from holdings data, so we need to fetch it for accurate balances
-            const financialData = await financialDataService.getUserFinancialData(userId, {
+          financialData = await financialDataService.getUserFinancialData(userId, {
               includeTransactions: true,
-              includeInvestments: true, // ✅ Always fetch to get SnapTrade account balances
-              includeHomeValue: questionNeeds.needsHomeValue, // ✅ Only fetch if needed
-              collectCategorizationDetails: true, // ✅ Collect detailed categorization results for debugging
-              shouldPersistTransactions: true // ✅ Persist transactions when called from GPT prompts
-            });
-            
-            // Store categorization details for later logging
+            includeInvestments: true,
+            includeHomeValue: questionNeeds.needsHomeValue,
+            collectCategorizationDetails: true,
+            shouldPersistTransactions: true
+          });
+
             categorizationDetails = financialData.categorizationDetails;
                     
-            // Extract data from unified structure
-            accounts = financialData.accounts.map(acc => ({
+          accounts = financialData.accounts.map((acc: any) => ({
               id: acc.id,
               name: acc.name,
               type: acc.type,
@@ -587,26 +782,24 @@ export async function askOpenAIWithEnhancedContext(
                         }
             }));
 
-    // ✅ CRITICAL: Include BOTH banking AND investment transactions for complete income analysis
-    // Investment transactions can include important income sources like dividends, capital gains, etc.
-    
-    // DEBUG: Check what category data is actually in the source transactions
-    console.log(`OpenAI Enhanced: Sample banking transaction structure:`, financialData.bankingTransactions[0] ? {
+          console.log(
+            'OpenAI Enhanced: Sample banking transaction structure:',
+            financialData.bankingTransactions[0]
+              ? {
       id: financialData.bankingTransactions[0].id,
       name: financialData.bankingTransactions[0].name,
       amount: financialData.bankingTransactions[0].amount,
       category: financialData.bankingTransactions[0].category,
       category_id: financialData.bankingTransactions[0].category_id,
-      personal_finance_category: (financialData.bankingTransactions[0] as any).personal_finance_category, // ✅ Check this field!
+                  personal_finance_category: (financialData.bankingTransactions[0] as any).personal_finance_category,
       enriched_data: financialData.bankingTransactions[0].enriched_data,
       allKeys: Object.keys(financialData.bankingTransactions[0])
-    } : 'No banking transactions');
-    
-    // ✅ CRITICAL: Preserve ALL fields from FinancialDataService, especially personal_finance_category!
-    // Use spread operator to ensure we don't lose any Plaid data (categories, personal_finance_category, etc.)
-    const bankingTxs = financialData.bankingTransactions.map(tx => ({
-      ...tx, // Spread all fields first to preserve everything from Plaid
-      // Explicitly ensure critical fields are present (these override if needed)
+                }
+              : 'No banking transactions'
+          );
+
+          const bankingTxs = financialData.bankingTransactions.map((tx: any) => ({
+            ...tx,
       id: tx.id || tx.transaction_id,
       account_id: tx.account_id,
       amount: tx.amount,
@@ -614,25 +807,19 @@ export async function askOpenAIWithEnhancedContext(
       name: tx.name,
       category: tx.category,
       category_id: tx.category_id,
-      personal_finance_category: (tx as any).personal_finance_category, // ✅ CRITICAL: Preserve this!
-      transaction_type: (tx as any).transaction_type, // ✅ CRITICAL: Preserve transaction_type (includes manual corrections)
+            personal_finance_category: (tx as any).personal_finance_category,
+            transaction_type: (tx as any).transaction_type,
       enriched_data: tx.enriched_data
     }));
             
-            // ✅ CRITICAL: Only include INCOME-generating investment transactions (dividends, interest)
-            // Do NOT include buy/sell/deposit/withdrawal/cash adjustments - those are asset movements, not income
             const investmentTxs = financialData.investments.transactions
-              .filter(tx => {
+            .filter((tx: any) => {
                 const txType = (tx.type || '').toLowerCase();
                 const txName = (tx.name || '').toLowerCase();
-                
-                // Exclude ALL non-income transaction types FIRST
                 const excludeTypes = ['buy', 'sell', 'transfer', 'deposit', 'withdrawal', 'cash', 'fee', 'adjustment', 'contribution'];
                 if (excludeTypes.some(type => txType.includes(type) || txName.includes(type))) {
-                  return false; // Explicitly exclude cash movements
+                return false;
                 }
-                
-                // Then only include explicit income types
                 return (
                   txType.includes('dividend') ||
                   txType.includes('interest') ||
@@ -642,8 +829,8 @@ export async function askOpenAIWithEnhancedContext(
                   txName.includes('interest')
                 );
               })
-              .map(tx => ({
-                ...tx, // Spread all fields to preserve transaction_type and other categorization data
+            .map((tx: any) => ({
+              ...tx,
                 id: tx.id,
                 account_id: tx.account_id,
                 amount: tx.amount,
@@ -652,55 +839,58 @@ export async function askOpenAIWithEnhancedContext(
                 category: tx.category || ['Investment', 'Income'],
                 pending: false,
                 enriched_data: tx.enriched_data || {},
-                transaction_type: (tx as any).transaction_type // ✅ CRITICAL: Preserve transaction_type (includes manual corrections)
-              }));
-            
-            // ✅ DEBUG: Check if our specific transactions are in bankingTxs
-            // Search by amount with tolerance for rounding/sign changes (amounts might be normalized)
-            const socialSecurityTx = bankingTxs.find(t => Math.abs(Math.abs(t.amount) - 3732) < 1);
-            const ampLifeTx = bankingTxs.find(t => Math.abs(Math.abs(t.amount) - 1117.99) < 1);
-            const vanguardTx = bankingTxs.find(t => Math.abs(Math.abs(t.amount) - 842.53) < 1);
-            
-            // Also log ALL transactions with these amounts to see what we're working with
-            const all3732 = bankingTxs.filter(t => Math.abs(Math.abs(t.amount) - 3732) < 1);
-            const all1117 = bankingTxs.filter(t => Math.abs(Math.abs(t.amount) - 1117.99) < 1);
-            const all842 = bankingTxs.filter(t => Math.abs(Math.abs(t.amount) - 842.53) < 1);
-            
-            console.log(`OpenAI Enhanced: DEBUG - Looking for specific transactions:`, {
+              transaction_type: (tx as any).transaction_type
+            }));
+
+          const socialSecurityTx = bankingTxs.find((t: any) => Math.abs(Math.abs(t.amount) - 3732) < 1);
+          const ampLifeTx = bankingTxs.find((t: any) => Math.abs(Math.abs(t.amount) - 1117.99) < 1);
+          const vanguardTx = bankingTxs.find((t: any) => Math.abs(Math.abs(t.amount) - 842.53) < 1);
+
+          const all3732 = bankingTxs.filter((t: any) => Math.abs(Math.abs(t.amount) - 3732) < 1);
+          const all1117 = bankingTxs.filter((t: any) => Math.abs(Math.abs(t.amount) - 1117.99) < 1);
+          const all842 = bankingTxs.filter((t: any) => Math.abs(Math.abs(t.amount) - 842.53) < 1);
+
+          console.log('OpenAI Enhanced: DEBUG - Looking for specific transactions:', {
               socialSecurityFound: !!socialSecurityTx,
               socialSecurityAmount: socialSecurityTx?.amount,
               socialSecurityDate: socialSecurityTx?.date,
               socialSecurityCategory: socialSecurityTx?.category,
               socialSecurityMatches: all3732.length,
-              allSocialSecurityTxs: all3732.map(t => ({ amount: t.amount, date: t.date, name: t.name, category: t.category })),
+            allSocialSecurityTxs: all3732.map((t: any) => ({ amount: t.amount, date: t.date, name: t.name, category: t.category })),
               ampLifeFound: !!ampLifeTx,
               ampLifeAmount: ampLifeTx?.amount,
               ampLifeDate: ampLifeTx?.date,
               ampLifeCategory: ampLifeTx?.category,
               ampLifeMatches: all1117.length,
-              allAmpLifeTxs: all1117.map(t => ({ amount: t.amount, date: t.date, name: t.name, category: t.category })),
+            allAmpLifeTxs: all1117.map((t: any) => ({ amount: t.amount, date: t.date, name: t.name, category: t.category })),
               vanguardFound: !!vanguardTx,
               vanguardAmount: vanguardTx?.amount,
               vanguardDate: vanguardTx?.date,
               vanguardCategory: vanguardTx?.category,
               vanguardMatches: all842.length,
-              allVanguardTxs: all842.map(t => ({ amount: t.amount, date: t.date, name: t.name, category: t.category })),
+            allVanguardTxs: all842.map((t: any) => ({ amount: t.amount, date: t.date, name: t.name, category: t.category })),
               totalBankingTxs: bankingTxs.length
                     });
                     
-            // Merge both arrays for complete transaction history
             transactions = [...bankingTxs, ...investmentTxs];
-            console.log(`OpenAI Enhanced: Merged transactions - Banking: ${bankingTxs.length}, Investment (income only): ${investmentTxs.length}, Total: ${transactions.length}`);
+          console.log(
+            `OpenAI Enhanced: Merged transactions - Banking: ${bankingTxs.length}, Investment (income only): ${investmentTxs.length}, Total: ${transactions.length}`
+          );
             
-            // Debug: Show filtered investment transactions
             if (investmentTxs.length > 0) {
-              console.log(`OpenAI Enhanced: Investment income transactions:`, investmentTxs.slice(0, 5).map(tx => `${tx.name}: $${tx.amount}`));
+            console.log(
+              `OpenAI Enhanced: Investment income transactions:`,
+              investmentTxs.slice(0, 5).map((tx: any) => `${tx.name}: $${tx.amount}`)
+            );
             }
             if (financialData.investments.transactions.length - investmentTxs.length > 0) {
-              console.log(`OpenAI Enhanced: Filtered out ${financialData.investments.transactions.length - investmentTxs.length} non-income investment transactions (buy/sell/transfer)`);
-                        }
-            
-            // Set investment data if available
+            console.log(
+              `OpenAI Enhanced: Filtered out ${
+                financialData.investments.transactions.length - investmentTxs.length
+              } non-income investment transactions (buy/sell/transfer)`
+            );
+          }
+
             if (financialData.investments.holdings.length > 0) {
               investmentData = {
                 portfolio: financialData.investments.portfolio,
@@ -708,12 +898,9 @@ export async function askOpenAIWithEnhancedContext(
               };
             }
             
-            // ✅ NO NEED to extract SnapTrade separately - holdings already merged by FinancialDataService
-            // The financialData.investments.holdings already includes both Plaid AND SnapTrade merged
             console.log('OpenAI Enhanced: Holdings already include both Plaid and SnapTrade (merged by FinancialDataService)');
             
-            // Extract SnapTrade activities from investment transactions
-            const snapTradeTransactions = financialData.investments.transactions.filter(tx =>
+          const snapTradeTransactions = financialData.investments.transactions.filter((tx: any) =>
               tx.account_id.toString().startsWith('snaptrade-')
             );
             
@@ -729,230 +916,88 @@ export async function askOpenAIWithEnhancedContext(
             console.log('OpenAI Enhanced: Token health:', financialData.metadata.tokenHealth);
             console.log('OpenAI Enhanced: Data fetch duration:', financialData.metadata.performance.totalDuration, 'ms');
             console.log('OpenAI Enhanced: Partial data:', financialData.metadata.partialData);
-            
+          if (financialData.metadata?.dataSources) {
+            console.log('OpenAI Enhanced: Data sources:', financialData.metadata.dataSources);
+          }
+          if (financialData.metadata?.persistedAsOf) {
+            console.log('OpenAI Enhanced: Persisted transactions last synced at:', financialData.metadata.persistedAsOf);
+          }
                   } catch (error) {
             console.error('OpenAI Enhanced: Error fetching unified financial data:', error);
-          }
         }
                     } else {
         console.log('OpenAI Enhanced: No userId provided, fetching all data (this should not happen for authenticated users)');
       }
                   } catch (error) {
       console.error('OpenAI Enhanced: Error fetching user data:', error);
-                  }
+    } finally {
+      pipelineTracker.endStage(dataFetchStage, {
+        accountCount: accounts.length,
+        transactionCount: transactions.length,
+        hasInvestments: Boolean(investmentData)
+      });
                 }
 
   // Analyze income patterns BEFORE anonymization
   let incomeAnalysis = '';
+  const incomeStage = pipelineTracker.startStage('income_analysis');
+  let incomeTransactionCount = 0;
+  try {
   if (!isDemo && transactions.length > 0) {
-    // ✅ SIMPLIFIED: Use transaction_type from categorization service
-    // All complex filtering logic has been moved to TransactionCategorizationService
     const incomeTransactions = transactions.filter(transaction => {
-      const transactionType = (transaction as any).transaction_type;
-      const amount = transaction.amount || 0;
-      
-      // Only include transactions explicitly categorized as income with positive amounts
-      if (transactionType === 'income' && amount > 0) {
-        console.log(`OpenAI Income Filter: INCLUDED - ${transaction.name || 'Unknown'}: $${amount}, type: ${transactionType}`);
-        return true;
-      }
-      
-      // Debug log for transactions that look like income but aren't categorized as such
-      if (amount > 0 && !transactionType) {
-        console.log(`OpenAI Income Filter: WARNING - Transaction has no transaction_type: ${transaction.name || 'Unknown'}: $${amount}`);
-                  }
-                  
-      return false;
-    });
-    
-    const totalPositive = transactions.filter(t => t.amount > 0).length;
-    const filteredOut = totalPositive - incomeTransactions.length;
-                
-    console.log(`OpenAI Enhanced: Analyzing income from ${incomeTransactions.length} actual income transactions (filtered out ${filteredOut} non-income positive transactions out of ${totalPositive} total positive)`);
-    
-    // ✅ DEBUG: Log sample of what was included vs excluded
-    if (incomeTransactions.length > 0) {
-      console.log(`OpenAI Enhanced: Sample INCLUDED transactions:`, incomeTransactions.slice(0, 3).map(t => ({
-        name: t.name,
-        amount: t.amount,
-        category: t.category,
-        personal_finance_category: (t as any).personal_finance_category,
-        enriched_category: t.enriched_data?.category
-      })));
-    }
-    
-    if (filteredOut > 0) {
-      const excludedSample = transactions
-        .filter(t => t.amount > 0 && !incomeTransactions.includes(t))
-        .slice(0, 3);
-      console.log(`OpenAI Enhanced: Sample EXCLUDED transactions:`, excludedSample.map(t => ({
-        name: t.name,
-        amount: t.amount,
-        category: t.category,
-        personal_finance_category: (t as any).personal_finance_category,
-        enriched_category: t.enriched_data?.category
-      })));
-    }
-    if (incomeTransactions.length > 0) {
-      const monthlyIncome = new Map<string, number>();
-      const incomeSources = new Map<string, number>();
+        const type = (transaction as any).transaction_type;
+        const amount = Number(transaction.amount) || 0;
+        return type === 'income' && amount > 0;
+      });
+
+      incomeTransactionCount = incomeTransactions.length;
+
+      if (incomeTransactionCount > 0) {
+        const monthlyTotals = new Map<string, number>();
+        const sourceTotals = new Map<string, number>();
       
       for (const transaction of incomeTransactions) {
-        // Handle both Date objects (from DB) and strings (from Plaid API)
-        const dateStr = transaction.date instanceof Date 
-          ? transaction.date.toISOString().substring(0, 7) 
-          : transaction.date.substring(0, 7); // YYYY-MM
-        if (!monthlyIncome.has(dateStr)) {
-          monthlyIncome.set(dateStr, 0);
+          const amount = Number(transaction.amount) || 0;
+          const date = transaction.date instanceof Date ? transaction.date : new Date(transaction.date);
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          monthlyTotals.set(monthKey, (monthlyTotals.get(monthKey) || 0) + amount);
+
+          const primaryCategory = (transaction as any).personal_finance_category?.primary;
+          const enrichedCategory = transaction.enriched_data?.category?.[0];
+          const basicCategory = Array.isArray(transaction.category) ? transaction.category[0] : transaction.category;
+          const sourceLabel = (primaryCategory || enrichedCategory || basicCategory || 'Income').toString();
+          sourceTotals.set(sourceLabel, (sourceTotals.get(sourceLabel) || 0) + amount);
         }
-        monthlyIncome.set(dateStr, monthlyIncome.get(dateStr)! + transaction.amount);
-        
-        // Identify income source
-        const name = transaction.name?.toLowerCase() || '';
-        
-        // ✅ Check ALL categories from multiple sources (basic, enriched, personal_finance_category)
-        const basicCatsArray2 = Array.isArray(transaction.category) ? transaction.category : (transaction.category ? [transaction.category] : []);
-        const enrichedCatsArray2 = Array.isArray(transaction.enriched_data?.category) ? transaction.enriched_data.category : (transaction.enriched_data?.category ? [transaction.enriched_data.category] : []);
-        const pfcPrimary2 = (transaction as any).personal_finance_category?.primary || '';
-        const pfcDetailed2 = (transaction as any).personal_finance_category?.detailed || '';
-        const combinedBasic2 = [...basicCatsArray2, pfcPrimary2, pfcDetailed2].filter(Boolean) as string[];
-        const allBasicCats = combinedBasic2.map(c => c.toLowerCase()).join(' ');
-        const allEnrichedCats = enrichedCatsArray2.map((c: any) => (c || '').toLowerCase()).join(' ');
-        
-        // IMPORTANT: For income detection, prioritize basic categories over enriched when basic shows income
-        // Enriched categories sometimes misclassify income (e.g., "Interest Credit" as "Bank Fees")
-        let category = allBasicCats;
-        if (allBasicCats.includes('income') || allBasicCats.includes('interest') || allBasicCats.includes('dividend')) {
-          // Trust basic category when it explicitly indicates income
-          category = allBasicCats;
-        } else if (allEnrichedCats && !allEnrichedCats.includes('bank fees') && !allEnrichedCats.includes('fee')) {
-          // Use enriched only if it doesn't suggest a fee/expense
-          category = allEnrichedCats;
-        }
-        
-        let source = 'Other Income';
-        
-        // Check transaction name first (most reliable)
-        if (name.includes('social security') || name.includes('ssa')) {
-          source = 'Social Security';
-        } else if (name.includes('interest deposit') || name.includes('interest credit')) {
-          source = 'Interest Income';
-        } else if (name.includes('annuity') || name.includes('amp life') || name.includes('riversource')) {
-          source = 'Annuity/RMD';
-        } else if (name.includes('vanguard') && name.includes('rmd')) {
-          source = 'Annuity/RMD';
-        } else if (name.includes('vanguard') || name.includes('public')) {
-          source = 'Investment Income';
-        } else if (name.includes('salary') || name.includes('payroll') || name.includes('wages')) {
-          source = 'Salary/Wages';
-        } else if (name.includes('dividend')) {
-          source = 'Investment Income';
-        }
-        // Then check categories if name didn't match
-        else if (category.includes('social security')) {
-          source = 'Social Security';
-        } else if (category.includes('interest')) {
-          source = 'Interest Income';
-        } else if (category.includes('annuity') || category.includes('insurance')) {
-          source = 'Annuity/RMD';
-        } else if (category.includes('wages') || category.includes('salary')) {
-          source = 'Salary/Wages';
-        } else if (category.includes('dividend')) {
-          source = 'Investment Income';
-        } else if (category.includes('government')) {
-          source = 'Government Benefits';
-        } else if (category.includes('transfer in') || category.includes('income')) {
-          source = 'Other Income';
-        }
-        
-        incomeSources.set(source, (incomeSources.get(source) || 0) + transaction.amount);
-        
-        // Debug logging for large income transactions
-        if (transaction.amount > 1000) {
-          console.log(`OpenAI Enhanced: Large income detected - $${transaction.amount.toFixed(2)} from "${transaction.name}" → categorized as "${source}"`);
-        }
-      }
-      
-      console.log(`OpenAI Enhanced: Income sources identified:`, Array.from(incomeSources.entries()).map(([source, amount]) => `${source}: $${amount.toFixed(2)}`).join(', '));
-      
-      if (monthlyIncome.size > 0) {
-        // ✅ Calculate which months are "complete" (exclude partial months)
-        // A month is complete if:
-        // 1. It's not the current month, OR
-        // 2. It has transactions spanning at least 15 days
-        const today = new Date();
-        const currentMonthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-        
-        // Track date ranges for each month
-        const monthDateRanges = new Map<string, { min: Date | null, max: Date | null, count: number }>();
-        for (const transaction of incomeTransactions) {
-          const dateStr = transaction.date instanceof Date 
-            ? transaction.date.toISOString().substring(0, 7) 
-            : transaction.date.substring(0, 7);
-          
-          if (!monthDateRanges.has(dateStr)) {
-            monthDateRanges.set(dateStr, { min: null, max: null, count: 0 });
-          }
-          
-          const range = monthDateRanges.get(dateStr)!;
-          const txDate = transaction.date instanceof Date ? transaction.date : new Date(transaction.date);
-          
-          if (!range.min || txDate < range.min) range.min = txDate;
-          if (!range.max || txDate > range.max) range.max = txDate;
-          range.count++;
-        }
-        
-        // Filter to complete months only
-        const completeMonths = Array.from(monthlyIncome.entries()).filter(([month]) => {
-          const range = monthDateRanges.get(month);
-          if (!range || !range.min || !range.max) return false;
-          
-          // Exclude current month if it's not complete
-          if (month === currentMonthStr) {
-            const daysSinceMonthStart = Math.floor((today.getTime() - range.min.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-            const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-            // Consider current month complete only if we're past day 15 and have good coverage
-            return daysSinceMonthStart >= 15 && (range.count >= 3 || daysSinceMonthStart >= daysInMonth * 0.5);
-          }
-          
-          // For past months, check if transactions span at least 15 days
-          const daysSpan = Math.floor((range.max.getTime() - range.min.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-          return daysSpan >= 15 || range.count >= 5; // At least 15 days OR 5+ transactions indicates complete month
-        });
-        
-        const totalIncome = completeMonths.reduce((sum, [, amount]) => sum + amount, 0);
-        const avgMonthlyIncome = completeMonths.length > 0 ? totalIncome / completeMonths.length : 0;
-        
-        console.log(`OpenAI Enhanced: Month analysis - Total months with income: ${monthlyIncome.size}, Complete months: ${completeMonths.length}`);
-        if (completeMonths.length < monthlyIncome.size) {
-          const excludedMonths = Array.from(monthlyIncome.entries())
-            .filter(([month]) => !completeMonths.some(([m]) => m === month))
-            .map(([month, amt]) => `${month} ($${amt.toFixed(2)})`);
-          console.log(`OpenAI Enhanced: Excluded partial months: ${excludedMonths.join(', ')}`);
-        }
-        
-        const topIncomeSources = Array.from(incomeSources.entries())
-          .sort(([,a], [,b]) => b - a)
-          .slice(0, 5);
-        
-        incomeAnalysis = `- Average Monthly Income: $${avgMonthlyIncome.toFixed(2)}
-- Income Sources: ${topIncomeSources.map(([source, amount]) => `${source}: $${amount.toFixed(2)}`).join(', ')}
-- Total Income Transactions: ${incomeTransactions.length}
-- Analysis Period: ${completeMonths.length} complete month(s) (${monthlyIncome.size} total months with transactions)`;
-        
-        console.log(`OpenAI Enhanced: INCOME ANALYSIS SUMMARY:`);
-        console.log(`  - Total Income over ${completeMonths.length} complete months: $${totalIncome.toFixed(2)}`);
-        console.log(`  - Average Monthly Income: $${avgMonthlyIncome.toFixed(2)}`);
-        console.log(`  - Income Transactions: ${incomeTransactions.length} transactions`);
-        console.log(`  - Complete Months Used: ${completeMonths.length} (${completeMonths.map(([m]) => m).join(', ')})`);
-        console.log(`  - Top Sources:`, topIncomeSources.map(([source, amount]) => `${source}: $${amount.toFixed(2)}`).join(', '));
+
+        const monthEntries = Array.from(monthlyTotals.entries()).sort(([a], [b]) => a.localeCompare(b));
+        const totalIncome = monthEntries.reduce((sum, [, value]) => sum + value, 0);
+        const averageMonthlyIncome = monthEntries.length > 0 ? totalIncome / monthEntries.length : 0;
+        const topSources = Array.from(sourceTotals.entries())
+          .sort(([, a], [, b]) => b - a)
+          .slice(0, 5)
+          .map(([label, value]) => `${label}: $${value.toFixed(2)}`)
+          .join(', ');
+
+        incomeAnalysis = [
+          `- Average Monthly Income: $${averageMonthlyIncome.toFixed(2)}`,
+          `- Total Income Transactions: ${incomeTransactionCount}`,
+          `- Analysis Months: ${monthEntries.length}`,
+          `- Top Income Sources: ${topSources || 'Not available'}`
+        ].join('\n');
       }
     }
+  } finally {
+    pipelineTracker.endStage(incomeStage, {
+      totalTransactions: transactions.length,
+      incomeTransactions: incomeTransactionCount
+    });
   }
 
   // Anonymize data before sending to OpenAI (skip for demo mode)
   // Note: accountSummary and transactionSummary will be created later from tierContext
   // This section just tokenizes the account/transaction names for anonymization
+  const anonymizationStage = pipelineTracker.startStage('anonymization');
+  try {
   if (!isDemo && userId) {
     // ✅ Use new anonymization service with session isolation to tokenize names
     
@@ -993,13 +1038,20 @@ export async function askOpenAIWithEnhancedContext(
         merchantName: tokenizedMerchantName,
         enriched_data: anonymizedEnrichedData
       };
+      });
+    }
+  } finally {
+    pipelineTracker.endStage(anonymizationStage, {
+      anonymizedAccounts: !isDemo && userId ? accounts.length : 0,
+      anonymizedTransactions: !isDemo && userId ? transactions.length : 0
     });
   }
 
   // ✅ OPTIMIZATION: Conditionally fetch market context only if needed (parallel with other operations)
   console.log('OpenAI Enhanced: Getting market news context for tier:', tier);
   let marketContextSummary = '';
-  
+  const marketContextStage = pipelineTracker.startStage('market_context');
+  try {
   // Only fetch market context if question suggests it's needed
   if (questionNeeds.needsMarketContext) {
     try {
@@ -1022,10 +1074,17 @@ export async function askOpenAIWithEnhancedContext(
     }
   } else {
     console.log('OpenAI Enhanced: Skipping market context (not needed for this question)');
+    }
+  } finally {
+    pipelineTracker.endStage(marketContextStage, {
+      hasContext: marketContextSummary.length > 0
+    });
   }
 
   // Get search context for real-time financial information
   let searchContext: string | undefined;
+  const searchStage = pipelineTracker.startStage('search_context');
+  try {
   if (tier === UserTier.STANDARD || tier === UserTier.PREMIUM) {
     try {
       // Enhance search query for better results
@@ -1098,14 +1157,33 @@ export async function askOpenAIWithEnhancedContext(
     }
   } else if (!questionNeeds.needsSearchContext) {
     console.log('OpenAI Enhanced: Skipping search context (not needed for this question)');
+    }
+  } finally {
+    pipelineTracker.endStage(searchStage, {
+      hasSearchContext: Boolean(searchContext)
+    });
   }
 
   // Apply intelligent transaction filtering for better AI focus
+  const filterStage = pipelineTracker.startStage('transaction_filter', {
+    transactionCount: transactions.length
+  });
   const filteredTransactions = filterTransactionsForAI(transactions);
+  pipelineTracker.endStage(filterStage, {
+    filteredCount: filteredTransactions.length
+  });
   
   // Build tier-aware context using the new orchestrator
   console.log('OpenAI Enhanced: Building tier-aware context for tier:', tier);
+  const contextStage = pipelineTracker.startStage('context_build', {
+    accountCount: accounts.length,
+    filteredTransactionCount: filteredTransactions.length
+  });
   const tierContext = await dataOrchestrator.buildTierAwareContext(tier, accounts, filteredTransactions, isDemo);
+  pipelineTracker.endStage(contextStage, {
+    contextAccounts: tierContext.accounts.length,
+    contextTransactions: tierContext.transactions.length
+  });
   
   console.log('OpenAI Enhanced: Tier context built:', {
     tier: tierContext.tierInfo.currentTier,
@@ -1113,6 +1191,8 @@ export async function askOpenAIWithEnhancedContext(
     unavailableSources: tierContext.tierInfo.unavailableSources.length,
     upgradeHints: tierContext.upgradeHints.length
   });
+
+  const promptStage = pipelineTracker.startStage('prompt_build');
 
   // Create account summary
   const accountSummary = tierContext.accounts.map(account => {
@@ -1205,10 +1285,19 @@ export async function askOpenAIWithEnhancedContext(
     }))
   });
   
+  const maxPromptTransactions = parseInt(process.env.MAX_PROMPT_TRANSACTIONS || '75', 10);
+  const displayTransactions = tierContext.transactions.slice(0, maxPromptTransactions);
+
+  console.log('OpenAI Enhanced: Transaction prompt limits:', {
+    totalTransactions: tierContext.transactions.length,
+    usingTransactions: displayTransactions.length,
+    maxConfigured: maxPromptTransactions
+  });
+  
   // ✅ Use already-anonymized transaction fields (transactions were anonymized at lines 908-936)
   // The anonymization service has already tokenized name, merchantName, and enriched_data.merchant_name
   // We just need to use those already-anonymized fields directly
-  const transactionSummary = tierContext.transactions.map(transaction => {
+  let transactionSummary = displayTransactions.map(transaction => {
     // ✅ CRITICAL: Use transaction_type (from aiCategory) as the authoritative category
     const transactionType = (transaction as any).transaction_type || (transaction as any).aiCategory;
     
@@ -1305,11 +1394,100 @@ export async function askOpenAIWithEnhancedContext(
     return `- ${merchantName}${typeInfo}: $${amount.toFixed(2)} on ${dateStr}${transferWarning}${enhancedInfo}`;
   }).join('\n');
 
+  const overflowSummary = groupSmallTransactions(tierContext.transactions, displayTransactions);
+  if (overflowSummary) {
+    transactionSummary += overflowSummary;
+  }
+
+  const pickCategoryLabel = (transaction: any): string | undefined => {
+    if (transaction.enriched_data?.category && Array.isArray(transaction.enriched_data.category)) {
+      const enrichedLabel = transaction.enriched_data.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
+      if (enrichedLabel) {
+        return enrichedLabel;
+      }
+    }
+    if (Array.isArray(transaction.category)) {
+      const basicLabel = transaction.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
+      if (basicLabel) {
+        return basicLabel;
+      }
+    } else if (typeof transaction.category === 'string' && transaction.category.trim() !== '' && transaction.category !== '0') {
+      return transaction.category;
+    }
+    return undefined;
+  };
+
+  const aggregatedFromMetadata = financialData?.metadata?.transactionAggregates;
+  const expenseTotals = new Map<string, number>();
+  const incomeTotals = new Map<string, number>();
+  if (!aggregatedFromMetadata?.expense?.length || !aggregatedFromMetadata?.income?.length) {
+    tierContext.transactions.forEach(transaction => {
+      const transactionTypeRaw = (transaction as any).transaction_type || (transaction as any).aiCategory;
+      if (!transactionTypeRaw) {
+        return;
+      }
+      const normalizedType = String(transactionTypeRaw).toLowerCase();
+      const amount = Math.abs(Number(transaction.amount) || 0);
+      if (amount === 0) {
+        return;
+      }
+      if (normalizedType === 'expense' || normalizedType === 'fee') {
+        const label = (pickCategoryLabel(transaction) || normalizedType).toLowerCase();
+        expenseTotals.set(label, (expenseTotals.get(label) || 0) + amount);
+      } else if (normalizedType === 'income') {
+        const label = (pickCategoryLabel(transaction) || normalizedType).toLowerCase();
+        incomeTotals.set(label, (incomeTotals.get(label) || 0) + amount);
+      }
+    });
+  }
+
+  const resolveTopEntries = (entries: Array<[string, number]>): Array<[string, number]> =>
+    entries
+      .slice()
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5);
+
+  const aggregatedExpenseEntries = aggregatedFromMetadata?.expense as Array<[string, number]> | undefined;
+  const aggregatedIncomeEntries = aggregatedFromMetadata?.income as Array<[string, number]> | undefined;
+  const fallbackExpenseEntries = Array.from(expenseTotals.entries());
+  const fallbackIncomeEntries = Array.from(incomeTotals.entries());
+
+  const categorySummaryParts: string[] = [];
+
+  const topExpenseEntries = resolveTopEntries(
+    aggregatedExpenseEntries && aggregatedExpenseEntries.length > 0
+      ? aggregatedExpenseEntries
+      : fallbackExpenseEntries
+  );
+  if (topExpenseEntries.length > 0) {
+    categorySummaryParts.push('TOP EXPENSE TYPES (excludes transfers):');
+    topExpenseEntries.forEach(([type, total]) => {
+      categorySummaryParts.push(`• ${type.toUpperCase()}: $${total.toFixed(2)}`);
+    });
+  }
+
+  const topIncomeEntries = resolveTopEntries(
+    aggregatedIncomeEntries && aggregatedIncomeEntries.length > 0
+      ? aggregatedIncomeEntries
+      : fallbackIncomeEntries
+  );
+  if (topIncomeEntries.length > 0) {
+    categorySummaryParts.push('TOP INCOME TYPES:');
+    topIncomeEntries.forEach(([type, total]) => {
+      categorySummaryParts.push(`• ${type.toUpperCase()}: $${total.toFixed(2)}`);
+    });
+  }
+
+  if (categorySummaryParts.length > 0) {
+    transactionSummary = `${categorySummaryParts.join('\n')}\n${transactionSummary}`;
+  }
+
   // ✅ DEBUG: Log the final transaction summary to see what the AI receives
   console.log('OpenAI Enhanced: DEBUG - Final transaction summary preview:', {
     totalLength: transactionSummary.length,
     preview: transactionSummary.substring(0, 500),
-    firstFewLines: transactionSummary.split('\n').slice(0, 3)
+    firstFewLines: transactionSummary.split('\n').slice(0, 3),
+    overflowAppended: Boolean(overflowSummary)
   });
 
   // Create investment summary
@@ -1755,17 +1933,38 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
     conversationHistory: recentHistory.length * 2, // Q&A pairs
     currentQuestion: 1
   });
+  pipelineTracker.endStage(promptStage, {
+    systemPromptLength: systemPrompt.length,
+    messageCount: messages.length
+  });
 
+  const llmStage = pipelineTracker.startStage('llm_call', {
+    requestedModel: model || 'gpt-4o'
+  });
+  let completion: Awaited<ReturnType<typeof openai.chat.completions.create>> | undefined;
   try {
-    const completion = await openai.chat.completions.create({
+    completion = await openai.chat.completions.create({
       model: model || 'gpt-4o',
       messages,
       temperature: 0.7,
       max_tokens: 2000
     });
+  } catch (error) {
+    pipelineTracker.endStage(llmStage);
+    console.error('OpenAI Enhanced: Error calling OpenAI API:', error);
+    throw new Error('Failed to get AI response');
+  }
+
+  pipelineTracker.endStage(llmStage, {
+    modelUsed: completion.model,
+    promptTokens: completion.usage?.prompt_tokens,
+    completionTokens: completion.usage?.completion_tokens
+    });
 
     let answer = completion.choices[0]?.message?.content || 'I apologize, but I was unable to generate a response.';
 
+  const postProcessStage = pipelineTracker.startStage('post_process');
+  try {
     console.log('🔧 TEST: Got OpenAI response, length:', answer.length);
 
     // Optional: Parse and log JSON output contract for debugging/monitoring
@@ -1796,6 +1995,11 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
     }
 
     console.log('OpenAI Enhanced: Response generated successfully');
+  } finally {
+    pipelineTracker.endStage(postProcessStage, {
+      finalLength: answer.length
+    });
+  }
     
     // Update user profile from conversation BEFORE generating response (for authenticated users only)
     if (userId && !isDemo) {
@@ -1819,147 +2023,11 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
     
     return answer;
   } catch (error) {
-    console.error('OpenAI Enhanced: Error calling OpenAI API:', error);
-    throw new Error('Failed to get AI response');
-  }
+  pipelineStatus = 'error';
+  throw error;
+} finally {
+  pipelineTracker.finish(pipelineStatus);
 }
-
-/**
- * Analyzes conversation history to identify context building opportunities
- */
-export function analyzeConversationContext(conversationHistory: Conversation[], currentQuestion: string): {
-  hasContextOpportunities: boolean;
-  instruction: string;
-} {
-  if (conversationHistory.length === 0) {
-    return { hasContextOpportunities: false, instruction: '' };
-  }
-
-  const contextOpportunities: string[] = [];
-  
-  // Look for incomplete portfolio analysis requests
-  const portfolioQuestions = conversationHistory.filter(conv => 
-    conv.question.toLowerCase().includes('portfolio') || 
-    conv.question.toLowerCase().includes('investment') ||
-    conv.question.toLowerCase().includes('asset allocation')
-  );
-  
-  if (portfolioQuestions.length > 0) {
-    // Check if current question provides age or other key information
-    const ageInfo = currentQuestion.match(/\b(\d+)\s*(?:years?\s*old|y\.?o\.?|age)\b/i);
-    const incomeInfo = currentQuestion.match(/\b(?:income|salary|earn|make)\s*\$?(\d+(?:,\d{3})*(?:\.\d{2})?)\b/i);
-    const goalInfo = currentQuestion.match(/\b(?:goal|target|planning for|saving for)\b/i);
-    
-    if (ageInfo || incomeInfo || goalInfo) {
-      contextOpportunities.push('User previously asked about portfolio analysis and now provided key personal information. Offer to complete the portfolio analysis with this new context.');
-    }
-  }
-  
-  // Look for incomplete financial planning requests
-  const planningQuestions = conversationHistory.filter(conv => 
-    conv.question.toLowerCase().includes('plan') || 
-    conv.question.toLowerCase().includes('goal') ||
-    conv.question.toLowerCase().includes('retirement') ||
-    conv.question.toLowerCase().includes('savings')
-  );
-  
-  if (planningQuestions.length > 0) {
-    const ageInfo = currentQuestion.match(/\b(\d+)\s*(?:years?\s*old|y\.?o\.?|age)\b/i);
-    const timelineInfo = currentQuestion.match(/\b(?:in\s+(\d+)\s+years?|(\d+)\s+years?\s+from\s+now)\b/i);
-    
-    if (ageInfo || timelineInfo) {
-      contextOpportunities.push('User previously asked about financial planning and now provided timeline or age information. Offer to create a comprehensive financial plan.');
-    }
-  }
-  
-  // Look for incomplete debt analysis requests
-  const debtQuestions = conversationHistory.filter(conv => 
-    conv.question.toLowerCase().includes('debt') || 
-    conv.question.toLowerCase().includes('credit') ||
-    conv.question.toLowerCase().includes('loan')
-  );
-  
-  if (debtQuestions.length > 0) {
-    const incomeInfo = currentQuestion.match(/\b(?:income|salary|earn|make)\s*\$?(\d+(?:,\d{3})*(?:\.\d{2})?)\b/i);
-    const expenseInfo = currentQuestion.match(/\b(?:expense|spend|cost)\s*\$?(\d+(?:,\d{3})*(?:\.\d{2})?)\b/i);
-    
-    if (incomeInfo || expenseInfo) {
-      contextOpportunities.push('User previously asked about debt analysis and now provided income/expense information. Offer to complete the debt-to-income analysis.');
-    }
-  }
-  
-  // Look for incomplete budgeting requests
-  const budgetQuestions = conversationHistory.filter(conv => 
-    conv.question.toLowerCase().includes('budget') || 
-    conv.question.toLowerCase().includes('spending') ||
-    conv.question.toLowerCase().includes('expense')
-  );
-  
-  if (budgetQuestions.length > 0) {
-    const incomeInfo = currentQuestion.match(/\b(?:income|salary|earn|make)\s*\$?(\d+(?:,\d{3})*(?:\.\d{2})?)\b/i);
-    const familyInfo = currentQuestion.match(/\b(?:family|children|kids|dependents?)\b/i);
-    
-    if (incomeInfo || familyInfo) {
-      contextOpportunities.push('User previously asked about budgeting and now provided income or family information. Offer to create a comprehensive budget plan.');
-    }
-  }
-  
-  // Look for business banking and savings account requests
-  const businessBankingQuestions = conversationHistory.filter(conv => 
-    conv.question.toLowerCase().includes('business') || 
-    conv.question.toLowerCase().includes('llc') ||
-    conv.question.toLowerCase().includes('business savings') ||
-    conv.question.toLowerCase().includes('business account') ||
-    conv.question.toLowerCase().includes('business banking')
-  );
-  
-  if (businessBankingQuestions.length > 0) {
-    const rateQuestion = currentQuestion.toLowerCase().includes('rate') || 
-                         currentQuestion.toLowerCase().includes('interest') ||
-                         currentQuestion.toLowerCase().includes('apy') ||
-                         currentQuestion.toLowerCase().includes('yield') ||
-                         currentQuestion.toLowerCase().includes('compare') ||
-                         currentQuestion.toLowerCase().includes('which') ||
-                         currentQuestion.toLowerCase().includes('better');
-    
-    if (rateQuestion) {
-      contextOpportunities.push('User previously asked about business banking/savings accounts and now is asking about rates or comparing options. Provide specific rate information for business accounts and reference the previous conversation about business banking needs.');
-    }
-  }
-  
-  // Look for general savings and banking requests
-  const savingsBankingQuestions = conversationHistory.filter(conv => 
-    conv.question.toLowerCase().includes('savings') || 
-    conv.question.toLowerCase().includes('banking') ||
-    conv.question.toLowerCase().includes('account') ||
-    conv.question.toLowerCase().includes('bank') ||
-    conv.question.toLowerCase().includes('cd') ||
-    conv.question.toLowerCase().includes('certificate of deposit')
-  );
-  
-  if (savingsBankingQuestions.length > 0) {
-    const rateQuestion = currentQuestion.toLowerCase().includes('rate') || 
-                         currentQuestion.toLowerCase().includes('interest') ||
-                         currentQuestion.toLowerCase().includes('apy') ||
-                         currentQuestion.toLowerCase().includes('yield') ||
-                         currentQuestion.toLowerCase().includes('compare') ||
-                         currentQuestion.toLowerCase().includes('which') ||
-                         currentQuestion.toLowerCase().includes('better') ||
-                         currentQuestion.toLowerCase().includes('highest');
-    
-    if (rateQuestion) {
-      contextOpportunities.push('User previously asked about savings, banking, or accounts and now is asking about rates or comparing options. Reference the previous conversation about their banking needs and provide specific rate information for the types of accounts they were interested in.');
-    }
-  }
-  
-  if (contextOpportunities.length > 0) {
-    return {
-      hasContextOpportunities: true,
-      instruction: contextOpportunities.join(' ')
-    };
-  }
-  
-  return { hasContextOpportunities: false, instruction: '' };
 }
 
 /**
@@ -1977,1045 +2045,159 @@ function buildEnhancedSystemPrompt(
 ): string {
   const { tierInfo, upgradeHints } = tierContext;
 
-  // Extract home value data from profile if present
-  let homeValueSection = '';
-  if (userProfile) {
-    const homeAddressMatch = userProfile.match(/HOME_ADDRESS:\s*(.+?)(?:\n|$)/);
-    const homeValueMatch = userProfile.match(/HOME_VALUE:\s*(\d+)/);
-    const homeValueLowMatch = userProfile.match(/HOME_VALUE_LOW:\s*(\d+)/);
-    const homeValueHighMatch = userProfile.match(/HOME_VALUE_HIGH:\s*(\d+)/);
-    const homeValueUpdatedMatch = userProfile.match(/HOME_VALUE_LAST_UPDATED:\s*(.+?)(?:\n|$)/);
-    
-    if (homeAddressMatch && homeValueMatch) {
-      const address = homeAddressMatch[1].trim();
-      const value = parseInt(homeValueMatch[1], 10);
-      const valueLow = homeValueLowMatch ? parseInt(homeValueLowMatch[1], 10) : null;
-      const valueHigh = homeValueHighMatch ? parseInt(homeValueHighMatch[1], 10) : null;
-      const lastUpdated = homeValueUpdatedMatch ? homeValueUpdatedMatch[1].trim() : 'Unknown';
-      
-      homeValueSection = `
-HOME VALUE DATA (Available):
-- Address: ${address}
-- Estimated Value: $${value.toLocaleString()}
-${valueLow && valueHigh ? `- Value Range: $${valueLow.toLocaleString()} - $${valueHigh.toLocaleString()}` : ''}
-- Last Updated: ${new Date(lastUpdated).toLocaleDateString()}
-- Source: RentCast API
+  const sections: string[] = [];
 
-IMPORTANT: When the user asks about their home value, use this data above to provide the current estimate.
-`;
-    }
+  sections.push(
+    '# SYSTEM (Linc – Financial Analyst)',
+    'You are Linc, an AI financial analyst. Use only the data provided in this prompt.'
+  );
+
+  sections.push(
+    '## Data Precedence (highest → lowest)\n' +
+      '1) INCOME ANALYSIS block (exact figures; do not recalc)\n' +
+      "2) USER'S FINANCIAL DATA (transactions, balances, holdings)\n" +
+      '3) USER PROFILE (personal context)\n' +
+      '4) MARKET CONTEXT (current market conditions and trends)\n' +
+      '5) REAL-TIME FINANCIAL DATA (use only when explicitly requested)'
+  );
+
+  sections.push(
+    '## Response Rules\n' +
+      '- Never use LaTeX or math notation.\n' +
+      '- Do not expose chain-of-thought; provide results only.\n' +
+      '- Calculations must appear in plain-text paragraphs (not bullet lists).\n' +
+      '- Currency format: $X,XXX.XX; Percentages: XX.XX%.\n' +
+      '- Be explicit about exclusions (transfers, investment buys/sells).\n' +
+      '- If required data is missing, state the limitation and continue.'
+  );
+
+  sections.push(
+    '## Income Rules (Critical)\n' +
+      '- Use INCOME ANALYSIS figures exactly when present. Do not recalc from transactions.\n' +
+      '- Exclude transfer_in, transfer_out, deposit, withdrawal, buy, sell.\n' +
+      '- For unmatched periods, include only transactions explicitly marked (INCOME).'
+  );
+
+  sections.push(
+    '## Expense Rules (Critical)\n' +
+      '- Count only transaction_type: expense or fee.\n' +
+      '- Exclude transfer_in, transfer_out, deposit, withdrawal, buy, sell, refund.\n' +
+      '- When summarising spend by category, note that transfers and investment transactions were excluded.'
+  );
+
+  sections.push(
+    '## Date-Specific Guidance\n' +
+      '- Include all relevant transactions in the requested period.\n' +
+      '- Mention visible gaps in dates if present.\n' +
+      '- Report how many income and expense transactions you included.'
+  );
+
+  sections.push(
+    '## Real-Time Data\n' +
+      '- If the user explicitly asks for current rates/prices/averages, use the data inside the REAL-TIME section verbatim (cite by name, no links).\n' +
+      '- Otherwise, treat real-time data as contextual comparisons only.'
+  );
+
+  sections.push(
+    '## Output Contract\n' +
+      'Return ONE JSON object first (no prose before it). After the JSON, write a 3–6 sentence narrative summary. Keep calculations in paragraphs (not bullets) and reference any real-time sources by name.'
+  );
+
+  if (searchContext) {
+    sections.push(
+      '=== REAL-TIME FINANCIAL DATA ===\n' + searchContext + '\n=== END REAL-TIME FINANCIAL DATA ==='
+    );
   }
 
-  // Build market context section separately (for logging/viewing)
-  const marketContextSection = marketContextSummary 
-    ? `MARKET CONTEXT:
-${marketContextSummary}
-` 
-    : '';
-  
-  // Build search context section separately (for logging/viewing)
-  const searchContextSection = searchContext 
-    ? `SEARCH CONTEXT (Real-Time Data):
-${searchContext}
-` 
-    : '';
-  
-  // Consolidate real-time data for prompt (combines both for efficiency)
-  const realTimeBlock = `=== REAL-TIME FINANCIAL DATA ===
-${marketContextSummary || searchContext || 'No market context available (upgrade to Standard tier)'}
-=== END REAL-TIME FINANCIAL DATA ===`;
+  if (marketContextSummary) {
+    sections.push('MARKET CONTEXT:\n' + marketContextSummary);
+  }
 
-  // Build the optimized, deterministic system prompt
-  const systemPrompt = `# SYSTEM (Linc – Financial Analyst)
+  if (userProfile && userProfile.trim()) {
+    sections.push('USER PROFILE:\n' + userProfile.trim());
+  } else {
+    sections.push('USER PROFILE:\nNo profile available');
+  }
 
-You are Linc, an AI financial analyst. Use only the data provided in this prompt.
+  sections.push(
+    'LIABILITIES INFORMATION:\nCredit limit information may be unavailable from Plaid. If limits are unknown, state "Credit Limit: Unknown" and never infer utilisation.'
+  );
 
-## Data Precedence (highest → lowest)
-1) INCOME ANALYSIS block (exact figures; do not recalc)
-2) USER'S FINANCIAL DATA (transactions, balances, holdings)
-3) USER PROFILE (personal context)
-4) MARKET CONTEXT (current market conditions and trends)
-5) REAL-TIME FINANCIAL DATA (use only when user explicitly asks for current/market averages/rates)
+  sections.push(
+    "USER'S FINANCIAL DATA:\nAccounts:\n" + (accountSummary || 'No accounts found')
+  );
 
-## Forbidden & Style
-- Never use LaTeX or math notation.
-- Do not show chain-of-thought; provide results only.
-- Calculations must be in plain-text paragraphs (not bullet lists).
-- Currency format: $X,XXX.XX; Percentages: XX.XX%.
-- Be explicit about exclusions (transfers, investment buys/sells).
-- If a required datum is missing, state the limitation and continue.
+  sections.push(
+    'RECENT TRANSACTIONS (authoritative types in parentheses):\n' +
+      'IMPORTANT: Use only (INCOME) transactions for income calculations. Exclude (TRANSFER_IN), (TRANSFER_OUT), (DEPOSIT), and (WITHDRAWAL).\n' +
+      (transactionSummary || 'No transactions found')
+  );
 
-## Income Rules (Critical)
-- Use INCOME ANALYSIS figures exactly when present. Do not recalc from transactions.
-- Exclude transfer_in, transfer_out, deposit, withdrawal, buy, sell.
-- If asked for a date range with no INCOME ANALYSIS for it: include only transactions with (INCOME).
+  if (incomeAnalysis && incomeAnalysis.trim()) {
+    sections.push('INCOME ANALYSIS (authoritative):\n' + incomeAnalysis.trim());
+          } else {
+    sections.push(
+      'INCOME ANALYSIS (authoritative):\nNo income analysis provided. If asked for income, include only transactions marked (INCOME).'
+    );
+  }
 
-## Expense Rules (Critical)
-- Count only transaction_type: expense or fee.
-- Exclude transfer_in, transfer_out, deposit, withdrawal, buy, sell, refund.
-- When giving spend by category, state: "Excluding transfers and investment transactions."
+  if (investmentSummary && investmentSummary.trim()) {
+    sections.push('INVESTMENT DATA (overview):\n' + investmentSummary.trim());
+  }
 
-## Date-Specific Analysis
-- Include all relevant transactions in the requested period (scan start/middle/end dates).
-- Mention visible gaps in dates if present.
-- Report how many income and expense transactions you included.
+  const tierLines: string[] = [];
+  tierLines.push(`USER TIER: ${String(tierInfo.currentTier).toUpperCase()}`);
+  tierLines.push(
+    'AVAILABLE DATA SOURCES:\n' +
+      (tierInfo.availableSources.length > 0
+        ? tierInfo.availableSources.map(source => `• ${source}`).join('\n')
+        : '• Account data only')
+  );
+  if (tierInfo.unavailableSources.length > 0 && !searchContext) {
+    tierLines.push(
+      'UNAVAILABLE DATA SOURCES (upgrade to access):\n' +
+        tierInfo.unavailableSources.map(source => `• ${source}`).join('\n')
+    );
+  }
+  if (upgradeHints.length > 0) {
+    tierLines.push(
+      'UPGRADE SUGGESTIONS:\n' +
+        upgradeHints
+          .map(hint => `• ${hint.feature}: ${hint.benefit}`)
+          .join('\n')
+    );
+  }
+  sections.push(tierLines.join('\n\n'));
 
-## Real-Time Data (Conflict-safe)
-- If the user explicitly asks for current rates/prices/averages, use entries inside === REAL-TIME FINANCIAL DATA === verbatim (cite by name, no links).
-- Otherwise, do not use those sources to overwrite the user's actual data; use only as contextual comparisons.
+  sections.push(
+    'ADDITIONAL INSTRUCTIONS:\n' +
+      '- Compute average monthly spending excluding transfers/deposits/withdrawals/buys/sells/refunds; include expense/fee only.\n' +
+      '- Provide detailed category breakdown using the authoritative transaction_type and categories provided.\n' +
+      '- State the analysis period you infer from the transactions and mention any visible date gaps.\n' +
+      '- After the JSON, follow with a concise narrative summary (3–6 sentences).' 
+  );
 
-## Output Contract
-Return ONE JSON object first (no prose before it):
-\`\`\`
-{
-  "timeframe": "<label or dates>",
-  "income": {
-    "average_monthly_income": 0.00,
-    "sources": [{"name":"", "amount":0.00}],
-    "notes": "<if INCOME ANALYSIS used, say so>"
-  },
-  "spending": {
-    "average_monthly_spend": 0.00,
-    "by_category": [{"category":"", "amount":0.00}],
-    "exclusions": ["transfers", "deposits", "withdrawals", "investment buys/sells"]
-  },
-  "balances": {
-    "total_savings": 0.00,
-    "total_investments": 0.00
-  },
-  "observations": ["short bullet insights"],
-  "next_steps": ["action 1", "action 2"]
-}
-\`\`\`
-Then a short narrative (3–6 sentences) with any calculations shown in paragraphs (not bullets). If real-time data was used, reference the source names.
-
----
-
-# TASK CONTEXT
-
-**User Tier:** ${String(tierInfo.currentTier).toUpperCase()}
-
-${marketContextSection}${searchContextSection}${realTimeBlock}
-
-${homeValueSection ? `${homeValueSection}\n` : ''}USER PROFILE:
-${userProfile || 'No profile available'}
-
-LIABILITIES INFORMATION:
-Credit limit information may be unavailable from Plaid. If limits are unknown, state "Credit Limit: Unknown" and never infer utilization.
-
-USER'S FINANCIAL DATA:
-Accounts:
-${accountSummary || 'No accounts found'}
-
-RECENT TRANSACTIONS (authoritative types in parentheses):
-IMPORTANT: When calculating income, use ONLY transactions marked with (INCOME) - EXCLUDE all transactions marked with (TRANSFER_IN), (TRANSFER_OUT), (DEPOSIT), or (WITHDRAWAL). These are money movements, not income.
-${transactionSummary || 'No transactions found'}
-
-INCOME ANALYSIS (authoritative):
-${incomeAnalysis || 'No income analysis provided. If asked for income, include only transactions marked (INCOME).'}
-
-${incomeAnalysis ? `CRITICAL: The above INCOME ANALYSIS contains your actual income data from transaction history. This is pre-calculated and excludes transfers, deposits, and other non-income transactions. 
-- You MUST use these exact figures in your response - do NOT recalculate income from the transaction list below
-- Do NOT include any transactions marked as (TRANSFER_IN), (TRANSFER_OUT), (DEPOSIT), or (WITHDRAWAL) in income calculations
-- The INCOME ANALYSIS section is the ONLY source of truth for income - ignore any positive amounts in the transaction list that are not explicitly categorized as "income"
-
-` : ''}${investmentSummary ? `INVESTMENT DATA (overview):
-${investmentSummary}
-
-` : ''}DATA INTERPRETATION NOTES:
-- For checking/savings, balance is available funds; for credit cards, balance is amount owed.
-- Never state cards are maxed; if limits missing, say "Credit Limit: Unknown."
-- Transaction types are shown in the format: "Merchant (TRANSACTION_TYPE): $Amount"
-- The (TRANSACTION_TYPE) field uses transaction_type from aiCategory (which respects manual corrections) - this is the AUTHORITATIVE category to use
-- AMOUNT SIGN CONVENTION: Expenses and fees are always negative (e.g., -$100.00); Income is always positive (e.g., $100.00)
-
-INSTRUCTIONS:
-- Compute average monthly spending excluding transfers/deposits/withdrawals/buys/sells/refunds; include expense/fee only.
-- Provide detailed category breakdown using the authoritative transaction_type and categories provided.
-- For income, use the INCOME ANALYSIS numbers as the single source of truth.
-- State the analysis period you infer from the transactions (e.g., "Aug–Oct 2025") and mention any visible date gaps.
-- After the JSON, write a brief narrative summary (3–6 sentences). Keep calculations in paragraphs, not bullets, no LaTeX.
-${tierInfo.unavailableSources.length > 0 && !searchContext ? `
-AVAILABLE DATA SOURCES:
-${tierInfo.availableSources.length > 0 ? tierInfo.availableSources.map(source => `• ${source}`).join('\n') : '• Account data only'}
-
-UNAVAILABLE DATA SOURCES (upgrade to access):
-${tierInfo.unavailableSources.map(source => `• ${source}`).join('\n')}
-` : ''}`;
-
-  return systemPrompt.trim();
+  return sections.join('\n\n').trim();
 }
 
 export async function askOpenAI(
-  question: string, 
-  conversationHistory: Conversation[] = [], 
-  userTier: UserTier | string = UserTier.STARTER, 
-  isDemo: boolean = false, 
+  question: string,
+  conversationHistory: Conversation[] = [],
+  userTier: UserTier | string = UserTier.STARTER,
+  isDemo: boolean = false,
   userId?: string,
   model?: string
 ): Promise<string> {
-  // Convert string tier to enum if needed
-  const tier = typeof userTier === 'string' ? (userTier as UserTier) : userTier;
-
-  // ✅ Create anonymization services with session isolation (for askOpenAI function)
-  const anonymizationService = new AnonymizationService();
-  const deanonymizationService = new DeanonymizationService(anonymizationService);
-
-  // Get user-specific data
-  let accounts: any[] = [];
-  let transactions: any[] = [];
-
-  // For demo mode, use demo data instead of database data
-  if (isDemo) {
-    console.log('OpenAI: Using demo data for accounts and transactions');
-    try {
-      const { demoData } = await import('./demo-data');
-      accounts = demoData.accounts || [];
-      transactions = demoData.transactions || [];
-      console.log('OpenAI: Demo data loaded - accounts:', accounts.length, 'transactions:', transactions.length);
-    } catch (error) {
-      console.error('OpenAI: Error loading demo data:', error);
-    }
-  } else {
-    // For authenticated users, fetch from database first, then Plaid if needed
-    try {
-      if (userId) {
-        console.log('OpenAI: Fetching user-specific data for userId:', userId);
-        const { getPrismaClient } = await import('./prisma-client');
-        const prisma = getPrismaClient();
-        
-        // First try to get data from database
-        accounts = await prisma.account.findMany({
-          where: { userId },
-          include: { transactions: true }
-        });
-        
-        transactions = await prisma.transaction.findMany({
-          where: { 
-            account: { userId },
-            date: {
-              gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) // 90 days ago
-            }
-          },
-          orderBy: { date: 'desc' },
-          take: 500
-        });
-        
-        // ✅ FIXED: Parse category strings back into arrays for database transactions
-        transactions = transactions.map(transaction => ({
-          ...transaction,
-          // Parse category string back into array if it's stored as comma-separated string
-          category: transaction.category ? 
-            (typeof transaction.category === 'string' ? 
-              transaction.category.split(',').map((cat: any) => cat.trim()).filter((cat: any) => cat && cat !== '') :
-              transaction.category) : 
-            []
-        }));
-        
-        console.log('OpenAI Enhanced: Found', accounts.length, 'accounts and', transactions.length, 'transactions in database for user', userId);
-        
-        // If no data in database, try to fetch from Plaid directly
-        if (accounts.length === 0 || transactions.length === 0) {
-          console.log('OpenAI Enhanced: No data in database, fetching from Plaid directly');
-          
-          // CRITICAL SECURITY FIX: Never call Plaid APIs in demo mode
-          if (isDemo) {
-            console.log('OpenAI Enhanced: DEMO MODE - Skipping Plaid API calls for security');
-          } else {
-            try {
-              // Import Plaid functions directly
-              const { Configuration, PlaidApi, PlaidEnvironments } = await import('plaid');
-              
-              const credentials = getPlaidCredentials();
-              const configuration = new Configuration({
-                basePath: PlaidEnvironments[credentials.env],
-                baseOptions: {
-                  headers: {
-                    'PLAID-CLIENT-ID': credentials.clientId,
-                    'PLAID-SECRET': credentials.secret,
-                  },
-                },
-              });
-              
-              const plaidClient = new PlaidApi(configuration);
-              
-              // Get access tokens for the current user only
-              const accessTokens = await prisma.accessToken.findMany({
-                where: { userId }
-              });
-              
-              if (accessTokens.length > 0) {
-                console.log('OpenAI Enhanced: Found', accessTokens.length, 'access tokens for user', userId);
-                
-                // Fetch accounts from all tokens
-                for (const tokenRecord of accessTokens) {
-                  try {
-                    // Validate token first
-                    const isValid = await validatePlaidToken(tokenRecord, plaidClient, prisma);
-                    if (!isValid) {
-                      console.log(`Skipping invalid token ${tokenRecord.id}`);
-                      continue;
-                    }
-                    
-                    const accountsResponse = await plaidClient.accountsGet({
-                      access_token: tokenRecord.token,
-                    });
-                    
-                    // Use optimized BalanceService (cached, max 1x per day)
-                    const balancesData = await BalanceService.getAccountBalances(
-                      tokenRecord.token,
-                      plaidClient
-                    );
-                    
-                    // Get institution data for this token
-                    const institutionData = await getInstitutionData(tokenRecord.token, plaidClient);
-                    
-                    // Merge account and balance data with institution information
-                    const accountsWithBalances = accountsResponse.data.accounts.map((account: any) => {
-                      const balance = balancesData.find((b: any) => b.account_id === account.account_id);
-                      return {
-                        id: account.account_id,
-                        name: account.name,
-                        type: account.type,
-                        subtype: account.subtype,
-                        institution: institutionData?.name || account.institution_name || 'Unknown',
-                        institution_id: institutionData?.institution_id,
-                        institution_logo: institutionData?.logo,
-                        institution_url: institutionData?.url,
-                        balance: {
-                          available: balance?.available || account.balances?.available,
-                          current: balance?.current || account.balances?.current,
-                          limit: balance?.limit || account.balances?.limit,
-                          iso_currency_code: balance?.iso_currency_code || account.balances?.iso_currency_code,
-                          unofficial_currency_code: balance?.unofficial_currency_code || account.balances?.unofficial_currency_code
-                        }
-                      };
-                    });
-                    
-                    // ✅ DEBUG: Log account data being processed
-                    console.log('OpenAI Enhanced: Raw Plaid accounts for token:', tokenRecord.id);
-                    accountsResponse.data.accounts.forEach((account: any, index: number) => {
-                      console.log(`OpenAI Enhanced: Account ${index}:`, {
-                        id: account.account_id,
-                        name: account.name,
-                        type: account.type,
-                        subtype: account.subtype,
-                        institution: institutionData?.name || account.institution_name || 'Unknown'
-                      });
-                    });
-                    
-                    console.log('OpenAI Enhanced: Processed accounts with balances and institution data:', accountsWithBalances);
-                    
-                    accounts.push(...accountsWithBalances);
-                    console.log('OpenAI Enhanced: Fetched', accountsWithBalances.length, 'accounts from Plaid with institution data');
-                  } catch (error) {
-                    console.error('OpenAI Enhanced: Error fetching accounts from token:', error);
-                  }
-                }
-                
-                // Deduplicate accounts by account_id AND by description (name + type + balance)
-                const accountMap2 = new Map();
-                const accountDescMap2 = new Map();
-                
-                accounts.forEach(account => {
-                  if (account.id && !accountMap2.has(account.id)) {
-                    accountMap2.set(account.id, account);
-                    const balance = account.balance?.current || account.balance?.available || account.currentBalance || account.availableBalance || 0;
-                    const descKey = `${account.name}|${account.type}|${account.subtype}|${balance}`;
-                    accountDescMap2.set(descKey, account);
-                  } else if (!account.id) {
-                    const balance = account.balance?.current || account.balance?.available || account.currentBalance || account.availableBalance || 0;
-                    const descKey = `${account.name}|${account.type}|${account.subtype}|${balance}`;
-                    if (!accountDescMap2.has(descKey)) {
-                      accountDescMap2.set(descKey, account);
-                    }
-                  }
-                });
-                
-                const finalAccountMap2 = new Map();
-                const seenDescriptions2 = new Set();
-                
-                accountMap2.forEach((account, id) => {
-                  const balance = account.balance?.current || account.balance?.available || account.currentBalance || account.availableBalance || 0;
-                  const descKey = `${account.name}|${account.type}|${account.subtype}|${balance}`;
-                  seenDescriptions2.add(descKey);
-                  finalAccountMap2.set(id, account);
-                });
-                
-                accountDescMap2.forEach((account, descKey) => {
-                  if (!seenDescriptions2.has(descKey)) {
-                    finalAccountMap2.set(descKey, account);
-                    seenDescriptions2.add(descKey);
-                  }
-                });
-                
-                accounts = Array.from(finalAccountMap2.values());
-                console.log('OpenAI Enhanced: After deduplication:', accounts.length, 'unique accounts (from', accountMap2.size, 'by ID,', seenDescriptions2.size, 'total unique descriptions)');
-                
-                // Fetch transactions from all tokens
-                const endDate = new Date().toISOString().split('T')[0];
-                const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-                
-                for (const tokenRecord of accessTokens) {
-                  try {
-                    // Use the enhanced transactions endpoint instead of calling Plaid directly
-                    const enhancedTransactionsResponse = await fetch(`${process.env.BACKEND_URL || 'http://localhost:3000'}/plaid/transactions`, {
-                      method: 'GET',
-                      headers: {
-                        'Authorization': `Bearer ${tokenRecord.token}`,
-                        'Content-Type': 'application/json'
-                      }
-                    });
-                    
-                    if (enhancedTransactionsResponse.ok) {
-                      const enhancedTransactionsData = await enhancedTransactionsResponse.json();
-                      const enhancedTransactions = enhancedTransactionsData.transactions || [];
-                      
-                      // Process enhanced transactions (they already include enriched_data)
-                      const processedTransactions = enhancedTransactions.map((transaction: any) => ({
-                        id: transaction.id || transaction.transaction_id,
-                        account_id: transaction.account_id,
-                        amount: transaction.amount,
-                        date: transaction.date,
-                        name: transaction.name,
-                        merchant_name: transaction.merchant_name,
-                        category: transaction.category,
-                        category_id: transaction.category_id,
-                        pending: transaction.pending,
-                        payment_channel: transaction.payment_channel,
-                        location: transaction.location,
-                        payment_meta: transaction.payment_meta,
-                        pending_transaction_id: transaction.pending_transaction_id,
-                        account_owner: transaction.account_owner,
-                        transaction_code: transaction.transaction_code,
-                        enriched_data: transaction.enriched_data // Include enhanced data
-                      }));
-                      
-                      transactions.push(...processedTransactions);
-                      console.log('OpenAI Enhanced: Fetched', processedTransactions.length, 'enhanced transactions from enhanced endpoint');
-                      
-                      // Log enhanced data availability
-                      const enhancedCount = processedTransactions.filter((t: any) => t.enriched_data).length;
-                      console.log(`OpenAI Enhanced: Enhanced data available for ${enhancedCount}/${processedTransactions.length} transactions`);
-                    } else {
-                      console.warn('OpenAI Enhanced: Enhanced transactions endpoint failed, falling back to basic Plaid call');
-                      
-                      // Fallback to basic Plaid call if enhanced endpoint fails
-                      const transactionsResponse = await plaidClient.transactionsGet({
-                        access_token: tokenRecord.token,
-                        start_date: startDate,
-                        end_date: endDate,
-                        options: {
-                          count: 500,
-                          include_personal_finance_category: true
-                        }
-                      });
-                      
-                      const processedTransactions = transactionsResponse.data.transactions.map((transaction: any) => ({
-                        id: transaction.transaction_id,
-                        account_id: transaction.account_id,
-                        amount: transaction.amount,
-                        date: transaction.date,
-                        name: transaction.name,
-                        merchant_name: transaction.merchant_name,
-                        category: transaction.category,
-                        category_id: transaction.category_id,
-                        pending: transaction.pending,
-                        payment_channel: transaction.payment_channel,
-                        location: transaction.location,
-                        payment_meta: transaction.payment_meta,
-                        pending_transaction_id: transaction.pending_transaction_id,
-                        account_owner: transaction.account_owner,
-                        transaction_code: transaction.transaction_code
-                      }));
-                      
-                      transactions.push(...processedTransactions);
-                      console.log('OpenAI Enhanced: Fetched', processedTransactions.length, 'basic transactions from Plaid (fallback)');
-                    }
-                  } catch (error) {
-                    console.error('OpenAI Enhanced: Error fetching transactions:', error);
-                  }
-                }
-              }
-            } catch (plaidError) {
-              console.error('OpenAI Enhanced: Error fetching from Plaid directly:', plaidError);
-            }
-          }
-        }
-        
-        console.log('OpenAI Enhanced: Final count -', accounts.length, 'accounts and', transactions.length, 'transactions for user', userId);
-      } else {
-        console.log('OpenAI Enhanced: No userId provided, fetching all data (this should not happen for authenticated users)');
-      }
-    } catch (error) {
-      console.error('OpenAI Enhanced: Error fetching user data:', error);
-    }
-  }
-
-  // Create dual data structures: real data for display, tokenized data for AI
-  const displayAccounts = [...accounts];
-  const displayTransactions = [...transactions];
-  let aiAccounts = [...accounts];
-  let aiTransactions = [...transactions];
-
-  // Tokenize data for AI processing (skip for demo mode since it uses fake data)
-  if (!isDemo) {
-    aiAccounts = accounts.map(account => ({
-      ...account,
-      name: `Account_${account.id.slice(-4)}`,
-      plaidAccountId: `plaid_${account.id.slice(-8)}`
-    }));
-    
-    aiTransactions = transactions.map(transaction => ({
-      ...transaction,
-      name: transaction.name ? `Transaction_${transaction.id.slice(-4)}` : 'Unknown',
-      merchantName: transaction.merchantName ? `Merchant_${transaction.id.slice(-4)}` : 'Unknown',
-      // ✅ Anonymize enriched data if available - simplified in this code path
-      enriched_data: transaction.enriched_data ? {
-        ...transaction.enriched_data,
-        merchant_name: transaction.enriched_data.merchant_name ? `Merchant_${transaction.id?.slice(-4) || 'XXXX'}` : 'Unknown',
-        category: transaction.enriched_data.category?.map((cat: any) => cat ? `Category_${cat.toString().slice(0, 10)}` : 'Unknown') || [],
-        website: transaction.enriched_data.website ? 
-          `website_${transaction.enriched_data.website.split('.').slice(-2).join('_')}` : undefined,
-        brand_name: transaction.enriched_data.brand_name ? `Brand_${transaction.id?.slice(-4) || 'XXXX'}` : 'Unknown'
-      } : undefined
-    }));
-  }
-
-  // Build tier-aware context using AI data (tokenized for production, real for demo)
-  console.log('OpenAI: Building tier-aware context for tier:', tier, 'isDemo:', isDemo);
-  const tierContext = await dataOrchestrator.buildTierAwareContext(tier, aiAccounts, aiTransactions, isDemo);
-  
-  console.log('OpenAI: Tier context built:', {
-    tier: tierContext.tierInfo.currentTier,
-    availableSources: tierContext.tierInfo.availableSources.length,
-    unavailableSources: tierContext.tierInfo.unavailableSources.length,
-    upgradeHints: tierContext.upgradeHints.length
-  });
-
-  // Get search context for real-time financial information
-  let searchContext: string | undefined;
-  if (tier === UserTier.STANDARD || tier === UserTier.PREMIUM) {
-    try {
-      console.log('OpenAI: Getting search context for question:', question);
-      const searchResults = await dataOrchestrator.getSearchContext(question, tier, isDemo);
-      
-      if (searchResults && searchResults.results.length > 0) {
-        searchContext = searchResults.summary;
-        console.log('OpenAI: Search context found with', searchResults.results.length, 'results');
-        console.log('OpenAI: Search context preview:', searchContext.substring(0, 200) + '...');
-      } else {
-        console.log('OpenAI: No search context found for question');
-      }
-    } catch (error) {
-      console.error('OpenAI: Error getting search context:', error);
-    }
-  }
-
-  // Create account summary using display data (real names for user)
-  const accountSummary = displayAccounts.map(account => {
-    let balance;
-    if (isDemo) {
-      balance = account.balance;
-    } else if (account.balance && account.balance.available !== undefined && account.balance.available !== null) {
-      // ✅ FIX: For checking/savings accounts, use available balance (spendable amount)
-      // For investment accounts, use current balance (total portfolio value)
-      if (account.type === 'depository' || account.type === 'checking' || account.type === 'savings') {
-        balance = account.balance.available; // Use available for checking/savings
-      } else {
-        balance = account.balance.current; // Use current for investments/loans/credit
-      }
-    } else if (account.balance && account.balance.current) {
-      // Fallback to current balance for other account types
-      balance = account.balance.current;
-    } else if (account.availableBalance) {
-      // Database structure - prioritize available balance for checking/savings
-      if (account.type === 'depository' || account.type === 'checking' || account.type === 'savings') {
-        balance = account.availableBalance;
-      } else {
-        balance = account.currentBalance;
-      }
-    } else if (account.currentBalance) {
-      // Database structure - fallback to current balance
-      balance = account.currentBalance;
-    } else {
-      balance = 0;
-    }
-    
-    const subtype = isDemo ? account.type : (account.subtype || account.type);
-    return `- ${account.name} (${account.type}/${subtype}): $${balance?.toFixed(2) || '0.00'}`;
-  }).join('\n');
-
-  // Create transaction summary using display data (real names for user)
-  const transactionSummary = displayTransactions.map(transaction => {
-    const name = isDemo ? transaction.description : transaction.name;
-    
-    // ✅ PRIORITIZE enriched data over basic data for better categorization
-    let category = 'Unknown';
-    
-    // First try enriched data
-    if (transaction.enriched_data?.category && Array.isArray(transaction.enriched_data.category)) {
-      const validEnrichedCategory = transaction.enriched_data.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
-      if (validEnrichedCategory) {
-        category = validEnrichedCategory;
-      }
-    }
-    
-    // Fallback to basic category if no enriched data
-    if (category === 'Unknown' && transaction.category) {
-      if (Array.isArray(transaction.category)) {
-        const validBasicCategory = transaction.category.find((cat: any) => cat && cat.trim() !== '' && cat !== '0');
-        if (validBasicCategory) {
-          category = validBasicCategory;
-        }
-      } else if (typeof transaction.category === 'string' && transaction.category.trim() !== '') {
-        category = transaction.category;
-      }
-    }
-    
-    // ✅ Use anonymized name first (guaranteed to be anonymized if anonymization ran)
-    // Only use enriched_data or merchant_name if name is not available
-    // Note: enriched_data.merchant_name and merchant_name should also be anonymized, 
-    // but name is the safest fallback since it's always anonymized when userId is present
-    const merchantName = name || 
-                         transaction.merchant_name || 
-                         transaction.enriched_data?.merchant_name;
-    
-    // Fix: Invert the transaction amount sign to match expected behavior
-    // Positive amounts should be negative (money leaving account) and vice versa
-    const correctedAmount = -(transaction.amount || 0);
-    
-    // ✅ Include enhanced information when available
-    let enhancedInfo = '';
-    if (transaction.enriched_data) {
-      if (transaction.enriched_data.website) {
-        enhancedInfo += ` [Website: ${transaction.enriched_data.website}]`;
-      }
-      if (transaction.enriched_data.category && transaction.enriched_data.category.length > 1) {
-        enhancedInfo += ` [Categories: ${transaction.enriched_data.category.filter((cat: any) => cat && cat.trim() !== '').join(', ')}]`;
-      }
-      if (transaction.enriched_data.brand_name && transaction.enriched_data.brand_name !== merchantName) {
-        enhancedInfo += ` [Brand: ${transaction.enriched_data.brand_name}]`;
-      }
-    }
-    
-    return `- ${merchantName} (${category}): $${correctedAmount?.toFixed(2) || '0.00'} on ${transaction.date}${enhancedInfo}`;
-  }).join('\n');
-
-  console.log('OpenAI: Account summary for AI:', accountSummary);
-  console.log('OpenAI: Transaction summary for AI:', transactionSummary);
-  console.log('OpenAI: Number of accounts found:', tierContext.accounts.length);
-  console.log('OpenAI: Number of transactions found:', tierContext.transactions.length);
-  console.log('OpenAI: User ID being used:', userId);
-  
-  // ✅ Debug: Log enhanced transaction data availability
-  const enhancedTransactionsCount = tierContext.transactions.filter((t: any) => t.enriched_data).length;
-  const totalTransactionsCount = tierContext.transactions.length;
-  console.log(`OpenAI Enhanced: Enhanced data available for ${enhancedTransactionsCount}/${totalTransactionsCount} transactions`);
-  
-  if (enhancedTransactionsCount > 0) {
-    console.log('OpenAI Enhanced: Sample enhanced transaction data:', {
-      first: tierContext.transactions.find((t: any) => t.enriched_data)?.enriched_data,
-      count: enhancedTransactionsCount
-    });
-  }
-
-  // Get conversation history
-  console.log('OpenAI: Conversation history length:', conversationHistory.length);
-  if (conversationHistory.length > 0) {
-    console.log('OpenAI: Recent conversation questions:', conversationHistory.slice(0, 3).map(c => c.question));
-  }
-
-  // For demo mode, use demo data
-  if (isDemo) {
-    console.log('OpenAI: Demo accounts:', tierContext.accounts.length);
-    console.log('OpenAI: Demo transactions:', tierContext.transactions.length);
-    console.log('OpenAI: Account summary preview:', accountSummary.substring(0, 500));
-    console.log('OpenAI: Transaction summary preview:', transactionSummary.substring(0, 500));
-    console.log('OpenAI: Full account summary:', accountSummary);
-    console.log('OpenAI: Full transaction summary:', transactionSummary);
-  }
-
-  // Get user profile if available
-  let userProfile: string = '';
-  if (userId && !isDemo) {
-    try {
-      const { ProfileManager } = await import('./profile/manager');
-      // ✅ Pass the same AnonymizationService instance to ProfileManager for unified token management
-      const profileManager = new ProfileManager(userId, anonymizationService);
-      
-      // ✅ CRITICAL FIX: Get ORIGINAL (non-anonymized) profile first for enhancement
-      // We need the real profile to enhance it with real Plaid data
-      let originalProfile = await profileManager.getOriginalProfile(userId);
-      
-      // Enhance profile with Plaid data if available (using ORIGINAL profile, not anonymized)
-      if (accounts.length > 0 || transactions.length > 0) {
-        try {
-          const { PlaidProfileEnhancer } = await import('./profile/plaid-enhancer');
-          const plaidEnhancer = new PlaidProfileEnhancer();
-          const enhancedProfile = await plaidEnhancer.enhanceProfileFromPlaidData(
-            userId,
-            accounts,
-            transactions,
-            originalProfile
-          );
-          
-          if (enhancedProfile !== originalProfile) {
-            // Update the persistent profile with enhanced REAL data (not anonymized)
-            try {
-              const { ProfileManager } = await import('./profile/manager');
-              // ProfileManager for update doesn't need AnonymizationService (not anonymizing)
-              const profileManager = new ProfileManager();
-              
-              // ✅ CRITICAL: Preserve structured home data when enhancing profile
-              // The AI-enhanced profile might not include the structured HOME_* fields
-              const existingHomeData = profileManager.extractHomeData(originalProfile);
-              const enhancedHomeData = profileManager.extractHomeData(enhancedProfile);
-              
-              let finalProfile = enhancedProfile;
-              
-              // If we have home data in the original profile but not in the enhanced profile, preserve it
-              if (existingHomeData.address && !enhancedHomeData.address) {
-                console.log('💾 Preserving structured home data during Plaid profile enhancement');
-                
-                // Remove any existing home data markers from enhanced profile (shouldn't be any, but just in case)
-                finalProfile = finalProfile.replace(
-                  /HOME_ADDRESS:.*?\n|HOME_VALUE:.*?\n|HOME_VALUE_LOW:.*?\n|HOME_VALUE_HIGH:.*?\n|HOME_VALUE_LAST_UPDATED:.*?\n/g,
-                  ''
-                ).trim();
-                
-                // Re-add the structured home data (only if we have all required fields)
-                if (existingHomeData.address && existingHomeData.value !== null) {
-                  const homeDataSection = `
-
-HOME_ADDRESS: ${existingHomeData.address}
-HOME_VALUE: ${existingHomeData.value}
-HOME_VALUE_LOW: ${existingHomeData.valueLow ?? existingHomeData.value}
-HOME_VALUE_HIGH: ${existingHomeData.valueHigh ?? existingHomeData.value}
-HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Date().toISOString()}`;
-                  
-                  finalProfile = finalProfile + homeDataSection;
-                }
-              }
-              
-              await profileManager.updateProfile(userId, finalProfile);
-              console.log('OpenAI: Persistent profile updated with Plaid insights (real data)');
-              // Update local variable to use the enhanced profile
-              originalProfile = finalProfile;
-            } catch (profileUpdateError) {
-              console.error('OpenAI: Failed to update persistent profile with Plaid insights:', profileUpdateError);
-              // Don't fail the main request if profile update fails
-            }
-          }
-        } catch (error) {
-          console.error('OpenAI: Failed to enhance profile with Plaid data:', error);
-          // Don't fail the main request if Plaid enhancement fails
-        }
-      }
-      
-      // ✅ NOW anonymize the profile for GPT use (after enhancement with real data)
-      // This ensures the profile stored in DB is always real, and anonymization only happens for GPT
-      // Use getAnonymizedProfile which will retrieve the updated profile and anonymize it using the shared AnonymizationService
-      userProfile = await profileManager.getAnonymizedProfile(userId);
-      console.log('OpenAI: User profile retrieved, enhanced, and anonymized for GPT, length:', userProfile.length);
-      
-      // ✅ NEW: Fetch liabilities data for credit accounts
-      const liabilitiesData = '';
-      try {
-        const accessTokens = await prisma.accessToken.findMany({
-          where: { userId }
-        });
-        
-        if (accessTokens.length > 0) {
-          // Use the first token to get liabilities
-          const token = accessTokens[0].token;
-          const liabilitiesResponse = await fetch(`${process.env.BACKEND_URL || 'http://localhost:3000'}/plaid/liabilities`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          
-          if (liabilitiesResponse.ok) {
-            const liabilitiesData = await liabilitiesResponse.json();
-            console.log('OpenAI Enhanced: Fetched liabilities data:', liabilitiesData);
-            
-            // Add liabilities context to user profile
-            if (liabilitiesData.liabilities && liabilitiesData.liabilities.length > 0) {
-              // Extract all liability accounts for anonymization
-              const allLiabilityAccounts: any[] = [];
-              liabilitiesData.liabilities.forEach((liability: any) => {
-                if (liability.accounts && liability.accounts.length > 0) {
-                  allLiabilityAccounts.push(...liability.accounts);
-                }
-              });
-              
-              if (allLiabilityAccounts.length > 0) {
-                // Anonymize liability data before adding to profile - simplified in this code path
-                const anonymizedLiabilities = allLiabilityAccounts.map((l: any) => `- Liability_${l.id?.slice(-4) || 'XXXX'}: $${l.balance || 0}`).join('\n');
-                userProfile += `\n\nLIABILITIES INFORMATION:\n${anonymizedLiabilities}`;
-                console.log('OpenAI Enhanced: Added anonymized liabilities context to profile');
-              }
-            }
-          } else {
-            // ✅ FIXED: Handle API failures gracefully
-            console.log('OpenAI Enhanced: Liabilities API failed, status:', liabilitiesResponse.status);
-            userProfile += `\n\nLIABILITIES INFORMATION:\nCredit limit information not available - your bank does not provide this data through Plaid.`;
-            console.log('OpenAI Enhanced: Added fallback message for unavailable liabilities data');
-          }
-        }
-      } catch (liabilitiesError) {
-        console.error('OpenAI Enhanced: Error fetching liabilities:', liabilitiesError);
-        // ✅ FIXED: Add fallback message when liabilities fetch fails
-        userProfile += `\n\nLIABILITIES INFORMATION:\nCredit limit information not available - unable to fetch from your bank.`;
-        console.log('OpenAI Enhanced: Added fallback message due to liabilities fetch error');
-      }
-    } catch (error) {
-      console.error('OpenAI Enhanced: Failed to get user profile:', error);
-      // Don't fail the main request if profile retrieval fails
-    }
-  }
-
-  // Build enhanced system prompt with tier-aware context
-  const systemPrompt = buildTierAwareSystemPrompt(tierContext, accountSummary, transactionSummary, searchContext, userProfile);
-
-  console.log('OpenAI: System prompt length:', systemPrompt.length);
-  console.log('OpenAI: System prompt preview:', systemPrompt.substring(0, 500));
-
-  // Prepare conversation history for OpenAI
-  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: 'system', content: systemPrompt }
-  ];
-
-  // Enhanced conversation history processing with context analysis
-  const filteredHistory = filterConversationHistory(conversationHistory, question);
-  const recentHistory = filteredHistory.slice(-8); // Use filtered history
-  
-  // Analyze conversation history for context building opportunities
-  const contextAnalysis = analyzeConversationContext(recentHistory, question);
-  
-  console.log('OpenAI Enhanced: Conversation context analysis:', {
-    hasOpportunities: contextAnalysis.hasContextOpportunities,
-    instruction: contextAnalysis.instruction,
-    historyLength: recentHistory.length
-  });
-  
-  // Add context-aware instruction if there are opportunities to build on previous conversations
-  if (contextAnalysis.hasContextOpportunities) {
-    const contextInstruction = `CONTEXT BUILDING OPPORTUNITY: ${contextAnalysis.instruction}`;
-    messages.push({ role: 'user', content: contextInstruction });
-    console.log('OpenAI Enhanced: Added context building instruction:', contextInstruction);
-  }
-  
-  // Add conversation history with enhanced context
-  for (const conv of recentHistory) {
-    messages.push({ role: 'user', content: conv.question });
-    messages.push({ role: 'assistant', content: conv.answer });
-  }
-
-  // Add current question
-  messages.push({ role: 'user', content: question });
-
-  console.log('OpenAI: Sending request to OpenAI with', messages.length, 'messages');
-  console.log('OpenAI: Using model:', model || 'gpt-4o-mini');
-
-  try {
-    const completion = await openai.chat.completions.create({
-      model: model || 'gpt-4o',
-      messages,
-      temperature: 0.7,
-      max_tokens: 1000
-    });
-
-    let answer = completion.choices[0]?.message?.content || 'I apologize, but I was unable to generate a response.';
-
-    console.log('🔧 TEST: Got OpenAI response, length:', answer.length);
-
-    // Strip LaTeX syntax (safety net in case GPT ignores instructions)
-    answer = stripLatexSyntax(answer);
-    console.log('🔧 LaTeX stripped, new length:', answer.length);
-
-    // Enhance response with upgrade suggestions
-    answer = enhanceResponseWithUpgrades(answer, tierContext, searchContext);
-
-    // ✅ De-anonymize response for user (replace tokens with real names)
-    // Note: deanonymizationService is declared at function level, accessible here
-    if (!isDemo && userId) {
-      try {
-        answer = deanonymizationService.convertResponseToUserFriendly(userId, answer);
-      } catch (e) {
-        console.error('Error de-anonymizing response:', e);
-        // Continue with tokenized response if de-anonymization fails
-      }
-    }
-
-    console.log('OpenAI: Response generated successfully');
-    
-    // Update user profile from conversation BEFORE generating response (for authenticated users only)
-    if (userId && !isDemo) {
-      try {
-        const { ProfileManager } = await import('./profile/manager');
-        const profileManager = new ProfileManager();
-        
-        // Extract profile information from the user's question BEFORE AI response
-        await profileManager.updateProfileFromConversation(userId, {
-          id: 'temp',
-          question,
-          answer: '', // No answer yet - we're extracting from the question
-          createdAt: new Date()
-        });
-        console.log('OpenAI: User profile updated from conversation question');
-      } catch (error) {
-        console.error('OpenAI: Failed to update user profile:', error);
-        // Don't fail the main request if profile update fails
-      }
-    }
-    
-    return answer;
-  } catch (error) {
-    console.error('OpenAI: Error calling OpenAI API:', error);
-    throw new Error('Failed to get AI response');
-  }
+  return askOpenAIWithEnhancedContext(question, conversationHistory, userTier, isDemo, userId, model);
 }
 
-function buildTierAwareSystemPrompt(
-  tierContext: TierAwareContext, 
-  accountSummary: string, 
-  transactionSummary: string,
-  searchContext?: string,
-  userProfile?: string
-): string {
-  const { tierInfo, marketContext, upgradeHints } = tierContext;
-
-  let systemPrompt = '';
-
-  // Add search context at the very top with clear delimiters if available
-  if (searchContext) {
-    systemPrompt += `=== REAL-TIME FINANCIAL DATA ===
-${searchContext}
-=== END REAL-TIME FINANCIAL DATA ===
-
-CRITICAL INSTRUCTIONS:
-- You MUST use the information between the === REAL-TIME FINANCIAL DATA === markers to answer the user's question
-- Do NOT say you lack access to real-time data when the answer is present above
-- When the user asks about rates, prices, or current information, use the specific data from the search results above
-- Provide the current information from the search results directly
-- If the search results contain the answer, use that information instead of your training data
-
-`;
-  }
-
-  systemPrompt += `You are Linc, an AI-powered financial analyst. You help users understand their finances by analyzing their account data and providing clear, actionable insights.
-
-IMPORTANT: You have access to the user's financial data and current market conditions based on their subscription tier. Use this data to provide personalized, accurate financial advice.
-
-CONVERSATION CONTEXT:
-- Analyze conversation history to build context across multiple turns
-- Connect new information (age, income, goals) to previous questions
-- Proactively offer to complete prior incomplete analyses when you now have sufficient information
-- Reference previous conversation details: "Based on your earlier question about..." or "Now that I know..."
-
-${userProfile && userProfile.trim() ? `USER PROFILE:
-${userProfile}
-
-Use this profile information to provide more personalized and relevant financial advice.
-Consider the user's personal situation, family status, occupation, and financial goals when making recommendations.
-
-` : ''}
-
-USER'S FINANCIAL DATA:
-Accounts:
-${accountSummary || 'No accounts found'}
-
-Recent Transactions:
-${transactionSummary || 'No transactions found'}
-
-DATA INTERPRETATION:
-- Credit cards: "balance" = outstanding balance (money owed); "limit" = credit limit (if available)
-- Checking/savings: "balance" = available balance (money you have)
-- NEVER say credit cards are "maxed out" or infer utilization % without explicit credit limit data
-- When limits unknown, state "Credit Limit: Unknown" - don't assume balance equals limit
-
-USER TIER: ${String(tierInfo.currentTier).toUpperCase()}
-
-AVAILABLE DATA SOURCES:
-${tierInfo.availableSources.length > 0 ? tierInfo.availableSources.map(source => `• ${source}`).join('\n') : '• Account data only'}
-
-${tierInfo.unavailableSources.length > 0 ? `UNAVAILABLE DATA SOURCES (upgrade to access):
-${tierInfo.unavailableSources.map(source => `• ${source}`).join('\n')}` : ''}
-
-MARKET CONTEXT:
-${marketContext?.economicIndicators ? `Economic Indicators:
-- CPI Index: ${marketContext.economicIndicators.cpi.value} (${marketContext.economicIndicators.cpi.date})
-- Fed Funds Rate: ${marketContext.economicIndicators.fedRate.value}%
-- Average 30-year Mortgage Rate: ${marketContext.economicIndicators.mortgageRate.value}%
-- Average Credit Card APR: ${marketContext.economicIndicators.creditCardAPR.value}%` : 'No economic indicators available (upgrade to Standard tier)'}
-
-${marketContext?.liveMarketData ? `Live Market Data:
-CD Rates (APY): ${marketContext.liveMarketData.cdRates.map(cd => `${cd.term}: ${cd.rate}%`).join(', ')}
-Treasury Yields: ${marketContext.liveMarketData.treasuryYields.slice(0, 4).map(t => `${t.term}: ${t.yield}%`).join(', ')}
-Current Mortgage Rates: ${marketContext.liveMarketData.mortgageRates.map(m => `${m.type}: ${m.rate}%`).join(', ')}` : 'No live market data available (upgrade to Premium tier)'}
-
-${searchContext ? `ADDITIONAL REAL-TIME INFORMATION:
-The search results above contain current financial data. When the user asks about rates, prices, or current information, use the specific data from the search results above. Do NOT say you don't have access to this information when it is provided in the search results.` : ''}
-
-${!searchContext ? `TIER LIMITATIONS:
-${tierInfo.limitations.map(limitation => `• ${limitation}`).join('\n')}` : ''}
-
-INSTRUCTIONS:
-- Provide clear, actionable advice using specific numbers from user's data
-- Reference current market conditions and real-time information when available
-- Be conversational but professional; ask for clarification if data insufficient
-- Always cite external data sources when used
-
-RESPONSE FORMATTING - CRITICAL RULES:
-
-RULE #1: NEVER USE LATEX OR MATH NOTATION
-- Do NOT use: \\text{}, \\div, \\frac{}, \\approx, or ANY LaTeX commands
-- Do NOT wrap calculations in [ ] brackets
-- Use plain text: / for division, * for multiplication, ~ for approximately
-
-RULE #2: CALCULATIONS MUST NOT BE IN BULLET LISTS
-Do NOT put calculations as bullet points. Show them as standalone paragraphs.
-
-CORRECT - calculations as paragraphs:
-  ## Financial Runway Calculation
-  
-  Monthly Shortfall = $10,680.29 - $7,062.98 = **$3,617.31**
-  
-  Financial Runway = $1,401,438.42 / $3,617.31 = **387.4 months** or **32.3 years**
-
-WRONG - do NOT do this:
-  ## Financial Runway Calculation
-  - Monthly Shortfall: $10,680.29 - $7,062.98 = $3,617.31
-  - Financial Runway: $1,401,438.42 / $3,617.31 = 387.4 months
-
-RULE #3: When to use bullet lists
-- Use bullets ONLY for listing items, steps, or distinct points
-- Do NOT use bullets for calculations, formulas, or math
-- Use **bold** for critical values in calculations
-
-Other formatting:
-- Headers: ## on own line with blank lines before/after
-- Currency: $X,XXX.XX | Percentages: XX.XX%
-- Style: Clean, concise, professional
-
-${!searchContext && tierInfo.unavailableSources.length > 0 ? `
-- Be helpful with current tier limitations
-- Suggest upgrades when appropriate
-- Focus on available data sources` : ''}`;
-
-  return systemPrompt;
-}
-
-// Function specifically for tests that uses a cheaper model
 export async function askOpenAIForTests(
   question: string, 
   conversationHistory: Conversation[] = [], 
   userTier: UserTier | string = UserTier.STARTER, 
   isDemo: boolean = false, 
-  userId?: string
+  userId?: string,
+  model: string = 'gpt-4o-mini'
 ): Promise<string> {
-  // Use a cheaper model for tests
-  return askOpenAI(question, conversationHistory, userTier, isDemo, userId, 'gpt-3.5-turbo');
+  return askOpenAIWithEnhancedContext(question, conversationHistory, userTier, isDemo, userId, model);
 }
