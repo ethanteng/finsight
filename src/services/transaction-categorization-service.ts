@@ -51,7 +51,7 @@ export interface Account {
 export interface CategorizedTransaction extends Transaction {
   transaction_type: TransactionType;
   categorization_confidence: number; // 0-1
-  categorization_method: 'gpt' | 'plaid';
+  categorization_method: 'gpt' | 'plaid' | 'manual' | 'cached';
   categorization_reason?: string;
 }
 
@@ -79,7 +79,7 @@ export interface CategorizationDetail {
   categorization: {
     transaction_type: TransactionType;
     confidence: number;
-    method: 'gpt' | 'plaid';
+    method: 'gpt' | 'plaid' | 'manual' | 'cached';
     reason?: string;
   };
 }

@@ -304,205 +304,296 @@ export class FinancialDataService {
     if (!options?.skipCategorization && (mergedData.bankingTransactions.length > 0 || mergedData.investments.transactions.length > 0)) {
       const accountsMap = new Map(mergedData.accounts.map(acc => [acc.account_id, acc]));
       
-      // ✅ CRITICAL: Load manual corrections from database before categorizing
-          // ✅ CRITICAL: Map aiCategory to transaction_type so income filter can find them
-          // Merge aiCategory (transaction_type) from database into transactions to preserve manual corrections
-          try {
-            // ✅ Get all transaction IDs - Plaid uses transaction_id, investment uses investment_transaction_id or id
-            // We need to normalize to what's stored as plaidTransactionId in DB
+      console.log('FinancialDataService: Categorizing transactions before normalization');
+      
+      const allCategorizationDetails: CategorizationDetail[] = [];
+      let gptCategorizedCount = 0;
+      let plaidFallbackCount = 0;
+      let totalConfidence = 0;
+      
+      const ttlParsed = parseInt(process.env.CATEGORIZATION_CACHE_TTL_HOURS || '24', 10);
+      const categorizationTtlMs = Number.isFinite(ttlParsed) && ttlParsed > 0 ? ttlParsed * 60 * 60 * 1000 : 0;
+      const now = Date.now();
+      
+      const existingCategorizationsMap = new Map<string, {
+        aiCategory: string | null;
+        aiCategoryReason: string | null;
+        categoryComparedAt: Date | null;
+      }>();
+      
+      try {
         const transactionIds: string[] = [];
-        const transactionIdMap = new Map<string, { source: 'banking' | 'investment', index: number }>();
         
-        // Banking transactions: use transaction_id (Plaid's field) or id if set
-        mergedData.bankingTransactions.forEach((tx, idx) => {
+        mergedData.bankingTransactions.forEach(tx => {
           const txId = (tx as any).transaction_id || tx.id || tx.transaction_id;
           if (txId && !txId.startsWith('snaptrade-')) {
             transactionIds.push(txId);
-            transactionIdMap.set(txId, { source: 'banking', index: idx });
           }
         });
         
-        // Investment transactions: use id or transaction_id, but handle Plaid investment_transaction_id
-        mergedData.investments.transactions.forEach((tx, idx) => {
-          // Plaid investment transactions use investment_transaction_id, but we might have stored as id
+        mergedData.investments.transactions.forEach(tx => {
           const txId = (tx as any).investment_transaction_id || (tx as any).id || tx.transaction_id || tx.id;
           if (txId) {
             transactionIds.push(txId);
-            transactionIdMap.set(txId, { source: 'investment', index: idx });
           }
         });
         
         if (transactionIds.length > 0) {
-          // ✅ Load ALL existing categorizations (both manual corrections and previous GPT categorizations)
-          // We need to preserve all of them, not just manual corrections
-          // Manual corrections will override GPT, but we also want to preserve previous GPT categorizations
-          // if the user hasn't manually corrected them
           const dbTransactions = await prisma.transaction.findMany({
             where: {
               plaidTransactionId: { in: transactionIds },
-              aiCategory: { not: null } // Fetch all transactions with any categorization (manual or GPT)
+              aiCategory: { not: null }
             },
             select: {
               plaidTransactionId: true,
               aiCategory: true,
-              aiCategoryReason: true
+              aiCategoryReason: true,
+              categoryComparedAt: true
             }
           });
           
-          // Create a map of transaction ID -> existing categorization
-          // These will be loaded into transactions before categorization
-          // If aiCategoryReason contains "Manually corrected", categorization service will use it
-          // Otherwise, categorization will re-run (allowing GPT to update previous categorizations)
-          const existingCategorizationsMap = new Map(
-            dbTransactions.map(dbTx => [dbTx.plaidTransactionId, {
+          for (const dbTx of dbTransactions) {
+            existingCategorizationsMap.set(dbTx.plaidTransactionId, {
               aiCategory: dbTx.aiCategory,
-              aiCategoryReason: dbTx.aiCategoryReason
-            }])
-          );
-          
-          // Merge existing categorizations into transactions using the map
-          // The categorization service will check for aiCategory and use it if it's a manual correction
-          // If it's a previous GPT categorization, it will be overwritten by new GPT categorization
-          mergedData.bankingTransactions = mergedData.bankingTransactions.map(tx => {
-            const txId = (tx as any).transaction_id || tx.id || tx.transaction_id;
-            if (!txId || txId.startsWith('snaptrade-')) return tx;
-            const existingCategorization = existingCategorizationsMap.get(txId);
-            if (existingCategorization) {
-              // ✅ Check if this is a manual correction (user explicitly set it)
-              // Manual corrections have reason containing "Manually corrected" or "corrected by user"
-              const isManualCorrection = existingCategorization.aiCategoryReason?.toLowerCase().includes('manually corrected') ||
-                                       existingCategorization.aiCategoryReason?.toLowerCase().includes('corrected by user');
-              
-              if (isManualCorrection) {
-                // Manual correction - always preserve it
-                return {
-                  ...tx,
-                  aiCategory: existingCategorization.aiCategory,
-                  transaction_type: existingCategorization.aiCategory, // ✅ Map aiCategory to transaction_type
-                  aiCategoryReason: existingCategorization.aiCategoryReason 
-                };
-              }
-              // Previous GPT categorization - let categorization service re-categorize
-              // Don't set aiCategory here, so GPT can update it
-              // But still map existing aiCategory to transaction_type for income filter
-              if (existingCategorization.aiCategory) {
-                return {
-                  ...tx,
-                  transaction_type: existingCategorization.aiCategory // ✅ Map aiCategory to transaction_type
-                };
-              }
-            }
-            return tx;
-          });
-          
-          mergedData.investments.transactions = mergedData.investments.transactions.map(tx => {
-            // For investment transactions, try both investment_transaction_id and id
-            const txId = (tx as any).investment_transaction_id || (tx as any).id || tx.transaction_id || tx.id;
-            if (!txId) return tx;
-            const existingCategorization = existingCategorizationsMap.get(txId);
-            if (existingCategorization) {
-              // ✅ Check if this is a manual correction
-              const isManualCorrection = existingCategorization.aiCategoryReason?.toLowerCase().includes('manually corrected') ||
-                                       existingCategorization.aiCategoryReason?.toLowerCase().includes('corrected by user');
-              
-              if (isManualCorrection) {
-                // Manual correction - always preserve it
-                return { 
-                  ...tx, 
-                  aiCategory: existingCategorization.aiCategory,
-                  transaction_type: existingCategorization.aiCategory, // ✅ Map aiCategory to transaction_type
-                  aiCategoryReason: existingCategorization.aiCategoryReason 
-                };
-              }
-              // Previous GPT categorization - let categorization service re-categorize
-              // But still map existing aiCategory to transaction_type for income filter
-              if (existingCategorization.aiCategory) {
-                return {
-                  ...tx,
-                  transaction_type: existingCategorization.aiCategory // ✅ Map aiCategory to transaction_type
-                };
-              }
-            }
-            return tx;
-          });
-          
-          const manualCorrectionCount = Array.from(existingCategorizationsMap.values())
-            .filter(ec => ec.aiCategoryReason?.toLowerCase().includes('manually corrected') || 
-                         ec.aiCategoryReason?.toLowerCase().includes('corrected by user'))
-            .length;
-          
-          console.log(`FinancialDataService: Loaded ${existingCategorizationsMap.size} existing categorizations (${manualCorrectionCount} manual corrections) from database`);
+              aiCategoryReason: dbTx.aiCategoryReason,
+              categoryComparedAt: dbTx.categoryComparedAt ? new Date(dbTx.categoryComparedAt) : null
+            });
+          }
         }
       } catch (error) {
         console.error('FinancialDataService: Error loading manual corrections from database:', error);
         // Continue with categorization even if loading corrections fails
       }
       
-      console.log('FinancialDataService: Categorizing transactions before normalization');
+      const manualCorrectionCount = Array.from(existingCategorizationsMap.values())
+        .filter(ec => ec.aiCategoryReason?.toLowerCase().includes('manually corrected') || 
+                     ec.aiCategoryReason?.toLowerCase().includes('corrected by user'))
+        .length;
       
-      // Collect all categorization details if requested
-      const allCategorizationDetails: CategorizationDetail[] = [];
-      let gptCategorizedCount = 0;
-      let plaidFallbackCount = 0;
-      let totalConfidence = 0;
+      console.log(`FinancialDataService: Loaded ${existingCategorizationsMap.size} existing categorizations (${manualCorrectionCount} manual corrections) from database`);
       
-      // Categorize banking transactions
-      if (mergedData.bankingTransactions.length > 0) {
+      const buildDetail = (originalTx: any, categorizedTx: any): CategorizationDetail => {
+            const account = accountsMap.get(originalTx.account_id);
+            const pfc = (originalTx as any).personal_finance_category;
+                return {
+              transaction: {
+                id: originalTx.id || originalTx.transaction_id || 'unknown',
+                name: originalTx.name,
+                amount: originalTx.amount,
+                date: originalTx.date,
+                category: originalTx.category || [],
+                category_id: originalTx.category_id,
+                personal_finance_category: pfc ? {
+                  primary: pfc.primary || '',
+                  detailed: pfc.detailed || ''
+                } : null,
+                payment_channel: originalTx.payment_channel,
+                merchant_name: originalTx.merchant_name,
+                iso_currency_code: originalTx.iso_currency_code,
+                pending: originalTx.pending
+              },
+              account: {
+                account_id: account?.account_id || originalTx.account_id,
+                type: account?.type || 'unknown',
+                subtype: account?.subtype,
+                name: account?.name || 'Unknown Account'
+              },
+              categorization: {
+                transaction_type: categorizedTx.transaction_type,
+                confidence: categorizedTx.categorization_confidence ?? 1,
+                method: categorizedTx.categorization_method || 'cached',
+                reason: categorizedTx.categorization_reason || categorizedTx.aiCategoryReason
+              }
+            };
+          };
+          
+      const processTransactionGroup = async (
+            transactions: any[],
+            getTransactionId: (tx: any) => string | undefined,
+            label: 'banking' | 'investment'
+          ): Promise<{
+            results: any[];
+            reusedCount: number;
+            manualCount: number;
+            recategorizedCount: number;
+          }> => {
+            if (transactions.length === 0) {
+              return { results: transactions, reusedCount: 0, manualCount: 0, recategorizedCount: 0 };
+            }
+            
+            const output: any[] = new Array(transactions.length);
+            const toCategorize: Array<{ tx: any; index: number }> = [];
+            let reusedCount = 0;
+            let manualCountLocal = 0;
+            
+            transactions.forEach((tx, index) => {
+              const txId = getTransactionId(tx);
+              if (!txId) {
+                toCategorize.push({ tx, index });
+                return;
+              }
+              
+              const existing = existingCategorizationsMap.get(txId);
+              if (!existing || !existing.aiCategory) {
+                toCategorize.push({ tx, index });
+                return;
+              }
+              
+              const isManual = existing.aiCategoryReason?.toLowerCase().includes('manually corrected') ||
+                               existing.aiCategoryReason?.toLowerCase().includes('corrected by user');
+              
+              const isFresh = isManual ||
+                (existing.categoryComparedAt instanceof Date &&
+                  categorizationTtlMs > 0 &&
+                  now - existing.categoryComparedAt.getTime() <= categorizationTtlMs);
+              
+              if (!isFresh) {
+                toCategorize.push({ tx, index });
+                return;
+              }
+              
+              const preservedTx = {
+                  ...tx,
+                aiCategory: existing.aiCategory,
+                transaction_type: existing.aiCategory,
+                aiCategoryReason: existing.aiCategoryReason,
+                categorization_method: isManual ? 'manual' : 'cached',
+                categorization_confidence: isManual ? 1 : 0.95,
+                categorization_reason: existing.aiCategoryReason ||
+                  (isManual ? 'Manually corrected by user' : 'Cached AI categorization'),
+                categoryComparedAt: existing.categoryComparedAt || undefined,
+                iso_currency_code: (tx as any).iso_currency_code || 'USD'
+              };
+              
+              output[index] = preservedTx;
+              reusedCount += isManual ? 0 : 1;
+              if (isManual) {
+                manualCountLocal += 1;
+              }
+              
+              if (options?.collectCategorizationDetails) {
+                allCategorizationDetails.push(buildDetail(tx, preservedTx));
+                totalConfidence += preservedTx.categorization_confidence ?? 1;
+              }
+            });
+            
+            let recategorizedCount = 0;
+            
+            if (toCategorize.length > 0) {
+              const transactionsToCategorize = toCategorize.map(item => item.tx);
+              recategorizedCount = transactionsToCategorize.length;
+              
         if (options?.collectCategorizationDetails) {
-          // Use detailed categorization method
           const result = await this.transactionCategorizationService.categorizeTransactionBatchWithDetails(
-            mergedData.bankingTransactions,
+                  transactionsToCategorize,
             accountsMap
           );
-          mergedData.bankingTransactions = result.transactions.map(tx => ({
-            ...tx,
-            iso_currency_code: tx.iso_currency_code || 'USD'
-          }));
+                
+                result.transactions.forEach((categorizedTx, idx) => {
+                  const originalIndex = toCategorize[idx].index;
+                  output[originalIndex] = {
+                    ...categorizedTx,
+                    iso_currency_code: categorizedTx.iso_currency_code || 'USD'
+                  };
+                });
+                
           allCategorizationDetails.push(...result.details);
           gptCategorizedCount += result.summary.gptCategorized;
           plaidFallbackCount += result.summary.plaidFallback;
           totalConfidence += result.summary.averageConfidence * result.summary.total;
         } else {
-          // Use regular categorization method (faster)
           const categorized = await this.transactionCategorizationService.categorizeTransactionBatch(
-            mergedData.bankingTransactions,
+                  transactionsToCategorize,
             accountsMap
           );
-          mergedData.bankingTransactions = categorized.map(tx => ({
-            ...tx,
-            iso_currency_code: tx.iso_currency_code || 'USD'
-          }));
-        }
-      }
-      
-      // Categorize investment transactions
+                
+                categorized.forEach((categorizedTx, idx) => {
+                  const originalIndex = toCategorize[idx].index;
+                  output[originalIndex] = {
+                    ...categorizedTx,
+                    iso_currency_code: categorizedTx.iso_currency_code || 'USD'
+                  };
+                });
+              }
+            }
+            
+            // Fill any unset slots with original transaction data
+            output.forEach((value, idx) => {
+              if (!value) {
+                output[idx] = {
+                  ...transactions[idx],
+                  iso_currency_code: (transactions[idx] as any).iso_currency_code || 'USD'
+                };
+              }
+            });
+            
+            if (reusedCount > 0 || manualCountLocal > 0) {
+              console.log(`FinancialDataService: Reused ${reusedCount} cached categorizations` +
+                (manualCountLocal > 0 ? ` and preserved ${manualCountLocal} manual corrections` : '') +
+                ` for ${label} transactions (recategorized ${recategorizedCount})`);
+            }
+            
+            return {
+              results: output,
+              reusedCount,
+              manualCount: manualCountLocal,
+              recategorizedCount
+            };
+          };
+          
+          // Categorize banking transactions with caching
+          let bankingRecategorized = 0;
+          let bankingReused = 0;
+          let bankingManual = 0;
+          
+          if (mergedData.bankingTransactions.length > 0) {
+            const bankingResult = await processTransactionGroup(
+              mergedData.bankingTransactions,
+              (tx) => {
+                const txId = (tx as any).transaction_id || tx.id || tx.transaction_id;
+                return txId && !txId.startsWith('snaptrade-') ? txId : undefined;
+              },
+              'banking'
+            );
+            
+            mergedData.bankingTransactions = bankingResult.results;
+            bankingRecategorized = bankingResult.recategorizedCount;
+            bankingReused = bankingResult.reusedCount;
+            bankingManual = bankingResult.manualCount;
+          }
+          
+          // Categorize investment transactions with caching
+          let investmentRecategorized = 0;
+          let investmentReused = 0;
+          let investmentManual = 0;
+          
       if (mergedData.investments.transactions.length > 0) {
-        if (options?.collectCategorizationDetails) {
-          // Use detailed categorization method
-          const result = await this.transactionCategorizationService.categorizeTransactionBatchWithDetails(
+            const investmentResult = await processTransactionGroup(
             mergedData.investments.transactions,
-            accountsMap
-          );
-          mergedData.investments.transactions = result.transactions.map(tx => ({
-            ...tx,
-            iso_currency_code: tx.iso_currency_code || 'USD'
-          }));
-          allCategorizationDetails.push(...result.details);
-          gptCategorizedCount += result.summary.gptCategorized;
-          plaidFallbackCount += result.summary.plaidFallback;
-          totalConfidence += result.summary.averageConfidence * result.summary.total;
-        } else {
-          // Use regular categorization method (faster)
-          const categorized = await this.transactionCategorizationService.categorizeTransactionBatch(
-            mergedData.investments.transactions,
-            accountsMap
-          );
-          mergedData.investments.transactions = categorized.map(tx => ({
-            ...tx,
-            iso_currency_code: tx.iso_currency_code || 'USD'
-          }));
-        }
-      }
+              (tx) => (tx as any).investment_transaction_id || (tx as any).id || tx.transaction_id || tx.id,
+              'investment'
+            );
+            
+            mergedData.investments.transactions = investmentResult.results;
+            investmentRecategorized = investmentResult.recategorizedCount;
+            investmentReused = investmentResult.reusedCount;
+            investmentManual = investmentResult.manualCount;
+          }
+          
+          console.log('FinancialDataService: Categorization reuse summary', {
+            banking: {
+              total: mergedData.bankingTransactions.length,
+              reused: bankingReused,
+              manual: bankingManual,
+              recategorized: bankingRecategorized
+            },
+            investment: {
+              total: mergedData.investments.transactions.length,
+              reused: investmentReused,
+              manual: investmentManual,
+              recategorized: investmentRecategorized
+            }
+          });
       
       console.log('FinancialDataService: Categorization complete');
       
@@ -517,7 +608,7 @@ export class FinancialDataService {
             averageConfidence: allCategorizationDetails.length > 0 ? totalConfidence / allCategorizationDetails.length : 0
           }
         };
-        console.log('FinancialDataService: Categorization details collected:', mergedData.categorizationDetails.summary);
+          }
       }
     } else if (options?.skipCategorization) {
       console.log('FinancialDataService: Skipping categorization (UI-only request)');
@@ -969,9 +1060,9 @@ export class FinancialDataService {
             balances[account.account_id] = account.balances;
           }
 
-          const hasInvestmentAccounts = accountsResponse.data.accounts.some(acc =>
-            acc.type === 'investment' || (acc.subtype && INVESTMENT_SUBTYPES.includes(acc.subtype.toLowerCase()))
-          );
+            const hasInvestmentAccounts = accountsResponse.data.accounts.some(acc =>
+              acc.type === 'investment' || (acc.subtype && INVESTMENT_SUBTYPES.includes(acc.subtype.toLowerCase()))
+            );
 
           const asyncTasks: Promise<void>[] = [];
 
@@ -1079,12 +1170,12 @@ export class FinancialDataService {
 
           if (options.includeTransactions) {
             asyncTasks.push((async () => {
-              try {
-                const endDate = new Date().toISOString().split('T')[0];
-                const transactionHistoryDays = parseInt(process.env.TRANSACTION_HISTORY_DAYS || '90', 10);
-                const startDate = new Date(Date.now() - transactionHistoryDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-                
-                console.log(`FinancialDataService: Fetching Plaid banking transactions from ${startDate} to ${endDate} (${transactionHistoryDays} days)`);
+            try {
+              const endDate = new Date().toISOString().split('T')[0];
+              const transactionHistoryDays = parseInt(process.env.TRANSACTION_HISTORY_DAYS || '90', 10);
+              const startDate = new Date(Date.now() - transactionHistoryDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+              
+              console.log(`FinancialDataService: Fetching Plaid banking transactions from ${startDate} to ${endDate} (${transactionHistoryDays} days)`);
 
                 const mapTransaction = (tx: any) => {
                   const normalized = {
@@ -1096,27 +1187,27 @@ export class FinancialDataService {
                   return normalized;
                 };
 
-                const transactionsResponse = await plaidClient.transactionsGet({
-                  access_token: tokenRecord.token,
-                  start_date: startDate,
-                  end_date: endDate,
-                  options: {
+              const transactionsResponse = await plaidClient.transactionsGet({
+                access_token: tokenRecord.token,
+                start_date: startDate,
+                end_date: endDate,
+                options: {
                     count: 500,
                     include_personal_finance_category: true
-                  }
-                });
-
-                if (transactionsResponse.data.transactions.length > 0) {
-                  const sampleTxn = transactionsResponse.data.transactions[0];
-                  console.log(`FinancialDataService: Sample Plaid transaction structure:`, {
-                    name: sampleTxn.name,
-                    amount: sampleTxn.amount,
-                    category: sampleTxn.category,
-                    category_id: sampleTxn.category_id,
-                    personal_finance_category: (sampleTxn as any).personal_finance_category,
-                    allKeys: Object.keys(sampleTxn)
-                  });
                 }
+              });
+
+              if (transactionsResponse.data.transactions.length > 0) {
+                const sampleTxn = transactionsResponse.data.transactions[0];
+                console.log(`FinancialDataService: Sample Plaid transaction structure:`, {
+                  name: sampleTxn.name,
+                  amount: sampleTxn.amount,
+                  category: sampleTxn.category,
+                  category_id: sampleTxn.category_id,
+                  personal_finance_category: (sampleTxn as any).personal_finance_category,
+                  allKeys: Object.keys(sampleTxn)
+                });
+              }
 
                 transactions.push(...transactionsResponse.data.transactions.map(mapTransaction));
 
@@ -1143,14 +1234,14 @@ export class FinancialDataService {
                     totalTransactions
                   });
                 }
-              } catch (transactionError: any) {
-                console.error('Error fetching transactions for token:', transactionError?.response?.data?.error_code);
-                errors.push({
-                  tokenId: tokenRecord.id,
-                  error: transactionError?.response?.data?.error_message || transactionError.message,
-                  timestamp: new Date()
-                });
-              }
+            } catch (transactionError: any) {
+              console.error('Error fetching transactions for token:', transactionError?.response?.data?.error_code);
+              errors.push({
+                tokenId: tokenRecord.id,
+                error: transactionError?.response?.data?.error_message || transactionError.message,
+                timestamp: new Date()
+              });
+            }
             })());
           }
 

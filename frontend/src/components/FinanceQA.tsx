@@ -194,16 +194,32 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
 
       const data = await res.json();
       if (data.answer) {
-        const segments = data.answer
+        const parsedSegments = data.answer
           .split(/\n{2,}/)
           .map((segment: string) => segment.trim())
           .filter((segment: string) => segment.length > 0);
-        
-        if (segments.length > 0) {
-          setStreamingSegments(segments);
-          setIsStreaming(true);
-        } else {
+        let segmentsToStream = parsedSegments;
+
+        if (segmentsToStream.length === 0) {
           setAnswer(data.answer);
+        } else {
+          if (segmentsToStream.length === 1) {
+            const chunkSize = 400;
+            const singleSegment = segmentsToStream[0];
+            const chunked: string[] = [];
+            for (let i = 0; i < singleSegment.length; i += chunkSize) {
+              chunked.push(singleSegment.slice(i, i + chunkSize));
+            }
+            if (chunked.length > 1) {
+              segmentsToStream = chunked;
+              setAnswer('');
+            }
+          } else {
+            setAnswer('');
+          }
+
+          setStreamingSegments(segmentsToStream);
+          setIsStreaming(true);
         }
         // Store conversation ID for feedback
         if (data.conversationId) {

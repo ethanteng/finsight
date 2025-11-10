@@ -589,41 +589,6 @@ export function convertResponseToUserFriendly(response: string): string {
     return String(response); // Use String() directly to get "null", "undefined", etc.
   }
   
-  // ✅ DEBUG: Log current tokenization maps and response content
-  console.log('convertResponseToUserFriendly: Current merchantRealDataMap size:', merchantRealDataMap.size);
-  if (merchantRealDataMap.size > 0) {
-    console.log('convertResponseToUserFriendly: Merchant mappings:', 
-      Array.from(merchantRealDataMap.entries()).slice(0, 10));
-  }
-  
-  // ✅ DEBUG: Log account tokenization maps to diagnose Robinhood account issue
-  console.log('convertResponseToUserFriendly: Current accountRealDataMap size:', accountRealDataMap.size);
-  if (accountRealDataMap.size > 0) {
-    console.log('convertResponseToUserFriendly: Account mappings:', 
-      Array.from(accountRealDataMap.entries()).slice(0, 20));
-  }
-  
-  // ✅ DEBUG: Check for specific Robinhood account tokens in response
-  const robinhoodTokens = response.match(/Account_\d+/g);
-  if (robinhoodTokens) {
-    console.log('convertResponseToUserFriendly: Found Robinhood account tokens in response:', robinhoodTokens);
-    robinhoodTokens.forEach(token => {
-      const realData = accountRealDataMap.get(token);
-      console.log(`convertResponseToUserFriendly: Token ${token} maps to:`, realData);
-    });
-  }
-  
-  // ✅ DEBUG: Dump all tokenization maps to see current state
-  dumpTokenizationMaps();
-  
-  // ✅ DEBUG: Check for July transaction patterns in response (safe now that we know it's a string)
-  const julyPatterns = response.match(/CREDIT CARD.*PAYMENT.*\/\/\d+/g);
-  const merchantPatterns = response.match(/Merchant_\d+/g);
-  console.log('convertResponseToUserFriendly: Found patterns:', {
-    julyPatterns: julyPatterns?.slice(0, 5),
-    merchantPatterns: merchantPatterns?.slice(0, 5)
-  });
-  
   let userFriendlyResponse = response;
   
   // Replace account tokens with real names

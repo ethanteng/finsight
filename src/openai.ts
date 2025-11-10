@@ -1995,6 +1995,16 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
     }
 
     console.log('OpenAI Enhanced: Response generated successfully');
+    const paragraphSegments = answer
+      .split(/\n{2,}/)
+      .map(segment => segment.trim())
+      .filter(segment => segment.length > 0);
+    const uniqueParagraphs = new Set(paragraphSegments);
+    console.log('OpenAI Enhanced: Response paragraph stats', {
+      totalParagraphs: paragraphSegments.length,
+      uniqueParagraphs: uniqueParagraphs.size
+    });
+    console.log('OpenAI Enhanced: Final answer preview:', answer.substring(0, 400));
   } finally {
     pipelineTracker.endStage(postProcessStage, {
       finalLength: answer.length
