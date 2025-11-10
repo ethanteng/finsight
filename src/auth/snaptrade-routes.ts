@@ -77,7 +77,7 @@ router.get('/status/user', requireAuth, async (req, res) => {
     if (result.success) {
       res.json(result.data);
     } else {
-      res.status(401).json({
+      res.status(404).json({
         error: result.error,
         status: 'not_initialized'
       });
@@ -133,7 +133,7 @@ router.post('/login', requireAuth, async (req, res) => {
     });
 
     if (!user) {
-      return res.status(401).json({
+      return res.status(404).json({
         success: false,
         error: 'SnapTrade user not found. Please initialize first.'
       });
@@ -175,7 +175,7 @@ router.get('/accounts', requireAuth, async (req, res) => {
     });
 
     if (!user) {
-      return res.status(401).json({
+      return res.status(404).json({
         success: false,
         error: 'SnapTrade user not found. Please initialize first.'
       });
@@ -217,7 +217,7 @@ router.get('/activities', requireAuth, async (req, res) => {
     });
 
     if (!user) {
-      return res.status(401).json({
+      return res.status(404).json({
         success: false,
         error: 'SnapTrade user not found. Please initialize first.'
       });
@@ -259,7 +259,7 @@ router.get('/holdings', requireAuth, async (req, res) => {
     });
 
     if (!user) {
-      return res.status(401).json({
+      return res.status(404).json({
         success: false,
         error: 'SnapTrade user not found. Please initialize first.'
       });

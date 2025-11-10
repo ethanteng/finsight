@@ -82,8 +82,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       includeTransactions: true,
       includeInvestments: true,
       includeHomeValue: questionNeeds.needsHomeValue,
-      skipCategorization: true,
-      collectCategorizationDetails: false
+      collectCategorizationDetails: false,
+      shouldPersistTransactions: true
     });
 
     accounts = unified.accounts;
