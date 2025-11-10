@@ -196,8 +196,8 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       if (data.answer) {
         const segments = data.answer
           .split(/\n{2,}/)
-          .map(segment => segment.trim())
-          .filter(segment => segment.length > 0);
+          .map((segment: string) => segment.trim())
+          .filter((segment: string) => segment.length > 0);
         
         if (segments.length > 0) {
           setStreamingSegments(segments);
