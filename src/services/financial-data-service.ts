@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { Configuration, PlaidApi, PlaidEnvironments, CountryCode } from 'plaid';
 import { SnapTradeService } from '../snaptrade';
 import { BalanceService } from './balance-service';
@@ -62,6 +62,7 @@ export interface Account {
   institution_logo?: string;
   institution_url?: string;
   source: 'plaid' | 'snaptrade';
+  transactions?: Array<any>;
 }
 
 export interface Balance {
@@ -178,6 +179,15 @@ export interface UnifiedFinancialData {
       plaidDuration: number;
       snaptradeDuration: number;
     };
+    dataSources: {
+      plaid: string;
+      snaptrade: string;
+    };
+    transactionAggregates?: {
+      income: Array<[string, number]>;
+      expense: Array<[string, number]>;
+    };
+    persistedAsOf: Date | null;
   };
 }
 
@@ -701,7 +711,7 @@ export class FinancialDataService {
       const accountInclude = options.includeTransactions
         ? {
             transactions: {
-              orderBy: { date: 'desc' },
+              orderBy: { date: Prisma.SortOrder.desc },
               where: {
                 date: {
                   gte: startDate
@@ -714,7 +724,11 @@ export class FinancialDataService {
       const accountRecords = await prisma.account.findMany({
         where: { userId },
         include: accountInclude
-      });
+      }) as Array<Prisma.AccountGetPayload<{
+        include: {
+          transactions: true;
+        };
+      }>>;
 
       if (accountRecords.length === 0) {
         return null;
@@ -774,10 +788,10 @@ export class FinancialDataService {
       if (options.includeTransactions) {
         accountRecords.forEach(record => {
           const plaidAccountId = record.plaidAccountId;
-          record.transactions?.forEach(dbTx => {
+          record.transactions?.forEach((dbTx: any) => {
             const categoryArray =
               typeof dbTx.category === 'string'
-                ? dbTx.category.split(',').map(item => item.trim()).filter(Boolean)
+                ? dbTx.category.split(',').map((item: string) => item.trim()).filter(Boolean)
                 : undefined;
 
             const normalizedType = dbTx.aiCategory ? dbTx.aiCategory.toLowerCase() : undefined;
