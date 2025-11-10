@@ -4,7 +4,7 @@ import { SnapTradeService } from '../snaptrade';
 import { BalanceService } from './balance-service';
 import { TokenValidationService, TokenStatus, PlaidTokenHealth, SnapTradeTokenHealth } from './token-validation-service';
 import { TransactionNormalizationService } from './transaction-normalization-service';
-import { TransactionCategorizationService, CategorizationDetail, CategorizedTransaction } from './transaction-categorization-service';
+import { TransactionCategorizationService, CategorizationDetail } from './transaction-categorization-service';
 import { persistTransactionsToDb, persistSnapTradeActivitiesToDb } from '../data/persistence';
 import { cacheService } from '../data/cache';
 
@@ -375,7 +375,7 @@ export class FinancialDataService {
       
       console.log(`FinancialDataService: Loaded ${existingCategorizationsMap.size} existing categorizations (${manualCorrectionCount} manual corrections) from database`);
       
-      const buildDetail = (originalTx: any, categorizedTx: CategorizedTransaction): CategorizationDetail => {
+      const buildDetail = (originalTx: any, categorizedTx: any): CategorizationDetail => {
             const account = accountsMap.get(originalTx.account_id);
             const pfc = (originalTx as any).personal_finance_category;
                 return {
@@ -611,7 +611,6 @@ export class FinancialDataService {
             averageConfidence: allCategorizationDetails.length > 0 ? totalConfidence / allCategorizationDetails.length : 0
           }
         };
-          }
       }
     } else if (options?.skipCategorization) {
       console.log('FinancialDataService: Skipping categorization (UI-only request)');
