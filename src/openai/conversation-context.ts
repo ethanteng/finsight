@@ -127,6 +127,53 @@ export function analyzeConversationContext(
     /\b(?:in\s+(\d+)\s+years?|(\d+)\s+years?\s+from\s+now)\b/
   );
 
+  const historyText = history.map(item => `${item.question} ${item.answer}`.toLowerCase());
+  const historyIncludes = (patterns: (string | RegExp)[]): boolean =>
+    historyText.some(entry =>
+      patterns.some(pattern =>
+        typeof pattern === 'string' ? entry.includes(pattern) : pattern.test(entry)
+      )
+    );
+
+  const businessPatterns: (string | RegExp)[] = [
+    'business',
+    'llc',
+    'limited liability',
+    'startup',
+    'entrepreneur',
+    'company account',
+    /biz banking/
+  ];
+
+  const bankingPatterns: (string | RegExp)[] = [
+    'savings',
+    'checking',
+    'bank account',
+    'cd',
+    'certificate of deposit',
+    'cash management',
+    'money market',
+    'high-yield'
+  ];
+
+  const ratePatterns = [
+    'rate',
+    'rates',
+    'apy',
+    'yield',
+    'compare',
+    'comparison',
+    'better',
+    'best',
+    'highest',
+    'interest'
+  ];
+
+  const questionForRateCheck = lowerQuestion.replace(/[?!.]/g, ' ');
+  const asksAboutRates = ratePatterns.some(keyword =>
+    questionForRateCheck.includes(keyword)
+  );
+
   if (
     hasPriorQuestion('portfolio', 'investment', 'asset allocation') &&
     (ageInfo || incomeInfo || goalInfo)
@@ -151,6 +198,18 @@ export function analyzeConversationContext(
   ) {
     contextOpportunities.push(
       'User previously asked about debt analysis and now provided income/expense information. Offer to complete the debt-to-income analysis.'
+    );
+  }
+
+  if (asksAboutRates && historyIncludes(businessPatterns)) {
+    contextOpportunities.push(
+      'User previously asked about business banking/savings accounts. Provide rates or comparing options tailored to their question.'
+    );
+  }
+
+  if (asksAboutRates && historyIncludes(bankingPatterns)) {
+    contextOpportunities.push(
+      'User previously discussed savings, banking, or accounts. Provide rates or comparing options tailored to their question.'
     );
   }
 

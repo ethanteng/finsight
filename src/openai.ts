@@ -149,3 +149,6 @@ export async function askOpenAIForTests(
   );
 }
 
+export { filterConversationHistory, analyzeConversationContext } from './openai/conversation-context';
+export { analyzeQuestionNeeds } from './openai/question-analysis';
+
