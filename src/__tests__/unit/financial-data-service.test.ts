@@ -1,21 +1,19 @@
 import { describe, expect, beforeEach, it, jest } from '@jest/globals';
 import { FinancialDataService } from '../../services/financial-data-service';
 
-var mockPrisma: any;
+const mockPrisma = {
+  account: {
+    findMany: jest.fn(),
+  },
+  accessToken: {
+    findMany: jest.fn(),
+  },
+  transaction: {
+    findMany: jest.fn(),
+  },
+};
 
 jest.mock('@prisma/client', () => {
-  mockPrisma = {
-    account: {
-      findMany: jest.fn(),
-    },
-    accessToken: {
-      findMany: jest.fn(),
-    },
-    transaction: {
-      findMany: jest.fn(),
-    },
-  };
-
   const PrismaClient = jest.fn(() => mockPrisma);
   return {
     PrismaClient,
@@ -27,18 +25,15 @@ jest.mock('@prisma/client', () => {
   };
 });
 
-var mockCache: any;
+const mockCache = {
+  get: jest.fn(),
+  set: jest.fn(),
+  invalidate: jest.fn(),
+};
 
-jest.mock('../../data/cache', () => {
-  mockCache = {
-    get: jest.fn(),
-    set: jest.fn(),
-    invalidate: jest.fn(),
-  };
-  return {
-    cacheService: mockCache,
-  };
-});
+jest.mock('../../data/cache', () => ({
+  cacheService: mockCache,
+}));
 
 jest.mock('../../data/persistence', () => ({
   persistTransactionsToDb: jest.fn(),
@@ -102,6 +97,9 @@ jest.mock('plaid', () => {
 describe('FinancialDataService investment persistence safeguards', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCache.get.mockReset();
+    mockCache.set.mockReset();
+    mockCache.invalidate.mockReset();
     mockCache.get.mockResolvedValue(null);
   });
 
