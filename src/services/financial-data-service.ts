@@ -63,6 +63,9 @@ export interface Account {
   institution_url?: string;
   source: 'plaid' | 'snaptrade';
   transactions?: Array<any>;
+  persistentAccountId?: string | null;
+  snapshotTimestamp?: string;
+  lastSyncedAt?: string;
 }
 
 export interface Balance {
@@ -811,7 +814,27 @@ export class FinancialDataService {
         return null;
       }
 
-      const lastSyncedTimestamps = accountRecords
+      const sortedRecords = accountRecords
+        .slice()
+        .sort((a, b) => {
+          const aTimestamp = (a.lastSynced || a.updatedAt)?.getTime?.() ?? 0;
+          const bTimestamp = (b.lastSynced || b.updatedAt)?.getTime?.() ?? 0;
+          return bTimestamp - aTimestamp;
+        });
+
+      const uniqueRecords: typeof accountRecords = [];
+      const seenAccountKeys = new Set<string>();
+
+      for (const record of sortedRecords) {
+        const key = record.persistentAccountId || record.plaidAccountId || record.id;
+        if (seenAccountKeys.has(key)) {
+          continue;
+        }
+        seenAccountKeys.add(key);
+        uniqueRecords.push(record);
+      }
+
+      const lastSyncedTimestamps = sortedRecords
         .map(record => record.lastSynced || record.updatedAt)
         .filter((value): value is Date => Boolean(value))
         .map(value => value.getTime());
@@ -826,7 +849,7 @@ export class FinancialDataService {
         ? Date.now() - lastSynced.getTime() <= maxAgeMinutes * 60 * 1000
         : false;
 
-      const accounts = accountRecords.map(record => ({
+      const accounts = uniqueRecords.map(record => ({
         account_id: record.plaidAccountId,
         id: record.plaidAccountId,
         name: record.name,
@@ -844,7 +867,10 @@ export class FinancialDataService {
         institution_logo: undefined,
         institution_url: undefined,
         source: 'plaid',
-        persisted: true
+        persisted: true,
+        persistentAccountId: record.persistentAccountId || record.plaidAccountId,
+        snapshotTimestamp: (record.lastSynced || record.updatedAt)?.toISOString?.(),
+        lastSyncedAt: record.lastSynced?.toISOString?.()
       }));
 
       const balances: Record<string, Balance> = {};
@@ -863,7 +889,7 @@ export class FinancialDataService {
         expense: new Map<string, number>()
       };
       if (options.includeTransactions) {
-        accountRecords.forEach(record => {
+        uniqueRecords.forEach(record => {
           const plaidAccountId = record.plaidAccountId;
           record.transactions?.forEach((dbTx: any) => {
             const categoryArray =
@@ -1008,6 +1034,8 @@ export class FinancialDataService {
       // Fetch data for each token
       for (const tokenRecord of accessTokens) {
         try {
+          const requestTimestamp = new Date().toISOString();
+
           // Get accounts
           const accountsResponse = await plaidClient.accountsGet({
             access_token: tokenRecord.token
@@ -1019,6 +1047,7 @@ export class FinancialDataService {
             institution_id: item.data.item.institution_id!,
             country_codes: ['US' as CountryCode]
           });
+          const itemLastUpdated = item.data.item.last_updated_datetime || requestTimestamp;
 
           for (const account of accountsResponse.data.accounts) {
             accounts.push({
@@ -1038,7 +1067,10 @@ export class FinancialDataService {
               institution_id: institution.data.institution.institution_id,
               institution_logo: institution.data.institution.logo || undefined,
               institution_url: institution.data.institution.url || undefined,
-              source: 'plaid'
+              source: 'plaid',
+              persistentAccountId: account.account_id,
+              snapshotTimestamp: itemLastUpdated,
+              lastSyncedAt: itemLastUpdated
             });
 
             balances[account.account_id] = account.balances;
@@ -1286,6 +1318,8 @@ export class FinancialDataService {
         accountsData = accountsResult; // Store for later reuse
         
         if (accountsResult.success && accountsResult.data?.accounts) {
+          const fetchedAt = new Date().toISOString();
+
           for (const account of accountsResult.data.accounts) {
             const balance = account.balance?.value || account.currentBalance || 0;
             const accountId = `snaptrade-${account.id}`;
@@ -1301,7 +1335,10 @@ export class FinancialDataService {
                 iso_currency_code: 'USD'
               },
               institution: 'SnapTrade',
-              source: 'snaptrade'
+              source: 'snaptrade',
+              persistentAccountId: accountId,
+              snapshotTimestamp: fetchedAt,
+              lastSyncedAt: fetchedAt
             });
           }
         } else {

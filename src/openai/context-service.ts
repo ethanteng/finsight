@@ -149,22 +149,78 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
 
 function deduplicateAccounts(accounts: Account[]): Account[] {
   const map = new Map<string, Account>();
+
+  const getSnapshotTimestamp = (account: Account): number | null => {
+    const rawTimestamp =
+      (account as any).snapshotTimestamp ||
+      (account as any).lastSyncedAt ||
+      (account as any).persistedAsOf ||
+      (account as any).lastSynced ||
+      null;
+
+    if (!rawTimestamp) {
+      return null;
+    }
+
+    if (rawTimestamp instanceof Date) {
+      return rawTimestamp.getTime();
+    }
+
+    const parsed = Date.parse(rawTimestamp);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const buildFallbackKey = (account: Account): string =>
+    [
+      account.name || 'unknown',
+      account.type || 'unknown',
+      account.subtype || 'unknown',
+      account.institution || 'unknown'
+    ].join('|');
+
   for (const account of accounts) {
-    const key = account.account_id || account.id;
-    if (!key) {
-      continue;
-    }
-    const existing = map.get(key);
+    const primaryKey =
+      (account as any).persistentAccountId ||
+      account.account_id ||
+      account.id ||
+      buildFallbackKey(account);
+
+    const existing = map.get(primaryKey);
     if (!existing) {
-      map.set(key, account);
+      map.set(primaryKey, account);
       continue;
     }
-    const existingBalance = existing.balance?.current ?? 0;
-    const candidateBalance = account.balance?.current ?? 0;
+
+    const existingTimestamp = getSnapshotTimestamp(existing);
+    const candidateTimestamp = getSnapshotTimestamp(account);
+
+    if (candidateTimestamp !== null && (existingTimestamp === null || candidateTimestamp > existingTimestamp)) {
+      map.set(primaryKey, account);
+      continue;
+    }
+
+    if (existingTimestamp !== null && candidateTimestamp !== null && existingTimestamp > candidateTimestamp) {
+      continue;
+    }
+
+    if (existingTimestamp !== null && candidateTimestamp === null) {
+      continue;
+    }
+
+    const existingBalance =
+      existing.balance?.current ??
+      existing.balance?.available ??
+      0;
+    const candidateBalance =
+      account.balance?.current ??
+      account.balance?.available ??
+      0;
+
     if (candidateBalance >= existingBalance) {
-      map.set(key, account);
+      map.set(primaryKey, account);
     }
   }
+
   return Array.from(map.values());
 }
 
