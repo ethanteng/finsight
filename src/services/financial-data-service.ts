@@ -785,6 +785,13 @@ export class FinancialDataService {
     userId: string,
     options: { includeTransactions: boolean; includeInvestments: boolean }
   ): Promise<{ data: any; lastSynced: Date | null; isFresh: boolean } | null> {
+    // Persisted snapshots currently store only account/core balance data. When
+    // investment holdings are requested we must force a live Plaid fetch to keep
+    // portfolio analytics accurate.
+    if (options.includeInvestments) {
+      return null;
+    }
+
     try {
       const historyDays = parseInt(process.env.TRANSACTION_HISTORY_DAYS || '90', 10);
       const startDate = new Date(Date.now() - historyDays * 24 * 60 * 60 * 1000);

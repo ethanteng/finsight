@@ -729,9 +729,11 @@ export function createTestApp() {
   
   // Add mock SnapTrade endpoints for testing
   app.get('/snaptrade/status/user', testAuthMiddleware, (req: any, res) => {
+    const userId = req.user?.id || 'unknown-user';
+
     res.json({
       status: 'registered',
-      snapTradeUserId: 'test-snaptrade-user-id',
+      snapTradeUserId: `test-snaptrade-user-${userId}`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
