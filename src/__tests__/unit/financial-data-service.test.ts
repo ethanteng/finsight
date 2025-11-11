@@ -1,19 +1,19 @@
 import { describe, expect, beforeEach, it, jest } from '@jest/globals';
 import { FinancialDataService } from '../../services/financial-data-service';
 
-const mockPrisma = {
-  account: {
-    findMany: jest.fn(),
-  },
-  accessToken: {
-    findMany: jest.fn(),
-  },
-  transaction: {
-    findMany: jest.fn(),
-  },
-};
-
 jest.mock('@prisma/client', () => {
+  const mockPrisma = {
+    account: {
+      findMany: jest.fn(),
+    },
+    accessToken: {
+      findMany: jest.fn(),
+    },
+    transaction: {
+      findMany: jest.fn(),
+    },
+  };
+
   const PrismaClient = jest.fn(() => mockPrisma);
   return {
     PrismaClient,
@@ -22,18 +22,39 @@ jest.mock('@prisma/client', () => {
         desc: 'desc',
       },
     },
+    __mockPrisma: mockPrisma,
   };
 });
 
-const mockCache = {
-  get: jest.fn(),
-  set: jest.fn(),
-  invalidate: jest.fn(),
+const { __mockPrisma: mockPrisma } = jest.requireMock('@prisma/client') as {
+  __mockPrisma: {
+    account: { findMany: jest.Mock };
+    accessToken: { findMany: jest.Mock };
+    transaction: { findMany: jest.Mock };
+  };
 };
 
-jest.mock('../../data/cache', () => ({
-  cacheService: mockCache,
-}));
+type CacheMock = {
+  get: jest.Mock;
+  set: jest.Mock;
+  invalidate: jest.Mock;
+};
+
+jest.mock('../../data/cache', () => {
+  const cacheMock: CacheMock = {
+    get: jest.fn(),
+    set: jest.fn(),
+    invalidate: jest.fn(),
+  };
+  return {
+    cacheService: cacheMock,
+    __mockCache: cacheMock,
+  };
+});
+
+const { __mockCache: mockCache } = jest.requireMock('../../data/cache') as {
+  __mockCache: CacheMock;
+};
 
 jest.mock('../../data/persistence', () => ({
   persistTransactionsToDb: jest.fn(),
@@ -100,7 +121,7 @@ describe('FinancialDataService investment persistence safeguards', () => {
     mockCache.get.mockReset();
     mockCache.set.mockReset();
     mockCache.invalidate.mockReset();
-    mockCache.get.mockResolvedValue(null);
+    mockCache.get.mockResolvedValue(null as never);
   });
 
   it('skips persisted Plaid snapshot when investments are requested', async () => {
