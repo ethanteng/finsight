@@ -1699,28 +1699,78 @@ export class FinancialDataService {
     // This handles both direct duplicates AND cross-source duplicates
 
     const accountMap = new Map<string, any>();
-    const seenDescriptions = new Set<string>();
+    const descriptionSet = new Set<string>();
+
+    const parseSnapshotTimestamp = (source: any): number | null => {
+      const raw =
+        source?.snapshotTimestamp ||
+        source?.lastSyncedAt ||
+        source?.persistedAsOf ||
+        source?.lastSynced ||
+        null;
+
+      if (!raw) {
+        return null;
+      }
+
+      if (raw instanceof Date) {
+        return raw.getTime();
+      }
+
+      const parsed = Date.parse(raw);
+      return Number.isNaN(parsed) ? null : parsed;
+    };
 
     for (const account of rawAccounts) {
       const accountId = account.account_id || account.id;
-      const balance = account.balance?.current || account.balance?.available || 0;
+      const balance = account.balance?.current ?? account.balance?.available ?? 0;
       const descKey = `${account.name}|${account.type}|${account.subtype}|${Math.round(balance * 100)}`;
 
-      // Skip if we've already seen this description (handles duplicates)
-      if (seenDescriptions.has(descKey)) {
-        continue;
-      }
+      const candidateTimestamp = parseSnapshotTimestamp(account);
+      const candidateIsPersisted = Boolean(account.persisted);
 
-      // Skip if we've already seen this account_id
-      if (accountId && accountMap.has(accountId)) {
-        continue;
-      }
-
-      // Add this account
       if (accountId) {
+        const existing = accountMap.get(accountId);
+        if (existing) {
+          const existingTimestamp = parseSnapshotTimestamp(existing);
+          const existingIsPersisted = Boolean(existing.persisted);
+          const existingBalance =
+            existing.balance?.current ?? existing.balance?.available ?? 0;
+
+          let shouldReplace = false;
+
+          if (candidateTimestamp !== null && (existingTimestamp === null || candidateTimestamp > existingTimestamp)) {
+            shouldReplace = true;
+          } else if (existingTimestamp !== null && candidateTimestamp !== null && existingTimestamp > candidateTimestamp) {
+            shouldReplace = false;
+          } else if (existingTimestamp !== null && candidateTimestamp === null) {
+            shouldReplace = false;
+          } else if (existingTimestamp === null && candidateTimestamp !== null) {
+            shouldReplace = true;
+          } else if (!candidateIsPersisted && existingIsPersisted) {
+            shouldReplace = true;
+          } else if (candidateIsPersisted === existingIsPersisted && balance >= existingBalance) {
+            shouldReplace = true;
+          }
+
+          if (!shouldReplace) {
+            descriptionSet.add(descKey);
+            continue;
+          }
+        }
+
         accountMap.set(accountId, account);
+        descriptionSet.add(descKey);
+        continue;
       }
-      seenDescriptions.add(descKey);
+
+      if (descriptionSet.has(descKey)) {
+        continue;
+      }
+
+      const fallbackKey = `desc:${descriptionSet.size}`;
+      accountMap.set(fallbackKey, account);
+      descriptionSet.add(descKey);
     }
 
     const accounts = Array.from(accountMap.values());
