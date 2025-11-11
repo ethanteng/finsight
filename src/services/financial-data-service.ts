@@ -1047,7 +1047,8 @@ export class FinancialDataService {
             institution_id: item.data.item.institution_id!,
             country_codes: ['US' as CountryCode]
           });
-          const itemLastUpdated = item.data.item.last_updated_datetime || requestTimestamp;
+          const itemData = item.data.item as Record<string, any>;
+          const itemLastUpdated = itemData?.last_updated_datetime || requestTimestamp;
 
           for (const account of accountsResponse.data.accounts) {
             accounts.push({
