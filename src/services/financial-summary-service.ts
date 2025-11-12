@@ -54,25 +54,44 @@ export class FinancialSummaryService {
    */
   private deduplicateAccounts(accounts: Account[]): Account[] {
     const accountMap = new Map<string, Account>();
+    const seenIds = new Set<string>();
     
     for (const account of accounts) {
-      const plaidAccountId = (account as any).plaidAccountId || 
-                             (account as any).persistentAccountId || 
+      const accountAny = account as any;
+      
+      // Try multiple keys for deduplication
+      const plaidAccountId = accountAny.plaidAccountId || 
+                             accountAny.persistentAccountId || 
                              account.account_id || 
                              account.id;
       
-      const existing = accountMap.get(plaidAccountId);
+      // Also check by name+type+subtype+balance as fallback
+      const balance = account.balance?.current ?? account.balance?.available ?? 0;
+      const fallbackKey = `${account.name}|${account.type}|${account.subtype}|${Math.round(balance * 100)}`;
+      
+      // Check if we've seen this account before
+      const existingByPlaidId = accountMap.get(plaidAccountId);
+      const existingByFallback = accountMap.get(fallbackKey);
+      const existing = existingByPlaidId || existingByFallback;
       
       if (!existing) {
+        // New account - add it with both keys
         accountMap.set(plaidAccountId, account);
+        if (plaidAccountId !== fallbackKey) {
+          accountMap.set(fallbackKey, account);
+        }
+        seenIds.add(plaidAccountId);
       } else {
-        // Keep the most recent account (by lastSynced or updatedAt)
-        const existingTimestamp = (existing as any).lastSynced || 
-                                  (existing as any).updatedAt || 
-                                  (existing as any).createdAt;
-        const candidateTimestamp = (account as any).lastSynced || 
-                                   (account as any).updatedAt || 
-                                   (account as any).createdAt;
+        // Duplicate found - keep the most recent one
+        const existingAny = existing as any;
+        const existingTimestamp = existingAny.lastSynced || 
+                                  existingAny.updatedAt || 
+                                  existingAny.createdAt;
+        const candidateTimestamp = accountAny.lastSynced || 
+                                   accountAny.updatedAt || 
+                                   accountAny.createdAt;
+        
+        let shouldReplace = false;
         
         if (candidateTimestamp && existingTimestamp) {
           const existingTime = existingTimestamp instanceof Date 
@@ -81,16 +100,59 @@ export class FinancialSummaryService {
           const candidateTime = candidateTimestamp instanceof Date 
             ? candidateTimestamp.getTime() 
             : new Date(candidateTimestamp).getTime();
-          if (candidateTime > existingTime) {
-            accountMap.set(plaidAccountId, account);
-          }
+          shouldReplace = candidateTime > existingTime;
         } else if (candidateTimestamp && !existingTimestamp) {
+          shouldReplace = true;
+        } else {
+          // If timestamps are equal or both missing, prefer the one with higher balance (more recent data)
+          const existingBalance = existing.balance?.current ?? existing.balance?.available ?? 0;
+          shouldReplace = balance >= existingBalance;
+        }
+        
+        if (shouldReplace) {
+          // Remove old entry
+          const oldPlaidId = existingAny.plaidAccountId || 
+                            existingAny.persistentAccountId || 
+                            existing.account_id || 
+                            existing.id;
+          accountMap.delete(oldPlaidId);
+          
+          const oldBalance = existing.balance?.current ?? existing.balance?.available ?? 0;
+          const oldFallbackKey = `${existing.name}|${existing.type}|${existing.subtype}|${Math.round(oldBalance * 100)}`;
+          if (oldFallbackKey !== oldPlaidId) {
+            accountMap.delete(oldFallbackKey);
+          }
+          
+          // Add new entry
           accountMap.set(plaidAccountId, account);
+          if (plaidAccountId !== fallbackKey) {
+            accountMap.set(fallbackKey, account);
+          }
         }
       }
     }
     
-    return Array.from(accountMap.values());
+    // Extract unique accounts (only from plaidAccountId keys, not fallback keys)
+    const uniqueAccounts: Account[] = [];
+    const seenUniqueIds = new Set<string>();
+    
+    for (const [key, account] of accountMap.entries()) {
+      const accountAny = account as any;
+      const uniqueId = accountAny.plaidAccountId || 
+                       accountAny.persistentAccountId || 
+                       account.account_id || 
+                       account.id;
+      
+      // Only add if we haven't seen this unique ID before
+      if (!seenUniqueIds.has(uniqueId)) {
+        uniqueAccounts.push(account);
+        seenUniqueIds.add(uniqueId);
+      }
+    }
+    
+    console.log(`📊 Deduplicated ${accounts.length} accounts to ${uniqueAccounts.length} unique accounts`);
+    
+    return uniqueAccounts;
   }
 
   /**
@@ -103,13 +165,45 @@ export class FinancialSummaryService {
   ): FinancialOverview {
     const deduplicatedAccounts = this.deduplicateAccounts(accounts);
     
+    console.log(`📊 FinancialSummary: Calculating overview from ${deduplicatedAccounts.length} deduplicated accounts (out of ${accounts.length} total)`);
+    
+    // Log account types for debugging
+    const accountTypes = deduplicatedAccounts.reduce((acc, account) => {
+      const type = `${account.type}/${account.subtype}`;
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    console.log(`📊 Account type distribution:`, accountTypes);
+    
     let totalCash = 0;
     let totalDebt = 0;
+    const seenAccountIds = new Set<string>();
     
     for (const account of deduplicatedAccounts) {
+      // Get unique identifier to ensure we don't count the same account twice
+      const accountAny = account as any;
+      const uniqueId = accountAny.plaidAccountId || 
+                       accountAny.persistentAccountId || 
+                       account.account_id || 
+                       account.id;
+      
+      if (seenAccountIds.has(uniqueId)) {
+        console.warn(`⚠️ Duplicate account detected in calculation: ${account.name} (ID: ${uniqueId})`);
+        continue; // Skip duplicate
+      }
+      seenAccountIds.add(uniqueId);
+      
       const balance = account.balance?.current ?? account.balance?.available ?? 0;
       const accountType = account.type?.toLowerCase() || '';
       const accountSubtype = account.subtype?.toLowerCase() || '';
+      
+      // ✅ IMPORTANT: Exclude investment accounts from cash/debt calculations
+      // Investment accounts are counted separately via holdings
+      if (accountType === 'investment') {
+        // Investment accounts should not be counted as cash or debt
+        // Their value is already included in totalInvestments via holdings
+        continue;
+      }
       
       // Debt accounts: credit, loan, mortgage (check first to avoid double counting)
       if (accountType === 'credit' || 
@@ -133,6 +227,13 @@ export class FinancialSummaryService {
     
     const totalInvestments = investments.portfolio.totalValue || 0;
     const homeValueAmount = homeValue?.valueMid || homeValue?.valueHigh || homeValue?.valueLow || null;
+    
+    console.log(`📊 Financial Summary Calculation:
+      - Total Cash: $${totalCash.toFixed(2)}
+      - Total Investments: $${totalInvestments.toFixed(2)}
+      - Total Debt: $${totalDebt.toFixed(2)}
+      - Home Value: $${homeValueAmount?.toFixed(2) || 'null'}
+      - Net Worth: $${(totalCash + totalInvestments + (homeValueAmount || 0) - totalDebt).toFixed(2)}`);
     
     const netWorth = totalCash + totalInvestments + (homeValueAmount || 0) - totalDebt;
     

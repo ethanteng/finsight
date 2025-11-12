@@ -192,17 +192,35 @@ export default function ProfilePage() {
     const seen = new Map<string, Account>();
     
     for (const account of accounts) {
-      // Create a unique key based on account name, type, subtype, and balance
-      const balance = account.balance?.current ?? account.balance?.available ?? 0;
-      const key = `${account.name}|${account.type}|${account.subtype}|${Math.round(balance * 100)}`;
+      // Use account.id as the primary unique identifier (should be plaidAccountId or account_id)
+      const accountId = account.id;
       
-      const existing = seen.get(key);
-      if (!existing) {
-        seen.set(key, account);
+      if (!accountId) {
+        // Fallback: Create a unique key based on account name, type, subtype, and balance
+        const balance = account.balance?.current ?? account.balance?.available ?? 0;
+        const fallbackKey = `${account.name}|${account.type}|${account.subtype}|${Math.round(balance * 100)}`;
+        
+        const existing = seen.get(fallbackKey);
+        if (!existing) {
+          seen.set(fallbackKey, account);
+        } else {
+          // If duplicate found, keep the one with more complete data (has institution info)
+          if (account.institution && !existing.institution) {
+            seen.set(fallbackKey, account);
+          }
+        }
       } else {
-        // If duplicate found, keep the one with more complete data (has institution info)
-        if (account.institution && !existing.institution) {
-          seen.set(key, account);
+        // Use account.id as the unique key
+        const existing = seen.get(accountId);
+        if (!existing) {
+          seen.set(accountId, account);
+        } else {
+          // If duplicate found by ID, keep the one with more complete data
+          if (account.institution && !existing.institution) {
+            seen.set(accountId, account);
+          } else if (account.name && !existing.name) {
+            seen.set(accountId, account);
+          }
         }
       }
     }

@@ -543,6 +543,21 @@ export const setupPlaidRoutes = (app: any) => {
         account.source === 'plaid' || !account.account_id.toString().startsWith('snaptrade-')
       );
 
+      console.log(`🔍 Found ${plaidOnlyAccounts.length} Plaid accounts from FinancialDataService (out of ${financialData.accounts.length} total accounts)`);
+      
+      // Log account IDs for debugging
+      const accountIds = plaidOnlyAccounts.map(acc => {
+        const accAny = acc as any;
+        return {
+          account_id: acc.account_id,
+          id: acc.id,
+          plaidAccountId: accAny.plaidAccountId,
+          persistentAccountId: accAny.persistentAccountId,
+          name: acc.name
+        };
+      });
+      console.log(`🔍 Account IDs before deduplication:`, JSON.stringify(accountIds, null, 2));
+
       // ✅ Deduplicate accounts by multiple keys to catch all duplicates
       // Use a single map with composite keys to ensure no duplicates
       const accountMap = new Map<string, any>();
@@ -619,7 +634,7 @@ export const setupPlaidRoutes = (app: any) => {
       
       // Extract unique accounts (only from primary keys, not id: keys)
       const deduplicatedAccounts: any[] = [];
-      const seenAccounts = new Set<any>();
+      const seenAccountIds = new Set<string>();
       
       for (const [key, account] of accountMap.entries()) {
         // Skip id: prefixed keys (they're just for lookup)
@@ -627,33 +642,59 @@ export const setupPlaidRoutes = (app: any) => {
           continue;
         }
         
-        // Use object reference to ensure no duplicates
-        if (!seenAccounts.has(account)) {
+        // Use a unique identifier to ensure no duplicates
+        // Prefer plaidAccountId, then account_id, then account.id
+        const accountAny = account as any;
+        const uniqueId = accountAny.plaidAccountId || accountAny.persistentAccountId || account.account_id || account.id;
+        
+        if (!seenAccountIds.has(uniqueId)) {
           deduplicatedAccounts.push(account);
-          seenAccounts.add(account);
+          seenAccountIds.add(uniqueId);
         }
       }
 
       // Format accounts for frontend (matching expected format)
-      const formattedAccounts = deduplicatedAccounts.map(account => ({
-        id: account.id,
-        name: account.name,
-        type: account.type,
-        subtype: account.subtype,
-        mask: account.id.slice(-4), // Use last 4 characters as mask
-        balance: {
-          available: account.balance.available,
-          current: account.balance.current,
-          limit: account.balance.limit,
-          iso_currency_code: account.balance.iso_currency_code,
-          unofficial_currency_code: account.balance.unofficial_currency_code
-        },
-        institution: account.institution
-      }));
+      // Use account_id or plaidAccountId as the unique identifier
+      const formattedAccounts = deduplicatedAccounts.map(account => {
+        const accountAny = account as any;
+        // Use account_id or plaidAccountId as the primary ID for frontend
+        const accountId = account.account_id || accountAny.plaidAccountId || accountAny.persistentAccountId || account.id;
+        const mask = account.mask || (accountId ? accountId.slice(-4) : '****');
+        
+        return {
+          id: accountId, // Use account_id/plaidAccountId as the unique identifier
+          name: account.name,
+          type: account.type,
+          subtype: account.subtype,
+          mask: mask,
+          balance: {
+            available: account.balance?.available ?? 0,
+            current: account.balance?.current ?? 0,
+            limit: account.balance?.limit ?? null,
+            iso_currency_code: account.balance?.iso_currency_code ?? 'USD',
+            unofficial_currency_code: account.balance?.unofficial_currency_code ?? null
+          },
+          institution: account.institution
+        };
+      });
 
-      console.log(`🔍 Returning ${formattedAccounts.length} Plaid accounts (filtered out ${financialData.accounts.length - plaidOnlyAccounts.length} SnapTrade accounts)`);
+      // ✅ Final deduplication pass using account IDs to catch any remaining duplicates
+      const finalDeduplicated: any[] = [];
+      const finalSeenIds = new Set<string>();
+      
+      for (const account of formattedAccounts) {
+        const accountId = account.id;
+        if (!finalSeenIds.has(accountId)) {
+          finalDeduplicated.push(account);
+          finalSeenIds.add(accountId);
+        } else {
+          console.log(`⚠️ Duplicate account detected and removed: ${account.name} (ID: ${accountId})`);
+        }
+      }
 
-      res.json({ accounts: formattedAccounts });
+      console.log(`🔍 Returning ${finalDeduplicated.length} unique Plaid accounts (filtered out ${financialData.accounts.length - plaidOnlyAccounts.length} SnapTrade accounts, removed ${formattedAccounts.length - finalDeduplicated.length} duplicates)`);
+
+      res.json({ accounts: finalDeduplicated });
     } catch (error) {
       const errorResponse = handlePlaidError(error, 'get all accounts');
       res.status(500).json(errorResponse);
