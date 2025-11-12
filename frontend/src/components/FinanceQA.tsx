@@ -31,8 +31,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const [showContextModal, setShowContextModal] = useState(false);
-  const [streamingSegments, setStreamingSegments] = useState<string[]>([]);
-  const [isStreaming, setIsStreaming] = useState(false);
+  // ✅ Streaming disabled - removed streaming state variables
   const { trackEvent } = useAnalytics();
 
   // Demo placeholder questions that rotate
@@ -135,8 +134,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     setLoading(true);
     setLoadingMessageIndex(0); // Reset to first message
     setError('');
-    setStreamingSegments([]);
-    setIsStreaming(false);
+    // ✅ Streaming disabled - removed streaming state resets
     setAnswer('');
     
     // Track question submission
@@ -194,33 +192,8 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
 
       const data = await res.json();
       if (data.answer) {
-        const parsedSegments = data.answer
-          .split(/\n{2,}/)
-          .map((segment: string) => segment.trim())
-          .filter((segment: string) => segment.length > 0);
-        let segmentsToStream = parsedSegments;
-
-        if (segmentsToStream.length === 0) {
-          setAnswer(data.answer);
-        } else {
-          if (segmentsToStream.length === 1) {
-            const chunkSize = 400;
-            const singleSegment = segmentsToStream[0];
-            const chunked: string[] = [];
-            for (let i = 0; i < singleSegment.length; i += chunkSize) {
-              chunked.push(singleSegment.slice(i, i + chunkSize));
-            }
-            if (chunked.length > 1) {
-              segmentsToStream = chunked;
-              setAnswer('');
-            }
-          } else {
-            setAnswer('');
-          }
-
-          setStreamingSegments(segmentsToStream);
-          setIsStreaming(true);
-        }
+        // ✅ Disabled streaming simulation - display answer immediately
+        setAnswer(data.answer);
         // Store conversation ID for feedback
         if (data.conversationId) {
           setConversationId(data.conversationId);
@@ -263,20 +236,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       setLoading(false);
     }
   };
-  useEffect(() => {
-    if (!isStreaming) return;
-    if (streamingSegments.length === 0) {
-      setIsStreaming(false);
-      return;
-    }
-
-    const timeout = setTimeout(() => {
-      setAnswer(prev => (prev ? `${prev}\n\n${streamingSegments[0]}` : streamingSegments[0]));
-      setStreamingSegments(prev => prev.slice(1));
-    }, 200);
-
-    return () => clearTimeout(timeout);
-  }, [isStreaming, streamingSegments]);
+  // ✅ Streaming disabled - removed useEffect that was simulating streaming
 
 
   return (
