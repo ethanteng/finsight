@@ -43,6 +43,25 @@ export interface FinancialContextSnapshot {
   marketContext?: string;
   userProfile?: string;
   homeValueSummary?: string;
+  financialSummary?: {
+    financialOverview?: {
+      netWorth: number;
+      totalCash: number;
+      totalInvestments: number;
+      totalDebt: number;
+      homeValue: number | null;
+    };
+    investmentPortfolio?: {
+      totalValue: number;
+      holdingsCount: number;
+      assetAllocation: Array<{
+        type: string;
+        value: number;
+        percentage: number;
+      }>;
+      securityCount: number;
+    };
+  };
 }
 
 export interface ConversationEntry {

@@ -647,7 +647,7 @@ export default function ProfilePage() {
     };
   }, []);
 
-  // NEW: Load enhanced investment data
+  // NEW: Load enhanced investment data from summaries endpoint
   const loadInvestmentData = useCallback(async (demoMode: boolean) => {
     try {
       const headers: Record<string, string> = {
@@ -663,7 +663,47 @@ export default function ProfilePage() {
         }
       }
 
-      // Load investment data (already includes both Plaid + SnapTrade merged on backend)
+      if (!demoMode) {
+        // Load from summaries endpoint (includes investment portfolio)
+        const summaryRes = await fetch(`${API_URL}/api/summaries`, {
+          method: 'GET',
+          headers,
+        });
+
+        if (summaryRes.ok) {
+          const summaryData = await summaryRes.json();
+          console.log('Received summary data:', summaryData);
+          
+          // Transform summary data format to match frontend expectations
+          const formattedData = {
+            portfolio: summaryData.investmentPortfolio,
+            holdings: [], // Holdings not included in summary, load separately if needed
+            transactions: [],
+            investment_transactions: [],
+            total_investment_transactions: 0,
+            securities: [],
+            accounts: [],
+            item: {},
+            analysis: {
+              portfolio: summaryData.investmentPortfolio,
+              activity: {
+                totalTransactions: 0,
+                totalVolume: 0,
+                activityByType: {},
+                averageTransactionSize: 0
+              }
+            }
+          };
+          
+          setInvestmentData(formattedData);
+          setSnapTradeHoldings(null);
+          
+          console.log('Investment portfolio loaded from summary:', summaryData.investmentPortfolio);
+          return;
+        }
+      }
+
+      // Fallback: Load investment data from old endpoint (for demo mode or if summary fails)
       const investmentsRes = await fetch(`${API_URL}/plaid/investments`, {
         method: 'GET',
         headers,
@@ -697,7 +737,7 @@ export default function ProfilePage() {
         setInvestmentData(formattedData);
         setSnapTradeHoldings(null); // No longer needed since data is merged on backend
         
-        console.log('Investment data loaded:', {
+        console.log('Investment data loaded (fallback):', {
           totalValue: formattedData.portfolio?.totalValue,
           holdingCount: formattedData.portfolio?.holdingCount,
           securityCount: formattedData.portfolio?.securityCount,

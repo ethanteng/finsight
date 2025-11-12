@@ -618,10 +618,15 @@ describe('Complete Security Test Suite', () => {
       test('should accept valid JWT tokens for SnapTrade endpoints', async () => {
         const response = await request(testApp)
           .get('/snaptrade/status/user')
-          .set('Authorization', `Bearer ${user1JWT}`)
-          .expect(200);
+          .set('Authorization', `Bearer ${user1JWT}`);
         
-        expect(response.body).toHaveProperty('status');
+        // Valid JWT should be accepted (returns 200 if user has SnapTrade, 404 if not)
+        expect([200, 404]).toContain(response.status);
+        if (response.status === 200) {
+          expect(response.body).toHaveProperty('status');
+        } else {
+          expect(response.body).toHaveProperty('error');
+        }
       });
     });
 

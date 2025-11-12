@@ -1739,7 +1739,10 @@ export class FinancialDataService {
     };
 
     for (const account of rawAccounts) {
-      const accountId = account.account_id || account.id;
+      // ✅ Use plaidAccountId as primary deduplication key (if available)
+      // This ensures accounts from database are properly deduplicated
+      const plaidAccountId = account.plaidAccountId || account.persistentAccountId;
+      const accountId = plaidAccountId || account.account_id || account.id;
       const balance = account.balance?.current ?? account.balance?.available ?? 0;
       const descKey = `${account.name}|${account.type}|${account.subtype}|${Math.round(balance * 100)}`;
 
@@ -1756,7 +1759,15 @@ export class FinancialDataService {
 
           let shouldReplace = false;
 
-          if (candidateTimestamp !== null && (existingTimestamp === null || candidateTimestamp > existingTimestamp)) {
+          // Prefer accounts with plaidAccountId over those without
+          const candidateHasPlaidId = Boolean(account.plaidAccountId || account.persistentAccountId);
+          const existingHasPlaidId = Boolean(existing.plaidAccountId || existing.persistentAccountId);
+          
+          if (candidateHasPlaidId && !existingHasPlaidId) {
+            shouldReplace = true;
+          } else if (!candidateHasPlaidId && existingHasPlaidId) {
+            shouldReplace = false;
+          } else if (candidateTimestamp !== null && (existingTimestamp === null || candidateTimestamp > existingTimestamp)) {
             shouldReplace = true;
           } else if (existingTimestamp !== null && candidateTimestamp !== null && existingTimestamp > candidateTimestamp) {
             shouldReplace = false;

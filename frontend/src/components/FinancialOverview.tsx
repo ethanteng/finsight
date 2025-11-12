@@ -84,7 +84,45 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
           }
         }
 
-        // Load Plaid accounts
+        // Load financial summary from new endpoint (includes overview and portfolio)
+        if (!isDemo) {
+          try {
+            const summaryRes = await fetch(`${API_URL}/api/summaries`, {
+              headers,
+            });
+
+            if (summaryRes.ok) {
+              const summaryData = await summaryRes.json();
+              
+              // Extract financial overview data
+              if (summaryData.financialOverview) {
+                // Set home data from summary
+                if (summaryData.financialOverview.homeValue !== null) {
+                  setHomeData({
+                    address: '',
+                    value: summaryData.financialOverview.homeValue,
+                    valueLow: summaryData.financialOverview.homeValue * 0.9,
+                    valueHigh: summaryData.financialOverview.homeValue * 1.1,
+                    lastUpdated: summaryData.lastUpdated || new Date().toISOString()
+                  });
+                }
+              }
+              
+              // Extract investment portfolio data
+              if (summaryData.investmentPortfolio) {
+                setInvestmentData({
+                  portfolio: summaryData.investmentPortfolio
+                });
+              }
+            } else {
+              console.log('Failed to load financial summary:', summaryRes.status);
+            }
+          } catch (summaryError) {
+            console.log('Error loading financial summary:', summaryError);
+          }
+        }
+
+        // Still load accounts separately for display (needed for account list)
         const accountsRes = await fetch(`${API_URL}/plaid/all-accounts`, {
           headers,
         });
@@ -94,77 +132,29 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
           setAccounts(accountsData.accounts || []);
         } else {
           console.error('Failed to load Plaid accounts:', accountsRes.status);
-          // Set accounts to empty array if fetch fails
           setAccounts([]);
         }
 
         // Load SnapTrade accounts (only for authenticated users, not demo)
         if (!isDemo) {
           try {
-            console.log('Fetching SnapTrade accounts...');
             const snapTradeRes = await fetch(`${API_URL}/snaptrade/accounts`, {
               headers,
             });
 
-            console.log('SnapTrade response status:', snapTradeRes.status);
             if (snapTradeRes.ok) {
               const snapTradeData = await snapTradeRes.json();
-              console.log('SnapTrade response data:', snapTradeData);
               if (snapTradeData.success && snapTradeData.data?.accounts) {
                 setSnapTradeAccounts(snapTradeData.data.accounts);
-                console.log('SnapTrade accounts loaded:', snapTradeData.data.accounts);
-              } else {
-                console.log('SnapTrade response not successful or no accounts:', snapTradeData);
               }
-            } else {
-              console.log('Failed to load SnapTrade accounts:', snapTradeRes.status);
-              // Don't set error as this is optional
             }
           } catch (snapTradeError) {
             console.log('Error loading SnapTrade accounts:', snapTradeError);
-            // Don't set error as this is optional
-          }
-        }
-
-        // Load investment data
-        const investmentsRes = await fetch(`${API_URL}/plaid/investments`, {
-          headers,
-        });
-
-        if (investmentsRes.ok) {
-          const investmentsData = await investmentsRes.json();
-          setInvestmentData(investmentsData);
-        } else {
-          console.log('Failed to load investment data:', investmentsRes.status);
-          // Don't set error as this is optional
-        }
-
-        // Load home data (only for authenticated users, not demo)
-        if (!isDemo) {
-          try {
-            const homeRes = await fetch(`${API_URL}/profile/home`, {
-              headers,
-            });
-
-            if (homeRes.ok) {
-              const homeDataRes = await homeRes.json();
-              if (homeDataRes.hasHome && homeDataRes.homeData) {
-                setHomeData(homeDataRes.homeData);
-                console.log('Home data loaded:', homeDataRes.homeData);
-              }
-            } else {
-              console.log('Failed to load home data:', homeRes.status);
-              // Don't set error as this is optional
-            }
-          } catch (homeError) {
-            console.log('Error loading home data:', homeError);
-            // Don't set error as this is optional
           }
         }
       } catch (error) {
         console.error('Error loading financial data:', error);
         setError('Failed to load financial data');
-        // Set accounts to empty array on error
         setAccounts([]);
       } finally {
         setLoading(false);

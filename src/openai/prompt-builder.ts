@@ -48,9 +48,35 @@ function buildSystemPrompt(snapshot: FinancialContextSnapshot): string {
       '- Treat amounts as USD unless clearly specified otherwise.'
   );
 
+  // Use financial summary if available (reduces prompt size)
+  if (snapshot.financialSummary?.financialOverview) {
+    const overview = snapshot.financialSummary.financialOverview;
+    sections.push(`# Financial Overview\n` +
+      `Net Worth: $${overview.netWorth.toFixed(2)}\n` +
+      `Total Cash: $${overview.totalCash.toFixed(2)}\n` +
+      `Total Investments: $${overview.totalInvestments.toFixed(2)}\n` +
+      `Total Debt: $${overview.totalDebt.toFixed(2)}` +
+      (overview.homeValue !== null ? `\nHome Value: $${overview.homeValue.toFixed(2)}` : '')
+    );
+  }
+
   const accountSummary = formatAccountSummary(snapshot.accounts);
   const transactionSummary = formatTransactionSummary(snapshot.bankingTransactions);
-  const investmentSummary = snapshot.investments ? formatInvestmentSummary(snapshot.investments) : '';
+  
+  // Use summary investment portfolio if available, otherwise use detailed snapshot
+  let investmentSummary = '';
+  if (snapshot.financialSummary?.investmentPortfolio) {
+    const portfolio = snapshot.financialSummary.investmentPortfolio;
+    investmentSummary = `Total Portfolio Value: $${portfolio.totalValue.toFixed(2)}\n` +
+      `Holdings: ${portfolio.holdingsCount}\n` +
+      `Securities: ${portfolio.securityCount}\n` +
+      `Asset Allocation:\n` +
+      portfolio.assetAllocation.map(aa => 
+        `- ${aa.type}: $${aa.value.toFixed(2)} (${aa.percentage.toFixed(1)}%)`
+      ).join('\n');
+  } else if (snapshot.investments) {
+    investmentSummary = formatInvestmentSummary(snapshot.investments);
+  }
 
   if (snapshot.incomeAnalysis) {
     sections.push(`# Income Analysis (authoritative)\n${snapshot.incomeAnalysis}`);

@@ -2921,6 +2921,40 @@ app.get('/profile/tokens', requireAuth, async (req: Request, res: Response) => {
 });
 
 // Get SnapTrade connection status
+app.get('/api/summaries', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { FinancialSummaryService } = await import('./services/financial-summary-service');
+    const summaryService = new FinancialSummaryService();
+    
+    const summary = await summaryService.getUserSummary(req.user!.id);
+    
+    // If summary is stale, trigger non-blocking refresh
+    if (summaryService.isSummaryStale(summary.lastUpdated)) {
+      setImmediate(() => {
+        summaryService.refreshUserSummary(req.user!.id).catch(error => {
+          console.error(`Failed to refresh summary for user ${req.user!.id}:`, error);
+        });
+      });
+    }
+    
+    res.json({
+      financialOverview: summary.financialOverview,
+      investmentPortfolio: summary.investmentPortfolio,
+      lastUpdated: summary.lastUpdated.toISOString()
+    });
+  } catch (error) {
+    console.error('Failed to fetch financial summary:', error);
+    
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+      res.status(500).json({ error: error.message });
+    } else {
+      Sentry.captureMessage('Unknown error in financial summary endpoint', 'error');
+      res.status(500).json({ error: 'Failed to fetch financial summary' });
+    }
+  }
+});
+
 app.get('/profile/snaptrade-status', requireAuth, async (req: Request, res: Response) => {
   try {
     const prisma = getPrismaClient();

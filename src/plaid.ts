@@ -543,8 +543,37 @@ export const setupPlaidRoutes = (app: any) => {
         account.source === 'plaid' || !account.account_id.toString().startsWith('snaptrade-')
       );
 
+      // ✅ Deduplicate accounts by plaidAccountId, keeping most recent entry
+      const accountMap = new Map<string, any>();
+      for (const account of plaidOnlyAccounts) {
+        const accountAny = account as any;
+        const plaidAccountId = accountAny.plaidAccountId || accountAny.persistentAccountId || account.account_id || account.id;
+        const existing = accountMap.get(plaidAccountId);
+        
+        if (!existing) {
+          accountMap.set(plaidAccountId, account);
+        } else {
+          // Keep the most recent account (by lastSynced or updatedAt)
+          const existingAny = existing as any;
+          const existingTimestamp = existingAny.lastSynced || existingAny.lastSyncedAt || existingAny.updatedAt || existingAny.createdAt;
+          const candidateTimestamp = accountAny.lastSynced || accountAny.lastSyncedAt || accountAny.updatedAt || accountAny.createdAt;
+          
+          if (candidateTimestamp && existingTimestamp) {
+            const existingTime = existingTimestamp instanceof Date ? existingTimestamp.getTime() : new Date(existingTimestamp).getTime();
+            const candidateTime = candidateTimestamp instanceof Date ? candidateTimestamp.getTime() : new Date(candidateTimestamp).getTime();
+            if (candidateTime > existingTime) {
+              accountMap.set(plaidAccountId, account);
+            }
+          } else if (candidateTimestamp && !existingTimestamp) {
+            accountMap.set(plaidAccountId, account);
+          }
+        }
+      }
+      
+      const deduplicatedAccounts = Array.from(accountMap.values());
+
       // Format accounts for frontend (matching expected format)
-      const formattedAccounts = plaidOnlyAccounts.map(account => ({
+      const formattedAccounts = deduplicatedAccounts.map(account => ({
         id: account.id,
         name: account.name,
         type: account.type,

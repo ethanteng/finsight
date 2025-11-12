@@ -63,6 +63,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   let investmentsSnapshot: InvestmentSnapshot | undefined;
   let homeValueSummary: string | undefined;
   let metadata: UnifiedFinancialData['metadata'] = { ...DEFAULT_METADATA };
+  let financialSummary: { financialOverview?: any; investmentPortfolio?: any } | null = null;
 
   if (isDemo) {
     const { demoData } = await import('../demo-data');
@@ -81,6 +82,19 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       homeValueSummary = 'Home value data is not available in demo mode.';
     }
   } else if (userId) {
+    // Try to use cached financial summary first (reduces GPT prompt size)
+    try {
+      const { FinancialSummaryService } = await import('../services/financial-summary-service');
+      const summaryService = new FinancialSummaryService();
+      const summary = await summaryService.getUserSummary(userId);
+      financialSummary = {
+        financialOverview: summary.financialOverview,
+        investmentPortfolio: summary.investmentPortfolio
+      };
+    } catch (error) {
+      console.warn('Failed to load financial summary, falling back to full data fetch:', error);
+    }
+
     const financialDataService = new FinancialDataService();
     const unified = await financialDataService.getUserFinancialData(userId, {
       includeTransactions: true,
@@ -94,14 +108,47 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     bankingTransactions = unified.bankingTransactions;
     metadata = unified.metadata;
 
-    if (questionNeeds.needsInvestments && unified.investments?.holdings?.length) {
+    // Use summary data for investment totals if available, otherwise derive from holdings
+    if (financialSummary?.investmentPortfolio && questionNeeds.needsInvestments) {
+      // Use summary portfolio totals, but still include top holdings for context
+      const topHoldings = unified.investments?.holdings?.slice(0, 10).map((holding: any) => {
+        const name = holding.security_name || holding.ticker_symbol || 'Holding';
+        const value = holding.institution_value || 0;
+        return `- ${name}: $${value.toFixed(2)}`;
+      }) || [];
+      
+      investmentsSnapshot = {
+        totalValue: financialSummary.investmentPortfolio.totalValue,
+        holdingCount: financialSummary.investmentPortfolio.holdingsCount,
+        summaryLines: topHoldings.length > 0 ? topHoldings : [
+          `Total Portfolio Value: $${financialSummary.investmentPortfolio.totalValue.toFixed(2)}`,
+          `Holdings: ${financialSummary.investmentPortfolio.holdingsCount}`,
+          `Securities: ${financialSummary.investmentPortfolio.securityCount}`
+        ]
+      };
+    } else if (questionNeeds.needsInvestments && unified.investments?.holdings?.length) {
       investmentsSnapshot = deriveInvestmentSnapshot(unified.investments);
     }
 
     if (questionNeeds.needsHomeValue) {
-      homeValueSummary = unified.homeValue
-        ? buildHomeValueSummary(unified.homeValue)
-        : 'Home value data is currently unavailable.';
+      // Use summary home value if available, otherwise use unified data
+      const homeValue = financialSummary?.financialOverview?.homeValue !== null && financialSummary?.financialOverview?.homeValue !== undefined
+        ? financialSummary.financialOverview.homeValue 
+        : unified.homeValue;
+      
+      if (homeValue) {
+        if (typeof homeValue === 'number') {
+          homeValueSummary = `Home value: $${new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD',
+            maximumFractionDigits: 0
+          }).format(homeValue)}`;
+        } else {
+          homeValueSummary = buildHomeValueSummary(homeValue);
+        }
+      } else {
+        homeValueSummary = 'Home value data is currently unavailable.';
+      }
     }
   }
 
@@ -154,7 +201,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     searchContext,
     marketContext,
     userProfile,
-    homeValueSummary
+    homeValueSummary,
+    financialSummary: financialSummary || undefined
   };
 }
 

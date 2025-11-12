@@ -31,6 +31,7 @@ model User {
   snapTradeUser          SnapTradeUser?
   subscriptions          Subscription[]
   profile                UserProfile?
+  financialSummary       FinancialSummary?
 
   @@map("users")
 }
@@ -378,4 +379,21 @@ model SnapTradeActivity {
   snapTradeUser      SnapTradeUser  @relation(fields: [snapTradeUserId], references: [id], onDelete: Cascade)
 
   @@map("snaptrade_activities")
+}
+
+model FinancialSummary {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  netWorth           Float
+  totalCash          Float
+  totalInvestments   Float
+  totalDebt         Float
+  homeValue          Float?
+  investmentPortfolio Json
+  lastUpdated        DateTime
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("financial_summaries")
 }

@@ -739,6 +739,27 @@ export function createTestApp() {
   const getSnapTradeSecret = (userId: string | undefined) => userId ? `test-user-secret-${userId}` : 'unknown-secret';
 
   // Add mock SnapTrade endpoints for testing
+  app.get('/api/summaries', testAuthMiddleware, (req: any, res) => {
+    res.json({
+      financialOverview: {
+        netWorth: 100000,
+        totalCash: 50000,
+        totalInvestments: 40000,
+        totalDebt: 10000,
+        homeValue: 200000
+      },
+      investmentPortfolio: {
+        totalValue: 40000,
+        holdingsCount: 10,
+        assetAllocation: [
+          { type: 'Equity', value: 40000, percentage: 100 }
+        ],
+        securityCount: 5
+      },
+      lastUpdated: new Date().toISOString()
+    });
+  });
+
   app.get('/snaptrade/status/user', testAuthMiddleware, (req: any, res) => {
     const userId = req.user?.id;
     const record = userId ? snapTradeUsers.get(userId) : undefined;
@@ -747,29 +768,26 @@ export function createTestApp() {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
-    let currentRecord = record;
-
-    if (!currentRecord) {
-      const timestamp = new Date().toISOString();
-      currentRecord = {
-        snapTradeUserId: getSnapTradeKey(userId),
-        userSecret: getSnapTradeSecret(userId),
-        createdAt: timestamp,
-        updatedAt: timestamp
-      };
-      snapTradeUsers.set(userId, currentRecord);
+    // Only return existing records - don't auto-create for security tests
+    // This ensures /snaptrade/accounts returns 404 for users not explicitly initialized
+    if (!record) {
+      return res.status(404).json({ 
+        status: 'not_initialized',
+        error: 'SnapTrade user not found. Please initialize first.'
+      });
     }
 
     res.json({
       status: 'registered',
-      snapTradeUserId: currentRecord.snapTradeUserId,
-      createdAt: currentRecord.createdAt,
-      updatedAt: currentRecord.updatedAt
+      snapTradeUserId: record.snapTradeUserId,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt
     });
   });
   
   app.get('/snaptrade/accounts', testAuthMiddleware, (req: any, res) => {
     const userId = req.user?.id;
+    // Check if user exists in the map (must be explicitly initialized, not auto-created)
     if (!userId || !snapTradeUsers.has(userId)) {
       return res.status(404).json({
         success: false,
