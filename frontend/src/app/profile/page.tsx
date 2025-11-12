@@ -677,8 +677,8 @@ export default function ProfilePage() {
           console.log('Received summary data:', summaryData);
           
           // ✅ Load holdings and transactions separately since summary doesn't include them
-          let holdings: any[] = [];
-          let transactions: any[] = [];
+          let holdings: InvestmentData['holdings'] = [];
+          let transactions: InvestmentData['transactions'] = [];
           
           try {
             const investmentsRes = await fetch(`${API_URL}/plaid/investments`, {
@@ -718,10 +718,16 @@ export default function ProfilePage() {
               },
               activity: {
                 totalTransactions: transactions.length,
-                totalVolume: transactions.reduce((sum: number, tx: any) => sum + Math.abs(tx.institution_value || tx.value || 0), 0),
+                totalVolume: transactions.reduce((sum: number, tx: InvestmentData['transactions'][0]) => {
+                  const txAny = tx as InvestmentTransaction;
+                  return sum + Math.abs(txAny.institution_value || txAny.value || 0);
+                }, 0),
                 activityByType: {},
                 averageTransactionSize: transactions.length > 0 
-                  ? transactions.reduce((sum: number, tx: any) => sum + Math.abs(tx.institution_value || tx.value || 0), 0) / transactions.length 
+                  ? transactions.reduce((sum: number, tx: InvestmentData['transactions'][0]) => {
+                      const txAny = tx as InvestmentTransaction;
+                      return sum + Math.abs(txAny.institution_value || txAny.value || 0);
+                    }, 0) / transactions.length 
                   : 0
               }
             }
