@@ -291,14 +291,14 @@ export class ProfileManager {
           ''
         ).trim();
         
-        // Re-add the structured home data (only if we have all required fields)
-        if (existingHomeData.address && existingHomeData.value !== null) {
+        // Re-add the structured home data (even if value is 0 - address is still useful)
+        if (existingHomeData.address) {
           const homeDataSection = `
 
 HOME_ADDRESS: ${existingHomeData.address}
-HOME_VALUE: ${existingHomeData.value}
-HOME_VALUE_LOW: ${existingHomeData.valueLow ?? existingHomeData.value}
-HOME_VALUE_HIGH: ${existingHomeData.valueHigh ?? existingHomeData.value}
+HOME_VALUE: ${existingHomeData.value ?? 0}
+HOME_VALUE_LOW: ${existingHomeData.valueLow ?? existingHomeData.value ?? 0}
+HOME_VALUE_HIGH: ${existingHomeData.valueHigh ?? existingHomeData.value ?? 0}
 HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Date().toISOString()}`;
           
           finalProfile = finalProfile + homeDataSection;
@@ -309,6 +309,28 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
       console.log(`Profile intelligently updated for user: ${userId}`);
     } else {
       console.log(`No new profile information found for user: ${userId}`);
+    }
+    
+    // ✅ After profile update, check if address was detected but value wasn't fetched
+    // This handles the case where GPT added address in natural language but detectAndFetchHomeValue
+    // didn't trigger (e.g., if it ran before the profile was saved)
+    const finalProfile = await this.getOriginalProfile(userId);
+    const finalHomeData = this.extractHomeData(finalProfile);
+    
+    // If we have an address but no value (or value is 0), try to fetch it
+    if (finalHomeData.address && (!finalHomeData.value || finalHomeData.value === 0)) {
+      console.log(`ProfileManager: Address detected but value missing, attempting to fetch home value for: ${finalHomeData.address}`);
+      try {
+        const homeValue = await this.updateHomeValue(userId, finalHomeData.address);
+        if (homeValue) {
+          console.log(`ProfileManager: Successfully fetched home value: $${homeValue}`);
+        } else {
+          console.log('ProfileManager: Failed to fetch home value, but address is saved');
+        }
+      } catch (error) {
+        console.error('ProfileManager: Error fetching home value:', error);
+        // Don't throw - address is still saved
+      }
     }
   }
 

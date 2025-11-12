@@ -136,18 +136,60 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
         ? financialSummary.financialOverview.homeValue 
         : unified.homeValue;
       
+      // Also check user profile for home address (in case it's there but homeValue fetch failed)
+      let homeAddressFromProfile: string | null = null;
+      if (userId && !isDemo) {
+        try {
+          const { ProfileManager } = await import('../profile/manager');
+          const profileManager = new ProfileManager();
+          const profileText = await profileManager.getOriginalProfile(userId);
+          const addressMatch = profileText.match(/HOME_ADDRESS:\s*(.+)/);
+          if (addressMatch) {
+            homeAddressFromProfile = addressMatch[1].trim();
+          }
+        } catch (error) {
+          // Ignore errors - we'll use homeValue data if available
+        }
+      }
+      
       if (homeValue) {
         if (typeof homeValue === 'number') {
-          homeValueSummary = `Home value: $${new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: 'USD',
-            maximumFractionDigits: 0
-          }).format(homeValue)}`;
+          if (homeValue > 0) {
+            homeValueSummary = `Home value: $${new Intl.NumberFormat('en-US', {
+              style: 'currency',
+              currency: 'USD',
+              maximumFractionDigits: 0
+            }).format(homeValue)}`;
+          } else {
+            // Value is 0 but address might be available
+            const homeData = unified.homeValue;
+            const address = (homeData && homeData.address) || homeAddressFromProfile;
+            if (address) {
+              homeValueSummary = `Home address: ${address}. Home value estimate is not currently available, but the user owns this property.`;
+            } else {
+              homeValueSummary = 'Home value data is currently unavailable.';
+            }
+          }
         } else {
-          homeValueSummary = buildHomeValueSummary(homeValue);
+          // HomeData object
+          if (homeValue.valueMid > 0 || homeValue.valueHigh > 0 || homeValue.valueLow > 0) {
+            homeValueSummary = buildHomeValueSummary(homeValue);
+          } else if (homeValue.address) {
+            // Address exists but value is 0
+            homeValueSummary = `Home address: ${homeValue.address}. Home value estimate is not currently available, but the user owns this property.`;
+          } else {
+            homeValueSummary = 'Home value data is currently unavailable.';
+          }
         }
       } else {
-        homeValueSummary = 'Home value data is currently unavailable.';
+        // Check if we have address in profile even without value
+        const homeData = unified.homeValue;
+        const address = (homeData && homeData.address) || homeAddressFromProfile;
+        if (address) {
+          homeValueSummary = `Home address: ${address}. Home value estimate is not currently available, but the user owns this property.`;
+        } else {
+          homeValueSummary = 'Home value data is currently unavailable.';
+        }
       }
     }
   }

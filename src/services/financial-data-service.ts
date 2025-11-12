@@ -1681,15 +1681,21 @@ export class FinancialDataService {
       const valueHighMatch = profileData.match(/HOME_VALUE_HIGH:\s*(\d+(?:\.\d+)?)/);
       const lastUpdatedMatch = profileData.match(/HOME_VALUE_LAST_UPDATED:\s*(.+)/);
 
-      if (!addressMatch || !valueMatch) {
+      // Return home data even if value is 0 or missing (address is still useful)
+      if (!addressMatch) {
         return null;
       }
 
+      const address = addressMatch[1].trim();
+      const value = valueMatch ? parseFloat(valueMatch[1]) : 0;
+      const valueLow = valueLowMatch ? parseFloat(valueLowMatch[1]) : (value > 0 ? value * 0.9 : 0);
+      const valueHigh = valueHighMatch ? parseFloat(valueHighMatch[1]) : (value > 0 ? value * 1.1 : 0);
+
       return {
-        address: addressMatch[1].trim(),
-        valueLow: valueLowMatch ? parseFloat(valueLowMatch[1]) : parseFloat(valueMatch[1]),
-        valueMid: parseFloat(valueMatch[1]),
-        valueHigh: valueHighMatch ? parseFloat(valueHighMatch[1]) : parseFloat(valueMatch[1]),
+        address,
+        valueLow: valueLow > 0 ? valueLow : 0,
+        valueMid: value > 0 ? value : 0,
+        valueHigh: valueHigh > 0 ? valueHigh : 0,
         lastUpdated: lastUpdatedMatch ? lastUpdatedMatch[1].trim() : new Date().toISOString()
       };
     } catch (error: any) {

@@ -45,18 +45,27 @@ function buildSystemPrompt(snapshot: FinancialContextSnapshot): string {
       '- Write in structured paragraphs; use short bullet points only when summarising actions.\n' +
       '- Do not include JSON or LaTeX.\n' +
       '- If data is missing, state the limitation before offering alternatives.\n' +
-      '- Treat amounts as USD unless clearly specified otherwise.'
+      '- Treat amounts as USD unless clearly specified otherwise.\n' +
+      '- IMPORTANT: You have access to the user\'s financial data including home address when provided. If home value is shown as "not estimated yet" or unavailable, you can still reference that the user owns a home at the provided address. Do not state that you lack access to home value data - instead, acknowledge the home ownership and address if available.'
   );
 
   // Use financial summary if available (reduces prompt size)
   if (snapshot.financialSummary?.financialOverview) {
     const overview = snapshot.financialSummary.financialOverview;
+    let homeValueLine = '';
+    if (overview.homeValue !== null && overview.homeValue !== undefined) {
+      if (overview.homeValue > 0) {
+        homeValueLine = `\nHome Value: $${overview.homeValue.toFixed(2)}`;
+      } else {
+        // Value is 0 but include note that user owns home
+        homeValueLine = '\nHome Value: Not estimated yet (user owns a home)';
+      }
+    }
     sections.push(`# Financial Overview\n` +
       `Net Worth: $${overview.netWorth.toFixed(2)}\n` +
       `Total Cash: $${overview.totalCash.toFixed(2)}\n` +
       `Total Investments: $${overview.totalInvestments.toFixed(2)}\n` +
-      `Total Debt: $${overview.totalDebt.toFixed(2)}` +
-      (overview.homeValue !== null ? `\nHome Value: $${overview.homeValue.toFixed(2)}` : '')
+      `Total Debt: $${overview.totalDebt.toFixed(2)}${homeValueLine}`
     );
   }
 

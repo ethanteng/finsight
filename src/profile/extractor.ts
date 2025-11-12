@@ -97,28 +97,37 @@ export class ProfileExtractor {
     profileText: string
   ): Promise<void> {
     try {
-      // Check if profile already has home data
-      const hasHomeData = /HOME_ADDRESS:/.test(profileText);
-      if (hasHomeData) {
-        console.log('ProfileExtractor: Home data already exists in profile, skipping detection');
-        return;
+      // Check if profile already has structured home data with value
+      const hasStructuredHomeData = /HOME_ADDRESS:/.test(profileText);
+      if (hasStructuredHomeData) {
+        // Check if value exists and is > 0
+        const valueMatch = profileText.match(/HOME_VALUE:\s*(\d+(?:\.\d+)?)/);
+        if (valueMatch && parseFloat(valueMatch[1]) > 0) {
+          console.log('ProfileExtractor: Home data with value already exists in profile, skipping detection');
+          return;
+        }
+        // If address exists but value is 0, we should try to fetch
+        console.log('ProfileExtractor: Home address exists but value is 0 or missing, attempting to fetch value');
       }
 
-      // Detect ownership indicators
+      // Detect ownership indicators in both question and extracted profile
       const ownershipIndicators = [
         /\b(I|we) own (a|my|our) (home|house|property)\b/i,
         /\bmy (home|house|property)\b/i,
         /\bour (home|house|property)\b/i,
-        /\bowned? (home|house|property)\b/i
+        /\bowned? (home|house|property)\b/i,
+        /\bown (a|my|our) (home|house|property)\b/i
       ];
 
-      const hasOwnership = ownershipIndicators.some(pattern => pattern.test(question));
+      const hasOwnership = ownershipIndicators.some(pattern => 
+        pattern.test(question) || pattern.test(profileText)
+      );
       
       if (!hasOwnership) {
         return;
       }
 
-      // Detect address patterns
+      // Detect address patterns in both question and extracted profile
       // Pattern: street number + street name (with ordinals like 10th) + city + state + optional zip
       const addressPatterns = [
         // Pattern with explicit street type (Street, Ave, Dr, etc.)
@@ -126,21 +135,36 @@ export class ProfileExtractor {
         // Pattern after "at" keyword (more flexible)
         /\bat\s+(\d+\s+[\w\s]+?,\s+[\w\s]+?,\s+[A-Z]{2}(?:,?\s+\d{5})?)\b/i,
         // Pattern for standard format: number + street, city, state zip
-        /\b(\d+(?:\s+[NSEW]\.?)?\s+\d+(?:st|nd|rd|th)?\s+[\w\s]+?,\s+[\w\s]+?,\s+[A-Z]{2}(?:,?\s+\d{5})?)\b/i
+        /\b(\d+(?:\s+[NSEW]\.?)?\s+\d+(?:st|nd|rd|th)?\s+[\w\s]+?,\s+[\w\s]+?,\s+[A-Z]{2}(?:,?\s+\d{5})?)\b/i,
+        // More flexible pattern: number + street name + city, state
+        /\b(\d+\s+[\w\s]+?,\s+[\w\s]+?,\s+[A-Z]{2}(?:\s+\d{5})?)\b/i
       ];
 
       let detectedAddress: string | null = null;
       
-      for (const pattern of addressPatterns) {
-        const match = question.match(pattern);
-        if (match) {
-          detectedAddress = match[1].trim();
-          break;
+      // First check structured format
+      const structuredMatch = profileText.match(/HOME_ADDRESS:\s*(.+?)(?:\n|$)/);
+      if (structuredMatch) {
+        detectedAddress = structuredMatch[1].trim();
+      } else {
+        // Check question first, then profile text
+        for (const pattern of addressPatterns) {
+          const questionMatch = question.match(pattern);
+          if (questionMatch) {
+            detectedAddress = questionMatch[1].trim();
+            break;
+          }
+          
+          const profileMatch = profileText.match(pattern);
+          if (profileMatch) {
+            detectedAddress = profileMatch[1].trim();
+            break;
+          }
         }
       }
 
       if (!detectedAddress) {
-        console.log('ProfileExtractor: Ownership detected but no address found');
+        console.log('ProfileExtractor: Ownership detected but no address found in question or profile');
         return;
       }
 
@@ -150,12 +174,13 @@ export class ProfileExtractor {
       const { ProfileManager } = await import('./manager');
       const profileManager = new ProfileManager();
       
+      // Fetch home value from RentCast and update profile
       const homeValue = await profileManager.updateHomeValue(userId, detectedAddress);
       
       if (homeValue) {
         console.log(`ProfileExtractor: Successfully fetched and stored home value: $${homeValue}`);
       } else {
-        console.log('ProfileExtractor: Failed to fetch home value, but ownership detected');
+        console.log('ProfileExtractor: Failed to fetch home value from RentCast, but address was detected and saved');
       }
     } catch (error) {
       console.error('ProfileExtractor: Error detecting and fetching home value:', error);
