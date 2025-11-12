@@ -1,6 +1,6 @@
 import { UserTier } from '../data/types';
 import { dataOrchestrator } from '../data/orchestrator';
-import { FinancialDataService, Account, Transaction, UnifiedFinancialData } from '../services/financial-data-service';
+import { FinancialDataService, Account, Transaction, UnifiedFinancialData, HomeData } from '../services/financial-data-service';
 import { AnonymizationService } from '../services/anonymization-service';
 import { TokenStatus } from '../services/token-validation-service';
 import { QuestionNeeds, FinancialContextSnapshot, AccountSummaryItem, TransactionSummaryItem, InvestmentSnapshot } from './types';
@@ -61,6 +61,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   let accounts: Account[] = [];
   let bankingTransactions: Transaction[] = [];
   let investmentsSnapshot: InvestmentSnapshot | undefined;
+  let homeValueSummary: string | undefined;
   let metadata: UnifiedFinancialData['metadata'] = { ...DEFAULT_METADATA };
 
   if (isDemo) {
@@ -76,6 +77,9 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
         snaptrade: 'demo'
       }
     };
+    if (questionNeeds.needsHomeValue) {
+      homeValueSummary = 'Home value data is not available in demo mode.';
+    }
   } else if (userId) {
     const financialDataService = new FinancialDataService();
     const unified = await financialDataService.getUserFinancialData(userId, {
@@ -92,6 +96,12 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
 
     if (questionNeeds.needsInvestments && unified.investments?.holdings?.length) {
       investmentsSnapshot = deriveInvestmentSnapshot(unified.investments);
+    }
+
+    if (questionNeeds.needsHomeValue) {
+      homeValueSummary = unified.homeValue
+        ? buildHomeValueSummary(unified.homeValue)
+        : 'Home value data is currently unavailable.';
     }
   }
 
@@ -143,7 +153,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     incomeAnalysis,
     searchContext,
     marketContext,
-    userProfile
+    userProfile,
+    homeValueSummary
   };
 }
 
@@ -446,6 +457,42 @@ function deriveInvestmentSnapshot(data: any): InvestmentSnapshot | undefined {
     holdingCount,
     summaryLines
   };
+}
+
+function buildHomeValueSummary(homeData: HomeData): string {
+  const formatCurrency = (value: number | undefined) => {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      return 'Unknown';
+    }
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0
+    }).format(value);
+  };
+
+  const midValue = formatCurrency(homeData.valueMid ?? homeData.valueHigh ?? homeData.valueLow);
+  const lowValue = typeof homeData.valueLow === 'number' ? formatCurrency(homeData.valueLow) : undefined;
+  const highValue = typeof homeData.valueHigh === 'number' ? formatCurrency(homeData.valueHigh) : undefined;
+  const rangeLine =
+    lowValue && highValue ? `Estimated range: ${lowValue} – ${highValue}` : undefined;
+
+  const lastUpdated = homeData.lastUpdated
+    ? new Date(homeData.lastUpdated).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      })
+    : undefined;
+
+  const lines = [
+    `Address: ${homeData.address}`,
+    `Estimated value: ${midValue}`,
+    rangeLine,
+    lastUpdated ? `Last updated: ${lastUpdated}` : undefined
+  ].filter(Boolean) as string[];
+
+  return lines.join('\n');
 }
 
 async function maybeFetchSearchContext(

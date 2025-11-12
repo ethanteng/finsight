@@ -68,6 +68,10 @@ function buildSystemPrompt(snapshot: FinancialContextSnapshot): string {
     sections.push(`# User Profile\n${snapshot.userProfile}`);
   }
 
+  if (snapshot.homeValueSummary) {
+    sections.push(`# Home Value\n${snapshot.homeValueSummary}`);
+  }
+
   sections.push(`# Accounts\n${accountSummary}`);
   sections.push(`# Recent Transactions\n${transactionSummary}`);
 

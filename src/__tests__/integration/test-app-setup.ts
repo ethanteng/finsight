@@ -727,26 +727,81 @@ export function createTestApp() {
     res.status(401).json({ error: 'Authentication required' });
   });
   
+  // In-memory SnapTrade user store for isolation tests
+  const snapTradeUsers = new Map<string, {
+    snapTradeUserId: string;
+    userSecret: string;
+    createdAt: string;
+    updatedAt: string;
+  }>();
+
+  const getSnapTradeKey = (userId: string | undefined) => userId ? `test-snaptrade-user-${userId}` : 'unknown';
+  const getSnapTradeSecret = (userId: string | undefined) => userId ? `test-user-secret-${userId}` : 'unknown-secret';
+
   // Add mock SnapTrade endpoints for testing
   app.get('/snaptrade/status/user', testAuthMiddleware, (req: any, res) => {
+    const userId = req.user?.id;
+    const record = userId ? snapTradeUsers.get(userId) : undefined;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    let currentRecord = record;
+
+    if (!currentRecord) {
+      const timestamp = new Date().toISOString();
+      currentRecord = {
+        snapTradeUserId: getSnapTradeKey(userId),
+        userSecret: getSnapTradeSecret(userId),
+        createdAt: timestamp,
+        updatedAt: timestamp
+      };
+      snapTradeUsers.set(userId, currentRecord);
+    }
+
     res.json({
       status: 'registered',
-      snapTradeUserId: 'test-snaptrade-user-id',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      snapTradeUserId: currentRecord.snapTradeUserId,
+      createdAt: currentRecord.createdAt,
+      updatedAt: currentRecord.updatedAt
     });
   });
   
   app.get('/snaptrade/accounts', testAuthMiddleware, (req: any, res) => {
-    // For testing error handling, return 404 for users without SnapTrade data
-    // This simulates the real behavior when a user hasn't initialized SnapTrade
-    res.status(404).json({
-      success: false,
-      error: 'SnapTrade user not found. Please initialize first.'
+    const userId = req.user?.id;
+    if (!userId || !snapTradeUsers.has(userId)) {
+      return res.status(404).json({
+        success: false,
+        error: 'SnapTrade user not found. Please initialize first.'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Accounts retrieved successfully',
+      data: {
+        accounts: [
+          {
+            id: 'test-account-1',
+            name: `Test Investment Account (${userId})`,
+            number: '123456789'
+          }
+        ],
+        totalAccounts: 1
+      }
     });
   });
   
   app.get('/snaptrade/holdings', testAuthMiddleware, (req: any, res) => {
+    const userId = req.user?.id;
+    if (!userId || !snapTradeUsers.has(userId)) {
+      return res.status(404).json({
+        success: false,
+        error: 'SnapTrade user not found. Please initialize first.'
+      });
+    }
+
     res.json({
       success: true,
       message: 'Holdings retrieved successfully',
@@ -787,6 +842,14 @@ export function createTestApp() {
   });
   
   app.get('/snaptrade/activities', testAuthMiddleware, (req: any, res) => {
+    const userId = req.user?.id;
+    if (!userId || !snapTradeUsers.has(userId)) {
+      return res.status(404).json({
+        success: false,
+        error: 'SnapTrade user not found. Please initialize first.'
+      });
+    }
+
     res.json({
       success: true,
       message: 'Activities retrieved successfully',
@@ -808,17 +871,43 @@ export function createTestApp() {
   });
   
   app.post('/snaptrade/init', testAuthMiddleware, (req: any, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'User context missing from request.'
+      });
+    }
+
+    const timestamp = new Date().toISOString();
+    const record = {
+      snapTradeUserId: getSnapTradeKey(userId),
+      userSecret: getSnapTradeSecret(userId),
+      createdAt: timestamp,
+      updatedAt: timestamp
+    };
+
+    snapTradeUsers.set(userId, record);
+
     res.json({
       success: true,
       message: 'SnapTrade initialized successfully',
       data: {
-        snapTradeUserId: 'test-snaptrade-user-id',
-        userSecret: 'test-user-secret'
+        snapTradeUserId: record.snapTradeUserId,
+        userSecret: record.userSecret
       }
     });
   });
   
   app.post('/snaptrade/login', testAuthMiddleware, (req: any, res) => {
+    const userId = req.user?.id;
+    if (!userId || !snapTradeUsers.has(userId)) {
+      return res.status(404).json({
+        success: false,
+        error: 'SnapTrade user not found. Please initialize first.'
+      });
+    }
+
     res.json({
       success: true,
       message: 'Login redirect URI obtained',
@@ -829,6 +918,16 @@ export function createTestApp() {
   });
   
   app.delete('/snaptrade/delete', testAuthMiddleware, (req: any, res) => {
+    const userId = req.user?.id;
+    if (!userId || !snapTradeUsers.has(userId)) {
+      return res.status(404).json({
+        success: false,
+        error: 'SnapTrade user not found. Please initialize first.'
+      });
+    }
+
+    snapTradeUsers.delete(userId);
+
     res.json({
       success: true,
       message: 'SnapTrade user deleted successfully',

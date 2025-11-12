@@ -808,7 +808,7 @@ export class FinancialDataService {
           }
         : undefined;
 
-      const accountRecords = await prisma.account.findMany({
+      const accountRecordsRaw = await prisma.account.findMany({
         where: { userId },
         include: accountInclude
       }) as Array<Prisma.AccountGetPayload<{
@@ -816,6 +816,16 @@ export class FinancialDataService {
           transactions: true;
         };
       }>>;
+
+      const accountRecords = accountRecordsRaw.filter(record => {
+        if (!record.plaidAccountId) {
+          return false;
+        }
+        if (record.plaidAccountId.startsWith('snaptrade-')) {
+          return false;
+        }
+        return true;
+      });
 
       if (accountRecords.length === 0) {
         return null;

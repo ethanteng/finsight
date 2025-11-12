@@ -23,6 +23,17 @@ export async function persistTransactionsToDb(
       // Using account.id causes chaining where each sync creates a duplicate with the previous DB ID
       const plaidAccountId = account.account_id || account.plaidAccountId;
       
+    // Skip SnapTrade or non-Plaid accounts to avoid polluting Plaid account table
+    if (!plaidAccountId) {
+      continue;
+    }
+
+    const source = account.source || account.provider;
+    if ((typeof plaidAccountId === 'string' && plaidAccountId.startsWith('snaptrade-')) ||
+        source === 'snaptrade') {
+      continue;
+    }
+
       // Upsert account
       const dbAccount = await prisma.account.upsert({
         where: { plaidAccountId },

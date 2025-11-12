@@ -42,6 +42,7 @@ export interface FinancialContextSnapshot {
   searchContext?: string;
   marketContext?: string;
   userProfile?: string;
+  homeValueSummary?: string;
 }
 
 export interface ConversationEntry {
