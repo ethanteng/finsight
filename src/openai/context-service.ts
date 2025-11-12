@@ -194,16 +194,51 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     }
   }
 
-  // ✅ Trust FinancialDataService - accounts are already deduplicated
-  // No need to deduplicate here - FinancialDataService.mergeFinancialData() handles it
+  // ✅ CRITICAL: Deduplicate accounts by account_id as a safety net
+  // Even though FinancialDataService should deduplicate, corrupted database records might slip through
+  // if they have different account_id values (due to corrupted plaidAccountId pointing to other account IDs)
+  const accountIdMap = new Map<string, Account>();
+  const duplicateAccountIds: string[] = [];
+  
+  accounts.forEach(account => {
+    const accountId = account.account_id || account.id;
+    if (accountId) {
+      if (accountIdMap.has(accountId)) {
+        duplicateAccountIds.push(accountId);
+        console.warn(`⚠️ gatherContextSnapshot: Duplicate account_id detected: ${accountId} (${account.name}). FinancialDataService should have deduplicated this!`);
+        // Keep the most recent account based on timestamp
+        const existing = accountIdMap.get(accountId)!;
+        const existingTimestamp = existing.lastSyncedAt || existing.snapshotTimestamp;
+        const newTimestamp = account.lastSyncedAt || account.snapshotTimestamp;
+        if (newTimestamp && (!existingTimestamp || newTimestamp > existingTimestamp)) {
+          accountIdMap.set(accountId, account);
+        }
+      } else {
+        accountIdMap.set(accountId, account);
+      }
+    } else {
+      console.warn(`⚠️ gatherContextSnapshot: Account without account_id: ${account.name}, skipping`);
+    }
+  });
+  
+  const deduplicatedAccounts = Array.from(accountIdMap.values());
+  
+  if (duplicateAccountIds.length > 0) {
+    console.error(`❌ gatherContextSnapshot: FinancialDataService returned ${duplicateAccountIds.length} duplicate accounts! This indicates corrupted database records or a bug in deduplication.`);
+    console.error(`   Duplicate account_ids: ${duplicateAccountIds.join(', ')}`);
+  }
+  
+  if (accounts.length !== deduplicatedAccounts.length) {
+    console.warn(`⚠️ gatherContextSnapshot: Deduplicated ${accounts.length} accounts → ${deduplicatedAccounts.length} unique accounts (removed ${accounts.length - deduplicatedAccounts.length} duplicates)`);
+  }
   
   const sortedTransactions = bankingTransactions
     .slice()
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const anonymizedAccounts = !isDemo && userId
-    ? anonymizeAccounts(accounts, userId, anonymizationService)
-    : accounts;
+    ? anonymizeAccounts(deduplicatedAccounts, userId, anonymizationService)
+    : deduplicatedAccounts;
 
   const anonymizedTransactions = !isDemo && userId
     ? anonymizeTransactions(sortedTransactions, userId, anonymizationService)
