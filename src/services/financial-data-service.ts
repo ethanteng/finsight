@@ -831,7 +831,36 @@ export class FinancialDataService {
         return null;
       }
 
-      const sortedRecords = accountRecords
+      // ✅ CRITICAL: Filter out corrupted records where plaidAccountId points to another account's database id
+      // This is a safety measure to prevent corrupted data from being used
+      // Note: Deduplication is handled by mergeFinancialData() - this is just data quality filtering
+      const accountIdSet = new Set(accountRecords.map(r => r.id));
+      
+      // Helper to check if plaidAccountId looks like a database ID (cuid format: 25 chars, starts with 'c')
+      const isDatabaseId = (id: string) => id.length === 25 && id.startsWith('c');
+      
+      // Filter out corrupted records only (deduplication happens in mergeFinancialData)
+      const validRecords = accountRecords.filter(record => {
+        // If plaidAccountId matches another account's database id, it's corrupted
+        if (isDatabaseId(record.plaidAccountId) && accountIdSet.has(record.plaidAccountId) && record.plaidAccountId !== record.id) {
+          console.warn(`⚠️ tryLoadPersistedPlaidData: Skipping corrupted account ${record.id} (${record.name}) - plaidAccountId points to another account's id: ${record.plaidAccountId}`);
+          return false;
+        }
+        return true;
+      });
+
+      // ✅ Trust mergeFinancialData() for deduplication - don't deduplicate here
+      // This ensures a single source of truth for deduplication logic
+      const uniqueRecords = validRecords;
+      
+      if (accountRecords.length !== validRecords.length) {
+        const corruptedCount = accountRecords.length - validRecords.length;
+        console.warn(`⚠️ tryLoadPersistedPlaidData: Filtered out ${corruptedCount} corrupted accounts (${accountRecords.length} → ${validRecords.length}). Deduplication will be handled by mergeFinancialData().`);
+      }
+
+      // ✅ FIX: Sort validRecords (not accountRecords) and use them for timestamp calculation
+      // This ensures corrupted records (which were filtered out) don't affect the lastSynced calculation
+      const sortedValidRecords = validRecords
         .slice()
         .sort((a, b) => {
           const aTimestamp = (a.lastSynced || a.updatedAt)?.getTime?.() ?? 0;
@@ -839,19 +868,7 @@ export class FinancialDataService {
           return bTimestamp - aTimestamp;
         });
 
-      const uniqueRecords: typeof accountRecords = [];
-      const seenAccountKeys = new Set<string>();
-
-      for (const record of sortedRecords) {
-        const key = record.persistentAccountId || record.plaidAccountId || record.id;
-        if (seenAccountKeys.has(key)) {
-          continue;
-        }
-        seenAccountKeys.add(key);
-        uniqueRecords.push(record);
-      }
-
-      const lastSyncedTimestamps = sortedRecords
+      const lastSyncedTimestamps = sortedValidRecords
         .map(record => record.lastSynced || record.updatedAt)
         .filter((value): value is Date => Boolean(value))
         .map(value => value.getTime());
@@ -1731,6 +1748,12 @@ export class FinancialDataService {
     // This ensures consistent deduplication across all account sources
 
     const accountMap = new Map<string, any>();
+
+    // ✅ SINGLE SOURCE OF TRUTH: This is the ONLY place where account deduplication happens
+    // All other code should trust this function to return deduplicated accounts
+    // - tryLoadPersistedPlaidData: Only filters corrupted records (safety), no deduplication
+    // - /plaid/all-accounts: Only verification/logging, no deduplication
+    // - Frontend: No deduplication (trusts backend)
 
     const parseSnapshotTimestamp = (source: any): number | null => {
       const raw =

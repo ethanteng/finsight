@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 interface Account {
@@ -319,6 +319,42 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
   const { totalCash, totalDebt, totalInvestments, totalHomeValue, uncategorizedAccounts } = calculateTotals();
   const hasAccounts = accounts.length > 0 || snapTradeAccounts.length > 0;
 
+  // ✅ Trust backend - FinancialDataService should have already deduplicated accounts
+  // Only deduplicate here if backend bug causes duplicates (should not happen)
+  const deduplicatedAccounts = React.useMemo(() => {
+    const accountMap = new Map<string, Account>();
+    accounts.forEach(account => {
+      const accountId = account.id;
+      if (accountMap.has(accountId)) {
+        console.warn(`⚠️ Frontend: Backend returned duplicate account: ${accountId} (${account.name})`);
+      }
+      accountMap.set(accountId, account);
+    });
+    const unique = Array.from(accountMap.values());
+    if (unique.length !== accounts.length) {
+      console.error(`❌ Frontend: Backend returned ${accounts.length} accounts but only ${unique.length} are unique!`);
+    }
+    return unique;
+  }, [accounts]);
+
+  const deduplicatedSnapTradeAccounts = React.useMemo(() => {
+    const accountMap = new Map<string, SnapTradeAccount>();
+    snapTradeAccounts.forEach(account => {
+      // ✅ FIX: Use accountNumber (not number) as fallback - matches SnapTradeAccount interface
+      const accountId = account.id || account.accountNumber;
+      if (accountId) {
+        if (accountMap.has(accountId)) {
+          console.warn(`⚠️ Frontend: Backend returned duplicate SnapTrade account: ${accountId}`);
+        }
+        accountMap.set(accountId, account);
+      }
+    });
+    return Array.from(accountMap.values());
+  }, [snapTradeAccounts]);
+
+  // Use deduplicated counts for display (should match accounts.length if backend is correct)
+  const totalAccountCount = deduplicatedAccounts.length + deduplicatedSnapTradeAccounts.length;
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -441,7 +477,7 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
         <div className="grid grid-cols-3 md:grid-cols-3 gap-2">
           <div className="bg-blue-800 rounded p-2.5">
             <div className="text-blue-300 text-xs mb-1">Accounts</div>
-            <div className="text-white font-medium text-base">{accounts.length + snapTradeAccounts.length}</div>
+            <div className="text-white font-medium text-base">{totalAccountCount}</div>
           </div>
           
           {investmentData?.portfolio && (

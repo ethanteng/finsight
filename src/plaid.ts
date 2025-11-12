@@ -545,7 +545,7 @@ export const setupPlaidRoutes = (app: any) => {
 
       console.log(`🔍 Found ${plaidOnlyAccounts.length} Plaid accounts from FinancialDataService (out of ${financialData.accounts.length} total accounts)`);
       
-      // ✅ Verify no duplicates by account_id
+      // ✅ Verify no duplicates (FinancialDataService should have already deduplicated)
       const accountIdSet = new Set<string>();
       const duplicateIds: string[] = [];
       plaidOnlyAccounts.forEach(account => {
@@ -553,7 +553,7 @@ export const setupPlaidRoutes = (app: any) => {
         if (accountId) {
           if (accountIdSet.has(accountId)) {
             duplicateIds.push(accountId);
-            console.warn(`⚠️ /plaid/all-accounts: Duplicate account_id detected: ${accountId} (${account.name})`);
+            console.error(`❌ /plaid/all-accounts: FinancialDataService returned duplicate account_id: ${accountId} (${account.name})`);
           } else {
             accountIdSet.add(accountId);
           }
@@ -561,11 +561,13 @@ export const setupPlaidRoutes = (app: any) => {
       });
       
       if (duplicateIds.length > 0) {
-        console.error(`❌ /plaid/all-accounts: Found ${duplicateIds.length} duplicate account IDs after FinancialDataService deduplication!`);
+        console.error(`❌ /plaid/all-accounts: FinancialDataService returned ${duplicateIds.length} duplicate accounts! This should not happen.`);
+        // This is a critical error - FinancialDataService should be the single source of truth
+        // Log it but still return the accounts (deduplication will happen in frontend as safety net)
       }
 
-      // ✅ Trust FinancialDataService - accounts are already deduplicated
-      // Format accounts for frontend (matching expected format)
+      // ✅ Format accounts for frontend (matching expected format)
+      // Trust FinancialDataService - it should have already deduplicated
       const formattedAccounts = plaidOnlyAccounts.map(account => {
         const accountAny = account as any;
         // Use account_id or plaidAccountId as the primary ID for frontend

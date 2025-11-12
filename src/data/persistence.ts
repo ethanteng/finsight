@@ -22,7 +22,7 @@ export async function persistTransactionsToDb(
       // ✅ CRITICAL: Always use account_id (Plaid ID), NEVER use id (database ID)
       // Using account.id causes chaining where each sync creates a duplicate with the previous DB ID
       // ✅ Ensure plaidAccountId is always set from account_id if not already present
-      const plaidAccountId = account.account_id || (account as any).plaidAccountId;
+      let plaidAccountId = account.account_id || (account as any).plaidAccountId;
       
       // Skip SnapTrade or non-Plaid accounts to avoid polluting Plaid account table
       if (!plaidAccountId) {
@@ -33,6 +33,23 @@ export async function persistTransactionsToDb(
       if ((typeof plaidAccountId === 'string' && plaidAccountId.startsWith('snaptrade-')) ||
           source === 'snaptrade') {
         continue;
+      }
+
+      // ✅ CRITICAL SAFEGUARD: Never allow plaidAccountId to be set to account.id (database ID)
+      // This prevents creating corrupted records where plaidAccountId points to another account's database id
+      if (plaidAccountId === account.id || (account as any).id === plaidAccountId) {
+        console.error(`❌ Persistence: CRITICAL ERROR - plaidAccountId matches account.id for ${account.name}. Skipping to prevent corruption.`);
+        console.error(`   account.id: ${account.id}, plaidAccountId: ${plaidAccountId}, account_id: ${account.account_id}`);
+        continue;
+      }
+
+      // ✅ Additional safeguard: Check if plaidAccountId looks like a database ID (cuid format)
+      // Real Plaid account IDs are typically longer than 25 characters or don't start with 'c'
+      const isDatabaseId = (id: string) => id.length === 25 && id.startsWith('c');
+      if (isDatabaseId(plaidAccountId) && !account.account_id) {
+        // If we only have plaidAccountId and it looks like a database ID, and we don't have account_id,
+        // this is suspicious - log a warning but proceed (might be a valid edge case)
+        console.warn(`⚠️ Persistence: plaidAccountId "${plaidAccountId}" for account "${account.name}" looks like a database ID but account_id is missing. Proceeding with caution.`);
       }
 
       // Upsert account

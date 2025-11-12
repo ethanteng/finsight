@@ -354,7 +354,25 @@ export default function ProfilePage() {
         const data = await res.json();
         const accounts = data.accounts || [];
         console.log(`📊 Received ${accounts.length} accounts from backend`);
-        setConnectedAccounts(accounts);
+        
+        // ✅ Trust backend - FinancialDataService should have already deduplicated
+        // Only deduplicate here if backend bug causes duplicates (should not happen)
+        const accountMap = new Map<string, Account>();
+        accounts.forEach((account: Account) => {
+          const accountId = account.id;
+          if (accountMap.has(accountId)) {
+            console.error(`❌ Frontend: Backend returned duplicate account: ${accountId} (${account.name}) - FinancialDataService should have deduplicated!`);
+          }
+          accountMap.set(accountId, account);
+        });
+        const deduplicatedAccounts = Array.from(accountMap.values());
+        
+        if (deduplicatedAccounts.length !== accounts.length) {
+          console.error(`❌ Frontend: Backend returned ${accounts.length} accounts but only ${deduplicatedAccounts.length} are unique! This indicates a bug in FinancialDataService.`);
+        }
+        
+        console.log(`✅ Setting ${deduplicatedAccounts.length} unique accounts`);
+        setConnectedAccounts(deduplicatedAccounts);
       } else {
         if (res.status === 401) {
           setError('Authentication required. Please log in.');
