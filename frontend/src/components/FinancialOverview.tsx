@@ -221,22 +221,11 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
     console.log('Plaid accounts:', accounts.length);
     console.log('SnapTrade accounts:', snapTradeAccounts.length);
 
-    // ✅ Deduplicate accounts client-side to avoid double-counting
-    const seenAccountIds = new Set<string>();
-    const deduplicatedAccounts = accounts.filter(account => {
-      const accountId = account.id;
-      if (seenAccountIds.has(accountId)) {
-        console.warn(`⚠️ Duplicate account detected in frontend calculation: ${account.name} (ID: ${accountId})`);
-        return false;
-      }
-      seenAccountIds.add(accountId);
-      return true;
-    });
-
-    console.log(`📊 Deduplicated ${accounts.length} accounts to ${deduplicatedAccounts.length} unique accounts`);
+    // ✅ Trust backend - accounts from /plaid/all-accounts are already deduplicated by FinancialDataService
+    // No need for client-side deduplication
 
     // Process Plaid accounts (EXCLUDE investment accounts - they're counted via holdings)
-    deduplicatedAccounts.forEach(account => {
+    accounts.forEach(account => {
       let balance;
       if (account.type === 'depository' || 
           account.subtype === 'checking' || 

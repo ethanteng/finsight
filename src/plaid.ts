@@ -544,84 +544,10 @@ export const setupPlaidRoutes = (app: any) => {
       );
 
       console.log(`🔍 Found ${plaidOnlyAccounts.length} Plaid accounts from FinancialDataService (out of ${financialData.accounts.length} total accounts)`);
-      
-      // Log account IDs for debugging
-      const accountIds = plaidOnlyAccounts.map(acc => {
-        const accAny = acc as any;
-        return {
-          account_id: acc.account_id,
-          id: acc.id,
-          plaidAccountId: accAny.plaidAccountId,
-          persistentAccountId: accAny.persistentAccountId,
-          name: acc.name
-        };
-      });
-      console.log(`🔍 Account IDs before deduplication:`, JSON.stringify(accountIds, null, 2));
 
-      // ✅ CRITICAL: Deduplicate accounts using plaidAccountId as primary key
-      // This ensures accounts synced at different times with different balances are properly deduplicated
-      const accountMap = new Map<string, any>();
-      const seenAccountIds = new Set<string>();
-      
-      for (const account of plaidOnlyAccounts) {
-        const accountAny = account as any;
-        
-        // ✅ Primary unique identifier: plaidAccountId (most reliable, consistent across syncs)
-        const plaidAccountId = accountAny.plaidAccountId || accountAny.persistentAccountId;
-        const accountId = account.account_id || account.id;
-        
-        // Use plaidAccountId if available, otherwise account_id, otherwise id
-        const uniqueId = plaidAccountId || accountId || account.id;
-        
-        if (!uniqueId) {
-          // Fallback: skip accounts without any ID (shouldn't happen, but be safe)
-          console.warn(`⚠️ Account without ID found: ${account.name} (${account.type}/${account.subtype})`);
-          continue;
-        }
-        
-        // Check if we've seen this account ID before
-        if (seenAccountIds.has(uniqueId)) {
-          // Duplicate found - keep the most recent one based on timestamp
-          const existing = accountMap.get(uniqueId);
-          if (existing) {
-            const existingAny = existing as any;
-            const existingTimestamp = existingAny.lastSynced || existingAny.lastSyncedAt || existingAny.updatedAt || existingAny.createdAt;
-            const candidateTimestamp = accountAny.lastSynced || accountAny.lastSyncedAt || accountAny.updatedAt || accountAny.createdAt;
-            
-            let shouldReplace = false;
-            
-            if (candidateTimestamp && existingTimestamp) {
-              const existingTime = existingTimestamp instanceof Date ? existingTimestamp.getTime() : new Date(existingTimestamp).getTime();
-              const candidateTime = candidateTimestamp instanceof Date ? candidateTimestamp.getTime() : new Date(candidateTimestamp).getTime();
-              shouldReplace = candidateTime > existingTime;
-            } else if (candidateTimestamp && !existingTimestamp) {
-              shouldReplace = true;
-            } else {
-              // If timestamps are equal or both missing, prefer the one with higher balance (more recent data)
-              const existingBalance = existing.balance?.current ?? existing.balance?.available ?? 0;
-              const candidateBalance = account.balance?.current ?? account.balance?.available ?? 0;
-              shouldReplace = candidateBalance >= existingBalance;
-            }
-            
-            if (shouldReplace) {
-              accountMap.set(uniqueId, account);
-              console.log(`🔄 Replaced duplicate account: ${account.name} (ID: ${uniqueId})`);
-            }
-          }
-          continue;
-        }
-        
-        // New unique account
-        seenAccountIds.add(uniqueId);
-        accountMap.set(uniqueId, account);
-      }
-      
-      // Extract unique accounts
-      const deduplicatedAccounts = Array.from(accountMap.values());
-
+      // ✅ Trust FinancialDataService - accounts are already deduplicated
       // Format accounts for frontend (matching expected format)
-      // Use account_id or plaidAccountId as the unique identifier
-      const formattedAccounts = deduplicatedAccounts.map(account => {
+      const formattedAccounts = plaidOnlyAccounts.map(account => {
         const accountAny = account as any;
         // Use account_id or plaidAccountId as the primary ID for frontend
         const accountId = account.account_id || accountAny.plaidAccountId || accountAny.persistentAccountId || account.id;
@@ -644,23 +570,9 @@ export const setupPlaidRoutes = (app: any) => {
         };
       });
 
-      // ✅ Final deduplication pass using account IDs to catch any remaining duplicates
-      const finalDeduplicated: any[] = [];
-      const finalSeenIds = new Set<string>();
-      
-      for (const account of formattedAccounts) {
-        const accountId = account.id;
-        if (!finalSeenIds.has(accountId)) {
-          finalDeduplicated.push(account);
-          finalSeenIds.add(accountId);
-        } else {
-          console.log(`⚠️ Duplicate account detected and removed: ${account.name} (ID: ${accountId})`);
-        }
-      }
+      console.log(`🔍 Returning ${formattedAccounts.length} Plaid accounts (filtered out ${financialData.accounts.length - plaidOnlyAccounts.length} SnapTrade accounts)`);
 
-      console.log(`🔍 Returning ${finalDeduplicated.length} unique Plaid accounts (filtered out ${financialData.accounts.length - plaidOnlyAccounts.length} SnapTrade accounts, removed ${formattedAccounts.length - finalDeduplicated.length} duplicates)`);
-
-      res.json({ accounts: finalDeduplicated });
+      res.json({ accounts: formattedAccounts });
     } catch (error) {
       const errorResponse = handlePlaidError(error, 'get all accounts');
       res.status(500).json(errorResponse);

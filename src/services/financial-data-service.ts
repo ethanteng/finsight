@@ -1068,9 +1068,12 @@ export class FinancialDataService {
           const itemLastUpdated = itemData?.last_updated_datetime || requestTimestamp;
 
           for (const account of accountsResponse.data.accounts) {
+            // ✅ CRITICAL: Always set plaidAccountId from account.account_id for Plaid accounts
+            // This ensures consistent account identity across the system
+            const plaidAccountId = account.account_id;
             accounts.push({
-              account_id: account.account_id,
-              id: account.account_id, // Alias for compatibility
+              account_id: plaidAccountId,
+              id: plaidAccountId, // Alias for compatibility
               name: account.name,
               type: account.type,
               subtype: account.subtype,
@@ -1086,7 +1089,8 @@ export class FinancialDataService {
               institution_logo: institution.data.institution.logo || undefined,
               institution_url: institution.data.institution.url || undefined,
               source: 'plaid',
-              persistentAccountId: account.account_id,
+              plaidAccountId: plaidAccountId, // ✅ Always set for Plaid accounts
+              persistentAccountId: plaidAccountId, // Alias for backward compatibility
               snapshotTimestamp: itemLastUpdated,
               lastSyncedAt: itemLastUpdated
             });
@@ -1340,9 +1344,11 @@ export class FinancialDataService {
 
           for (const account of accountsResult.data.accounts) {
             const balance = account.balance?.value || account.currentBalance || 0;
+            // ✅ CRITICAL: SnapTrade accounts use account_id format: snaptrade-{id}
+            // Do NOT set plaidAccountId for SnapTrade accounts (they don't have one)
             const accountId = `snaptrade-${account.id}`;
             accounts.push({
-              account_id: accountId,
+              account_id: accountId, // ✅ Primary unique identifier for SnapTrade accounts
               id: accountId, // Alias for compatibility
               name: account.name,
               type: 'investment',
@@ -1354,7 +1360,8 @@ export class FinancialDataService {
               },
               institution: 'SnapTrade',
               source: 'snaptrade',
-              persistentAccountId: accountId,
+              persistentAccountId: accountId, // ✅ Set for SnapTrade accounts
+              // ✅ Do NOT set plaidAccountId - SnapTrade accounts don't have one
               snapshotTimestamp: fetchedAt,
               lastSyncedAt: fetchedAt
             });
@@ -1718,11 +1725,12 @@ export class FinancialDataService {
       ...(snapTradeData?.accounts || [])
     ];
 
-    // ✅ Deduplicate accounts by account_id AND by description (name + type + balance)
-    // This handles both direct duplicates AND cross-source duplicates
+    // ✅ SINGLE DEDUPLICATION POINT: Use account_id as primary unique identifier for ALL accounts
+    // For Plaid accounts: account_id equals plaidAccountId
+    // For SnapTrade accounts: account_id equals snaptrade-{id}
+    // This ensures consistent deduplication across all account sources
 
     const accountMap = new Map<string, any>();
-    const descriptionSet = new Set<string>();
 
     const parseSnapshotTimestamp = (source: any): number | null => {
       const raw =
@@ -1745,92 +1753,52 @@ export class FinancialDataService {
     };
 
     for (const account of rawAccounts) {
-      // ✅ Use plaidAccountId as primary deduplication key (if available)
-      // This ensures accounts from database are properly deduplicated
-      const plaidAccountId = account.plaidAccountId || account.persistentAccountId;
-      const accountId = plaidAccountId || account.account_id || account.id;
-      const balance = account.balance?.current ?? account.balance?.available ?? 0;
-      const descKey = `${account.name}|${account.type}|${account.subtype}|${Math.round(balance * 100)}`;
+      // ✅ Primary unique identifier: account_id (works for both Plaid and SnapTrade)
+      // Fallback: plaidAccountId (Plaid) or persistentAccountId (SnapTrade)
+      // Do NOT use account.id as fallback - it may be a database ID, not a unique account identifier
+      const accountId = account.account_id || 
+                       (account as any).plaidAccountId || 
+                       (account as any).persistentAccountId;
 
-      const candidateTimestamp = parseSnapshotTimestamp(account);
-      const candidateIsPersisted = Boolean(account.persisted);
+      if (!accountId) {
+        console.warn(`⚠️ Account without ID found: ${account.name} (${account.type}/${account.subtype}), skipping`);
+        continue;
+      }
 
-      if (accountId) {
-        const existing = accountMap.get(accountId);
-        if (existing) {
-          const existingTimestamp = parseSnapshotTimestamp(existing);
-          const existingIsPersisted = Boolean(existing.persisted);
-          const existingBalance =
-            existing.balance?.current ?? existing.balance?.available ?? 0;
-
-          let shouldReplace = false;
-
-          // Prefer accounts with plaidAccountId over those without
-          const candidateHasPlaidId = Boolean(account.plaidAccountId || account.persistentAccountId);
-          const existingHasPlaidId = Boolean(existing.plaidAccountId || existing.persistentAccountId);
-          
-          if (candidateHasPlaidId && !existingHasPlaidId) {
-            shouldReplace = true;
-          } else if (!candidateHasPlaidId && existingHasPlaidId) {
-            shouldReplace = false;
-          } else if (candidateTimestamp !== null && (existingTimestamp === null || candidateTimestamp > existingTimestamp)) {
-            shouldReplace = true;
-          } else if (existingTimestamp !== null && candidateTimestamp !== null && existingTimestamp > candidateTimestamp) {
-            shouldReplace = false;
-          } else if (existingTimestamp !== null && candidateTimestamp === null) {
-            shouldReplace = false;
-          } else if (existingTimestamp === null && candidateTimestamp !== null) {
-            shouldReplace = true;
-          } else if (!candidateIsPersisted && existingIsPersisted) {
-            shouldReplace = true;
-          } else if (candidateIsPersisted === existingIsPersisted && balance >= existingBalance) {
-            shouldReplace = true;
-          }
-
-          if (!shouldReplace) {
-            descriptionSet.add(descKey);
-            continue;
-          }
-        }
-
+      const existing = accountMap.get(accountId);
+      if (!existing) {
+        // New account - add it
         accountMap.set(accountId, account);
-        descriptionSet.add(descKey);
         continue;
       }
 
-      if (descriptionSet.has(descKey)) {
-        continue;
+      // Duplicate found - keep the most recent based on timestamp
+      const existingTimestamp = parseSnapshotTimestamp(existing);
+      const candidateTimestamp = parseSnapshotTimestamp(account);
+
+      let shouldReplace = false;
+
+      if (candidateTimestamp !== null && (existingTimestamp === null || candidateTimestamp > existingTimestamp)) {
+        shouldReplace = true;
+      } else if (existingTimestamp !== null && candidateTimestamp === null) {
+        shouldReplace = false;
+      } else if (candidateTimestamp === null && existingTimestamp === null) {
+        // Both missing timestamps - prefer the one with higher balance (more recent data)
+        const existingBalance = existing.balance?.current ?? existing.balance?.available ?? 0;
+        const candidateBalance = account.balance?.current ?? account.balance?.available ?? 0;
+        shouldReplace = candidateBalance >= existingBalance;
       }
 
-      const fallbackKey = `desc:${descriptionSet.size}`;
-      accountMap.set(fallbackKey, account);
-      descriptionSet.add(descKey);
+      if (shouldReplace) {
+        accountMap.set(accountId, account);
+      }
     }
 
-    const accounts = Array.from(accountMap.values());
-
-    // ✅ Final deduplication pass to ensure no duplicates slipped through
-    const finalAccountMap = new Map<string, any>();
-    const finalSeenIds = new Set<string>();
-    
-    for (const account of accounts) {
-      const accountAny = account as any;
-      const uniqueId = accountAny.plaidAccountId || 
-                       accountAny.persistentAccountId || 
-                       account.account_id || 
-                       account.id;
-      
-      if (finalSeenIds.has(uniqueId)) {
-        console.warn(`⚠️ Duplicate account detected in mergeFinancialData: ${account.name} (ID: ${uniqueId})`);
-        continue;
-      }
-      
-      finalSeenIds.add(uniqueId);
-      finalAccountMap.set(uniqueId, account);
+    const finalAccounts = Array.from(accountMap.values());
+    const duplicatesRemoved = rawAccounts.length - finalAccounts.length;
+    if (duplicatesRemoved > 0) {
+      console.log(`📊 Deduplicated ${rawAccounts.length} raw accounts to ${finalAccounts.length} unique accounts (removed ${duplicatesRemoved} duplicates)`);
     }
-    
-    const finalAccounts = Array.from(finalAccountMap.values());
-    console.log(`📊 Merged ${rawAccounts.length} raw accounts to ${finalAccounts.length} unique accounts`);
 
     // Merge balances
     const balances = {

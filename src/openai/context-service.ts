@@ -194,40 +194,16 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     }
   }
 
-  // ✅ CRITICAL: Deduplicate accounts BEFORE anonymization
-  // Anonymization changes account names, making name-based deduplication impossible
-  const dedupedAccounts = deduplicateAccounts(accounts);
-  
-  // ✅ Additional deduplication pass using plaidAccountId to catch any remaining duplicates
-  const finalDedupedAccounts: Account[] = [];
-  const seenAccountIds = new Set<string>();
-  
-  for (const account of dedupedAccounts) {
-    const accountAny = account as any;
-    // Use plaidAccountId as the primary unique identifier
-    const uniqueId = accountAny.plaidAccountId || 
-                     accountAny.persistentAccountId || 
-                     account.account_id || 
-                     account.id;
-    
-    if (seenAccountIds.has(uniqueId)) {
-      console.warn(`⚠️ Duplicate account detected in context-service (after deduplication): ${account.name} (ID: ${uniqueId})`);
-      continue;
-    }
-    
-    seenAccountIds.add(uniqueId);
-    finalDedupedAccounts.push(account);
-  }
-  
-  console.log(`📊 Context-service: Deduplicated ${accounts.length} accounts to ${finalDedupedAccounts.length} unique accounts`);
+  // ✅ Trust FinancialDataService - accounts are already deduplicated
+  // No need to deduplicate here - FinancialDataService.mergeFinancialData() handles it
   
   const sortedTransactions = bankingTransactions
     .slice()
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const anonymizedAccounts = !isDemo && userId
-    ? anonymizeAccounts(finalDedupedAccounts, userId, anonymizationService)
-    : finalDedupedAccounts;
+    ? anonymizeAccounts(accounts, userId, anonymizationService)
+    : accounts;
 
   const anonymizedTransactions = !isDemo && userId
     ? anonymizeTransactions(sortedTransactions, userId, anonymizationService)
@@ -274,91 +250,6 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   };
 }
 
-function deduplicateAccounts(accounts: Account[]): Account[] {
-  // ✅ Use plaidAccountId as primary key for deduplication
-  // This is the most reliable identifier since it's consistent across syncs
-  const accountMap = new Map<string, Account>();
-  const seenIds = new Set<string>();
-
-  const getSnapshotTimestamp = (account: Account): number | null => {
-    const rawTimestamp =
-      (account as any).snapshotTimestamp ||
-      (account as any).lastSyncedAt ||
-      (account as any).persistedAsOf ||
-      (account as any).lastSynced ||
-      null;
-
-    if (!rawTimestamp) {
-      return null;
-    }
-
-    if (rawTimestamp instanceof Date) {
-      return rawTimestamp.getTime();
-    }
-
-    const parsed = Date.parse(rawTimestamp);
-    return Number.isNaN(parsed) ? null : parsed;
-  };
-
-  for (const account of accounts) {
-    const accountAny = account as any;
-    
-    // ✅ Primary key: plaidAccountId (most reliable)
-    const plaidAccountId = accountAny.plaidAccountId || accountAny.persistentAccountId;
-    const accountId = account.account_id || account.id;
-    
-    // Use plaidAccountId if available, otherwise account_id, otherwise id
-    const primaryKey = plaidAccountId || accountId || account.id;
-    
-    if (!primaryKey) {
-      // Fallback: use composite key (but this is less reliable)
-      const balance = account.balance?.current ?? account.balance?.available ?? 0;
-      const fallbackKey = `${account.name}|${account.type}|${account.subtype}|${account.institution || 'unknown'}|${Math.round(balance * 100)}`;
-      
-      if (accountMap.has(fallbackKey)) {
-        // Check if this is truly a duplicate or just similar
-        const existing = accountMap.get(fallbackKey)!;
-        const existingTimestamp = getSnapshotTimestamp(existing);
-        const candidateTimestamp = getSnapshotTimestamp(account);
-        
-        // Keep the most recent one
-        if (candidateTimestamp && existingTimestamp && candidateTimestamp > existingTimestamp) {
-          accountMap.set(fallbackKey, account);
-        }
-        continue;
-      }
-      
-      accountMap.set(fallbackKey, account);
-      continue;
-    }
-
-    // Check if we've seen this account ID before
-    if (seenIds.has(primaryKey)) {
-      // Duplicate found - keep the most recent one
-      const existing = accountMap.get(primaryKey);
-      if (existing) {
-        const existingTimestamp = getSnapshotTimestamp(existing);
-        const candidateTimestamp = getSnapshotTimestamp(account);
-        
-        if (candidateTimestamp && existingTimestamp && candidateTimestamp > existingTimestamp) {
-          accountMap.set(primaryKey, account);
-        } else if (candidateTimestamp && !existingTimestamp) {
-          accountMap.set(primaryKey, account);
-        }
-        // Otherwise keep existing
-      }
-      continue;
-    }
-
-    seenIds.add(primaryKey);
-    accountMap.set(primaryKey, account);
-  }
-
-  const deduplicated = Array.from(accountMap.values());
-  console.log(`📊 deduplicateAccounts: Deduplicated ${accounts.length} accounts to ${deduplicated.length} unique accounts`);
-  
-  return deduplicated;
-}
 
 function anonymizeAccounts(
   accounts: Account[],
