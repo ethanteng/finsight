@@ -544,6 +544,25 @@ export const setupPlaidRoutes = (app: any) => {
       );
 
       console.log(`🔍 Found ${plaidOnlyAccounts.length} Plaid accounts from FinancialDataService (out of ${financialData.accounts.length} total accounts)`);
+      
+      // ✅ Verify no duplicates by account_id
+      const accountIdSet = new Set<string>();
+      const duplicateIds: string[] = [];
+      plaidOnlyAccounts.forEach(account => {
+        const accountId = account.account_id || (account as any).plaidAccountId;
+        if (accountId) {
+          if (accountIdSet.has(accountId)) {
+            duplicateIds.push(accountId);
+            console.warn(`⚠️ /plaid/all-accounts: Duplicate account_id detected: ${accountId} (${account.name})`);
+          } else {
+            accountIdSet.add(accountId);
+          }
+        }
+      });
+      
+      if (duplicateIds.length > 0) {
+        console.error(`❌ /plaid/all-accounts: Found ${duplicateIds.length} duplicate account IDs after FinancialDataService deduplication!`);
+      }
 
       // ✅ Trust FinancialDataService - accounts are already deduplicated
       // Format accounts for frontend (matching expected format)

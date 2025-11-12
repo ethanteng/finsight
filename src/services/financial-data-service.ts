@@ -1796,8 +1796,27 @@ export class FinancialDataService {
 
     const finalAccounts = Array.from(accountMap.values());
     const duplicatesRemoved = rawAccounts.length - finalAccounts.length;
+    
+    // ✅ Always log account deduplication for debugging
+    console.log(`📊 mergeFinancialData: ${rawAccounts.length} raw accounts → ${finalAccounts.length} unique accounts (removed ${duplicatesRemoved} duplicates)`);
+    
+    // ✅ Log duplicate account IDs if any were found
     if (duplicatesRemoved > 0) {
-      console.log(`📊 Deduplicated ${rawAccounts.length} raw accounts to ${finalAccounts.length} unique accounts (removed ${duplicatesRemoved} duplicates)`);
+      const accountIdCounts = new Map<string, number>();
+      rawAccounts.forEach(acc => {
+        const accountId = acc.account_id || (acc as any).plaidAccountId || (acc as any).persistentAccountId;
+        if (accountId) {
+          accountIdCounts.set(accountId, (accountIdCounts.get(accountId) || 0) + 1);
+        }
+      });
+      
+      const duplicateIds = Array.from(accountIdCounts.entries())
+        .filter(([_, count]) => count > 1)
+        .map(([id, count]) => ({ id, count }));
+      
+      if (duplicateIds.length > 0) {
+        console.warn(`⚠️ Found duplicate account IDs:`, duplicateIds);
+      }
     }
 
     // Merge balances

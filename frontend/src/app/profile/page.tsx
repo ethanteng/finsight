@@ -352,10 +352,8 @@ export default function ProfilePage() {
 
       if (res.ok) {
         const data = await res.json();
-        console.log('Received accounts data:', data);
-        
-        // ✅ Trust backend - accounts from /plaid/all-accounts are already deduplicated by FinancialDataService
         const accounts = data.accounts || [];
+        console.log(`📊 Received ${accounts.length} accounts from backend`);
         setConnectedAccounts(accounts);
       } else {
         if (res.status === 401) {
@@ -678,23 +676,53 @@ export default function ProfilePage() {
           const summaryData = await summaryRes.json();
           console.log('Received summary data:', summaryData);
           
+          // ✅ Load holdings and transactions separately since summary doesn't include them
+          let holdings: any[] = [];
+          let transactions: any[] = [];
+          
+          try {
+            const investmentsRes = await fetch(`${API_URL}/plaid/investments`, {
+              method: 'GET',
+              headers,
+            });
+            
+            if (investmentsRes.ok) {
+              const investmentsData = await investmentsRes.json();
+              holdings = investmentsData.holdings || [];
+              transactions = investmentsData.transactions || [];
+              console.log(`📊 Loaded ${holdings.length} holdings and ${transactions.length} transactions from investments endpoint`);
+            }
+          } catch (err) {
+            console.warn('Failed to load holdings/transactions, using summary data only:', err);
+          }
+          
           // Transform summary data format to match frontend expectations
+          // ✅ Map holdingsCount to holdingCount for component compatibility
+          const portfolioData = summaryData.investmentPortfolio || {};
           const formattedData = {
-            portfolio: summaryData.investmentPortfolio,
-            holdings: [], // Holdings not included in summary, load separately if needed
-            transactions: [],
-            investment_transactions: [],
-            total_investment_transactions: 0,
+            portfolio: {
+              ...portfolioData,
+              holdingCount: portfolioData.holdingsCount || portfolioData.holdingCount || 0
+            },
+            holdings: holdings,
+            transactions: transactions,
+            investment_transactions: transactions,
+            total_investment_transactions: transactions.length,
             securities: [],
             accounts: [],
             item: {},
             analysis: {
-              portfolio: summaryData.investmentPortfolio,
+              portfolio: {
+                ...portfolioData,
+                holdingCount: portfolioData.holdingsCount || portfolioData.holdingCount || 0
+              },
               activity: {
-                totalTransactions: 0,
-                totalVolume: 0,
+                totalTransactions: transactions.length,
+                totalVolume: transactions.reduce((sum: number, tx: any) => sum + Math.abs(tx.institution_value || tx.value || 0), 0),
                 activityByType: {},
-                averageTransactionSize: 0
+                averageTransactionSize: transactions.length > 0 
+                  ? transactions.reduce((sum: number, tx: any) => sum + Math.abs(tx.institution_value || tx.value || 0), 0) / transactions.length 
+                  : 0
               }
             }
           };
@@ -702,7 +730,13 @@ export default function ProfilePage() {
           setInvestmentData(formattedData);
           setSnapTradeHoldings(null);
           
-          console.log('Investment portfolio loaded from summary:', summaryData.investmentPortfolio);
+          console.log('Investment portfolio loaded from summary:', {
+            totalValue: portfolioData.totalValue,
+            holdingsCount: portfolioData.holdingsCount,
+            securityCount: portfolioData.securityCount,
+            holdingsLoaded: holdings.length,
+            transactionsLoaded: transactions.length
+          });
           return;
         }
       }

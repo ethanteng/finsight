@@ -162,7 +162,9 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
 
         if (accountsRes.ok) {
           const accountsData = await accountsRes.json();
-          setAccounts(accountsData.accounts || []);
+          const accounts = accountsData.accounts || [];
+          console.log(`📊 Received ${accounts.length} accounts from backend`);
+          setAccounts(accounts);
         } else {
           console.error('Failed to load Plaid accounts:', accountsRes.status);
           setAccounts([]);
@@ -178,7 +180,9 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
             if (snapTradeRes.ok) {
               const snapTradeData = await snapTradeRes.json();
               if (snapTradeData.success && snapTradeData.data?.accounts) {
-                setSnapTradeAccounts(snapTradeData.data.accounts);
+                const snapTradeAccounts = snapTradeData.data.accounts;
+                console.log(`📊 Received ${snapTradeAccounts.length} SnapTrade accounts from backend`);
+                setSnapTradeAccounts(snapTradeAccounts);
               }
             }
           } catch (snapTradeError) {
