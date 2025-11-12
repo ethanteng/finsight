@@ -55,6 +55,7 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
   const [snapTradeAccounts, setSnapTradeAccounts] = useState<SnapTradeAccount[]>([]);
   const [investmentData, setInvestmentData] = useState<InvestmentData | null>(null);
   const [homeData, setHomeData] = useState<HomeData | null>(null);
+  const [financialSummary, setFinancialSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const router = useRouter();
@@ -117,15 +118,15 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
               }
               
               // ✅ Store summary data for use in calculateTotals
-              (window as any).__financialSummary = summaryData;
+              setFinancialSummary(summaryData);
             } else {
               const errorText = await summaryRes.text();
               console.error('Failed to load financial summary:', summaryRes.status, errorText);
-              (window as any).__financialSummary = null;
+              setFinancialSummary(null);
             }
           } catch (summaryError) {
             console.error('Error loading financial summary:', summaryError);
-            (window as any).__financialSummary = null;
+            setFinancialSummary(null);
           }
         }
 
@@ -174,14 +175,13 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
   // Calculate totals
   const calculateTotals = () => {
     // ✅ FIRST: Try to use summary data if available (most accurate)
-    const summary = (window as any).__financialSummary;
-    if (summary?.financialOverview) {
+    if (financialSummary?.financialOverview) {
       console.log('✅ Using financial summary data from backend');
       return {
-        totalCash: summary.financialOverview.totalCash || 0,
-        totalDebt: summary.financialOverview.totalDebt || 0,
-        totalInvestments: summary.financialOverview.totalInvestments || 0,
-        totalHomeValue: summary.financialOverview.homeValue || 0,
+        totalCash: financialSummary.financialOverview.totalCash || 0,
+        totalDebt: financialSummary.financialOverview.totalDebt || 0,
+        totalInvestments: financialSummary.financialOverview.totalInvestments || 0,
+        totalHomeValue: financialSummary.financialOverview.homeValue || 0,
         uncategorizedAccounts: 0
       };
     }
