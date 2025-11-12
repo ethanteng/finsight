@@ -187,6 +187,29 @@ export default function ProfilePage() {
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+  // ✅ Helper function to deduplicate accounts client-side
+  const deduplicateAccounts = useCallback((accounts: Account[]): Account[] => {
+    const seen = new Map<string, Account>();
+    
+    for (const account of accounts) {
+      // Create a unique key based on account name, type, subtype, and balance
+      const balance = account.balance?.current ?? account.balance?.available ?? 0;
+      const key = `${account.name}|${account.type}|${account.subtype}|${Math.round(balance * 100)}`;
+      
+      const existing = seen.get(key);
+      if (!existing) {
+        seen.set(key, account);
+      } else {
+        // If duplicate found, keep the one with more complete data (has institution info)
+        if (account.institution && !existing.institution) {
+          seen.set(key, account);
+        }
+      }
+    }
+    
+    return Array.from(seen.values());
+  }, []);
+
   // Load token statuses for non-demo users
   const loadTokenStatuses = useCallback(async () => {
     console.log('🔍 loadTokenStatuses called, isDemo:', isDemo);
@@ -352,7 +375,13 @@ export default function ProfilePage() {
       if (res.ok) {
         const data = await res.json();
         console.log('Received accounts data:', data);
-        setConnectedAccounts(data.accounts || []);
+        
+        // ✅ Client-side deduplication as safety net
+        const accounts = data.accounts || [];
+        const deduplicatedAccounts = deduplicateAccounts(accounts);
+        console.log(`Deduplicated ${accounts.length} accounts to ${deduplicatedAccounts.length}`);
+        
+        setConnectedAccounts(deduplicatedAccounts);
       } else {
         if (res.status === 401) {
           setError('Authentication required. Please log in.');
