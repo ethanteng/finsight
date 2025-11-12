@@ -136,7 +136,7 @@ export class FinancialSummaryService {
     const uniqueAccounts: Account[] = [];
     const seenUniqueIds = new Set<string>();
     
-    for (const [key, account] of accountMap.entries()) {
+    for (const [, account] of accountMap.entries()) {
       const accountAny = account as any;
       const uniqueId = accountAny.plaidAccountId || 
                        accountAny.persistentAccountId || 

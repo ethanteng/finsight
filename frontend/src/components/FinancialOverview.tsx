@@ -38,6 +38,27 @@ interface InvestmentData {
   };
 }
 
+interface FinancialSummaryData {
+  financialOverview: {
+    netWorth: number;
+    totalCash: number;
+    totalInvestments: number;
+    totalDebt: number;
+    homeValue: number | null;
+  };
+  investmentPortfolio: {
+    totalValue: number;
+    holdingsCount: number;
+    assetAllocation: Array<{
+      type: string;
+      value: number;
+      percentage: number;
+    }>;
+    securityCount: number;
+  };
+  lastUpdated: string;
+}
+
 interface FinancialOverviewProps {
   isDemo?: boolean;
 }
@@ -55,7 +76,7 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
   const [snapTradeAccounts, setSnapTradeAccounts] = useState<SnapTradeAccount[]>([]);
   const [investmentData, setInvestmentData] = useState<InvestmentData | null>(null);
   const [homeData, setHomeData] = useState<HomeData | null>(null);
-  const [financialSummary, setFinancialSummary] = useState<any>(null);
+  const [financialSummary, setFinancialSummary] = useState<FinancialSummaryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const router = useRouter();
@@ -86,7 +107,6 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
         }
 
         // Load financial summary from new endpoint (includes overview and portfolio)
-        let summaryData: any = null;
         if (!isDemo) {
           try {
             const summaryRes = await fetch(`${API_URL}/api/summaries`, {
@@ -94,7 +114,7 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
             });
 
             if (summaryRes.ok) {
-              summaryData = await summaryRes.json();
+              const summaryData: FinancialSummaryData = await summaryRes.json();
               
               // Extract financial overview data
               if (summaryData.financialOverview) {
@@ -113,7 +133,12 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
               // Extract investment portfolio data
               if (summaryData.investmentPortfolio) {
                 setInvestmentData({
-                  portfolio: summaryData.investmentPortfolio
+                  portfolio: {
+                    totalValue: summaryData.investmentPortfolio.totalValue,
+                    assetAllocation: summaryData.investmentPortfolio.assetAllocation,
+                    holdingCount: summaryData.investmentPortfolio.holdingsCount,
+                    securityCount: summaryData.investmentPortfolio.securityCount
+                  }
                 });
               }
               
