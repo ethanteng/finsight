@@ -558,100 +558,66 @@ export const setupPlaidRoutes = (app: any) => {
       });
       console.log(`🔍 Account IDs before deduplication:`, JSON.stringify(accountIds, null, 2));
 
-      // ✅ Deduplicate accounts by multiple keys to catch all duplicates
-      // Use a single map with composite keys to ensure no duplicates
+      // ✅ CRITICAL: Deduplicate accounts using plaidAccountId as primary key
+      // This ensures accounts synced at different times with different balances are properly deduplicated
       const accountMap = new Map<string, any>();
+      const seenAccountIds = new Set<string>();
       
       for (const account of plaidOnlyAccounts) {
         const accountAny = account as any;
         
-        // Try multiple keys for deduplication
+        // ✅ Primary unique identifier: plaidAccountId (most reliable, consistent across syncs)
         const plaidAccountId = accountAny.plaidAccountId || accountAny.persistentAccountId;
         const accountId = account.account_id || account.id;
-        const name = account.name || '';
-        const type = account.type || '';
-        const subtype = account.subtype || '';
-        const balance = account.balance?.current ?? account.balance?.available ?? 0;
         
-        // Primary key: plaidAccountId if available, otherwise composite key
-        const primaryKey = plaidAccountId || `${name}|${type}|${subtype}|${Math.round(balance * 100)}`;
+        // Use plaidAccountId if available, otherwise account_id, otherwise id
+        const uniqueId = plaidAccountId || accountId || account.id;
         
-        // Check if we've seen this account before (by primary key or account_id)
-        const existingByPrimary = accountMap.get(primaryKey);
-        const existingById = accountId ? accountMap.get(`id:${accountId}`) : null;
-        const existing = existingByPrimary || existingById;
-        
-        if (!existing) {
-          // New account - add it with both keys
-          accountMap.set(primaryKey, account);
-          if (accountId) {
-            accountMap.set(`id:${accountId}`, account);
-          }
-        } else {
-          // Duplicate found - keep the most recent one
-          const existingAny = existing as any;
-          const existingTimestamp = existingAny.lastSynced || existingAny.lastSyncedAt || existingAny.updatedAt || existingAny.createdAt;
-          const candidateTimestamp = accountAny.lastSynced || accountAny.lastSyncedAt || accountAny.updatedAt || accountAny.createdAt;
-          
-          let shouldReplace = false;
-          
-          // Prefer accounts with plaidAccountId
-          const candidateHasPlaidId = Boolean(plaidAccountId);
-          const existingHasPlaidId = Boolean(existingAny.plaidAccountId || existingAny.persistentAccountId);
-          
-          if (candidateHasPlaidId && !existingHasPlaidId) {
-            shouldReplace = true;
-          } else if (!candidateHasPlaidId && existingHasPlaidId) {
-            shouldReplace = false;
-          } else if (candidateTimestamp && existingTimestamp) {
-            const existingTime = existingTimestamp instanceof Date ? existingTimestamp.getTime() : new Date(existingTimestamp).getTime();
-            const candidateTime = candidateTimestamp instanceof Date ? candidateTimestamp.getTime() : new Date(candidateTimestamp).getTime();
-            shouldReplace = candidateTime > existingTime;
-          } else if (candidateTimestamp && !existingTimestamp) {
-            shouldReplace = true;
-          } else {
-            // If timestamps are equal or both missing, prefer the one with higher balance (more recent data)
-            shouldReplace = balance >= (existing.balance?.current ?? existing.balance?.available ?? 0);
-          }
-          
-          if (shouldReplace) {
-            // Remove old entry and add new one
-            const oldPrimaryKey = existingAny.plaidAccountId || existingAny.persistentAccountId || 
-              `${existing.name}|${existing.type}|${existing.subtype}|${Math.round((existing.balance?.current ?? existing.balance?.available ?? 0) * 100)}`;
-            accountMap.delete(oldPrimaryKey);
-            const oldAccountId = existing.account_id || existing.id;
-            if (oldAccountId) {
-              accountMap.delete(`id:${oldAccountId}`);
-            }
-            
-            accountMap.set(primaryKey, account);
-            if (accountId) {
-              accountMap.set(`id:${accountId}`, account);
-            }
-          }
-        }
-      }
-      
-      // Extract unique accounts (only from primary keys, not id: keys)
-      const deduplicatedAccounts: any[] = [];
-      const seenAccountIds = new Set<string>();
-      
-      for (const [key, account] of accountMap.entries()) {
-        // Skip id: prefixed keys (they're just for lookup)
-        if (key.startsWith('id:')) {
+        if (!uniqueId) {
+          // Fallback: skip accounts without any ID (shouldn't happen, but be safe)
+          console.warn(`⚠️ Account without ID found: ${account.name} (${account.type}/${account.subtype})`);
           continue;
         }
         
-        // Use a unique identifier to ensure no duplicates
-        // Prefer plaidAccountId, then account_id, then account.id
-        const accountAny = account as any;
-        const uniqueId = accountAny.plaidAccountId || accountAny.persistentAccountId || account.account_id || account.id;
-        
-        if (!seenAccountIds.has(uniqueId)) {
-          deduplicatedAccounts.push(account);
-          seenAccountIds.add(uniqueId);
+        // Check if we've seen this account ID before
+        if (seenAccountIds.has(uniqueId)) {
+          // Duplicate found - keep the most recent one based on timestamp
+          const existing = accountMap.get(uniqueId);
+          if (existing) {
+            const existingAny = existing as any;
+            const existingTimestamp = existingAny.lastSynced || existingAny.lastSyncedAt || existingAny.updatedAt || existingAny.createdAt;
+            const candidateTimestamp = accountAny.lastSynced || accountAny.lastSyncedAt || accountAny.updatedAt || accountAny.createdAt;
+            
+            let shouldReplace = false;
+            
+            if (candidateTimestamp && existingTimestamp) {
+              const existingTime = existingTimestamp instanceof Date ? existingTimestamp.getTime() : new Date(existingTimestamp).getTime();
+              const candidateTime = candidateTimestamp instanceof Date ? candidateTimestamp.getTime() : new Date(candidateTimestamp).getTime();
+              shouldReplace = candidateTime > existingTime;
+            } else if (candidateTimestamp && !existingTimestamp) {
+              shouldReplace = true;
+            } else {
+              // If timestamps are equal or both missing, prefer the one with higher balance (more recent data)
+              const existingBalance = existing.balance?.current ?? existing.balance?.available ?? 0;
+              const candidateBalance = account.balance?.current ?? account.balance?.available ?? 0;
+              shouldReplace = candidateBalance >= existingBalance;
+            }
+            
+            if (shouldReplace) {
+              accountMap.set(uniqueId, account);
+              console.log(`🔄 Replaced duplicate account: ${account.name} (ID: ${uniqueId})`);
+            }
+          }
+          continue;
         }
+        
+        // New unique account
+        seenAccountIds.add(uniqueId);
+        accountMap.set(uniqueId, account);
       }
+      
+      // Extract unique accounts
+      const deduplicatedAccounts = Array.from(accountMap.values());
 
       // Format accounts for frontend (matching expected format)
       // Use account_id or plaidAccountId as the unique identifier
