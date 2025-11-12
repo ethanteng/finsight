@@ -85,6 +85,7 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
         }
 
         // Load financial summary from new endpoint (includes overview and portfolio)
+        let summaryData: any = null;
         if (!isDemo) {
           try {
             const summaryRes = await fetch(`${API_URL}/api/summaries`, {
@@ -92,12 +93,12 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
             });
 
             if (summaryRes.ok) {
-              const summaryData = await summaryRes.json();
+              summaryData = await summaryRes.json();
               
               // Extract financial overview data
               if (summaryData.financialOverview) {
                 // Set home data from summary
-                if (summaryData.financialOverview.homeValue !== null) {
+                if (summaryData.financialOverview.homeValue !== null && summaryData.financialOverview.homeValue !== undefined) {
                   setHomeData({
                     address: '',
                     value: summaryData.financialOverview.homeValue,
@@ -114,11 +115,17 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
                   portfolio: summaryData.investmentPortfolio
                 });
               }
+              
+              // ✅ Store summary data for use in calculateTotals
+              (window as any).__financialSummary = summaryData;
             } else {
-              console.log('Failed to load financial summary:', summaryRes.status);
+              const errorText = await summaryRes.text();
+              console.error('Failed to load financial summary:', summaryRes.status, errorText);
+              (window as any).__financialSummary = null;
             }
           } catch (summaryError) {
-            console.log('Error loading financial summary:', summaryError);
+            console.error('Error loading financial summary:', summaryError);
+            (window as any).__financialSummary = null;
           }
         }
 
@@ -166,18 +173,45 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
 
   // Calculate totals
   const calculateTotals = () => {
+    // ✅ FIRST: Try to use summary data if available (most accurate)
+    const summary = (window as any).__financialSummary;
+    if (summary?.financialOverview) {
+      console.log('✅ Using financial summary data from backend');
+      return {
+        totalCash: summary.financialOverview.totalCash || 0,
+        totalDebt: summary.financialOverview.totalDebt || 0,
+        totalInvestments: summary.financialOverview.totalInvestments || 0,
+        totalHomeValue: summary.financialOverview.homeValue || 0,
+        uncategorizedAccounts: 0
+      };
+    }
+
+    // Fallback: Calculate from accounts (but avoid double-counting)
     let totalCash = 0;
     let totalDebt = 0;
     let totalInvestments = 0;
     let uncategorizedAccounts = 0;
 
-    console.log('Calculating totals...');
-    console.log('Plaid accounts:', accounts);
-    console.log('SnapTrade accounts:', snapTradeAccounts);
+    console.log('⚠️ Calculating totals from accounts (summary endpoint failed or unavailable)');
+    console.log('Plaid accounts:', accounts.length);
+    console.log('SnapTrade accounts:', snapTradeAccounts.length);
 
-    // Process Plaid accounts
-    accounts.forEach(account => {
-      // ✅ FIX: Use the correct balance field based on account type
+    // ✅ Deduplicate accounts client-side to avoid double-counting
+    const seenAccountIds = new Set<string>();
+    const deduplicatedAccounts = accounts.filter(account => {
+      const accountId = account.id;
+      if (seenAccountIds.has(accountId)) {
+        console.warn(`⚠️ Duplicate account detected in frontend calculation: ${account.name} (ID: ${accountId})`);
+        return false;
+      }
+      seenAccountIds.add(accountId);
+      return true;
+    });
+
+    console.log(`📊 Deduplicated ${accounts.length} accounts to ${deduplicatedAccounts.length} unique accounts`);
+
+    // Process Plaid accounts (EXCLUDE investment accounts - they're counted via holdings)
+    deduplicatedAccounts.forEach(account => {
       let balance;
       if (account.type === 'depository' || 
           account.subtype === 'checking' || 
@@ -185,31 +219,33 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
           account.subtype === 'cd' ||
           account.subtype === 'money market' ||
           account.subtype === 'prepaid') {
-        // For checking/savings accounts, use available balance (what user can actually spend)
         balance = account.balance?.available !== undefined && account.balance?.available !== null 
           ? account.balance.available 
           : account.balance?.current || 0;
-      } else if (account.type === 'investment' || 
-                 account.subtype === '401k' || 
-                 account.subtype === 'ira' || 
-                 account.subtype === 'roth' || 
-                 account.subtype === 'brokerage' || 
-                 account.subtype === 'hsa' || 
-                 account.subtype === '529' ||
-                 account.subtype === 'pension' ||
-                 account.subtype === 'annuity') {
-        // For investment accounts, use current balance (total portfolio value)
-        balance = account.balance?.current || 0;
       } else if (account.type === 'credit') {
-        // For credit accounts, use current balance (amount owed)
+        balance = account.balance?.current || 0;
+      } else if (account.type === 'loan') {
         balance = account.balance?.current || 0;
       } else {
-        // Fallback to current balance for other account types
         balance = account.balance?.current || 0;
       }
       
       const accountType = account.type;
       const accountSubtype = account.subtype;
+      
+      // ✅ IMPORTANT: Skip investment accounts - they're counted via holdings, not balances
+      if (accountType === 'investment' || 
+          accountSubtype === '401k' || 
+          accountSubtype === 'ira' || 
+          accountSubtype === 'roth' || 
+          accountSubtype === 'brokerage' || 
+          accountSubtype === 'hsa' || 
+          accountSubtype === '529' ||
+          accountSubtype === 'pension' ||
+          accountSubtype === 'annuity') {
+        // Investment accounts are NOT counted here - use holdings data instead
+        return;
+      }
       
       if (accountType === 'depository' || 
           accountSubtype === 'checking' || 
@@ -217,12 +253,8 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
           accountSubtype === 'cd' ||
           accountSubtype === 'money market' ||
           accountSubtype === 'prepaid') {
-        // Cash accounts: checking, savings, cd, money market, prepaid, etc.
         totalCash += Math.max(0, balance);
       } else if (accountType === 'credit') {
-        // Credit cards - balance represents outstanding debt (positive = money owed)
-        // Plaid may return positive or negative balances for credit cards
-        // We want the absolute value as debt
         totalDebt += Math.abs(balance);
       } else if (accountType === 'loan' || 
                  accountSubtype === 'mortgage' || 
@@ -230,59 +262,36 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
                  accountSubtype === 'personal' ||
                  accountSubtype === 'auto' ||
                  accountSubtype === 'home equity') {
-        // Loans - positive balance means debt
         totalDebt += Math.max(0, balance);
-      } else if (accountType === 'investment' || 
-                 accountSubtype === '401k' || 
-                 accountSubtype === 'ira' || 
-                 accountSubtype === 'roth' || 
-                 accountSubtype === 'brokerage' || 
-                 accountSubtype === 'hsa' || 
-                 accountSubtype === '529' ||
-                 accountSubtype === 'pension' ||
-                 accountSubtype === 'annuity') {
-        // Investment accounts: 401k, IRA, Roth, brokerage, HSA, 529, pension, annuity, etc.
-        totalInvestments += Math.max(0, balance);
       } else {
-        // Fallback: categorize by balance sign
-        // Positive balance could be cash or investment, negative could be debt
         if (balance > 0) {
-          // Positive balance - treat as cash (conservative approach)
           totalCash += balance;
         } else if (balance < 0) {
-          // Negative balance - treat as debt
           totalDebt += Math.abs(balance);
         }
         uncategorizedAccounts++;
       }
     });
 
-    // Process SnapTrade accounts
-    snapTradeAccounts.forEach(account => {
-      // SnapTrade accounts have balance as a direct field, not nested like Plaid
-      const balance = account.balance || 0;
-      
-      console.log('Processing SnapTrade account:', account.name, 'balance:', balance, 'type:', account.type);
-      
-      // SnapTrade accounts are typically investment accounts (brokerage, treasury, etc.)
-      // Add them to total investments
-      totalInvestments += Math.max(0, balance);
-    });
-
-    console.log('After processing SnapTrade accounts - totalInvestments:', totalInvestments);
-
-    // Add investment portfolio value if available
-    // ✅ The backend FinancialDataService already merges Plaid + SnapTrade, so just use totalValue directly
+    // ✅ Use investment portfolio value from holdings (not account balances)
+    // This avoids double-counting investment account balances AND holdings
     if (investmentData?.portfolio?.totalValue) {
-      console.log('Investment data portfolio value (already includes Plaid + SnapTrade merged):', investmentData.portfolio.totalValue);
+      console.log('✅ Using investment portfolio value from holdings:', investmentData.portfolio.totalValue);
       totalInvestments = investmentData.portfolio.totalValue;
+    } else {
+      // Fallback: Only count SnapTrade balances if we don't have holdings data
+      // But this should rarely happen since holdings are fetched separately
+      console.warn('⚠️ No investment holdings data available, using SnapTrade balances as fallback');
+      snapTradeAccounts.forEach(account => {
+        const balance = account.balance || 0;
+        totalInvestments += Math.max(0, balance);
+      });
     }
 
     // Add home value if available
     let totalHomeValue = 0;
     if (homeData?.value) {
       totalHomeValue = homeData.value;
-      console.log('Home value included:', totalHomeValue);
     }
 
     console.log('Final totals - totalCash:', totalCash, 'totalDebt:', totalDebt, 'totalInvestments:', totalInvestments, 'totalHomeValue:', totalHomeValue);

@@ -1809,6 +1809,28 @@ export class FinancialDataService {
 
     const accounts = Array.from(accountMap.values());
 
+    // ✅ Final deduplication pass to ensure no duplicates slipped through
+    const finalAccountMap = new Map<string, any>();
+    const finalSeenIds = new Set<string>();
+    
+    for (const account of accounts) {
+      const accountAny = account as any;
+      const uniqueId = accountAny.plaidAccountId || 
+                       accountAny.persistentAccountId || 
+                       account.account_id || 
+                       account.id;
+      
+      if (finalSeenIds.has(uniqueId)) {
+        console.warn(`⚠️ Duplicate account detected in mergeFinancialData: ${account.name} (ID: ${uniqueId})`);
+        continue;
+      }
+      
+      finalSeenIds.add(uniqueId);
+      finalAccountMap.set(uniqueId, account);
+    }
+    
+    const finalAccounts = Array.from(finalAccountMap.values());
+    console.log(`📊 Merged ${rawAccounts.length} raw accounts to ${finalAccounts.length} unique accounts`);
 
     // Merge balances
     const balances = {
@@ -1870,7 +1892,7 @@ export class FinancialDataService {
     
 
     return {
-      accounts,
+      accounts: finalAccounts,
       balances,
       investments: {
         holdings,
