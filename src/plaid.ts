@@ -551,7 +551,7 @@ export const setupPlaidRoutes = (app: any) => {
         const accountAny = account as any;
         // Use account_id or plaidAccountId as the primary ID for frontend
         const accountId = account.account_id || accountAny.plaidAccountId || accountAny.persistentAccountId || account.id;
-        const mask = account.mask || (accountId ? accountId.slice(-4) : '****');
+        const mask = accountAny.mask || (accountId ? accountId.slice(-4) : '****');
         
         return {
           id: accountId, // Use account_id/plaidAccountId as the unique identifier
