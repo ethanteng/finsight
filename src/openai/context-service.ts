@@ -367,12 +367,16 @@ function buildAccountSummaries(accounts: Account[], isDemo: boolean): AccountSum
 
 /**
  * Deduplicate transactions by removing pending versions when settled versions exist.
- * If a transaction has both pending and settled versions, keep only the settled one.
- * Also filters out any remaining pending transactions.
  * 
- * Handles two scenarios:
- * 1. Same transaction_id with different pending flags
- * 2. Related transactions via pendingTransactionId (settled transaction references pending)
+ * Plaid Transaction Behavior:
+ * - pending: true → Transaction is pending (authorization hold, not yet settled)
+ * - pending: false → Posted/settled transaction
+ * - pending_transaction_id: Present on a posted transaction, points to transaction_id of earlier pending version
+ * 
+ * Strategy:
+ * 1. Always filter out pending transactions (pending: true) from GPT context
+ * 2. If a settled transaction has pending_transaction_id, it replaces the pending version
+ * 3. Keep only settled transactions (pending: false or undefined/null treated as settled)
  */
 function deduplicateTransactions(transactions: Transaction[]): Transaction[] {
   if (transactions.length === 0) {
@@ -383,6 +387,7 @@ function deduplicateTransactions(transactions: Transaction[]): Transaction[] {
   const txById = new Map<string, Transaction>();
   const pendingTxIds = new Set<string>();
   
+  // First pass: identify all transactions and mark pending ones
   for (const transaction of transactions) {
     const txId = transaction.transaction_id || 
                  (transaction as any).id || 
@@ -390,7 +395,11 @@ function deduplicateTransactions(transactions: Transaction[]): Transaction[] {
     
     if (txId) {
       txById.set(txId, transaction);
-      const isPending = transaction.pending === true || (transaction as any).pending === true;
+      // Plaid uses boolean pending field: true = pending, false = settled
+      // Also handle edge cases where it might be stored as string
+      const isPending = transaction.pending === true || 
+                        (transaction as any).pending === true ||
+                        String((transaction as any).pending || '').toLowerCase() === 'true';
       if (isPending) {
         pendingTxIds.add(txId);
       }
@@ -400,7 +409,7 @@ function deduplicateTransactions(transactions: Transaction[]): Transaction[] {
   const transactionsToKeep = new Set<string>();
   const transactionsToSkip = new Set<string>();
 
-  // Process each transaction
+  // Second pass: process each transaction according to Plaid's linking pattern
   for (const transaction of transactions) {
     const txId = transaction.transaction_id || 
                  (transaction as any).id || 
@@ -411,35 +420,25 @@ function deduplicateTransactions(transactions: Transaction[]): Transaction[] {
       continue;
     }
 
-    const isPending = transaction.pending === true || (transaction as any).pending === true;
-    const pendingTxId = (transaction as any).pendingTransactionId || (transaction as any).pending_transaction_id;
+    // Check pending status (Plaid uses boolean: true = pending, false = settled)
+    const isPending = transaction.pending === true || 
+                      (transaction as any).pending === true ||
+                      String((transaction as any).pending || '').toLowerCase() === 'true';
+    
+    // Get pending_transaction_id if present (on settled transactions, points to earlier pending version)
+    const pendingTxId = (transaction as any).pendingTransactionId || 
+                        (transaction as any).pending_transaction_id;
 
     if (isPending) {
-      // This is a pending transaction
-      // Check if there's a settled version that references this pending transaction
-      // (settled transactions have pendingTransactionId pointing to the pending one)
-      let hasSettledVersion = false;
-      for (const [otherTxId, otherTx] of txById.entries()) {
-        if (otherTxId !== txId) {
-          const otherPendingTxId = (otherTx as any).pendingTransactionId || (otherTx as any).pending_transaction_id;
-          if (otherPendingTxId === txId && (otherTx.pending === false || (otherTx as any).pending === false)) {
-            hasSettledVersion = true;
-            break;
-          }
-        }
-      }
-      
-      if (hasSettledVersion) {
-        // There's a settled version that references this pending transaction, skip the pending one
-        transactionsToSkip.add(txId);
-      } else {
-        // Only pending version exists, skip it (we don't want pending transactions in GPT context)
-        transactionsToSkip.add(txId);
-      }
+      // This is a pending transaction (pending: true)
+      // Always skip pending transactions - they should not appear in GPT context
+      // If a settled version exists (with pending_transaction_id pointing here), it will be kept instead
+      transactionsToSkip.add(txId);
     } else {
-      // This is a settled transaction
+      // This is a settled transaction (pending: false or undefined/null)
       if (pendingTxId && pendingTxIds.has(pendingTxId)) {
-        // This settled transaction references a pending one - keep the settled, skip the pending
+        // This settled transaction replaces a pending one (per Plaid's linking pattern)
+        // Keep the settled version, skip the pending version
         transactionsToKeep.add(txId);
         transactionsToSkip.add(pendingTxId);
       } else {
@@ -470,12 +469,28 @@ function deduplicateTransactions(transactions: Transaction[]): Transaction[] {
     }
 
     // Safety check: filter out any remaining pending transactions
-    const isPending = tx.pending === true || (tx as any).pending === true;
-    return !isPending;
+    // Check multiple possible field names and be strict about pending status
+    const isPending = tx.pending === true || 
+                      (tx as any).pending === true ||
+                      (tx as any).pending === 'true' ||
+                      String((tx as any).pending || '').toLowerCase() === 'true';
+    
+    if (isPending) {
+      return false; // Explicitly skip pending transactions
+    }
+    
+    return true;
   });
 
   if (transactions.length !== deduplicated.length) {
-    console.log(`✅ Filtered transactions: ${transactions.length} → ${deduplicated.length} (removed ${transactions.length - deduplicated.length} pending/duplicate transactions)`);
+    const pendingCount = transactions.filter(tx => {
+      const isPending = tx.pending === true || 
+                        (tx as any).pending === true ||
+                        (tx as any).pending === 'true' ||
+                        String((tx as any).pending || '').toLowerCase() === 'true';
+      return isPending;
+    }).length;
+    console.log(`✅ Filtered transactions: ${transactions.length} → ${deduplicated.length} (removed ${transactions.length - deduplicated.length} transactions, ${pendingCount} were pending)`);
   }
 
   return deduplicated;
@@ -504,8 +519,17 @@ function buildTransactionSummaries(transactions: Transaction[]): TransactionSumm
 }
 
 function deriveTransactionTypeLabel(transaction: Transaction): string {
-  const rawType = (transaction as any).transaction_type || transaction.aiCategory;
-  const normalized = typeof rawType === 'string' ? rawType.toLowerCase() : '';
+  // ✅ CRITICAL: Prioritize manual corrections over AI categorization
+  // If aiCategoryReason indicates manual correction, always use aiCategory
+  const isManualCorrection = transaction.aiCategoryReason?.toLowerCase().includes('manually corrected') ||
+                             transaction.aiCategoryReason?.toLowerCase().includes('corrected by user');
+  
+  // Use aiCategory if it's a manual correction, otherwise check transaction_type then aiCategory
+  const rawType = isManualCorrection 
+    ? transaction.aiCategory 
+    : ((transaction as any).transaction_type || transaction.aiCategory);
+  
+  const normalized = typeof rawType === 'string' ? rawType.toLowerCase().trim() : '';
 
   switch (normalized) {
     case 'income':
@@ -522,6 +546,14 @@ function deriveTransactionTypeLabel(transaction: Transaction): string {
       return '(DEPOSIT)';
     case 'withdrawal':
       return '(WITHDRAWAL)';
+    case 'buy':
+      return '(BUY)';
+    case 'sell':
+      return '(SELL)';
+    case 'refund':
+      return '(REFUND)';
+    case 'adjustment':
+      return '(ADJUSTMENT)';
     default:
       return '(OTHER)';
   }
