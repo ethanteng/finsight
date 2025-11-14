@@ -34,6 +34,7 @@ interface Transaction {
   isManualCorrection?: boolean;
   match: boolean;
   enrichedData?: Record<string, unknown>;
+  pending?: boolean;
 }
 
 export const CategoryComparison: React.FC = () => {
@@ -41,6 +42,7 @@ export const CategoryComparison: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'matched' | 'mismatched' | 'uncategorized'>('all');
+  const [showPending, setShowPending] = useState<boolean>(true);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [savingTransactionId, setSavingTransactionId] = useState<string | null>(null);
   const [localTransactionTypes, setLocalTransactionTypes] = useState<Map<string, TransactionType>>(new Map());
@@ -210,6 +212,14 @@ export const CategoryComparison: React.FC = () => {
       .join(' ');
   };
 
+  // Filter transactions based on showPending state
+  const filteredTransactions = transactions.filter(tx => {
+    if (!showPending && tx.pending) {
+      return false;
+    }
+    return true;
+  });
+
   return (
     <div className="p-6">
       {/* Filters */}
@@ -228,6 +238,18 @@ export const CategoryComparison: React.FC = () => {
               {f.charAt(0).toUpperCase() + f.slice(1)}
             </button>
           ))}
+        </div>
+        
+        <div className="flex gap-2 items-center">
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showPending}
+              onChange={(e) => setShowPending(e.target.checked)}
+              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+            />
+            <span>Show Pending</span>
+          </label>
         </div>
         
         <div className="flex-1" />
@@ -249,40 +271,43 @@ export const CategoryComparison: React.FC = () => {
       
       {loading ? (
         <div className="text-center py-8 text-gray-500">Loading transactions...</div>
-      ) : transactions.length === 0 ? (
+      ) : filteredTransactions.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
           No transactions found for this filter.
         </div>
       ) : (
         <div 
           ref={tableContainerRef}
-          className="bg-white rounded-lg shadow overflow-x-auto max-h-[calc(100vh-250px)] overflow-y-auto"
+          className="bg-white rounded-lg shadow max-h-[calc(100vh-250px)] overflow-y-auto"
         >
-          <table className="min-w-full divide-y divide-gray-200" style={{ tableLayout: 'auto' }}>
+          <table className="w-full divide-y divide-gray-200" style={{ tableLayout: 'fixed', width: '100%' }}>
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[25%]">
                   Transaction
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[10%]">
                   Amount
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[10%]">
                   Date
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[10%]">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[20%]">
                   Plaid Category
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[15%]">
                   Transaction Type
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-[10%]">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {transactions.map(transaction => {
+              {filteredTransactions.map(transaction => {
                 const isEditing = editingTransactionId === transaction.id;
                 const isSaving = savingTransactionId === transaction.id;
                 // Get the transaction type, but validate it's actually a valid TransactionType
@@ -301,10 +326,10 @@ export const CategoryComparison: React.FC = () => {
                     className="hover:bg-gray-50"
                   >
                     <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-gray-900">
+                      <div className="text-sm font-medium text-gray-900 break-words">
                         {transaction.merchantName || transaction.name}
                       </div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-sm text-gray-500 break-words">
                         {transaction.account.name}
                         {transaction.account.institution && ` • ${transaction.account.institution}`}
                       </div>
@@ -315,17 +340,28 @@ export const CategoryComparison: React.FC = () => {
                     <td className="px-6 py-4 text-sm text-gray-500">
                       {new Date(transaction.date).toLocaleDateString()}
                     </td>
-                    <td className="px-6 py-4 min-w-[250px]">
+                    <td className="px-6 py-4">
+                      {transaction.pending ? (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                          Pending
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          Settled
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
                       <div className="text-sm text-gray-900 break-words">
                         {transaction.originalCategory || 'N/A'}
                       </div>
                     </td>
-                    <td className="px-6 py-4 min-w-[200px]">
+                    <td className="px-6 py-4">
                       {isEditing ? (
                         <select
                           value={currentType || ''}
                           onChange={(e) => handleTransactionTypeChange(transaction.id, e.target.value as TransactionType)}
-                          className="text-sm border border-blue-500 rounded-md px-3 py-2 bg-white text-gray-900 min-w-[180px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="text-sm border border-blue-500 rounded-md px-3 py-2 bg-white text-gray-900 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
                           disabled={isSaving}
                           onClick={(e) => e.stopPropagation()}
                         >
@@ -337,7 +373,7 @@ export const CategoryComparison: React.FC = () => {
                           ))}
                         </select>
                       ) : (
-                        <div className="min-w-[200px]">
+                        <div>
                           {currentType ? (
                             <div className="flex flex-col gap-1">
                               <div className="flex items-center gap-2 flex-wrap">

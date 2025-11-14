@@ -248,6 +248,7 @@ router.get('/transactions/comparison', requireAuth, async (req, res) => {
                            false,
         match: transaction.category === transactionType,
         enrichedData: transaction.enriched_data,
+        pending: transaction.pending || false,
       };
     });
     

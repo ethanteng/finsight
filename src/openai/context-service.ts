@@ -232,7 +232,11 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     console.warn(`⚠️ gatherContextSnapshot: Deduplicated ${accounts.length} accounts → ${deduplicatedAccounts.length} unique accounts (removed ${accounts.length - deduplicatedAccounts.length} duplicates)`);
   }
   
-  const sortedTransactions = bankingTransactions
+  // Filter out pending transactions and deduplicate pending/settled pairs
+  // This prevents inflated expense/income calculations in GPT context
+  const filteredTransactions = deduplicateTransactions(bankingTransactions);
+  
+  const sortedTransactions = filteredTransactions
     .slice()
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -359,6 +363,122 @@ function buildAccountSummaries(accounts: Account[], isDemo: boolean): AccountSum
 
     return summary;
   });
+}
+
+/**
+ * Deduplicate transactions by removing pending versions when settled versions exist.
+ * If a transaction has both pending and settled versions, keep only the settled one.
+ * Also filters out any remaining pending transactions.
+ * 
+ * Handles two scenarios:
+ * 1. Same transaction_id with different pending flags
+ * 2. Related transactions via pendingTransactionId (settled transaction references pending)
+ */
+function deduplicateTransactions(transactions: Transaction[]): Transaction[] {
+  if (transactions.length === 0) {
+    return transactions;
+  }
+
+  // Build a map of transaction_id -> transaction for quick lookup
+  const txById = new Map<string, Transaction>();
+  const pendingTxIds = new Set<string>();
+  
+  for (const transaction of transactions) {
+    const txId = transaction.transaction_id || 
+                 (transaction as any).id || 
+                 (transaction as any).plaidTransactionId;
+    
+    if (txId) {
+      txById.set(txId, transaction);
+      const isPending = transaction.pending === true || (transaction as any).pending === true;
+      if (isPending) {
+        pendingTxIds.add(txId);
+      }
+    }
+  }
+
+  const transactionsToKeep = new Set<string>();
+  const transactionsToSkip = new Set<string>();
+
+  // Process each transaction
+  for (const transaction of transactions) {
+    const txId = transaction.transaction_id || 
+                 (transaction as any).id || 
+                 (transaction as any).plaidTransactionId;
+    
+    if (!txId) {
+      // Skip transactions without IDs (shouldn't happen, but be safe)
+      continue;
+    }
+
+    const isPending = transaction.pending === true || (transaction as any).pending === true;
+    const pendingTxId = (transaction as any).pendingTransactionId || (transaction as any).pending_transaction_id;
+
+    if (isPending) {
+      // This is a pending transaction
+      // Check if there's a settled version that references this pending transaction
+      // (settled transactions have pendingTransactionId pointing to the pending one)
+      let hasSettledVersion = false;
+      for (const [otherTxId, otherTx] of txById.entries()) {
+        if (otherTxId !== txId) {
+          const otherPendingTxId = (otherTx as any).pendingTransactionId || (otherTx as any).pending_transaction_id;
+          if (otherPendingTxId === txId && (otherTx.pending === false || (otherTx as any).pending === false)) {
+            hasSettledVersion = true;
+            break;
+          }
+        }
+      }
+      
+      if (hasSettledVersion) {
+        // There's a settled version that references this pending transaction, skip the pending one
+        transactionsToSkip.add(txId);
+      } else {
+        // Only pending version exists, skip it (we don't want pending transactions in GPT context)
+        transactionsToSkip.add(txId);
+      }
+    } else {
+      // This is a settled transaction
+      if (pendingTxId && pendingTxIds.has(pendingTxId)) {
+        // This settled transaction references a pending one - keep the settled, skip the pending
+        transactionsToKeep.add(txId);
+        transactionsToSkip.add(pendingTxId);
+      } else {
+        // No related pending transaction, keep this settled one
+        transactionsToKeep.add(txId);
+      }
+    }
+  }
+
+  // Build the final deduplicated array
+  const deduplicated = transactions.filter(tx => {
+    const txId = tx.transaction_id || 
+                 (tx as any).id || 
+                 (tx as any).plaidTransactionId;
+    
+    if (!txId) {
+      return false; // Skip transactions without IDs
+    }
+
+    // Skip if explicitly marked to skip
+    if (transactionsToSkip.has(txId)) {
+      return false;
+    }
+
+    // Keep if explicitly marked to keep
+    if (transactionsToKeep.has(txId)) {
+      return true;
+    }
+
+    // Safety check: filter out any remaining pending transactions
+    const isPending = tx.pending === true || (tx as any).pending === true;
+    return !isPending;
+  });
+
+  if (transactions.length !== deduplicated.length) {
+    console.log(`✅ Filtered transactions: ${transactions.length} → ${deduplicated.length} (removed ${transactions.length - deduplicated.length} pending/duplicate transactions)`);
+  }
+
+  return deduplicated;
 }
 
 function buildTransactionSummaries(transactions: Transaction[]): TransactionSummaryItem[] {
@@ -682,7 +802,11 @@ async function loadUserProfile(params: {
         institution: account.institution
       }));
 
-      const plaidTransactions = transactions.map(tx => ({
+      // Filter out pending transactions before passing to profile enhancer
+      // This ensures profile enhancement uses only settled transactions (consistent with GPT context)
+      const filteredTransactionsForProfile = deduplicateTransactions(transactions);
+      
+      const plaidTransactions = filteredTransactionsForProfile.map(tx => ({
         id: (tx as any).transaction_id || (tx as any).id || `${tx.account_id}-${tx.date}-${tx.name}`,
         account_id: tx.account_id,
         amount: tx.amount,
