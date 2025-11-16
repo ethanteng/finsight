@@ -5,17 +5,19 @@ const { SummaryCacheService } = require('../dist/services/summary-cache-service'
 require('dotenv').config({ path: '.env.local' });
 
 async function refreshTransactions() {
-  const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] 🚀 Starting scheduled transaction sync...`);
+  const startTime = Date.now();
+  const startTimestamp = new Date().toISOString();
+  console.log(`[${startTimestamp}] 🚀 Starting scheduled transaction sync...`);
   
   try {
     const result = await TransactionSyncService.syncAllActiveTokens();
     
     if (result.success) {
-      console.log(`[${timestamp}] ✅ Transaction sync completed successfully`);
-      console.log(`[${timestamp}] 📊 Total tokens: ${result.totalTokens}`);
-      console.log(`[${timestamp}] ✅ Successful: ${result.successful}`);
-      console.log(`[${timestamp}] ❌ Failed: ${result.failed}`);
+      const syncTimestamp = new Date().toISOString();
+      console.log(`[${syncTimestamp}] ✅ Transaction sync completed successfully`);
+      console.log(`[${syncTimestamp}] 📊 Total tokens: ${result.totalTokens}`);
+      console.log(`[${syncTimestamp}] ✅ Successful: ${result.successful}`);
+      console.log(`[${syncTimestamp}] ❌ Failed: ${result.failed}`);
       
       // Log summary statistics
       let totalAdded = 0;
@@ -28,38 +30,56 @@ async function refreshTransactions() {
         totalRemoved += r.result.removed;
       });
       
-      console.log(`[${timestamp}] 📈 Summary: ${totalAdded} added, ${totalModified} modified, ${totalRemoved} removed`);
+      console.log(`[${syncTimestamp}] 📈 Summary: ${totalAdded} added, ${totalModified} modified, ${totalRemoved} removed`);
       
       if (result.failed > 0) {
-        console.log(`[${timestamp}] ⚠️  Some tokens failed to sync:`);
+        console.log(`[${syncTimestamp}] ⚠️  Some tokens failed to sync:`);
         result.results
           .filter((r) => !r.result.success)
           .forEach((r) => {
-            console.log(`[${timestamp}]   - Token ${r.tokenId.substring(0, 8)}...: ${r.result.error}`);
+            console.log(`[${syncTimestamp}]   - Token ${r.tokenId.substring(0, 8)}...: ${r.result.error}`);
           });
       }
     } else {
-      console.log(`[${timestamp}] ❌ Transaction sync completed with errors`);
-      console.log(`[${timestamp}] 📊 Total tokens: ${result.totalTokens}`);
-      console.log(`[${timestamp}] ✅ Successful: ${result.successful}`);
-      console.log(`[${timestamp}] ❌ Failed: ${result.failed}`);
+      const syncTimestamp = new Date().toISOString();
+      console.log(`[${syncTimestamp}] ❌ Transaction sync completed with errors`);
+      console.log(`[${syncTimestamp}] 📊 Total tokens: ${result.totalTokens}`);
+      console.log(`[${syncTimestamp}] ✅ Successful: ${result.successful}`);
+      console.log(`[${syncTimestamp}] ❌ Failed: ${result.failed}`);
     }
   } catch (error) {
-    console.error(`[${timestamp}] 💥 Unexpected error in transaction sync:`, error);
+    const errorTimestamp = new Date().toISOString();
+    console.error(`[${errorTimestamp}] 💥 Unexpected error in transaction sync:`, error);
     process.exit(1);
   }
   
   // After transactions sync, refresh cached summaries for all users
   try {
-    console.log(`[${timestamp}] 🧮 Refreshing cached financial summaries for all users...`);
+    const summaryTimestamp = new Date().toISOString();
+    console.log(`[${summaryTimestamp}] 🧮 Refreshing cached financial summaries for all users...`);
     const result = await SummaryCacheService.refreshAllUsers();
-    console.log(`[${timestamp}] ✅ Summary cache refresh completed. Users processed: ${result.usersProcessed}`);
+    const summaryEndTimestamp = new Date().toISOString();
+    console.log(`[${summaryEndTimestamp}] ✅ Summary cache refresh completed. Users processed: ${result.usersProcessed}`);
   } catch (error) {
-    console.error(`[${timestamp}] ⚠️ Summary cache refresh failed:`, error);
+    const errorTimestamp = new Date().toISOString();
+    console.error(`[${errorTimestamp}] ⚠️ Summary cache refresh failed:`, error);
     // Do not fail the entire cron; proceed
   }
   
-  console.log(`[${timestamp}] 🏁 Transaction sync + summary refresh finished\n`);
+  const endTime = Date.now();
+  const endTimestamp = new Date().toISOString();
+  const durationMs = endTime - startTime;
+  const durationSeconds = Math.round(durationMs / 1000);
+  const durationMinutes = Math.floor(durationSeconds / 60);
+  const remainingSeconds = durationSeconds % 60;
+  
+  console.log(`[${endTimestamp}] 🏁 Transaction sync + summary refresh finished`);
+  if (durationMinutes > 0) {
+    console.log(`[${endTimestamp}] ⏱️  Total duration: ${durationMinutes}m ${remainingSeconds}s (${durationMs}ms)`);
+  } else {
+    console.log(`[${endTimestamp}] ⏱️  Total duration: ${durationSeconds}s (${durationMs}ms)`);
+  }
+  console.log(); // Empty line for readability
 }
 
 // If run directly, execute immediately

@@ -493,6 +493,10 @@ export class FinancialDataService {
                   const fallbackCategorized = {
                     ...tx,
                     transaction_type: transactionType,
+                    // Map transaction_type to aiCategory for persistence (aiCategory field stores transaction_type)
+                    aiCategory: transactionType,
+                    aiCategoryReason: 'Investment fallback categorization',
+                    categoryComparedAt: new Date(), // Mark when categorization was performed
                     categorization_confidence: 0.6,
                     categorization_method: 'fallback',
                     categorization_reason: 'Investment fallback categorization',
@@ -520,6 +524,10 @@ export class FinancialDataService {
                     const originalIndex = toCategorize[idx].index;
                     output[originalIndex] = {
                       ...categorizedTx,
+                      // Map transaction_type to aiCategory for persistence (aiCategory field stores transaction_type)
+                      aiCategory: categorizedTx.transaction_type || undefined,
+                      aiCategoryReason: categorizedTx.categorization_reason || undefined,
+                      categoryComparedAt: new Date(), // Mark when categorization was performed
                       iso_currency_code: categorizedTx.iso_currency_code || 'USD'
                     };
                   });
@@ -538,6 +546,10 @@ export class FinancialDataService {
                     const originalIndex = toCategorize[idx].index;
                     output[originalIndex] = {
                       ...categorizedTx,
+                      // Map transaction_type to aiCategory for persistence (aiCategory field stores transaction_type)
+                      aiCategory: categorizedTx.transaction_type || undefined,
+                      aiCategoryReason: categorizedTx.categorization_reason || undefined,
+                      categoryComparedAt: new Date(), // Mark when categorization was performed
                       iso_currency_code: categorizedTx.iso_currency_code || 'USD'
                     };
                   });
@@ -1390,17 +1402,37 @@ export class FinancialDataService {
             });
           }
         } else {
+          // Check if it's a 401 Unauthorized error (invalid credentials)
+          const is401 = accountsResult.error?.toLowerCase().includes('credentials') || accountsResult.error?.toLowerCase().includes('invalid') || accountsResult.error?.toLowerCase().includes('expired');
+          if (is401) {
+            console.warn(`⚠️ FinancialDataService: SnapTrade accounts 401 Unauthorized for user ${userId} - credentials invalid/expired. Gracefully continuing without SnapTrade accounts.`);
+            errors.push({
+              error: 'SnapTrade credentials invalid or expired. Please reconnect your SnapTrade account.',
+              timestamp: new Date()
+            });
+          } else {
+            errors.push({
+              error: accountsResult.error || 'Failed to fetch SnapTrade accounts',
+              timestamp: new Date()
+            });
+          }
+        }
+      } catch (accountError: any) {
+        // Check if it's a 401 Unauthorized error (invalid credentials)
+        const is401 = accountError?.status === 401 || accountError?.code === 'ERR_BAD_REQUEST' && accountError?.status === 401;
+        if (is401) {
+          console.warn(`⚠️ FinancialDataService: SnapTrade accounts 401 Unauthorized for user ${userId} - credentials invalid/expired. Gracefully continuing without SnapTrade accounts.`);
           errors.push({
-            error: accountsResult.error || 'Failed to fetch SnapTrade accounts',
+            error: 'SnapTrade credentials invalid or expired. Please reconnect your SnapTrade account.',
+            timestamp: new Date()
+          });
+        } else {
+          console.error('Error fetching SnapTrade accounts:', accountError);
+          errors.push({
+            error: accountError.message || 'Failed to fetch SnapTrade accounts',
             timestamp: new Date()
           });
         }
-      } catch (accountError: any) {
-        console.error('Error fetching SnapTrade accounts:', accountError);
-        errors.push({
-          error: accountError.message || 'Failed to fetch SnapTrade accounts',
-          timestamp: new Date()
-        });
       }
 
       // Get holdings if option is enabled
@@ -1567,17 +1599,37 @@ export class FinancialDataService {
               }
             }
           } else {
+            // Check if it's a 401 Unauthorized error (invalid credentials)
+            const is401 = holdingsResult.error?.toLowerCase().includes('credentials') || holdingsResult.error?.toLowerCase().includes('invalid') || holdingsResult.error?.toLowerCase().includes('expired');
+            if (is401) {
+              console.warn(`⚠️ FinancialDataService: SnapTrade holdings 401 Unauthorized for user ${userId} - credentials invalid/expired. Gracefully continuing without SnapTrade holdings.`);
+              errors.push({
+                error: 'SnapTrade credentials invalid or expired. Please reconnect your SnapTrade account.',
+                timestamp: new Date()
+              });
+            } else {
+              errors.push({
+                error: holdingsResult.error || 'Failed to fetch SnapTrade holdings',
+                timestamp: new Date()
+              });
+            }
+          }
+        } catch (holdingError: any) {
+          // Check if it's a 401 Unauthorized error (invalid credentials)
+          const is401 = holdingError?.status === 401 || holdingError?.code === 'ERR_BAD_REQUEST' && holdingError?.status === 401;
+          if (is401) {
+            console.warn(`⚠️ FinancialDataService: SnapTrade holdings 401 Unauthorized for user ${userId} - credentials invalid/expired. Gracefully continuing without SnapTrade holdings.`);
             errors.push({
-              error: holdingsResult.error || 'Failed to fetch SnapTrade holdings',
+              error: 'SnapTrade credentials invalid or expired. Please reconnect your SnapTrade account.',
+              timestamp: new Date()
+            });
+          } else {
+            console.error('Error fetching SnapTrade holdings:', holdingError);
+            errors.push({
+              error: holdingError.message || 'Failed to fetch SnapTrade holdings',
               timestamp: new Date()
             });
           }
-        } catch (holdingError: any) {
-          console.error('Error fetching SnapTrade holdings:', holdingError);
-          errors.push({
-            error: holdingError.message || 'Failed to fetch SnapTrade holdings',
-            timestamp: new Date()
-          });
         }
       }
 
@@ -1657,17 +1709,37 @@ export class FinancialDataService {
             }
             
           } else {
+            // Check if it's a 401 Unauthorized error (invalid credentials)
+            const is401 = activitiesResult.error?.toLowerCase().includes('credentials') || activitiesResult.error?.toLowerCase().includes('invalid') || activitiesResult.error?.toLowerCase().includes('expired');
+            if (is401) {
+              console.warn(`⚠️ FinancialDataService: SnapTrade activities 401 Unauthorized for user ${userId} - credentials invalid/expired. Gracefully continuing without SnapTrade activities.`);
+              errors.push({
+                error: 'SnapTrade credentials invalid or expired. Please reconnect your SnapTrade account.',
+                timestamp: new Date()
+              });
+            } else {
+              errors.push({
+                error: activitiesResult.error || 'Failed to fetch SnapTrade activities',
+                timestamp: new Date()
+              });
+            }
+          }
+        } catch (activityError: any) {
+          // Check if it's a 401 Unauthorized error (invalid credentials)
+          const is401 = activityError?.status === 401 || activityError?.code === 'ERR_BAD_REQUEST' && activityError?.status === 401;
+          if (is401) {
+            console.warn(`⚠️ FinancialDataService: SnapTrade activities 401 Unauthorized for user ${userId} - credentials invalid/expired. Gracefully continuing without SnapTrade activities.`);
             errors.push({
-              error: activitiesResult.error || 'Failed to fetch SnapTrade activities',
+              error: 'SnapTrade credentials invalid or expired. Please reconnect your SnapTrade account.',
+              timestamp: new Date()
+            });
+          } else {
+            console.error('Error fetching SnapTrade activities:', activityError);
+            errors.push({
+              error: activityError.message || 'Failed to fetch SnapTrade activities',
               timestamp: new Date()
             });
           }
-        } catch (activityError: any) {
-          console.error('Error fetching SnapTrade activities:', activityError);
-          errors.push({
-            error: activityError.message || 'Failed to fetch SnapTrade activities',
-            timestamp: new Date()
-          });
         }
       }
 

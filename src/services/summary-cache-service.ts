@@ -23,8 +23,9 @@ export class SummaryCacheService {
   /**
    * Compute and upsert the snapshot for a given user.
    * Applies env-driven windows and balance refresh throttling.
+   * opts.categorize: when true, runs heavier categorization; when false, skips for faster completion.
    */
-  static async computeForUser(userId: string) {
+  static async computeForUser(userId: string, opts: { categorize?: boolean } = {}) {
     const prisma = getPrisma();
     const { txDays, invYears, balanceHours } = this.getEnvWindows();
 
@@ -68,8 +69,10 @@ export class SummaryCacheService {
       includeTransactions: true,
       includeInvestments: true,
       includeHomeValue: true,
-      // Keep categorization enabled so GPT gets enriched context
-      skipCategorization: false,
+      // Fast path by default for on-demand refresh; cron can request categorize=true
+      skipCategorization: opts.categorize ? false : true,
+      // Persist categorized transactions to database when categorization is enabled
+      shouldPersistTransactions: opts.categorize ? true : false,
     });
 
     // Derive overview/portfolio and pre-aggregations
@@ -160,7 +163,8 @@ export class SummaryCacheService {
     let processed = 0;
     for (const u of userIds) {
       try {
-        await this.computeForUser(u.id);
+        // Cron: run full categorization for richer GPT context
+        await this.computeForUser(u.id, { categorize: true });
         processed++;
       } catch (err) {
         console.error(`SummaryCacheService: Failed to refresh snapshot for user ${u.id}`, err);

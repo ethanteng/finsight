@@ -3078,7 +3078,8 @@ app.get('/api/summaries', requireAuth, async (req: Request, res: Response) => {
 app.post('/api/refresh-summary', requireAuth, async (req: Request, res: Response) => {
   try {
     const { SummaryCacheService } = await import('./services/summary-cache-service');
-    const payload = await SummaryCacheService.computeForUser(req.user!.id);
+    // Fast path: skip heavy categorization to avoid request timeouts
+    const payload = await SummaryCacheService.computeForUser(req.user!.id, { categorize: false });
     res.json(payload);
   } catch (error) {
     console.error('❌ Failed to refresh financial summary:', error);
