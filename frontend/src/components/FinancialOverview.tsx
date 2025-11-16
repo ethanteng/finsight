@@ -130,15 +130,70 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
                 }
               }
               
-              // Extract investment portfolio data
+              // ✅ Fetch actual holdings to calculate accurate counts
+              let actualHoldings: any[] = [];
+              try {
+                const investmentsRes = await fetch(`${API_URL}/plaid/investments`, {
+                  headers,
+                });
+                
+                if (investmentsRes.ok) {
+                  const investmentsData = await investmentsRes.json();
+                  console.log('📊 FinancialOverview: Investments endpoint response structure:', {
+                    hasHoldings: !!investmentsData.holdings,
+                    hasAllHoldings: !!investmentsData.allHoldings,
+                    holdingsType: Array.isArray(investmentsData.holdings) ? 'array' : typeof investmentsData.holdings,
+                    keys: Object.keys(investmentsData)
+                  });
+                  
+                  // Handle response format: holdings is an array of objects, each with a holdings property
+                  if (investmentsData.holdings && Array.isArray(investmentsData.holdings)) {
+                    // Check if holdings[0] has a holdings property (nested structure)
+                    if (investmentsData.holdings.length > 0 && investmentsData.holdings[0]?.holdings) {
+                      // Nested format: array of account holdings, each with holdings array
+                      actualHoldings = investmentsData.holdings.flatMap((h: any) => h.holdings || []);
+                      console.log(`📊 FinancialOverview: Parsed ${investmentsData.holdings.length} account holdings into ${actualHoldings.length} total holdings`);
+                    } else {
+                      // Flat format: direct array of holdings
+                      actualHoldings = investmentsData.holdings;
+                    }
+                  } else if (investmentsData.allHoldings && Array.isArray(investmentsData.allHoldings)) {
+                    // Alternative format: allHoldings array
+                    actualHoldings = investmentsData.allHoldings.flatMap((h: any) => h.holdings || []);
+                  }
+                  
+                  console.log(`📊 FinancialOverview: Loaded ${actualHoldings.length} holdings from investments endpoint`);
+                }
+              } catch (investmentsError) {
+                console.warn('FinancialOverview: Failed to load holdings, using summary data only:', investmentsError);
+              }
+              
+              // ✅ Calculate counts from actual holdings array instead of trusting cached summary
+              const actualHoldingCount = actualHoldings.length;
+              const actualSecurityCount = new Set(actualHoldings.map((h: any) => h.security_id)).size;
+              const actualTotalValue = actualHoldings.length > 0 
+                ? actualHoldings.reduce((sum: number, h: any) => {
+                    return sum + (h.institution_value || h.value || 0);
+                  }, 0)
+                : summaryData.investmentPortfolio?.totalValue || 0;
+              
+              // Extract investment portfolio data - use actual counts if available
               if (summaryData.investmentPortfolio) {
                 setInvestmentData({
                   portfolio: {
-                    totalValue: summaryData.investmentPortfolio.totalValue,
+                    totalValue: actualTotalValue > 0 ? actualTotalValue : summaryData.investmentPortfolio.totalValue,
                     assetAllocation: summaryData.investmentPortfolio.assetAllocation,
-                    holdingCount: summaryData.investmentPortfolio.holdingsCount,
-                    securityCount: summaryData.investmentPortfolio.securityCount
+                    holdingCount: actualHoldingCount > 0 ? actualHoldingCount : (summaryData.investmentPortfolio.holdingsCount || 0),
+                    securityCount: actualSecurityCount > 0 ? actualSecurityCount : (summaryData.investmentPortfolio.securityCount || 0)
                   }
+                });
+                
+                console.log('📊 FinancialOverview: Investment portfolio data set:', {
+                  totalValue: actualTotalValue > 0 ? actualTotalValue : summaryData.investmentPortfolio.totalValue,
+                  holdingCount: actualHoldingCount > 0 ? actualHoldingCount : summaryData.investmentPortfolio.holdingsCount,
+                  securityCount: actualSecurityCount > 0 ? actualSecurityCount : summaryData.investmentPortfolio.securityCount,
+                  holdingsFromAPI: actualHoldings.length,
+                  holdingsFromSummary: summaryData.investmentPortfolio.holdingsCount
                 });
               }
               

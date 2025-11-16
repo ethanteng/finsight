@@ -706,21 +706,53 @@ export default function ProfilePage() {
             
             if (investmentsRes.ok) {
               const investmentsData = await investmentsRes.json();
-              holdings = investmentsData.holdings || [];
+              console.log('📊 Investments endpoint response structure:', {
+                hasHoldings: !!investmentsData.holdings,
+                hasAllHoldings: !!investmentsData.allHoldings,
+                holdingsType: Array.isArray(investmentsData.holdings) ? 'array' : typeof investmentsData.holdings,
+                allHoldingsType: Array.isArray(investmentsData.allHoldings) ? 'array' : typeof investmentsData.allHoldings,
+                keys: Object.keys(investmentsData)
+              });
+              
+              // Handle response format: holdings is an array of objects, each with a holdings property
+              if (investmentsData.holdings && Array.isArray(investmentsData.holdings)) {
+                // Check if holdings[0] has a holdings property (nested structure)
+                if (investmentsData.holdings.length > 0 && investmentsData.holdings[0]?.holdings) {
+                  // Nested format: array of account holdings, each with holdings array
+                  holdings = investmentsData.holdings.flatMap((h: any) => h.holdings || []);
+                  console.log(`📊 Parsed ${investmentsData.holdings.length} account holdings into ${holdings.length} total holdings`);
+                } else {
+                  // Flat format: direct array of holdings
+                  holdings = investmentsData.holdings;
+                }
+              } else if (investmentsData.allHoldings && Array.isArray(investmentsData.allHoldings)) {
+                // Alternative format: allHoldings array
+                holdings = investmentsData.allHoldings.flatMap((h: any) => h.holdings || []);
+              }
+              
               transactions = investmentsData.transactions || [];
-              console.log(`📊 Loaded ${holdings.length} holdings and ${transactions.length} transactions from investments endpoint`);
+              console.log(`📊 Final: ${holdings.length} holdings and ${transactions.length} transactions from investments endpoint`);
             }
           } catch (err) {
             console.warn('Failed to load holdings/transactions, using summary data only:', err);
           }
           
+          // ✅ Calculate counts from actual holdings array instead of trusting cached summary
+          const actualHoldingCount = holdings.length;
+          const actualSecurityCount = new Set(holdings.map((h: any) => h.security_id)).size;
+          const actualTotalValue = holdings.reduce((sum: number, h: any) => {
+            return sum + (h.institution_value || h.value || 0);
+          }, 0);
+          
           // Transform summary data format to match frontend expectations
-          // ✅ Map holdingsCount to holdingCount for component compatibility
+          // ✅ Use actual counts from holdings array, fallback to summary if holdings empty
           const portfolioData = summaryData.investmentPortfolio || {};
           const formattedData = {
             portfolio: {
               ...portfolioData,
-              holdingCount: portfolioData.holdingsCount || portfolioData.holdingCount || 0
+              totalValue: actualTotalValue > 0 ? actualTotalValue : portfolioData.totalValue || 0,
+              holdingCount: actualHoldingCount > 0 ? actualHoldingCount : (portfolioData.holdingsCount || portfolioData.holdingCount || 0),
+              securityCount: actualSecurityCount > 0 ? actualSecurityCount : (portfolioData.securityCount || 0)
             },
             holdings: holdings,
             transactions: transactions,
@@ -732,7 +764,9 @@ export default function ProfilePage() {
             analysis: {
               portfolio: {
                 ...portfolioData,
-                holdingCount: portfolioData.holdingsCount || portfolioData.holdingCount || 0
+                totalValue: actualTotalValue > 0 ? actualTotalValue : portfolioData.totalValue || 0,
+                holdingCount: actualHoldingCount > 0 ? actualHoldingCount : (portfolioData.holdingsCount || portfolioData.holdingCount || 0),
+                securityCount: actualSecurityCount > 0 ? actualSecurityCount : (portfolioData.securityCount || 0)
               },
               activity: {
                 totalTransactions: transactions.length,
