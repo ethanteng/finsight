@@ -688,6 +688,11 @@ export class FinancialDataService {
               // ✅ Ensure transaction_id is set correctly (this is what we use as plaidTransactionId in DB)
               const plaidTransactionId = (tx as any).transaction_id || (tx as any).id;
               
+              // Log if transaction has categorization for debugging (before return)
+              if ((tx as any).aiCategory || (tx as any).transaction_type) {
+                console.log(`📝 FinancialDataService: Transaction "${tx.name}" will be persisted with aiCategory: ${(tx as any).aiCategory || (tx as any).transaction_type}`);
+              }
+              
               return {
                 ...tx,
                 id: plaidTransactionId,
@@ -712,11 +717,6 @@ export class FinancialDataService {
                 aiCategoryReason: (tx as any).aiCategoryReason || (tx as any).categorization_reason || undefined,
                 categoryComparedAt: ((tx as any).transaction_type || (tx as any).aiCategory) ? new Date() : undefined
               };
-              
-              // Log if transaction has categorization for debugging
-              if ((tx as any).aiCategory || (tx as any).transaction_type) {
-                console.log(`📝 FinancialDataService: Transaction "${tx.name}" will be persisted with aiCategory: ${(tx as any).aiCategory || (tx as any).transaction_type}`);
-              }
             });
           
           if (plaidBankingTransactions.length > 0) {
