@@ -4,6 +4,7 @@ import { enhanceProfileWithInvestmentData, enhanceProfileWithLiabilityData, enha
 import { BalanceService } from './services/balance-service';
 import { FinancialDataService } from './services/financial-data-service';
 import { SnapTradeService } from './snaptrade';
+import { TransactionSyncService } from './services/transaction-sync-service';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
@@ -149,7 +150,7 @@ const processAccountData = (account: any) => {
   };
 };
 
-const processTransactionData = (transaction: any) => {
+export const processTransactionData = (transaction: any) => {
   // ✅ Extract basic categories from personal_finance_category if legacy category is empty
   let basicCategory = transaction.category || [];
   let basicCategoryId = transaction.category_id;
@@ -2445,56 +2446,30 @@ export const setupPlaidRoutes = (app: any) => {
     }
   });
 
-  // Sync transactions
+  // Sync transactions using transactionsSync API with cursor tracking
   app.post('/plaid/sync_transactions', async (req: any, res: any) => {
     try {
       const { access_token } = req.body;
-      const now = new Date();
-      const startDate = new Date(now.getFullYear(), now.getMonth(), 1); // First day of current month
       
-      const transactionsResponse = await plaidClient.transactionsGet({
-        access_token: access_token,
-        start_date: startDate.toISOString().split('T')[0],
-        end_date: now.toISOString().split('T')[0],
-      });
-
-      const transactions = transactionsResponse.data.transactions;
-      let count = 0;
-
-      for (const transaction of transactions) {
-        // Check if account exists before upserting transaction
-        const account = await getPrismaClient().account.findUnique({
-          where: { plaidAccountId: transaction.account_id },
-        });
-        if (!account) {
-          console.warn(`Skipping transaction for unknown accountId: ${transaction.account_id}`);
-          continue;
-        }
-        // Force deployment - account check is active
-        await getPrismaClient().transaction.upsert({
-          where: { plaidTransactionId: transaction.transaction_id },
-          update: {
-            accountId: account.id, // Use Account.id, not Plaid account_id
-            amount: transaction.amount,
-            date: new Date(transaction.date),
-            name: transaction.name,
-            category: transaction.category?.join(', ') || '',
-            pending: transaction.pending,
-          },
-          create: {
-            plaidTransactionId: transaction.transaction_id,
-            accountId: account.id, // Use Account.id, not Plaid account_id
-            amount: transaction.amount,
-            date: new Date(transaction.date),
-            name: transaction.name,
-            category: transaction.category?.join(', ') || '',
-            pending: transaction.pending,
-          },
-        });
-        count++;
+      if (!access_token) {
+        return res.status(400).json({ error: 'Access token required' });
       }
 
-      res.json({ success: true, count });
+      // Use TransactionSyncService to sync transactions with cursor management
+      const result = await TransactionSyncService.syncTransactionsForToken(access_token);
+
+      if (result.success) {
+        res.json({
+          success: true,
+          added: result.added,
+          modified: result.modified,
+          removed: result.removed,
+          total: result.added + result.modified + result.removed,
+        });
+      } else {
+        const errorInfo = handlePlaidError(new Error(result.error || 'Transaction sync failed'), 'syncing transactions');
+        res.status(500).json(errorInfo);
+      }
     } catch (error) {
       const errorInfo = handlePlaidError(error, 'syncing transactions');
       res.status(500).json(errorInfo);
