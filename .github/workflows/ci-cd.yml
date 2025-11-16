@@ -59,7 +59,8 @@ jobs:
       - name: Lint backend
         run: |
           # Run ESLint with JSON output to check for actual errors
-          ESLINT_JSON=$(npx eslint src/ --ext .ts --format=json 2>&1) || ESLINT_EXIT=$?
+          # Use || true to prevent exit on warnings, then check for severity 2 errors
+          ESLINT_JSON=$(npx eslint src/ --ext .ts --format=json 2>&1 || true)
           # Parse JSON to check if there are any severity 2 (error) issues
           if echo "$ESLINT_JSON" | grep -q '"severity":2'; then
             echo "ESLint found errors (severity 2):"
@@ -74,7 +75,8 @@ jobs:
         run: |
           cd frontend
           # Run ESLint with JSON output to check for actual errors
-          ESLINT_JSON=$(npx eslint src/ --ext .ts,.tsx --format=json 2>&1) || ESLINT_EXIT=$?
+          # Use || true to prevent exit on warnings, then check for severity 2 errors
+          ESLINT_JSON=$(npx eslint src/ --ext .ts,.tsx --format=json 2>&1 || true)
           # Parse JSON to check if there are any severity 2 (error) issues
           if echo "$ESLINT_JSON" | grep -q '"severity":2'; then
             echo "ESLint found errors (severity 2):"
