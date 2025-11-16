@@ -58,13 +58,13 @@ jobs:
 
       - name: Lint backend
         run: |
-          npx eslint src/ --ext .ts
+          npx eslint src/ --ext .ts --max-warnings=10000
           npx tsc --noEmit --skipLibCheck -p tsconfig.build.json
 
       - name: Lint frontend
         run: |
           cd frontend
-          npx eslint src/ --ext .ts,.tsx
+          npx eslint src/ --ext .ts,.tsx --max-warnings=10000
           npx tsc --noEmit --skipLibCheck
 
       - name: Security audit
