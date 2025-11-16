@@ -78,7 +78,7 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
   const [homeData, setHomeData] = useState<HomeData | null>(null);
   const [financialSummary, setFinancialSummary] = useState<FinancialSummaryData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [_error, setError] = useState('');
   const router = useRouter();
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -131,7 +131,13 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
               }
               
               // ✅ Fetch actual holdings to calculate accurate counts
-              let actualHoldings: any[] = [];
+              type InvestmentHolding = {
+                account_id: string;
+                security_id: string;
+                institution_value?: number;
+                value?: number;
+              };
+              let actualHoldings: InvestmentHolding[] = [];
               try {
                 const investmentsRes = await fetch(`${API_URL}/plaid/investments`, {
                   headers,
@@ -151,15 +157,19 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
                     // Check if holdings[0] has a holdings property (nested structure)
                     if (investmentsData.holdings.length > 0 && investmentsData.holdings[0]?.holdings) {
                       // Nested format: array of account holdings, each with holdings array
-                      actualHoldings = investmentsData.holdings.flatMap((h: any) => h.holdings || []);
+                      actualHoldings = investmentsData.holdings.flatMap(
+                        (h: { holdings?: InvestmentHolding[] }) => h.holdings || []
+                      );
                       console.log(`📊 FinancialOverview: Parsed ${investmentsData.holdings.length} account holdings into ${actualHoldings.length} total holdings`);
                     } else {
                       // Flat format: direct array of holdings
-                      actualHoldings = investmentsData.holdings;
+                      actualHoldings = investmentsData.holdings as InvestmentHolding[];
                     }
                   } else if (investmentsData.allHoldings && Array.isArray(investmentsData.allHoldings)) {
                     // Alternative format: allHoldings array
-                    actualHoldings = investmentsData.allHoldings.flatMap((h: any) => h.holdings || []);
+                    actualHoldings = investmentsData.allHoldings.flatMap(
+                      (h: { holdings?: InvestmentHolding[] }) => h.holdings || []
+                    );
                   }
                   
                   console.log(`📊 FinancialOverview: Loaded ${actualHoldings.length} holdings from investments endpoint`);
@@ -170,10 +180,12 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
               
               // ✅ Calculate counts from actual holdings array instead of trusting cached summary
               const actualHoldingCount = actualHoldings.length;
-              const actualSecurityCount = new Set(actualHoldings.map((h: any) => h.security_id)).size;
+              const actualSecurityCount = new Set(
+                actualHoldings.map((h: InvestmentHolding) => h.security_id)
+              ).size;
               const actualTotalValue = actualHoldings.length > 0 
-                ? actualHoldings.reduce((sum: number, h: any) => {
-                    return sum + (h.institution_value || h.value || 0);
+                ? actualHoldings.reduce((sum: number, h: InvestmentHolding) => {
+                    return sum + (h.institution_value ?? h.value ?? 0);
                   }, 0)
                 : summaryData.investmentPortfolio?.totalValue || 0;
               

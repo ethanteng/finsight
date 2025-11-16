@@ -7,6 +7,25 @@ import InvestmentPortfolio from '../../components/InvestmentPortfolio';
 import SnapTradeButton from '../../components/SnapTradeButton';
 import PageMeta from '../../components/PageMeta';
 
+// Typed holdings shape used across investment parsing
+type InvestmentHolding = {
+  id?: string;
+  account_id: string;
+  security_id: string;
+  institution_value?: number;
+  institution_price?: number;
+  institution_price_as_of?: string;
+  cost_basis?: number;
+  quantity?: number;
+  iso_currency_code?: string;
+  security_name?: string;
+  security_type?: string;
+  ticker_symbol?: string;
+  name?: string;
+  type?: string;
+  value?: number;
+};
+
 interface Account {
   id: string;
   name: string;
@@ -719,15 +738,19 @@ export default function ProfilePage() {
                 // Check if holdings[0] has a holdings property (nested structure)
                 if (investmentsData.holdings.length > 0 && investmentsData.holdings[0]?.holdings) {
                   // Nested format: array of account holdings, each with holdings array
-                  holdings = investmentsData.holdings.flatMap((h: any) => h.holdings || []);
+                  holdings = investmentsData.holdings.flatMap(
+                    (h: { holdings?: InvestmentHolding[] }) => h.holdings || []
+                  ) as unknown as InvestmentData['holdings'];
                   console.log(`📊 Parsed ${investmentsData.holdings.length} account holdings into ${holdings.length} total holdings`);
                 } else {
                   // Flat format: direct array of holdings
-                  holdings = investmentsData.holdings;
+                  holdings = investmentsData.holdings as InvestmentData['holdings'];
                 }
               } else if (investmentsData.allHoldings && Array.isArray(investmentsData.allHoldings)) {
                 // Alternative format: allHoldings array
-                holdings = investmentsData.allHoldings.flatMap((h: any) => h.holdings || []);
+                holdings = investmentsData.allHoldings.flatMap(
+                  (h: { holdings?: InvestmentHolding[] }) => h.holdings || []
+                ) as unknown as InvestmentData['holdings'];
               }
               
               transactions = investmentsData.transactions || [];
@@ -739,9 +762,11 @@ export default function ProfilePage() {
           
           // ✅ Calculate counts from actual holdings array instead of trusting cached summary
           const actualHoldingCount = holdings.length;
-          const actualSecurityCount = new Set(holdings.map((h: any) => h.security_id)).size;
-          const actualTotalValue = holdings.reduce((sum: number, h: any) => {
-            return sum + (h.institution_value || h.value || 0);
+          const actualSecurityCount = new Set(
+            holdings.map((h: InvestmentHolding) => h.security_id)
+          ).size;
+          const actualTotalValue = holdings.reduce((sum: number, h: InvestmentHolding) => {
+            return sum + (h.institution_value ?? h.value ?? 0);
           }, 0);
           
           // Transform summary data format to match frontend expectations
