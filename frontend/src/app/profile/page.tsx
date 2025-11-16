@@ -1409,13 +1409,14 @@ export default function ProfilePage() {
                             <div className="text-xs text-red-400 mt-1">
                               {token.lastError === 'ITEM_LOGIN_REQUIRED' ? 
                                 'Re-authentication required - Click "Connect Account" above to reconnect' :
-                                token.lastError || 'Connection expired'}
+                                token.lastError ? token.lastError :
+                                !token.isActive ? 'Connection inactive' :
+                                'No accounts available for this connection'}
                             </div>
-                            {!token.isActive && (
-                              <div className="text-xs text-gray-500 mt-1">
-                                Last checked: {token.lastChecked ? new Date(token.lastChecked).toLocaleString() : 'Never'}
-                              </div>
-                            )}
+                            <div className="text-xs text-gray-500 mt-1">
+                              Status: {token.isActive ? 'Active' : 'Inactive'} • 
+                              Last checked: {token.lastChecked ? new Date(token.lastChecked).toLocaleString() : 'Never'}
+                            </div>
                           </div>
                         </div>
                       </div>

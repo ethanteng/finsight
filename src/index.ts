@@ -2871,9 +2871,62 @@ app.get('/profile/tokens', requireAuth, async (req: Request, res: Response) => {
       orderBy: { createdAt: 'desc' }
     });
     
-    // Update institution names for any tokens that don't have them
+    // Validate tokens and update institution names
     const updatedTokens = await Promise.all(tokens.map(async (token: any) => {
-      if (!token.institutionName && token.itemId) {
+      let updatedToken = { ...token };
+      
+      // Validate token if it hasn't been checked recently (within last hour)
+      const shouldValidate = !token.lastChecked || 
+        (Date.now() - new Date(token.lastChecked).getTime()) > 60 * 60 * 1000; // 1 hour
+      
+      if (shouldValidate) {
+        try {
+          // Validate token by trying to get accounts
+          try {
+            await plaidClient.accountsGet({
+              access_token: token.token
+            });
+            
+            // Token is valid - update status
+            await prisma.accessToken.update({
+              where: { id: token.id },
+              data: {
+                isActive: true,
+                lastError: null,
+                lastChecked: new Date()
+              }
+            });
+            
+            updatedToken.isActive = true;
+            updatedToken.lastError = null;
+            updatedToken.lastChecked = new Date();
+          } catch (plaidError: any) {
+            const errorCode = plaidError?.response?.data?.error_code;
+            const errorMessage = plaidError?.response?.data?.error_message || plaidError.message;
+            
+            // Token has an issue - update status
+            const isActive = errorCode !== 'ITEM_LOGIN_REQUIRED' && errorCode !== 'INVALID_ACCESS_TOKEN';
+            
+            await prisma.accessToken.update({
+              where: { id: token.id },
+              data: {
+                isActive,
+                lastError: errorCode || errorMessage,
+                lastChecked: new Date()
+              }
+            });
+            
+            updatedToken.isActive = isActive;
+            updatedToken.lastError = errorCode || errorMessage;
+            updatedToken.lastChecked = new Date();
+          }
+        } catch (err) {
+          console.warn(`Failed to validate token ${token.id}:`, err);
+        }
+      }
+      
+      // Update institution name if missing
+      if (!updatedToken.institutionName && updatedToken.itemId) {
         try {
           const itemResponse = await plaidClient.itemGet({
             access_token: token.token
@@ -2893,7 +2946,7 @@ app.get('/profile/tokens', requireAuth, async (req: Request, res: Response) => {
               data: { institutionName }
             });
             
-            return { ...token, institutionName, token: undefined }; // Don't return actual token to frontend
+            updatedToken.institutionName = institutionName;
           }
         } catch (err) {
           console.warn(`Failed to fetch institution name for token ${token.id}:`, err);
@@ -2901,7 +2954,7 @@ app.get('/profile/tokens', requireAuth, async (req: Request, res: Response) => {
       }
       
       // Remove actual token from response
-      const { token: _, ...tokenWithoutSecret } = token;
+      const { token: _, ...tokenWithoutSecret } = updatedToken;
       return tokenWithoutSecret;
     }));
     
