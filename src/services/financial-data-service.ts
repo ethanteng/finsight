@@ -666,11 +666,13 @@ export class FinancialDataService {
       }
     }
 
-    // ✅ STEP 3: Persist transactions to database ONLY when:
-    // 1. PERSIST_TRANSACTIONS env var is set to 'true'
-    // 2. shouldPersistTransactions option is explicitly true (called from GPT prompts, not display-only views)
-    // This prevents saving transactions when just displaying data in /app or /profile pages
-    if (process.env.PERSIST_TRANSACTIONS === 'true' && options?.shouldPersistTransactions === true) {
+    // ✅ STEP 3: Persist transactions to database when:
+    // 1. shouldPersistTransactions is explicitly true (categorization was requested, or called from GPT prompts)
+    //    OR
+    // 2. PERSIST_TRANSACTIONS env var is set to 'true' (legacy behavior for explicit persistence)
+    // This ensures categorized transactions are always persisted, while preventing unnecessary persistence for display-only views
+    const shouldPersist = options?.shouldPersistTransactions === true || process.env.PERSIST_TRANSACTIONS === 'true';
+    if (shouldPersist) {
       try {
         
         // Persist banking transactions (from Plaid)
@@ -710,10 +712,18 @@ export class FinancialDataService {
                 aiCategoryReason: (tx as any).aiCategoryReason || (tx as any).categorization_reason || undefined,
                 categoryComparedAt: ((tx as any).transaction_type || (tx as any).aiCategory) ? new Date() : undefined
               };
+              
+              // Log if transaction has categorization for debugging
+              if ((tx as any).aiCategory || (tx as any).transaction_type) {
+                console.log(`📝 FinancialDataService: Transaction "${tx.name}" will be persisted with aiCategory: ${(tx as any).aiCategory || (tx as any).transaction_type}`);
+              }
             });
           
           if (plaidBankingTransactions.length > 0) {
+            const categorizedCount = plaidBankingTransactions.filter(tx => tx.aiCategory).length;
+            console.log(`💾 FinancialDataService: Persisting ${plaidBankingTransactions.length} transactions (${categorizedCount} with aiCategory) to database`);
             await persistTransactionsToDb(userId, plaidBankingTransactions, mergedData.accounts);
+            console.log(`✅ FinancialDataService: Successfully persisted ${plaidBankingTransactions.length} transactions to database`);
           }
         }
         

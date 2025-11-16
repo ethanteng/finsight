@@ -699,7 +699,8 @@ export default function ProfilePage() {
           // Use portfolio and holdings directly from snapshot
           const portfolioData = summaryData.investmentPortfolio || {};
           const holdings = Array.isArray(summaryData.holdings) ? summaryData.holdings : [];
-          const transactions = Array.isArray(summaryData.transactions) ? summaryData.transactions : [];
+          // Use 'activities' for investment transactions, not 'transactions' (which includes banking transactions)
+          const investmentTransactions = Array.isArray(summaryData.activities) ? summaryData.activities : [];
           type SnapshotTx = {
             institution_value?: number;
             value?: number;
@@ -710,9 +711,9 @@ export default function ProfilePage() {
               ...portfolioData
             },
             holdings,
-            transactions,
-            investment_transactions: transactions,
-            total_investment_transactions: transactions.length,
+            transactions: investmentTransactions, // Use activities (investment transactions only)
+            investment_transactions: investmentTransactions,
+            total_investment_transactions: investmentTransactions.length,
             securities: [],
             accounts: [],
             item: {},
@@ -721,21 +722,21 @@ export default function ProfilePage() {
                 ...portfolioData
               },
               activity: {
-                totalTransactions: transactions.length,
-                totalVolume: transactions.reduce((sum: number, tx: SnapshotTx) => {
+                totalTransactions: investmentTransactions.length,
+                totalVolume: investmentTransactions.reduce((sum: number, tx: SnapshotTx) => {
                   const v = Math.abs(
                     (tx.institution_value ?? tx.value ?? tx.amount ?? 0)
                   );
                   return sum + (Number.isFinite(v) ? v : 0);
                 }, 0),
                 activityByType: {},
-                averageTransactionSize: transactions.length > 0
-                  ? transactions.reduce((sum: number, tx: SnapshotTx) => {
+                averageTransactionSize: investmentTransactions.length > 0
+                  ? investmentTransactions.reduce((sum: number, tx: SnapshotTx) => {
                       const v = Math.abs(
                         (tx.institution_value ?? tx.value ?? tx.amount ?? 0)
                       );
                       return sum + (Number.isFinite(v) ? v : 0);
-                    }, 0) / transactions.length
+                    }, 0) / investmentTransactions.length
                   : 0
               }
             }
@@ -749,7 +750,7 @@ export default function ProfilePage() {
             holdingsCount: portfolioData.holdingsCount,
             securityCount: portfolioData.securityCount,
             holdingsLoaded: holdings.length,
-            transactionsLoaded: transactions.length
+            transactionsLoaded: investmentTransactions.length
           });
           return;
         }
