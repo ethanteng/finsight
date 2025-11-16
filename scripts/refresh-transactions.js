@@ -3,14 +3,26 @@
 const path = require('path');
 const fs = require('fs');
 
-// Determine project root first
+// Determine project root first - look for package.json
 let projectRoot = process.cwd();
 if (__dirname.includes('/src/scripts')) {
-  // Running from src/scripts/, project root is two levels up
-  projectRoot = path.join(__dirname, '../..');
+  // Running from src/scripts/, project root is one level up (src/)
+  projectRoot = path.join(__dirname, '..');
 } else if (__dirname.includes('/scripts')) {
   // Running from scripts/, project root is one level up
   projectRoot = path.join(__dirname, '..');
+}
+
+// Verify project root by checking for package.json
+if (!fs.existsSync(path.join(projectRoot, 'package.json'))) {
+  // Try parent directory
+  const parentRoot = path.join(projectRoot, '..');
+  if (fs.existsSync(path.join(parentRoot, 'package.json'))) {
+    projectRoot = parentRoot;
+  } else {
+    // Fall back to current working directory
+    projectRoot = process.cwd();
+  }
 }
 
 // Resolve dist path - try multiple possible locations
@@ -57,18 +69,16 @@ if (!distPath) {
   
   console.error(`   Attempting to build...`);
   
-  // Try to run the build
-  // Determine the project root - could be current dir, parent, or src parent
-  let projectRoot = process.cwd();
-  if (__dirname.includes('/src/scripts')) {
-    // Running from src/scripts/, project root is two levels up
-    projectRoot = path.join(__dirname, '../..');
-  } else if (__dirname.includes('/scripts')) {
-    // Running from scripts/, project root is one level up
-    projectRoot = path.join(__dirname, '..');
+  // Verify project root has package.json before building
+  const packageJsonPath = path.join(projectRoot, 'package.json');
+  if (!fs.existsSync(packageJsonPath)) {
+    console.error(`   ❌ package.json not found at ${packageJsonPath}`);
+    console.error(`   Cannot build - project root is incorrect`);
+    process.exit(1);
   }
   
   console.log(`   Project root determined as: ${projectRoot}`);
+  console.log(`   Verified package.json exists at: ${packageJsonPath}`);
   console.log(`   Running: npm run build from ${projectRoot}`);
   
   const { execSync } = require('child_process');
