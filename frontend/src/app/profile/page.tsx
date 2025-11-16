@@ -686,8 +686,8 @@ export default function ProfilePage() {
       }
 
       if (!demoMode) {
-        // Load from single-source snapshot (summary view)
-        const summaryRes = await fetch(`${API_URL}/api/summaries?view=summary`, {
+        // Load from single-source snapshot (full view so we can show holdings/transactions)
+        const summaryRes = await fetch(`${API_URL}/api/summaries?view=full`, {
           method: 'GET',
           headers,
         });
@@ -696,16 +696,23 @@ export default function ProfilePage() {
           const summaryData = await summaryRes.json();
           console.log('Received summary data:', summaryData);
           
-          // Use portfolio counts directly from snapshot
+          // Use portfolio and holdings directly from snapshot
           const portfolioData = summaryData.investmentPortfolio || {};
+          const holdings = Array.isArray(summaryData.holdings) ? summaryData.holdings : [];
+          const transactions = Array.isArray(summaryData.transactions) ? summaryData.transactions : [];
+          type SnapshotTx = {
+            institution_value?: number;
+            value?: number;
+            amount?: number;
+          };
           const formattedData = {
             portfolio: {
               ...portfolioData
             },
-            holdings: [],
-            transactions: [],
-            investment_transactions: [],
-            total_investment_transactions: 0,
+            holdings,
+            transactions,
+            investment_transactions: transactions,
+            total_investment_transactions: transactions.length,
             securities: [],
             accounts: [],
             item: {},
@@ -714,10 +721,22 @@ export default function ProfilePage() {
                 ...portfolioData
               },
               activity: {
-                totalTransactions: 0,
-                totalVolume: 0,
+                totalTransactions: transactions.length,
+                totalVolume: transactions.reduce((sum: number, tx: SnapshotTx) => {
+                  const v = Math.abs(
+                    (tx.institution_value ?? tx.value ?? tx.amount ?? 0)
+                  );
+                  return sum + (Number.isFinite(v) ? v : 0);
+                }, 0),
                 activityByType: {},
-                averageTransactionSize: 0
+                averageTransactionSize: transactions.length > 0
+                  ? transactions.reduce((sum: number, tx: SnapshotTx) => {
+                      const v = Math.abs(
+                        (tx.institution_value ?? tx.value ?? tx.amount ?? 0)
+                      );
+                      return sum + (Number.isFinite(v) ? v : 0);
+                    }, 0) / transactions.length
+                  : 0
               }
             }
           };
@@ -729,8 +748,8 @@ export default function ProfilePage() {
             totalValue: portfolioData.totalValue,
             holdingsCount: portfolioData.holdingsCount,
             securityCount: portfolioData.securityCount,
-            holdingsLoaded: 0,
-            transactionsLoaded: 0
+            holdingsLoaded: holdings.length,
+            transactionsLoaded: transactions.length
           });
           return;
         }

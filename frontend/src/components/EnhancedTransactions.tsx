@@ -32,6 +32,22 @@ export default function EnhancedTransactions({ isDemo = false, tier = 'standard'
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+  type SnapshotTransaction = {
+    transaction_id?: string;
+    id?: string;
+    account_id: string;
+    amount: number | string;
+    date: string;
+    name: string;
+    merchant_name?: string;
+    category?: string[] | string;
+    pending?: boolean;
+    enriched_data?: {
+      website?: string;
+      logo_url?: string;
+    };
+  };
+
   const loadEnrichments = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -86,30 +102,33 @@ export default function EnhancedTransactions({ isDemo = false, tier = 'standard'
         return;
       }
 
-      // In production, call the real enhanced transaction endpoint
-      const endDate = new Date().toISOString().split('T')[0];
-      const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-      // Use the existing transactions endpoint which already includes enriched data
-      const res = await fetch(`${API_URL}/plaid/transactions?start_date=${startDate}&end_date=${endDate}&count=50`, {
-        method: 'GET',
-        headers,
-      });
+      // Prefer snapshot transactions (single source of truth)
+      const res = await fetch(`${API_URL}/api/summaries?view=full`, { method: 'GET', headers });
 
       if (res.ok) {
         const data = await res.json();
-        console.log('Received enhanced transaction data:', data);
+        console.log('Received snapshot (full) for enhanced transactions:', data);
         
-        // Transform the data to match our interface
-        // The existing endpoint returns transactions with enriched_data already included
+        // Transform snapshot transactions to enriched shape (best-effort)
+        const snapshotTx: SnapshotTransaction[] = Array.isArray(data.transactions) ? data.transactions as SnapshotTransaction[] : [];
         const transformedEnrichments: TransactionEnrichment[] = [{
-          enriched_transactions: data.transactions || [],
+          enriched_transactions: snapshotTx.map((t) => ({
+            transaction_id: t.transaction_id || t.id || `${t.account_id}-${t.date}-${t.name}`,
+            merchant_name: t.merchant_name,
+            website: t.enriched_data?.website,
+            logo_url: t.enriched_data?.logo_url,
+            category: Array.isArray(t.category) ? t.category[0] : (typeof t.category === 'string' ? t.category : 'Uncategorized'),
+            amount: typeof t.amount === 'number' ? t.amount : Number(t.amount || 0),
+            date: t.date,
+            name: t.name,
+            account_id: t.account_id
+          })),
           request_id: data.request_id || 'real_request'
         }];
         
         setEnrichments(transformedEnrichments);
       } else {
-        console.log('Failed to load enhanced transactions:', res.status);
+        console.log('Failed to load snapshot transactions:', res.status);
         setError('Failed to load enhanced transactions');
       }
       

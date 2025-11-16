@@ -47,6 +47,24 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+  type SnapshotTransaction = {
+    transaction_id?: string;
+    id?: string;
+    account_id: string;
+    amount: number | string;
+    date: string;
+    name: string;
+    merchant_name?: string;
+    category?: string[] | string;
+    pending?: boolean;
+    transaction_type?: string;
+    enriched_data?: {
+      merchant_name?: string;
+      website?: string;
+      logo_url?: string;
+    };
+  };
+
   const loadTransactions = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -68,26 +86,15 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
         }
       }
 
-      // Calculate date range
-      const endDate = new Date().toISOString().split('T')[0];
-      const startDate = new Date(Date.now() - parseInt(dateRange) * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-      console.log('🔍 Frontend: Fetching transactions from', startDate, 'to', endDate);
-      console.log('🔍 Frontend: Demo mode:', isDemo);
-
-      // Use the existing transactions endpoint which already includes enriched data
-      const res = await fetch(`${API_URL}/plaid/transactions?start_date=${startDate}&end_date=${endDate}&count=50&_t=${Date.now()}`, {
+      // Use single source of truth: snapshot transactions
+      const res = await fetch(`${API_URL}/api/summaries?view=full&_t=${Date.now()}`, {
         method: 'GET',
-        headers,
+        headers
       });
 
       if (res.ok) {
         const data = await res.json();
-        console.log('🔍 Frontend: Received transactions data:', data);
-        console.log('🔍 Frontend: Has enriched data?', data.transactions?.[0]?.enriched_data ? 'YES' : 'NO');
-        console.log('🔍 Frontend: Enriched fields:', data.transactions?.[0]?.enriched_data ? Object.keys(data.transactions[0].enriched_data) : 'NONE');
-        console.log('🔍 Frontend: Top-level merchant_name:', data.transactions?.[0]?.merchant_name);
-        console.log('🔍 Frontend: Enriched merchant_name:', data.transactions?.[0]?.enriched_data?.merchant_name);
+        console.log('🔍 Frontend: Received snapshot (full) for transactions:', data);
         
         // Debug: Show the exact enriched_data structure
         if (data.transactions?.[0]?.enriched_data) {
@@ -109,7 +116,21 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
           });
         }
         
-        setTransactions(data.transactions || []);
+        const snapshotTx: SnapshotTransaction[] = Array.isArray(data.transactions) ? data.transactions as SnapshotTransaction[] : [];
+        // Ensure each transaction has an id
+        const normalized = snapshotTx.map((t) => ({
+          id: t.transaction_id || t.id || `${t.account_id}-${t.date}-${t.name}`,
+          account_id: t.account_id,
+          amount: typeof t.amount === 'number' ? t.amount : Number(t.amount || 0),
+          date: t.date,
+          name: t.name,
+          merchant_name: t.merchant_name,
+          category: Array.isArray(t.category) ? t.category : (typeof t.category === 'string' ? [t.category] : []),
+          pending: Boolean(t.pending),
+          transaction_type: t.transaction_type,
+          enriched_data: t.enriched_data
+        })) as Transaction[];
+        setTransactions(normalized);
       } else {
         if (res.status === 401) {
           setError('Authentication required. Please log in.');
