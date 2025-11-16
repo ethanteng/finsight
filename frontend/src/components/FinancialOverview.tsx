@@ -270,117 +270,79 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
 
   // Calculate totals
   const calculateTotals = () => {
-    // ✅ FIRST: Try to use summary data if available (most accurate)
+    // Compute derived totals from local data for robustness
+    const deriveFromAccounts = () => {
+      let totalCash = 0;
+      let totalDebt = 0;
+      let uncategorizedAccounts = 0;
+      
+      accounts.forEach(account => {
+        let balance: number;
+        if (account.type === 'depository' || 
+            account.subtype === 'checking' || 
+            account.subtype === 'savings' || 
+            account.subtype === 'cd' ||
+            account.subtype === 'money market' ||
+            account.subtype === 'prepaid') {
+          balance = account.balance?.available !== undefined && account.balance?.available !== null 
+            ? account.balance.available 
+            : account.balance?.current || 0;
+        } else if (account.type === 'credit') {
+          balance = account.balance?.current || 0;
+        } else if (account.type === 'loan') {
+          balance = account.balance?.current || 0;
+        } else {
+          balance = account.balance?.current || 0;
+        }
+        
+        const t = account.type;
+        const st = account.subtype;
+        // Skip investment-like accounts here
+        if (t === 'investment' ||
+            st === '401k' || st === 'ira' || st === 'roth' ||
+            st === 'brokerage' || st === 'hsa' || st === '529' ||
+            st === 'pension' || st === 'annuity') {
+          return;
+        }
+        
+        if (t === 'depository' || st === 'checking' || st === 'savings' || st === 'cd' ||
+            st === 'money market' || st === 'prepaid') {
+          totalCash += Math.max(0, balance);
+        } else if (t === 'credit') {
+          totalDebt += Math.abs(balance);
+        } else if (t === 'loan' || st === 'mortgage' || st === 'student' || st === 'personal' ||
+                   st === 'auto' || st === 'home equity') {
+          totalDebt += Math.max(0, balance);
+        } else {
+          if (balance > 0) totalCash += balance;
+          else if (balance < 0) totalDebt += Math.abs(balance);
+          uncategorizedAccounts++;
+        }
+      });
+      
+      const totalInvestments = investmentData?.portfolio?.totalValue || 0;
+      const totalHomeValue = homeData?.value || 0;
+      return { totalCash, totalDebt, totalInvestments, totalHomeValue, uncategorizedAccounts };
+    };
+    
+    // Prefer backend summary when it provides non-zero values, but backfill from derived data if missing
     if (financialSummary?.financialOverview) {
-      console.log('✅ Using financial summary data from backend');
+      const derived = deriveFromAccounts();
+      const s = financialSummary.financialOverview;
+      console.log('✅ Using financial summary with derived backfill where needed', { summary: s, derived });
       return {
-        totalCash: financialSummary.financialOverview.totalCash || 0,
-        totalDebt: financialSummary.financialOverview.totalDebt || 0,
-        totalInvestments: financialSummary.financialOverview.totalInvestments || 0,
-        totalHomeValue: financialSummary.financialOverview.homeValue || 0,
-        uncategorizedAccounts: 0
+        totalCash: s.totalCash && s.totalCash > 0 ? s.totalCash : derived.totalCash,
+        totalDebt: s.totalDebt && s.totalDebt > 0 ? s.totalDebt : derived.totalDebt,
+        totalInvestments: s.totalInvestments && s.totalInvestments > 0 ? s.totalInvestments : derived.totalInvestments,
+        totalHomeValue: (s.homeValue ?? 0) > 0 ? (s.homeValue as number) : derived.totalHomeValue,
+        uncategorizedAccounts: derived.uncategorizedAccounts
       };
     }
 
-    // Fallback: Calculate from accounts (but avoid double-counting)
-    let totalCash = 0;
-    let totalDebt = 0;
-    let totalInvestments = 0;
-    let uncategorizedAccounts = 0;
-
-    console.log('⚠️ Calculating totals from accounts (summary endpoint failed or unavailable)');
-    console.log('Plaid accounts:', accounts.length);
-    console.log('SnapTrade accounts:', snapTradeAccounts.length);
-
-    // ✅ Trust backend - accounts from /plaid/all-accounts are already deduplicated by FinancialDataService
-    // No need for client-side deduplication
-
-    // Process Plaid accounts (EXCLUDE investment accounts - they're counted via holdings)
-    accounts.forEach(account => {
-      let balance;
-      if (account.type === 'depository' || 
-          account.subtype === 'checking' || 
-          account.subtype === 'savings' || 
-          account.subtype === 'cd' ||
-          account.subtype === 'money market' ||
-          account.subtype === 'prepaid') {
-        balance = account.balance?.available !== undefined && account.balance?.available !== null 
-          ? account.balance.available 
-          : account.balance?.current || 0;
-      } else if (account.type === 'credit') {
-        balance = account.balance?.current || 0;
-      } else if (account.type === 'loan') {
-        balance = account.balance?.current || 0;
-      } else {
-        balance = account.balance?.current || 0;
-      }
-      
-      const accountType = account.type;
-      const accountSubtype = account.subtype;
-      
-      // ✅ IMPORTANT: Skip investment accounts - they're counted via holdings, not balances
-      if (accountType === 'investment' || 
-          accountSubtype === '401k' || 
-          accountSubtype === 'ira' || 
-          accountSubtype === 'roth' || 
-          accountSubtype === 'brokerage' || 
-          accountSubtype === 'hsa' || 
-          accountSubtype === '529' ||
-          accountSubtype === 'pension' ||
-          accountSubtype === 'annuity') {
-        // Investment accounts are NOT counted here - use holdings data instead
-        return;
-      }
-      
-      if (accountType === 'depository' || 
-          accountSubtype === 'checking' || 
-          accountSubtype === 'savings' || 
-          accountSubtype === 'cd' ||
-          accountSubtype === 'money market' ||
-          accountSubtype === 'prepaid') {
-        totalCash += Math.max(0, balance);
-      } else if (accountType === 'credit') {
-        totalDebt += Math.abs(balance);
-      } else if (accountType === 'loan' || 
-                 accountSubtype === 'mortgage' || 
-                 accountSubtype === 'student' || 
-                 accountSubtype === 'personal' ||
-                 accountSubtype === 'auto' ||
-                 accountSubtype === 'home equity') {
-        totalDebt += Math.max(0, balance);
-      } else {
-        if (balance > 0) {
-          totalCash += balance;
-        } else if (balance < 0) {
-          totalDebt += Math.abs(balance);
-        }
-        uncategorizedAccounts++;
-      }
-    });
-
-    // ✅ Use investment portfolio value from holdings (not account balances)
-    // This avoids double-counting investment account balances AND holdings
-    if (investmentData?.portfolio?.totalValue) {
-      console.log('✅ Using investment portfolio value from holdings:', investmentData.portfolio.totalValue);
-      totalInvestments = investmentData.portfolio.totalValue;
-    } else {
-      // Fallback: Only count SnapTrade balances if we don't have holdings data
-      // But this should rarely happen since holdings are fetched separately
-      console.warn('⚠️ No investment holdings data available, using SnapTrade balances as fallback');
-      snapTradeAccounts.forEach(account => {
-        const balance = account.balance || 0;
-        totalInvestments += Math.max(0, balance);
-      });
-    }
-
-    // Add home value if available
-    let totalHomeValue = 0;
-    if (homeData?.value) {
-      totalHomeValue = homeData.value;
-    }
-
-    console.log('Final totals - totalCash:', totalCash, 'totalDebt:', totalDebt, 'totalInvestments:', totalInvestments, 'totalHomeValue:', totalHomeValue);
-    return { totalCash, totalDebt, totalInvestments, totalHomeValue, uncategorizedAccounts };
+    // Fallback: derive entirely from accounts/holdings if no summary
+    const derived = deriveFromAccounts();
+    console.log('⚠️ Calculating totals from accounts (summary endpoint failed or unavailable)', derived);
+    return derived;
   };
 
   const { totalCash, totalDebt, totalInvestments, totalHomeValue, uncategorizedAccounts } = calculateTotals();
