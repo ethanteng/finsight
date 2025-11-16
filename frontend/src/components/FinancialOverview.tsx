@@ -106,133 +106,37 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
           }
         }
 
-        // Load financial summary from new endpoint (includes overview and portfolio)
-        if (!isDemo) {
-          try {
-            const summaryRes = await fetch(`${API_URL}/api/summaries`, {
-              headers,
-            });
-
-            if (summaryRes.ok) {
-              const summaryData: FinancialSummaryData = await summaryRes.json();
-              
-              // Extract financial overview data
-              if (summaryData.financialOverview) {
-                // Set home data from summary
-                if (summaryData.financialOverview.homeValue !== null && summaryData.financialOverview.homeValue !== undefined) {
-                  setHomeData({
-                    address: '',
-                    value: summaryData.financialOverview.homeValue,
-                    valueLow: summaryData.financialOverview.homeValue * 0.9,
-                    valueHigh: summaryData.financialOverview.homeValue * 1.1,
-                    lastUpdated: summaryData.lastUpdated || new Date().toISOString()
-                  });
-                }
-              }
-              
-              // ✅ Fetch actual holdings to calculate accurate counts
-              type InvestmentHolding = {
-                account_id: string;
-                security_id: string;
-                institution_value?: number;
-                value?: number;
-              };
-              let actualHoldings: InvestmentHolding[] = [];
-              try {
-                const investmentsRes = await fetch(`${API_URL}/plaid/investments`, {
-                  headers,
-                });
-                
-                if (investmentsRes.ok) {
-                  const investmentsData = await investmentsRes.json();
-                  console.log('📊 FinancialOverview: Investments endpoint response structure:', {
-                    hasHoldings: !!investmentsData.holdings,
-                    hasAllHoldings: !!investmentsData.allHoldings,
-                    holdingsType: Array.isArray(investmentsData.holdings) ? 'array' : typeof investmentsData.holdings,
-                    keys: Object.keys(investmentsData)
-                  });
-                  
-                  // Handle response format: holdings is an array of objects, each with a holdings property
-                  if (investmentsData.holdings && Array.isArray(investmentsData.holdings)) {
-                    // Check if holdings[0] has a holdings property (nested structure)
-                    if (investmentsData.holdings.length > 0 && investmentsData.holdings[0]?.holdings) {
-                      // Nested format: array of account holdings, each with holdings array
-                      actualHoldings = investmentsData.holdings.flatMap(
-                        (h: { holdings?: InvestmentHolding[] }) => h.holdings || []
-                      );
-                      console.log(`📊 FinancialOverview: Parsed ${investmentsData.holdings.length} account holdings into ${actualHoldings.length} total holdings`);
-                    } else {
-                      // Flat format: direct array of holdings
-                      actualHoldings = investmentsData.holdings as InvestmentHolding[];
-                    }
-                  } else if (investmentsData.allHoldings && Array.isArray(investmentsData.allHoldings)) {
-                    // Alternative format: allHoldings array
-                    actualHoldings = investmentsData.allHoldings.flatMap(
-                      (h: { holdings?: InvestmentHolding[] }) => h.holdings || []
-                    );
-                  }
-                  
-                  // If holdings still empty, fall back to combinedPortfolio/summary from backend response
-                  if ((!actualHoldings || actualHoldings.length === 0) && investmentsData.combinedPortfolio) {
-                    console.log('📊 FinancialOverview: Using combinedPortfolio fallback from backend');
-                    setInvestmentData({
-                      portfolio: {
-                        totalValue: investmentsData.combinedPortfolio.totalValue || 0,
-                        assetAllocation: investmentsData.combinedPortfolio.assetAllocation || [],
-                        holdingCount: (investmentsData.summary?.totalHoldings as number) || 0,
-                        securityCount: (investmentsData.summary?.totalSecurities as number) || 0
-                      }
-                    });
-                  }
-                  
-                  console.log(`📊 FinancialOverview: Loaded ${actualHoldings.length} holdings from investments endpoint`);
-                }
-              } catch (investmentsError) {
-                console.warn('FinancialOverview: Failed to load holdings, using summary data only:', investmentsError);
-              }
-              
-              // ✅ Calculate counts from actual holdings array instead of trusting cached summary
-              const actualHoldingCount = actualHoldings.length;
-              const actualSecurityCount = new Set(
-                actualHoldings.map((h: InvestmentHolding) => h.security_id)
-              ).size;
-              const actualTotalValue = actualHoldings.length > 0 
-                ? actualHoldings.reduce((sum: number, h: InvestmentHolding) => {
-                    return sum + (h.institution_value ?? h.value ?? 0);
-                  }, 0)
-                : summaryData.investmentPortfolio?.totalValue || 0;
-              
-              // Extract investment portfolio data - use actual counts if available
-              if (summaryData.investmentPortfolio) {
-                setInvestmentData({
-                  portfolio: {
-                    totalValue: actualTotalValue > 0 ? actualTotalValue : summaryData.investmentPortfolio.totalValue,
-                    assetAllocation: summaryData.investmentPortfolio.assetAllocation,
-                    holdingCount: actualHoldingCount > 0 ? actualHoldingCount : (summaryData.investmentPortfolio.holdingsCount || 0),
-                    securityCount: actualSecurityCount > 0 ? actualSecurityCount : (summaryData.investmentPortfolio.securityCount || 0)
-                  }
-                });
-                
-                console.log('📊 FinancialOverview: Investment portfolio data set:', {
-                  totalValue: actualTotalValue > 0 ? actualTotalValue : summaryData.investmentPortfolio.totalValue,
-                  holdingCount: actualHoldingCount > 0 ? actualHoldingCount : summaryData.investmentPortfolio.holdingsCount,
-                  securityCount: actualSecurityCount > 0 ? actualSecurityCount : summaryData.investmentPortfolio.securityCount,
-                  holdingsFromAPI: actualHoldings.length,
-                  holdingsFromSummary: summaryData.investmentPortfolio.holdingsCount
-                });
-              }
-              
-              // ✅ Store summary data for use in calculateTotals
-              setFinancialSummary(summaryData);
+        // Load single-source snapshot (summary view)
+        try {
+          const res = await fetch(`${API_URL}/api/summaries?view=summary`, { headers });
+          if (res.ok) {
+            const snapshot = await res.json();
+            // Map snapshot to local state types
+            const finOverview = snapshot.financialOverview;
+            const portfolio = snapshot.investmentPortfolio;
+            const computedAt = snapshot.computedAt || new Date().toISOString();
+            setFinancialSummary({
+              financialOverview: finOverview,
+              investmentPortfolio: portfolio,
+              lastUpdated: computedAt,
+            } as unknown as FinancialSummaryData);
+            setInvestmentData({ portfolio });
+            if (finOverview?.homeValue) {
+              setHomeData({
+                address: '',
+                value: finOverview.homeValue,
+                valueLow: finOverview.homeValue * 0.9,
+                valueHigh: finOverview.homeValue * 1.1,
+                lastUpdated: computedAt
+              });
             } else {
-              const errorText = await summaryRes.text();
-              console.error('Failed to load financial summary:', summaryRes.status, errorText);
-              setFinancialSummary(null);
+              setHomeData(null);
             }
-          } catch (summaryError) {
-            console.error('Error loading financial summary:', summaryError);
+          } else {
             setFinancialSummary(null);
           }
+        } catch (e) {
+          setFinancialSummary(null);
         }
 
         // Still load accounts separately for display (needed for account list)
@@ -283,7 +187,7 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
 
   // Calculate totals
   const calculateTotals = () => {
-    // Compute derived totals from local data for robustness
+    // Compute derived totals from snapshot-first data
     const deriveFromAccounts = () => {
       let totalCash = 0;
       let totalDebt = 0;
@@ -338,7 +242,7 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
       return { totalCash, totalDebt, totalInvestments, totalHomeValue, uncategorizedAccounts };
     };
     
-    // Prefer backend summary when it provides non-zero values, but backfill from derived data if missing
+    // Prefer snapshot (financialSummary) values, backfill from derived accounts if missing
     if (financialSummary?.financialOverview) {
       const derived = deriveFromAccounts();
       const s = financialSummary.financialOverview;

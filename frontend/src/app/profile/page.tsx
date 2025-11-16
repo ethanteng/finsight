@@ -7,24 +7,7 @@ import InvestmentPortfolio from '../../components/InvestmentPortfolio';
 import SnapTradeButton from '../../components/SnapTradeButton';
 import PageMeta from '../../components/PageMeta';
 
-// Typed holdings shape used across investment parsing
-type InvestmentHolding = {
-  id?: string;
-  account_id: string;
-  security_id: string;
-  institution_value?: number;
-  institution_price?: number;
-  institution_price_as_of?: string;
-  cost_basis?: number;
-  quantity?: number;
-  iso_currency_code?: string;
-  security_name?: string;
-  security_type?: string;
-  ticker_symbol?: string;
-  name?: string;
-  type?: string;
-  value?: number;
-};
+// (removed) local InvestmentHolding type - no longer used after snapshot refactor
 
 interface Account {
   id: string;
@@ -703,8 +686,8 @@ export default function ProfilePage() {
       }
 
       if (!demoMode) {
-        // Load from summaries endpoint (includes investment portfolio)
-        const summaryRes = await fetch(`${API_URL}/api/summaries`, {
+        // Load from single-source snapshot (summary view)
+        const summaryRes = await fetch(`${API_URL}/api/summaries?view=summary`, {
           method: 'GET',
           headers,
         });
@@ -713,99 +696,28 @@ export default function ProfilePage() {
           const summaryData = await summaryRes.json();
           console.log('Received summary data:', summaryData);
           
-          // ✅ Load holdings and transactions separately since summary doesn't include them
-          let holdings: InvestmentData['holdings'] = [];
-          let transactions: InvestmentData['transactions'] = [];
-          
-          try {
-            const investmentsRes = await fetch(`${API_URL}/plaid/investments`, {
-              method: 'GET',
-              headers,
-            });
-            
-            if (investmentsRes.ok) {
-              const investmentsData = await investmentsRes.json();
-              console.log('📊 Investments endpoint response structure:', {
-                hasHoldings: !!investmentsData.holdings,
-                hasAllHoldings: !!investmentsData.allHoldings,
-                holdingsType: Array.isArray(investmentsData.holdings) ? 'array' : typeof investmentsData.holdings,
-                allHoldingsType: Array.isArray(investmentsData.allHoldings) ? 'array' : typeof investmentsData.allHoldings,
-                keys: Object.keys(investmentsData)
-              });
-              
-              // Handle response format: holdings is an array of objects, each with a holdings property
-              if (investmentsData.holdings && Array.isArray(investmentsData.holdings)) {
-                // Check if holdings[0] has a holdings property (nested structure)
-                if (investmentsData.holdings.length > 0 && investmentsData.holdings[0]?.holdings) {
-                  // Nested format: array of account holdings, each with holdings array
-                  holdings = investmentsData.holdings.flatMap(
-                    (h: { holdings?: InvestmentHolding[] }) => h.holdings || []
-                  ) as unknown as InvestmentData['holdings'];
-                  console.log(`📊 Parsed ${investmentsData.holdings.length} account holdings into ${holdings.length} total holdings`);
-                } else {
-                  // Flat format: direct array of holdings
-                  holdings = investmentsData.holdings as InvestmentData['holdings'];
-                }
-              } else if (investmentsData.allHoldings && Array.isArray(investmentsData.allHoldings)) {
-                // Alternative format: allHoldings array
-                holdings = investmentsData.allHoldings.flatMap(
-                  (h: { holdings?: InvestmentHolding[] }) => h.holdings || []
-                ) as unknown as InvestmentData['holdings'];
-              }
-              
-              transactions = investmentsData.transactions || [];
-              console.log(`📊 Final: ${holdings.length} holdings and ${transactions.length} transactions from investments endpoint`);
-            }
-          } catch (err) {
-            console.warn('Failed to load holdings/transactions, using summary data only:', err);
-          }
-          
-          // ✅ Calculate counts from actual holdings array instead of trusting cached summary
-          const actualHoldingCount = holdings.length;
-          const actualSecurityCount = new Set(
-            holdings.map((h: InvestmentHolding) => h.security_id)
-          ).size;
-          const actualTotalValue = holdings.reduce((sum: number, h: InvestmentHolding) => {
-            return sum + (h.institution_value ?? h.value ?? 0);
-          }, 0);
-          
-          // Transform summary data format to match frontend expectations
-          // ✅ Use actual counts from holdings array, fallback to summary if holdings empty
+          // Use portfolio counts directly from snapshot
           const portfolioData = summaryData.investmentPortfolio || {};
           const formattedData = {
             portfolio: {
-              ...portfolioData,
-              totalValue: actualTotalValue > 0 ? actualTotalValue : portfolioData.totalValue || 0,
-              holdingCount: actualHoldingCount > 0 ? actualHoldingCount : (portfolioData.holdingsCount || portfolioData.holdingCount || 0),
-              securityCount: actualSecurityCount > 0 ? actualSecurityCount : (portfolioData.securityCount || 0)
+              ...portfolioData
             },
-            holdings: holdings,
-            transactions: transactions,
-            investment_transactions: transactions,
-            total_investment_transactions: transactions.length,
+            holdings: [],
+            transactions: [],
+            investment_transactions: [],
+            total_investment_transactions: 0,
             securities: [],
             accounts: [],
             item: {},
             analysis: {
               portfolio: {
-                ...portfolioData,
-                totalValue: actualTotalValue > 0 ? actualTotalValue : portfolioData.totalValue || 0,
-                holdingCount: actualHoldingCount > 0 ? actualHoldingCount : (portfolioData.holdingsCount || portfolioData.holdingCount || 0),
-                securityCount: actualSecurityCount > 0 ? actualSecurityCount : (portfolioData.securityCount || 0)
+                ...portfolioData
               },
               activity: {
-                totalTransactions: transactions.length,
-                totalVolume: transactions.reduce((sum: number, tx: InvestmentData['transactions'][0]) => {
-                  const txAny = tx as InvestmentTransaction;
-                  return sum + Math.abs(txAny.institution_value || txAny.value || 0);
-                }, 0),
+                totalTransactions: 0,
+                totalVolume: 0,
                 activityByType: {},
-                averageTransactionSize: transactions.length > 0 
-                  ? transactions.reduce((sum: number, tx: InvestmentData['transactions'][0]) => {
-                      const txAny = tx as InvestmentTransaction;
-                      return sum + Math.abs(txAny.institution_value || txAny.value || 0);
-                    }, 0) / transactions.length 
-                  : 0
+                averageTransactionSize: 0
               }
             }
           };
@@ -817,8 +729,8 @@ export default function ProfilePage() {
             totalValue: portfolioData.totalValue,
             holdingsCount: portfolioData.holdingsCount,
             securityCount: portfolioData.securityCount,
-            holdingsLoaded: holdings.length,
-            transactionsLoaded: transactions.length
+            holdingsLoaded: 0,
+            transactionsLoaded: 0
           });
           return;
         }

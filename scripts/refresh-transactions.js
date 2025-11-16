@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const { TransactionSyncService } = require('../dist/services/transaction-sync-service');
+const { SummaryCacheService } = require('../dist/services/summary-cache-service');
 require('dotenv').config({ path: '.env.local' });
 
 async function refreshTransactions() {
@@ -48,7 +49,17 @@ async function refreshTransactions() {
     process.exit(1);
   }
   
-  console.log(`[${timestamp}] 🏁 Transaction sync finished\n`);
+  // After transactions sync, refresh cached summaries for all users
+  try {
+    console.log(`[${timestamp}] 🧮 Refreshing cached financial summaries for all users...`);
+    const result = await SummaryCacheService.refreshAllUsers();
+    console.log(`[${timestamp}] ✅ Summary cache refresh completed. Users processed: ${result.usersProcessed}`);
+  } catch (error) {
+    console.error(`[${timestamp}] ⚠️ Summary cache refresh failed:`, error);
+    // Do not fail the entire cron; proceed
+  }
+  
+  console.log(`[${timestamp}] 🏁 Transaction sync + summary refresh finished\n`);
 }
 
 // If run directly, execute immediately

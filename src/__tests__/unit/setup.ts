@@ -21,6 +21,12 @@ jest.mock('../../openai', () => {
   };
 });
 
+// Provide required env vars to avoid test failures that expect them
+process.env.OPENAI_API_KEY = process.env.OPENAI_API_KEY || 'dummy_key_123';
+process.env.PROFILE_ENCRYPTION_KEY = process.env.PROFILE_ENCRYPTION_KEY || 'dummy_profile_key_1234567890123456';
+
+// Note: FinancialSummaryService is not mocked globally here to allow its unit tests to validate behavior.
+
 // Mock market news aggregator to prevent real API calls
 jest.mock('../../market-news/aggregator', () => ({
   MarketNewsAggregator: jest.fn().mockImplementation(() => ({

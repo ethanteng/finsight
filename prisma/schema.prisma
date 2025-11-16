@@ -32,6 +32,7 @@ model User {
   subscriptions          Subscription[]
   profile                UserProfile?
   financialSummary       FinancialSummary?
+  financialSummarySnapshot FinancialSummarySnapshot?
 
   @@map("users")
 }
@@ -398,4 +399,32 @@ model FinancialSummary {
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("financial_summaries")
+}
+
+/// Cached, single source of truth snapshot for frontend and GPT consumption
+model FinancialSummarySnapshot {
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  computedAt           DateTime
+
+  // Summary sections
+  financialOverview     Json    // { netWorth, totalCash, totalInvestments, totalDebt, homeValue }
+  investmentPortfolio   Json    // { totalValue, holdingCount, securityCount, assetAllocation }
+
+  // Full data for GPT / deep dives (optional in summary view)
+  accounts              Json?
+  holdings              Json?
+  securities            Json?
+  transactions          Json?   // windowed by TRANSACTION_HISTORY_DAYS
+  transactionsSummary   Json?   // aggregates for income/expenses/categories/monthlies over window
+  activities            Json?   // investment activities windowed by INVESTMENT_HISTORY_YEARS
+
+  // Metadata (includes window sizes and balance refresh info)
+  meta                 Json?
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@map("financial_summary_snapshots")
 }

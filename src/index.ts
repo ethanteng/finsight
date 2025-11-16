@@ -3055,41 +3055,39 @@ app.get('/profile/tokens', requireAuth, async (req: Request, res: Response) => {
 // Get SnapTrade connection status
 app.get('/api/summaries', requireAuth, async (req: Request, res: Response) => {
   try {
-    console.log(`📊 /api/summaries: Fetching summary for user ${req.user!.id}`);
-    const { FinancialSummaryService } = await import('./services/financial-summary-service');
-    const summaryService = new FinancialSummaryService();
-    
-    const summary = await summaryService.getUserSummary(req.user!.id);
-    
-    console.log(`📊 /api/summaries: Summary retrieved - Net Worth: $${summary.financialOverview.netWorth.toFixed(2)}, Investments: $${summary.financialOverview.totalInvestments.toFixed(2)}`);
-    
-    // If summary is stale, trigger non-blocking refresh
-    if (summaryService.isSummaryStale(summary.lastUpdated)) {
-      console.log(`📊 /api/summaries: Summary is stale, triggering background refresh`);
-      setImmediate(() => {
-        summaryService.refreshUserSummary(req.user!.id).catch(error => {
-          console.error(`Failed to refresh summary for user ${req.user!.id}:`, error);
-        });
-      });
+    const { SummaryCacheService } = await import('./services/summary-cache-service');
+    const view = (req.query.view as string) === 'full' ? 'full' : 'summary';
+    const snapshot = await SummaryCacheService.getLatestSnapshot(req.user!.id, view as any);
+    if (!snapshot) {
+      return res.status(204).json({ computedAt: null });
     }
-    
-    res.json({
-      financialOverview: summary.financialOverview,
-      investmentPortfolio: summary.investmentPortfolio,
-      lastUpdated: summary.lastUpdated.toISOString()
-    });
+    res.json(snapshot);
   } catch (error) {
-    console.error('❌ Failed to fetch financial summary:', error);
-    
+    console.error('❌ Failed to fetch cached financial summary:', error);
     if (error instanceof Error) {
-      console.error('❌ Error details:', error.message);
-      console.error('❌ Error stack:', error.stack);
       Sentry.captureException(error);
       res.status(500).json({ error: error.message });
     } else {
-      console.error('❌ Unknown error type:', error);
-      Sentry.captureMessage('Unknown error in financial summary endpoint', 'error');
+      Sentry.captureMessage('Unknown error in cached financial summary endpoint', 'error');
       res.status(500).json({ error: 'Failed to fetch financial summary' });
+    }
+  }
+});
+
+// Optional admin/per-user endpoint to recompute snapshot on demand
+app.post('/api/refresh-summary', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { SummaryCacheService } = await import('./services/summary-cache-service');
+    const payload = await SummaryCacheService.computeForUser(req.user!.id);
+    res.json(payload);
+  } catch (error) {
+    console.error('❌ Failed to refresh financial summary:', error);
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+      res.status(500).json({ error: error.message });
+    } else {
+      Sentry.captureMessage('Unknown error in refresh summary endpoint', 'error');
+      res.status(500).json({ error: 'Failed to refresh financial summary' });
     }
   }
 });

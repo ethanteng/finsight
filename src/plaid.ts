@@ -2459,12 +2459,23 @@ export const setupPlaidRoutes = (app: any) => {
       const result = await TransactionSyncService.syncTransactionsForToken(access_token);
 
       if (result.success) {
+        // Optionally compute and return a fresh snapshot for the authenticated user
+        let snapshot: any = null;
+        try {
+          if (req.user?.id) {
+            const { SummaryCacheService } = await import('./services/summary-cache-service');
+            snapshot = await SummaryCacheService.computeForUser(req.user.id);
+          }
+        } catch (e) {
+          console.warn('sync_transactions: snapshot refresh failed (non-fatal):', e);
+        }
         res.json({
           success: true,
           added: result.added,
           modified: result.modified,
           removed: result.removed,
           total: result.added + result.modified + result.removed,
+          snapshot
         });
       } else {
         const errorInfo = handlePlaidError(new Error(result.error || 'Transaction sync failed'), 'syncing transactions');
