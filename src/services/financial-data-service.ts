@@ -1128,6 +1128,8 @@ export class FinancialDataService {
                   access_token: tokenRecord.token
                 });
 
+                console.log(`📊 Plaid: Token ${tokenRecord.id.substring(0, 8)}... fetched ${holdingsResponse.data.holdings?.length || 0} holdings and ${holdingsResponse.data.securities?.length || 0} securities`);
+
                 const securityMap = new Map();
                 for (const security of holdingsResponse.data.securities) {
                   securityMap.set(security.security_id, security);
@@ -1144,7 +1146,9 @@ export class FinancialDataService {
                   });
                 }
 
+                let holdingsAdded = 0;
                 for (const holding of holdingsResponse.data.holdings) {
+                  holdingsAdded++;
                   const security = securityMap.get(holding.security_id);
                   
                   holdings.push({
@@ -1162,6 +1166,8 @@ export class FinancialDataService {
                     ticker_symbol: security?.ticker_symbol || undefined
                   });
                 }
+                
+                console.log(`📊 Plaid: Token ${tokenRecord.id.substring(0, 8)}... processed ${holdingsAdded} holdings into holdings array (total holdings now: ${holdings.length})`);
                 
                 if (options.includeTransactions) {
                   try {
@@ -1403,9 +1409,11 @@ export class FinancialDataService {
           const holdingsResult = await snapTradeService.getUserHoldings(userId, snapTradeUser.userSecret);
           
           if (holdingsResult.success && holdingsResult.data) {
+            console.log(`📊 SnapTrade: Received ${holdingsResult.data.length} account holdings from API`);
             // ✅ Build a map to update account balances with total_value from holdings
             const accountBalanceMap = new Map<string, number>();
             
+            let totalPositionsProcessed = 0;
             for (const accountHolding of holdingsResult.data) {
               // ✅ Store total_value for this account if available
               const accountId = `snaptrade-${accountHolding.account?.id}`;
@@ -1416,7 +1424,9 @@ export class FinancialDataService {
               
               // Process positions
               if (accountHolding.positions && Array.isArray(accountHolding.positions)) {
+                console.log(`📊 SnapTrade: Account ${accountHolding.account?.name || accountId} has ${accountHolding.positions.length} positions`);
                 for (const position of accountHolding.positions) {
+                  totalPositionsProcessed++;
                   // ✅ Get security type from SnapTrade API (correct path: position.symbol.symbol.type.description)
                   let securityType = position.symbol?.symbol?.type?.description || position.symbol?.type?.description;
                   
@@ -1545,6 +1555,8 @@ export class FinancialDataService {
                 }
               }
             }
+            
+            console.log(`📊 SnapTrade: Processed ${totalPositionsProcessed} positions into ${holdings.length} holdings and ${securities.length} securities`);
             
             // ✅ Update account balances with total_value from holdings
             for (const account of accounts) {
@@ -1854,14 +1866,22 @@ export class FinancialDataService {
       ...(snapTradeData?.holdings || [])
     ];
 
+    console.log(`📊 mergeFinancialData: Merging ${plaidData?.holdings?.length || 0} Plaid holdings + ${snapTradeData?.holdings?.length || 0} SnapTrade holdings = ${rawHoldings.length} total raw holdings`);
+
     const holdingMap = new Map<string, any>();
+    let duplicatesSkipped = 0;
     for (const holding of rawHoldings) {
       const holdingId = holding.id || `${holding.account_id}_${holding.security_id}_${holding.quantity}`;
       if (!holdingMap.has(holdingId)) {
         holdingMap.set(holdingId, holding);
+      } else {
+        duplicatesSkipped++;
+        console.log(`⚠️ Skipping duplicate holding: ${holdingId} (${holding.security_name || holding.security_id})`);
       }
     }
     const holdings = Array.from(holdingMap.values());
+    
+    console.log(`📊 mergeFinancialData: After deduplication: ${holdings.length} unique holdings (removed ${duplicatesSkipped} duplicates)`);
 
     // Merge securities with deduplication by security_id
     const rawSecurities = [
@@ -1946,6 +1966,8 @@ export class FinancialDataService {
 
     // Calculate unique securities count
     const uniqueSecurityIds = new Set(holdings.map(h => h.security_id));
+
+    console.log(`📊 analyzePortfolio: Analyzing ${holdings.length} holdings, ${uniqueSecurityIds.size} unique securities, total value: $${portfolioValue.toFixed(2)}`);
 
     return {
       totalValue: portfolioValue,
