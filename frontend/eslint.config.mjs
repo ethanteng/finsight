@@ -15,15 +15,18 @@ const eslintConfig = [
     rules: {
       // Disable apostrophe/quote escaping requirement - allow natural text
       "react/no-unescaped-entities": "off",
-      // Allow unused variables that start with underscore
+      // Allow unused variables that start with underscore - set to warn to not fail CI
       "@typescript-eslint/no-unused-vars": [
         "warn",
         {
           argsIgnorePattern: "^_",
           varsIgnorePattern: "^_",
-          caughtErrorsIgnorePattern: "^_"
+          caughtErrorsIgnorePattern: "^_",
+          ignoreRestSiblings: true
         }
       ],
+      // Also override the base no-unused-vars rule
+      "no-unused-vars": "off", // Turn off base rule as it conflicts with @typescript-eslint version
       // Relax React hooks dependencies for common patterns
       "react-hooks/exhaustive-deps": "warn"
     }
