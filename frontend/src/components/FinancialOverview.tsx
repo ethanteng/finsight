@@ -172,6 +172,19 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
                     );
                   }
                   
+                  // If holdings still empty, fall back to combinedPortfolio/summary from backend response
+                  if ((!actualHoldings || actualHoldings.length === 0) && investmentsData.combinedPortfolio) {
+                    console.log('📊 FinancialOverview: Using combinedPortfolio fallback from backend');
+                    setInvestmentData({
+                      portfolio: {
+                        totalValue: investmentsData.combinedPortfolio.totalValue || 0,
+                        assetAllocation: investmentsData.combinedPortfolio.assetAllocation || [],
+                        holdingCount: (investmentsData.summary?.totalHoldings as number) || 0,
+                        securityCount: (investmentsData.summary?.totalSecurities as number) || 0
+                      }
+                    });
+                  }
+                  
                   console.log(`📊 FinancialOverview: Loaded ${actualHoldings.length} holdings from investments endpoint`);
                 }
               } catch (investmentsError) {
