@@ -2883,7 +2883,7 @@ app.get('/profile/tokens', requireAuth, async (req: Request, res: Response) => {
         try {
           // Validate token by trying to get accounts
           try {
-            await plaidClient.accountsGet({
+            const accountsResponse = await plaidClient.accountsGet({
               access_token: token.token
             });
             
@@ -2900,6 +2900,85 @@ app.get('/profile/tokens', requireAuth, async (req: Request, res: Response) => {
             updatedToken.isActive = true;
             updatedToken.lastError = null;
             updatedToken.lastChecked = new Date();
+            
+            // Also ensure accounts are persisted to database
+            // Get institution name from item if not already set
+            let institutionName = updatedToken.institutionName;
+            if (!institutionName && token.itemId) {
+              try {
+                const itemResponse = await plaidClient.itemGet({
+                  access_token: token.token
+                });
+                
+                if (itemResponse.data.item.institution_id) {
+                  const institutionResponse = await plaidClient.institutionsGetById({
+                    institution_id: itemResponse.data.item.institution_id,
+                    country_codes: ['US' as any]
+                  });
+                  
+                  institutionName = institutionResponse.data.institution.name;
+                  
+                  // Update institution name in database
+                  await prisma.accessToken.update({
+                    where: { id: token.id },
+                    data: { institutionName }
+                  });
+                  
+                  updatedToken.institutionName = institutionName;
+                }
+              } catch (err) {
+                console.warn(`Failed to fetch institution name for token ${token.id}:`, err);
+              }
+            }
+            
+            // Check if accounts exist for this token's user
+            const accountsCount = await prisma.account.count({
+              where: {
+                userId: token.userId || req.user!.id,
+                plaidAccountId: {
+                  in: accountsResponse.data.accounts.map((acc: any) => acc.account_id)
+                }
+              }
+            });
+            
+            // If accounts don't exist, sync them
+            if (accountsCount === 0 && accountsResponse.data.accounts.length > 0) {
+              console.log(`Token ${token.id.substring(0, 8)}... is valid but has ${accountsResponse.data.accounts.length} accounts not in database - syncing accounts`);
+              
+              // Sync accounts to database
+              for (const account of accountsResponse.data.accounts) {
+                await prisma.account.upsert({
+                  where: { plaidAccountId: account.account_id },
+                  update: {
+                    name: account.name,
+                    mask: account.mask,
+                    type: account.type,
+                    subtype: account.subtype,
+                    currentBalance: account.balances.current,
+                    availableBalance: account.balances.available,
+                    limit: account.balances.limit,
+                    currency: account.balances.iso_currency_code,
+                    institution: institutionName || undefined,
+                    userId: token.userId || req.user!.id,
+                    lastSynced: new Date()
+                  },
+                  create: {
+                    plaidAccountId: account.account_id,
+                    name: account.name,
+                    mask: account.mask,
+                    type: account.type,
+                    subtype: account.subtype,
+                    currentBalance: account.balances.current,
+                    availableBalance: account.balances.available,
+                    limit: account.balances.limit,
+                    currency: account.balances.iso_currency_code,
+                    institution: institutionName || undefined,
+                    userId: token.userId || req.user!.id,
+                    lastSynced: new Date()
+                  }
+                });
+              }
+            }
           } catch (plaidError: any) {
             const errorCode = plaidError?.response?.data?.error_code;
             const errorMessage = plaidError?.response?.data?.error_message || plaidError.message;
@@ -2925,7 +3004,7 @@ app.get('/profile/tokens', requireAuth, async (req: Request, res: Response) => {
         }
       }
       
-      // Update institution name if missing
+      // Update institution name if still missing (fallback if not set during validation)
       if (!updatedToken.institutionName && updatedToken.itemId) {
         try {
           const itemResponse = await plaidClient.itemGet({
