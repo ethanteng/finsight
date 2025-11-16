@@ -49,6 +49,7 @@
     "typescript": "^5"
   },
   "overrides": {
-    "axios": "^1.12.2"
+    "axios": "^1.12.2",
+    "js-yaml": "^4.1.1"
   }
 }
