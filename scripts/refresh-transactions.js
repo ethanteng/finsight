@@ -1,7 +1,26 @@
 #!/usr/bin/env node
 
-const { TransactionSyncService } = require('../dist/services/transaction-sync-service');
-const { SummaryCacheService } = require('../dist/services/summary-cache-service');
+const path = require('path');
+const fs = require('fs');
+
+// Resolve dist path - works from both root/scripts/ and src/scripts/ locations
+let distPath = path.join(__dirname, '../dist');
+if (!fs.existsSync(distPath)) {
+  // Try from src/scripts/ location (Render)
+  distPath = path.join(__dirname, '../../dist');
+}
+
+if (!fs.existsSync(distPath)) {
+  console.error(`❌ Error: Could not find dist folder. Tried:`);
+  console.error(`   - ${path.join(__dirname, '../dist')}`);
+  console.error(`   - ${path.join(__dirname, '../../dist')}`);
+  console.error(`   Current directory: ${__dirname}`);
+  console.error(`   Please ensure the project has been built (npm run build)`);
+  process.exit(1);
+}
+
+const { TransactionSyncService } = require(path.join(distPath, 'services/transaction-sync-service'));
+const { SummaryCacheService } = require(path.join(distPath, 'services/summary-cache-service'));
 require('dotenv').config({ path: '.env.local' });
 
 async function refreshTransactions() {
