@@ -82,121 +82,121 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       homeValueSummary = 'Home value data is not available in demo mode.';
     }
   } else if (userId) {
-    // Try to use cached financial summary first (reduces GPT prompt size)
-    try {
-      const { FinancialSummaryService } = await import('../services/financial-summary-service');
-      const summaryService = new FinancialSummaryService();
-      const summary = await summaryService.getUserSummary(userId);
-      financialSummary = {
-        financialOverview: summary.financialOverview,
-        investmentPortfolio: summary.investmentPortfolio
-      };
-    } catch (error) {
-      console.warn('Failed to load financial summary, falling back to full data fetch:', error);
-    }
+    // Fetch full snapshot for GPT context (single source of truth, already deduplicated)
+    const { SummaryCacheService } = await import('../services/summary-cache-service');
+    const snapshot = await SummaryCacheService.getLatestSnapshot(userId, 'full');
 
-    const financialDataService = new FinancialDataService();
-    const unified = await financialDataService.getUserFinancialData(userId, {
-      includeTransactions: true,
-      includeInvestments: true,
-      includeHomeValue: questionNeeds.needsHomeValue,
-      collectCategorizationDetails: false,
-      shouldPersistTransactions: true
-    });
+    if (snapshot) {
+      accounts = snapshot.accounts as Account[];
+      bankingTransactions = snapshot.transactions as Transaction[];
+      metadata = snapshot.meta as UnifiedFinancialData['metadata'];
 
-    accounts = unified.accounts;
-    bankingTransactions = unified.bankingTransactions;
-    metadata = unified.metadata;
-
-    // Use summary data for investment totals if available, otherwise derive from holdings
-    if (financialSummary?.investmentPortfolio && questionNeeds.needsInvestments) {
-      // Use summary portfolio totals, but still include top holdings for context
-      const topHoldings = unified.investments?.holdings?.slice(0, 10).map((holding: any) => {
-        const name = holding.security_name || holding.ticker_symbol || 'Holding';
-        const value = holding.institution_value || 0;
-        return `- ${name}: $${value.toFixed(2)}`;
-      }) || [];
-      
-      investmentsSnapshot = {
-        totalValue: financialSummary.investmentPortfolio.totalValue,
-        holdingCount: financialSummary.investmentPortfolio.holdingsCount,
-        summaryLines: topHoldings.length > 0 ? topHoldings : [
-          `Total Portfolio Value: $${financialSummary.investmentPortfolio.totalValue.toFixed(2)}`,
-          `Holdings: ${financialSummary.investmentPortfolio.holdingsCount}`,
-          `Securities: ${financialSummary.investmentPortfolio.securityCount}`
-        ]
-      };
-    } else if (questionNeeds.needsInvestments && unified.investments?.holdings?.length) {
-      investmentsSnapshot = deriveInvestmentSnapshot(unified.investments);
-    }
-
-    if (questionNeeds.needsHomeValue) {
-      // Use summary home value if available, otherwise use unified data
-      const homeValue = financialSummary?.financialOverview?.homeValue !== null && financialSummary?.financialOverview?.homeValue !== undefined
-        ? financialSummary.financialOverview.homeValue 
-        : unified.homeValue;
-      
-      // Also check user profile for home address (in case it's there but homeValue fetch failed)
-      let homeAddressFromProfile: string | null = null;
-      if (userId && !isDemo) {
-        try {
-          const { ProfileManager } = await import('../profile/manager');
-          const profileManager = new ProfileManager();
-          const profileText = await profileManager.getOriginalProfile(userId);
-          const addressMatch = profileText.match(/HOME_ADDRESS:\s*(.+)/);
-          if (addressMatch) {
-            homeAddressFromProfile = addressMatch[1].trim();
-          }
-        } catch (error) {
-          // Ignore errors - we'll use homeValue data if available
-        }
+      if (questionNeeds.needsInvestments) {
+        investmentsSnapshot = {
+          totalValue: (snapshot.investmentPortfolio as any).totalValue || 0,
+          holdingCount: (snapshot.investmentPortfolio as any).holdingCount || 0,
+          summaryLines: (snapshot.holdings as any[] || []).slice(0, 10).map((holding: any) => {
+            const name = holding.security_name || holding.ticker_symbol || 'Holding';
+            const value = holding.institution_value || 0;
+            return `- ${name}: $${value.toFixed(2)}`;
+          }),
+        };
       }
-      
-      if (homeValue) {
-        if (typeof homeValue === 'number') {
-          if (homeValue > 0) {
-            homeValueSummary = `Home value: $${new Intl.NumberFormat('en-US', {
-              style: 'currency',
-              currency: 'USD',
-              maximumFractionDigits: 0
-            }).format(homeValue)}`;
+
+      if (questionNeeds.needsHomeValue) {
+        const homeValue = (snapshot.financialOverview as any).homeValue;
+        
+        // Also check user profile for home address (in case it's there but homeValue fetch failed)
+        let homeAddressFromProfile: string | null = null;
+        if (userId && !isDemo) {
+          try {
+            const { ProfileManager } = await import('../profile/manager');
+            const profileManager = new ProfileManager();
+            const profileText = await profileManager.getOriginalProfile(userId);
+            const addressMatch = profileText.match(/HOME_ADDRESS:\s*(.+)/);
+            if (addressMatch) {
+              homeAddressFromProfile = addressMatch[1].trim();
+            }
+          } catch (error) {
+            // Ignore errors - we'll use homeValue data if available
+          }
+        }
+        
+        if (homeValue) {
+          if (typeof homeValue === 'number') {
+            if (homeValue > 0) {
+              homeValueSummary = `Home value: $${new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                maximumFractionDigits: 0
+              }).format(homeValue)}`;
+            } else {
+              // Value is 0 but address might be available
+              const address = homeAddressFromProfile;
+              if (address) {
+                homeValueSummary = `Home address: ${address}. Home value estimate is not currently available, but the user owns this property.`;
+              } else {
+                homeValueSummary = 'Home value data is currently unavailable.';
+              }
+            }
           } else {
-            // Value is 0 but address might be available
-            const homeData = unified.homeValue;
-            const address = (homeData && homeData.address) || homeAddressFromProfile;
-            if (address) {
-              homeValueSummary = `Home address: ${address}. Home value estimate is not currently available, but the user owns this property.`;
+            // HomeData object
+            if (homeValue.valueMid > 0 || homeValue.valueHigh > 0 || homeValue.valueLow > 0) {
+              homeValueSummary = buildHomeValueSummary(homeValue);
+            } else if (homeValue.address) {
+              // Address exists but value is 0
+              homeValueSummary = `Home address: ${homeValue.address}. Home value estimate is not currently available, but the user owns this property.`;
             } else {
               homeValueSummary = 'Home value data is currently unavailable.';
             }
           }
         } else {
-          // HomeData object
-          if (homeValue.valueMid > 0 || homeValue.valueHigh > 0 || homeValue.valueLow > 0) {
-            homeValueSummary = buildHomeValueSummary(homeValue);
-          } else if (homeValue.address) {
-            // Address exists but value is 0
-            homeValueSummary = `Home address: ${homeValue.address}. Home value estimate is not currently available, but the user owns this property.`;
+          // Check if we have address in profile even without value
+          const address = homeAddressFromProfile;
+          if (address) {
+            homeValueSummary = `Home address: ${address}. Home value estimate is not currently available, but the user owns this property.`;
           } else {
             homeValueSummary = 'Home value data is currently unavailable.';
           }
         }
-      } else {
-        // Check if we have address in profile even without value
-        const homeData = unified.homeValue;
-        const address = (homeData && homeData.address) || homeAddressFromProfile;
-        if (address) {
-          homeValueSummary = `Home address: ${address}. Home value estimate is not currently available, but the user owns this property.`;
-        } else {
-          homeValueSummary = 'Home value data is currently unavailable.';
-        }
+      }
+    } else {
+      console.warn(`ContextService: No financial snapshot found for user ${userId}.`);
+      // Fallback to empty data if no snapshot exists
+      // Try to get token health from TokenValidationService
+      let tokenHealth = DEFAULT_METADATA.tokenHealth;
+      try {
+        const { TokenValidationService } = await import('../services/token-validation-service');
+        const tokenService = new TokenValidationService();
+        const plaidTokens = await tokenService.validatePlaidTokens(userId);
+        tokenHealth = {
+          plaid: plaidTokens.map((t: any) => ({
+            tokenId: t.tokenId,
+            status: t.status,
+            error: t.error,
+            lastChecked: t.lastChecked
+          })),
+          snaptrade: DEFAULT_METADATA.tokenHealth.snaptrade
+        };
+      } catch (error) {
+        console.warn('ContextService: Failed to get token health, using defaults:', error);
+      }
+      
+      metadata = {
+        ...DEFAULT_METADATA,
+        tokenHealth,
+        errors: { plaid: [], snaptrade: [], homeValue: { error: 'No snapshot available', timestamp: new Date() } },
+        partialData: true,
+      };
+      if (questionNeeds.needsHomeValue) {
+        homeValueSummary = 'Home value data is not estimated yet.';
       }
     }
   }
 
   // ✅ CRITICAL: Deduplicate accounts by account_id as a safety net
-  // Even though FinancialDataService should deduplicate, corrupted database records might slip through
-  // if they have different account_id values (due to corrupted plaidAccountId pointing to other account IDs)
+  // Even though the snapshot should already be deduplicated, we add this as a defensive check
+  // in case corrupted database records slip through with duplicate account_id values
   const accountIdMap = new Map<string, Account>();
   const duplicateAccountIds: string[] = [];
   
@@ -205,7 +205,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     if (accountId) {
       if (accountIdMap.has(accountId)) {
         duplicateAccountIds.push(accountId);
-        console.warn(`⚠️ gatherContextSnapshot: Duplicate account_id detected: ${accountId} (${account.name}). FinancialDataService should have deduplicated this!`);
+        console.warn(`⚠️ gatherContextSnapshot: Duplicate account_id detected: ${accountId} (${account.name}). Snapshot should have deduplicated this!`);
         // Keep the most recent account based on timestamp
         const existing = accountIdMap.get(accountId)!;
         const existingTimestamp = existing.lastSyncedAt || existing.snapshotTimestamp;
@@ -224,7 +224,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   const deduplicatedAccounts = Array.from(accountIdMap.values());
   
   if (duplicateAccountIds.length > 0) {
-    console.error(`❌ gatherContextSnapshot: FinancialDataService returned ${duplicateAccountIds.length} duplicate accounts! This indicates corrupted database records or a bug in deduplication.`);
+    console.error(`❌ gatherContextSnapshot: Snapshot returned ${duplicateAccountIds.length} duplicate accounts! This indicates corrupted database records or a bug in snapshot deduplication.`);
     console.error(`   Duplicate account_ids: ${duplicateAccountIds.join(', ')}`);
   }
   
