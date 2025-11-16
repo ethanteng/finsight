@@ -83,10 +83,32 @@ if (!distPath) {
   
   const { execSync } = require('child_process');
   try {
-    execSync('npm run build', { 
+    // Use build:render which has memory limits set, or build:backend if dependencies are already installed
+    // First check if node_modules exists and Prisma client is generated
+    const nodeModulesExists = fs.existsSync(path.join(projectRoot, 'node_modules'));
+    const prismaClientExists = fs.existsSync(path.join(projectRoot, 'node_modules/@prisma/client'));
+    
+    let buildCommand = 'npm run build';
+    if (nodeModulesExists && prismaClientExists) {
+      // Dependencies are installed, use build:backend which has memory limits and skips npm install
+      buildCommand = 'npm run build:backend';
+    } else {
+      // Need to install dependencies, use build:render which has memory limits
+      buildCommand = 'npm run build:render';
+    }
+    
+    console.log(`   Using build command: ${buildCommand}`);
+    
+    // Set Node memory limit for TypeScript compilation
+    const buildEnv = {
+      ...process.env,
+      NODE_OPTIONS: '--max-old-space-size=4096'
+    };
+    
+    execSync(buildCommand, { 
       stdio: 'inherit',
       cwd: projectRoot,
-      env: process.env
+      env: buildEnv
     });
     
     // Try to find dist again after build
