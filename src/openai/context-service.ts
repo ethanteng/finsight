@@ -103,7 +103,6 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
         investmentsSnapshot = {
           totalValue: (snapshot.investmentPortfolio as any).totalValue || 0,
           holdingCount: (snapshot.investmentPortfolio as any).holdingCount || 0,
-          securityCount: (snapshot.investmentPortfolio as any).securityCount || 0,
           summaryLines: (snapshot.holdings as any[] || []).slice(0, 10).map((holding: any) => {
             const name = holding.security_name || holding.ticker_symbol || 'Holding';
             const value = holding.institution_value || 0;
@@ -876,7 +875,7 @@ async function loadUserProfile(params: {
       console.warn('Profile enhancement failed', enhanceError);
     }
 
-    const anonymizedProfile = profileManager.getAnonymizedProfile(userId);
+    const anonymizedProfile = await profileManager.getAnonymizedProfile(userId);
     
     // ✅ CRITICAL: Deduplicate "LIABILITIES INFORMATION" sections in profile text
     // GPT may have added this section multiple times during profile enhancement
