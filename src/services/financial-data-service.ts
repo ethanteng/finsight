@@ -1046,18 +1046,36 @@ export class FinancialDataService {
                 : undefined;
 
             const normalizedType = dbTx.aiCategory ? dbTx.aiCategory.toLowerCase() : undefined;
-            if (normalizedType === 'income') {
-              const label = (categoryArray?.[0] || normalizedType || 'uncategorized').toLowerCase();
-              aggregateTotals.income.set(
-                label,
-                (aggregateTotals.income.get(label) || 0) + (dbTx.amount || 0)
-              );
-            } else if (normalizedType === 'expense' || normalizedType === 'fee') {
-              const label = (categoryArray?.[0] || normalizedType || 'uncategorized').toLowerCase();
-              aggregateTotals.expense.set(
-                label,
-                (aggregateTotals.expense.get(label) || 0) + Math.abs(dbTx.amount || 0)
-              );
+            
+            // ✅ CRITICAL: Only include settled (non-pending) transactions in income/expense calculations
+            if (dbTx.pending === true) {
+              // Skip pending transactions - they should not be included in income or expense calculations
+              // They will still be included in the transactions array for display purposes
+            } else {
+              // ✅ CRITICAL: Explicitly exclude transfers from expense/income calculations
+              // Check both normalizedType and category to catch any miscategorized transfers
+              const isTransfer = 
+                normalizedType === 'transfer_in' || 
+                normalizedType === 'transfer_out' ||
+                categoryArray?.some((cat: string) => cat?.toLowerCase().includes('transfer')) ||
+                (dbTx.name?.toLowerCase() || '').includes('transfer');
+              
+              // Only aggregate income/expense if it's NOT a transfer
+              if (!isTransfer) {
+                if (normalizedType === 'income') {
+                  const label = (categoryArray?.[0] || normalizedType || 'uncategorized').toLowerCase();
+                  aggregateTotals.income.set(
+                    label,
+                    (aggregateTotals.income.get(label) || 0) + (dbTx.amount || 0)
+                  );
+                } else if (normalizedType === 'expense' || normalizedType === 'fee') {
+                  const label = (categoryArray?.[0] || normalizedType || 'uncategorized').toLowerCase();
+                  aggregateTotals.expense.set(
+                    label,
+                    (aggregateTotals.expense.get(label) || 0) + Math.abs(dbTx.amount || 0)
+                  );
+                }
+              }
             }
 
             transactions.push({
@@ -1153,6 +1171,11 @@ export class FinancialDataService {
         return 'uncategorized';
       };
       const addToAggregates = (tx: any) => {
+        // ✅ CRITICAL: Only include settled (non-pending) transactions in income/expense calculations
+        if (tx.pending === true) {
+          return; // Skip pending transactions - they should not be included in income or expense calculations
+        }
+        
         const amount = Number(tx.amount) || 0;
         const absAmount = Math.abs(amount);
         if (absAmount === 0) {
@@ -1164,9 +1187,17 @@ export class FinancialDataService {
           aggregateTotals.income.set(label, (aggregateTotals.income.get(label) || 0) + absAmount);
           return;
         }
-        if (primaryCategory.includes('transfer')) {
-          return;
+        // ✅ CRITICAL: Explicitly exclude transfers from expense/income calculations
+        // Check both primaryCategory and transaction name to catch any miscategorized transfers
+        const isTransfer = 
+          primaryCategory.includes('transfer') ||
+          (tx.name?.toLowerCase() || '').includes('transfer') ||
+          (tx.category?.[0]?.toLowerCase() || '').includes('transfer');
+        
+        if (isTransfer) {
+          return; // Skip transfers - they should not be included in income or expense calculations
         }
+        
         if (primaryCategory) {
           aggregateTotals.expense.set(label, (aggregateTotals.expense.get(label) || 0) + absAmount);
           return;
