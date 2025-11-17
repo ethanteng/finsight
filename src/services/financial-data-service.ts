@@ -285,6 +285,9 @@ export class FinancialDataService {
     // ✅ STEP 1: Categorize transactions BEFORE normalization (skip for UI-only requests)
     // This ensures we have transaction_type available for normalization and filtering
     if (!options?.skipCategorization && (mergedData.bankingTransactions.length > 0 || mergedData.investments.transactions.length > 0)) {
+      console.log(`🔍 FinancialDataService: Starting categorization for ${mergedData.bankingTransactions.length} banking transactions and ${mergedData.investments.transactions.length} investment transactions`);
+      console.log(`   Categorization enabled: ${!options?.skipCategorization}, shouldPersistTransactions: ${options?.shouldPersistTransactions}`);
+      
       const accountsMap = new Map<string, Account>();
       mergedData.accounts.forEach((acc: Account) => {
         accountsMap.set(acc.account_id, acc);
@@ -433,12 +436,18 @@ export class FinancialDataService {
             transactions.forEach((tx, index) => {
               const txId = getTransactionId(tx);
               if (!txId) {
+                console.log(`   ⚠️ Transaction at index ${index} ("${tx.name}") has no ID - will categorize`);
                 toCategorize.push({ tx, index });
                 return;
               }
               
               const existing = existingCategorizationsMap.get(txId);
               if (!existing || !existing.aiCategory) {
+                if (!existing) {
+                  console.log(`   📝 Transaction "${tx.name}" (${txId}): No existing categorization - will categorize`);
+                } else {
+                  console.log(`   📝 Transaction "${tx.name}" (${txId}): Existing categorization has no aiCategory - will recategorize`);
+                }
                 toCategorize.push({ tx, index });
                 return;
               }
@@ -452,6 +461,9 @@ export class FinancialDataService {
                   now - existing.categoryComparedAt.getTime() <= categorizationTtlMs);
               
               if (!isFresh) {
+                const ageMs = existing.categoryComparedAt ? now - existing.categoryComparedAt.getTime() : Infinity;
+                const ageHours = ageMs / (1000 * 60 * 60);
+                console.log(`   🔄 Transaction "${tx.name}" (${txId}): Categorization stale (${ageHours.toFixed(1)}h old, TTL: ${categorizationTtlMs / (1000 * 60 * 60)}h) - will recategorize`);
                 toCategorize.push({ tx, index });
                 return;
               }
@@ -486,6 +498,7 @@ export class FinancialDataService {
             if (toCategorize.length > 0) {
               const transactionsToCategorize = toCategorize.map(item => item.tx);
               recategorizedCount = transactionsToCategorize.length;
+              console.log(`   🎯 Categorizing ${recategorizedCount} transactions (${reusedCount} reused from cache, ${manualCountLocal} manual corrections preserved)`);
 
           if (label === 'investment') {
                 transactionsToCategorize.forEach((tx, idx) => {
@@ -522,10 +535,19 @@ export class FinancialDataService {
 
                   result.transactions.forEach((categorizedTx, idx) => {
                     const originalIndex = toCategorize[idx].index;
+                    const txId = getTransactionId(categorizedTx);
+                    const aiCategory = categorizedTx.transaction_type || undefined;
+                    
+                    if (!aiCategory) {
+                      console.warn(`   ⚠️ Transaction "${categorizedTx.name}" (${txId}): Categorization returned no transaction_type`);
+                    } else {
+                      console.log(`   ✅ Transaction "${categorizedTx.name}" (${txId}): Categorized as ${aiCategory}`);
+                    }
+                    
                     output[originalIndex] = {
                       ...categorizedTx,
                       // Map transaction_type to aiCategory for persistence (aiCategory field stores transaction_type)
-                      aiCategory: categorizedTx.transaction_type || undefined,
+                      aiCategory: aiCategory,
                       aiCategoryReason: categorizedTx.categorization_reason || undefined,
                       categoryComparedAt: new Date(), // Mark when categorization was performed
                       iso_currency_code: categorizedTx.iso_currency_code || 'USD'
@@ -544,10 +566,19 @@ export class FinancialDataService {
 
                   categorized.forEach((categorizedTx, idx) => {
                     const originalIndex = toCategorize[idx].index;
+                    const txId = getTransactionId(categorizedTx);
+                    const aiCategory = categorizedTx.transaction_type || undefined;
+                    
+                    if (!aiCategory) {
+                      console.warn(`   ⚠️ Transaction "${categorizedTx.name}" (${txId}): Categorization returned no transaction_type`);
+                    } else {
+                      console.log(`   ✅ Transaction "${categorizedTx.name}" (${txId}): Categorized as ${aiCategory}`);
+                    }
+                    
                     output[originalIndex] = {
                       ...categorizedTx,
                       // Map transaction_type to aiCategory for persistence (aiCategory field stores transaction_type)
-                      aiCategory: categorizedTx.transaction_type || undefined,
+                      aiCategory: aiCategory,
                       aiCategoryReason: categorizedTx.categorization_reason || undefined,
                       categoryComparedAt: new Date(), // Mark when categorization was performed
                       iso_currency_code: categorizedTx.iso_currency_code || 'USD'
@@ -558,14 +589,64 @@ export class FinancialDataService {
             }
             
             // Fill any unset slots with original transaction data
+            // ✅ CRITICAL: Ensure aiCategory is set from transaction_type if available
+            let filledCount = 0;
+            let missingAiCategoryCount = 0;
             output.forEach((value, idx) => {
               if (!value) {
+                filledCount++;
+                const tx = transactions[idx];
+                const txId = getTransactionId(tx);
+                const aiCategory = (tx as any).aiCategory || (tx as any).transaction_type || undefined;
+                
+                if (!aiCategory) {
+                  missingAiCategoryCount++;
+                  console.warn(`   ⚠️ Transaction "${tx.name}" (${txId}): No aiCategory after categorization - filling with original data`);
+                }
+                
                 output[idx] = {
-                  ...transactions[idx],
-                  iso_currency_code: (transactions[idx] as any).iso_currency_code || 'USD'
+                  ...tx,
+                  // Map transaction_type to aiCategory if available
+                  aiCategory: aiCategory,
+                  aiCategoryReason: (tx as any).aiCategoryReason || (tx as any).categorization_reason || undefined,
+                  categoryComparedAt: ((tx as any).transaction_type || (tx as any).aiCategory) ? new Date() : undefined,
+                  iso_currency_code: (tx as any).iso_currency_code || 'USD'
                 };
+              } else {
+                // Ensure aiCategory is set even if it wasn't set during categorization
+                const tx = transactions[idx];
+                const txId = getTransactionId(tx);
+                if (!value.aiCategory && !value.transaction_type) {
+                  missingAiCategoryCount++;
+                  // Try to get it from the original transaction
+                  const aiCategory = (tx as any).aiCategory || (tx as any).transaction_type || undefined;
+                  console.warn(`   ⚠️ Transaction "${tx.name}" (${txId}): Output missing aiCategory - attempting to recover from original transaction: ${aiCategory || 'none'}`);
+                  value.aiCategory = aiCategory;
+                  value.aiCategoryReason = value.aiCategoryReason || (tx as any).aiCategoryReason || (tx as any).categorization_reason || undefined;
+                  value.categoryComparedAt = value.categoryComparedAt || (((tx as any).transaction_type || (tx as any).aiCategory) ? new Date() : undefined);
+                }
               }
             });
+            
+            if (filledCount > 0 || missingAiCategoryCount > 0) {
+              console.log(`   📊 Categorization summary: ${filledCount} slots filled, ${missingAiCategoryCount} transactions still missing aiCategory`);
+            }
+            
+            // Final verification: count how many transactions have aiCategory set
+            const finalCategorizedCount = output.filter(tx => tx.aiCategory || (tx as any).transaction_type).length;
+            const finalUncategorizedCount = output.length - finalCategorizedCount;
+            
+            if (finalUncategorizedCount > 0) {
+              console.warn(`   ⚠️ After categorization: ${finalUncategorizedCount} transactions still missing aiCategory out of ${output.length} total`);
+              // Log sample of uncategorized transactions
+              const uncategorizedSample = output.filter(tx => !tx.aiCategory && !(tx as any).transaction_type).slice(0, 3);
+              uncategorizedSample.forEach(tx => {
+                const txId = getTransactionId(tx);
+                console.warn(`      - "${tx.name}" (${txId})`);
+              });
+            } else {
+              console.log(`   ✅ All ${output.length} transactions have aiCategory set`);
+            }
             
             return {
               results: output,
@@ -721,7 +802,18 @@ export class FinancialDataService {
           
           if (plaidBankingTransactions.length > 0) {
             const categorizedCount = plaidBankingTransactions.filter(tx => tx.aiCategory).length;
-            console.log(`💾 FinancialDataService: Persisting ${plaidBankingTransactions.length} transactions (${categorizedCount} with aiCategory) to database`);
+            const uncategorizedCount = plaidBankingTransactions.length - categorizedCount;
+            console.log(`💾 FinancialDataService: Persisting ${plaidBankingTransactions.length} transactions (${categorizedCount} with aiCategory, ${uncategorizedCount} without)`);
+            
+            if (uncategorizedCount > 0 && options?.shouldPersistTransactions) {
+              console.warn(`⚠️ FinancialDataService: ${uncategorizedCount} transactions are missing aiCategory despite categorization being enabled. This may indicate categorization failed or was skipped.`);
+              // Log a sample of uncategorized transactions for debugging
+              const uncategorizedSample = plaidBankingTransactions.filter(tx => !tx.aiCategory).slice(0, 5);
+              uncategorizedSample.forEach(tx => {
+                console.warn(`   - Transaction "${tx.name}" (${tx.id || tx.transaction_id}): no aiCategory, transaction_type=${(tx as any).transaction_type || 'none'}`);
+              });
+            }
+            
             await persistTransactionsToDb(userId, plaidBankingTransactions, mergedData.accounts);
             console.log(`✅ FinancialDataService: Successfully persisted ${plaidBankingTransactions.length} transactions to database`);
           }

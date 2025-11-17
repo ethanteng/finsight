@@ -30,58 +30,92 @@ export async function persistTransactionsToDb(
       }
 
       const source = account.source || account.provider;
-      if ((typeof plaidAccountId === 'string' && plaidAccountId.startsWith('snaptrade-')) ||
-          source === 'snaptrade') {
+      // ✅ Skip SnapTrade accounts - they should not be persisted to the Plaid Account table
+      // SnapTrade accounts are identified by:
+      // 1. account_id starting with "snaptrade-"
+      // 2. source field set to 'snaptrade'
+      // 3. institution name containing "Robinhood" (common SnapTrade account)
+      const isSnapTrade = (typeof plaidAccountId === 'string' && plaidAccountId.startsWith('snaptrade-')) ||
+                          source === 'snaptrade' ||
+                          (account.institution && account.institution.toLowerCase().includes('robinhood')) ||
+                          (account.name && account.name.toLowerCase().includes('robinhood'));
+      
+      if (isSnapTrade) {
+        console.log(`⏭️ Persistence: Skipping SnapTrade account "${account.name}" (${plaidAccountId})`);
         continue;
       }
 
       // ✅ CRITICAL SAFEGUARD: Never allow plaidAccountId to be set to account.id (database ID)
       // This prevents creating corrupted records where plaidAccountId points to another account's database id
-      if (plaidAccountId === account.id || (account as any).id === plaidAccountId) {
-        console.error(`❌ Persistence: CRITICAL ERROR - plaidAccountId matches account.id for ${account.name}. Skipping to prevent corruption.`);
-        console.error(`   account.id: ${account.id}, plaidAccountId: ${plaidAccountId}, account_id: ${account.account_id}`);
+      // BUT: Check if account.id is actually the same as account_id (which means account.id is the Plaid ID, not a DB ID)
+      const accountIdIsPlaidId = account.id === account.account_id;
+      
+      if (!accountIdIsPlaidId && (plaidAccountId === account.id || (account as any).id === plaidAccountId)) {
+        console.error(`❌ Persistence: CRITICAL ERROR - plaidAccountId matches account.id (DB ID) for ${account.name}. Skipping to prevent corruption.`);
+        console.error(`   account.id: ${account.id}, plaidAccountId: ${plaidAccountId}, account_id: ${account.account_id}, source: ${source}`);
         continue;
       }
 
       // ✅ Additional safeguard: Check if plaidAccountId looks like a database ID (cuid format)
       // Real Plaid account IDs are typically longer than 25 characters or don't start with 'c'
-      const isDatabaseId = (id: string) => id.length === 25 && id.startsWith('c');
-      if (isDatabaseId(plaidAccountId) && !account.account_id) {
-        // If we only have plaidAccountId and it looks like a database ID, and we don't have account_id,
-        // this is suspicious - log a warning but proceed (might be a valid edge case)
-        console.warn(`⚠️ Persistence: plaidAccountId "${plaidAccountId}" for account "${account.name}" looks like a database ID but account_id is missing. Proceeding with caution.`);
+      // BUT: Some Plaid accounts in production might have 25-character IDs, so we need to be more careful
+      // If account.id === account.account_id, then account.id IS the Plaid ID, not a DB ID
+      const isDatabaseIdFormat = (id: string) => id.length === 25 && /^[a-zA-Z0-9]{25}$/.test(id);
+      
+      if (isDatabaseIdFormat(plaidAccountId) && !accountIdIsPlaidId) {
+        // If plaidAccountId looks like a database ID AND account.id is different from account_id,
+        // this is suspicious - but if account.id === account_id, then it's actually a Plaid ID
+        console.warn(`⚠️ Persistence: plaidAccountId "${plaidAccountId}" for account "${account.name}" looks like a database ID format. account.id=${account.id}, account_id=${account.account_id}, source=${source}`);
+        
+        // If we have a source field and it's not 'plaid', skip it
+        if (source && source !== 'plaid') {
+          console.warn(`   Skipping account "${account.name}" because source is "${source}" (not Plaid)`);
+          continue;
+        }
+        
+        // If account.id is different from account_id and plaidAccountId matches account.id, skip it
+        if (account.id && account.id !== account.account_id && plaidAccountId === account.id) {
+          console.warn(`   Skipping account "${account.name}" because plaidAccountId matches account.id (likely a database ID)`);
+          continue;
+        }
       }
 
       // Upsert account
-      const dbAccount = await prisma.account.upsert({
-        where: { plaidAccountId },
-        create: {
-          plaidAccountId,
-          name: account.name,
-          type: account.type,
-          subtype: account.subtype || null,
-          mask: account.mask || null,
-          officialName: account.official_name || account.officialName || null,
-          currentBalance: account.balance?.current || account.currentBalance || 0,
-          availableBalance: account.balance?.available || account.availableBalance || null,
-          currency: account.balance?.iso_currency_code || account.currency || 'USD',
-          institution: account.institution || null,
-          limit: account.balance?.limit || account.limit || null,
-          userId,
-          lastSynced: new Date(),
-        },
-        update: {
-          name: account.name,
-          type: account.type,
-          subtype: account.subtype || null,
-          currentBalance: account.balance?.current || account.currentBalance || 0,
-          availableBalance: account.balance?.available || account.availableBalance || null,
-          limit: account.balance?.limit || account.limit || null,
-          lastSynced: new Date(),
-        },
-      });
-      
-      accountMap.set(plaidAccountId, dbAccount.id);
+      try {
+        const dbAccount = await prisma.account.upsert({
+          where: { plaidAccountId },
+          create: {
+            plaidAccountId,
+            name: account.name,
+            type: account.type,
+            subtype: account.subtype || null,
+            mask: account.mask || null,
+            officialName: account.official_name || account.officialName || null,
+            currentBalance: account.balance?.current || account.currentBalance || 0,
+            availableBalance: account.balance?.available || account.availableBalance || null,
+            currency: account.balance?.iso_currency_code || account.currency || 'USD',
+            institution: account.institution || null,
+            limit: account.balance?.limit || account.limit || null,
+            userId,
+            lastSynced: new Date(),
+          },
+          update: {
+            name: account.name,
+            type: account.type,
+            subtype: account.subtype || null,
+            currentBalance: account.balance?.current || account.currentBalance || 0,
+            availableBalance: account.balance?.available || account.availableBalance || null,
+            limit: account.balance?.limit || account.limit || null,
+            lastSynced: new Date(),
+          },
+        });
+        
+        accountMap.set(plaidAccountId, dbAccount.id);
+        console.log(`✅ Persistence: Account "${account.name}" (${plaidAccountId}) mapped to DB ID ${dbAccount.id}`);
+      } catch (error: any) {
+        console.error(`❌ Persistence: Failed to upsert account "${account.name}" (${plaidAccountId}):`, error.message);
+        // Continue with other accounts
+      }
     }
     
     console.log(`Persistence: Created/updated ${accountMap.size} accounts`);
@@ -174,11 +208,19 @@ export async function persistTransactionsToDb(
               }
             }
           } else {
-            // No aiCategory in transaction data - preserve existing if it's a manual correction
+            // No aiCategory in transaction data
+            // If existing has a manual correction, preserve it
             if (existingIsManualCorrection && existing.aiCategory) {
               updateData.aiCategory = existing.aiCategory;
               updateData.aiCategoryReason = existing.aiCategoryReason;
+            } else if (existing.aiCategory) {
+              // Existing has aiCategory but it's not a manual correction
+              // Preserve it (might be from previous categorization)
+              updateData.aiCategory = existing.aiCategory;
+              updateData.aiCategoryReason = existing.aiCategoryReason;
             }
+            // If transaction.aiCategory is undefined and existing has no aiCategory,
+            // leave it as null (will be set on next categorization run)
           }
           
           // Handle categoryComparedAt separately
