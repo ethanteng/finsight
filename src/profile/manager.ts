@@ -425,7 +425,17 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
     const lastUpdatedMatch = profileText.match(/HOME_VALUE_LAST_UPDATED:\s*(.+?)(?:\n|$)/);
     if (lastUpdatedMatch) {
       try {
-        result.lastUpdated = new Date(lastUpdatedMatch[1].trim());
+        const dateStr = lastUpdatedMatch[1].trim();
+        // Skip if the value is "Not specified" or empty
+        if (dateStr && dateStr.toLowerCase() !== 'not specified' && dateStr !== '') {
+          const parsedDate = new Date(dateStr);
+          // Only set if the date is valid
+          if (!isNaN(parsedDate.getTime())) {
+            result.lastUpdated = parsedDate;
+          } else {
+            console.warn(`Invalid date format for HOME_VALUE_LAST_UPDATED: "${dateStr}"`);
+          }
+        }
       } catch (error) {
         console.error('Failed to parse HOME_VALUE_LAST_UPDATED:', error);
       }

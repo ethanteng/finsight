@@ -2694,6 +2694,14 @@ app.get('/profile/home', requireAuth, async (req: Request, res: Response) => {
     const valueLow = homeData.valueLow ?? homeData.value ?? 0;
     const valueHigh = homeData.valueHigh ?? homeData.value ?? 0;
     
+    // Safely convert lastUpdated to ISO string, checking if date is valid
+    let lastUpdatedISO: string;
+    if (homeData.lastUpdated && !isNaN(homeData.lastUpdated.getTime())) {
+      lastUpdatedISO = homeData.lastUpdated.toISOString();
+    } else {
+      lastUpdatedISO = new Date().toISOString();
+    }
+    
     res.json({ 
       hasHome: true,
       homeData: {
@@ -2701,7 +2709,7 @@ app.get('/profile/home', requireAuth, async (req: Request, res: Response) => {
         value: homeData.value ?? 0,
         valueLow: valueLow,
         valueHigh: valueHigh,
-        lastUpdated: homeData.lastUpdated?.toISOString() || new Date().toISOString()
+        lastUpdated: lastUpdatedISO
       }
     });
   } catch (error) {
@@ -2753,6 +2761,14 @@ app.post('/profile/home', requireAuth, async (req: Request, res: Response) => {
     const valueLow = homeData.valueLow ?? homeData.value ?? 0;
     const valueHigh = homeData.valueHigh ?? homeData.value ?? 0;
     
+    // Safely convert lastUpdated to ISO string, checking if date is valid
+    let lastUpdatedISO: string;
+    if (homeData.lastUpdated && !isNaN(homeData.lastUpdated.getTime())) {
+      lastUpdatedISO = homeData.lastUpdated.toISOString();
+    } else {
+      lastUpdatedISO = new Date().toISOString();
+    }
+    
     res.json({ 
       success: true,
       homeData: {
@@ -2760,7 +2776,7 @@ app.post('/profile/home', requireAuth, async (req: Request, res: Response) => {
         value: homeData.value ?? 0,
         valueLow: valueLow,
         valueHigh: valueHigh,
-        lastUpdated: homeData.lastUpdated?.toISOString() || new Date().toISOString()
+        lastUpdated: lastUpdatedISO
       }
     });
   } catch (error) {
@@ -2806,6 +2822,14 @@ app.post('/profile/home/refresh', requireAuth, async (req: Request, res: Respons
     const valueLow = homeData.valueLow ?? homeData.value ?? 0;
     const valueHigh = homeData.valueHigh ?? homeData.value ?? 0;
     
+    // Safely convert lastUpdated to ISO string, checking if date is valid
+    let lastUpdatedISO: string;
+    if (homeData.lastUpdated && !isNaN(homeData.lastUpdated.getTime())) {
+      lastUpdatedISO = homeData.lastUpdated.toISOString();
+    } else {
+      lastUpdatedISO = new Date().toISOString();
+    }
+    
     res.json({ 
       success: true,
       homeData: {
@@ -2813,7 +2837,7 @@ app.post('/profile/home/refresh', requireAuth, async (req: Request, res: Respons
         value: homeData.value ?? 0,
         valueLow: valueLow,
         valueHigh: valueHigh,
-        lastUpdated: homeData.lastUpdated?.toISOString() || new Date().toISOString()
+        lastUpdated: lastUpdatedISO
       }
     });
   } catch (error) {
