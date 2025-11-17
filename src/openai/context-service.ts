@@ -876,10 +876,89 @@ async function loadUserProfile(params: {
       console.warn('Profile enhancement failed', enhanceError);
     }
 
-    return profileManager.getAnonymizedProfile(userId);
+    const anonymizedProfile = profileManager.getAnonymizedProfile(userId);
+    
+    // ✅ CRITICAL: Deduplicate "LIABILITIES INFORMATION" sections in profile text
+    // GPT may have added this section multiple times during profile enhancement
+    if (anonymizedProfile) {
+      return deduplicateLiabilitySections(anonymizedProfile);
+    }
+    
+    return anonymizedProfile;
   } catch (error) {
     console.warn('Profile load failed', error);
     return undefined;
   }
+}
+
+/**
+ * Remove duplicate "LIABILITIES INFORMATION" sections from profile text
+ * GPT may add this section multiple times during profile enhancement
+ */
+function deduplicateLiabilitySections(profileText: string): string {
+  // Match "LIABILITIES INFORMATION:" followed by content until the next section header or end
+  // Pattern: "LIABILITIES INFORMATION:" followed by text (including newlines) until next section marker or end
+  const liabilityPattern = /LIABILITIES INFORMATION:[\s\S]*?(?=\n\n(?:# |[A-Z][A-Z\s]+:)|$)/gi;
+  const matches = [...profileText.matchAll(liabilityPattern)];
+  
+  if (!matches || matches.length <= 1) {
+    // No duplicates found
+    return profileText;
+  }
+  
+  // Keep only the most complete version (longest one)
+  const sortedMatches = matches.map(m => ({
+    text: m[0],
+    index: m.index!,
+    length: m[0].length
+  })).sort((a, b) => b.length - a.length);
+  
+  const keepMatch = sortedMatches[0];
+  const removeMatches = sortedMatches.slice(1);
+  
+  // Build deduplicated text by removing duplicates
+  let deduplicated = profileText;
+  
+  // Remove duplicates in reverse order (to preserve indices)
+  for (const match of removeMatches.sort((a, b) => b.index - a.index)) {
+    // Remove the match, preserving surrounding structure
+    const before = deduplicated.slice(0, match.index);
+    const after = deduplicated.slice(match.index + match.text.length);
+    
+    // Clean up any double newlines that might result
+    deduplicated = (before.trimEnd() + '\n\n' + after.trimStart()).replace(/\n{3,}/g, '\n\n');
+  }
+  
+  // Ensure we have the kept match (in case it was removed)
+  if (!deduplicated.includes('LIABILITIES INFORMATION:')) {
+    // Find insertion point (before "# Accounts" section if present, or after User Profile)
+    const accountsIndex = deduplicated.indexOf('# Accounts');
+    if (accountsIndex > 0) {
+      const beforeAccounts = deduplicated.slice(0, accountsIndex).trimEnd();
+      const afterAccounts = deduplicated.slice(accountsIndex);
+      deduplicated = beforeAccounts + '\n\n' + keepMatch.text.trim() + '\n\n' + afterAccounts;
+    } else {
+      // Insert after User Profile section if present
+      const userProfileEnd = deduplicated.indexOf('# User Profile');
+      if (userProfileEnd >= 0) {
+        const nextSectionMatch = deduplicated.slice(userProfileEnd).match(/\n\n# [A-Z]/);
+        if (nextSectionMatch && nextSectionMatch.index) {
+          const insertIndex = userProfileEnd + nextSectionMatch.index;
+          deduplicated = deduplicated.slice(0, insertIndex) + '\n\n' + keepMatch.text.trim() + deduplicated.slice(insertIndex);
+        } else {
+          deduplicated = deduplicated.trimEnd() + '\n\n' + keepMatch.text.trim();
+        }
+      } else {
+        deduplicated = deduplicated.trimEnd() + '\n\n' + keepMatch.text.trim();
+      }
+    }
+  }
+  
+  // Final cleanup of excessive newlines
+  deduplicated = deduplicated.replace(/\n{3,}/g, '\n\n');
+  
+  console.warn(`⚠️ deduplicateLiabilitySections: Removed ${removeMatches.length} duplicate "LIABILITIES INFORMATION" section(s) from profile`);
+  
+  return deduplicated;
 }
 
