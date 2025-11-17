@@ -1053,10 +1053,27 @@ export class FinancialDataService {
               // They will still be included in the transactions array for display purposes
             } else {
               // ✅ CRITICAL: Explicitly exclude transfers from expense/income calculations
-              // Check both normalizedType and category to catch any miscategorized transfers
+              // Prioritize aiCategory first (respects manual user corrections), then fall back to other indicators
+              
+              // Check enriched_data for personal_finance_category (stored as JSONB) as fallback
+              let pfcPrimary = '';
+              let pfcDetailed = '';
+              if (dbTx.enriched_data && typeof dbTx.enriched_data === 'object') {
+                const enriched = dbTx.enriched_data as any;
+                if (enriched.personal_finance_category) {
+                  pfcPrimary = (enriched.personal_finance_category.primary || '').toLowerCase();
+                  pfcDetailed = (enriched.personal_finance_category.detailed || '').toLowerCase();
+                }
+              }
+              
+              // ✅ PRIMARY: Check aiCategory first (respects manual corrections and our categorization)
+              // ✅ SECONDARY: Check personal_finance_category (Plaid's source of truth)
+              // ✅ FALLBACK: Check category array and transaction name
               const isTransfer = 
                 normalizedType === 'transfer_in' || 
                 normalizedType === 'transfer_out' ||
+                pfcPrimary.includes('transfer') ||
+                pfcDetailed.includes('transfer') ||
                 categoryArray?.some((cat: string) => cat?.toLowerCase().includes('transfer')) ||
                 (dbTx.name?.toLowerCase() || '').includes('transfer');
               
