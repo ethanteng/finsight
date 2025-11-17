@@ -88,7 +88,35 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     const snapshot = await SummaryCacheService.getLatestSnapshot(userId, 'full');
 
     if (snapshot) {
-      accounts = snapshot.accounts as Account[];
+      // ✅ CRITICAL: snapshot.accounts is stored as JSON in the database
+      // When retrieved, Prisma parses it, but we need to ensure it's an array
+      const rawAccounts = snapshot.accounts as any;
+      accounts = Array.isArray(rawAccounts) ? rawAccounts as Account[] : [];
+      
+      // Log account count and check for duplicates in snapshot
+      console.log(`📊 gatherContextSnapshot: Retrieved ${accounts.length} accounts from snapshot for user ${userId}`);
+      
+      // Check for duplicates in the snapshot itself (before defensive deduplication)
+      const snapshotAccountIds = new Set<string>();
+      const snapshotDuplicates: string[] = [];
+      accounts.forEach(account => {
+        const accountId = account.account_id || (account as any).plaidAccountId || (account as any).persistentAccountId;
+        if (accountId) {
+          if (snapshotAccountIds.has(accountId)) {
+            snapshotDuplicates.push(accountId);
+          } else {
+            snapshotAccountIds.add(accountId);
+          }
+        }
+      });
+      if (snapshotDuplicates.length > 0) {
+        console.error(`❌ gatherContextSnapshot: Snapshot contains ${snapshotDuplicates.length} duplicate account_ids in JSON! This indicates the snapshot was created before deduplication fix or has corrupted data.`);
+        console.error(`   Duplicate account_ids in snapshot: ${snapshotDuplicates.slice(0, 10).join(', ')}${snapshotDuplicates.length > 10 ? '...' : ''}`);
+        console.error(`   Snapshot computedAt: ${(snapshot as any).computedAt}`);
+      } else {
+        console.log(`✅ gatherContextSnapshot: Snapshot contains ${accounts.length} unique accounts (no duplicates in JSON)`);
+      }
+      
       bankingTransactions = snapshot.transactions as Transaction[];
       metadata = snapshot.meta as UnifiedFinancialData['metadata'];
       
@@ -255,6 +283,9 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     ? anonymizeAccounts(deduplicatedAccounts, userId, anonymizationService)
     : deduplicatedAccounts;
 
+  // ✅ CRITICAL: Log account counts to debug duplicate issues
+  console.log(`📊 gatherContextSnapshot: After deduplication and anonymization: ${anonymizedAccounts.length} accounts (from ${accounts.length} original, ${deduplicatedAccounts.length} deduplicated)`);
+
   const anonymizedTransactions = !isDemo && userId
     ? anonymizeTransactions(sortedTransactions, userId, anonymizationService)
     : sortedTransactions;
@@ -276,12 +307,22 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   const marketContext = await maybeFetchMarketContext(questionNeeds, tier, isDemo);
 
   const incomeAnalysis = buildIncomeAnalysis(sortedTransactions);
+  
+  // ✅ CRITICAL: Pass deduplicatedAccounts (not anonymizedAccounts) to loadUserProfile
+  // The profile enhancer needs the actual account data, not anonymized tokens
+  // But we still need to deduplicate to prevent inflated totals
+  const accountsForProfile = !isDemo && userId
+    ? deduplicatedAccounts  // Use deduplicated but not anonymized accounts for profile enhancement
+    : deduplicatedAccounts;
+  
+  console.log(`📊 gatherContextSnapshot: Passing ${accountsForProfile.length} deduplicated accounts to loadUserProfile`);
+  
   const userProfile = await loadUserProfile({
     userId,
     isDemo,
     demoProfile,
     anonymizationService,
-    accounts: anonymizedAccounts,
+    accounts: accountsForProfile,  // Use deduplicated accounts, not anonymized
     transactions: anonymizedTransactions
   });
 
@@ -831,7 +872,39 @@ async function loadUserProfile(params: {
     try {
       const { PlaidProfileEnhancer } = await import('../profile/plaid-enhancer');
       const enhancer = new PlaidProfileEnhancer();
-      const plaidAccounts = accounts.map(account => ({
+      
+      // ✅ CRITICAL: Deduplicate accounts before passing to profile enhancer
+      // The snapshot should already be deduplicated, but add defensive deduplication here
+      // to prevent inflated totals in profile text
+      const accountMap = new Map<string, typeof accounts[0]>();
+      accounts.forEach(account => {
+        const accountId = account.account_id || (account as any).plaidAccountId || (account as any).persistentAccountId || account.id;
+        if (accountId) {
+          if (accountMap.has(accountId)) {
+            console.warn(`⚠️ loadUserProfile: Duplicate account_id detected: ${accountId} (${account.name}). Snapshot should have deduplicated this!`);
+            // Keep the account with the most recent data (if available)
+            const existing = accountMap.get(accountId)!;
+            const existingTimestamp = existing.lastSyncedAt || existing.snapshotTimestamp || (existing as any).updatedAt;
+            const newTimestamp = account.lastSyncedAt || account.snapshotTimestamp || (account as any).updatedAt;
+            if (newTimestamp && (!existingTimestamp || new Date(newTimestamp) > new Date(existingTimestamp))) {
+              accountMap.set(accountId, account);
+            }
+          } else {
+            accountMap.set(accountId, account);
+          }
+        } else {
+          console.warn(`⚠️ loadUserProfile: Account without account_id/plaidAccountId: ${account.name}, skipping`);
+        }
+      });
+      const deduplicatedAccounts = Array.from(accountMap.values());
+      if (deduplicatedAccounts.length !== accounts.length) {
+        console.warn(`⚠️ loadUserProfile: Deduplicated accounts: ${accounts.length} → ${deduplicatedAccounts.length} (removed ${accounts.length - deduplicatedAccounts.length} duplicates)`);
+        console.warn(`   This indicates the snapshot JSON contains duplicates. The snapshot should be regenerated.`);
+      } else {
+        console.log(`✅ loadUserProfile: Received ${accounts.length} accounts, all unique (no deduplication needed)`);
+      }
+      
+      const plaidAccounts = deduplicatedAccounts.map(account => ({
         id: account.account_id || account.id,
         name: account.name,
         type: account.type,
