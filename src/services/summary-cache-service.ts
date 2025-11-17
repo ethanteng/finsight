@@ -84,11 +84,86 @@ export class SummaryCacheService {
     );
     const activities = SummaryCacheService.extractWindowedInvestmentActivities(data, invSince);
 
+    // ✅ CRITICAL: Deduplicate accounts before storing in snapshot
+    // Even though mergeFinancialData() should have deduplicated, ensure no duplicates slip through
+    // Use the same robust deduplication logic as mergeFinancialData() for consistency
+    const accountMap = new Map<string, any>();
+    const rawAccounts = data?.accounts || [];
+    
+    // Parse timestamp helper (matches mergeFinancialData() logic)
+    const parseSnapshotTimestamp = (source: any): number | null => {
+      const raw =
+        source?.snapshotTimestamp ||
+        source?.lastSyncedAt ||
+        source?.persistedAsOf ||
+        source?.lastSynced ||
+        (source as any)?.updatedAt ||
+        null;
+
+      if (!raw) {
+        return null;
+      }
+
+      if (raw instanceof Date) {
+        return raw.getTime();
+      }
+
+      const parsed = Date.parse(raw);
+      return Number.isNaN(parsed) ? null : parsed;
+    };
+    
+    for (const account of rawAccounts) {
+      // ✅ Primary unique identifier: account_id (works for both Plaid and SnapTrade)
+      // Fallback: plaidAccountId (Plaid) or persistentAccountId (SnapTrade)
+      // Do NOT use account.id as fallback - it may be a database ID, not a unique account identifier
+      const accountId = account.account_id || (account as any).plaidAccountId || (account as any).persistentAccountId;
+      
+      if (!accountId) {
+        console.warn(`⚠️ SummaryCacheService: Account without ID found: ${account.name} (${account.type}/${account.subtype}), skipping`);
+        continue;
+      }
+
+      const existing = accountMap.get(accountId);
+      if (!existing) {
+        // New account - add it
+        accountMap.set(accountId, account);
+        continue;
+      }
+
+      // Duplicate found - keep the most recent based on timestamp
+      const existingTimestamp = parseSnapshotTimestamp(existing);
+      const candidateTimestamp = parseSnapshotTimestamp(account);
+
+      let shouldReplace = false;
+
+      if (candidateTimestamp !== null && (existingTimestamp === null || candidateTimestamp > existingTimestamp)) {
+        shouldReplace = true;
+      } else if (existingTimestamp !== null && candidateTimestamp === null) {
+        shouldReplace = false;
+      } else if (candidateTimestamp === null && existingTimestamp === null) {
+        // Both missing timestamps - prefer the one with higher balance (more recent data)
+        const existingBalance = existing.balance?.current ?? existing.balance?.available ?? 0;
+        const candidateBalance = account.balance?.current ?? account.balance?.available ?? 0;
+        shouldReplace = candidateBalance >= existingBalance;
+      }
+
+      if (shouldReplace) {
+        accountMap.set(accountId, account);
+      }
+    }
+    
+    const deduplicatedAccounts = Array.from(accountMap.values());
+    const duplicatesRemoved = rawAccounts.length - deduplicatedAccounts.length;
+    
+    if (duplicatesRemoved > 0) {
+      console.warn(`⚠️ SummaryCacheService: Deduplicated accounts before storing snapshot: ${rawAccounts.length} → ${deduplicatedAccounts.length} (removed ${duplicatesRemoved} duplicates)`);
+    }
+
     const payload: any = {
       computedAt: new Date(),
       financialOverview: overview,
       investmentPortfolio: portfolio,
-      accounts: data?.accounts || [],
+      accounts: deduplicatedAccounts, // Use deduplicated accounts
       holdings: data?.investments?.holdings || [],
       securities: data?.investments?.securities || [],
       transactions: windowedTransactions,
@@ -99,7 +174,7 @@ export class SummaryCacheService {
         source: 'SummaryCacheService',
         transactionsWindowDays: txDays,
         investmentWindowYears: invYears,
-        balanceRefreshHours: balanceHours,
+        balanceRefreshHours: balanceHours || null,
       },
     };
 
@@ -203,11 +278,24 @@ export class SummaryCacheService {
   }
 
   private static computeInvestmentPortfolio(data: any) {
+    // ✅ CRITICAL: Use the portfolio analysis from FinancialDataService, not recalculate
+    // The portfolio analysis already includes proper deduplication and calculations
+    const portfolio = data?.investments?.portfolio;
+    if (portfolio) {
+      return {
+        totalValue: portfolio.totalValue || 0,
+        holdingCount: portfolio.holdingCount || 0,
+        securityCount: portfolio.securityCount || 0,
+        assetAllocation: portfolio.assetAllocation || []
+      };
+    }
+    
+    // Fallback: calculate from holdings if portfolio not available
     const holdings = Array.isArray(data?.investments?.holdings) ? data.investments.holdings : [];
     const totalValue = holdings.reduce((s: number, h: any) => s + (h.institution_value ?? h.value ?? 0), 0);
     const holdingCount = holdings.length;
     const securityCount = new Set(holdings.map((h: any) => h.security_id)).size;
-    const assetAllocation = data?.investments?.portfolio?.assetAllocation || [];
+    const assetAllocation: Array<{ type: string; value: number; percentage: number }> = [];
     return { totalValue, holdingCount, securityCount, assetAllocation };
   }
 

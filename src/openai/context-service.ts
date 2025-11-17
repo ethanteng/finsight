@@ -64,6 +64,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   let homeValueSummary: string | undefined;
   let metadata: UnifiedFinancialData['metadata'] = { ...DEFAULT_METADATA };
   let financialSummary: { financialOverview?: any; investmentPortfolio?: any } | null = null;
+  let investmentPortfolio: any = null;
 
   if (isDemo) {
     const { demoData } = await import('../demo-data');
@@ -90,11 +91,19 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       accounts = snapshot.accounts as Account[];
       bankingTransactions = snapshot.transactions as Transaction[];
       metadata = snapshot.meta as UnifiedFinancialData['metadata'];
+      
+      // ✅ Set financialSummary for prompt builder
+      financialSummary = {
+        financialOverview: snapshot.financialOverview,
+        investmentPortfolio: snapshot.investmentPortfolio
+      };
+      investmentPortfolio = snapshot.investmentPortfolio;
 
       if (questionNeeds.needsInvestments) {
         investmentsSnapshot = {
           totalValue: (snapshot.investmentPortfolio as any).totalValue || 0,
           holdingCount: (snapshot.investmentPortfolio as any).holdingCount || 0,
+          securityCount: (snapshot.investmentPortfolio as any).securityCount || 0,
           summaryLines: (snapshot.holdings as any[] || []).slice(0, 10).map((holding: any) => {
             const name = holding.security_name || holding.ticker_symbol || 'Holding';
             const value = holding.institution_value || 0;
@@ -194,30 +203,33 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     }
   }
 
-  // ✅ CRITICAL: Deduplicate accounts by account_id as a safety net
+  // ✅ CRITICAL: Deduplicate accounts by account_id/plaidAccountId as a safety net
   // Even though the snapshot should already be deduplicated, we add this as a defensive check
   // in case corrupted database records slip through with duplicate account_id values
+  // IMPORTANT: Use the same deduplication key logic as SummaryCacheService to ensure consistency
   const accountIdMap = new Map<string, Account>();
   const duplicateAccountIds: string[] = [];
   
   accounts.forEach(account => {
-    const accountId = account.account_id || account.id;
+    // ✅ Use the same key logic as SummaryCacheService: account_id || plaidAccountId || persistentAccountId
+    // Do NOT use account.id (database ID) as it's unique per record and won't catch duplicates
+    const accountId = account.account_id || (account as any).plaidAccountId || (account as any).persistentAccountId;
     if (accountId) {
       if (accountIdMap.has(accountId)) {
         duplicateAccountIds.push(accountId);
         console.warn(`⚠️ gatherContextSnapshot: Duplicate account_id detected: ${accountId} (${account.name}). Snapshot should have deduplicated this!`);
         // Keep the most recent account based on timestamp
         const existing = accountIdMap.get(accountId)!;
-        const existingTimestamp = existing.lastSyncedAt || existing.snapshotTimestamp;
-        const newTimestamp = account.lastSyncedAt || account.snapshotTimestamp;
-        if (newTimestamp && (!existingTimestamp || newTimestamp > existingTimestamp)) {
+        const existingTimestamp = existing.lastSyncedAt || existing.snapshotTimestamp || (existing as any).updatedAt;
+        const newTimestamp = account.lastSyncedAt || account.snapshotTimestamp || (account as any).updatedAt;
+        if (newTimestamp && (!existingTimestamp || new Date(newTimestamp) > new Date(existingTimestamp))) {
           accountIdMap.set(accountId, account);
         }
       } else {
         accountIdMap.set(accountId, account);
       }
     } else {
-      console.warn(`⚠️ gatherContextSnapshot: Account without account_id: ${account.name}, skipping`);
+      console.warn(`⚠️ gatherContextSnapshot: Account without account_id/plaidAccountId: ${account.name}, skipping`);
     }
   });
   
