@@ -121,7 +121,7 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
               lastUpdated: computedAt,
             } as unknown as FinancialSummaryData);
             setInvestmentData({ portfolio });
-            if (finOverview?.homeValue) {
+            if (finOverview?.homeValue && finOverview.homeValue > 0) {
               setHomeData({
                 address: '',
                 value: finOverview.homeValue,
@@ -130,7 +130,28 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
                 lastUpdated: computedAt
               });
             } else {
+              // Fallback: Try to load home data from profile endpoint if snapshot doesn't have it
               setHomeData(null);
+              if (!isDemo) {
+                try {
+                  const homeRes = await fetch(`${API_URL}/profile/home`, { headers });
+                  if (homeRes.ok) {
+                    const homeDataResponse = await homeRes.json();
+                    if (homeDataResponse.hasHome && homeDataResponse.homeData?.value) {
+                      setHomeData({
+                        address: homeDataResponse.homeData.address || '',
+                        value: homeDataResponse.homeData.value,
+                        valueLow: homeDataResponse.homeData.valueLow || homeDataResponse.homeData.value * 0.9,
+                        valueHigh: homeDataResponse.homeData.valueHigh || homeDataResponse.homeData.value * 1.1,
+                        lastUpdated: homeDataResponse.homeData.lastUpdated || computedAt
+                      });
+                      console.log(`🏠 Loaded home value from /profile/home endpoint: $${homeDataResponse.homeData.value}`);
+                    }
+                  }
+                } catch (homeError) {
+                  console.log('Error loading home data from /profile/home:', homeError);
+                }
+              }
             }
           } else {
             setFinancialSummary(null);
