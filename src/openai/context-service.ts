@@ -628,8 +628,9 @@ function deriveCategory(transaction: Transaction): string | undefined {
   // ✅ CRITICAL FIX: Handle category as string (comma-separated from database)
   // When loading from database, category is stored as "FOOD_AND_DRINK, FOOD_AND_DRINK_COFFEE"
   if (typeof transaction.category === 'string' && transaction.category.trim() !== '') {
-    const categoryParts = transaction.category.split(',').map(item => item.trim()).filter(Boolean);
-    const validCategories = categoryParts.filter(cat => cat !== '0');
+    const categoryString = transaction.category as string;
+    const categoryParts = categoryString.split(',').map((item: string) => item.trim()).filter(Boolean);
+    const validCategories = categoryParts.filter((cat: string) => cat !== '0');
     if (validCategories.length > 0) {
       return validCategories.join(' > ');
     }
@@ -661,8 +662,9 @@ function deriveCategory(transaction: Transaction): string | undefined {
     
     // ✅ Also check category as string in enriched_data
     if (typeof enriched.category === 'string' && enriched.category.trim() !== '') {
-      const categoryParts = enriched.category.split(',').map((item: string) => item.trim()).filter(Boolean);
-      const validCategories = categoryParts.filter(cat => cat !== '0');
+      const categoryString = enriched.category as string;
+      const categoryParts = categoryString.split(',').map((item: string) => item.trim()).filter(Boolean);
+      const validCategories = categoryParts.filter((cat: string) => cat !== '0');
       if (validCategories.length > 0) {
         return validCategories.join(' > ');
       }
