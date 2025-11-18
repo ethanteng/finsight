@@ -46,7 +46,8 @@ function buildSystemPrompt(snapshot: FinancialContextSnapshot): string {
       '- Do not include JSON or LaTeX.\n' +
       '- If data is missing, state the limitation before offering alternatives.\n' +
       '- Treat amounts as USD unless clearly specified otherwise.\n' +
-      '- IMPORTANT: You have access to the user\'s financial data including home address when provided. If home value is shown as "not estimated yet" or unavailable, you can still reference that the user owns a home at the provided address. Do not state that you lack access to home value data - instead, acknowledge the home ownership and address if available.'
+      '- IMPORTANT: You have access to the user\'s financial data including home address when provided. If home value is shown as "not estimated yet" or unavailable, you can still reference that the user owns a home at the provided address. Do not state that you lack access to home value data - instead, acknowledge the home ownership and address if available.\n' +
+      '- CRITICAL: When calculating expenses, you MUST follow this process: (1) FIRST, filter to ONLY transactions with type label (EXPENSE) or (FEE) - ignore all other transaction types including (TRANSFER_IN), (TRANSFER_OUT), (INCOME), (BUY), (SELL), (DEPOSIT), (WITHDRAWAL), etc. (2) THEN, group the filtered expense transactions by their category labels. (3) If a transaction is marked as (EXPENSE) or (FEE) but lacks a category label, try to infer a reasonable category from the transaction name. (4) Do NOT group transactions as "Unknown" - if you see a large "Unknown" amount, investigate the transaction names to determine appropriate categories. (5) Remember: transactions without (EXPENSE) or (FEE) type labels should NEVER be included in expense calculations, regardless of their category or amount.'
   );
 
   // Use financial summary if available (reduces prompt size)

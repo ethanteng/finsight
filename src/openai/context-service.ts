@@ -571,15 +571,19 @@ function buildTransactionSummaries(transactions: Transaction[]): TransactionSumm
 }
 
 function deriveTransactionTypeLabel(transaction: Transaction): string {
-  // ✅ CRITICAL: Prioritize manual corrections over AI categorization
-  // If aiCategoryReason indicates manual correction, always use aiCategory
+  // ✅ CRITICAL: Prioritize aiCategory first (this is the source of truth from our categorization service)
+  // aiCategory stores the transaction type: income, expense, transfer_in, transfer_out, buy, sell, etc.
+  // This ensures we use the AI-categorized type, which respects manual corrections and proper categorization
+  
+  // Check for manual corrections first (highest priority)
   const isManualCorrection = transaction.aiCategoryReason?.toLowerCase().includes('manually corrected') ||
                              transaction.aiCategoryReason?.toLowerCase().includes('corrected by user');
   
-  // Use aiCategory if it's a manual correction, otherwise check transaction_type then aiCategory
-  const rawType = isManualCorrection 
-    ? transaction.aiCategory 
-    : ((transaction as any).transaction_type || transaction.aiCategory);
+  // Priority order:
+  // 1. aiCategory (if manual correction, or if available)
+  // 2. transaction_type (fallback, may be set from aiCategory when loading from DB)
+  // 3. undefined (will result in (OTHER))
+  const rawType = transaction.aiCategory || (transaction as any).transaction_type;
   
   const normalized = typeof rawType === 'string' ? rawType.toLowerCase().trim() : '';
 
@@ -612,17 +616,85 @@ function deriveTransactionTypeLabel(transaction: Transaction): string {
 }
 
 function deriveCategory(transaction: Transaction): string | undefined {
+  // ✅ Check category array first (most direct)
   if (Array.isArray(transaction.category) && transaction.category.length > 0) {
-    return transaction.category.join(' > ');
+    // Filter out empty/null/0 values
+    const validCategories = transaction.category.filter(cat => cat && String(cat).trim() !== '' && cat !== '0');
+    if (validCategories.length > 0) {
+      return validCategories.join(' > ');
+    }
   }
+  
+  // ✅ CRITICAL FIX: Handle category as string (comma-separated from database)
+  // When loading from database, category is stored as "FOOD_AND_DRINK, FOOD_AND_DRINK_COFFEE"
+  if (typeof transaction.category === 'string' && transaction.category.trim() !== '') {
+    const categoryParts = transaction.category.split(',').map(item => item.trim()).filter(Boolean);
+    const validCategories = categoryParts.filter(cat => cat !== '0');
+    if (validCategories.length > 0) {
+      return validCategories.join(' > ');
+    }
+  }
+  
+  // ✅ Check personal_finance_category directly on transaction
   if ((transaction as any).personal_finance_category?.primary) {
     const primary = (transaction as any).personal_finance_category.primary;
     const detailed = (transaction as any).personal_finance_category.detailed;
     return detailed ? `${primary} > ${detailed}` : primary;
   }
-  if (transaction.enriched_data?.category && transaction.enriched_data.category.length > 0) {
-    return transaction.enriched_data.category.join(' > ');
+  
+  // ✅ CRITICAL FIX: Check personal_finance_category in enriched_data (where it's stored from database)
+  if (transaction.enriched_data && typeof transaction.enriched_data === 'object') {
+    const enriched = transaction.enriched_data as any;
+    if (enriched.personal_finance_category?.primary) {
+      const primary = enriched.personal_finance_category.primary;
+      const detailed = enriched.personal_finance_category.detailed;
+      return detailed ? `${primary} > ${detailed}` : primary;
+    }
+    
+    // ✅ Also check category array in enriched_data
+    if (Array.isArray(enriched.category) && enriched.category.length > 0) {
+      const validCategories = enriched.category.filter((cat: any) => cat && String(cat).trim() !== '' && cat !== '0');
+      if (validCategories.length > 0) {
+        return validCategories.join(' > ');
+      }
+    }
+    
+    // ✅ Also check category as string in enriched_data
+    if (typeof enriched.category === 'string' && enriched.category.trim() !== '') {
+      const categoryParts = enriched.category.split(',').map((item: string) => item.trim()).filter(Boolean);
+      const validCategories = categoryParts.filter(cat => cat !== '0');
+      if (validCategories.length > 0) {
+        return validCategories.join(' > ');
+      }
+    }
   }
+  
+  // ✅ FALLBACK: If no category found, try to infer from transaction name or merchant
+  // This helps GPT categorize transactions even when Plaid didn't provide a category
+  const transactionName = (transaction.name || '').toLowerCase();
+  const merchantName = ((transaction as any).merchant_name || (transaction as any).merchantName || '').toLowerCase();
+  
+  // Common patterns to infer category
+  if (transactionName.includes('rent') || transactionName.includes('apartment') || transactionName.includes('housing')) {
+    return 'RENT_AND_UTILITIES';
+  }
+  if (transactionName.includes('electric') || transactionName.includes('gas') || transactionName.includes('water') || transactionName.includes('utility')) {
+    return 'RENT_AND_UTILITIES';
+  }
+  if (transactionName.includes('grocery') || transactionName.includes('supermarket') || transactionName.includes('food') || transactionName.includes('restaurant') || transactionName.includes('cafe')) {
+    return 'FOOD_AND_DRINK';
+  }
+  if (transactionName.includes('gas') || transactionName.includes('fuel') || transactionName.includes('shell') || transactionName.includes('chevron') || transactionName.includes('exxon')) {
+    return 'TRANSPORTATION';
+  }
+  if (transactionName.includes('amazon') || transactionName.includes('target') || transactionName.includes('walmart') || transactionName.includes('shopping')) {
+    return 'GENERAL_MERCHANDISE';
+  }
+  if (merchantName) {
+    // If we have a merchant name but no category, use the merchant name as a hint
+    return `MERCHANT: ${merchantName}`;
+  }
+  
   return undefined;
 }
 
