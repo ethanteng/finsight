@@ -100,7 +100,7 @@ async function backfillCategorization() {
           amount: dbTx.amount,
           date: dbTx.date.toISOString().split('T')[0],
           name: dbTx.name,
-          category: dbTx.category ? dbTx.category.split(',').map((c: string) => c.trim()).filter(Boolean) : [],
+          category: dbTx.category ? dbTx.category.split(',').map((c) => c.trim()).filter(Boolean) : [],
           category_id: dbTx.categoryId || null,
           pending: dbTx.pending,
           merchant_name: dbTx.merchantName || null,
@@ -144,7 +144,7 @@ async function backfillCategorization() {
           failed++;
           console.warn(`   ⚠️  Failed to categorize transaction ${dbTx.plaidTransactionId}: No transaction_type returned`);
         }
-      } catch (error: any) {
+      } catch (error) {
         failed++;
         console.error(`   ❌ Error categorizing transaction ${dbTx.plaidTransactionId}: ${error.message}`);
       }
@@ -158,7 +158,7 @@ async function backfillCategorization() {
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
     console.log(`\n⏱️  Completed in ${duration}s`);
-  } catch (error: any) {
+  } catch (error) {
     console.error(`\n💥 Fatal error:`, error);
     throw error;
   } finally {
