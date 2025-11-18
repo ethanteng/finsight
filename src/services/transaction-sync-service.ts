@@ -4,6 +4,7 @@ import { processTransactionData } from '../plaid';
 import { TransactionCategorizationService } from './transaction-categorization-service';
 
 const prisma = new PrismaClient();
+const categorizationService = new TransactionCategorizationService();
 
 export interface TransactionSyncResult {
   success: boolean;
@@ -218,7 +219,7 @@ export class TransactionSyncService {
           name: account.name,
         };
 
-        const categorized = await TransactionCategorizationService.categorizeTransaction(
+        const categorized = await categorizationService.categorizeTransaction(
           processedTx,
           accountData
         );

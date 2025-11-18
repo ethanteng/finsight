@@ -53,6 +53,7 @@ const { processTransactionData } = require(path.join(distPath, 'plaid'));
 require('dotenv').config({ path: '.env.local' });
 
 const prisma = new PrismaClient();
+const categorizationService = new TransactionCategorizationService();
 
 async function backfillCategorization() {
   const startTime = Date.now();
@@ -119,7 +120,7 @@ async function backfillCategorization() {
         };
 
         // Categorize transaction
-        const categorizedTx = await TransactionCategorizationService.categorizeTransaction(
+        const categorizedTx = await categorizationService.categorizeTransaction(
           processedTx,
           accountData
         );
