@@ -174,7 +174,7 @@ export class TransactionSyncService {
    * Upsert a transaction to the database
    * Handles account lookup, transaction data processing, and categorization
    */
-  private static async upsertTransaction(transaction: any, accessToken: string): Promise<void> {
+  private static async upsertTransaction(transaction: any, _accessToken: string): Promise<void> {
     // Find the account for this transaction
     const account = await prisma.account.findUnique({
       where: { plaidAccountId: transaction.account_id },
