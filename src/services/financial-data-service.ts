@@ -1068,14 +1068,22 @@ export class FinancialDataService {
               
               // ✅ PRIMARY: Check aiCategory first (respects manual corrections and our categorization)
               // ✅ SECONDARY: Check personal_finance_category (Plaid's source of truth)
-              // ✅ FALLBACK: Check category array and transaction name
+              // ✅ FALLBACK: Check categoryId, category array, and transaction name (including common transfer keywords)
+              // Note: Prisma returns camelCase, but check both for safety
+              const categoryId = ((dbTx.categoryId || dbTx.category_id || '') as string).toLowerCase();
+              const transactionName = (dbTx.name || '').toLowerCase();
               const isTransfer = 
                 normalizedType === 'transfer_in' || 
                 normalizedType === 'transfer_out' ||
                 pfcPrimary.includes('transfer') ||
                 pfcDetailed.includes('transfer') ||
+                categoryId.includes('transfer') ||
                 categoryArray?.some((cat: string) => cat?.toLowerCase().includes('transfer')) ||
-                (dbTx.name?.toLowerCase() || '').includes('transfer');
+                transactionName.includes('transfer') ||
+                transactionName.includes('zelle') ||
+                transactionName.includes('ach') ||
+                transactionName.includes('wire transfer') ||
+                transactionName.includes('account transfer');
               
               // Only aggregate income/expense if it's NOT a transfer
               if (!isTransfer) {
@@ -1205,11 +1213,21 @@ export class FinancialDataService {
           return;
         }
         // ✅ CRITICAL: Explicitly exclude transfers from expense/income calculations
-        // Check both primaryCategory and transaction name to catch any miscategorized transfers
+        // Check multiple sources to catch any miscategorized transfers
+        const transactionName = (tx.name?.toLowerCase() || '');
+        const categoryId = ((tx as any).category_id || '').toLowerCase();
+        const categoryArray = tx.category || [];
         const isTransfer = 
           primaryCategory.includes('transfer') ||
-          (tx.name?.toLowerCase() || '').includes('transfer') ||
-          (tx.category?.[0]?.toLowerCase() || '').includes('transfer');
+          (tx as any).transaction_type === 'transfer_in' ||
+          (tx as any).transaction_type === 'transfer_out' ||
+          categoryId.includes('transfer') ||
+          categoryArray.some((cat: any) => String(cat || '').toLowerCase().includes('transfer')) ||
+          transactionName.includes('transfer') ||
+          transactionName.includes('zelle') ||
+          transactionName.includes('ach') ||
+          transactionName.includes('wire transfer') ||
+          transactionName.includes('account transfer');
         
         if (isTransfer) {
           return; // Skip transfers - they should not be included in income or expense calculations

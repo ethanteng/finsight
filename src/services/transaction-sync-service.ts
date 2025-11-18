@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { plaidClient } from '../plaid';
 import { processTransactionData } from '../plaid';
+import { TransactionCategorizationService } from './transaction-categorization-service';
 
 const prisma = new PrismaClient();
 
@@ -170,7 +171,7 @@ export class TransactionSyncService {
 
   /**
    * Upsert a transaction to the database
-   * Handles account lookup and transaction data processing
+   * Handles account lookup, transaction data processing, and categorization
    */
   private static async upsertTransaction(transaction: any, accessToken: string): Promise<void> {
     // Find the account for this transaction
@@ -196,6 +197,48 @@ export class TransactionSyncService {
       }
     }
 
+    // Check if transaction already exists to see if we need to categorize
+    const existing = await prisma.transaction.findUnique({
+      where: { plaidTransactionId: transaction.transaction_id },
+    });
+
+    // ✅ CRITICAL: Categorize transaction if it doesn't have aiCategory
+    // This ensures transactions are categorized during sync, not just when GPT requests data
+    let aiCategory: string | null = null;
+    let aiCategoryReason: string | null = null;
+    let categoryComparedAt: Date | null = null;
+
+    if (!existing?.aiCategory) {
+      // Transaction doesn't have aiCategory - categorize it
+      try {
+        const accountData = {
+          account_id: account.plaidAccountId,
+          type: account.type,
+          subtype: account.subtype || undefined,
+          name: account.name,
+        };
+
+        const categorized = await TransactionCategorizationService.categorizeTransaction(
+          processedTx,
+          accountData
+        );
+
+        if (categorized.transaction_type) {
+          aiCategory = categorized.transaction_type;
+          aiCategoryReason = categorized.categorization_reason || null;
+          categoryComparedAt = new Date();
+        }
+      } catch (error: any) {
+        // Log error but don't fail the sync - transaction will be categorized on next GPT request
+        console.warn(`Failed to categorize transaction ${transaction.transaction_id}: ${error.message}`);
+      }
+    } else {
+      // Preserve existing categorization (including manual corrections)
+      aiCategory = existing.aiCategory;
+      aiCategoryReason = existing.aiCategoryReason;
+      categoryComparedAt = existing.categoryComparedAt;
+    }
+
     // Upsert transaction
     await prisma.transaction.upsert({
       where: { plaidTransactionId: transaction.transaction_id },
@@ -216,8 +259,12 @@ export class TransactionSyncService {
         location: transaction.location ? JSON.stringify(transaction.location) : null,
         pendingTransactionId: transaction.pending_transaction_id || null,
         lastSynced: new Date(),
-        // Preserve existing aiCategory and aiCategoryReason if they exist (manual corrections)
-        // Only update if transaction data includes new categorization
+        // Update aiCategory only if we just categorized it (preserves manual corrections)
+        ...(aiCategory && !existing?.aiCategory ? {
+          aiCategory,
+          aiCategoryReason,
+          categoryComparedAt,
+        } : {}),
       },
       create: {
         plaidTransactionId: transaction.transaction_id,
@@ -237,6 +284,9 @@ export class TransactionSyncService {
         location: transaction.location ? JSON.stringify(transaction.location) : null,
         pendingTransactionId: transaction.pending_transaction_id || null,
         lastSynced: new Date(),
+        aiCategory,
+        aiCategoryReason,
+        categoryComparedAt,
       },
     });
   }
