@@ -627,9 +627,10 @@ function deriveCategory(transaction: Transaction): string | undefined {
   
   // ✅ CRITICAL FIX: Handle category as string (comma-separated from database)
   // When loading from database, category is stored as "FOOD_AND_DRINK, FOOD_AND_DRINK_COFFEE"
-  if (typeof transaction.category === 'string' && transaction.category.trim() !== '') {
-    const categoryString = transaction.category as string;
-    const categoryParts = categoryString.split(',').map((item: string) => item.trim()).filter(Boolean);
+  // Note: Transaction interface defines category as string[], but database stores it as string
+  const categoryValue = transaction.category as string | string[] | undefined;
+  if (typeof categoryValue === 'string' && categoryValue.trim() !== '') {
+    const categoryParts = categoryValue.split(',').map((item: string) => item.trim()).filter(Boolean);
     const validCategories = categoryParts.filter((cat: string) => cat !== '0');
     if (validCategories.length > 0) {
       return validCategories.join(' > ');
