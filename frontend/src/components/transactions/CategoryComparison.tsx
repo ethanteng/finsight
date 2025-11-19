@@ -41,7 +41,7 @@ export const CategoryComparison: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'matched' | 'mismatched' | 'uncategorized'>('all');
+  const [filter, setFilter] = useState<string>('all');
   const [showPending, setShowPending] = useState<boolean>(true);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [savingTransactionId, setSavingTransactionId] = useState<string | null>(null);
@@ -224,18 +224,28 @@ export const CategoryComparison: React.FC = () => {
     <div className="p-6">
       {/* Filters */}
       <div className="mb-6 flex items-center gap-4 flex-wrap">
-        <div className="flex gap-2">
-          {(['all', 'matched', 'mismatched', 'uncategorized'] as const).map(f => (
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => setFilter('all')}
+            className={`px-4 py-2 rounded-md text-sm font-medium ${
+              filter === 'all'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            All
+          </button>
+          {TRANSACTION_TYPES.map(type => (
             <button
-              key={f}
-              onClick={() => setFilter(f)}
+              key={type}
+              onClick={() => setFilter(type)}
               className={`px-4 py-2 rounded-md text-sm font-medium ${
-                filter === f
+                filter === type
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              {f.charAt(0).toUpperCase() + f.slice(1)}
+              {formatTransactionType(type)}
             </button>
           ))}
         </div>

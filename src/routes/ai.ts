@@ -173,12 +173,21 @@ router.get('/transactions/comparison', requireAuth, async (req, res) => {
     const userId = (req as any).user.id;
     const { filter = 'all', limit = 100 } = req.query;
     
+    // Valid transaction types (used to filter out old category names like "Special", "Place")
+    const validTransactionTypes = ['income', 'expense', 'transfer_in', 'transfer_out', 'buy', 'sell', 
+                                   'deposit', 'withdrawal', 'fee', 'refund', 'adjustment'];
+    
     // Build filter conditions
     let whereClause: any = {
       account: { userId },
     };
     
-    if (filter === 'matched') {
+    // Check if filter is a valid transaction type
+    const normalizedFilter = String(filter).toLowerCase().trim();
+    if (validTransactionTypes.includes(normalizedFilter)) {
+      // Filter by transaction type
+      whereClause.aiCategory = normalizedFilter;
+    } else if (filter === 'matched') {
       // Only show transactions where AI category matches original
       whereClause.aiCategory = { not: null };
       whereClause.AND = {
@@ -194,6 +203,7 @@ router.get('/transactions/comparison', requireAuth, async (req, res) => {
       // Only show transactions without AI categories
       whereClause.aiCategory = null;
     }
+    // If filter is 'all', no additional filtering is needed
     
     const transactions = await prisma.transaction.findMany({
       where: whereClause,
@@ -211,10 +221,6 @@ router.get('/transactions/comparison', requireAuth, async (req, res) => {
       ],
       take: Number(limit),
     });
-    
-    // Valid transaction types (used to filter out old category names like "Special", "Place")
-    const validTransactionTypes = ['income', 'expense', 'transfer_in', 'transfer_out', 'buy', 'sell', 
-                                   'deposit', 'withdrawal', 'fee', 'refund', 'adjustment'];
     
     const results = transactions.map((transaction: any) => {
       // Filter out invalid values stored in aiCategory (old category names, payment channels, etc.)
