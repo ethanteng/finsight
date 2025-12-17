@@ -53,7 +53,17 @@ export default function AccountGroupCard({
 
   const getAccountBalance = (account: Account | SnapTradeAccount): number => {
     if ('balance' in account && typeof account.balance === 'object') {
-      return account.balance.available ?? account.balance.current ?? 0;
+      const acc = account as Account;
+      // For checking/savings accounts, prefer available balance
+      if (acc.type === 'depository' || 
+          acc.subtype === 'checking' || 
+          acc.subtype === 'savings') {
+        return acc.balance.available !== undefined && acc.balance.available !== null 
+          ? acc.balance.available 
+          : acc.balance.current ?? 0;
+      }
+      // For investment/credit/loan accounts, use current balance
+      return acc.balance.current ?? 0;
     }
     return (account as SnapTradeAccount).balance ?? 0;
   };

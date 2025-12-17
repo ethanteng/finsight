@@ -84,6 +84,7 @@ interface Snapshot {
 
 export default function FinancesPageClient() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [freshAccounts, setFreshAccounts] = useState<Account[]>([]);
   const [snapTradeAccounts, setSnapTradeAccounts] = useState<SnapTradeAccount[]>([]);
   const [homeData, setHomeData] = useState<HomeData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -163,6 +164,25 @@ export default function FinancesPageClient() {
           setError('Failed to load financial data');
         }
 
+        // Load fresh account data from /plaid/all-accounts (same as profile page)
+        try {
+          const accountsRes = await fetch(`${API_URL}/plaid/all-accounts`, { headers });
+          if (accountsRes.ok) {
+            const accountsData = await accountsRes.json();
+            const accounts = accountsData.accounts || [];
+            console.log(`📊 FinancesPage: Loaded ${accounts.length} fresh accounts from /plaid/all-accounts`);
+            setFreshAccounts(accounts);
+          } else {
+            console.log('Failed to load fresh accounts, falling back to snapshot');
+            // Fallback to snapshot accounts if fresh fetch fails
+            setFreshAccounts(data.accounts || []);
+          }
+        } catch (accountsError) {
+          console.log('Error loading fresh accounts:', accountsError);
+          // Fallback to snapshot accounts
+          setFreshAccounts(data.accounts || []);
+        }
+
         // Load SnapTrade accounts
         try {
           const snapTradeRes = await fetch(`${API_URL}/snaptrade/accounts`, { headers });
@@ -231,7 +251,8 @@ export default function FinancesPageClient() {
     );
   }
 
-  const accounts = snapshot.accounts || [];
+  // Use fresh accounts if available, otherwise fall back to snapshot accounts
+  const accounts = freshAccounts.length > 0 ? freshAccounts : (snapshot.accounts || []);
   const groupedAccounts = groupAccounts(accounts, snapTradeAccounts);
 
   return (
@@ -348,7 +369,18 @@ export default function FinancesPageClient() {
               title="Cash Accounts"
               accounts={groupedAccounts.cash}
               totalBalance={groupedAccounts.cash.reduce((sum, acc) => {
-                const balance = (acc as Account).balance?.available ?? (acc as Account).balance?.current ?? (acc as SnapTradeAccount).balance ?? 0;
+                const account = acc as Account;
+                // Match profile page logic: use available for checking/savings, current for others
+                let balance: number;
+                if (account.type === 'depository' || 
+                    account.subtype === 'checking' || 
+                    account.subtype === 'savings') {
+                  balance = account.balance?.available !== undefined && account.balance?.available !== null 
+                    ? account.balance.available 
+                    : account.balance?.current ?? 0;
+                } else {
+                  balance = account.balance?.current ?? 0;
+                }
                 return sum + balance;
               }, 0)}
               isExpanded={selectedAccountGroup === 'cash'}
