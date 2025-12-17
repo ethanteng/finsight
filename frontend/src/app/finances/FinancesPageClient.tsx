@@ -114,10 +114,11 @@ export default function FinancesPageClient() {
         headers['Authorization'] = `Bearer ${token}`;
 
         // Load snapshot
+        let snapshotData: Snapshot | null = null;
         const res = await fetch(`${API_URL}/api/summaries?view=full`, { headers });
         if (res.ok) {
-          const data = await res.json();
-          setSnapshot(data);
+          snapshotData = await res.json();
+          setSnapshot(snapshotData);
           
           // Always try to get home data from profile endpoint (more reliable)
           try {
@@ -132,7 +133,7 @@ export default function FinancesPageClient() {
                   value: homeDataResponse.homeData.value,
                   valueLow: homeDataResponse.homeData.valueLow || homeDataResponse.homeData.value * 0.9,
                   valueHigh: homeDataResponse.homeData.valueHigh || homeDataResponse.homeData.value * 1.1,
-                  lastUpdated: homeDataResponse.homeData.lastUpdated || data.computedAt || new Date().toISOString()
+                  lastUpdated: homeDataResponse.homeData.lastUpdated || snapshotData.computedAt || new Date().toISOString()
                 });
               } else {
                 console.log('🏠 FinancesPage: Profile endpoint returned no home data or invalid value');
@@ -143,14 +144,14 @@ export default function FinancesPageClient() {
           } catch (e) {
             console.log('🏠 FinancesPage: Error fetching from profile endpoint:', e);
             // Fallback: try to use home value from snapshot if profile endpoint fails
-            if (data.financialOverview?.homeValue && data.financialOverview.homeValue > 0) {
-              console.log(`🏠 FinancesPage: Using snapshot home value: $${data.financialOverview.homeValue}`);
+            if (snapshotData?.financialOverview?.homeValue && snapshotData.financialOverview.homeValue > 0) {
+              console.log(`🏠 FinancesPage: Using snapshot home value: $${snapshotData.financialOverview.homeValue}`);
               setHomeData({
                 address: '',
-                value: data.financialOverview.homeValue,
-                valueLow: data.financialOverview.homeValue * 0.9,
-                valueHigh: data.financialOverview.homeValue * 1.1,
-                lastUpdated: data.computedAt || new Date().toISOString()
+                value: snapshotData.financialOverview.homeValue,
+                valueLow: snapshotData.financialOverview.homeValue * 0.9,
+                valueHigh: snapshotData.financialOverview.homeValue * 1.1,
+                lastUpdated: snapshotData.computedAt || new Date().toISOString()
               });
             } else {
               console.log('🏠 FinancesPage: No home value found in snapshot either');
@@ -175,12 +176,12 @@ export default function FinancesPageClient() {
           } else {
             console.log('Failed to load fresh accounts, falling back to snapshot');
             // Fallback to snapshot accounts if fresh fetch fails
-            setFreshAccounts(data.accounts || []);
+            setFreshAccounts(snapshotData?.accounts || []);
           }
         } catch (accountsError) {
           console.log('Error loading fresh accounts:', accountsError);
           // Fallback to snapshot accounts
-          setFreshAccounts(data.accounts || []);
+          setFreshAccounts(snapshotData?.accounts || []);
         }
 
         // Load SnapTrade accounts
