@@ -133,7 +133,7 @@ export default function FinancesPageClient() {
                   value: homeDataResponse.homeData.value,
                   valueLow: homeDataResponse.homeData.valueLow || homeDataResponse.homeData.value * 0.9,
                   valueHigh: homeDataResponse.homeData.valueHigh || homeDataResponse.homeData.value * 1.1,
-                  lastUpdated: homeDataResponse.homeData.lastUpdated || snapshotData.computedAt || new Date().toISOString()
+                  lastUpdated: homeDataResponse.homeData.lastUpdated || snapshotData?.computedAt || new Date().toISOString()
                 });
               } else {
                 console.log('🏠 FinancesPage: Profile endpoint returned no home data or invalid value');
