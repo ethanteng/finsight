@@ -118,33 +118,32 @@ export default function FinancesPageClient() {
           const data = await res.json();
           setSnapshot(data);
           
-          // Extract home value if available
-          if (data.financialOverview?.homeValue && data.financialOverview.homeValue > 0) {
-            // Try to get home data from profile endpoint for address
-            try {
-              const homeRes = await fetch(`${API_URL}/profile/home`, { headers });
-              if (homeRes.ok) {
-                const homeDataResponse = await homeRes.json();
-                if (homeDataResponse.hasHome && homeDataResponse.homeData) {
-                  setHomeData({
-                    address: homeDataResponse.homeData.address || '',
-                    value: data.financialOverview.homeValue,
-                    valueLow: homeDataResponse.homeData.valueLow || data.financialOverview.homeValue * 0.9,
-                    valueHigh: homeDataResponse.homeData.valueHigh || data.financialOverview.homeValue * 1.1,
-                    lastUpdated: data.computedAt || new Date().toISOString()
-                  });
-                } else {
-                  setHomeData({
-                    address: '',
-                    value: data.financialOverview.homeValue,
-                    valueLow: data.financialOverview.homeValue * 0.9,
-                    valueHigh: data.financialOverview.homeValue * 1.1,
-                    lastUpdated: data.computedAt || new Date().toISOString()
-                  });
-                }
+          // Always try to get home data from profile endpoint (more reliable)
+          try {
+            const homeRes = await fetch(`${API_URL}/profile/home`, { headers });
+            if (homeRes.ok) {
+              const homeDataResponse = await homeRes.json();
+              console.log('🏠 FinancesPage: Profile home data response:', homeDataResponse);
+              if (homeDataResponse.hasHome && homeDataResponse.homeData && homeDataResponse.homeData.value > 0) {
+                console.log(`🏠 FinancesPage: Setting home data from profile: $${homeDataResponse.homeData.value}`);
+                setHomeData({
+                  address: homeDataResponse.homeData.address || '',
+                  value: homeDataResponse.homeData.value,
+                  valueLow: homeDataResponse.homeData.valueLow || homeDataResponse.homeData.value * 0.9,
+                  valueHigh: homeDataResponse.homeData.valueHigh || homeDataResponse.homeData.value * 1.1,
+                  lastUpdated: homeDataResponse.homeData.lastUpdated || data.computedAt || new Date().toISOString()
+                });
+              } else {
+                console.log('🏠 FinancesPage: Profile endpoint returned no home data or invalid value');
               }
-            } catch (_e) {
-              // Fallback to snapshot data only
+            } else {
+              console.log(`🏠 FinancesPage: Profile endpoint returned status ${homeRes.status}`);
+            }
+          } catch (e) {
+            console.log('🏠 FinancesPage: Error fetching from profile endpoint:', e);
+            // Fallback: try to use home value from snapshot if profile endpoint fails
+            if (data.financialOverview?.homeValue && data.financialOverview.homeValue > 0) {
+              console.log(`🏠 FinancesPage: Using snapshot home value: $${data.financialOverview.homeValue}`);
               setHomeData({
                 address: '',
                 value: data.financialOverview.homeValue,
@@ -152,6 +151,8 @@ export default function FinancesPageClient() {
                 valueHigh: data.financialOverview.homeValue * 1.1,
                 lastUpdated: data.computedAt || new Date().toISOString()
               });
+            } else {
+              console.log('🏠 FinancesPage: No home value found in snapshot either');
             }
           }
         } else {
@@ -271,7 +272,7 @@ export default function FinancesPageClient() {
           totalCash={snapshot.financialOverview.totalCash}
           totalInvestments={snapshot.financialOverview.totalInvestments}
           totalDebt={snapshot.financialOverview.totalDebt}
-          homeValue={snapshot.financialOverview.homeValue}
+          homeValue={homeData?.value || snapshot.financialOverview.homeValue || null}
         />
 
         {/* Key Metrics Grid */}
@@ -300,9 +301,12 @@ export default function FinancesPageClient() {
           <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
             <div className="text-gray-400 text-sm mb-1">Home Value</div>
             <div className="text-white font-semibold text-xl">
-              {snapshot.financialOverview.homeValue ? 
-                new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(snapshot.financialOverview.homeValue) :
-                '$0'
+              {homeData && homeData.value > 0 ? 
+                new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(homeData.value) :
+                (snapshot.financialOverview.homeValue && snapshot.financialOverview.homeValue > 0 ?
+                  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(snapshot.financialOverview.homeValue) :
+                  '$0'
+                )
               }
             </div>
           </div>
