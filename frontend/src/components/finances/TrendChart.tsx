@@ -8,7 +8,7 @@ interface Transaction {
   amount: number;
   date: string;
   name: string;
-  category?: string[];
+  category?: string[] | string;
   pending?: boolean;
 }
 

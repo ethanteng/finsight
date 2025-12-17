@@ -74,7 +74,7 @@ interface Transaction {
     merchant_name?: string;
     website?: string;
     logo_url?: string;
-    category?: string[];
+    category?: string[] | string;
   };
   transaction_type?: string;
 }

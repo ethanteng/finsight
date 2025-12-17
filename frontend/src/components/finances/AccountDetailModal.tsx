@@ -34,14 +34,14 @@ interface Transaction {
   amount: number;
   date: string;
   name: string;
-  category?: string[];
+  category?: string[] | string;
   pending?: boolean;
   merchant_name?: string;
   enriched_data?: {
     merchant_name?: string;
     website?: string;
     logo_url?: string;
-    category?: string[];
+    category?: string[] | string;
   };
   transaction_type?: string;
 }
@@ -140,15 +140,18 @@ export default function AccountDetailModal({
       // Handle category as array or string
       let categories: string[] = [];
       if (tx.enriched_data?.category) {
-        categories = Array.isArray(tx.enriched_data.category) 
-          ? tx.enriched_data.category 
-          : [tx.enriched_data.category];
+        const enrichedCat = tx.enriched_data.category;
+        if (Array.isArray(enrichedCat)) {
+          categories = enrichedCat;
+        } else if (typeof enrichedCat === 'string') {
+          categories = enrichedCat.split(',').map((c: string) => c.trim());
+        }
       } else if (tx.category) {
-        categories = Array.isArray(tx.category) 
-          ? tx.category 
-          : typeof tx.category === 'string' 
-            ? tx.category.split(',').map(c => c.trim())
-            : [];
+        if (Array.isArray(tx.category)) {
+          categories = tx.category;
+        } else if (typeof tx.category === 'string') {
+          categories = tx.category.split(',').map((c: string) => c.trim());
+        }
       }
       
       const categoryKey = categories.length > 0 && categories.some(c => c && c !== '0')
@@ -175,15 +178,18 @@ export default function AccountDetailModal({
       // Handle category as array or string
       let categories: string[] = [];
       if (tx.enriched_data?.category) {
-        categories = Array.isArray(tx.enriched_data.category) 
-          ? tx.enriched_data.category 
-          : [tx.enriched_data.category];
+        const enrichedCat = tx.enriched_data.category;
+        if (Array.isArray(enrichedCat)) {
+          categories = enrichedCat;
+        } else if (typeof enrichedCat === 'string') {
+          categories = enrichedCat.split(',').map((c: string) => c.trim());
+        }
       } else if (tx.category) {
-        categories = Array.isArray(tx.category) 
-          ? tx.category 
-          : typeof tx.category === 'string' 
-            ? tx.category.split(',').map(c => c.trim())
-            : [];
+        if (Array.isArray(tx.category)) {
+          categories = tx.category;
+        } else if (typeof tx.category === 'string') {
+          categories = tx.category.split(',').map((c: string) => c.trim());
+        }
       }
       
       const categoryKey = categories.length > 0 && categories.some(c => c && c !== '0')
