@@ -117,6 +117,7 @@ interface Snapshot {
   accounts?: Account[];
   transactions?: Transaction[];
   holdings?: Holding[];
+  activities?: InvestmentTransaction[];
   transactionsSummary?: {
     byMonth: Record<string, { income: number; expense: number }>;
     byCategory: Record<string, number>;
@@ -500,9 +501,7 @@ export default function FinancesPageClient() {
           accountId={selectedAccountId}
           transactions={snapshot.transactions || []}
           holdings={snapshot.holdings || []}
-          investmentTransactions={(snapshot.transactions || []).filter((t: any) => 
-            t.security_id || t.type === 'buy' || t.type === 'sell' || t.security_name
-          ) as InvestmentTransaction[]}
+          investmentTransactions={snapshot.activities || []}
           onClose={() => {
             setSelectedAccount(null);
             setSelectedAccountId(null);
