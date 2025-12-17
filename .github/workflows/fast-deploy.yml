@@ -1,4 +1,4 @@
-name: Fast Deploy - Website Pages & Blog
+name: Fast Deploy - Website Pages, Blog & Finances
 
 on:
   push:
@@ -9,6 +9,9 @@ on:
       - 'frontend/src/app/privacy/**'
       - 'frontend/src/app/terms/**'
       - 'frontend/src/app/blog/**'
+      - 'frontend/src/app/finances/**'
+      - 'frontend/src/components/finances/**'
+      - 'frontend/src/app/app/AppPageClient.tsx'
       - 'frontend/src/lib/ghost.ts'
       - 'frontend/src/components/NewHomepage.tsx'
       - 'frontend/next.config.ts'
@@ -20,7 +23,7 @@ on:
   workflow_dispatch:
     inputs:
       force_deploy:
-        description: 'Force deploy even if no website page changes'
+        description: 'Force deploy even if no website/finances page changes'
         required: false
         default: 'false'
 
@@ -47,8 +50,10 @@ jobs:
         run: |
           cd frontend
           # Basic TypeScript check (no strict mode, exclude tests)
+          # Skip linting and tests for fast deployment
           npx tsc --noEmit --skipLibCheck --noUnusedLocals false --noUnusedParameters false --project tsconfig.build.json
           # Basic ESLint check (only critical errors, exclude tests)
+          # Using --quiet to only show errors, warnings are ignored for fast deploy
           npx eslint src/ --ext .ts,.tsx --quiet --ignore-pattern "**/__tests__/**" --ignore-pattern "**/*.test.*" --ignore-pattern "**/*.spec.*" || echo "ESLint warnings found but continuing..."
 
       - name: Verify frontend build
