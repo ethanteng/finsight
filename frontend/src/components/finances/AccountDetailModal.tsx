@@ -573,20 +573,37 @@ export default function AccountDetailModal({
                           <div className="text-sm text-gray-400 mb-1">
                             {formatDate(tx.date)}
                           </div>
-                          {(tx.enriched_data?.category || tx.category) && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                              {(tx.enriched_data?.category || tx.category || [])
-                                .filter((c: string) => c && c !== '0')
-                                .map((cat: string, idx: number) => (
-                                  <span 
-                                    key={idx}
-                                    className="inline-block px-2 py-1 bg-blue-900/30 text-blue-300 text-xs rounded border border-blue-700/50"
-                                  >
-                                    {cat.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
-                                  </span>
-                                ))}
-                            </div>
-                          )}
+                          {(tx.enriched_data?.category || tx.category) && (() => {
+                            let categories: string[] = [];
+                            if (tx.enriched_data?.category) {
+                              const enrichedCat = tx.enriched_data.category;
+                              if (Array.isArray(enrichedCat)) {
+                                categories = enrichedCat;
+                              } else if (typeof enrichedCat === 'string') {
+                                categories = enrichedCat.split(',').map((c: string) => c.trim());
+                              }
+                            } else if (tx.category) {
+                              if (Array.isArray(tx.category)) {
+                                categories = tx.category;
+                              } else if (typeof tx.category === 'string') {
+                                categories = tx.category.split(',').map((c: string) => c.trim());
+                              }
+                            }
+                            return categories.length > 0 ? (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {categories
+                                  .filter((c: string) => c && c !== '0')
+                                  .map((cat: string, idx: number) => (
+                                    <span 
+                                      key={idx}
+                                      className="inline-block px-2 py-1 bg-blue-900/30 text-blue-300 text-xs rounded border border-blue-700/50"
+                                    >
+                                      {cat.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
+                                    </span>
+                                  ))}
+                              </div>
+                            ) : null;
+                          })()}
                         </div>
                         <div className="text-right">
                           <div className={`font-semibold text-lg ${
