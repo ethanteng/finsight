@@ -268,10 +268,15 @@ export default function FinancesPageClient() {
       <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
         {/* Net Worth Card */}
         <NetWorthCard 
-          netWorth={snapshot.financialOverview.netWorth}
-          totalCash={snapshot.financialOverview.totalCash}
-          totalInvestments={snapshot.financialOverview.totalInvestments}
-          totalDebt={snapshot.financialOverview.totalDebt}
+          netWorth={Math.round(
+            snapshot.financialOverview.totalCash + 
+            snapshot.financialOverview.totalInvestments + 
+            (homeData?.value || snapshot.financialOverview.homeValue || 0) - 
+            snapshot.financialOverview.totalDebt
+          )}
+          totalCash={Math.round(snapshot.financialOverview.totalCash)}
+          totalInvestments={Math.round(snapshot.financialOverview.totalInvestments)}
+          totalDebt={Math.round(snapshot.financialOverview.totalDebt)}
           homeValue={homeData?.value || snapshot.financialOverview.homeValue || null}
         />
 
@@ -280,21 +285,21 @@ export default function FinancesPageClient() {
           <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
             <div className="text-gray-400 text-sm mb-1">Total Cash</div>
             <div className="text-white font-semibold text-xl">
-              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(snapshot.financialOverview.totalCash)}
+              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(snapshot.financialOverview.totalCash))}
             </div>
           </div>
           
           <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
             <div className="text-gray-400 text-sm mb-1">Total Debt</div>
             <div className="text-white font-semibold text-xl">
-              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(snapshot.financialOverview.totalDebt)}
+              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(snapshot.financialOverview.totalDebt))}
             </div>
           </div>
           
           <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
             <div className="text-gray-400 text-sm mb-1">Total Investments</div>
             <div className="text-white font-semibold text-xl">
-              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(snapshot.financialOverview.totalInvestments)}
+              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(snapshot.financialOverview.totalInvestments))}
             </div>
           </div>
 
@@ -302,9 +307,9 @@ export default function FinancesPageClient() {
             <div className="text-gray-400 text-sm mb-1">Home Value</div>
             <div className="text-white font-semibold text-xl">
               {homeData && homeData.value > 0 ? 
-                new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(homeData.value) :
+                new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(homeData.value)) :
                 (snapshot.financialOverview.homeValue && snapshot.financialOverview.homeValue > 0 ?
-                  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(snapshot.financialOverview.homeValue) :
+                  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(snapshot.financialOverview.homeValue)) :
                   '$0'
                 )
               }
