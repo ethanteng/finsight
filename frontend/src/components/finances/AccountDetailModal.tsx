@@ -103,7 +103,6 @@ export default function AccountDetailModal({
 
   const [cashDebtView, setCashDebtView] = useState<CashDebtView>('categories');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [investmentView, setInvestmentView] = useState<InvestmentView>('overview');
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -287,123 +286,13 @@ export default function AccountDetailModal({
             </button>
           </div>
 
-          {/* Navigation Tabs */}
-          <div className="flex space-x-1 px-6 pt-4 bg-gray-800 border-b border-gray-700">
-            <button
-              onClick={() => setInvestmentView('overview')}
-              className={`py-2 px-4 rounded-t-md text-sm font-medium transition-colors ${
-                investmentView === 'overview'
-                  ? 'bg-gray-700 text-white'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              Portfolio Overview
-            </button>
-            <button
-              onClick={() => setInvestmentView('holdings')}
-              className={`py-2 px-4 rounded-t-md text-sm font-medium transition-colors ${
-                investmentView === 'holdings'
-                  ? 'bg-gray-700 text-white'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              Holdings ({accountHoldings.length})
-            </button>
-            <button
-              onClick={() => setInvestmentView('transactions')}
-              className={`py-2 px-4 rounded-t-md text-sm font-medium transition-colors ${
-                investmentView === 'transactions'
-                  ? 'bg-gray-700 text-white'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              Transactions ({accountInvestmentTransactions.length})
-            </button>
-          </div>
-
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6">
-            {investmentView === 'overview' && (
-              <InvestmentPortfolio
-                portfolio={accountPortfolio}
-                holdings={accountHoldings}
-                transactions={accountInvestmentTransactions}
-              />
-            )}
-
-            {investmentView === 'holdings' && (
-              <div className="space-y-4">
-                {accountHoldings.length > 0 ? (
-                  accountHoldings.map((holding) => (
-                    <div key={holding.id || holding.security_id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="font-medium text-white">
-                            {holding.security_name || 'Unknown Security'}
-                          </div>
-                          <div className="text-sm text-gray-400">
-                            {holding.security_type || 'Unknown Type'}
-                            {holding.ticker_symbol && ` • ${holding.ticker_symbol}`}
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            Quantity: {holding.quantity?.toLocaleString() || 'N/A'}
-                            {holding.cost_basis > 0 && ` • Cost Basis: ${formatCurrency(holding.cost_basis)}`}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-semibold text-white">
-                            {formatCurrency(holding.institution_value || 0)}
-                          </div>
-                          <div className="text-sm text-gray-400">
-                            {holding.institution_price ? `${formatCurrency(holding.institution_price)} per share` : 'N/A'}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-gray-400 text-center py-8">
-                    No holdings data available for this account
-                  </div>
-                )}
-              </div>
-            )}
-
-            {investmentView === 'transactions' && (
-              <div className="space-y-4">
-                {accountInvestmentTransactions.length > 0 ? (
-                  accountInvestmentTransactions.map((tx) => (
-                    <div key={tx.id || tx.transaction_id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="font-medium text-white">
-                            {tx.security_name || tx.name || 'Unknown Security'}
-                          </div>
-                          <div className="text-sm text-gray-400">
-                            {tx.type} • {formatDate(tx.date)}
-                            {tx.ticker_symbol && ` • ${tx.ticker_symbol}`}
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            Quantity: {tx.quantity?.toLocaleString() || 'N/A'}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className={`font-semibold ${
-                            tx.amount > 0 ? 'text-green-400' : 'text-red-400'
-                          }`}>
-                            {formatCurrency(Math.abs(tx.amount || 0))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-gray-400 text-center py-8">
-                    No transaction data available for this account
-                  </div>
-                )}
-              </div>
-            )}
+            <InvestmentPortfolio
+              portfolio={accountPortfolio}
+              holdings={accountHoldings}
+              transactions={accountInvestmentTransactions}
+            />
           </div>
         </div>
       </div>
