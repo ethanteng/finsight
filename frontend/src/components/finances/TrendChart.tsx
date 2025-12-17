@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 
 interface Transaction {
   id?: string;
@@ -41,6 +41,31 @@ export default function TrendChart({
   timeRange,
   onTimeRangeChange
 }: TrendChartProps) {
+  const getCutoffDate = useCallback((range: '1M' | '3M' | '6M' | '1Y' | 'All'): Date => {
+    const now = new Date();
+    const cutoff = new Date();
+    
+    switch (range) {
+      case '1M':
+        cutoff.setMonth(now.getMonth() - 1);
+        break;
+      case '3M':
+        cutoff.setMonth(now.getMonth() - 3);
+        break;
+      case '6M':
+        cutoff.setMonth(now.getMonth() - 6);
+        break;
+      case '1Y':
+        cutoff.setFullYear(now.getFullYear() - 1);
+        break;
+      case 'All':
+        cutoff.setFullYear(2000); // Far back enough
+        break;
+    }
+    
+    return cutoff;
+  }, []);
+
   const chartData = useMemo(() => {
     if (type === 'spending' && snapshot.transactionsSummary?.byMonth) {
       const monthKeys = Object.keys(snapshot.transactionsSummary.byMonth).sort();
@@ -116,32 +141,7 @@ export default function TrendChart({
     }
 
     return [];
-  }, [type, snapshot, timeRange]);
-
-  const getCutoffDate = (range: '1M' | '3M' | '6M' | '1Y' | 'All'): Date => {
-    const now = new Date();
-    const cutoff = new Date();
-    
-    switch (range) {
-      case '1M':
-        cutoff.setMonth(now.getMonth() - 1);
-        break;
-      case '3M':
-        cutoff.setMonth(now.getMonth() - 3);
-        break;
-      case '6M':
-        cutoff.setMonth(now.getMonth() - 6);
-        break;
-      case '1Y':
-        cutoff.setFullYear(now.getFullYear() - 1);
-        break;
-      case 'All':
-        cutoff.setFullYear(2000); // Far back enough
-        break;
-    }
-    
-    return cutoff;
-  };
+  }, [type, snapshot, timeRange, getCutoffDate]);
 
   const renderChart = () => {
     if (chartData.length === 0) {
