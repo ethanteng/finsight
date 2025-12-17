@@ -335,6 +335,11 @@ export default function FinancesPageClient() {
           </div>
         )}
 
+        {/* Home Value */}
+        {homeData && homeData.value > 0 && (
+          <HomeValueCard homeData={homeData} />
+        )}
+
         {/* Account Groups */}
         <div className="space-y-4 mt-6">
           {/* Cash Accounts */}
@@ -362,11 +367,6 @@ export default function FinancesPageClient() {
               onToggle={() => setSelectedAccountGroup(selectedAccountGroup === 'investments' ? null : 'investments')}
               onAccountClick={(accountId) => setSelectedAccountId(accountId)}
             />
-          )}
-
-          {/* Home Value */}
-          {homeData && homeData.value > 0 && (
-            <HomeValueCard homeData={homeData} />
           )}
 
           {/* Debt Accounts */}
