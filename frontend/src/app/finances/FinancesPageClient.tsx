@@ -5,6 +5,7 @@ import NetWorthCard from '../../components/finances/NetWorthCard';
 import HomeValueCard from '../../components/finances/HomeValueCard';
 import AccountGroupCard from '../../components/finances/AccountGroupCard';
 import TrendChart from '../../components/finances/TrendChart';
+import AccountDetailModal from '../../components/finances/AccountDetailModal';
 import { groupAccounts } from '../../components/finances/AccountGrouping';
 
 interface Account {
@@ -66,8 +67,47 @@ interface Transaction {
   amount: number;
   date: string;
   name: string;
-  category?: string[];
+  category?: string[] | string;
   pending?: boolean;
+  merchant_name?: string;
+  enriched_data?: {
+    merchant_name?: string;
+    website?: string;
+    logo_url?: string;
+    category?: string[];
+  };
+  transaction_type?: string;
+}
+
+interface Holding {
+  id: string;
+  account_id: string;
+  security_id: string;
+  institution_value: number;
+  institution_price: number;
+  institution_price_as_of: string;
+  cost_basis: number;
+  quantity: number;
+  iso_currency_code: string;
+  security_name?: string;
+  security_type?: string;
+  ticker_symbol?: string;
+}
+
+interface InvestmentTransaction {
+  id?: string;
+  transaction_id?: string;
+  account_id: string;
+  security_id: string;
+  amount: number;
+  date: string;
+  name?: string;
+  security_name?: string;
+  security_type?: string;
+  ticker_symbol?: string;
+  quantity: number;
+  type: string;
+  iso_currency_code: string;
 }
 
 interface Snapshot {
@@ -76,6 +116,7 @@ interface Snapshot {
   investmentPortfolio: InvestmentPortfolio;
   accounts?: Account[];
   transactions?: Transaction[];
+  holdings?: Holding[];
   transactionsSummary?: {
     byMonth: Record<string, { income: number; expense: number }>;
     byCategory: Record<string, number>;
@@ -90,7 +131,8 @@ export default function FinancesPageClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedAccountGroup, setSelectedAccountGroup] = useState<string | null>(null);
-  const [_selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<Account | SnapTradeAccount | null>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [chartTimeRange, setChartTimeRange] = useState<'1M' | '3M' | '6M' | '1Y' | 'All'>('6M');
   const router = useRouter();
 
@@ -255,6 +297,20 @@ export default function FinancesPageClient() {
   // Use fresh accounts if available, otherwise fall back to snapshot accounts
   const accounts = freshAccounts.length > 0 ? freshAccounts : (snapshot.accounts || []);
   const groupedAccounts = groupAccounts(accounts, snapTradeAccounts);
+  
+  // Helper to find account by ID
+  const findAccountById = (accountId: string): Account | SnapTradeAccount | null => {
+    const allAccounts = [
+      ...groupedAccounts.cash,
+      ...groupedAccounts.investments,
+      ...groupedAccounts.debt,
+      ...groupedAccounts.snapTrade
+    ];
+    return allAccounts.find(acc => {
+      const accId = (acc as Account).account_id || (acc as Account).id || (acc as SnapTradeAccount).id;
+      return accId === accountId;
+    }) || null;
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -386,7 +442,13 @@ export default function FinancesPageClient() {
               }, 0)}
               isExpanded={selectedAccountGroup === 'cash'}
               onToggle={() => setSelectedAccountGroup(selectedAccountGroup === 'cash' ? null : 'cash')}
-              onAccountClick={(accountId) => setSelectedAccountId(accountId)}
+              onAccountClick={(accountId) => {
+                const account = findAccountById(accountId);
+                if (account) {
+                  setSelectedAccount(account);
+                  setSelectedAccountId(accountId);
+                }
+              }}
             />
           )}
 
@@ -398,7 +460,13 @@ export default function FinancesPageClient() {
               totalBalance={snapshot.financialOverview.totalInvestments}
               isExpanded={selectedAccountGroup === 'investments'}
               onToggle={() => setSelectedAccountGroup(selectedAccountGroup === 'investments' ? null : 'investments')}
-              onAccountClick={(accountId) => setSelectedAccountId(accountId)}
+              onAccountClick={(accountId) => {
+                const account = findAccountById(accountId);
+                if (account) {
+                  setSelectedAccount(account);
+                  setSelectedAccountId(accountId);
+                }
+              }}
             />
           )}
 
@@ -413,11 +481,34 @@ export default function FinancesPageClient() {
               }, 0)}
               isExpanded={selectedAccountGroup === 'debt'}
               onToggle={() => setSelectedAccountGroup(selectedAccountGroup === 'debt' ? null : 'debt')}
-              onAccountClick={(accountId) => setSelectedAccountId(accountId)}
+              onAccountClick={(accountId) => {
+                const account = findAccountById(accountId);
+                if (account) {
+                  setSelectedAccount(account);
+                  setSelectedAccountId(accountId);
+                }
+              }}
             />
           )}
         </div>
       </div>
+
+      {/* Account Detail Modal */}
+      {selectedAccount && selectedAccountId && snapshot && (
+        <AccountDetailModal
+          account={selectedAccount}
+          accountId={selectedAccountId}
+          transactions={snapshot.transactions || []}
+          holdings={snapshot.holdings || []}
+          investmentTransactions={(snapshot.transactions || []).filter((t: any) => 
+            t.security_id || t.type === 'buy' || t.type === 'sell' || t.security_name
+          ) as InvestmentTransaction[]}
+          onClose={() => {
+            setSelectedAccount(null);
+            setSelectedAccountId(null);
+          }}
+        />
+      )}
     </div>
   );
 }
