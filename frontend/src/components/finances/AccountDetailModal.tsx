@@ -1,6 +1,6 @@
 "use client";
 import { useState, useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import InvestmentPortfolio from '../InvestmentPortfolio';
 
 interface Account {
@@ -142,6 +142,17 @@ export default function AccountDetailModal({
     return parts[parts.length - 1] || categoryPath;
   };
 
+  // Color palette function for different category types
+  const getCategoryColor = (type: 'income' | 'expense' | 'payment' | 'additionalDebt', index: number): string => {
+    const palettes = {
+      income: ['#10B981', '#059669', '#047857', '#065F46'],
+      expense: ['#EF4444', '#DC2626', '#B91C1C', '#991B1B'],
+      payment: ['#06B6D4', '#0891B2', '#0E7490', '#155E75'],
+      additionalDebt: ['#F59E0B', '#D97706', '#B45309', '#92400E']
+    };
+    return palettes[type][index % palettes[type].length];
+  };
+
   // Filter transactions for this account
   const accountTransactions = useMemo(() => {
     return transactions.filter(t => {
@@ -192,7 +203,7 @@ export default function AccountDetailModal({
       
       const targetTotals = isCashAccount 
         ? (isIncome ? incomeTotals : expenseTotals)
-        : (isPayment ? expenseTotals : incomeTotals); // For debt: payments go to "expense" (reducing), additional debt goes to "income" (increasing)
+        : (isPayment ? incomeTotals : expenseTotals); // For debt: payments go to "income" (reducing debt), additional debt goes to "expense" (increasing debt)
       
       if (!targetTotals[categoryKey]) {
         targetTotals[categoryKey] = { total: 0, count: 0, fullCategory: categoryKey };
@@ -464,38 +475,44 @@ export default function AccountDetailModal({
                               width={140}
                             />
                             <Tooltip
-                              formatter={(value: number, name: string, props: { payload?: { percentage: number; fullCategory: string } }) => {
+                              formatter={(value: number, name: string, props: { payload?: { percentage: number; shortenedCategory: string } }) => {
                                 if (!props.payload) return [`${formatCurrency(value)}`, name];
                                 return [
                                   `${formatCurrency(value)} (${props.payload.percentage.toFixed(1)}%)`,
-                                  props.payload.fullCategory
+                                  props.payload.shortenedCategory
                                 ];
                               }}
+                              labelFormatter={() => ''}
                               contentStyle={{
                                 backgroundColor: '#1F2937',
                                 border: '1px solid #374151',
                                 borderRadius: '8px',
-                                color: '#fff'
+                                color: '#fff',
+                                fontSize: '12px',
+                                padding: '8px'
                               }}
-                              itemStyle={{ color: '#fff' }}
-                              labelStyle={{ color: '#fff' }}
+                              itemStyle={{ color: '#fff', fontSize: '12px' }}
+                              labelStyle={{ color: '#fff', fontSize: '12px' }}
                             />
                             <Bar
                               dataKey="total"
-                              fill="#10B981"
                               onClick={(data) => {
                                 if (data && data.fullCategory) {
                                   setSelectedCategory(data.fullCategory);
                                 }
                               }}
                               style={{ cursor: 'pointer' }}
-                            />
+                            >
+                              {categoryTotals.income.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={getCategoryColor(entry.type, index)} />
+                              ))}
+                            </Bar>
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
                       {/* Income/Payments Details List */}
                       <div className="space-y-2">
-                        {categoryTotals.income.map((cat) => (
+                        {categoryTotals.income.map((cat, index) => (
                           <button
                             key={cat.category}
                             onClick={() => setSelectedCategory(cat.fullCategory)}
@@ -503,7 +520,7 @@ export default function AccountDetailModal({
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3 flex-1">
-                                <div className="w-4 h-4 rounded" style={{ backgroundColor: '#10B981' }} />
+                                <div className="w-4 h-4 rounded" style={{ backgroundColor: getCategoryColor(cat.type, index) }} />
                                 <div className="flex-1">
                                   <div className="font-medium text-white">{cat.shortenedCategory}</div>
                                   <div className="text-sm text-gray-400">{cat.count} transactions</div>
@@ -552,38 +569,44 @@ export default function AccountDetailModal({
                               width={140}
                             />
                             <Tooltip
-                              formatter={(value: number, name: string, props: { payload?: { percentage: number; fullCategory: string } }) => {
+                              formatter={(value: number, name: string, props: { payload?: { percentage: number; shortenedCategory: string } }) => {
                                 if (!props.payload) return [`${formatCurrency(value)}`, name];
                                 return [
                                   `${formatCurrency(value)} (${props.payload.percentage.toFixed(1)}%)`,
-                                  props.payload.fullCategory
+                                  props.payload.shortenedCategory
                                 ];
                               }}
+                              labelFormatter={() => ''}
                               contentStyle={{
                                 backgroundColor: '#1F2937',
                                 border: '1px solid #374151',
                                 borderRadius: '8px',
-                                color: '#fff'
+                                color: '#fff',
+                                fontSize: '12px',
+                                padding: '8px'
                               }}
-                              itemStyle={{ color: '#fff' }}
-                              labelStyle={{ color: '#fff' }}
+                              itemStyle={{ color: '#fff', fontSize: '12px' }}
+                              labelStyle={{ color: '#fff', fontSize: '12px' }}
                             />
                             <Bar
                               dataKey="total"
-                              fill="#EF4444"
                               onClick={(data) => {
                                 if (data && data.fullCategory) {
                                   setSelectedCategory(data.fullCategory);
                                 }
                               }}
                               style={{ cursor: 'pointer' }}
-                            />
+                            >
+                              {categoryTotals.expense.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={getCategoryColor(entry.type, index)} />
+                              ))}
+                            </Bar>
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
                       {/* Expense/Additional Debt Details List */}
                       <div className="space-y-2">
-                        {categoryTotals.expense.map((cat) => (
+                        {categoryTotals.expense.map((cat, index) => (
                           <button
                             key={cat.category}
                             onClick={() => setSelectedCategory(cat.fullCategory)}
@@ -591,7 +614,7 @@ export default function AccountDetailModal({
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3 flex-1">
-                                <div className="w-4 h-4 rounded" style={{ backgroundColor: '#EF4444' }} />
+                                <div className="w-4 h-4 rounded" style={{ backgroundColor: getCategoryColor(cat.type, index) }} />
                                 <div className="flex-1">
                                   <div className="font-medium text-white">{cat.shortenedCategory}</div>
                                   <div className="text-sm text-gray-400">{cat.count} transactions</div>

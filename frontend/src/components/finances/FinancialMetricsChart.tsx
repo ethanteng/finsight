@@ -108,16 +108,24 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
   const minValue = Math.min(...chartData.map(d => d.totalDebt)); // Most negative (debt)
   const maxValue = Math.max(...allValues);
   
-  // Ensure Y-axis starts at 0 and extends both above and below
-  // Add padding: 10% above max, 10% below min (but ensure 0 is included)
-  const yAxisMin = Math.min(0, minValue * 1.1);
-  const yAxisMax = maxValue * 1.1;
+  // Ensure Y-axis starts at 0 (or below if there's negative debt)
+  // Calculate padding: 10% above max, 10% below min (if negative)
+  const paddingTop = maxValue * 0.1;
+  const paddingBottom = minValue < 0 ? Math.abs(minValue) * 0.1 : 0;
+  
+  // Y-axis domain: start at 0 or below (if there's debt), extend to accommodate all values
+  // Always ensure 0 is included in the visible range
+  const yAxisMin = minValue < 0 ? minValue - paddingBottom : 0;
+  const yAxisMax = maxValue + paddingTop;
+  
+  // Ensure domain includes 0 - this is critical for bars to start from the baseline
+  const finalYAxisMin = Math.min(0, yAxisMin);
 
   return (
     <ResponsiveContainer width="100%" height={400}>
-      <ComposedChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+      <ComposedChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 60 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-        <ReferenceLine y={0} stroke="#6B7280" strokeWidth={2} strokeDasharray="0" />
+        <ReferenceLine y={0} stroke="#6B7280" strokeWidth={2} />
         <XAxis
           dataKey="dateLabel"
           stroke="#9CA3AF"
@@ -125,13 +133,16 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           angle={-45}
           textAnchor="end"
           height={60}
+          interval={0}
+          tick={{ fill: '#9CA3AF' }}
         />
         <YAxis
           stroke="#9CA3AF"
           style={{ fontSize: '12px' }}
           tickFormatter={(value) => formatCurrency(Math.abs(value))}
-          domain={[yAxisMin, yAxisMax]}
+          domain={[finalYAxisMin, yAxisMax]}
           allowDataOverflow={false}
+          tick={{ fill: '#9CA3AF' }}
         />
         <Tooltip
           formatter={(value: number, name: string) => {
@@ -161,19 +172,19 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           }}
         />
         {/* Stacked bars - assets above zero, debt below zero */}
-        {/* Order matters for stacking: Cash first (bottom), then Investments, then Home Value (top) */}
-        <Bar dataKey="totalCash" stackId="assets" fill="#10B981" name="totalCash" />
-        <Bar dataKey="totalInvestments" stackId="assets" fill="#8B5CF6" name="totalInvestments" />
+        {/* Order matters for stacking: Cash first (bottom), then Investments, then Home Value (top), then Debt (below zero) */}
+        <Bar dataKey="totalCash" stackId="financial" fill="#10B981" name="totalCash" />
+        <Bar dataKey="totalInvestments" stackId="financial" fill="#8B5CF6" name="totalInvestments" />
         <Bar 
           dataKey="homeValue" 
-          stackId="assets" 
+          stackId="financial" 
           fill="#F59E0B" 
           name="homeValue"
           minPointSize={0}
         />
-        {/* Debt bar (negative, uses same stackId to appear as part of same stack but below zero) */}
-        <Bar dataKey="totalDebt" stackId="assets" fill="#EF4444" name="totalDebt" />
-        {/* Net Worth line */}
+        {/* Debt bar (negative, part of same stack but extends below zero) */}
+        <Bar dataKey="totalDebt" stackId="financial" fill="#EF4444" name="totalDebt" />
+        {/* Net Worth line - render after bars so it appears on top */}
         <Line
           type="monotone"
           dataKey="netWorth"
@@ -181,6 +192,7 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           strokeWidth={3}
           dot={false}
           name="netWorth"
+          isAnimationActive={false}
         />
       </ComposedChart>
     </ResponsiveContainer>
