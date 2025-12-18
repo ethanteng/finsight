@@ -1,6 +1,34 @@
 "use client";
 import { useMemo, useState } from 'react';
-import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+  TimeScale,
+} from 'chart.js';
+import { Chart } from 'react-chartjs-2';
+import 'chartjs-adapter-date-fns';
+
+// Register Chart.js components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+  TimeScale
+);
 
 export interface HistoricalSnapshot {
   computedAt: string;
@@ -18,6 +46,7 @@ interface FinancialMetricsChartProps {
 
 export default function FinancialMetricsChart({ data, timeRange = 'All' }: FinancialMetricsChartProps) {
   const [viewMode, setViewMode] = useState<'assets' | 'debt'>('assets');
+
   const formatCurrency = (value: number) => {
     if (value >= 1000000) {
       return `$${(value / 1000000).toFixed(1)}M`;
@@ -28,21 +57,7 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
     return `$${value.toFixed(0)}`;
   };
 
-  const formatDateLabel = (date: Date): string => {
-    const daysDiff = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (daysDiff < 30) {
-      // Show day and month for recent data
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    } else if (daysDiff < 365) {
-      // Show month and year for medium-term data
-      return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-    } else {
-      // Show month and full year for long-term data
-      return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-    }
-  };
-
+  // Filter data based on time range
   const filteredData = useMemo(() => {
     if (timeRange === 'All' || !data.length) return data;
     
@@ -70,29 +85,210 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
     });
   }, [data, timeRange]);
 
+  // Prepare chart data for Chart.js
   const chartData = useMemo(() => {
-    if (!filteredData || filteredData.length === 0) return [];
-    
-    // Reverse to show oldest first (for proper time progression)
-    return [...filteredData].reverse().map(item => {
-      // Ensure homeValue is always a number (use 0 if null)
-      const homeValue = item.homeValue != null ? Number(item.homeValue) : 0;
-      
-      const dataPoint = {
-        date: new Date(item.computedAt),
-        dateLabel: formatDateLabel(new Date(item.computedAt)),
-        netWorth: Number(item.netWorth) || 0,
-        totalCash: Number(item.totalCash) || 0,
-        totalInvestments: Number(item.totalInvestments) || 0,
-        totalDebt: Number(item.totalDebt) || 0, // Positive value for debt chart
-        homeValue: homeValue || 0, // Always include homeValue, even if 0
-        // Calculate stacked assets (cash + investments + home value)
-        assets: (Number(item.totalCash) || 0) + (Number(item.totalInvestments) || 0) + (homeValue || 0),
+    if (!filteredData || filteredData.length === 0) return null;
+
+    // Sort data by date (oldest first)
+    const sortedData = [...filteredData].sort((a, b) => 
+      new Date(a.computedAt).getTime() - new Date(b.computedAt).getTime()
+    );
+
+    // Prepare data points with dates
+    const dataPoints = sortedData.map(item => ({
+      x: new Date(item.computedAt).getTime(),
+      netWorth: Number(item.netWorth) || 0,
+      totalCash: Number(item.totalCash) || 0,
+      totalInvestments: Number(item.totalInvestments) || 0,
+      totalDebt: Number(item.totalDebt) || 0,
+      homeValue: item.homeValue != null ? Number(item.homeValue) : 0,
+    }));
+
+    if (viewMode === 'assets') {
+      // Assets & Net Worth view: Stacked area for assets + line for net worth
+      return {
+        datasets: [
+          // Total Cash (bottom layer)
+          {
+            label: 'Total Cash',
+            data: dataPoints.map(d => ({ x: d.x, y: d.totalCash })),
+            backgroundColor: 'rgba(16, 185, 129, 0.6)', // #10B981 with opacity
+            borderColor: '#10B981',
+            borderWidth: 0,
+            fill: true,
+            stack: 'assets',
+            order: 2,
+          },
+          // Total Investments (middle layer)
+          {
+            label: 'Total Investments',
+            data: dataPoints.map(d => ({ x: d.x, y: d.totalInvestments })),
+            backgroundColor: 'rgba(139, 92, 246, 0.6)', // #8B5CF6 with opacity
+            borderColor: '#8B5CF6',
+            borderWidth: 0,
+            fill: true,
+            stack: 'assets',
+            order: 2,
+          },
+          // Home Value (top layer)
+          {
+            label: 'Home Value',
+            data: dataPoints.map(d => ({ x: d.x, y: d.homeValue })),
+            backgroundColor: 'rgba(245, 158, 11, 0.6)', // #F59E0B with opacity
+            borderColor: '#F59E0B',
+            borderWidth: 0,
+            fill: true,
+            stack: 'assets',
+            order: 2,
+          },
+          // Net Worth line (overlay)
+          {
+            label: 'Net Worth',
+            data: dataPoints.map(d => ({ x: d.x, y: d.netWorth })),
+            borderColor: '#3B82F6',
+            backgroundColor: 'transparent',
+            borderWidth: 3,
+            fill: false,
+            type: 'line' as const,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            order: 1,
+          },
+        ],
       };
-      
-      return dataPoint;
+    } else {
+      // Debt view: Single line/bar for debt
+      return {
+        datasets: [
+          {
+            label: 'Total Debt',
+            data: dataPoints.map(d => ({ x: d.x, y: d.totalDebt })),
+            backgroundColor: 'rgba(239, 68, 68, 0.6)', // #EF4444 with opacity
+            borderColor: '#EF4444',
+            borderWidth: 2,
+            fill: true,
+            type: 'line' as const,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+          },
+        ],
+      };
+    }
+  }, [filteredData, viewMode]);
+
+  // Calculate Y-axis domain
+  const yAxisMax = useMemo(() => {
+    if (!chartData) return 1000;
+    
+    const allValues: number[] = [];
+    chartData.datasets.forEach(dataset => {
+      if (Array.isArray(dataset.data)) {
+        dataset.data.forEach((point: any) => {
+          if (point.y !== undefined && point.y !== null) {
+            allValues.push(point.y);
+          }
+        });
+      }
     });
-  }, [filteredData]);
+    
+    if (allValues.length === 0) return 1000;
+    const max = Math.max(...allValues);
+    return max > 0 ? max * 1.1 : 1000; // 10% padding
+  }, [chartData]);
+
+  // Chart options
+  const chartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+      mode: 'index' as const,
+      intersect: false,
+    },
+    plugins: {
+      legend: {
+        display: true,
+        position: 'top' as const,
+        labels: {
+          color: '#9CA3AF',
+          usePointStyle: true,
+          padding: 15,
+          font: {
+            size: 12,
+          },
+        },
+      },
+      tooltip: {
+        backgroundColor: '#1F2937',
+        borderColor: '#374151',
+        borderWidth: 1,
+        padding: 12,
+        titleColor: '#fff',
+        bodyColor: '#fff',
+        callbacks: {
+          label: (context: any) => {
+            const label = context.dataset.label || '';
+            const value = context.parsed.y;
+            // Don't show homeValue if it's 0
+            if (label === 'Home Value' && value === 0) {
+              return null;
+            }
+            return `${label}: ${formatCurrency(value)}`;
+          },
+          title: (context: any) => {
+            const date = new Date(context[0].parsed.x);
+            const daysDiff = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+            
+            if (daysDiff < 30) {
+              return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            } else if (daysDiff < 365) {
+              return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+            } else {
+              return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+            }
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        type: 'time' as const,
+        time: {
+          displayFormats: {
+            day: 'MMM d',
+            month: 'MMM yyyy',
+            year: 'yyyy',
+          },
+        },
+        grid: {
+          color: '#374151',
+          drawBorder: false,
+        },
+        ticks: {
+          color: '#9CA3AF',
+          font: {
+            size: 12,
+          },
+          maxRotation: 45,
+          minRotation: 45,
+        },
+      },
+      y: {
+        beginAtZero: true,
+        max: yAxisMax,
+        grid: {
+          color: '#374151',
+          drawBorder: false,
+        },
+        ticks: {
+          color: '#9CA3AF',
+          font: {
+            size: 12,
+          },
+          callback: (value: any) => formatCurrency(value),
+        },
+      },
+    },
+  }), [yAxisMax]);
 
   if (!data || data.length === 0) {
     return (
@@ -102,7 +298,7 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
     );
   }
 
-  if (!chartData || chartData.length === 0) {
+  if (!chartData || filteredData.length === 0) {
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-center gap-4">
@@ -134,31 +330,6 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
     );
   }
 
-  // Calculate domain based on view mode
-  const assetsValues = [
-    ...chartData.map(d => Number(d.netWorth) || 0),
-    ...chartData.map(d => Number(d.totalCash) || 0),
-    ...chartData.map(d => Number(d.totalInvestments) || 0),
-    ...chartData.map(d => Number(d.homeValue) || 0),
-    ...chartData.map(d => Number(d.assets) || 0),
-  ].filter(v => !isNaN(v) && isFinite(v) && v >= 0);
-  
-  const debtValues = chartData.map(d => Number(d.totalDebt) || 0).filter(v => !isNaN(v) && isFinite(v) && v >= 0);
-  
-  const assetsMax = assetsValues.length > 0 && Math.max(...assetsValues) > 0 ? Math.max(...assetsValues) : 1000;
-  const debtMax = debtValues.length > 0 && Math.max(...debtValues) > 0 ? Math.max(...debtValues) : 1000;
-  
-  // Calculate domain with padding - ensure minimum domain size
-  const padding = 0.1; // 10% padding
-  const calculatedMax = viewMode === 'assets' ? assetsMax : debtMax;
-  const domainMax = calculatedMax > 0 ? calculatedMax * (1 + padding) : 1000;
-  const domainMin = 0; // Always start at 0
-  
-  // Ensure domain is valid
-  if (!isFinite(domainMax) || domainMax <= 0) {
-    console.error('Invalid domain calculation:', { domainMax, assetsMax, debtMax, viewMode, chartData });
-  }
-
   return (
     <div className="space-y-4">
       {/* Toggle Switch */}
@@ -186,117 +357,9 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
       </div>
 
       {/* Chart */}
-      <ResponsiveContainer width="100%" height={400}>
-        <ComposedChart 
-          data={chartData} 
-          margin={{ top: 5, right: 30, left: 20, bottom: 60 }}
-          barCategoryGap="20%"
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-          <ReferenceLine y={0} stroke="#6B7280" strokeWidth={2} />
-          <XAxis
-            dataKey="dateLabel"
-            stroke="#9CA3AF"
-            style={{ fontSize: '12px' }}
-            angle={-45}
-            textAnchor="end"
-            height={60}
-            interval={0}
-            tick={{ fill: '#9CA3AF' }}
-          />
-          <YAxis
-            stroke="#9CA3AF"
-            style={{ fontSize: '12px' }}
-            tickFormatter={(value) => formatCurrency(value)}
-            domain={[domainMin, domainMax]}
-            allowDataOverflow={false}
-            tick={{ fill: '#9CA3AF' }}
-            type="number"
-          />
-          <Tooltip
-            formatter={(value: number, name: string) => {
-              // Only show homeValue in tooltip if it's greater than 0
-              if (name === 'homeValue' && value === 0) {
-                return null;
-              }
-              return [formatCurrency(value), getMetricLabel(name)];
-            }}
-            labelFormatter={(label) => `Date: ${label}`}
-            contentStyle={{
-              backgroundColor: '#1F2937',
-              border: '1px solid #374151',
-              borderRadius: '8px',
-              color: '#fff'
-            }}
-            itemStyle={{ color: '#fff' }}
-            labelStyle={{ color: '#fff' }}
-          />
-          <Legend
-            wrapperStyle={{ color: '#fff' }}
-            formatter={(value: string) => {
-              return getMetricLabel(value);
-            }}
-          />
-          {viewMode === 'assets' ? (
-            <>
-              {/* Assets view: Stacked bars for assets + Net Worth line */}
-              <Bar 
-                dataKey="totalCash" 
-                stackId="assets" 
-                fill="#10B981" 
-                name="totalCash"
-                isAnimationActive={false}
-              />
-              <Bar 
-                dataKey="totalInvestments" 
-                stackId="assets" 
-                fill="#8B5CF6" 
-                name="totalInvestments"
-                isAnimationActive={false}
-              />
-              <Bar 
-                dataKey="homeValue" 
-                stackId="assets" 
-                fill="#F59E0B" 
-                name="homeValue"
-                minPointSize={0}
-                isAnimationActive={false}
-              />
-              {/* Net Worth line */}
-              <Line
-                type="monotone"
-                dataKey="netWorth"
-                stroke="#3B82F6"
-                strokeWidth={3}
-                dot={false}
-                name="netWorth"
-                isAnimationActive={false}
-              />
-            </>
-          ) : (
-            <>
-              {/* Debt view: Single bar chart for debt */}
-              <Bar 
-                dataKey="totalDebt" 
-                fill="#EF4444" 
-                name="totalDebt"
-                isAnimationActive={false}
-              />
-            </>
-          )}
-        </ComposedChart>
-      </ResponsiveContainer>
+      <div style={{ height: '400px', width: '100%' }}>
+        <Chart type="line" data={chartData} options={chartOptions} />
+      </div>
     </div>
   );
-}
-
-function getMetricLabel(metric: string): string {
-  const labels: Record<string, string> = {
-    netWorth: 'Net Worth',
-    totalCash: 'Total Cash',
-    totalInvestments: 'Total Investments',
-    totalDebt: 'Total Debt',
-    homeValue: 'Home Value',
-  };
-  return labels[metric] || metric;
 }

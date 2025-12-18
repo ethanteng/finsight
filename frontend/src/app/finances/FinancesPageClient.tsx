@@ -269,7 +269,10 @@ export default function FinancesPageClient() {
           const historyRes = await fetch(`${API_URL}/api/financial-history`, { headers });
           if (historyRes.ok) {
             const historyData = await historyRes.json();
-            setHistoricalData(historyData);
+            // Ensure we always have an array
+            const safeHistoryData = Array.isArray(historyData) ? historyData : [];
+            console.log(`📊 FinancesPage: Loaded ${safeHistoryData.length} historical snapshots`);
+            setHistoricalData(safeHistoryData);
           } else {
             console.log('Failed to load historical data, will show empty state');
             setHistoricalData([]);
@@ -450,7 +453,9 @@ export default function FinancesPageClient() {
           // Recalculate net worth and fill in missing homeValue for all historical snapshots
           // If a historical snapshot has homeValue as null/0 but we have a current homeValue,
           // use the current homeValue (assuming home value doesn't change frequently)
-          const correctedHistoricalData = historicalData.map(snapshot => {
+          // Ensure historicalData is always an array
+          const safeHistoricalData = Array.isArray(historicalData) ? historicalData : [];
+          const correctedHistoricalData = safeHistoricalData.map(snapshot => {
             // Use current homeValue if historical snapshot is missing it (null or 0)
             const homeValue = (snapshot.homeValue != null && snapshot.homeValue > 0) 
               ? snapshot.homeValue 
