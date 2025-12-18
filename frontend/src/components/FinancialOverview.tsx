@@ -337,6 +337,12 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
     router.push('/profile');
   };
 
+  const handleOverviewClick = () => {
+    if (!isDemo) {
+      router.push('/finances');
+    }
+  };
+
   if (loading) {
     return (
       <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 mb-6">
@@ -354,7 +360,19 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
 
   if (!hasAccounts && !isDemo) {
     return (
-      <div className="bg-blue-900 border border-blue-700 rounded-lg p-4 mb-6">
+      <div 
+        className="bg-blue-900 border border-blue-700 rounded-lg p-4 mb-6 cursor-pointer hover:border-blue-600 transition-colors"
+        onClick={handleOverviewClick}
+        title="Click to view full financial dashboard"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleOverviewClick();
+          }
+        }}
+      >
         <div className="text-center">
           <h3 className="text-lg font-semibold text-blue-100 mb-2">
             Your Financial Overview
@@ -363,7 +381,10 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
             Add your accounts to start seeing your financial overview
           </p>
           <button
-            onClick={handleAddAccounts}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleAddAccounts();
+            }}
             className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md text-sm font-medium transition-colors"
           >
             Add Your Accounts
@@ -377,7 +398,19 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
   const netWorth = totalCash + totalInvestments + totalHomeValue - totalDebt;
 
   return (
-    <div className="bg-blue-900 border border-blue-700 rounded-lg p-3 mb-4">
+    <div 
+      className="bg-blue-900 border border-blue-700 rounded-lg p-3 mb-4 cursor-pointer hover:border-blue-600 transition-colors"
+      onClick={handleOverviewClick}
+      title="Click to view full financial dashboard"
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleOverviewClick();
+        }
+      }}
+    >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center space-x-2">
           <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
@@ -387,8 +420,12 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
         {/* Add More Accounts link - only show when user has accounts */}
         {hasAccounts && (
           <button
-            onClick={handleAddAccounts}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleAddAccounts();
+            }}
             className="text-blue-300 hover:text-blue-200 text-sm transition-colors underline decoration-blue-400/30 hover:decoration-blue-400/60"
+            title="Add more accounts"
           >
             Add More Accounts
           </button>
