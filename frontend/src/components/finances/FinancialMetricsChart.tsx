@@ -27,6 +27,21 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
     return `$${value.toFixed(0)}`;
   };
 
+  const formatDateLabel = (date: Date): string => {
+    const daysDiff = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (daysDiff < 30) {
+      // Show day and month for recent data
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    } else if (daysDiff < 365) {
+      // Show month and year for medium-term data
+      return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+    } else {
+      // Show month and full year for long-term data
+      return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    }
+  };
+
   const filteredData = useMemo(() => {
     if (timeRange === 'All' || !data.length) return data;
     
@@ -66,21 +81,6 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
       homeValue: item.homeValue ?? 0,
     }));
   }, [filteredData]);
-
-  const formatDateLabel = (date: Date): string => {
-    const daysDiff = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (daysDiff < 30) {
-      // Show day and month for recent data
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    } else if (daysDiff < 365) {
-      // Show month and year for medium-term data
-      return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-    } else {
-      // Show month and full year for long-term data
-      return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-    }
-  };
 
   if (!data || data.length === 0) {
     return (
