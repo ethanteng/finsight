@@ -16,13 +16,33 @@ export default function ManualAccountForm({ account, onSuccess, onCancel, isDemo
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  const formatAmount = (value: number): string => {
+    // Format number with commas for display
+    return value.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  };
+
   useEffect(() => {
     if (account) {
       setName(account.name);
-      setAmount(account.amount.toString());
+      setAmount(formatAmount(account.amount));
       setType(account.type);
     }
   }, [account]);
+
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Allow numbers, commas, and decimal points
+    const value = e.target.value.replace(/[^0-9,.]/g, '');
+    setAmount(value);
+  };
+
+  const parseAmount = (amountStr: string): number => {
+    // Remove commas and parse as float
+    const cleaned = amountStr.replace(/,/g, '');
+    return parseFloat(cleaned);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,21 +50,25 @@ export default function ManualAccountForm({ account, onSuccess, onCancel, isDemo
     setError('');
 
     try {
-      const amountNum = parseFloat(amount);
-      if (isNaN(amountNum)) {
-        setError('Amount must be a valid number');
+      const amountNum = parseAmount(amount);
+      if (isNaN(amountNum) || amountNum <= 0) {
+        setError('Amount must be a valid positive number');
         setIsSubmitting(false);
         return;
       }
 
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        setError('Authentication required. Please log in again.');
+        setIsSubmitting(false);
+        return;
+      }
+      
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
       };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
 
       const url = account 
         ? `${API_URL}/api/manual-accounts/${account.id}`
@@ -103,13 +127,14 @@ export default function ManualAccountForm({ account, onSuccess, onCancel, isDemo
           </label>
           <input
             id="amount"
-            type="number"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={handleAmountChange}
             required
             className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             placeholder="0.00"
+            pattern="[0-9,]*\.?[0-9]*"
           />
           {type === 'debt' && (
             <p className="mt-1 text-xs text-gray-400">

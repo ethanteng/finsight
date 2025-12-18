@@ -22,13 +22,17 @@ export default function ManualAccountList({ accounts, onRefresh, isDemo = false 
     setDeletingId(id);
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        alert('Authentication required. Please log in again.');
+        setDeletingId(null);
+        return;
+      }
+      
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
       };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
 
       const response = await fetch(`${API_URL}/api/manual-accounts/${id}`, {
         method: 'DELETE',
