@@ -1,6 +1,6 @@
 "use client";
 import { useState, useMemo } from 'react';
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import InvestmentPortfolio from '../InvestmentPortfolio';
 
 interface Account {
@@ -88,7 +88,6 @@ interface AccountDetailModalProps {
 }
 
 type CashDebtView = 'categories' | 'transactions';
-type InvestmentView = 'overview' | 'holdings' | 'transactions';
 
 export default function AccountDetailModal({
   account,
@@ -422,10 +421,13 @@ export default function AccountDetailModal({
                           ))}
                         </Pie>
                         <Tooltip
-                          formatter={(value: number, name: string, props: any) => [
-                            `${formatCurrency(value)} (${props.payload.percentage.toFixed(1)}%)`,
-                            props.payload.name
-                          ]}
+                          formatter={(value: number, name: string, props: { payload?: { percentage: number; name: string } }) => {
+                            if (!props.payload) return [`${formatCurrency(value)}`, name];
+                            return [
+                              `${formatCurrency(value)} (${props.payload.percentage.toFixed(1)}%)`,
+                              props.payload.name
+                            ];
+                          }}
                           contentStyle={{
                             backgroundColor: '#1F2937',
                             border: '1px solid #374151',

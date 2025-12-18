@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface Security {
   id: string;
@@ -86,19 +86,6 @@ interface Account {
   name: string;
   type: string;
   subtype: string;
-}
-
-interface InvestmentData {
-  holdings: Holding[];
-  securities: Security[];
-  accounts: Account[];
-  investment_transactions: unknown[];
-  total_investment_transactions: number;
-  item: unknown;
-  analysis: {
-    portfolio: PortfolioAnalysis;
-    activity: ActivityAnalysis;
-  };
 }
 
 interface InvestmentPortfolioProps {
@@ -308,8 +295,9 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(value: number, name: string, props: any) => {
+                      formatter={(value: number, name: string, props: { payload?: { percentage: number; ticker?: string; quantity: number; price: number } }) => {
                         const data = props.payload;
+                        if (!data) return [];
                         const tooltipLines = [
                           `${formatCurrency(value)} (${data.percentage.toFixed(1)}%)`,
                           data.ticker ? `Ticker: ${data.ticker}` : null,
