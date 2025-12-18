@@ -35,7 +35,7 @@
     "lint:fix": "eslint src/ --ext .ts --fix",
     "type-check": "tsc --noEmit",
     "build": "npm install && npx prisma generate && npx tsc --project tsconfig.build.json --outDir dist",
-    "build:backend": "NODE_OPTIONS='--max-old-space-size=4096' npx tsc --project tsconfig.build.json --outDir ./dist && echo 'TypeScript compilation completed' && ls -la dist/",
+    "build:backend": "npx prisma generate && NODE_OPTIONS='--max-old-space-size=4096' npx tsc --project tsconfig.build.json --outDir ./dist && echo 'TypeScript compilation completed' && ls -la dist/",
     "build:prisma": "prisma generate",
     "build:render": "NODE_OPTIONS='--max-old-space-size=2048' npm install && prisma generate && npm run build:backend && echo 'Build completed' && ls -la dist/ && echo 'Verifying index.js exists:' && ls -la dist/index.js",
     "build:production": "npm install && npx prisma generate && npx tsc --project tsconfig.build.json --outDir dist",
