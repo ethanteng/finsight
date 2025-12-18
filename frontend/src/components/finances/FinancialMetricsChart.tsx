@@ -1,6 +1,6 @@
 "use client";
 import { useMemo } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export interface HistoricalSnapshot {
   computedAt: string;
@@ -77,8 +77,10 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
       netWorth: item.netWorth,
       totalCash: item.totalCash,
       totalInvestments: item.totalInvestments,
-      totalDebt: item.totalDebt,
+      totalDebt: -Math.abs(item.totalDebt), // Negative for debt to show below zero
       homeValue: item.homeValue ?? 0,
+      // Calculate stacked assets (cash + investments + home value)
+      assets: item.totalCash + item.totalInvestments + (item.homeValue ?? 0),
     }));
   }, [filteredData]);
 
@@ -92,91 +94,71 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
 
   const allValues = [
     ...chartData.map(d => d.netWorth),
-    ...chartData.map(d => d.totalCash),
-    ...chartData.map(d => d.totalInvestments),
-    ...chartData.map(d => d.totalDebt),
-    ...chartData.map(d => d.homeValue).filter(v => v > 0),
+    ...chartData.map(d => d.assets),
+    ...chartData.map(d => Math.abs(d.totalDebt)),
   ];
-  const minValue = Math.min(...allValues);
+  const minValue = Math.min(...chartData.map(d => d.totalDebt)); // Most negative (debt)
   const maxValue = Math.max(...allValues);
-  const valueRange = maxValue - minValue || 1;
+  const valueRange = maxValue - Math.abs(minValue) || 1;
 
   return (
     <ResponsiveContainer width="100%" height={400}>
-        <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-          <XAxis
-            dataKey="dateLabel"
-            stroke="#9CA3AF"
-            style={{ fontSize: '12px' }}
-            angle={-45}
-            textAnchor="end"
-            height={60}
-          />
-          <YAxis
-            stroke="#9CA3AF"
-            style={{ fontSize: '12px' }}
-            tickFormatter={formatCurrency}
-            domain={[minValue - valueRange * 0.1, maxValue + valueRange * 0.1]}
-          />
-          <Tooltip
-            formatter={(value: number, name: string) => [formatCurrency(value), getMetricLabel(name)]}
-            labelFormatter={(label) => `Date: ${label}`}
-            contentStyle={{
-              backgroundColor: '#1F2937',
-              border: '1px solid #374151',
-              borderRadius: '8px',
-              color: '#fff'
-            }}
-            itemStyle={{ color: '#fff' }}
-            labelStyle={{ color: '#fff' }}
-          />
-          <Legend
-            wrapperStyle={{ color: '#fff' }}
-            formatter={getMetricLabel}
-          />
-          <Line
-            type="monotone"
-            dataKey="netWorth"
-            stroke="#3B82F6"
-            strokeWidth={2}
-            dot={false}
-            name="netWorth"
-          />
-          <Line
-            type="monotone"
-            dataKey="totalCash"
-            stroke="#10B981"
-            strokeWidth={2}
-            dot={false}
-            name="totalCash"
-          />
-          <Line
-            type="monotone"
-            dataKey="totalInvestments"
-            stroke="#8B5CF6"
-            strokeWidth={2}
-            dot={false}
-            name="totalInvestments"
-          />
-          <Line
-            type="monotone"
-            dataKey="totalDebt"
-            stroke="#EF4444"
-            strokeWidth={2}
-            dot={false}
-            name="totalDebt"
-          />
-          <Line
-            type="monotone"
-            dataKey="homeValue"
-            stroke="#F59E0B"
-            strokeWidth={2}
-            dot={false}
-            name="homeValue"
-          />
-        </LineChart>
-      </ResponsiveContainer>
+      <ComposedChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+        <XAxis
+          dataKey="dateLabel"
+          stroke="#9CA3AF"
+          style={{ fontSize: '12px' }}
+          angle={-45}
+          textAnchor="end"
+          height={60}
+        />
+        <YAxis
+          stroke="#9CA3AF"
+          style={{ fontSize: '12px' }}
+          tickFormatter={(value) => formatCurrency(Math.abs(value))}
+          domain={[minValue * 1.1, maxValue * 1.1]}
+        />
+        <Tooltip
+          formatter={(value: number, name: string) => {
+            // Handle negative debt values
+            const displayValue = name === 'totalDebt' ? Math.abs(value) : value;
+            return [formatCurrency(displayValue), getMetricLabel(name)];
+          }}
+          labelFormatter={(label) => `Date: ${label}`}
+          contentStyle={{
+            backgroundColor: '#1F2937',
+            border: '1px solid #374151',
+            borderRadius: '8px',
+            color: '#fff'
+          }}
+          itemStyle={{ color: '#fff' }}
+          labelStyle={{ color: '#fff' }}
+        />
+        <Legend
+          wrapperStyle={{ color: '#fff' }}
+          formatter={(value: string) => {
+            if (value === 'assets') return null; // Hide assets from legend
+            return getMetricLabel(value);
+          }}
+        />
+        {/* Stacked bars for assets (positive) */}
+        <Bar dataKey="totalCash" stackId="assets" fill="#10B981" name="totalCash" />
+        <Bar dataKey="totalInvestments" stackId="assets" fill="#8B5CF6" name="totalInvestments" />
+        <Bar dataKey="homeValue" stackId="assets" fill="#F59E0B" name="homeValue" />
+        {/* Debt bar (negative, below zero) */}
+        <Bar dataKey="totalDebt" fill="#EF4444" name="totalDebt" />
+        {/* Net Worth line */}
+        <Line
+          type="monotone"
+          dataKey="netWorth"
+          stroke="#3B82F6"
+          strokeWidth={3}
+          dot={false}
+          name="netWorth"
+        />
+      </ComposedChart>
+    </ResponsiveContainer>
   );
 }
 

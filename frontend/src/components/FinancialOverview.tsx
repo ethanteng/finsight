@@ -379,7 +379,7 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
   if (!hasAccounts && !isDemo) {
     return (
       <div 
-        className="bg-blue-900 border border-blue-700 rounded-lg p-4 mb-6 cursor-pointer hover:border-blue-600 transition-colors"
+        className="bg-blue-900 border-2 border-blue-700 rounded-lg p-4 mb-6 cursor-pointer hover:bg-blue-800 hover:border-blue-500 hover:shadow-lg hover:shadow-blue-900/50 transition-all duration-200"
         onClick={handleOverviewClick}
         title="Click to view full financial dashboard"
         role="button"
@@ -417,7 +417,7 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
 
   return (
     <div 
-      className="bg-blue-900 border border-blue-700 rounded-lg p-3 mb-4 cursor-pointer hover:border-blue-600 transition-colors"
+      className="bg-blue-900 border-2 border-blue-700 rounded-lg p-3 mb-4 cursor-pointer hover:bg-blue-800 hover:border-blue-500 hover:shadow-lg hover:shadow-blue-900/50 transition-all duration-200"
       onClick={handleOverviewClick}
       title="Click to view full financial dashboard"
       role="button"

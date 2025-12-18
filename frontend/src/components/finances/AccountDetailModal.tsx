@@ -1,6 +1,6 @@
 "use client";
 import { useState, useMemo } from 'react';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import InvestmentPortfolio from '../InvestmentPortfolio';
 
 interface Account {
@@ -101,6 +101,20 @@ export default function AccountDetailModal({
                       ['401k', 'ira', 'roth', 'brokerage', 'hsa', '529'].includes((account as Account).subtype?.toLowerCase() || '') ||
                       (account as SnapTradeAccount).type === 'investment';
 
+  // Determine if account is cash or debt
+  const isCashAccount = useMemo(() => {
+    const acc = account as Account;
+    return acc.type === 'depository' || 
+           ['checking', 'savings', 'cd', 'money market', 'prepaid'].includes(acc.subtype?.toLowerCase() || '');
+  }, [account]);
+
+  const isDebtAccount = useMemo(() => {
+    const acc = account as Account;
+    return acc.type === 'credit' || 
+           acc.type === 'loan' ||
+           ['mortgage', 'student', 'personal', 'auto', 'home equity'].includes(acc.subtype?.toLowerCase() || '');
+  }, [account]);
+
   const [cashDebtView, setCashDebtView] = useState<CashDebtView>('categories');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
@@ -137,9 +151,10 @@ export default function AccountDetailModal({
     });
   }, [transactions, account, accountId]);
 
-  // Group transactions by category
+  // Group transactions by category, separating by type (income/expense or payment/additionalDebt)
   const categoryTotals = useMemo(() => {
-    const totals: Record<string, { total: number; count: number; fullCategory: string }> = {};
+    const incomeTotals: Record<string, { total: number; count: number; fullCategory: string }> = {};
+    const expenseTotals: Record<string, { total: number; count: number; fullCategory: string }> = {};
     
     accountTransactions.forEach(tx => {
       // Handle category as array or string
@@ -163,51 +178,76 @@ export default function AccountDetailModal({
         ? categories.filter(c => c && c !== '0' && c.trim() !== '').join(' > ')
         : 'Uncategorized';
       
-      if (!totals[categoryKey]) {
-        totals[categoryKey] = { total: 0, count: 0, fullCategory: categoryKey };
+      // Determine transaction type based on account type and amount sign
+      let isIncome = false;
+      let isPayment = false;
+      
+      if (isCashAccount) {
+        // For cash accounts: positive = income, negative = expense
+        isIncome = tx.amount > 0;
+      } else if (isDebtAccount) {
+        // For debt accounts: negative = payment (reducing debt), positive = additional debt
+        isPayment = tx.amount < 0;
       }
-      totals[categoryKey].total += Math.abs(tx.amount);
-      totals[categoryKey].count += 1;
+      
+      const targetTotals = isCashAccount 
+        ? (isIncome ? incomeTotals : expenseTotals)
+        : (isPayment ? expenseTotals : incomeTotals); // For debt: payments go to "expense" (reducing), additional debt goes to "income" (increasing)
+      
+      if (!targetTotals[categoryKey]) {
+        targetTotals[categoryKey] = { total: 0, count: 0, fullCategory: categoryKey };
+      }
+      targetTotals[categoryKey].total += Math.abs(tx.amount);
+      targetTotals[categoryKey].count += 1;
     });
     
-    const totalSpending = Object.values(totals).reduce((sum, cat) => sum + cat.total, 0);
+    // Calculate totals for percentage calculation
+    const incomeTotal = Object.values(incomeTotals).reduce((sum, cat) => sum + cat.total, 0);
+    const expenseTotal = Object.values(expenseTotals).reduce((sum, cat) => sum + cat.total, 0);
+    const grandTotal = incomeTotal + expenseTotal;
     
-    return Object.entries(totals)
+    // Convert to arrays with type information
+    const incomeCategories = Object.entries(incomeTotals)
       .map(([category, data]) => ({
         category,
         fullCategory: data.fullCategory,
         shortenedCategory: getLowestLevelCategory(category),
         total: data.total,
         count: data.count,
-        percentage: totalSpending > 0 ? (data.total / totalSpending) * 100 : 0
+        percentage: grandTotal > 0 ? (data.total / grandTotal) * 100 : 0,
+        type: isCashAccount ? 'income' : 'payment' as 'income' | 'expense' | 'payment' | 'additionalDebt'
       }))
       .sort((a, b) => b.total - a.total);
-  }, [accountTransactions]);
+    
+    const expenseCategories = Object.entries(expenseTotals)
+      .map(([category, data]) => ({
+        category,
+        fullCategory: data.fullCategory,
+        shortenedCategory: getLowestLevelCategory(category),
+        total: data.total,
+        count: data.count,
+        percentage: grandTotal > 0 ? (data.total / grandTotal) * 100 : 0,
+        type: isCashAccount ? 'expense' : 'additionalDebt' as 'income' | 'expense' | 'payment' | 'additionalDebt'
+      }))
+      .sort((a, b) => b.total - a.total);
+    
+    return {
+      income: incomeCategories,
+      expense: expenseCategories,
+      incomeTotal,
+      expenseTotal,
+      grandTotal
+    };
+  }, [accountTransactions, isCashAccount, isDebtAccount]);
 
-  // Pie chart data for categories
-  const categoryPieData = useMemo(() => {
-    return categoryTotals.map(cat => ({
-      name: cat.shortenedCategory,
-      value: cat.total,
-      percentage: cat.percentage,
-      fullCategory: cat.fullCategory,
-      count: cat.count
-    }));
-  }, [categoryTotals]);
-
-  // Color palette for pie chart
-  const COLORS = [
-    '#3B82F6', // blue
-    '#10B981', // green
-    '#8B5CF6', // purple
-    '#F59E0B', // orange
-    '#EF4444', // red
-    '#06B6D4', // cyan
-    '#EC4899', // pink
-    '#84CC16', // lime
-    '#6366F1', // indigo
-    '#F97316', // orange-500
-  ];
+  // Bar chart data for categories
+  const categoryBarData = useMemo(() => {
+    const allCategories = [
+      ...categoryTotals.income.map(cat => ({ ...cat, section: isCashAccount ? 'Income' : 'Payments' })),
+      ...categoryTotals.expense.map(cat => ({ ...cat, section: isCashAccount ? 'Expenses' : 'Additional Debt' }))
+    ];
+    return allCategories.sort((a, b) => b.total - a.total);
+  }, [categoryTotals, isCashAccount]);
 
   // Filter transactions by selected category
   const categoryTransactions = useMemo(() => {
@@ -375,7 +415,7 @@ export default function AccountDetailModal({
                 : 'text-gray-400 hover:text-white'
             }`}
           >
-            Categories ({categoryTotals.length})
+            Categories ({categoryTotals.income.length + categoryTotals.expense.length})
           </button>
           <button
             onClick={() => setCashDebtView('transactions')}
@@ -394,87 +434,183 @@ export default function AccountDetailModal({
           {cashDebtView === 'categories' && !selectedCategory && (
             <div className="space-y-6">
               <h3 className="text-lg font-semibold text-white mb-4">Transaction Categories</h3>
-              {categoryTotals.length > 0 ? (
+              {categoryTotals.grandTotal > 0 ? (
                 <>
-                  {/* Pie Chart */}
-                  <div className="bg-gray-700 rounded-lg p-6 border border-gray-600">
-                    <ResponsiveContainer width="100%" height={450}>
-                      <PieChart>
-                        <Pie
-                          data={categoryPieData}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          outerRadius={160}
-                          fill="#8884d8"
-                          dataKey="value"
-                          onClick={(data) => {
-                            if (data && data.fullCategory) {
-                              setSelectedCategory(data.fullCategory);
-                            }
-                          }}
-                          style={{ cursor: 'pointer' }}
-                        >
-                          {categoryPieData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          formatter={(value: number, name: string, props: { payload?: { percentage: number; name: string } }) => {
-                            if (!props.payload) return [`${formatCurrency(value)}`, name];
-                            return [
-                              `${formatCurrency(value)} (${props.payload.percentage.toFixed(1)}%)`,
-                              props.payload.name
-                            ];
-                          }}
-                          contentStyle={{
-                            backgroundColor: '#1F2937',
-                            border: '1px solid #374151',
-                            borderRadius: '8px',
-                            color: '#fff'
-                          }}
-                          itemStyle={{
-                            color: '#fff'
-                          }}
-                          labelStyle={{
-                            color: '#fff'
-                          }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* Category Details List */}
-                  <div className="space-y-2">
-                    {categoryTotals.map((cat, index) => (
-                      <button
-                        key={cat.category}
-                        onClick={() => setSelectedCategory(cat.fullCategory)}
-                        className="w-full bg-gray-700 rounded-lg p-4 border border-gray-600 hover:bg-gray-600 transition-colors text-left"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3 flex-1">
-                            <div
-                              className="w-4 h-4 rounded-full"
-                              style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                  {/* Income/Payments Section */}
+                  {categoryTotals.income.length > 0 && (
+                    <div className="space-y-4">
+                      <h4 className="text-md font-semibold text-white">
+                        {isCashAccount ? 'Income Categories' : 'Debt Payments'}
+                      </h4>
+                      <div className="bg-gray-700 rounded-lg p-6 border border-gray-600">
+                        <ResponsiveContainer width="100%" height={Math.min(300, categoryTotals.income.length * 40)}>
+                          <BarChart
+                            data={categoryTotals.income}
+                            layout="vertical"
+                            margin={{ top: 5, right: 30, left: 150, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                            <XAxis
+                              type="number"
+                              stroke="#9CA3AF"
+                              style={{ fontSize: '12px' }}
+                              tickFormatter={formatCurrency}
                             />
-                            <div className="flex-1">
-                              <div className="font-medium text-white">{cat.shortenedCategory}</div>
-                              <div className="text-sm text-gray-400">{cat.count} transactions</div>
+                            <YAxis
+                              type="category"
+                              dataKey="shortenedCategory"
+                              stroke="#9CA3AF"
+                              style={{ fontSize: '12px' }}
+                              width={140}
+                            />
+                            <Tooltip
+                              formatter={(value: number, name: string, props: { payload?: { percentage: number; fullCategory: string } }) => {
+                                if (!props.payload) return [`${formatCurrency(value)}`, name];
+                                return [
+                                  `${formatCurrency(value)} (${props.payload.percentage.toFixed(1)}%)`,
+                                  props.payload.fullCategory
+                                ];
+                              }}
+                              contentStyle={{
+                                backgroundColor: '#1F2937',
+                                border: '1px solid #374151',
+                                borderRadius: '8px',
+                                color: '#fff'
+                              }}
+                              itemStyle={{ color: '#fff' }}
+                              labelStyle={{ color: '#fff' }}
+                            />
+                            <Bar
+                              dataKey="total"
+                              fill="#10B981"
+                              onClick={(data) => {
+                                if (data && data.fullCategory) {
+                                  setSelectedCategory(data.fullCategory);
+                                }
+                              }}
+                              style={{ cursor: 'pointer' }}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      {/* Income/Payments Details List */}
+                      <div className="space-y-2">
+                        {categoryTotals.income.map((cat) => (
+                          <button
+                            key={cat.category}
+                            onClick={() => setSelectedCategory(cat.fullCategory)}
+                            className="w-full bg-gray-700 rounded-lg p-4 border border-gray-600 hover:bg-gray-600 transition-colors text-left"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3 flex-1">
+                                <div className="w-4 h-4 rounded" style={{ backgroundColor: '#10B981' }} />
+                                <div className="flex-1">
+                                  <div className="font-medium text-white">{cat.shortenedCategory}</div>
+                                  <div className="text-sm text-gray-400">{cat.count} transactions</div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-semibold text-white text-lg">
+                                  {formatCurrency(cat.total)}
+                                </div>
+                                <div className="text-sm text-gray-400">
+                                  {cat.percentage.toFixed(1)}%
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-semibold text-white text-lg">
-                              {formatCurrency(cat.total)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Expense/Additional Debt Section */}
+                  {categoryTotals.expense.length > 0 && (
+                    <div className="space-y-4">
+                      <h4 className="text-md font-semibold text-white">
+                        {isCashAccount ? 'Expense Categories' : 'Additional Debt'}
+                      </h4>
+                      <div className="bg-gray-700 rounded-lg p-6 border border-gray-600">
+                        <ResponsiveContainer width="100%" height={Math.min(300, categoryTotals.expense.length * 40)}>
+                          <BarChart
+                            data={categoryTotals.expense}
+                            layout="vertical"
+                            margin={{ top: 5, right: 30, left: 150, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                            <XAxis
+                              type="number"
+                              stroke="#9CA3AF"
+                              style={{ fontSize: '12px' }}
+                              tickFormatter={formatCurrency}
+                            />
+                            <YAxis
+                              type="category"
+                              dataKey="shortenedCategory"
+                              stroke="#9CA3AF"
+                              style={{ fontSize: '12px' }}
+                              width={140}
+                            />
+                            <Tooltip
+                              formatter={(value: number, name: string, props: { payload?: { percentage: number; fullCategory: string } }) => {
+                                if (!props.payload) return [`${formatCurrency(value)}`, name];
+                                return [
+                                  `${formatCurrency(value)} (${props.payload.percentage.toFixed(1)}%)`,
+                                  props.payload.fullCategory
+                                ];
+                              }}
+                              contentStyle={{
+                                backgroundColor: '#1F2937',
+                                border: '1px solid #374151',
+                                borderRadius: '8px',
+                                color: '#fff'
+                              }}
+                              itemStyle={{ color: '#fff' }}
+                              labelStyle={{ color: '#fff' }}
+                            />
+                            <Bar
+                              dataKey="total"
+                              fill="#EF4444"
+                              onClick={(data) => {
+                                if (data && data.fullCategory) {
+                                  setSelectedCategory(data.fullCategory);
+                                }
+                              }}
+                              style={{ cursor: 'pointer' }}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      {/* Expense/Additional Debt Details List */}
+                      <div className="space-y-2">
+                        {categoryTotals.expense.map((cat) => (
+                          <button
+                            key={cat.category}
+                            onClick={() => setSelectedCategory(cat.fullCategory)}
+                            className="w-full bg-gray-700 rounded-lg p-4 border border-gray-600 hover:bg-gray-600 transition-colors text-left"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3 flex-1">
+                                <div className="w-4 h-4 rounded" style={{ backgroundColor: '#EF4444' }} />
+                                <div className="flex-1">
+                                  <div className="font-medium text-white">{cat.shortenedCategory}</div>
+                                  <div className="text-sm text-gray-400">{cat.count} transactions</div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="font-semibold text-white text-lg">
+                                  {formatCurrency(cat.total)}
+                                </div>
+                                <div className="text-sm text-gray-400">
+                                  {cat.percentage.toFixed(1)}%
+                                </div>
+                              </div>
                             </div>
-                            <div className="text-sm text-gray-400">
-                              {cat.percentage.toFixed(1)}%
-                            </div>
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="text-gray-400 text-center py-8">

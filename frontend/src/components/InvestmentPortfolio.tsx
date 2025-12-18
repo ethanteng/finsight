@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface Security {
   id: string;
@@ -132,8 +132,8 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
       .sort((a, b) => b.value - a.value);
   };
 
-  // Pie chart data for holdings
-  const holdingsPieData = useMemo(() => {
+  // Bar chart data for holdings
+  const holdingsBarData = useMemo(() => {
     if (!holdings || holdings.length === 0) return [];
     
     const totalValue = holdings.reduce((sum, h) => sum + (h.institution_value || h.value || 0), 0);
@@ -151,7 +151,7 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
       .sort((a, b) => b.value - a.value);
   }, [holdings]);
 
-  // Color palette for pie chart
+  // Color palette for bar chart
   const COLORS = [
     '#3B82F6', // blue
     '#10B981', // green
@@ -273,27 +273,33 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
         <div className="space-y-6">
           {holdings && holdings.length > 0 ? (
             <>
-              {/* Pie Chart */}
+              {/* Horizontal Bar Chart */}
               <div className="bg-gray-700 rounded-lg p-6 border border-gray-600">
-                <ResponsiveContainer width="100%" height={450}>
-                  <PieChart>
-                    <Pie
-                      data={holdingsPieData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      outerRadius={160}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {holdingsPieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
+                <ResponsiveContainer width="100%" height={Math.min(500, holdingsBarData.length * 40)}>
+                  <BarChart
+                    data={holdingsBarData}
+                    layout="vertical"
+                    margin={{ top: 5, right: 30, left: 200, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis
+                      type="number"
+                      stroke="#9CA3AF"
+                      style={{ fontSize: '12px' }}
+                      tickFormatter={formatCurrency}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      stroke="#9CA3AF"
+                      style={{ fontSize: '12px' }}
+                      width={180}
+                      tick={{ fill: '#9CA3AF' }}
+                    />
                     <Tooltip
-                      formatter={(value: number, name: string, props: { payload?: { percentage: number; ticker?: string; quantity: number; price: number } }) => {
+                      formatter={(value: number, name: string, props: { payload?: { percentage: number; ticker?: string; quantity: number; price: number; name: string } }) => {
                         const data = props.payload;
-                        if (!data) return [];
+                        if (!data) return [`${formatCurrency(value)}`, name];
                         const tooltipLines = [
                           `${formatCurrency(value)} (${data.percentage.toFixed(1)}%)`,
                           data.ticker ? `Ticker: ${data.ticker}` : null,
@@ -302,33 +308,38 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                         ].filter(Boolean);
                         return tooltipLines;
                       }}
+                      labelFormatter={(label) => `Holding: ${label}`}
                       contentStyle={{
                         backgroundColor: '#1F2937',
                         border: '1px solid #374151',
                         borderRadius: '8px',
                         color: '#fff'
                       }}
-                      itemStyle={{
-                        color: '#fff'
-                      }}
-                      labelStyle={{
-                        color: '#fff'
-                      }}
+                      itemStyle={{ color: '#fff' }}
+                      labelStyle={{ color: '#fff' }}
                     />
-                  </PieChart>
+                    <Bar
+                      dataKey="value"
+                      radius={[0, 4, 4, 0]}
+                    >
+                      {holdingsBarData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
 
               {/* Holdings Details List */}
               <div className="space-y-2 max-h-96 overflow-y-auto">
-                {holdingsPieData.map((holdingData, index) => {
+                {holdingsBarData.map((holdingData, index) => {
                   const holding = holdingData.holding;
                   return (
                     <div key={holding.id || holding.security_id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-3 flex-1">
                           <div
-                            className="w-4 h-4 rounded-full flex-shrink-0"
+                            className="w-4 h-4 rounded flex-shrink-0"
                             style={{ backgroundColor: COLORS[index % COLORS.length] }}
                           />
                           <div className="flex-1 min-w-0">
