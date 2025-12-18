@@ -14,9 +14,16 @@ interface HomeData {
 interface HomeValueCardProps {
   homeData: HomeData;
   onValueUpdate?: (updatedData: HomeData) => void;
+  isExpanded?: boolean;
+  onToggle?: () => void;
 }
 
-export default function HomeValueCard({ homeData, onValueUpdate }: HomeValueCardProps) {
+export default function HomeValueCard({ 
+  homeData, 
+  onValueUpdate,
+  isExpanded = false,
+  onToggle
+}: HomeValueCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(homeData.value.toString());
   const [isSaving, setIsSaving] = useState(false);
@@ -132,113 +139,133 @@ export default function HomeValueCard({ homeData, onValueUpdate }: HomeValueCard
   };
 
   return (
-    <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <h3 className="text-lg font-semibold text-white">Home Value</h3>
-          {homeData.isManualOverride && (
-            <span className="px-2 py-1 bg-blue-900/30 text-blue-300 text-xs rounded border border-blue-700/50">
-              Manual
-            </span>
-          )}
-        </div>
-        <span className="text-gray-400 text-xs">
-          Updated {formatDate(homeData.lastUpdated)}
-        </span>
-      </div>
-
-      {homeData.address && (
-        <div className="text-gray-400 text-sm mb-3">
-          {homeData.address}
-        </div>
-      )}
-
-      <div className="mb-4">
-        {isEditing ? (
-          <div className="space-y-3">
-            <div>
-              <input
-                type="text"
-                value={editValue}
-                onChange={(e) => {
-                  // Allow only numbers and a single decimal point
-                  let value = e.target.value.replace(/[^0-9.]/g, '');
-                  
-                  // Prevent multiple decimal points - keep only the first decimal part
-                  const parts = value.split('.');
-                  if (parts.length > 2) {
-                    // Keep only the first part and the second part (first decimal part)
-                    value = parts[0] + '.' + parts[1];
-                  }
-                  
-                  setEditValue(value);
-                  setError(null);
-                }}
-                className="w-full bg-gray-700 text-white text-3xl font-bold px-3 py-2 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
-                placeholder="Enter value"
-                disabled={isSaving}
-                autoFocus
-              />
-              {error && (
-                <div className="text-red-400 text-sm mt-1">{error}</div>
+    <div className="bg-gray-800 rounded-lg border border-gray-700">
+      <button
+        onClick={onToggle}
+        className="w-full p-4 flex items-center justify-between hover:bg-gray-750 transition-colors rounded-lg"
+      >
+        <div className="flex items-center space-x-4">
+          <div className="text-lg">{isExpanded ? '▼' : '▶'}</div>
+          <div className="text-left">
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-white">Home Value</h3>
+              {homeData.isManualOverride && (
+                <span className="px-2 py-1 bg-blue-900/30 text-blue-300 text-xs rounded border border-blue-700/50">
+                  Manual
+                </span>
               )}
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSaving ? 'Saving...' : 'Save'}
-              </button>
-              <button
-                onClick={handleCancel}
-                disabled={isSaving}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Cancel
-              </button>
+            <div className="text-sm text-gray-400">
+              {homeData.address || 'No address set'}
             </div>
           </div>
-        ) : (
-          <>
-            <div className="text-white font-bold text-3xl mb-2">
-              {formatCurrency(homeData.value)}
-            </div>
-            <div className="text-gray-400 text-sm">
-              Range: {formatCurrency(homeData.valueLow)} - {formatCurrency(homeData.valueHigh)}
-            </div>
-          </>
-        )}
-      </div>
+        </div>
+        <div className="text-right">
+          <div className="text-white font-semibold text-xl">
+            {formatCurrency(homeData.value)}
+          </div>
+        </div>
+      </button>
 
-      <div className="pt-4 border-t border-gray-700 flex items-center justify-between">
-        {!isEditing && (
-          <button
-            onClick={() => setIsEditing(true)}
-            className="text-blue-400 hover:text-blue-300 text-sm transition-colors"
-          >
-            Edit Value →
-          </button>
-        )}
-        {homeData.isManualOverride && !isEditing && (
-          <button
-            onClick={handleReset}
-            disabled={isSaving}
-            className="text-gray-400 hover:text-gray-300 text-sm transition-colors disabled:opacity-50"
-          >
-            Reset to Estimate
-          </button>
-        )}
-        {!homeData.isManualOverride && !isEditing && (
-          <a
-            href="/profile"
-            className="text-gray-400 hover:text-gray-300 text-sm transition-colors"
-          >
-            Update Home Value →
-          </a>
-        )}
-      </div>
+      {isExpanded && (
+        <div className="border-t border-gray-700 p-6 space-y-4">
+          {homeData.address && (
+            <div className="text-gray-400 text-sm">
+              {homeData.address}
+            </div>
+          )}
+
+          <div>
+            {isEditing ? (
+              <div className="space-y-3">
+                <div>
+                  <input
+                    type="text"
+                    value={editValue}
+                    onChange={(e) => {
+                      // Allow only numbers and a single decimal point
+                      let value = e.target.value.replace(/[^0-9.]/g, '');
+                      
+                      // Prevent multiple decimal points - keep only the first decimal part
+                      const parts = value.split('.');
+                      if (parts.length > 2) {
+                        // Keep only the first part and the second part (first decimal part)
+                        value = parts[0] + '.' + parts[1];
+                      }
+                      
+                      setEditValue(value);
+                      setError(null);
+                    }}
+                    className="w-full bg-gray-700 text-white text-3xl font-bold px-3 py-2 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+                    placeholder="Enter value"
+                    disabled={isSaving}
+                    autoFocus
+                  />
+                  {error && (
+                    <div className="text-red-400 text-sm mt-1">{error}</div>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSaving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    onClick={handleCancel}
+                    disabled={isSaving}
+                    className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="text-white font-bold text-3xl mb-2">
+                  {formatCurrency(homeData.value)}
+                </div>
+                <div className="text-gray-400 text-sm mb-4">
+                  Range: {formatCurrency(homeData.valueLow)} - {formatCurrency(homeData.valueHigh)}
+                </div>
+                <div className="text-gray-400 text-xs mb-4">
+                  Updated {formatDate(homeData.lastUpdated)}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="pt-4 border-t border-gray-700 flex items-center justify-between">
+            {!isEditing && (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="text-blue-400 hover:text-blue-300 text-sm transition-colors"
+              >
+                Edit Value →
+              </button>
+            )}
+            {homeData.isManualOverride && !isEditing && (
+              <button
+                onClick={handleReset}
+                disabled={isSaving}
+                className="text-gray-400 hover:text-gray-300 text-sm transition-colors disabled:opacity-50"
+              >
+                Reset to Estimate
+              </button>
+            )}
+            {!homeData.isManualOverride && !isEditing && (
+              <a
+                href="/profile"
+                className="text-gray-400 hover:text-gray-300 text-sm transition-colors"
+              >
+                Update Home Value →
+              </a>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

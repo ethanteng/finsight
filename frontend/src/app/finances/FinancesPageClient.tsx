@@ -134,6 +134,7 @@ export default function FinancesPageClient() {
   const [selectedAccountGroup, setSelectedAccountGroup] = useState<string | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<Account | SnapTradeAccount | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [isHomeValueExpanded, setIsHomeValueExpanded] = useState(false);
   const router = useRouter();
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -401,6 +402,8 @@ export default function FinancesPageClient() {
         {homeData && homeData.value > 0 && (
           <HomeValueCard 
             homeData={homeData} 
+            isExpanded={isHomeValueExpanded}
+            onToggle={() => setIsHomeValueExpanded(!isHomeValueExpanded)}
             onValueUpdate={(updatedData) => {
               setHomeData(updatedData);
               // Optionally refresh the snapshot to get updated data
