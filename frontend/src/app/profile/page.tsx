@@ -5,6 +5,7 @@ import TransactionHistory from '../../components/TransactionHistory';
 import UserProfile from '../../components/UserProfile';
 import InvestmentPortfolio from '../../components/InvestmentPortfolio';
 import SnapTradeButton from '../../components/SnapTradeButton';
+import ManualAccountList from '../../components/ManualAccountList';
 import PageMeta from '../../components/PageMeta';
 
 // (removed) local InvestmentHolding type - no longer used after snapshot refactor
@@ -182,6 +183,7 @@ export default function ProfilePage() {
   const [isRetrying, setIsRetrying] = useState(false);
   const [retryMessage, setRetryMessage] = useState<string>('');
   const [forcePlaidReinitialize, setForcePlaidReinitialize] = useState(false);
+  const [manualAccounts, setManualAccounts] = useState<any[]>([]);
   const plaidLinkButtonRef = useRef<PlaidLinkButtonRef>(null);
 
   // Ref for TransactionHistory component to trigger refresh
@@ -419,6 +421,36 @@ export default function ProfilePage() {
       return null;
     }
   }, [API_URL]);
+
+  // Load manual accounts
+  const loadManualAccounts = useCallback(async () => {
+    if (isDemo) {
+      return;
+    }
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        return;
+      }
+
+      const res = await fetch(`${API_URL}/api/manual-accounts`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.data) {
+          setManualAccounts(data.data);
+        }
+      }
+    } catch (err) {
+      console.error('Error loading manual accounts:', err);
+    }
+  }, [API_URL, isDemo]);
 
   // NEW: Load SnapTrade activities data
   const loadSnapTradeActivities = useCallback(async () => {
@@ -957,8 +989,9 @@ export default function ProfilePage() {
       console.log('Real user mode detected, calling API functions');
       loadConnectedAccountsWithDemoMode(false);
       loadInvestmentData(false);
+      loadManualAccounts();
     }
-  }, [loadConnectedAccountsWithDemoMode, loadInvestmentData, API_URL]);
+  }, [loadConnectedAccountsWithDemoMode, loadInvestmentData, loadManualAccounts, API_URL]);
 
   // Fetch user email, subscription status, and token statuses when not in demo mode
   useEffect(() => {
@@ -1546,6 +1579,18 @@ export default function ProfilePage() {
               </p>
             </div>
           </div>
+
+          {/* Manual Accounts Section */}
+          {!isDemo && (
+            <div className="bg-gray-800 rounded-lg p-6 mb-6">
+              <h2 className="text-xl font-semibold mb-4">Manual Accounts</h2>
+              <ManualAccountList
+                accounts={manualAccounts}
+                onRefresh={loadManualAccounts}
+                isDemo={false}
+              />
+            </div>
+          )}
 
           {/* NEW: Enhanced Investment Portfolio Section */}
           {investmentData && (

@@ -22,6 +22,7 @@ model User {
   subscriptionStatus     String                  @default("inactive")
   accessTokens           AccessToken[]
   accounts               Account[]
+  manualAccounts         ManualAccount[]
   conversations          Conversation[]
   privacySettings        PrivacySettings?
   syncStatuses           SyncStatus[]
@@ -445,4 +446,19 @@ model FinancialSummaryHistory {
 
   @@index([userId, computedAt])
   @@map("financial_summary_history")
+}
+
+/// Manually added accounts by users (cash, investment, or debt)
+model ManualAccount {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  amount    Float
+  type      String   // 'cash', 'investment', or 'debt'
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("manual_accounts")
 }

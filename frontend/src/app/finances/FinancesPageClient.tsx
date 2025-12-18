@@ -7,6 +7,7 @@ import AccountGroupCard from '../../components/finances/AccountGroupCard';
 import AccountDetailModal from '../../components/finances/AccountDetailModal';
 import FinancialMetricsChart, { HistoricalSnapshot } from '../../components/finances/FinancialMetricsChart';
 import { groupAccounts } from '../../components/finances/AccountGrouping';
+import ManualAccountList from '../../components/ManualAccountList';
 
 interface Account {
   id: string;
@@ -139,6 +140,7 @@ export default function FinancesPageClient() {
   const [historicalData, setHistoricalData] = useState<HistoricalSnapshot[]>([]);
   const [historicalDataLoading, setHistoricalDataLoading] = useState(true);
   const [chartTimeRange, setChartTimeRange] = useState<'1M' | '3M' | '6M' | '1Y' | 'All'>('All');
+  const [manualAccounts, setManualAccounts] = useState<any[]>([]);
   const router = useRouter();
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -246,6 +248,19 @@ export default function FinancesPageClient() {
           console.log('Error loading SnapTrade accounts:', snapTradeError);
         }
 
+        // Load manual accounts
+        try {
+          const manualAccountsRes = await fetch(`${API_URL}/api/manual-accounts`, { headers });
+          if (manualAccountsRes.ok) {
+            const manualAccountsData = await manualAccountsRes.json();
+            if (manualAccountsData.success && manualAccountsData.data) {
+              setManualAccounts(manualAccountsData.data);
+            }
+          }
+        } catch (manualAccountsError) {
+          console.log('Error loading manual accounts:', manualAccountsError);
+        }
+
         // Load historical financial data
         try {
           setHistoricalDataLoading(true);
@@ -273,6 +288,33 @@ export default function FinancesPageClient() {
 
     loadFinancialData();
   }, [API_URL, router]);
+
+  const refreshManualAccounts = async () => {
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const manualAccountsRes = await fetch(`${API_URL}/api/manual-accounts`, { headers });
+      if (manualAccountsRes.ok) {
+        const manualAccountsData = await manualAccountsRes.json();
+        if (manualAccountsData.success && manualAccountsData.data) {
+          setManualAccounts(manualAccountsData.data);
+        }
+      }
+      // Also refresh the main financial data to update totals
+      const res = await fetch(`${API_URL}/api/summaries?view=full`, { headers });
+      if (res.ok) {
+        const snapshotData = await res.json();
+        setSnapshot(snapshotData);
+      }
+    } catch (error) {
+      console.error('Error refreshing manual accounts:', error);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('auth_token');
@@ -532,6 +574,15 @@ export default function FinancesPageClient() {
               }}
             />
           )}
+
+          {/* Manual Accounts Management */}
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <ManualAccountList
+              accounts={manualAccounts}
+              onRefresh={refreshManualAccounts}
+              isDemo={false}
+            />
+          </div>
         </div>
       </div>
 

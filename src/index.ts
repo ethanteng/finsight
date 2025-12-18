@@ -7,6 +7,7 @@ import { PrismaClient } from '@prisma/client';
 import { dataOrchestrator } from './data/orchestrator';
 import { isFeatureEnabled } from './config/features';
 import authRoutes from './auth/routes';
+import manualAccountsRoutes from './auth/manual-accounts-routes';
 import stripeRoutes from './routes/stripe';
 import aiRoutes from './routes/ai';
 import { optionalAuth, requireAuth, adminAuth } from './auth/middleware';
@@ -200,6 +201,9 @@ console.log('✅ setupSnapTradeRoutes completed successfully');
 
 // Setup Auth routes
 app.use('/auth', authRoutes);
+
+// Setup Manual Accounts routes
+app.use('/api/manual-accounts', manualAccountsRoutes);
 
 // Setup AI routes
 app.use('/api/ai', aiRoutes);

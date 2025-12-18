@@ -193,6 +193,24 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
           } catch (snapTradeError) {
             console.log('Error loading SnapTrade accounts:', snapTradeError);
           }
+
+          // Load manual accounts
+          try {
+            const manualAccountsRes = await fetch(`${API_URL}/api/manual-accounts`, {
+              headers,
+            });
+
+            if (manualAccountsRes.ok) {
+              const manualAccountsData = await manualAccountsRes.json();
+              if (manualAccountsData.success && manualAccountsData.data) {
+                console.log(`📊 Received ${manualAccountsData.data.length} manual accounts from backend`);
+                // Manual accounts are already included in the snapshot from backend
+                // But we can store them for display if needed
+              }
+            }
+          } catch (manualAccountsError) {
+            console.log('Error loading manual accounts:', manualAccountsError);
+          }
         }
       } catch (error) {
         console.error('Error loading financial data:', error);

@@ -260,9 +260,10 @@ export class FinancialDataService {
     }
 
     // Fetch data from all sources in parallel
-    const [plaidResult, snapTradeResult, homeValueResult, tokenHealth] = await Promise.allSettled([
+    const [plaidResult, snapTradeResult, manualAccountsResult, homeValueResult, tokenHealth] = await Promise.allSettled([
       plaidPromise,
       this.fetchSnapTradeData(userId, opts),
+      this.fetchManualAccounts(userId),
       opts.includeHomeValue ? this.fetchHomeValue(userId) : Promise.resolve(null),
       this.tokenValidationService.getTokenHealth(userId)
     ]);
@@ -270,6 +271,7 @@ export class FinancialDataService {
     // Process results
     let plaidData = plaidResult.status === 'fulfilled' ? plaidResult.value : null;
     const snapTradeData = snapTradeResult.status === 'fulfilled' ? snapTradeResult.value : null;
+    const manualAccountsData = manualAccountsResult.status === 'fulfilled' ? manualAccountsResult.value : null;
     const homeValue = homeValueResult.status === 'fulfilled' ? homeValueResult.value : null;
     const tokens = tokenHealth.status === 'fulfilled' ? tokenHealth.value : { plaid: [], snaptrade: { userId, status: TokenStatus.ERROR, error: 'Unknown', lastChecked: new Date() } };
 
@@ -280,7 +282,7 @@ export class FinancialDataService {
     }
 
     // Merge data
-    const mergedData = this.mergeFinancialData(plaidData, snapTradeData, homeValue);
+    const mergedData = this.mergeFinancialData(plaidData, snapTradeData, manualAccountsData, homeValue);
 
     // ✅ STEP 1: Categorize transactions BEFORE normalization (skip for UI-only requests)
     // This ensures we have transaction_type available for normalization and filtering
@@ -1507,6 +1509,85 @@ export class FinancialDataService {
   }
 
   /**
+   * Fetch manual accounts from database
+   */
+  private async fetchManualAccounts(userId: string): Promise<any> {
+    const startTime = Date.now();
+
+    try {
+      const manualAccounts = await prisma.manualAccount.findMany({
+        where: { userId },
+      });
+
+      const accounts: any[] = [];
+
+      for (const manualAccount of manualAccounts) {
+        // Map manual account types to account types
+        let accountType: string;
+        let accountSubtype: string;
+        
+        if (manualAccount.type === 'cash') {
+          accountType = 'depository';
+          accountSubtype = 'checking';
+        } else if (manualAccount.type === 'investment') {
+          accountType = 'investment';
+          accountSubtype = 'brokerage';
+        } else if (manualAccount.type === 'debt') {
+          // For debt, use 'credit' type, but amount should be positive (debt owed)
+          accountType = 'credit';
+          accountSubtype = 'credit card';
+        } else {
+          // Default fallback
+          accountType = 'depository';
+          accountSubtype = 'checking';
+        }
+
+        const accountId = `manual-${manualAccount.id}`;
+        const balance = manualAccount.type === 'debt' 
+          ? Math.abs(manualAccount.amount) // Debt should be positive for calculations
+          : manualAccount.amount;
+
+        accounts.push({
+          account_id: accountId,
+          id: accountId,
+          name: manualAccount.name,
+          type: accountType,
+          subtype: accountSubtype,
+          balance: {
+            current: balance,
+            available: balance,
+            iso_currency_code: 'USD'
+          },
+          institution: 'Manual',
+          source: 'manual',
+          persistentAccountId: accountId,
+          snapshotTimestamp: manualAccount.updatedAt.toISOString(),
+          lastSyncedAt: manualAccount.updatedAt.toISOString()
+        });
+      }
+
+      return {
+        accounts,
+        holdings: [],
+        securities: [],
+        transactions: [],
+        errors: [],
+        performance: { duration: Date.now() - startTime }
+      };
+    } catch (error: any) {
+      console.error('Error fetching manual accounts:', error);
+      return {
+        accounts: [],
+        holdings: [],
+        securities: [],
+        transactions: [],
+        errors: [{ error: error.message, timestamp: new Date() }],
+        performance: { duration: Date.now() - startTime }
+      };
+    }
+  }
+
+  /**
    * Fetch data from SnapTrade
    */
   private async fetchSnapTradeData(userId: string, options: any): Promise<any> {
@@ -1986,12 +2067,14 @@ export class FinancialDataService {
   private mergeFinancialData(
     plaidData: any | null,
     snapTradeData: any | null,
+    manualAccountsData: any | null,
     homeValue: HomeData | null
   ): Omit<UnifiedFinancialData, 'metadata'> {
     // Merge accounts with deduplication
     const rawAccounts = [
       ...(plaidData?.accounts || []),
-      ...(snapTradeData?.accounts || [])
+      ...(snapTradeData?.accounts || []),
+      ...(manualAccountsData?.accounts || [])
     ];
 
     // ✅ SINGLE DEDUPLICATION POINT: Use account_id as primary unique identifier for ALL accounts
