@@ -8,6 +8,7 @@ import AccountDetailModal from '../../components/finances/AccountDetailModal';
 import FinancialMetricsChart, { HistoricalSnapshot } from '../../components/finances/FinancialMetricsChart';
 import { groupAccounts } from '../../components/finances/AccountGrouping';
 import ManualAccountList from '../../components/ManualAccountList';
+import type { ManualAccount } from '../../types/manual-account';
 
 interface Account {
   id: string;
@@ -140,7 +141,7 @@ export default function FinancesPageClient() {
   const [historicalData, setHistoricalData] = useState<HistoricalSnapshot[]>([]);
   const [historicalDataLoading, setHistoricalDataLoading] = useState(true);
   const [chartTimeRange, setChartTimeRange] = useState<'1M' | '3M' | '6M' | '1Y' | 'All'>('All');
-  const [manualAccounts, setManualAccounts] = useState<any[]>([]);
+  const [manualAccounts, setManualAccounts] = useState<ManualAccount[]>([]);
   const router = useRouter();
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';

@@ -7,6 +7,7 @@ import InvestmentPortfolio from '../../components/InvestmentPortfolio';
 import SnapTradeButton from '../../components/SnapTradeButton';
 import ManualAccountList from '../../components/ManualAccountList';
 import PageMeta from '../../components/PageMeta';
+import type { ManualAccount } from '../../types/manual-account';
 
 // (removed) local InvestmentHolding type - no longer used after snapshot refactor
 
@@ -183,7 +184,7 @@ export default function ProfilePage() {
   const [isRetrying, setIsRetrying] = useState(false);
   const [retryMessage, setRetryMessage] = useState<string>('');
   const [forcePlaidReinitialize, setForcePlaidReinitialize] = useState(false);
-  const [manualAccounts, setManualAccounts] = useState<any[]>([]);
+  const [manualAccounts, setManualAccounts] = useState<ManualAccount[]>([]);
   const plaidLinkButtonRef = useRef<PlaidLinkButtonRef>(null);
 
   // Ref for TransactionHistory component to trigger refresh

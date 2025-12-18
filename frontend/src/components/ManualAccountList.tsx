@@ -1,15 +1,7 @@
 "use client";
 import { useState } from 'react';
 import ManualAccountForm from './ManualAccountForm';
-
-interface ManualAccount {
-  id: string;
-  name: string;
-  amount: number;
-  type: 'cash' | 'investment' | 'debt';
-  createdAt: string;
-  updatedAt: string;
-}
+import type { ManualAccount } from '../types/manual-account';
 
 interface ManualAccountListProps {
   accounts: ManualAccount[];
