@@ -398,14 +398,14 @@ export default function AccountDetailModal({
                 <>
                   {/* Pie Chart */}
                   <div className="bg-gray-700 rounded-lg p-6 border border-gray-600">
-                    <ResponsiveContainer width="100%" height={300}>
+                    <ResponsiveContainer width="100%" height={450}>
                       <PieChart>
                         <Pie
                           data={categoryPieData}
                           cx="50%"
                           cy="50%"
                           labelLine={false}
-                          outerRadius={100}
+                          outerRadius={160}
                           fill="#8884d8"
                           dataKey="value"
                           onClick={(data) => {
