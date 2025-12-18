@@ -134,7 +134,7 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           allowDataOverflow={false}
         />
         <Tooltip
-          formatter={(value: number, name: string, props: any) => {
+          formatter={(value: number, name: string) => {
             // Handle negative debt values
             const displayValue = name === 'totalDebt' ? Math.abs(value) : value;
             // Only show homeValue in tooltip if it's greater than 0
