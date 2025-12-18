@@ -5,6 +5,7 @@ import NetWorthCard from '../../components/finances/NetWorthCard';
 import HomeValueCard from '../../components/finances/HomeValueCard';
 import AccountGroupCard from '../../components/finances/AccountGroupCard';
 import AccountDetailModal from '../../components/finances/AccountDetailModal';
+import FinancialMetricsChart, { HistoricalSnapshot } from '../../components/finances/FinancialMetricsChart';
 import { groupAccounts } from '../../components/finances/AccountGrouping';
 
 interface Account {
@@ -135,6 +136,9 @@ export default function FinancesPageClient() {
   const [selectedAccount, setSelectedAccount] = useState<Account | SnapTradeAccount | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [isHomeValueExpanded, setIsHomeValueExpanded] = useState(false);
+  const [historicalData, setHistoricalData] = useState<HistoricalSnapshot[]>([]);
+  const [historicalDataLoading, setHistoricalDataLoading] = useState(true);
+  const [chartTimeRange, setChartTimeRange] = useState<'1M' | '3M' | '6M' | '1Y' | 'All'>('All');
   const router = useRouter();
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -240,6 +244,24 @@ export default function FinancesPageClient() {
           }
         } catch (snapTradeError) {
           console.log('Error loading SnapTrade accounts:', snapTradeError);
+        }
+
+        // Load historical financial data
+        try {
+          setHistoricalDataLoading(true);
+          const historyRes = await fetch(`${API_URL}/api/financial-history`, { headers });
+          if (historyRes.ok) {
+            const historyData = await historyRes.json();
+            setHistoricalData(historyData);
+          } else {
+            console.log('Failed to load historical data, will show empty state');
+            setHistoricalData([]);
+          }
+        } catch (historyError) {
+          console.log('Error loading historical data:', historyError);
+          setHistoricalData([]);
+        } finally {
+          setHistoricalDataLoading(false);
         }
       } catch (error) {
         console.error('Error loading financial data:', error);
@@ -360,6 +382,33 @@ export default function FinancesPageClient() {
           totalDebt={Math.round(snapshot.financialOverview.totalDebt)}
           homeValue={homeData?.value || snapshot.financialOverview.homeValue || null}
         />
+
+        {/* Financial Metrics Chart */}
+        {!historicalDataLoading && (
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-white">Financial Metrics Over Time</h3>
+              <select
+                value={chartTimeRange}
+                onChange={(e) => {
+                  const value = e.target.value as '1M' | '3M' | '6M' | '1Y' | 'All';
+                  setChartTimeRange(value);
+                }}
+                className="bg-gray-700 text-white px-3 py-1 rounded text-sm border border-gray-600 focus:border-blue-500 focus:outline-none"
+              >
+                <option value="1M">1 Month</option>
+                <option value="3M">3 Months</option>
+                <option value="6M">6 Months</option>
+                <option value="1Y">1 Year</option>
+                <option value="All">All Time</option>
+              </select>
+            </div>
+            <FinancialMetricsChart 
+              data={historicalData}
+              timeRange={chartTimeRange}
+            />
+          </div>
+        )}
 
         {/* Key Metrics Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

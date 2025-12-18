@@ -179,6 +179,16 @@ export class SummaryCacheService {
     };
 
     await this.upsertSnapshot(userId, payload);
+    
+    // Save historical snapshot for trend tracking
+    try {
+      const { FinancialHistoryService } = await import('./financial-history-service');
+      await FinancialHistoryService.saveHistoricalSnapshot(userId, overview);
+    } catch (error) {
+      // Log but don't fail - historical snapshot is non-critical
+      console.warn(`Failed to save historical snapshot for user ${userId}:`, error);
+    }
+    
     return payload;
   }
 
@@ -272,8 +282,8 @@ export class SummaryCacheService {
       }
       return sum;
     }, 0);
-    const homeValue = data?.homeValue?.valueMid ?? 0;
-    const netWorth = totalCash + totalInvestments + homeValue - totalDebt;
+    const homeValue = data?.homeValue?.valueMid ?? null;
+    const netWorth = totalCash + totalInvestments + (homeValue ?? 0) - totalDebt;
     return { netWorth, totalCash, totalInvestments, totalDebt, homeValue };
   }
 

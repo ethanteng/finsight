@@ -3197,6 +3197,64 @@ app.get('/api/summaries', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
+// Get historical financial snapshots
+app.get('/api/financial-history', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { FinancialHistoryService } = await import('./services/financial-history-service');
+    const userId = req.user!.id;
+    
+    // Parse optional query parameters
+    const startDate = req.query.startDate 
+      ? new Date(req.query.startDate as string) 
+      : undefined;
+    const endDate = req.query.endDate 
+      ? new Date(req.query.endDate as string) 
+      : undefined;
+    const limit = req.query.limit 
+      ? parseInt(req.query.limit as string, 10) 
+      : undefined;
+    
+    // Validate dates
+    if (startDate && isNaN(startDate.getTime())) {
+      return res.status(400).json({ error: 'Invalid startDate format' });
+    }
+    if (endDate && isNaN(endDate.getTime())) {
+      return res.status(400).json({ error: 'Invalid endDate format' });
+    }
+    if (limit !== undefined && (isNaN(limit) || limit < 1)) {
+      return res.status(400).json({ error: 'Invalid limit value' });
+    }
+    
+    const snapshots = await FinancialHistoryService.getHistoricalSnapshots(
+      userId,
+      startDate,
+      endDate,
+      limit
+    );
+    
+    // Convert dates to ISO strings for JSON response
+    const formattedSnapshots = snapshots.map(snapshot => ({
+      computedAt: snapshot.computedAt.toISOString(),
+      netWorth: snapshot.netWorth,
+      totalCash: snapshot.totalCash,
+      totalInvestments: snapshot.totalInvestments,
+      totalDebt: snapshot.totalDebt,
+      homeValue: snapshot.homeValue,
+    }));
+    
+    res.json(formattedSnapshots);
+  } catch (error) {
+    console.error('❌ Failed to fetch financial history:', error);
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+      res.status(500).json({ error: error.message });
+    } else {
+      Sentry.captureMessage('Unknown error in financial history endpoint', 'error');
+      res.status(500).json({ error: 'Failed to fetch financial history' });
+    }
+  }
+});
+
 // Optional admin/per-user endpoint to recompute snapshot on demand
 app.post('/api/refresh-summary', requireAuth, async (req: Request, res: Response) => {
   try {

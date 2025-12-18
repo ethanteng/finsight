@@ -33,6 +33,7 @@ model User {
   profile                UserProfile?
   financialSummary       FinancialSummary?
   financialSummarySnapshot FinancialSummarySnapshot?
+  financialSummaryHistory FinancialSummaryHistory[]
 
   @@map("users")
 }
@@ -427,4 +428,21 @@ model FinancialSummarySnapshot {
   updatedAt            DateTime @updatedAt
 
   @@map("financial_summary_snapshots")
+}
+
+/// Historical snapshots of financial metrics for trend analysis
+model FinancialSummaryHistory {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  computedAt       DateTime
+  netWorth         Float
+  totalCash        Float
+  totalInvestments Float
+  totalDebt       Float
+  homeValue        Float?
+  createdAt        DateTime @default(now())
+
+  @@index([userId, computedAt])
+  @@map("financial_summary_history")
 }
