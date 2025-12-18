@@ -405,7 +405,6 @@ export default function AccountDetailModal({
                           cx="50%"
                           cy="50%"
                           labelLine={false}
-                          label={({ name, percentage }) => `${name}: ${percentage.toFixed(1)}%`}
                           outerRadius={100}
                           fill="#8884d8"
                           dataKey="value"
@@ -432,6 +431,12 @@ export default function AccountDetailModal({
                             backgroundColor: '#1F2937',
                             border: '1px solid #374151',
                             borderRadius: '8px',
+                            color: '#fff'
+                          }}
+                          itemStyle={{
+                            color: '#fff'
+                          }}
+                          labelStyle={{
                             color: '#fff'
                           }}
                         />

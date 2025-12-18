@@ -282,10 +282,6 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, percentage }) => {
-                        const displayName = name.length > 15 ? name.substring(0, 15) + '...' : name;
-                        return `${displayName}: ${percentage.toFixed(1)}%`;
-                      }}
                       outerRadius={100}
                       fill="#8884d8"
                       dataKey="value"
@@ -310,6 +306,12 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                         backgroundColor: '#1F2937',
                         border: '1px solid #374151',
                         borderRadius: '8px',
+                        color: '#fff'
+                      }}
+                      itemStyle={{
+                        color: '#fff'
+                      }}
+                      labelStyle={{
                         color: '#fff'
                       }}
                     />
