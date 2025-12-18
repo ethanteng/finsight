@@ -366,8 +366,8 @@ export default function FinancesPageClient() {
   const accounts = freshAccounts.length > 0 ? freshAccounts : (snapshot.accounts || []);
   const groupedAccounts = groupAccounts(accounts, snapTradeAccounts);
   
-  // Helper to find account by ID
-  const findAccountById = useCallback((accountId: string): Account | SnapTradeAccount | null => {
+  // Helper to find account by ID (regular function, not a hook)
+  const findAccountById = (accountId: string): Account | SnapTradeAccount | null => {
     const allAccounts = [
       ...groupedAccounts.cash,
       ...groupedAccounts.investments,
@@ -378,7 +378,7 @@ export default function FinancesPageClient() {
       const accId = (acc as Account).account_id || (acc as Account).id || (acc as SnapTradeAccount).id;
       return accId === accountId;
     }) || null;
-  }, [groupedAccounts]);
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
