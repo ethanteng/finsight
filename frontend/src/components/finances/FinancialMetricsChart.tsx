@@ -167,7 +167,6 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
             allowDataOverflow={false}
             tick={{ fill: '#9CA3AF' }}
             type="number"
-            includeZero={true}
           />
           <Tooltip
             formatter={(value: number, name: string) => {
