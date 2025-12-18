@@ -71,22 +71,26 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
   }, [data, timeRange]);
 
   const chartData = useMemo(() => {
+    if (!filteredData || filteredData.length === 0) return [];
+    
     // Reverse to show oldest first (for proper time progression)
     return [...filteredData].reverse().map(item => {
       // Ensure homeValue is always a number (use 0 if null)
-      const homeValue = item.homeValue != null ? item.homeValue : 0;
+      const homeValue = item.homeValue != null ? Number(item.homeValue) : 0;
       
-      return {
+      const dataPoint = {
         date: new Date(item.computedAt),
         dateLabel: formatDateLabel(new Date(item.computedAt)),
-        netWorth: item.netWorth,
-        totalCash: item.totalCash,
-        totalInvestments: item.totalInvestments,
-        totalDebt: item.totalDebt, // Positive value for debt chart
-        homeValue: homeValue, // Always include homeValue, even if 0
+        netWorth: Number(item.netWorth) || 0,
+        totalCash: Number(item.totalCash) || 0,
+        totalInvestments: Number(item.totalInvestments) || 0,
+        totalDebt: Number(item.totalDebt) || 0, // Positive value for debt chart
+        homeValue: homeValue || 0, // Always include homeValue, even if 0
         // Calculate stacked assets (cash + investments + home value)
-        assets: item.totalCash + item.totalInvestments + homeValue,
+        assets: (Number(item.totalCash) || 0) + (Number(item.totalInvestments) || 0) + (homeValue || 0),
       };
+      
+      return dataPoint;
     });
   }, [filteredData]);
 
@@ -98,25 +102,62 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
     );
   }
 
+  if (!chartData || chartData.length === 0) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-center gap-4">
+          <button
+            onClick={() => setViewMode('assets')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              viewMode === 'assets'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            Assets & Net Worth
+          </button>
+          <button
+            onClick={() => setViewMode('debt')}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              viewMode === 'debt'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            Debt
+          </button>
+        </div>
+        <div className="flex items-center justify-center h-64 text-gray-400">
+          No chart data available for the selected time range.
+        </div>
+      </div>
+    );
+  }
+
   // Calculate domain based on view mode
   const assetsValues = [
-    ...chartData.map(d => d.netWorth),
-    ...chartData.map(d => d.totalCash),
-    ...chartData.map(d => d.totalInvestments),
-    ...chartData.map(d => d.homeValue),
-    ...chartData.map(d => d.assets),
-  ];
-  const debtValues = chartData.map(d => d.totalDebt);
+    ...chartData.map(d => Number(d.netWorth) || 0),
+    ...chartData.map(d => Number(d.totalCash) || 0),
+    ...chartData.map(d => Number(d.totalInvestments) || 0),
+    ...chartData.map(d => Number(d.homeValue) || 0),
+    ...chartData.map(d => Number(d.assets) || 0),
+  ].filter(v => !isNaN(v) && isFinite(v) && v >= 0);
   
-  const assetsMax = Math.max(...assetsValues);
-  const debtMax = Math.max(...debtValues);
+  const debtValues = chartData.map(d => Number(d.totalDebt) || 0).filter(v => !isNaN(v) && isFinite(v) && v >= 0);
   
-  // Calculate domain with padding
+  const assetsMax = assetsValues.length > 0 && Math.max(...assetsValues) > 0 ? Math.max(...assetsValues) : 1000;
+  const debtMax = debtValues.length > 0 && Math.max(...debtValues) > 0 ? Math.max(...debtValues) : 1000;
+  
+  // Calculate domain with padding - ensure minimum domain size
   const padding = 0.1; // 10% padding
-  const domainMax = viewMode === 'assets' 
-    ? assetsMax * (1 + padding)
-    : debtMax * (1 + padding);
+  const calculatedMax = viewMode === 'assets' ? assetsMax : debtMax;
+  const domainMax = calculatedMax > 0 ? calculatedMax * (1 + padding) : 1000;
   const domainMin = 0; // Always start at 0
+  
+  // Ensure domain is valid
+  if (!isFinite(domainMax) || domainMax <= 0) {
+    console.error('Invalid domain calculation:', { domainMax, assetsMax, debtMax, viewMode, chartData });
+  }
 
   return (
     <div className="space-y-4">
@@ -146,7 +187,11 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
 
       {/* Chart */}
       <ResponsiveContainer width="100%" height={400}>
-        <ComposedChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 60 }}>
+        <ComposedChart 
+          data={chartData} 
+          margin={{ top: 5, right: 30, left: 20, bottom: 60 }}
+          barCategoryGap="20%"
+        >
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
           <ReferenceLine y={0} stroke="#6B7280" strokeWidth={2} />
           <XAxis
@@ -195,14 +240,27 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           {viewMode === 'assets' ? (
             <>
               {/* Assets view: Stacked bars for assets + Net Worth line */}
-              <Bar dataKey="totalCash" stackId="assets" fill="#10B981" name="totalCash" />
-              <Bar dataKey="totalInvestments" stackId="assets" fill="#8B5CF6" name="totalInvestments" />
+              <Bar 
+                dataKey="totalCash" 
+                stackId="assets" 
+                fill="#10B981" 
+                name="totalCash"
+                isAnimationActive={false}
+              />
+              <Bar 
+                dataKey="totalInvestments" 
+                stackId="assets" 
+                fill="#8B5CF6" 
+                name="totalInvestments"
+                isAnimationActive={false}
+              />
               <Bar 
                 dataKey="homeValue" 
                 stackId="assets" 
                 fill="#F59E0B" 
                 name="homeValue"
                 minPointSize={0}
+                isAnimationActive={false}
               />
               {/* Net Worth line */}
               <Line
@@ -218,7 +276,12 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           ) : (
             <>
               {/* Debt view: Single bar chart for debt */}
-              <Bar dataKey="totalDebt" fill="#EF4444" name="totalDebt" />
+              <Bar 
+                dataKey="totalDebt" 
+                fill="#EF4444" 
+                name="totalDebt"
+                isAnimationActive={false}
+              />
             </>
           )}
         </ComposedChart>
