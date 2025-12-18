@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import NetWorthCard from '../../components/finances/NetWorthCard';
 import HomeValueCard from '../../components/finances/HomeValueCard';
@@ -7,8 +7,9 @@ import AccountGroupCard from '../../components/finances/AccountGroupCard';
 import AccountDetailModal from '../../components/finances/AccountDetailModal';
 import FinancialMetricsChart, { HistoricalSnapshot } from '../../components/finances/FinancialMetricsChart';
 import { groupAccounts } from '../../components/finances/AccountGrouping';
-import ManualAccountList from '../../components/ManualAccountList';
 import type { ManualAccount } from '../../types/manual-account';
+
+const ManualAccountList = lazy(() => import('../../components/ManualAccountList'));
 
 interface Account {
   id: string;
@@ -579,11 +580,13 @@ export default function FinancesPageClient() {
           {/* Manual Accounts Management */}
           {snapshot && (
             <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-              <ManualAccountList
-                accounts={manualAccounts}
-                onRefresh={refreshManualAccounts}
-                isDemo={false}
-              />
+              <Suspense fallback={<div className="text-gray-400">Loading manual accounts...</div>}>
+                <ManualAccountList
+                  accounts={manualAccounts}
+                  onRefresh={refreshManualAccounts}
+                  isDemo={false}
+                />
+              </Suspense>
             </div>
           )}
         </div>

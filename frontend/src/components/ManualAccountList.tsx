@@ -1,7 +1,8 @@
 "use client";
-import { useState } from 'react';
-import ManualAccountForm from './ManualAccountForm';
+import { useState, lazy, Suspense } from 'react';
 import type { ManualAccount } from '../types/manual-account';
+
+const ManualAccountForm = lazy(() => import('./ManualAccountForm'));
 
 interface ManualAccountListProps {
   accounts: ManualAccount[];
@@ -89,19 +90,21 @@ export default function ManualAccountList({ accounts, onRefresh, isDemo = false 
 
   if (showForm || editingAccount) {
     return (
-      <ManualAccountForm
-        account={editingAccount}
-        onSuccess={() => {
-          setShowForm(false);
-          setEditingAccount(null);
-          onRefresh();
-        }}
-        onCancel={() => {
-          setShowForm(false);
-          setEditingAccount(null);
-        }}
-        isDemo={isDemo}
-      />
+      <Suspense fallback={<div className="bg-gray-800 rounded-lg p-6 border border-gray-700 text-gray-400">Loading form...</div>}>
+        <ManualAccountForm
+          account={editingAccount}
+          onSuccess={() => {
+            setShowForm(false);
+            setEditingAccount(null);
+            onRefresh();
+          }}
+          onCancel={() => {
+            setShowForm(false);
+            setEditingAccount(null);
+          }}
+          isDemo={isDemo}
+        />
+      </Suspense>
     );
   }
 
