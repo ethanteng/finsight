@@ -83,7 +83,14 @@ export class FinancialHistoryService {
       take: limit,
     });
     
-    return snapshots.map((snapshot) => ({
+    return snapshots.map((snapshot: {
+      computedAt: Date;
+      netWorth: number;
+      totalCash: number;
+      totalInvestments: number;
+      totalDebt: number;
+      homeValue: number | null;
+    }) => ({
       computedAt: snapshot.computedAt,
       netWorth: snapshot.netWorth,
       totalCash: snapshot.totalCash,
