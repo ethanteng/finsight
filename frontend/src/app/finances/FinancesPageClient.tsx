@@ -4,7 +4,6 @@ import { useRouter } from 'next/navigation';
 import NetWorthCard from '../../components/finances/NetWorthCard';
 import HomeValueCard from '../../components/finances/HomeValueCard';
 import AccountGroupCard from '../../components/finances/AccountGroupCard';
-import TrendChart from '../../components/finances/TrendChart';
 import AccountDetailModal from '../../components/finances/AccountDetailModal';
 import { groupAccounts } from '../../components/finances/AccountGrouping';
 
@@ -135,7 +134,6 @@ export default function FinancesPageClient() {
   const [selectedAccountGroup, setSelectedAccountGroup] = useState<string | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<Account | SnapTradeAccount | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
-  const [chartTimeRange, setChartTimeRange] = useState<'1M' | '3M' | '6M' | '1Y' | 'All'>('6M');
   const router = useRouter();
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -398,24 +396,6 @@ export default function FinancesPageClient() {
             </div>
           </div>
         </div>
-
-        {/* Trend Charts */}
-        {(snapshot.transactionsSummary?.byMonth || snapshot.transactions) && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-            <TrendChart
-              type="netWorth"
-              snapshot={snapshot}
-              timeRange={chartTimeRange}
-              onTimeRangeChange={setChartTimeRange}
-            />
-            <TrendChart
-              type="spending"
-              snapshot={snapshot}
-              timeRange={chartTimeRange}
-              onTimeRangeChange={setChartTimeRange}
-            />
-          </div>
-        )}
 
         {/* Home Value */}
         {homeData && homeData.value > 0 && (

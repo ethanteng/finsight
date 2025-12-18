@@ -1,5 +1,6 @@
 "use client";
 import { useState, useMemo } from 'react';
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import InvestmentPortfolio from '../InvestmentPortfolio';
 
 interface Account {
@@ -122,6 +123,12 @@ export default function AccountDetailModal({
     });
   };
 
+  // Helper function to extract lowest-level category name
+  const getLowestLevelCategory = (categoryPath: string): string => {
+    const parts = categoryPath.split(' > ');
+    return parts[parts.length - 1] || categoryPath;
+  };
+
   // Filter transactions for this account
   const accountTransactions = useMemo(() => {
     return transactions.filter(t => {
@@ -133,7 +140,7 @@ export default function AccountDetailModal({
 
   // Group transactions by category
   const categoryTotals = useMemo(() => {
-    const totals: Record<string, { total: number; count: number }> = {};
+    const totals: Record<string, { total: number; count: number; fullCategory: string }> = {};
     
     accountTransactions.forEach(tx => {
       // Handle category as array or string
@@ -158,16 +165,50 @@ export default function AccountDetailModal({
         : 'Uncategorized';
       
       if (!totals[categoryKey]) {
-        totals[categoryKey] = { total: 0, count: 0 };
+        totals[categoryKey] = { total: 0, count: 0, fullCategory: categoryKey };
       }
       totals[categoryKey].total += Math.abs(tx.amount);
       totals[categoryKey].count += 1;
     });
     
+    const totalSpending = Object.values(totals).reduce((sum, cat) => sum + cat.total, 0);
+    
     return Object.entries(totals)
-      .map(([category, data]) => ({ category, ...data }))
+      .map(([category, data]) => ({
+        category,
+        fullCategory: data.fullCategory,
+        shortenedCategory: getLowestLevelCategory(category),
+        total: data.total,
+        count: data.count,
+        percentage: totalSpending > 0 ? (data.total / totalSpending) * 100 : 0
+      }))
       .sort((a, b) => b.total - a.total);
   }, [accountTransactions]);
+
+  // Pie chart data for categories
+  const categoryPieData = useMemo(() => {
+    return categoryTotals.map(cat => ({
+      name: cat.shortenedCategory,
+      value: cat.total,
+      percentage: cat.percentage,
+      fullCategory: cat.fullCategory,
+      count: cat.count
+    }));
+  }, [categoryTotals]);
+
+  // Color palette for pie chart
+  const COLORS = [
+    '#3B82F6', // blue
+    '#10B981', // green
+    '#8B5CF6', // purple
+    '#F59E0B', // orange
+    '#EF4444', // red
+    '#06B6D4', // cyan
+    '#EC4899', // pink
+    '#84CC16', // lime
+    '#6366F1', // indigo
+    '#F97316', // orange-500
+  ];
 
   // Filter transactions by selected category
   const categoryTransactions = useMemo(() => {
@@ -352,28 +393,82 @@ export default function AccountDetailModal({
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           {cashDebtView === 'categories' && !selectedCategory && (
-            <div className="space-y-3">
+            <div className="space-y-6">
               <h3 className="text-lg font-semibold text-white mb-4">Transaction Categories</h3>
               {categoryTotals.length > 0 ? (
-                categoryTotals.map((cat) => (
-                  <button
-                    key={cat.category}
-                    onClick={() => setSelectedCategory(cat.category)}
-                    className="w-full bg-gray-700 rounded-lg p-4 border border-gray-600 hover:bg-gray-600 transition-colors text-left"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="font-medium text-white">{cat.category}</div>
-                        <div className="text-sm text-gray-400">{cat.count} transactions</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-semibold text-white text-lg">
-                          {formatCurrency(cat.total)}
+                <>
+                  {/* Pie Chart */}
+                  <div className="bg-gray-700 rounded-lg p-6 border border-gray-600">
+                    <ResponsiveContainer width="100%" height={300}>
+                      <PieChart>
+                        <Pie
+                          data={categoryPieData}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ name, percentage }) => `${name}: ${percentage.toFixed(1)}%`}
+                          outerRadius={100}
+                          fill="#8884d8"
+                          dataKey="value"
+                          onClick={(data) => {
+                            if (data && data.fullCategory) {
+                              setSelectedCategory(data.fullCategory);
+                            }
+                          }}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          {categoryPieData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          formatter={(value: number, name: string, props: any) => [
+                            `${formatCurrency(value)} (${props.payload.percentage.toFixed(1)}%)`,
+                            props.payload.name
+                          ]}
+                          contentStyle={{
+                            backgroundColor: '#1F2937',
+                            border: '1px solid #374151',
+                            borderRadius: '8px',
+                            color: '#fff'
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Category Details List */}
+                  <div className="space-y-2">
+                    {categoryTotals.map((cat, index) => (
+                      <button
+                        key={cat.category}
+                        onClick={() => setSelectedCategory(cat.fullCategory)}
+                        className="w-full bg-gray-700 rounded-lg p-4 border border-gray-600 hover:bg-gray-600 transition-colors text-left"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 flex-1">
+                            <div
+                              className="w-4 h-4 rounded-full"
+                              style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                            />
+                            <div className="flex-1">
+                              <div className="font-medium text-white">{cat.shortenedCategory}</div>
+                              <div className="text-sm text-gray-400">{cat.count} transactions</div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-semibold text-white text-lg">
+                              {formatCurrency(cat.total)}
+                            </div>
+                            <div className="text-sm text-gray-400">
+                              {cat.percentage.toFixed(1)}%
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  </button>
-                ))
+                      </button>
+                    ))}
+                  </div>
+                </>
               ) : (
                 <div className="text-gray-400 text-center py-8">
                   No categorized transactions found

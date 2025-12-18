@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 interface Security {
   id: string;
@@ -144,6 +145,39 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
       .sort((a, b) => b.value - a.value);
   };
 
+  // Pie chart data for holdings
+  const holdingsPieData = useMemo(() => {
+    if (!holdings || holdings.length === 0) return [];
+    
+    const totalValue = holdings.reduce((sum, h) => sum + (h.institution_value || h.value || 0), 0);
+    
+    return holdings
+      .map(holding => ({
+        name: holding.security_name || holding.name || 'Unknown Security',
+        ticker: holding.ticker_symbol || '',
+        value: holding.institution_value || holding.value || 0,
+        percentage: totalValue > 0 ? ((holding.institution_value || holding.value || 0) / totalValue) * 100 : 0,
+        quantity: holding.quantity || 0,
+        price: holding.institution_price || 0,
+        holding: holding
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [holdings]);
+
+  // Color palette for pie chart
+  const COLORS = [
+    '#3B82F6', // blue
+    '#10B981', // green
+    '#8B5CF6', // purple
+    '#F59E0B', // orange
+    '#EF4444', // red
+    '#06B6D4', // cyan
+    '#EC4899', // pink
+    '#84CC16', // lime
+    '#6366F1', // indigo
+    '#F97316', // orange-500
+  ];
+
   if (!portfolio) {
     return (
       <div className="bg-gray-800 rounded-lg p-6">
@@ -249,50 +283,92 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
       )}
 
       {activeTab === 'holdings' && (
-        <div className="space-y-4 max-h-96 overflow-y-auto">
+        <div className="space-y-6">
           {holdings && holdings.length > 0 ? (
-            holdings.map((holding) => (
-              <div key={holding.id || holding.security_id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3 flex-1">
-                    <div className="text-2xl">
-                      {getAssetTypeIcon(holding.security_type || holding.type || 'Unknown')}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-white truncate">
-                        {holding.security_name || holding.name || 'Unknown Security'}
-                      </div>
-                      <div className="text-sm text-gray-400">
-                        {holding.security_type || holding.type || 'Unknown Type'}
-                        {holding.ticker_symbol && ` • ${holding.ticker_symbol}`}
-                        {holding.snapTradeData?.account_name && ` • ${holding.snapTradeData.account_name}`}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        Quantity: {holding.quantity?.toLocaleString() || 'N/A'}
-                        {holding.cost_basis > 0 && ` • Cost Basis: ${formatCurrency(holding.cost_basis)}`}
-                        {holding.snapTradeData?.average_purchase_price && 
-                          ` • Avg Price: ${formatCurrency(holding.snapTradeData.average_purchase_price)}`}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-semibold text-white">
-                      {formatCurrency(holding.institution_value || holding.value || 0)}
-                    </div>
-                    <div className="text-sm text-gray-400">
-                      {holding.institution_price ? `${formatCurrency(holding.institution_price)} per share` : 'N/A'}
-                    </div>
-                    {holding.snapTradeData?.open_pnl !== undefined && (
-                      <div className={`text-xs font-medium ${
-                        holding.snapTradeData.open_pnl >= 0 ? 'text-green-400' : 'text-red-400'
-                      }`}>
-                        P&L: {formatCurrency(holding.snapTradeData.open_pnl)}
-                      </div>
-                    )}
-                  </div>
-                </div>
+            <>
+              {/* Pie Chart */}
+              <div className="bg-gray-700 rounded-lg p-6 border border-gray-600">
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={holdingsPieData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percentage }) => {
+                        const displayName = name.length > 15 ? name.substring(0, 15) + '...' : name;
+                        return `${displayName}: ${percentage.toFixed(1)}%`;
+                      }}
+                      outerRadius={100}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {holdingsPieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: number, name: string, props: any) => {
+                        const data = props.payload;
+                        const tooltipLines = [
+                          `${formatCurrency(value)} (${data.percentage.toFixed(1)}%)`,
+                          data.ticker ? `Ticker: ${data.ticker}` : null,
+                          `Qty: ${data.quantity.toLocaleString()}`,
+                          data.price > 0 ? `Price: ${formatCurrency(data.price)}/share` : null
+                        ].filter(Boolean);
+                        return tooltipLines;
+                      }}
+                      contentStyle={{
+                        backgroundColor: '#1F2937',
+                        border: '1px solid #374151',
+                        borderRadius: '8px',
+                        color: '#fff'
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
-            ))
+
+              {/* Holdings Details List */}
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {holdingsPieData.map((holdingData, index) => {
+                  const holding = holdingData.holding;
+                  return (
+                    <div key={holding.id || holding.security_id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3 flex-1">
+                          <div
+                            className="w-4 h-4 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-white truncate">
+                              {holding.security_name || holding.name || 'Unknown Security'}
+                            </div>
+                            <div className="text-sm text-gray-400">
+                              {holding.security_type || holding.type || 'Unknown Type'}
+                              {holding.ticker_symbol && ` • ${holding.ticker_symbol}`}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              Qty: {holding.quantity?.toLocaleString() || 'N/A'}
+                              {holding.institution_price > 0 && ` • ${formatCurrency(holding.institution_price)}/share`}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-semibold text-white text-lg">
+                            {formatCurrency(holding.institution_value || holding.value || 0)}
+                          </div>
+                          <div className="text-sm text-gray-400">
+                            {holdingData.percentage.toFixed(1)}%
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           ) : (
             <div className="text-gray-400 text-center py-8">
               No holdings data available
