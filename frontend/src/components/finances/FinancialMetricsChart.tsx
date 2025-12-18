@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 
 export interface HistoricalSnapshot {
@@ -17,6 +17,7 @@ interface FinancialMetricsChartProps {
 }
 
 export default function FinancialMetricsChart({ data, timeRange = 'All' }: FinancialMetricsChartProps) {
+  const [viewMode, setViewMode] = useState<'assets' | 'debt'>('assets');
   const formatCurrency = (value: number) => {
     if (value >= 1000000) {
       return `$${(value / 1000000).toFixed(1)}M`;
@@ -81,7 +82,7 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
         netWorth: item.netWorth,
         totalCash: item.totalCash,
         totalInvestments: item.totalInvestments,
-        totalDebt: -Math.abs(item.totalDebt), // Negative for debt to show below zero
+        totalDebt: item.totalDebt, // Positive value for debt chart
         homeValue: homeValue, // Always include homeValue, even if 0
         // Calculate stacked assets (cash + investments + home value)
         assets: item.totalCash + item.totalInvestments + homeValue,
@@ -97,105 +98,133 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
     );
   }
 
-  const allValues = [
+  // Calculate domain based on view mode
+  const assetsValues = [
     ...chartData.map(d => d.netWorth),
     ...chartData.map(d => d.totalCash),
     ...chartData.map(d => d.totalInvestments),
     ...chartData.map(d => d.homeValue),
     ...chartData.map(d => d.assets),
-    ...chartData.map(d => Math.abs(d.totalDebt)),
   ];
-  const minValue = Math.min(...chartData.map(d => d.totalDebt)); // Most negative (debt)
-  const maxValue = Math.max(...allValues);
+  const debtValues = chartData.map(d => d.totalDebt);
   
-  // Ensure Y-axis starts at 0 (or below if there's negative debt)
-  // Calculate padding: 10% above max, 10% below min (if negative)
-  const paddingTop = maxValue * 0.1;
-  const paddingBottom = minValue < 0 ? Math.abs(minValue) * 0.1 : 0;
+  const assetsMax = Math.max(...assetsValues);
+  const debtMax = Math.max(...debtValues);
   
-  // Y-axis domain: start at 0 or below (if there's debt), extend to accommodate all values
-  // Always ensure 0 is included in the visible range
-  const yAxisMin = minValue < 0 ? minValue - paddingBottom : 0;
-  const yAxisMax = maxValue + paddingTop;
-  
-  // Ensure domain includes 0 - this is critical for bars to start from the baseline
-  const finalYAxisMin = Math.min(0, yAxisMin);
+  // Calculate domain with padding
+  const padding = 0.1; // 10% padding
+  const domainMax = viewMode === 'assets' 
+    ? assetsMax * (1 + padding)
+    : debtMax * (1 + padding);
+  const domainMin = 0; // Always start at 0
 
   return (
-    <ResponsiveContainer width="100%" height={400}>
-      <ComposedChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 60 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-        <ReferenceLine y={0} stroke="#6B7280" strokeWidth={2} />
-        <XAxis
-          dataKey="dateLabel"
-          stroke="#9CA3AF"
-          style={{ fontSize: '12px' }}
-          angle={-45}
-          textAnchor="end"
-          height={60}
-          interval={0}
-          tick={{ fill: '#9CA3AF' }}
-        />
-        <YAxis
-          stroke="#9CA3AF"
-          style={{ fontSize: '12px' }}
-          tickFormatter={(value) => formatCurrency(Math.abs(value))}
-          domain={[finalYAxisMin, yAxisMax]}
-          allowDataOverflow={false}
-          tick={{ fill: '#9CA3AF' }}
-        />
-        <Tooltip
-          formatter={(value: number, name: string) => {
-            // Handle negative debt values
-            const displayValue = name === 'totalDebt' ? Math.abs(value) : value;
-            // Only show homeValue in tooltip if it's greater than 0
-            if (name === 'homeValue' && displayValue === 0) {
-              return null;
-            }
-            return [formatCurrency(displayValue), getMetricLabel(name)];
-          }}
-          labelFormatter={(label) => `Date: ${label}`}
-          contentStyle={{
-            backgroundColor: '#1F2937',
-            border: '1px solid #374151',
-            borderRadius: '8px',
-            color: '#fff'
-          }}
-          itemStyle={{ color: '#fff' }}
-          labelStyle={{ color: '#fff' }}
-        />
-        <Legend
-          wrapperStyle={{ color: '#fff' }}
-          formatter={(value: string) => {
-            if (value === 'assets') return null; // Hide assets from legend
-            return getMetricLabel(value);
-          }}
-        />
-        {/* Stacked bars - assets above zero, debt below zero */}
-        {/* Order matters for stacking: Cash first (bottom), then Investments, then Home Value (top), then Debt (below zero) */}
-        <Bar dataKey="totalCash" stackId="financial" fill="#10B981" name="totalCash" />
-        <Bar dataKey="totalInvestments" stackId="financial" fill="#8B5CF6" name="totalInvestments" />
-        <Bar 
-          dataKey="homeValue" 
-          stackId="financial" 
-          fill="#F59E0B" 
-          name="homeValue"
-          minPointSize={0}
-        />
-        {/* Debt bar (negative, part of same stack but extends below zero) */}
-        <Bar dataKey="totalDebt" stackId="financial" fill="#EF4444" name="totalDebt" />
-        {/* Net Worth line - render after bars so it appears on top */}
-        <Line
-          type="monotone"
-          dataKey="netWorth"
-          stroke="#3B82F6"
-          strokeWidth={3}
-          dot={false}
-          name="netWorth"
-          isAnimationActive={false}
-        />
-      </ComposedChart>
-    </ResponsiveContainer>
+    <div className="space-y-4">
+      {/* Toggle Switch */}
+      <div className="flex items-center justify-center gap-4">
+        <button
+          onClick={() => setViewMode('assets')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            viewMode === 'assets'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+          }`}
+        >
+          Assets & Net Worth
+        </button>
+        <button
+          onClick={() => setViewMode('debt')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            viewMode === 'debt'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+          }`}
+        >
+          Debt
+        </button>
+      </div>
+
+      {/* Chart */}
+      <ResponsiveContainer width="100%" height={400}>
+        <ComposedChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 60 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+          <ReferenceLine y={0} stroke="#6B7280" strokeWidth={2} />
+          <XAxis
+            dataKey="dateLabel"
+            stroke="#9CA3AF"
+            style={{ fontSize: '12px' }}
+            angle={-45}
+            textAnchor="end"
+            height={60}
+            interval={0}
+            tick={{ fill: '#9CA3AF' }}
+          />
+          <YAxis
+            stroke="#9CA3AF"
+            style={{ fontSize: '12px' }}
+            tickFormatter={(value) => formatCurrency(value)}
+            domain={[domainMin, domainMax]}
+            allowDataOverflow={false}
+            tick={{ fill: '#9CA3AF' }}
+            type="number"
+            includeZero={true}
+          />
+          <Tooltip
+            formatter={(value: number, name: string) => {
+              // Only show homeValue in tooltip if it's greater than 0
+              if (name === 'homeValue' && value === 0) {
+                return null;
+              }
+              return [formatCurrency(value), getMetricLabel(name)];
+            }}
+            labelFormatter={(label) => `Date: ${label}`}
+            contentStyle={{
+              backgroundColor: '#1F2937',
+              border: '1px solid #374151',
+              borderRadius: '8px',
+              color: '#fff'
+            }}
+            itemStyle={{ color: '#fff' }}
+            labelStyle={{ color: '#fff' }}
+          />
+          <Legend
+            wrapperStyle={{ color: '#fff' }}
+            formatter={(value: string) => {
+              return getMetricLabel(value);
+            }}
+          />
+          {viewMode === 'assets' ? (
+            <>
+              {/* Assets view: Stacked bars for assets + Net Worth line */}
+              <Bar dataKey="totalCash" stackId="assets" fill="#10B981" name="totalCash" />
+              <Bar dataKey="totalInvestments" stackId="assets" fill="#8B5CF6" name="totalInvestments" />
+              <Bar 
+                dataKey="homeValue" 
+                stackId="assets" 
+                fill="#F59E0B" 
+                name="homeValue"
+                minPointSize={0}
+              />
+              {/* Net Worth line */}
+              <Line
+                type="monotone"
+                dataKey="netWorth"
+                stroke="#3B82F6"
+                strokeWidth={3}
+                dot={false}
+                name="netWorth"
+                isAnimationActive={false}
+              />
+            </>
+          ) : (
+            <>
+              {/* Debt view: Single bar chart for debt */}
+              <Bar dataKey="totalDebt" fill="#EF4444" name="totalDebt" />
+            </>
+          )}
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 
