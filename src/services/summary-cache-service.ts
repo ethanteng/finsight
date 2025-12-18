@@ -282,7 +282,9 @@ export class SummaryCacheService {
       }
       return sum;
     }, 0);
-    const homeValue = data?.homeValue?.valueMid ?? null;
+    // Extract homeValue: treat 0 as null (no value set)
+    const rawHomeValue = data?.homeValue?.valueMid;
+    const homeValue = (rawHomeValue != null && rawHomeValue > 0) ? rawHomeValue : null;
     const netWorth = totalCash + totalInvestments + (homeValue ?? 0) - totalDebt;
     return { netWorth, totalCash, totalInvestments, totalDebt, homeValue };
   }

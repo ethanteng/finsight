@@ -429,32 +429,44 @@ export default function FinancesPageClient() {
 
         {/* Financial Metrics Chart */}
         {!historicalDataLoading && snapshot && (() => {
+          // Get current home value (prefer homeData, then snapshot, then null)
+          const currentHomeValue = homeData?.value || snapshot.financialOverview.homeValue || null;
+          
           // Create current snapshot with accurate values
           const currentSnapshot = {
             computedAt: new Date().toISOString(),
             netWorth: Math.round(
               snapshot.financialOverview.totalCash + 
               snapshot.financialOverview.totalInvestments + 
-              (homeData?.value || snapshot.financialOverview.homeValue || 0) - 
+              (currentHomeValue || 0) - 
               snapshot.financialOverview.totalDebt
             ),
             totalCash: Math.round(snapshot.financialOverview.totalCash),
             totalInvestments: Math.round(snapshot.financialOverview.totalInvestments),
             totalDebt: Math.round(snapshot.financialOverview.totalDebt),
-            homeValue: homeData?.value || snapshot.financialOverview.homeValue || null,
+            homeValue: currentHomeValue,
           };
 
-          // Recalculate net worth for all historical snapshots to ensure accuracy
-          // (some may have been saved with incorrect net worth if home value was missing)
-          const correctedHistoricalData = historicalData.map(snapshot => ({
-            ...snapshot,
-            netWorth: Math.round(
-              snapshot.totalCash + 
-              snapshot.totalInvestments + 
-              (snapshot.homeValue || 0) - 
-              snapshot.totalDebt
-            ),
-          }));
+          // Recalculate net worth and fill in missing homeValue for all historical snapshots
+          // If a historical snapshot has homeValue as null/0 but we have a current homeValue,
+          // use the current homeValue (assuming home value doesn't change frequently)
+          const correctedHistoricalData = historicalData.map(snapshot => {
+            // Use current homeValue if historical snapshot is missing it (null or 0)
+            const homeValue = (snapshot.homeValue != null && snapshot.homeValue > 0) 
+              ? snapshot.homeValue 
+              : (currentHomeValue || null);
+            
+            return {
+              ...snapshot,
+              homeValue: homeValue,
+              netWorth: Math.round(
+                snapshot.totalCash + 
+                snapshot.totalInvestments + 
+                (homeValue || 0) - 
+                snapshot.totalDebt
+              ),
+            };
+          });
 
           // Check if the most recent historical snapshot is from today
           const today = new Date().toDateString();

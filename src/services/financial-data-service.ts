@@ -2033,25 +2033,47 @@ export class FinancialDataService {
       // Parse home value from profile data
       const profileData = userProfile.profileText;
       const addressMatch = profileData.match(/HOME_ADDRESS:\s*(.+)/);
-      const valueMatch = profileData.match(/HOME_VALUE:\s*(\d+(?:\.\d+)?)/);
-      const valueLowMatch = profileData.match(/HOME_VALUE_LOW:\s*(\d+(?:\.\d+)?)/);
-      const valueHighMatch = profileData.match(/HOME_VALUE_HIGH:\s*(\d+(?:\.\d+)?)/);
-      const lastUpdatedMatch = profileData.match(/HOME_VALUE_LAST_UPDATED:\s*(.+)/);
-
+      
       // Return home data even if value is 0 or missing (address is still useful)
       if (!addressMatch) {
         return null;
       }
 
       const address = addressMatch[1].trim();
-      const value = valueMatch ? parseFloat(valueMatch[1]) : 0;
-      const valueLow = valueLowMatch ? parseFloat(valueLowMatch[1]) : (value > 0 ? value * 0.9 : 0);
-      const valueHigh = valueHighMatch ? parseFloat(valueHighMatch[1]) : (value > 0 ? value * 1.1 : 0);
+      
+      // Check for manual override first (takes precedence over RentCast estimate)
+      const manualValueMatch = profileData.match(/HOME_VALUE_MANUAL:\s*(\d+(?:\.\d+)?)/);
+      let value: number | null = null;
+      
+      if (manualValueMatch) {
+        const manualValue = parseFloat(manualValueMatch[1]);
+        if (manualValue > 0) {
+          value = manualValue;
+        }
+      }
+      
+      // If no manual override, check for RentCast estimate
+      if (value == null) {
+        const valueMatch = profileData.match(/HOME_VALUE:\s*(\d+(?:\.\d+)?)/);
+        if (valueMatch) {
+          const parsedValue = parseFloat(valueMatch[1]);
+          if (parsedValue > 0) {
+            value = parsedValue;
+          }
+        }
+      }
+      
+      const valueLowMatch = profileData.match(/HOME_VALUE_LOW:\s*(\d+(?:\.\d+)?)/);
+      const valueHighMatch = profileData.match(/HOME_VALUE_HIGH:\s*(\d+(?:\.\d+)?)/);
+      const lastUpdatedMatch = profileData.match(/HOME_VALUE_LAST_UPDATED:\s*(.+)/);
+      
+      const valueLow = valueLowMatch ? parseFloat(valueLowMatch[1]) : (value != null && value > 0 ? value * 0.9 : 0);
+      const valueHigh = valueHighMatch ? parseFloat(valueHighMatch[1]) : (value != null && value > 0 ? value * 1.1 : 0);
 
       return {
         address,
         valueLow: valueLow > 0 ? valueLow : 0,
-        valueMid: value > 0 ? value : 0,
+        valueMid: value != null && value > 0 ? value : 0,
         valueHigh: valueHigh > 0 ? valueHigh : 0,
         lastUpdated: lastUpdatedMatch ? lastUpdatedMatch[1].trim() : new Date().toISOString()
       };
