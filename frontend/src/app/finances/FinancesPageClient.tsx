@@ -428,31 +428,71 @@ export default function FinancesPageClient() {
         />
 
         {/* Financial Metrics Chart */}
-        {!historicalDataLoading && (
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">Financial Metrics Over Time</h3>
-              <select
-                value={chartTimeRange}
-                onChange={(e) => {
-                  const value = e.target.value as '1M' | '3M' | '6M' | '1Y' | 'All';
-                  setChartTimeRange(value);
-                }}
-                className="bg-gray-700 text-white px-3 py-1 rounded text-sm border border-gray-600 focus:border-blue-500 focus:outline-none"
-              >
-                <option value="1M">1 Month</option>
-                <option value="3M">3 Months</option>
-                <option value="6M">6 Months</option>
-                <option value="1Y">1 Year</option>
-                <option value="All">All Time</option>
-              </select>
+        {!historicalDataLoading && snapshot && (() => {
+          // Create current snapshot with accurate values
+          const currentSnapshot = {
+            computedAt: new Date().toISOString(),
+            netWorth: Math.round(
+              snapshot.financialOverview.totalCash + 
+              snapshot.financialOverview.totalInvestments + 
+              (homeData?.value || snapshot.financialOverview.homeValue || 0) - 
+              snapshot.financialOverview.totalDebt
+            ),
+            totalCash: Math.round(snapshot.financialOverview.totalCash),
+            totalInvestments: Math.round(snapshot.financialOverview.totalInvestments),
+            totalDebt: Math.round(snapshot.financialOverview.totalDebt),
+            homeValue: homeData?.value || snapshot.financialOverview.homeValue || null,
+          };
+
+          // Recalculate net worth for all historical snapshots to ensure accuracy
+          // (some may have been saved with incorrect net worth if home value was missing)
+          const correctedHistoricalData = historicalData.map(snapshot => ({
+            ...snapshot,
+            netWorth: Math.round(
+              snapshot.totalCash + 
+              snapshot.totalInvestments + 
+              (snapshot.homeValue || 0) - 
+              snapshot.totalDebt
+            ),
+          }));
+
+          // Check if the most recent historical snapshot is from today
+          const today = new Date().toDateString();
+          const mostRecentHistorical = correctedHistoricalData.length > 0 
+            ? new Date(correctedHistoricalData[0].computedAt).toDateString()
+            : null;
+          
+          // Only add current snapshot if there's no historical data for today
+          const chartData = mostRecentHistorical === today 
+            ? correctedHistoricalData 
+            : [currentSnapshot, ...correctedHistoricalData];
+
+          return (
+            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white">Financial Metrics Over Time</h3>
+                <select
+                  value={chartTimeRange}
+                  onChange={(e) => {
+                    const value = e.target.value as '1M' | '3M' | '6M' | '1Y' | 'All';
+                    setChartTimeRange(value);
+                  }}
+                  className="bg-gray-700 text-white px-3 py-1 rounded text-sm border border-gray-600 focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="1M">1 Month</option>
+                  <option value="3M">3 Months</option>
+                  <option value="6M">6 Months</option>
+                  <option value="1Y">1 Year</option>
+                  <option value="All">All Time</option>
+                </select>
+              </div>
+              <FinancialMetricsChart 
+                data={chartData}
+                timeRange={chartTimeRange}
+              />
             </div>
-            <FinancialMetricsChart 
-              data={historicalData}
-              timeRange={chartTimeRange}
-            />
-          </div>
-        )}
+          );
+        })()}
 
         {/* Key Metrics Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
