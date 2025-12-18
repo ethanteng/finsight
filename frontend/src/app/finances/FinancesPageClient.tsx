@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import NetWorthCard from '../../components/finances/NetWorthCard';
 import HomeValueCard from '../../components/finances/HomeValueCard';
@@ -290,7 +290,7 @@ export default function FinancesPageClient() {
     loadFinancialData();
   }, [API_URL, router]);
 
-  const refreshManualAccounts = async () => {
+  const refreshManualAccounts = useCallback(async () => {
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -315,7 +315,7 @@ export default function FinancesPageClient() {
     } catch (error) {
       console.error('Error refreshing manual accounts:', error);
     }
-  };
+  }, [API_URL]);
 
   const handleLogout = () => {
     localStorage.removeItem('auth_token');
@@ -367,7 +367,7 @@ export default function FinancesPageClient() {
   const groupedAccounts = groupAccounts(accounts, snapTradeAccounts);
   
   // Helper to find account by ID
-  const findAccountById = (accountId: string): Account | SnapTradeAccount | null => {
+  const findAccountById = useCallback((accountId: string): Account | SnapTradeAccount | null => {
     const allAccounts = [
       ...groupedAccounts.cash,
       ...groupedAccounts.investments,
@@ -378,7 +378,7 @@ export default function FinancesPageClient() {
       const accId = (acc as Account).account_id || (acc as Account).id || (acc as SnapTradeAccount).id;
       return accId === accountId;
     }) || null;
-  };
+  }, [groupedAccounts]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -577,13 +577,15 @@ export default function FinancesPageClient() {
           )}
 
           {/* Manual Accounts Management */}
-          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-            <ManualAccountList
-              accounts={manualAccounts}
-              onRefresh={refreshManualAccounts}
-              isDemo={false}
-            />
-          </div>
+          {snapshot && (
+            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+              <ManualAccountList
+                accounts={manualAccounts}
+                onRefresh={refreshManualAccounts}
+                isDemo={false}
+              />
+            </div>
+          )}
         </div>
       </div>
 

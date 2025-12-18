@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { ManualAccount } from '../types/manual-account';
 
 interface ManualAccountFormProps {
@@ -16,13 +16,13 @@ export default function ManualAccountForm({ account, onSuccess, onCancel, isDemo
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const formatAmount = (value: number): string => {
+  const formatAmount = useCallback((value: number): string => {
     // Format number with commas for display
     return value.toLocaleString('en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
-  };
+  }, []);
 
   useEffect(() => {
     if (account) {
@@ -30,7 +30,7 @@ export default function ManualAccountForm({ account, onSuccess, onCancel, isDemo
       setAmount(formatAmount(account.amount));
       setType(account.type);
     }
-  }, [account]);
+  }, [account, formatAmount]);
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     // Allow numbers, commas, and decimal points
