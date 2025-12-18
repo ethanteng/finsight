@@ -388,13 +388,15 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
     valueLow: number | null;
     valueHigh: number | null;
     lastUpdated: Date | null;
+    isManualOverride: boolean;
   } {
     const result = {
       address: null as string | null,
       value: null as number | null,
       valueLow: null as number | null,
       valueHigh: null as number | null,
-      lastUpdated: null as Date | null
+      lastUpdated: null as Date | null,
+      isManualOverride: false
     };
 
     // Extract home address
@@ -403,10 +405,22 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
       result.address = addressMatch[1].trim();
     }
 
-    // Extract home value (supports both integers and decimals)
-    const valueMatch = profileText.match(/HOME_VALUE:\s*(\d+(?:\.\d+)?)/);
-    if (valueMatch) {
-      result.value = parseFloat(valueMatch[1]);
+    // Extract manual override value first (takes precedence)
+    const manualValueMatch = profileText.match(/HOME_VALUE_MANUAL:\s*(\d+(?:\.\d+)?)/);
+    if (manualValueMatch) {
+      const manualValue = parseFloat(manualValueMatch[1]);
+      if (manualValue > 0) {
+        result.value = manualValue;
+        result.isManualOverride = true;
+      }
+    }
+
+    // Extract home value (RentCast estimate) - only use if no manual override
+    if (!result.isManualOverride) {
+      const valueMatch = profileText.match(/HOME_VALUE:\s*(\d+(?:\.\d+)?)/);
+      if (valueMatch) {
+        result.value = parseFloat(valueMatch[1]);
+      }
     }
 
     // Extract home value low (supports both integers and decimals)
@@ -473,20 +487,29 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
       // Get current profile
       const currentProfile = await this.getOriginalProfile(userId);
       
-      // Remove any existing home data
+      // Preserve manual override if it exists
+      const manualOverrideMatch = currentProfile.match(/HOME_VALUE_MANUAL:\s*(\d+(?:\.\d+)?)/);
+      const manualOverride = manualOverrideMatch ? manualOverrideMatch[0] : null;
+      
+      // Remove any existing home data (but preserve manual override)
       let updatedProfile = currentProfile.replace(
         /HOME_ADDRESS:.*?\n|HOME_VALUE:.*?\n|HOME_VALUE_LOW:.*?\n|HOME_VALUE_HIGH:.*?\n|HOME_VALUE_LAST_UPDATED:.*?\n/g,
         ''
       ).trim();
 
       // Add new home data to profile
-      const homeDataSection = `
+      let homeDataSection = `
 
 HOME_ADDRESS: ${address}
 HOME_VALUE: ${homeValueData.price}
 HOME_VALUE_LOW: ${homeValueData.priceRangeLow}
 HOME_VALUE_HIGH: ${homeValueData.priceRangeHigh}
 HOME_VALUE_LAST_UPDATED: ${new Date().toISOString()}`;
+
+      // Re-add manual override if it existed (manual override takes precedence)
+      if (manualOverride) {
+        homeDataSection += `\n${manualOverride}`;
+      }
 
       updatedProfile = updatedProfile + homeDataSection;
 
@@ -514,15 +537,150 @@ HOME_VALUE_LAST_UPDATED: ${new Date().toISOString()}`;
   }
 
   /**
+   * Update manual home value override for a user
+   * @param userId - User ID
+   * @param manualValue - Manual override value
+   * @returns Updated home data
+   */
+  async updateManualHomeValue(userId: string, manualValue: number): Promise<{
+    address: string | null;
+    value: number | null;
+    valueLow: number | null;
+    valueHigh: number | null;
+    lastUpdated: Date | null;
+    isManualOverride: boolean;
+  }> {
+    const currentProfile = await this.getOriginalProfile(userId);
+    const currentHomeData = this.extractHomeData(currentProfile);
+    
+    if (!currentHomeData.address) {
+      throw new Error('No home address found. Please add a home address first.');
+    }
+
+    // Remove existing manual override if present
+    let updatedProfile = currentProfile.replace(
+      /HOME_VALUE_MANUAL:.*?\n/g,
+      ''
+    );
+
+    // Trim trailing whitespace but preserve at least one trailing newline for regex matching
+    // This ensures regex patterns can match properly
+    updatedProfile = updatedProfile.trimEnd();
+    
+    // Ensure profile ends with a newline for regex matching (after trimEnd)
+    if (!updatedProfile.endsWith('\n')) {
+      updatedProfile += '\n';
+    }
+
+    // Add or update manual override
+    if (manualValue > 0) {
+      // Check if home data section exists
+      if (!updatedProfile.includes('HOME_ADDRESS:')) {
+        throw new Error('Home data section not found in profile');
+      }
+
+      let overrideAdded = false;
+
+      // Add manual override after the last home data field
+      // Find the last HOME_VALUE_LAST_UPDATED line and add manual override after it
+      if (updatedProfile.includes('HOME_VALUE_LAST_UPDATED:')) {
+        // Match with or without trailing newline, ensure we add one
+        updatedProfile = updatedProfile.replace(
+          /(HOME_VALUE_LAST_UPDATED:.*?)(\n|$)/,
+          `$1\nHOME_VALUE_MANUAL: ${manualValue}\n`
+        );
+        overrideAdded = true;
+      } else {
+        // If no LAST_UPDATED, add after HOME_VALUE_HIGH or HOME_VALUE
+        if (updatedProfile.includes('HOME_VALUE_HIGH:')) {
+          updatedProfile = updatedProfile.replace(
+            /(HOME_VALUE_HIGH:.*?)(\n|$)/,
+            `$1\nHOME_VALUE_MANUAL: ${manualValue}\n`
+          );
+          overrideAdded = true;
+        } else if (updatedProfile.includes('HOME_VALUE:')) {
+          updatedProfile = updatedProfile.replace(
+            /(HOME_VALUE:.*?)(\n|$)/,
+            `$1\nHOME_VALUE_MANUAL: ${manualValue}\n`
+          );
+          overrideAdded = true;
+        } else {
+          // If no anchor field exists, append after HOME_ADDRESS
+          updatedProfile = updatedProfile.replace(
+            /(HOME_ADDRESS:.*?)(\n|$)/,
+            `$1HOME_VALUE_MANUAL: ${manualValue}\n`
+          );
+          overrideAdded = true;
+        }
+      }
+
+      // Verify override was added
+      if (!overrideAdded || !updatedProfile.includes(`HOME_VALUE_MANUAL: ${manualValue}`)) {
+        throw new Error('Failed to add manual override to profile');
+      }
+    }
+
+    // Update last updated timestamp
+    const now = new Date().toISOString();
+    if (updatedProfile.includes('HOME_VALUE_LAST_UPDATED:')) {
+      updatedProfile = updatedProfile.replace(
+        /HOME_VALUE_LAST_UPDATED:.*?\n/,
+        `HOME_VALUE_LAST_UPDATED: ${now}\n`
+      );
+    }
+
+    await this.updateProfile(userId, updatedProfile);
+    
+    // Return updated home data
+    return this.extractHomeData(updatedProfile);
+  }
+
+  /**
+   * Remove manual home value override (reset to estimate)
+   * @param userId - User ID
+   * @returns Updated home data
+   */
+  async removeManualHomeValue(userId: string): Promise<{
+    address: string | null;
+    value: number | null;
+    valueLow: number | null;
+    valueHigh: number | null;
+    lastUpdated: Date | null;
+    isManualOverride: boolean;
+  }> {
+    const currentProfile = await this.getOriginalProfile(userId);
+    
+    // Remove manual override
+    let updatedProfile = currentProfile.replace(
+      /HOME_VALUE_MANUAL:.*?\n/g,
+      ''
+    );
+
+    // Trim trailing whitespace but preserve at least one trailing newline for regex matching
+    // This ensures subsequent regex patterns in updateHomeValue can match properly
+    updatedProfile = updatedProfile.trimEnd();
+    
+    // Ensure profile ends with a newline for regex matching (after trimEnd)
+    if (!updatedProfile.endsWith('\n')) {
+      updatedProfile += '\n';
+    }
+
+    await this.updateProfile(userId, updatedProfile);
+    
+    // Return updated home data (will now use estimate)
+    return this.extractHomeData(updatedProfile);
+  }
+
+  /**
    * Remove home data from user profile
    * @param userId - User ID
    */
   async removeHomeData(userId: string): Promise<void> {
     const currentProfile = await this.getOriginalProfile(userId);
     
-    // Remove home data
+    // Remove home data (including manual override)
     const updatedProfile = currentProfile.replace(
-      /HOME_ADDRESS:.*?\n|HOME_VALUE:.*?\n|HOME_VALUE_LOW:.*?\n|HOME_VALUE_HIGH:.*?\n|HOME_VALUE_LAST_UPDATED:.*?\n/g,
+      /HOME_ADDRESS:.*?\n|HOME_VALUE:.*?\n|HOME_VALUE_LOW:.*?\n|HOME_VALUE_HIGH:.*?\n|HOME_VALUE_MANUAL:.*?\n|HOME_VALUE_LAST_UPDATED:.*?\n/g,
       ''
     ).trim();
 

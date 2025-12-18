@@ -58,6 +58,7 @@ interface HomeData {
   valueLow: number;
   valueHigh: number;
   lastUpdated: string;
+  isManualOverride?: boolean;
 }
 
 interface Transaction {
@@ -176,7 +177,8 @@ export default function FinancesPageClient() {
                   value: homeDataResponse.homeData.value,
                   valueLow: homeDataResponse.homeData.valueLow || homeDataResponse.homeData.value * 0.9,
                   valueHigh: homeDataResponse.homeData.valueHigh || homeDataResponse.homeData.value * 1.1,
-                  lastUpdated: homeDataResponse.homeData.lastUpdated || snapshotData?.computedAt || new Date().toISOString()
+                  lastUpdated: homeDataResponse.homeData.lastUpdated || snapshotData?.computedAt || new Date().toISOString(),
+                  isManualOverride: homeDataResponse.homeData.isManualOverride || false
                 });
               } else {
                 console.log('🏠 FinancesPage: Profile endpoint returned no home data or invalid value');
@@ -194,7 +196,8 @@ export default function FinancesPageClient() {
                 value: snapshotData.financialOverview.homeValue,
                 valueLow: snapshotData.financialOverview.homeValue * 0.9,
                 valueHigh: snapshotData.financialOverview.homeValue * 1.1,
-                lastUpdated: snapshotData.computedAt || new Date().toISOString()
+                lastUpdated: snapshotData.computedAt || new Date().toISOString(),
+                isManualOverride: false
               });
             } else {
               console.log('🏠 FinancesPage: No home value found in snapshot either');
@@ -416,7 +419,13 @@ export default function FinancesPageClient() {
 
         {/* Home Value */}
         {homeData && homeData.value > 0 && (
-          <HomeValueCard homeData={homeData} />
+          <HomeValueCard 
+            homeData={homeData} 
+            onValueUpdate={(updatedData) => {
+              setHomeData(updatedData);
+              // Optionally refresh the snapshot to get updated data
+            }}
+          />
         )}
 
         {/* Account Groups */}

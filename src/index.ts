@@ -2709,7 +2709,8 @@ app.get('/profile/home', requireAuth, async (req: Request, res: Response) => {
         value: homeData.value ?? 0,
         valueLow: valueLow,
         valueHigh: valueHigh,
-        lastUpdated: lastUpdatedISO
+        lastUpdated: lastUpdatedISO,
+        isManualOverride: homeData.isManualOverride || false
       }
     });
   } catch (error) {
@@ -2776,7 +2777,8 @@ app.post('/profile/home', requireAuth, async (req: Request, res: Response) => {
         value: homeData.value ?? 0,
         valueLow: valueLow,
         valueHigh: valueHigh,
-        lastUpdated: lastUpdatedISO
+        lastUpdated: lastUpdatedISO,
+        isManualOverride: homeData.isManualOverride || false
       }
     });
   } catch (error) {
@@ -2837,7 +2839,8 @@ app.post('/profile/home/refresh', requireAuth, async (req: Request, res: Respons
         value: homeData.value ?? 0,
         valueLow: valueLow,
         valueHigh: valueHigh,
-        lastUpdated: lastUpdatedISO
+        lastUpdated: lastUpdatedISO,
+        isManualOverride: homeData.isManualOverride || false
       }
     });
   } catch (error) {
@@ -2849,6 +2852,102 @@ app.post('/profile/home/refresh', requireAuth, async (req: Request, res: Respons
     } else {
       Sentry.captureMessage('Unknown error in home value refresh endpoint', 'error');
       res.status(500).json({ error: 'Failed to refresh home value' });
+    }
+  }
+});
+
+// Update manual home value override
+app.put('/profile/home/value', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { value } = req.body;
+    
+    if (typeof value !== 'number' || value <= 0) {
+      return res.status(400).json({ error: 'value is required and must be a positive number' });
+    }
+    
+    const { ProfileManager } = await import('./profile/manager');
+    const profileManager = new ProfileManager();
+    
+    // Update manual override
+    const homeData = await profileManager.updateManualHomeValue(req.user!.id, value);
+    
+    // Ensure valueLow and valueHigh are always numbers (use value as fallback if null)
+    const valueLow = homeData.valueLow ?? homeData.value ?? 0;
+    const valueHigh = homeData.valueHigh ?? homeData.value ?? 0;
+    
+    // Safely convert lastUpdated to ISO string, checking if date is valid
+    let lastUpdatedISO: string;
+    if (homeData.lastUpdated && !isNaN(homeData.lastUpdated.getTime())) {
+      lastUpdatedISO = homeData.lastUpdated.toISOString();
+    } else {
+      lastUpdatedISO = new Date().toISOString();
+    }
+    
+    res.json({ 
+      success: true,
+      homeData: {
+        address: homeData.address || '',
+        value: homeData.value ?? 0,
+        valueLow: valueLow,
+        valueHigh: valueHigh,
+        lastUpdated: lastUpdatedISO,
+        isManualOverride: homeData.isManualOverride
+      }
+    });
+  } catch (error) {
+    console.error('Failed to update manual home value:', error);
+    
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+      res.status(500).json({ error: error.message });
+    } else {
+      Sentry.captureMessage('Unknown error updating manual home value', 'error');
+      res.status(500).json({ error: 'Failed to update manual home value' });
+    }
+  }
+});
+
+// Remove manual home value override (reset to estimate)
+app.delete('/profile/home/value', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { ProfileManager } = await import('./profile/manager');
+    const profileManager = new ProfileManager();
+    
+    // Remove manual override
+    const homeData = await profileManager.removeManualHomeValue(req.user!.id);
+    
+    // Ensure valueLow and valueHigh are always numbers (use value as fallback if null)
+    const valueLow = homeData.valueLow ?? homeData.value ?? 0;
+    const valueHigh = homeData.valueHigh ?? homeData.value ?? 0;
+    
+    // Safely convert lastUpdated to ISO string, checking if date is valid
+    let lastUpdatedISO: string;
+    if (homeData.lastUpdated && !isNaN(homeData.lastUpdated.getTime())) {
+      lastUpdatedISO = homeData.lastUpdated.toISOString();
+    } else {
+      lastUpdatedISO = new Date().toISOString();
+    }
+    
+    res.json({ 
+      success: true,
+      homeData: {
+        address: homeData.address || '',
+        value: homeData.value ?? 0,
+        valueLow: valueLow,
+        valueHigh: valueHigh,
+        lastUpdated: lastUpdatedISO,
+        isManualOverride: homeData.isManualOverride
+      }
+    });
+  } catch (error) {
+    console.error('Failed to remove manual home value:', error);
+    
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+      res.status(500).json({ error: error.message });
+    } else {
+      Sentry.captureMessage('Unknown error removing manual home value', 'error');
+      res.status(500).json({ error: 'Failed to remove manual home value' });
     }
   }
 });
