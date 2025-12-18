@@ -12,6 +12,7 @@ import {
   Legend,
   Filler,
   TimeScale,
+  TooltipItem,
 } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
 import 'chartjs-adapter-date-fns';
@@ -183,7 +184,7 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
     const allValues: number[] = [];
     chartData.datasets.forEach(dataset => {
       if (Array.isArray(dataset.data)) {
-        dataset.data.forEach((point: any) => {
+        dataset.data.forEach((point: { x: number; y: number }) => {
           if (point.y !== undefined && point.y !== null) {
             allValues.push(point.y);
           }
@@ -225,17 +226,25 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
         titleColor: '#fff',
         bodyColor: '#fff',
         callbacks: {
-          label: (context: any) => {
+          label: (context: TooltipItem<'line'>) => {
             const label = context.dataset.label || '';
             const value = context.parsed.y;
-            // Don't show homeValue if it's 0
-            if (label === 'Home Value' && value === 0) {
-              return null;
+            // Don't show homeValue if it's 0 or null
+            if (label === 'Home Value' && (value === 0 || value === null)) {
+              return undefined; // Return undefined instead of null
+            }
+            // Handle null values
+            if (value === null || value === undefined) {
+              return `${label}: $0`;
             }
             return `${label}: ${formatCurrency(value)}`;
           },
-          title: (context: any) => {
-            const date = new Date(context[0].parsed.x);
+          title: (context: TooltipItem<'line'>[]) => {
+            const xValue = context[0].parsed.x;
+            if (xValue === null || xValue === undefined) {
+              return 'Unknown date';
+            }
+            const date = new Date(xValue);
             const daysDiff = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
             
             if (daysDiff < 30) {
@@ -284,7 +293,7 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           font: {
             size: 12,
           },
-          callback: (value: any) => formatCurrency(value),
+          callback: (value: string | number) => formatCurrency(typeof value === 'number' ? value : parseFloat(value)),
         },
       },
     },
