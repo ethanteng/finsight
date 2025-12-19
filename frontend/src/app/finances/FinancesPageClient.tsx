@@ -455,7 +455,16 @@ export default function FinancesPageClient() {
           // use the current homeValue (assuming home value doesn't change frequently)
           // Ensure historicalData is always an array
           const safeHistoricalData = Array.isArray(historicalData) ? historicalData : [];
-          const correctedHistoricalData = safeHistoricalData.map(snapshot => {
+          const today = new Date().toDateString();
+          
+          // Filter out any historical snapshots from today - we'll use current snapshot instead
+          // This ensures manual accounts are always included in today's data point
+          const historicalDataExcludingToday = safeHistoricalData.filter(snapshot => {
+            const snapshotDate = new Date(snapshot.computedAt).toDateString();
+            return snapshotDate !== today;
+          });
+          
+          const correctedHistoricalData = historicalDataExcludingToday.map(snapshot => {
             // Use current homeValue if historical snapshot is missing it (null or 0)
             const homeValue = (snapshot.homeValue != null && snapshot.homeValue > 0) 
               ? snapshot.homeValue 
@@ -473,16 +482,9 @@ export default function FinancesPageClient() {
             };
           });
 
-          // Check if the most recent historical snapshot is from today
-          const today = new Date().toDateString();
-          const mostRecentHistorical = correctedHistoricalData.length > 0 
-            ? new Date(correctedHistoricalData[0].computedAt).toDateString()
-            : null;
-          
-          // Only add current snapshot if there's no historical data for today
-          const chartData = mostRecentHistorical === today 
-            ? correctedHistoricalData 
-            : [currentSnapshot, ...correctedHistoricalData];
+          // Always use current snapshot for today (includes manual accounts)
+          // Prepend it to historical data so it appears as the most recent point
+          const chartData = [currentSnapshot, ...correctedHistoricalData];
 
           return (
             <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
