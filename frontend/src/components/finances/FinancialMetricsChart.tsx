@@ -15,6 +15,8 @@ import {
   Filler,
   TimeScale,
   TooltipItem,
+  LineController,
+  BarController,
 } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
 
@@ -30,7 +32,9 @@ ChartJS.register(
   Tooltip,
   Legend,
   Filler,
-  TimeScale
+  TimeScale,
+  LineController,
+  BarController
 );
 
 export interface HistoricalSnapshot {
