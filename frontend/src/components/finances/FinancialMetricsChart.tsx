@@ -1,5 +1,7 @@
 "use client";
 import { useMemo, useState } from 'react';
+// Import adapter FIRST before Chart.js imports
+import 'chartjs-adapter-date-fns';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -15,9 +17,9 @@ import {
   TooltipItem,
 } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
-import 'chartjs-adapter-date-fns';
 
 // Register Chart.js components
+// ChartJS.register is idempotent and safe to call multiple times
 ChartJS.register(
   CategoryScale,
   LinearScale,
