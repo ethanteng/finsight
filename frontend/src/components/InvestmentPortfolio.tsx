@@ -139,15 +139,20 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
     const totalValue = holdings.reduce((sum, h) => sum + (h.institution_value || h.value || 0), 0);
     
     return holdings
-      .map(holding => ({
-        name: holding.security_name || holding.name || 'Unknown Security',
-        ticker: holding.ticker_symbol || '',
-        value: holding.institution_value || holding.value || 0,
-        percentage: totalValue > 0 ? ((holding.institution_value || holding.value || 0) / totalValue) * 100 : 0,
-        quantity: holding.quantity || 0,
-        price: holding.institution_price || 0,
-        holding: holding
-      }))
+      .map(holding => {
+        const fullName = holding.security_name || holding.name || 'Unknown Security';
+        // Use ticker if available, otherwise use first 10 chars of name as fallback
+        const ticker = holding.ticker_symbol || fullName.substring(0, 10);
+        return {
+          name: fullName,
+          ticker: ticker,
+          value: holding.institution_value || holding.value || 0,
+          percentage: totalValue > 0 ? ((holding.institution_value || holding.value || 0) / totalValue) * 100 : 0,
+          quantity: holding.quantity || 0,
+          price: holding.institution_price || 0,
+          holding: holding
+        };
+      })
       .sort((a, b) => b.value - a.value);
   }, [holdings]);
 
@@ -290,10 +295,10 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                     />
                     <YAxis
                       type="category"
-                      dataKey="name"
+                      dataKey="ticker"
                       stroke="#9CA3AF"
                       style={{ fontSize: '12px' }}
-                      width={180}
+                      width={80}
                       tick={{ fill: '#9CA3AF' }}
                     />
                     <Tooltip

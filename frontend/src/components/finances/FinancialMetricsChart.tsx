@@ -101,15 +101,20 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
       new Date(a.computedAt).getTime() - new Date(b.computedAt).getTime()
     );
 
-    // Prepare data points with dates
-    const dataPoints = sortedData.map(item => ({
-      x: new Date(item.computedAt).getTime(),
-      netWorth: Number(item.netWorth) || 0,
-      totalCash: Number(item.totalCash) || 0,
-      totalInvestments: Number(item.totalInvestments) || 0,
-      totalDebt: Number(item.totalDebt) || 0,
-      homeValue: item.homeValue != null ? Number(item.homeValue) : 0,
-    }));
+    // Prepare data points with dates normalized to start of day
+    const dataPoints = sortedData.map(item => {
+      const date = new Date(item.computedAt);
+      // Normalize to start of day (midnight) to group by day
+      date.setHours(0, 0, 0, 0);
+      return {
+        x: date.getTime(),
+        netWorth: Number(item.netWorth) || 0,
+        totalCash: Number(item.totalCash) || 0,
+        totalInvestments: Number(item.totalInvestments) || 0,
+        totalDebt: Number(item.totalDebt) || 0,
+        homeValue: item.homeValue != null ? Number(item.homeValue) : 0,
+      };
+    });
 
     if (viewMode === 'assets') {
       // Assets & Net Worth view: Stacked area for assets + line for net worth
@@ -119,8 +124,8 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           {
             label: 'Total Cash',
             data: dataPoints.map(d => ({ x: d.x, y: d.totalCash })),
-            backgroundColor: 'rgba(16, 185, 129, 0.6)', // #10B981 with opacity
-            borderColor: '#10B981',
+            backgroundColor: 'rgba(6, 182, 212, 0.5)', // Cyan-500 - fresh and clean
+            borderColor: '#06B6D4',
             borderWidth: 0,
             fill: true,
             stack: 'assets',
@@ -130,8 +135,8 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           {
             label: 'Total Investments',
             data: dataPoints.map(d => ({ x: d.x, y: d.totalInvestments })),
-            backgroundColor: 'rgba(139, 92, 246, 0.6)', // #8B5CF6 with opacity
-            borderColor: '#8B5CF6',
+            backgroundColor: 'rgba(99, 102, 241, 0.5)', // Indigo-500 - professional blue-purple
+            borderColor: '#6366F1',
             borderWidth: 0,
             fill: true,
             stack: 'assets',
@@ -141,8 +146,8 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           {
             label: 'Home Value',
             data: dataPoints.map(d => ({ x: d.x, y: d.homeValue })),
-            backgroundColor: 'rgba(245, 158, 11, 0.6)', // #F59E0B with opacity
-            borderColor: '#F59E0B',
+            backgroundColor: 'rgba(217, 119, 6, 0.5)', // Amber-600 - warm but muted
+            borderColor: '#D97706',
             borderWidth: 0,
             fill: true,
             stack: 'assets',
@@ -152,7 +157,7 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           {
             label: 'Net Worth',
             data: dataPoints.map(d => ({ x: d.x, y: d.netWorth })),
-            borderColor: '#3B82F6',
+            borderColor: '#2563EB', // Blue-600 - strong but not harsh
             backgroundColor: 'transparent',
             borderWidth: 3,
             fill: false,
@@ -170,8 +175,8 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           {
             label: 'Total Debt',
             data: dataPoints.map(d => ({ x: d.x, y: d.totalDebt })),
-            backgroundColor: 'rgba(239, 68, 68, 0.6)', // #EF4444 with opacity
-            borderColor: '#EF4444',
+            backgroundColor: 'rgba(236, 72, 153, 0.5)', // Pink-500 - softer than bright red
+            borderColor: '#EC4899',
             borderWidth: 2,
             fill: true,
             type: 'line' as const,
@@ -268,6 +273,7 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
       x: {
         type: 'time' as const,
         time: {
+          unit: 'day',
           displayFormats: {
             day: 'MMM d',
             month: 'MMM yyyy',

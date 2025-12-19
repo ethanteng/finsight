@@ -145,10 +145,10 @@ export default function AccountDetailModal({
   // Color palette function for different category types
   const getCategoryColor = (type: 'income' | 'expense' | 'payment' | 'additionalDebt', index: number): string => {
     const palettes = {
-      income: ['#10B981', '#059669', '#047857', '#065F46'],
-      expense: ['#EF4444', '#DC2626', '#B91C1C', '#991B1B'],
-      payment: ['#06B6D4', '#0891B2', '#0E7490', '#155E75'],
-      additionalDebt: ['#F59E0B', '#D97706', '#B45309', '#92400E']
+      income: ['#10B981', '#059669', '#047857', '#065F46'], // Green shades
+      expense: ['#EF4444', '#DC2626', '#B91C1C', '#991B1B'], // Red shades
+      payment: ['#06B6D4', '#0891B2', '#0E7490', '#155E75'], // Cyan/teal shades
+      additionalDebt: ['#6366F1', '#4F46E5', '#4338CA', '#3730A3'] // Indigo/blue shades (replacing yellow/orange)
     };
     return palettes[type][index % palettes[type].length];
   };
@@ -198,7 +198,14 @@ export default function AccountDetailModal({
         isIncome = tx.amount > 0;
       } else if (isDebtAccount) {
         // For debt accounts: negative = payment (reducing debt), positive = additional debt
-        isPayment = tx.amount < 0;
+        // Check both amount sign and category to properly identify payments
+        const categoryLower = categoryKey.toLowerCase();
+        const isPaymentCategory = categoryLower.includes('transfer_out') || 
+                                 categoryLower.includes('payment') ||
+                                 categoryLower.includes('loan_payment') ||
+                                 categoryLower.includes('payoff');
+        // Negative amounts are payments, or explicitly marked payment categories
+        isPayment = tx.amount < 0 || isPaymentCategory;
       }
       
       const targetTotals = isCashAccount 
