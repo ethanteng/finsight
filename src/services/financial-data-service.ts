@@ -2243,8 +2243,8 @@ export class FinancialDataService {
     const securities = Array.from(securityMap.values());
 
 
-    // Calculate portfolio analysis
-    const portfolio = this.analyzePortfolio(holdings, securities);
+    // Calculate portfolio analysis - include manual investment accounts
+    const portfolio = this.analyzePortfolio(holdings, securities, finalAccounts);
 
     // ✅ Merge transactions and separate investment from banking transactions
     const allPlaidTransactions = plaidData?.transactions || [];
@@ -2284,10 +2284,31 @@ export class FinancialDataService {
   /**
    * Analyze portfolio
    */
-  private analyzePortfolio(holdings: Holding[], securities: Security[]): PortfolioAnalysis {
-    const portfolioValue = holdings.reduce((total, holding) => {
+  private analyzePortfolio(holdings: Holding[], securities: Security[], accounts?: Account[]): PortfolioAnalysis {
+    // Calculate portfolio value from holdings
+    let portfolioValue = holdings.reduce((total, holding) => {
       return total + (holding.institution_value || 0);
     }, 0);
+
+    // Add manual investment accounts (they don't have holdings, so add their balance directly)
+    if (accounts) {
+      const manualInvestmentAccounts = accounts.filter(acc => {
+        const accountAny = acc as any;
+        return accountAny.source === 'manual' && 
+               (acc.type === 'investment' || 
+                ['401k', 'ira', 'roth', 'brokerage', 'hsa', '529', 'pension', 'annuity'].includes(acc.subtype?.toLowerCase() || ''));
+      });
+      
+      const manualInvestmentValue = manualInvestmentAccounts.reduce((sum, acc) => {
+        const balance = acc.balance?.current ?? acc.balance?.available ?? 0;
+        return sum + Math.max(0, balance);
+      }, 0);
+      
+      if (manualInvestmentValue > 0) {
+        console.log(`📊 analyzePortfolio: Adding ${manualInvestmentAccounts.length} manual investment accounts with total value: $${manualInvestmentValue.toFixed(2)}`);
+        portfolioValue += manualInvestmentValue;
+      }
+    }
 
     const securityMap = new Map(securities.map(sec => [sec.security_id, sec]));
     

@@ -260,8 +260,12 @@ export class SummaryCacheService {
 
   // ---- Helpers to compute sections ----
   private static computeFinancialOverview(data: any) {
-    const holdings = Array.isArray(data?.investments?.holdings) ? data.investments.holdings : [];
-    const totalInvestments = holdings.reduce((s: number, h: any) => s + (h.institution_value ?? h.value ?? 0), 0);
+    // ✅ Use portfolio.totalValue which already includes manual investment accounts
+    // The portfolio is calculated by analyzePortfolio() which includes manual investment accounts
+    const portfolio = data?.investments?.portfolio;
+    const totalInvestments = portfolio?.totalValue || 0;
+    // ✅ Calculate totalCash including manual cash accounts
+    // Manual cash accounts are mapped to type='depository', subtype='checking' so they're included here
     const totalCash = (data?.accounts || []).reduce((sum: number, a: any) => {
       const t = a.type;
       const st = a.subtype;

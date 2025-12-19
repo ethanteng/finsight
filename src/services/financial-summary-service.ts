@@ -92,10 +92,11 @@ export class FinancialSummaryService {
       const accountSubtype = account.subtype?.toLowerCase() || '';
       
       // ✅ IMPORTANT: Exclude investment accounts from cash/debt calculations
-      // Investment accounts are counted separately via holdings
+      // Investment accounts are counted separately via holdings (for accounts with holdings)
+      // and via account balance (for manual investment accounts without holdings)
       if (accountType === 'investment') {
         // Investment accounts should not be counted as cash or debt
-        // Their value is already included in totalInvestments via holdings
+        // Their value is already included in totalInvestments via holdings or account balance
         continue;
       }
       

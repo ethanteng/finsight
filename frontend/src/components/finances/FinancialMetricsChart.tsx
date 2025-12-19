@@ -124,8 +124,8 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           {
             label: 'Total Cash',
             data: dataPoints.map(d => ({ x: d.x, y: d.totalCash })),
-            backgroundColor: 'rgba(6, 182, 212, 0.5)', // Cyan-500 - fresh and clean
-            borderColor: '#06B6D4',
+            backgroundColor: 'rgba(52, 211, 153, 0.6)', // Emerald-400 - modern mint green
+            borderColor: '#34D399',
             borderWidth: 0,
             fill: true,
             stack: 'assets',
@@ -135,8 +135,8 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           {
             label: 'Total Investments',
             data: dataPoints.map(d => ({ x: d.x, y: d.totalInvestments })),
-            backgroundColor: 'rgba(99, 102, 241, 0.5)', // Indigo-500 - professional blue-purple
-            borderColor: '#6366F1',
+            backgroundColor: 'rgba(139, 92, 246, 0.6)', // Violet-500 - rich purple
+            borderColor: '#8B5CF6',
             borderWidth: 0,
             fill: true,
             stack: 'assets',
@@ -146,8 +146,8 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           {
             label: 'Home Value',
             data: dataPoints.map(d => ({ x: d.x, y: d.homeValue })),
-            backgroundColor: 'rgba(217, 119, 6, 0.5)', // Amber-600 - warm but muted
-            borderColor: '#D97706',
+            backgroundColor: 'rgba(251, 191, 36, 0.6)', // Amber-400 - warm gold
+            borderColor: '#FBBF24',
             borderWidth: 0,
             fill: true,
             stack: 'assets',
@@ -157,7 +157,7 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           {
             label: 'Net Worth',
             data: dataPoints.map(d => ({ x: d.x, y: d.netWorth })),
-            borderColor: '#2563EB', // Blue-600 - strong but not harsh
+            borderColor: '#0EA5E9', // Sky-500 - modern sky blue
             backgroundColor: 'transparent',
             borderWidth: 3,
             fill: false,
@@ -175,8 +175,8 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           {
             label: 'Total Debt',
             data: dataPoints.map(d => ({ x: d.x, y: d.totalDebt })),
-            backgroundColor: 'rgba(236, 72, 153, 0.5)', // Pink-500 - softer than bright red
-            borderColor: '#EC4899',
+            backgroundColor: 'rgba(239, 68, 68, 0.6)', // Red-500 - clear but not harsh
+            borderColor: '#EF4444',
             borderWidth: 2,
             fill: true,
             type: 'line' as const,
