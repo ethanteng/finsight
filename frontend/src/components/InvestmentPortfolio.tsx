@@ -284,7 +284,7 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                   <BarChart
                     data={holdingsBarData}
                     layout="vertical"
-                    margin={{ top: 5, right: 30, left: 200, bottom: 5 }}
+                    margin={{ top: 5, right: 30, left: 90, bottom: 5 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis

@@ -243,7 +243,12 @@ export default function FinancesPageClient() {
           if (snapTradeRes.ok) {
             const snapTradeData = await snapTradeRes.json();
             if (snapTradeData.success && snapTradeData.data?.accounts) {
-              setSnapTradeAccounts(snapTradeData.data.accounts);
+              // Normalize SnapTrade account IDs to match holdings format (snaptrade-{id})
+              const normalizedAccounts = snapTradeData.data.accounts.map((acc: SnapTradeAccount) => ({
+                ...acc,
+                id: acc.id.startsWith('snaptrade-') ? acc.id : `snaptrade-${acc.id}`,
+              }));
+              setSnapTradeAccounts(normalizedAccounts);
             }
           }
         } catch (snapTradeError) {

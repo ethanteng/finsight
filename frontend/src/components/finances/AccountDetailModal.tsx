@@ -99,7 +99,9 @@ export default function AccountDetailModal({
 }: AccountDetailModalProps) {
   const isInvestment = (account as Account).type === 'investment' || 
                       ['401k', 'ira', 'roth', 'brokerage', 'hsa', '529'].includes((account as Account).subtype?.toLowerCase() || '') ||
-                      (account as SnapTradeAccount).type === 'investment';
+                      (account as SnapTradeAccount).type === 'investment' ||
+                      // SnapTrade accounts can have various types that are all investments
+                      ['treasury', 'brokerage', 'ira', '401k', 'hsa', '529'].includes((account as SnapTradeAccount).type?.toLowerCase() || '');
 
   // Determine if account is cash or debt
   const isCashAccount = useMemo(() => {
@@ -301,7 +303,16 @@ export default function AccountDetailModal({
     return holdings.filter(h => {
       const holdingAccountId = h.account_id;
       const accId = (account as Account).account_id || (account as Account).id || (account as SnapTradeAccount).id;
-      return holdingAccountId === accId || holdingAccountId === accountId;
+      
+      // Handle both raw and prefixed account IDs for SnapTrade accounts
+      // Holdings use prefixed format (snaptrade-{id}), accounts may use raw format
+      const normalizedAccId = accId.startsWith('snaptrade-') ? accId : `snaptrade-${accId}`;
+      const rawAccId = accId.startsWith('snaptrade-') ? accId.replace('snaptrade-', '') : accId;
+      
+      return holdingAccountId === accId || 
+             holdingAccountId === accountId || 
+             holdingAccountId === normalizedAccId ||
+             holdingAccountId === `snaptrade-${rawAccId}`;
     });
   }, [holdings, account, accountId]);
 
@@ -310,7 +321,16 @@ export default function AccountDetailModal({
     return investmentTransactions.filter(tx => {
       const txAccountId = tx.account_id;
       const accId = (account as Account).account_id || (account as Account).id || (account as SnapTradeAccount).id;
-      return txAccountId === accId || txAccountId === accountId;
+      
+      // Handle both raw and prefixed account IDs for SnapTrade accounts
+      // Transactions use prefixed format (snaptrade-{id}), accounts may use raw format
+      const normalizedAccId = accId.startsWith('snaptrade-') ? accId : `snaptrade-${accId}`;
+      const rawAccId = accId.startsWith('snaptrade-') ? accId.replace('snaptrade-', '') : accId;
+      
+      return txAccountId === accId || 
+             txAccountId === accountId || 
+             txAccountId === normalizedAccId ||
+             txAccountId === `snaptrade-${rawAccId}`;
     });
   }, [investmentTransactions, account, accountId]);
 

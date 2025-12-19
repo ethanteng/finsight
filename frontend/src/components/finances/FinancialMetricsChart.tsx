@@ -124,8 +124,8 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           {
             label: 'Total Cash',
             data: dataPoints.map(d => ({ x: d.x, y: d.totalCash })),
-            backgroundColor: 'rgba(52, 211, 153, 0.6)', // Emerald-400 - modern mint green
-            borderColor: '#34D399',
+            backgroundColor: 'rgba(20, 184, 166, 0.6)', // Teal-500 - modern teal
+            borderColor: '#14B8A6',
             borderWidth: 0,
             fill: true,
             stack: 'assets',
@@ -135,8 +135,8 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           {
             label: 'Total Investments',
             data: dataPoints.map(d => ({ x: d.x, y: d.totalInvestments })),
-            backgroundColor: 'rgba(139, 92, 246, 0.6)', // Violet-500 - rich purple
-            borderColor: '#8B5CF6',
+            backgroundColor: 'rgba(79, 70, 229, 0.6)', // Indigo-600 - deep indigo (not light purple)
+            borderColor: '#4F46E5',
             borderWidth: 0,
             fill: true,
             stack: 'assets',
@@ -146,24 +146,25 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           {
             label: 'Home Value',
             data: dataPoints.map(d => ({ x: d.x, y: d.homeValue })),
-            backgroundColor: 'rgba(251, 191, 36, 0.6)', // Amber-400 - warm gold
-            borderColor: '#FBBF24',
+            backgroundColor: 'rgba(249, 115, 22, 0.6)', // Orange-500 - warm orange (not mustard yellow)
+            borderColor: '#F97316',
             borderWidth: 0,
             fill: true,
             stack: 'assets',
             order: 2,
           },
-          // Net Worth line (overlay)
+          // Net Worth line (overlay) - Most prominent as it's the key metric
           {
             label: 'Net Worth',
             data: dataPoints.map(d => ({ x: d.x, y: d.netWorth })),
-            borderColor: '#0EA5E9', // Sky-500 - modern sky blue
+            borderColor: '#2563EB', // Blue-600 - deeper, more prominent blue
             backgroundColor: 'transparent',
-            borderWidth: 3,
+            borderWidth: 4, // Thicker line for prominence
             fill: false,
             type: 'line' as const,
             pointRadius: 0,
-            pointHoverRadius: 4,
+            pointHoverRadius: 6, // Larger hover area
+            tension: 0.1, // Slight curve for smoother appearance
             order: 1,
           },
         ],
