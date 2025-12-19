@@ -273,7 +273,7 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
       x: {
         type: 'time' as const,
         time: {
-          unit: 'day',
+          unit: 'day' as const,
           displayFormats: {
             day: 'MMM d',
             month: 'MMM yyyy',
