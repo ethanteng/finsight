@@ -55,7 +55,11 @@
     "test:production-investments": "node scripts/test-production-investments.js",
     "check:access-tokens": "node scripts/check-access-tokens.js",
     "migrate:profiles-to-encryption": "node scripts/migrate-profiles-to-encryption.js",
-    "test:gpt-smoke": "node scripts/test-gpt-smoke.js"
+    "test:gpt-smoke": "node scripts/test-gpt-smoke.js",
+    "clean": "rm -rf node_modules dist build out .next .cache .parcel-cache coverage .nyc_output .eslintcache *.tsbuildinfo .babelcache storybook-static",
+    "reset": "npm run clean && npm install",
+    "rebuild": "npm run clean && npm install && npm run build",
+    "clean:all": "npm run clean && rm -rf prisma/migrations_backup"
   },
   "keywords": [],
   "author": "",

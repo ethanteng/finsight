@@ -508,6 +508,12 @@ finsight/
 - **Deployment scripts** - Build, deploy, verify processes
 - **Cleanup scripts** - Environment maintenance
 
+### Reset local environment
+npm run reset
+
+### Full clean build (matches CI)
+npm run rebuild
+
 ## 🤝 **Contributing**
 
 1. Fork the repository
