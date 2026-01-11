@@ -75,7 +75,12 @@ jobs:
             echo "ESLint found warnings (non-blocking):"
             npm run test:lint || true
           fi
-          npm run type-check
+          # Type check - use local typescript if available, otherwise use npx with exact version
+          if [ -f "node_modules/.bin/tsc" ]; then
+            node_modules/.bin/tsc --noEmit
+          else
+            npx typescript@5.8.3 tsc --noEmit
+          fi
 
       - name: Lint frontend
         run: |
