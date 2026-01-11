@@ -60,20 +60,20 @@ jobs:
         run: |
           set +e  # Don't exit on error
           # Run ESLint with JSON output to check for actual errors
-          # Use the project's ESLint version (v8) via npx with explicit version
-          ESLINT_JSON=$(npx eslint@8 src/ --ext .ts --format=json 2>&1)
+          # Use the locally installed ESLint via npm script to ensure dependencies are available
+          ESLINT_JSON=$(npm run test:lint -- --format=json 2>&1 || echo '[]')
           ESLINT_EXIT=$?
           set -e  # Re-enable exit on error
           # Parse JSON to check if there are any severity 2 (error) issues
           if echo "$ESLINT_JSON" | grep -q '"severity":2'; then
             echo "ESLint found errors (severity 2):"
-            npx eslint@8 src/ --ext .ts
+            npm run test:lint
             exit 1
           fi
           # Show warnings but don't fail
           if [ $ESLINT_EXIT -ne 0 ]; then
             echo "ESLint found warnings (non-blocking):"
-            npx eslint@8 src/ --ext .ts || true
+            npm run test:lint || true
           fi
           npm run type-check
 

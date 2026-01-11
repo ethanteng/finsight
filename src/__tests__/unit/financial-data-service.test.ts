@@ -12,6 +12,9 @@ jest.mock('@prisma/client', () => {
     transaction: {
       findMany: jest.fn(),
     },
+    manualAccount: {
+      findMany: jest.fn(),
+    },
   };
 
   const PrismaClient = jest.fn(() => mockPrisma);
@@ -31,6 +34,7 @@ const { __mockPrisma: mockPrisma } = jest.requireMock('@prisma/client') as {
     account: { findMany: jest.Mock };
     accessToken: { findMany: jest.Mock };
     transaction: { findMany: jest.Mock };
+    manualAccount: { findMany: jest.Mock };
   };
 };
 
@@ -122,6 +126,11 @@ describe('FinancialDataService investment persistence safeguards', () => {
     mockCache.set.mockReset();
     mockCache.invalidate.mockReset();
     mockCache.get.mockResolvedValue(null as never);
+    // Set up default return values for Prisma mocks
+    (mockPrisma.account.findMany as jest.Mock).mockResolvedValue([]);
+    (mockPrisma.accessToken.findMany as jest.Mock).mockResolvedValue([]);
+    (mockPrisma.transaction.findMany as jest.Mock).mockResolvedValue([]);
+    (mockPrisma.manualAccount.findMany as jest.Mock).mockResolvedValue([]);
   });
 
   it('skips persisted Plaid snapshot when investments are requested', async () => {

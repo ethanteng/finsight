@@ -54,8 +54,8 @@ jobs:
           npm run type-check
           # Basic ESLint check (only critical errors, exclude tests)
           # Using --quiet to only show errors, warnings are ignored for fast deploy
-          # Use ESLint v8 to match project version
-          npx eslint@8 src/ --ext .ts,.tsx --quiet --ignore-pattern "**/__tests__/**" --ignore-pattern "**/*.test.*" --ignore-pattern "**/*.spec.*" || echo "ESLint warnings found but continuing..."
+          # Use locally installed ESLint via npm script to ensure dependencies are available
+          npm run test:lint -- --quiet --ignore-pattern "**/__tests__/**" --ignore-pattern "**/*.test.*" --ignore-pattern "**/*.spec.*" || echo "ESLint warnings found but continuing..."
 
       - name: Verify frontend build
         run: |
