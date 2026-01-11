@@ -109,24 +109,18 @@ jobs:
       - name: Lint frontend
         run: |
           cd frontend
-          set +e  # Don't exit on error
-          # Run ESLint with JSON output to check for actual errors
-          # Use the project's ESLint version (v8) via npx with explicit version
-          ESLINT_JSON=$(npx eslint@8 src/ --ext .ts,.tsx --format=json 2>&1)
-          ESLINT_EXIT=$?
-          set -e  # Re-enable exit on error
-          # Parse JSON to check if there are any severity 2 (error) issues
-          if echo "$ESLINT_JSON" | grep -q '"severity":2'; then
-            echo "ESLint found errors (severity 2):"
-            npx eslint@8 src/ --ext .ts,.tsx
-            exit 1
+          # Use Next.js lint command which handles ESLint v9 flat config correctly
+          npm run lint
+          # Type check - use local typescript
+          if [ -e "node_modules/.bin/tsc" ]; then
+            node_modules/.bin/tsc --noEmit
+          elif [ -e "node_modules/typescript/bin/tsc" ]; then
+            node_modules/typescript/bin/tsc --noEmit
+          else
+            echo "TypeScript not found, installing..."
+            npm install typescript@5 --no-save --no-audit
+            node_modules/.bin/tsc --noEmit
           fi
-          # Show warnings but don't fail
-          if [ $ESLINT_EXIT -ne 0 ]; then
-            echo "ESLint found warnings (non-blocking):"
-            npx eslint@8 src/ --ext .ts,.tsx || true
-          fi
-          npm run type-check
 
       - name: Security audit
         run: |
