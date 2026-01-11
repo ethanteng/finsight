@@ -93,7 +93,7 @@ function buildSystemPrompt(snapshot: FinancialContextSnapshot): string {
         const quantity = holding.quantity || 0;
         const costBasis = holding.cost_basis || 0;
         const currentValue = holding.institution_value || 0;
-        const securityType = holding.security_type || holding.type || 'Unknown';
+        const securityType = holding.security_type || 'Unknown';
         const gainLoss = currentValue - costBasis;
         const gainLossPercent = costBasis > 0 ? ((gainLoss / costBasis) * 100).toFixed(2) : '0.00';
         
@@ -262,7 +262,7 @@ function formatInvestmentSummary(investments: FinancialContextSnapshot['investme
       const quantity = holding.quantity || 0;
       const costBasis = holding.cost_basis || 0;
       const currentValue = holding.institution_value || 0;
-      const securityType = holding.security_type || holding.type || 'Unknown';
+      const securityType = holding.security_type || 'Unknown';
       const gainLoss = currentValue - costBasis;
       const gainLossPercent = costBasis > 0 ? ((gainLoss / costBasis) * 100).toFixed(2) : '0.00';
       
