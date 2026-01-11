@@ -91,13 +91,9 @@ jobs:
               npx eslint@8 src/ --ext .ts || true
             fi
           fi
-          # Type check - always use local typescript (installed via npm ci above)
+          # Type check - use npm run type-check which handles path resolution correctly
           # This ensures access to @types/jest and @types/node from node_modules
-          if [ ! -f "node_modules/.bin/tsc" ]; then
-            echo "Error: TypeScript not found in node_modules. Dependencies may not be installed."
-            exit 1
-          fi
-          node_modules/.bin/tsc --noEmit
+          npm run type-check
       - name: Collect npm logs
         if: always()
         run: |
