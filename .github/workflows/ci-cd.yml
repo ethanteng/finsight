@@ -88,11 +88,11 @@ jobs:
               npx eslint@8 src/ --ext .ts || true
             fi
           fi
-          # Type check - use local typescript if available, otherwise use npx with exact version
+          # Type check - use local typescript if available, otherwise use npx with -p flag
           if [ -f "node_modules/.bin/tsc" ]; then
             node_modules/.bin/tsc --noEmit
           else
-            npx typescript@5.8.3 tsc --noEmit
+            npx -p typescript@5.8.3 tsc --noEmit
           fi
       - name: Collect npm logs
         if: always()

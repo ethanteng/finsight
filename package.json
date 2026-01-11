@@ -33,7 +33,7 @@
     "test:dual-data:watch": "jest --testPathPattern=dual-data --watch",
     "test:lint": "eslint src/ --ext .ts",
     "lint:fix": "eslint src/ --ext .ts --fix",
-    "type-check": "node_modules/.bin/tsc --noEmit 2>/dev/null || npx typescript@5.8.3 tsc --noEmit",
+    "type-check": "node_modules/.bin/tsc --noEmit 2>/dev/null || npx -p typescript@5.8.3 tsc --noEmit",
     "build": "npm install && npx prisma generate && npx tsc --project tsconfig.build.json --outDir dist",
     "build:backend": "npx prisma generate && NODE_OPTIONS='--max-old-space-size=4096' npx tsc --project tsconfig.build.json --outDir ./dist && echo 'TypeScript compilation completed' && ls -la dist/",
     "build:prisma": "prisma generate",
