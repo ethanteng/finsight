@@ -3,6 +3,19 @@ import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
+// TypeScript declaration for Google Ads dataLayer
+declare global {
+  interface Window {
+    dataLayer?: Array<{
+      event: string;
+      value?: number;
+      currency?: string;
+      transaction_id?: string;
+      [key: string]: any;
+    }>;
+  }
+}
+
 function PaymentSuccessContentInner() {
   const [error, setError] = useState<string | null>(null);
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
@@ -30,11 +43,37 @@ function PaymentSuccessContentInner() {
         if (response.ok) {
           // Parse the JSON response to get the redirect URL
           const data = await response.json();
-          if (data.success && data.redirectUrl) {
-            setRedirectUrl(data.redirectUrl);
+          
+          // Fire Google Ads conversion event if payment was successful and not already fired
+          if (
+            data.paid &&
+            !sessionStorage.getItem('ads_conversion_fired')
+          ) {
+            window.dataLayer = window.dataLayer || [];
+            window.dataLayer.push({
+              event: 'subscription_purchase',
+              value: data.amount,
+              currency: data.currency,
+              transaction_id: data.session_id
+            });
+
+            sessionStorage.setItem('ads_conversion_fired', 'true');
+            console.log('Google Ads conversion event fired:', {
+              event: 'subscription_purchase',
+              value: data.amount,
+              currency: data.currency,
+              transaction_id: data.session_id
+            });
+          }
+
+          // Use redirect or redirectUrl (support both for backwards compatibility)
+          const redirectDestination = data.redirect || data.redirectUrl;
+          
+          if (data.success && redirectDestination) {
+            setRedirectUrl(redirectDestination);
             // Redirect after a brief delay to show success message
             setTimeout(() => {
-              window.location.href = data.redirectUrl;
+              window.location.href = redirectDestination;
             }, 2000);
           } else {
             // Fallback redirect

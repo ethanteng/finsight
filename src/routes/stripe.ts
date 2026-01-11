@@ -1,7 +1,7 @@
 import express from 'express';
 import { stripeService } from '../services/stripe';
 import { constructWebhookEvent } from '../config/stripe';
-import { CreateCheckoutSessionRequest, CreatePortalSessionRequest } from '../types/stripe';
+import { CreateCheckoutSessionRequest, CreatePortalSessionRequest, SubscriptionTier } from '../types/stripe';
 import { getPrismaClient } from '../prisma-client';
 import { stripe } from '../config/stripe'; // Added for payment success endpoint
 import { requireAuth } from '../auth/middleware';
@@ -33,6 +33,17 @@ router.get('/payment-success', async (req, res) => {
       });
     }
 
+    // Helper function to get Google Ads conversion value based on tier
+    // Maps internal tier names to conversion values: starter=$9, standard=$19, premium=$29
+    const getTierValue = (tierName: string | undefined): number => {
+      const tierLower = (tierName || 'standard').toLowerCase() as SubscriptionTier;
+      // Match exact internal tier names: 'starter', 'standard', 'premium'
+      if (tierLower === 'starter') return 9;
+      if (tierLower === 'standard') return 19;
+      if (tierLower === 'premium') return 29;
+      return 19; // default to standard
+    };
+
     // Verify the session with Stripe to ensure it's legitimate
     try {
       const session = await stripe.client.checkout.sessions.retrieve(session_id as string);
@@ -49,6 +60,10 @@ router.get('/payment-success', async (req, res) => {
       const customerEmail = session.customer_details?.email || (customer_email as string);
       console.log('Customer email from session:', customerEmail);
 
+      // Determine tier and value for Google Ads tracking
+      const tierName = (tier as string) || 'standard';
+      const conversionValue = getTierValue(tierName);
+
       // Check if user already exists
       const prisma = getPrismaClient();
       let existingUser = null;
@@ -59,27 +74,43 @@ router.get('/payment-success', async (req, res) => {
         });
       }
 
+      // Prepare response with tracking data
+      const responseData: any = {
+        success: true,
+        paid: true,
+        amount: conversionValue,
+        currency: 'USD',
+        session_id: session_id as string,
+        tier: tierName
+      };
+
       if (existingUser) {
         // User exists - redirect to dashboard or profile
         console.log('User already exists, redirecting to dashboard');
         const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
-        const redirectUrl = `${baseUrl}/profile?subscription=active&tier=${tier || 'standard'}`;
-        return res.json({ 
-          success: true, 
-          redirectUrl,
-          message: 'User already exists, redirecting to profile'
-        });
+        const redirectUrl = `${baseUrl}/profile?subscription=active&tier=${tierName}`;
+        responseData.redirectUrl = redirectUrl;
+        responseData.redirect = redirectUrl;
+        responseData.message = 'User already exists, redirecting to profile';
+        return res.json(responseData);
       } else {
         // New user - redirect to register with subscription context
         console.log('New user, redirecting to register with subscription context');
         const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
-        const registerUrl = `${baseUrl}/register?` + 
-          `subscription=success&tier=${tier || 'standard'}&email=${encodeURIComponent(customerEmail as string)}&session_id=${session_id}`;
-        return res.json({ 
-          success: true, 
-          redirectUrl: registerUrl,
-          message: 'New user, redirecting to registration'
+        // Build query parameters, only including email if it exists
+        const queryParams = new URLSearchParams({
+          subscription: 'success',
+          tier: tierName,
+          session_id: session_id as string
         });
+        if (customerEmail) {
+          queryParams.set('email', customerEmail);
+        }
+        const registerUrl = `${baseUrl}/register?${queryParams.toString()}`;
+        responseData.redirectUrl = registerUrl;
+        responseData.redirect = registerUrl;
+        responseData.message = 'New user, redirecting to registration';
+        return res.json(responseData);
       }
 
     } catch (stripeError) {
@@ -88,8 +119,10 @@ router.get('/payment-success', async (req, res) => {
       const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
       const registerUrl = `${baseUrl}/register?subscription=success&tier=${tier || 'standard'}`;
       return res.json({ 
-        success: true, 
+        success: true,
+        paid: false,
         redirectUrl: registerUrl,
+        redirect: registerUrl,
         message: 'Fallback redirect due to Stripe verification error'
       });
     }
@@ -100,8 +133,10 @@ router.get('/payment-success', async (req, res) => {
     const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
     const registerUrl = `${baseUrl}/register?subscription=success`;
     return res.json({ 
-      success: true, 
+      success: true,
+      paid: false,
       redirectUrl: registerUrl,
+      redirect: registerUrl,
       message: 'Fallback redirect due to general error'
     });
   }
