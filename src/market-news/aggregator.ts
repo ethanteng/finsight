@@ -403,11 +403,12 @@ export class MarketNewsAggregator {
     try {
       // Search for current financial news and market trends
       const searchQueries = [
-        'current mortgage rates 2025',
+        'current mortgage rates 2026',
         'federal reserve interest rate today',
         'inflation rate latest news',
         'stock market trends today',
-        'economic indicators latest'
+        'economic indicators latest',
+        'job market latest news'
       ];
       
       const searchData: MarketNewsData[] = [];
