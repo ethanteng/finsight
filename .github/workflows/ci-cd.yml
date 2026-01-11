@@ -60,20 +60,33 @@ jobs:
         run: |
           set +e  # Don't exit on error
           # Run ESLint with JSON output to check for actual errors
-          # Use the locally installed ESLint via npm script to ensure dependencies are available
-          ESLINT_JSON=$(npm run test:lint -- --format=json 2>&1 || echo '[]')
-          ESLINT_EXIT=$?
+          # Use the locally installed ESLint binary directly
+          if [ -f "node_modules/.bin/eslint" ]; then
+            ESLINT_JSON=$(node_modules/.bin/eslint src/ --ext .ts --format=json 2>&1 || echo '[]')
+            ESLINT_EXIT=$?
+          else
+            ESLINT_JSON=$(npx eslint@8 src/ --ext .ts --format=json 2>&1 || echo '[]')
+            ESLINT_EXIT=$?
+          fi
           set -e  # Re-enable exit on error
           # Parse JSON to check if there are any severity 2 (error) issues
           if echo "$ESLINT_JSON" | grep -q '"severity":2'; then
             echo "ESLint found errors (severity 2):"
-            npm run test:lint
+            if [ -f "node_modules/.bin/eslint" ]; then
+              node_modules/.bin/eslint src/ --ext .ts
+            else
+              npx eslint@8 src/ --ext .ts
+            fi
             exit 1
           fi
           # Show warnings but don't fail
           if [ $ESLINT_EXIT -ne 0 ]; then
             echo "ESLint found warnings (non-blocking):"
-            npm run test:lint || true
+            if [ -f "node_modules/.bin/eslint" ]; then
+              node_modules/.bin/eslint src/ --ext .ts || true
+            else
+              npx eslint@8 src/ --ext .ts || true
+            fi
           fi
           # Type check - use local typescript if available, otherwise use npx with exact version
           if [ -f "node_modules/.bin/tsc" ]; then
@@ -81,6 +94,17 @@ jobs:
           else
             npx typescript@5.8.3 tsc --noEmit
           fi
+      - name: Collect npm logs
+        if: always()
+        run: |
+          mkdir -p ci-logs
+          cp -v /home/runner/.npm/_logs/* ci-logs/ || true
+      - name: Upload npm logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-logs
+          path: ci-logs
 
       - name: Lint frontend
         run: |
