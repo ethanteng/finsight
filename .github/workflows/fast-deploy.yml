@@ -51,10 +51,11 @@ jobs:
           cd frontend
           # Basic TypeScript check (no strict mode, exclude tests)
           # Skip linting and tests for fast deployment
-          npx tsc --noEmit --skipLibCheck --noUnusedLocals false --noUnusedParameters false --project tsconfig.build.json
+          npm run type-check
           # Basic ESLint check (only critical errors, exclude tests)
           # Using --quiet to only show errors, warnings are ignored for fast deploy
-          npx eslint src/ --ext .ts,.tsx --quiet --ignore-pattern "**/__tests__/**" --ignore-pattern "**/*.test.*" --ignore-pattern "**/*.spec.*" || echo "ESLint warnings found but continuing..."
+          # Use ESLint v8 to match project version
+          npx eslint@8 src/ --ext .ts,.tsx --quiet --ignore-pattern "**/__tests__/**" --ignore-pattern "**/*.test.*" --ignore-pattern "**/*.spec.*" || echo "ESLint warnings found but continuing..."
 
       - name: Verify frontend build
         run: |

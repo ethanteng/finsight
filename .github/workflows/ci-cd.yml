@@ -60,42 +60,44 @@ jobs:
         run: |
           set +e  # Don't exit on error
           # Run ESLint with JSON output to check for actual errors
-          ESLINT_JSON=$(npx eslint src/ --ext .ts --format=json 2>&1)
+          # Use the project's ESLint version (v8) via npx with explicit version
+          ESLINT_JSON=$(npx eslint@8 src/ --ext .ts --format=json 2>&1)
           ESLINT_EXIT=$?
           set -e  # Re-enable exit on error
           # Parse JSON to check if there are any severity 2 (error) issues
           if echo "$ESLINT_JSON" | grep -q '"severity":2'; then
             echo "ESLint found errors (severity 2):"
-            npx eslint src/ --ext .ts
+            npx eslint@8 src/ --ext .ts
             exit 1
           fi
           # Show warnings but don't fail
           if [ $ESLINT_EXIT -ne 0 ]; then
             echo "ESLint found warnings (non-blocking):"
-            npx eslint src/ --ext .ts || true
+            npx eslint@8 src/ --ext .ts || true
           fi
-          npx tsc --noEmit --skipLibCheck -p tsconfig.build.json
+          npm run type-check
 
       - name: Lint frontend
         run: |
           cd frontend
           set +e  # Don't exit on error
           # Run ESLint with JSON output to check for actual errors
-          ESLINT_JSON=$(npx eslint src/ --ext .ts,.tsx --format=json 2>&1)
+          # Use the project's ESLint version (v8) via npx with explicit version
+          ESLINT_JSON=$(npx eslint@8 src/ --ext .ts,.tsx --format=json 2>&1)
           ESLINT_EXIT=$?
           set -e  # Re-enable exit on error
           # Parse JSON to check if there are any severity 2 (error) issues
           if echo "$ESLINT_JSON" | grep -q '"severity":2'; then
             echo "ESLint found errors (severity 2):"
-            npx eslint src/ --ext .ts,.tsx
+            npx eslint@8 src/ --ext .ts,.tsx
             exit 1
           fi
           # Show warnings but don't fail
           if [ $ESLINT_EXIT -ne 0 ]; then
             echo "ESLint found warnings (non-blocking):"
-            npx eslint src/ --ext .ts,.tsx || true
+            npx eslint@8 src/ --ext .ts,.tsx || true
           fi
-          npx tsc --noEmit --skipLibCheck
+          npm run type-check
 
       - name: Security audit
         run: |
@@ -538,7 +540,7 @@ jobs:
 
       - name: Verify backend build
         run: |
-          npx tsc --noEmit --skipLibCheck -p tsconfig.build.json
+          npm run type-check
           npm run build:backend
 
       - name: Verify frontend build
