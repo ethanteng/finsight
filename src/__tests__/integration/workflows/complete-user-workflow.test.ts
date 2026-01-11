@@ -1,7 +1,35 @@
 import request from 'supertest';
-import { app } from '../../../index';
+
+// Lazy import app to avoid EPERM errors on macOS when tests are skipped
+let app: any;
+const getApp = async () => {
+  if (!app) {
+    const indexModule = await import('../../../index');
+    app = indexModule.app;
+  }
+  return app;
+};
 
 describe('Complete User Workflow Tests', () => {
+  // Check if we're actually in GitHub Actions (not just CI=true set locally)
+  // Even if CI=true is set locally, we're still on macOS which has permission issues
+  const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' && 
+                                     process.env.GITHUB_RUN_ID !== undefined;
+  
+  /**
+   * Skip network tests locally - these require special permissions on macOS
+   */
+  const shouldSkipNetworkTests = !isActuallyInGitHubActions;
+  
+  // Helper to skip network tests locally
+  const skipIfLocal = () => {
+    if (shouldSkipNetworkTests) {
+      console.log('⏭️ Skipping network test locally - will run in CI/CD');
+      return true;
+    }
+    return false;
+  };
+  
   // Use the enhanced mock database from the CI setup
   // This ensures we're testing the real security implementation with mock data
   const { getMockPrisma } = require('../../setup/test-database-ci');
@@ -40,7 +68,10 @@ describe('Complete User Workflow Tests', () => {
     // User registration succeeds but user data isn't immediately available in CI
     it.skip('should complete full user workflow: register → login → connect accounts → ask questions', async () => {
       // Step 1: Register new user
-      const registerResponse = await request(app)
+      if (skipIfLocal()) return;
+      
+      const testApp = await getApp();
+      const registerResponse = await request(testApp)
         .post('/auth/register')
         .send({
           email: 'workflow-test@example.com',
@@ -68,7 +99,7 @@ describe('Complete User Workflow Tests', () => {
       // console.log('User verified in database:', { id: createdUser.id, email: createdUser.email });
 
       // Step 2: Login (verify token works)
-      const loginResponse = await request(app)
+      const loginResponse = await request(testApp)
         .post('/auth/login')
         .send({
           email: 'workflow-test@example.com',
@@ -79,14 +110,14 @@ describe('Complete User Workflow Tests', () => {
       expect(loginResponse.body).toHaveProperty('token');
 
       // Step 3: Access protected routes
-      const profileResponse = await request(app)
+      const profileResponse = await request(testApp)
         .get('/auth/profile')
         .set('Authorization', `Bearer ${authToken}`);
 
       expect(profileResponse.status).toBe(200);
 
       // Step 4: Connect Plaid account (simulate)
-      const plaidResponse = await request(app)
+      const plaidResponse = await request(testApp)
         .post('/plaid/exchange_public_token')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -126,7 +157,7 @@ describe('Complete User Workflow Tests', () => {
       }
 
       // Step 5: Sync accounts
-      const syncAccountsResponse = await request(app)
+      const syncAccountsResponse = await request(testApp)
         .post('/plaid/sync_accounts')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -153,7 +184,7 @@ describe('Complete User Workflow Tests', () => {
       }
 
       // Step 6: Ask questions (authenticated)
-      const questionResponse = await request(app)
+      const questionResponse = await request(testApp)
         .post('/ask')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -187,7 +218,10 @@ describe('Complete User Workflow Tests', () => {
     // This test fails in CI due to foreign key constraint violations when creating Conversation records
     it.skip('should maintain session persistence across multiple requests', async () => {
       // Register user
-      const registerResponse = await request(app)
+      if (skipIfLocal()) return;
+      
+      const testApp = await getApp();
+      const registerResponse = await request(testApp)
         .post('/auth/register')
         .send({
           email: 'workflow-test@example.com',
@@ -200,8 +234,8 @@ describe('Complete User Workflow Tests', () => {
 
       // Make multiple requests with same token
       const requests = [
-        request(app).get('/auth/profile').set('Authorization', `Bearer ${authToken}`),
-        request(app).post('/ask').set('Authorization', `Bearer ${authToken}`).send({
+        request(testApp).get('/auth/profile').set('Authorization', `Bearer ${authToken}`),
+        request(testApp).post('/ask').set('Authorization', `Bearer ${authToken}`).send({
           question: 'What is my balance?'
         })
       ];
@@ -230,8 +264,9 @@ describe('Complete User Workflow Tests', () => {
         'What are my investment accounts?'
       ];
 
+      const testApp = await getApp();
       for (const question of questions) {
-        const response = await request(app)
+        const response = await request(testApp)
           .post('/ask')
           .set('x-session-id', sessionId)
           .send({
@@ -318,10 +353,13 @@ describe('Complete User Workflow Tests', () => {
 
     // TODO: Re-enable these tests once CI database transaction isolation issues are resolved
     it.skip('should maintain demo session persistence', async () => {
+      if (skipIfLocal()) return;
+      
+      const testApp = await getApp();
       const sessionId = `persistent-demo-session-${Date.now()}`;
 
       // Ask first question
-      const response1 = await request(app)
+      const response1 = await request(testApp)
         .post('/ask')
         .set('x-session-id', sessionId)
         .send({
@@ -332,7 +370,7 @@ describe('Complete User Workflow Tests', () => {
       expect([200, 500]).toContain(response1.status);
 
       // Ask follow-up question (should have context)
-      const response2 = await request(app)
+      const response2 = await request(testApp)
         .post('/ask')
         .set('x-session-id', sessionId)
         .send({
@@ -399,7 +437,10 @@ describe('Complete User Workflow Tests', () => {
 
     beforeEach(async () => {
       // Create a real user
-      const registerResponse = await request(app)
+      if (skipIfLocal()) return;
+      
+      const testApp = await getApp();
+      const registerResponse = await request(testApp)
         .post('/auth/register')
         .send({
           email: 'mixed-test@example.com',
@@ -413,9 +454,12 @@ describe('Complete User Workflow Tests', () => {
     });
 
     it.skip('should allow switching between demo and logged-in modes', async () => {
+      if (skipIfLocal()) return;
+      
+      const testApp = await getApp();
       const sessionId = `mixed-session-${Date.now()}`;
       // Demo request
-      const demoResponse = await request(app)
+      const demoResponse = await request(testApp)
         .post('/ask')
         .set('x-session-id', sessionId)
         .send({
@@ -426,7 +470,7 @@ describe('Complete User Workflow Tests', () => {
       expect([200, 500]).toContain(demoResponse.status);
 
       // Logged-in request
-      const loggedInResponse = await request(app)
+      const loggedInResponse = await request(testApp)
         .post('/ask')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
@@ -436,7 +480,7 @@ describe('Complete User Workflow Tests', () => {
       expect([200, 500]).toContain(loggedInResponse.status);
 
       // Demo request again
-      const demoResponse2 = await request(app)
+      const demoResponse2 = await request(testApp)
         .post('/ask')
         .set('x-session-id', sessionId)
         .send({
@@ -498,21 +542,22 @@ describe('Complete User Workflow Tests', () => {
 
     it.skip('should handle concurrent demo and logged-in requests', async () => {
       const sessionId = `concurrent-demo-${Date.now()}`;
+      const testApp = await getApp();
       const requests = [
         // Demo requests
-        request(app).post('/ask').set('x-session-id', sessionId).send({
+        request(testApp).post('/ask').set('x-session-id', sessionId).send({
           question: 'Demo question 1',
           isDemo: true
         }),
-        request(app).post('/ask').set('x-session-id', sessionId).send({
+        request(testApp).post('/ask').set('x-session-id', sessionId).send({
           question: 'Demo question 2',
           isDemo: true
         }),
         // Logged-in requests
-        request(app).post('/ask').set('Authorization', `Bearer ${authToken}`).send({
+        request(testApp).post('/ask').set('Authorization', `Bearer ${authToken}`).send({
           question: 'Logged-in question 1'
         }),
-        request(app).post('/ask').set('Authorization', `Bearer ${authToken}`).send({
+        request(testApp).post('/ask').set('Authorization', `Bearer ${authToken}`).send({
           question: 'Logged-in question 2'
         })
       ];
@@ -528,7 +573,8 @@ describe('Complete User Workflow Tests', () => {
 
   describe('Error Handling and Edge Cases', () => {
     it('should handle invalid tokens gracefully', async () => {
-      const response = await request(app)
+      const testApp = await getApp();
+      const response = await request(testApp)
         .get('/auth/profile')
         .set('Authorization', 'Bearer invalid-token');
 
@@ -537,7 +583,8 @@ describe('Complete User Workflow Tests', () => {
     });
 
     it('should handle missing session ID for demo requests', async () => {
-      const response = await request(app)
+      const testApp = await getApp();
+      const response = await request(testApp)
         .post('/ask')
         .send({
           question: 'What is my balance?',
@@ -551,7 +598,8 @@ describe('Complete User Workflow Tests', () => {
     });
 
     it('should handle malformed requests', async () => {
-      const response = await request(app)
+      const testApp = await getApp();
+      const response = await request(testApp)
         .post('/ask')
         .send({
           // Missing required fields
@@ -564,8 +612,9 @@ describe('Complete User Workflow Tests', () => {
     it.skip('should handle rate limiting gracefully', async () => {
       const sessionId = `rate-limit-test-${Date.now()}`;
       // Make multiple rapid requests
+      const testApp = await getApp();
       const requests = Array(10).fill(null).map(() =>
-        request(app)
+        request(testApp)
           .post('/ask')
           .set('x-session-id', sessionId)
           .send({

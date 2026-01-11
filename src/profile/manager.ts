@@ -91,15 +91,8 @@ export class ProfileManager {
         profileText = profile.profileText || '';
       }
       
-      // Anonymize the profile before returning for AI use
-      // Create anonymizer with AnonymizationService if available, otherwise create a new one
-      const anonymizationService = this.anonymizationService || new AnonymizationService();
-      const anonymizer = new ProfileAnonymizer(anonymizationService, userId);
-      const anonymizationResult = anonymizer.anonymizeProfile(profileText);
-      
-      console.log('ProfileManager: Profile anonymized, original length:', profileText.length, 'anonymized length:', anonymizationResult.anonymizedProfile.length);
-      
-      return anonymizationResult.anonymizedProfile;
+      // ✅ Return original profile (no anonymization)
+      return profileText;
     } finally {
       await prisma.$disconnect();
     }
@@ -145,18 +138,10 @@ export class ProfileManager {
   }
 
   // Method to get anonymized profile for AI services
+  // ✅ NOTE: Now returns original profile (no anonymization)
   async getAnonymizedProfile(userId: string): Promise<string> {
-    const originalProfile = await this.getOriginalProfile(userId);
-    if (!originalProfile) {
-      return '';
-    }
-    
-    // Anonymize the profile for AI consumption using ProfileAnonymizer
-    const anonymizationService = this.anonymizationService || new AnonymizationService();
-    const anonymizer = new ProfileAnonymizer(anonymizationService, userId);
-    const anonymizationResult = anonymizer.anonymizeProfile(originalProfile);
-    
-    return anonymizationResult.anonymizedProfile;
+    // Return original profile (no anonymization)
+    return await this.getOriginalProfile(userId);
   }
 
   async updateProfile(userId: string, newProfileText: string): Promise<void> {

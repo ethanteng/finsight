@@ -2,7 +2,6 @@ import express from 'express';
 import { dataOrchestrator } from '../../data/orchestrator';
 import { UserTier } from '../../data/types';
 import { askOpenAIWithEnhancedContext } from '../../openai';
-import { convertResponseToUserFriendly } from '../../privacy';
 import { verifyToken, extractTokenFromHeader } from '../../auth/utils';
 
 // Create a test app instance that doesn't depend on ANY external modules or database connections
@@ -353,20 +352,8 @@ export function createTestApp() {
       // Call the actual askOpenAIWithEnhancedContext function (which is mocked in tests)
       const answer = await askOpenAIWithEnhancedContext(question, [], 'starter' as UserTier, isDemo);
       
-      // In production mode, convert the response to user-friendly format
-      let finalAnswer = answer;
-      if (!isDemo) {
-        try {
-          finalAnswer = convertResponseToUserFriendly(answer);
-        } catch (conversionError) {
-          // If conversion fails in production mode, return 500 error
-          const errorMessage = conversionError instanceof Error ? conversionError.message : 'Unknown conversion error';
-          return res.status(500).json({ 
-            error: 'Failed to process question',
-            message: errorMessage
-          });
-        }
-      }
+      // ✅ No conversion needed - AI response already contains real data (no anonymization)
+      const finalAnswer = answer;
       
       res.json({
         answer: finalAnswer,
@@ -393,20 +380,8 @@ export function createTestApp() {
       // Call the actual askOpenAIWithEnhancedContext function (which is mocked in tests)
       const answer = await askOpenAIWithEnhancedContext(question, [], 'starter' as UserTier, isDemo);
       
-      // In production mode, convert the response to user-friendly format
-      let finalAnswer = answer;
-      if (!isDemo) {
-        try {
-          finalAnswer = convertResponseToUserFriendly(answer);
-        } catch (conversionError) {
-          // If conversion fails in production mode, return 500 error
-          const errorMessage = conversionError instanceof Error ? conversionError.message : 'Unknown conversion error';
-          return res.status(500).json({ 
-            error: 'Failed to process question',
-            message: errorMessage
-          });
-        }
-      }
+      // ✅ No conversion needed - AI response already contains real data (no anonymization)
+      const finalAnswer = answer;
       
       res.json({
         answer: finalAnswer,

@@ -1,5 +1,5 @@
 import { TierAwareContext } from '../data/orchestrator';
-import { Transaction as UnifiedTransaction, UnifiedFinancialData } from '../services/financial-data-service';
+import { Transaction as UnifiedTransaction, UnifiedFinancialData, Holding, Security } from '../services/financial-data-service';
 
 export interface QuestionNeeds {
   needsMarketContext: boolean;
@@ -15,6 +15,7 @@ export interface AccountSummaryItem {
   subtype?: string;
   balance: number;
   institution?: string;
+  interestRate?: number;
 }
 
 export interface TransactionSummaryItem {
@@ -24,12 +25,17 @@ export interface TransactionSummaryItem {
   date: string;
   typeLabel: string;
   categoryLabel?: string;
+  merchantName?: string;
+  accountName?: string;
+  accountInstitution?: string;
 }
 
 export interface InvestmentSnapshot {
   totalValue: number;
   holdingCount: number;
   summaryLines: string[];
+  holdings?: Holding[];
+  securities?: Security[];
 }
 
 export interface FinancialContextSnapshot {

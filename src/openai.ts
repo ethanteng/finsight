@@ -1,7 +1,5 @@
 import OpenAI from 'openai';
 import * as Sentry from '@sentry/node';
-import { AnonymizationService } from './services/anonymization-service';
-import { DeanonymizationService } from './services/deanonymization-service';
 import { analyzeQuestionNeeds } from './openai/question-analysis';
 import { filterConversationHistory, analyzeConversationContext } from './openai/conversation-context';
 import { gatherContextSnapshot } from './openai/context-service';
@@ -31,9 +29,6 @@ export async function askOpenAIWithEnhancedContext(
 ): Promise<string> {
   const tier = typeof userTier === 'string' ? (userTier as UserTier) : userTier;
 
-  const anonymizationService = new AnonymizationService();
-  const deanonymizationService = new DeanonymizationService(anonymizationService);
-
   try {
     const questionNeeds = analyzeQuestionNeeds(question);
 
@@ -59,7 +54,6 @@ export async function askOpenAIWithEnhancedContext(
       question,
       questionNeeds,
       tier,
-      anonymizationService,
       demoProfile
     });
 
@@ -82,14 +76,6 @@ export async function askOpenAIWithEnhancedContext(
       'I am sorry, but I was unable to generate a response.';
 
     answer = postProcessAnswer(answer);
-
-    if (!isDemo && userId) {
-      try {
-        answer = deanonymizationService.convertResponseToUserFriendly(userId, answer);
-      } catch (deanonError) {
-        console.warn('Deanonymization failed', deanonError);
-      }
-    }
 
     if (userId && !isDemo) {
       try {

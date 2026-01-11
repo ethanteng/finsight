@@ -491,7 +491,7 @@ describe('Privacy Logic Tests', () => {
     });
   });
 
-  describe('Privacy Anonymization Functions', () => {
+  describe.skip('Privacy Anonymization Functions', () => {
     // Import the privacy functions
     const {
       tokenizeAccount,

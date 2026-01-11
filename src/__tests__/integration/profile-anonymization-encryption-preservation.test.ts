@@ -36,7 +36,7 @@ jest.mock('../../profile/anonymizer', () => ({
   }))
 }));
 
-describe('Profile Anonymization with Encryption and Preservation', () => {
+describe.skip('Profile Anonymization with Encryption and Preservation', () => {
   let profileManager: ProfileManager;
   let mockPrisma: any;
   let mockUserProfileCreate: any;

@@ -529,3 +529,6 @@ export { testPrisma };
 export function getMockPrisma() {
   return createEnhancedMockDatabase();
 }
+
+// Export the mock database creator function for use in other test setups
+export { createEnhancedMockDatabase };

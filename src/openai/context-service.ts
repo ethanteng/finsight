@@ -1,7 +1,6 @@
 import { UserTier } from '../data/types';
 import { dataOrchestrator } from '../data/orchestrator';
 import { FinancialDataService, Account, Transaction, UnifiedFinancialData, HomeData } from '../services/financial-data-service';
-import { AnonymizationService } from '../services/anonymization-service';
 import { TokenStatus } from '../services/token-validation-service';
 import { QuestionNeeds, FinancialContextSnapshot, AccountSummaryItem, TransactionSummaryItem, InvestmentSnapshot } from './types';
 import type { DemoAccount, DemoTransaction } from '../demo-data';
@@ -12,7 +11,6 @@ interface GatherContextArgs {
   question: string;
   questionNeeds: QuestionNeeds;
   tier: UserTier;
-  anonymizationService: AnonymizationService;
   demoProfile?: string;
 }
 
@@ -54,7 +52,6 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     question,
     questionNeeds,
     tier,
-    anonymizationService,
     demoProfile
   } = args;
 
@@ -117,7 +114,17 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
         console.log(`✅ gatherContextSnapshot: Snapshot contains ${accounts.length} unique accounts (no duplicates in JSON)`);
       }
       
-      bankingTransactions = snapshot.transactions as Transaction[];
+      // ✅ CRITICAL: snapshot.transactions is stored as JSON in the database
+      // When retrieved, Prisma parses it, but we need to ensure it's an array
+      const rawTransactions = snapshot.transactions as any;
+      bankingTransactions = Array.isArray(rawTransactions) ? rawTransactions as Transaction[] : [];
+      
+      if (!Array.isArray(rawTransactions)) {
+        console.warn(`⚠️ gatherContextSnapshot: Snapshot transactions is not an array (type: ${typeof rawTransactions}), defaulting to empty array`);
+      } else {
+        console.log(`📊 gatherContextSnapshot: Retrieved ${bankingTransactions.length} transactions from snapshot for user ${userId}`);
+      }
+      
       metadata = snapshot.meta as UnifiedFinancialData['metadata'];
       
       // ✅ Set financialSummary for prompt builder
@@ -128,14 +135,18 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       investmentPortfolio = snapshot.investmentPortfolio;
 
       if (questionNeeds.needsInvestments) {
+        const holdings = (snapshot.holdings as any[] || []);
+        const securities = (snapshot.securities as any[] || []);
         investmentsSnapshot = {
           totalValue: (snapshot.investmentPortfolio as any).totalValue || 0,
           holdingCount: (snapshot.investmentPortfolio as any).holdingCount || 0,
-          summaryLines: (snapshot.holdings as any[] || []).slice(0, 10).map((holding: any) => {
+          summaryLines: holdings.slice(0, 10).map((holding: any) => {
             const name = holding.security_name || holding.ticker_symbol || 'Holding';
             const value = holding.institution_value || 0;
             return `- ${name}: $${value.toFixed(2)}`;
           }),
+          holdings: holdings,
+          securities: securities,
         };
       }
 
@@ -279,27 +290,27 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     .slice()
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const anonymizedAccounts = !isDemo && userId
-    ? anonymizeAccounts(deduplicatedAccounts, userId, anonymizationService)
-    : deduplicatedAccounts;
+  // ✅ Use deduplicated accounts and sorted transactions directly (no anonymization)
+  console.log(`📊 gatherContextSnapshot: Using ${deduplicatedAccounts.length} deduplicated accounts (from ${accounts.length} original)`);
 
-  // ✅ CRITICAL: Log account counts to debug duplicate issues
-  console.log(`📊 gatherContextSnapshot: After deduplication and anonymization: ${anonymizedAccounts.length} accounts (from ${accounts.length} original, ${deduplicatedAccounts.length} deduplicated)`);
-
-  const anonymizedTransactions = !isDemo && userId
-    ? anonymizeTransactions(sortedTransactions, userId, anonymizationService)
-    : sortedTransactions;
-
-  const accountSummaries = buildAccountSummaries(anonymizedAccounts, isDemo);
-  const transactionSummaries = buildTransactionSummaries(anonymizedTransactions).slice(
+  const accountSummaries = buildAccountSummaries(deduplicatedAccounts, isDemo);
+  // Create account map for quick lookup by account_id
+  const accountMap = new Map<string, Account>();
+  deduplicatedAccounts.forEach(account => {
+    const accountId = account.account_id || (account as any).plaidAccountId || (account as any).persistentAccountId || account.id;
+    if (accountId) {
+      accountMap.set(accountId, account);
+    }
+  });
+  const transactionSummaries = buildTransactionSummaries(sortedTransactions, accountMap).slice(
     0,
     MAX_PROMPT_TRANSACTIONS
   );
 
   const tierContext = await dataOrchestrator.buildTierAwareContext(
     tier,
-    anonymizedAccounts,
-    anonymizedTransactions.slice(0, MAX_PROMPT_TRANSACTIONS),
+    deduplicatedAccounts,
+    sortedTransactions.slice(0, MAX_PROMPT_TRANSACTIONS),
     isDemo
   );
 
@@ -308,22 +319,16 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
 
   const incomeAnalysis = buildIncomeAnalysis(sortedTransactions);
   
-  // ✅ CRITICAL: Pass deduplicatedAccounts (not anonymizedAccounts) to loadUserProfile
+  // ✅ Pass deduplicated accounts and sorted transactions to loadUserProfile
   // The profile enhancer needs the actual account data, not anonymized tokens
-  // But we still need to deduplicate to prevent inflated totals
-  const accountsForProfile = !isDemo && userId
-    ? deduplicatedAccounts  // Use deduplicated but not anonymized accounts for profile enhancement
-    : deduplicatedAccounts;
-  
-  console.log(`📊 gatherContextSnapshot: Passing ${accountsForProfile.length} deduplicated accounts to loadUserProfile`);
+  console.log(`📊 gatherContextSnapshot: Passing ${deduplicatedAccounts.length} deduplicated accounts to loadUserProfile`);
   
   const userProfile = await loadUserProfile({
     userId,
     isDemo,
     demoProfile,
-    anonymizationService,
-    accounts: accountsForProfile,  // Use deduplicated accounts, not anonymized
-    transactions: anonymizedTransactions
+    accounts: deduplicatedAccounts,
+    transactions: sortedTransactions
   });
 
   return {
@@ -342,54 +347,6 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
 }
 
 
-function anonymizeAccounts(
-  accounts: Account[],
-  userId: string,
-  anonymizationService: AnonymizationService
-): Account[] {
-  return accounts.map(account => ({
-    ...account,
-    name: anonymizationService.tokenizeAccount(userId, account.name, account.institution),
-    institution: account.institution
-      ? anonymizationService.tokenizeInstitution(userId, String(account.institution))
-      : account.institution
-  }));
-}
-
-function anonymizeTransactions(
-  transactions: Transaction[],
-  userId: string,
-  anonymizationService: AnonymizationService
-): Transaction[] {
-  return transactions.map(transaction => {
-    const name = transaction.name
-      ? anonymizationService.tokenizeMerchant(userId, transaction.name)
-      : 'Unknown';
-
-    const merchantName = (transaction as any).merchantName
-      ? anonymizationService.tokenizeMerchant(userId, (transaction as any).merchantName)
-      : undefined;
-
-    const enriched = transaction.enriched_data
-      ? {
-          ...transaction.enriched_data,
-          merchant_name: transaction.enriched_data.merchant_name
-            ? anonymizationService.tokenizeMerchant(userId, transaction.enriched_data.merchant_name)
-            : undefined,
-          brand_name: transaction.enriched_data.brand_name
-            ? anonymizationService.tokenizeMerchant(userId, transaction.enriched_data.brand_name)
-            : undefined
-        }
-      : undefined;
-
-    return {
-      ...transaction,
-      name,
-      merchantName,
-      enriched_data: enriched
-    };
-  });
-}
 
 function buildAccountSummaries(accounts: Account[], isDemo: boolean): AccountSummaryItem[] {
   return accounts.map(account => {
@@ -406,12 +363,9 @@ function buildAccountSummaries(accounts: Account[], isDemo: boolean): AccountSum
       type: account.type,
       subtype,
       balance,
-      institution: account.institution
+      institution: account.institution,
+      interestRate: (account as any).interestRate
     };
-
-    if (isDemo && (account as any).interestRate) {
-      summary.name = `${summary.name} (Rate: ${(account as any).interestRate}%)`;
-    }
 
     return summary;
   });
@@ -431,6 +385,12 @@ function buildAccountSummaries(accounts: Account[], isDemo: boolean): AccountSum
  * 3. Keep only settled transactions (pending: false or undefined/null treated as settled)
  */
 function deduplicateTransactions(transactions: Transaction[]): Transaction[] {
+  // ✅ Defensive check: handle null/undefined/not-array inputs
+  if (!transactions || !Array.isArray(transactions)) {
+    console.warn('⚠️ deduplicateTransactions: Received invalid transactions input, returning empty array');
+    return [];
+  }
+  
   if (transactions.length === 0) {
     return transactions;
   }
@@ -548,7 +508,7 @@ function deduplicateTransactions(transactions: Transaction[]): Transaction[] {
   return deduplicated;
 }
 
-function buildTransactionSummaries(transactions: Transaction[]): TransactionSummaryItem[] {
+function buildTransactionSummaries(transactions: Transaction[], accountMap?: Map<string, Account>): TransactionSummaryItem[] {
   return transactions.map(transaction => {
     const id =
       transaction.transaction_id ||
@@ -559,13 +519,32 @@ function buildTransactionSummaries(transactions: Transaction[]): TransactionSumm
     const typeLabel = deriveTransactionTypeLabel(transaction);
     const categoryLabel = deriveCategory(transaction);
 
+    // Extract merchant name from transaction
+    const merchantName = (transaction as any).merchantName || 
+                        (transaction.enriched_data as any)?.merchant_name ||
+                        (transaction.enriched_data as any)?.brand_name;
+
+    // Look up account information if accountMap is provided
+    let accountName: string | undefined;
+    let accountInstitution: string | undefined;
+    if (accountMap && transaction.account_id) {
+      const account = accountMap.get(transaction.account_id);
+      if (account) {
+        accountName = account.name;
+        accountInstitution = account.institution;
+      }
+    }
+
     return {
       id,
       name: transaction.name || 'Unknown',
       amount,
       date: transaction.date,
       typeLabel,
-      categoryLabel
+      categoryLabel,
+      merchantName,
+      accountName,
+      accountInstitution
     };
   });
 }
@@ -921,11 +900,10 @@ async function loadUserProfile(params: {
   userId?: string;
   isDemo: boolean;
   demoProfile?: string;
-  anonymizationService: AnonymizationService;
   accounts: Account[];
   transactions: Transaction[];
 }): Promise<string | undefined> {
-  const { userId, isDemo, demoProfile, anonymizationService, accounts, transactions } = params;
+  const { userId, isDemo, demoProfile, accounts, transactions } = params;
 
   if (isDemo && demoProfile) {
     return demoProfile;
@@ -937,7 +915,7 @@ async function loadUserProfile(params: {
 
   try {
     const { ProfileManager } = await import('../profile/manager');
-    const profileManager = new ProfileManager(userId, anonymizationService);
+    const profileManager = new ProfileManager(userId);
 
     const rawProfile = await profileManager.getOriginalProfile(userId);
     if (!rawProfile) {
@@ -1023,15 +1001,16 @@ async function loadUserProfile(params: {
       console.warn('Profile enhancement failed', enhanceError);
     }
 
-    const anonymizedProfile = await profileManager.getAnonymizedProfile(userId);
+    // ✅ Use original profile (no anonymization)
+    const originalProfile = await profileManager.getOriginalProfile(userId);
     
     // ✅ CRITICAL: Deduplicate "LIABILITIES INFORMATION" sections in profile text
     // GPT may have added this section multiple times during profile enhancement
-    if (anonymizedProfile) {
-      return deduplicateLiabilitySections(anonymizedProfile);
+    if (originalProfile) {
+      return deduplicateLiabilitySections(originalProfile);
     }
     
-    return anonymizedProfile;
+    return originalProfile;
   } catch (error) {
     console.warn('Profile load failed', error);
     return undefined;

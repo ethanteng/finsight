@@ -84,6 +84,26 @@ function buildSystemPrompt(snapshot: FinancialContextSnapshot): string {
       portfolio.assetAllocation.map(aa => 
         `- ${aa.type}: $${aa.value.toFixed(2)} (${aa.percentage.toFixed(1)}%)`
       ).join('\n');
+    
+    // Add detailed holdings if available
+    if (snapshot.investments?.holdings && snapshot.investments.holdings.length > 0) {
+      const holdingsDetails = snapshot.investments.holdings.map(holding => {
+        const ticker = holding.ticker_symbol || '';
+        const name = holding.security_name || holding.ticker_symbol || 'Unknown Security';
+        const quantity = holding.quantity || 0;
+        const costBasis = holding.cost_basis || 0;
+        const currentValue = holding.institution_value || 0;
+        const securityType = holding.security_type || holding.type || 'Unknown';
+        const gainLoss = currentValue - costBasis;
+        const gainLossPercent = costBasis > 0 ? ((gainLoss / costBasis) * 100).toFixed(2) : '0.00';
+        
+        const tickerPart = ticker ? `${ticker} (` : '';
+        const tickerClose = ticker ? ')' : '';
+        return `- ${tickerPart}${name}${tickerClose} [${securityType}]: Quantity ${quantity.toFixed(4)}, Cost Basis $${costBasis.toFixed(2)}, Current Value $${currentValue.toFixed(2)} (${gainLoss >= 0 ? '+' : ''}$${gainLoss.toFixed(2)}, ${gainLossPercent}%)`;
+      }).join('\n');
+      
+      investmentSummary += `\n\nDetailed Holdings:\n${holdingsDetails}`;
+    }
   } else if (snapshot.investments) {
     investmentSummary = formatInvestmentSummary(snapshot.investments);
   }
@@ -205,7 +225,8 @@ function formatAccountSummary(accounts: AccountSummaryItem[]): string {
     .map(account => {
       const amount = `$${account.balance.toFixed(2)}`;
       const institution = account.institution ? ` at ${account.institution}` : '';
-      return `- ${account.name} (${account.type}/${account.subtype}): ${amount}${institution}`;
+      const interestRate = account.interestRate ? ` (Interest Rate: ${account.interestRate}%)` : '';
+      return `- ${account.name} (${account.type}/${account.subtype || account.type}): ${amount}${institution}${interestRate}`;
     })
     .join('\n');
 }
@@ -219,7 +240,9 @@ function formatTransactionSummary(transactions: TransactionSummaryItem[]): strin
     .map(tx => {
       const amount = tx.amount >= 0 ? `$${tx.amount.toFixed(2)}` : `-$${Math.abs(tx.amount).toFixed(2)}`;
       const category = tx.categoryLabel ? ` • ${tx.categoryLabel}` : '';
-      return `- ${tx.date} | ${tx.typeLabel} ${tx.name}: ${amount}${category}`;
+      const merchant = tx.merchantName && tx.merchantName !== tx.name ? ` (Merchant: ${tx.merchantName})` : '';
+      const account = tx.accountName ? ` [Account: ${tx.accountName}${tx.accountInstitution ? ` at ${tx.accountInstitution}` : ''}]` : '';
+      return `- ${tx.date} | ${tx.typeLabel} ${tx.name}${merchant}: ${amount}${category}${account}`;
     })
     .join('\n');
 }
@@ -230,8 +253,31 @@ function formatInvestmentSummary(investments: FinancialContextSnapshot['investme
   }
 
   const header = `Total Portfolio Value: $${investments.totalValue.toFixed(2)}\nHoldings: ${investments.holdingCount}`;
-  const holdings = investments.summaryLines.join('\n');
-  return `${header}\n${holdings}`.trim();
+  
+  // Use detailed holdings if available, otherwise fall back to summary lines
+  if (investments.holdings && investments.holdings.length > 0) {
+    const holdingsDetails = investments.holdings.map(holding => {
+      const ticker = holding.ticker_symbol || '';
+      const name = holding.security_name || holding.ticker_symbol || 'Unknown Security';
+      const quantity = holding.quantity || 0;
+      const costBasis = holding.cost_basis || 0;
+      const currentValue = holding.institution_value || 0;
+      const securityType = holding.security_type || holding.type || 'Unknown';
+      const gainLoss = currentValue - costBasis;
+      const gainLossPercent = costBasis > 0 ? ((gainLoss / costBasis) * 100).toFixed(2) : '0.00';
+      
+      const tickerPart = ticker ? `${ticker} (` : '';
+      const tickerClose = ticker ? ')' : '';
+      return `- ${tickerPart}${name}${tickerClose} [${securityType}]: Quantity ${quantity.toFixed(4)}, Cost Basis $${costBasis.toFixed(2)}, Current Value $${currentValue.toFixed(2)} (${gainLoss >= 0 ? '+' : ''}$${gainLoss.toFixed(2)}, ${gainLossPercent}%)`;
+    }).join('\n');
+    
+    return `${header}\n\nDetailed Holdings:\n${holdingsDetails}`.trim();
+  } else if (investments.summaryLines && investments.summaryLines.length > 0) {
+    const holdings = investments.summaryLines.join('\n');
+    return `${header}\n${holdings}`.trim();
+  }
+  
+  return header;
 }
 
 function buildTierDetails(snapshot: FinancialContextSnapshot): string {
