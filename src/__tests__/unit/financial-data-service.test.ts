@@ -127,10 +127,10 @@ describe('FinancialDataService investment persistence safeguards', () => {
     mockCache.invalidate.mockReset();
     mockCache.get.mockResolvedValue(null as never);
     // Set up default return values for Prisma mocks
-    (mockPrisma.account.findMany as jest.Mock).mockResolvedValue([]);
-    (mockPrisma.accessToken.findMany as jest.Mock).mockResolvedValue([]);
-    (mockPrisma.transaction.findMany as jest.Mock).mockResolvedValue([]);
-    (mockPrisma.manualAccount.findMany as jest.Mock).mockResolvedValue([]);
+    (mockPrisma.account.findMany as any).mockResolvedValue([]);
+    (mockPrisma.accessToken.findMany as any).mockResolvedValue([]);
+    (mockPrisma.transaction.findMany as any).mockResolvedValue([]);
+    (mockPrisma.manualAccount.findMany as any).mockResolvedValue([]);
   });
 
   it('skips persisted Plaid snapshot when investments are requested', async () => {
