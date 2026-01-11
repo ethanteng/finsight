@@ -11,7 +11,7 @@ declare global {
       value?: number;
       currency?: string;
       transaction_id?: string;
-      [key: string]: any;
+      [key: string]: string | number | boolean | undefined;
     }>;
   }
 }
