@@ -55,9 +55,12 @@ jobs:
               sleep $((i * 10))
             } && break
           done
+          cd ${{ github.workspace }}
 
       - name: Lint backend
         run: |
+          # Ensure we're in the root directory
+          cd ${{ github.workspace }}
           set +e  # Don't exit on error
           # Run ESLint with JSON output to check for actual errors
           # Use the locally installed ESLint binary directly
@@ -88,12 +91,13 @@ jobs:
               npx eslint@8 src/ --ext .ts || true
             fi
           fi
-          # Type check - use local typescript if available, otherwise use npx with -p flag
-          if [ -f "node_modules/.bin/tsc" ]; then
-            node_modules/.bin/tsc --noEmit
-          else
-            npx -p typescript@5.8.3 tsc --noEmit
+          # Type check - always use local typescript (installed via npm ci above)
+          # This ensures access to @types/jest and @types/node from node_modules
+          if [ ! -f "node_modules/.bin/tsc" ]; then
+            echo "Error: TypeScript not found in node_modules. Dependencies may not be installed."
+            exit 1
           fi
+          node_modules/.bin/tsc --noEmit
       - name: Collect npm logs
         if: always()
         run: |
