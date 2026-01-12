@@ -49,6 +49,72 @@ export interface FinancialContextSnapshot {
   marketContext?: string;
   userProfile?: string;
   homeValueSummary?: string;
+  retirementAnalysis?: {
+    summary: {
+      characteristics: {
+        growthPotential: 'high' | 'moderate' | 'low';
+        drawdownResistance: 'high' | 'moderate' | 'low';
+        withdrawalFragility: 'high' | 'moderate' | 'low';
+        inflationProtection: 'high' | 'moderate' | 'low';
+      };
+      tradeoffs: {
+        upside: string;
+        downside: string;
+      };
+      primaryObservation: string;
+      confidence: 'high' | 'medium' | 'low';
+      timelineBucket: '10' | '20' | '30';
+      timelineBucketNote: string;
+    };
+    metrics: {
+      equityAllocation: number;
+      withdrawalRate: number;
+      yearsOfExpenses: number;
+      historicalWithdrawalRates: {
+        p10: number;
+        p25: number;
+        p50: number;
+        p75: number;
+        p90: number;
+      };
+    };
+    stressTest: {
+      totalSequences: number;
+      survivalRate: number;
+      depletionPercentiles: {
+        p10: number | null;
+        p25: number | null;
+        p50: number | null;
+        p75: number | null;
+        p90: number | null;
+      };
+      worstSequences: {
+        byDepletion: Array<{ sequenceId: string; yearsUntilDepletion: number }>;
+        byDrawdown: Array<{ sequenceId: string; maximumDrawdown: number }>;
+        byRecovery: Array<{ sequenceId: string; timeToRecovery: number }>;
+      };
+      notablePeriods?: Array<{
+        period: string;
+        rank: number;
+        metric: 'depletion' | 'drawdown' | 'recovery';
+      }>;
+    };
+    historicalImplications: Array<{
+      category: 'allocation' | 'diversification' | 'expenses' | 'withdrawal';
+      observation: string;
+      historicalContext: string;
+    }>;
+    dataQuality: {
+      completeness: number;
+      priceHistoryCoverage: number;
+      metadataConfidence: 'high' | 'medium' | 'low';
+      portfolioMappingConfidence: 'high' | 'medium' | 'low';
+      proxiedValuePercentage: number;
+      assumptions: string[];
+      missingData: string[];
+    };
+    disclaimers: string[];
+  };
   financialSummary?: {
     financialOverview?: {
       netWorth: number;

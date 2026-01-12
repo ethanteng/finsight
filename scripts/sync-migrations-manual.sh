@@ -16,7 +16,7 @@ fi
 
 if [ -z "$LOCAL_DATABASE_URL" ]; then
     echo "❌ LOCAL_DATABASE_URL not set. Please set it to your local database URL."
-    echo "   export LOCAL_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/finsight'"
+    echo "   export LOCAL_DATABASE_URL='postgresql://postgres:postgres@localhost:5433/finsight'"
     exit 1
 fi
 
