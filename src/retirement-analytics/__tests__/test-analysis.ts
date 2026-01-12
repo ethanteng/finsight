@@ -14,7 +14,7 @@
  */
 
 import { analyzeRetirementPortfolio } from '../index';
-import { getFinancialData } from '../../services/financial-data-service';
+import { FinancialDataService } from '../../services/financial-data-service';
 import { RetirementAnalysisInput } from '../types';
 
 // Default test parameters (can be overridden)
@@ -225,7 +225,12 @@ async function testRetirementAnalysis() {
   try {
     // Step 1: Get financial data
     console.log('📊 Fetching financial data...');
-    const financialData = await getFinancialData(userId);
+    const financialDataService = new FinancialDataService();
+    const financialData = await financialDataService.getUserFinancialData(userId, {
+      includeInvestments: true,
+      includeTransactions: false,
+      includeHomeValue: false
+    });
     
     if (!financialData.investments?.holdings || financialData.investments.holdings.length === 0) {
       console.error('❌ Error: No investment holdings found for this user');
@@ -238,7 +243,7 @@ async function testRetirementAnalysis() {
     const holdingsCount = financialData.investments.holdings.length;
     const securitiesCount = financialData.investments.securities?.length || 0;
     const totalValue = financialData.investments.holdings.reduce(
-      (sum, h) => sum + (h.institution_value || 0), 
+      (sum: number, h: { institution_value?: number }) => sum + (h.institution_value || 0), 
       0
     );
     

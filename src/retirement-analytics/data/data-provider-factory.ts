@@ -9,7 +9,7 @@ import { AlphaVantageProvider } from '../../data/providers/alpha-vantage';
 export class DataProviderFactory {
   private tiingoProvider: TiingoProvider;
   private fmpProvider: FMPProvider;
-  private alphaVantageProvider: AlphaVantageProvider;
+  private alphaVantageProvider?: AlphaVantageProvider;
 
   constructor(
     tiingoApiKey: string,
