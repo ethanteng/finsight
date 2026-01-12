@@ -6,6 +6,7 @@ export interface QuestionNeeds {
   needsSearchContext: boolean;
   needsHomeValue: boolean;
   needsInvestments: boolean;
+  needsRetirement?: boolean;
 }
 
 export interface AccountSummaryItem {
@@ -110,6 +111,13 @@ export interface FinancialContextSnapshot {
       metadataConfidence: 'high' | 'medium' | 'low';
       portfolioMappingConfidence: 'high' | 'medium' | 'low';
       proxiedValuePercentage: number;
+      proxyUsage: {
+        usEquityProxy: string;
+        internationalEquityProxy: string;
+        bondsProxy: string;
+        unmappedHoldings: string[];
+        mappingMethod: string;
+      };
       assumptions: string[];
       missingData: string[];
     };

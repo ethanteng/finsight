@@ -331,6 +331,23 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     transactions: sortedTransactions
   });
 
+  // Fetch or create retirement analysis if question is retirement-related
+  let retirementAnalysis: FinancialContextSnapshot['retirementAnalysis'] | undefined;
+  if (userId && !isDemo && (questionNeeds.needsRetirement || questionNeeds.needsMarketContext) && investmentsSnapshot?.holdings && investmentsSnapshot.holdings.length > 0) {
+    try {
+      retirementAnalysis = await fetchOrCreateRetirementAnalysis({
+        userId,
+        question,
+        userProfile: userProfile || '',
+        holdings: investmentsSnapshot.holdings,
+        securities: investmentsSnapshot.securities || []
+      });
+    } catch (error) {
+      console.error('Error fetching/creating retirement analysis:', error);
+      // Don't fail the entire context gathering if retirement analysis fails
+    }
+  }
+
   return {
     accounts: accountSummaries,
     bankingTransactions: transactionSummaries,
@@ -342,8 +359,161 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     marketContext,
     userProfile,
     homeValueSummary,
-    financialSummary: financialSummary || undefined
+    financialSummary: financialSummary || undefined,
+    retirementAnalysis
   };
+}
+
+/**
+ * Fetch existing retirement analysis or create a new one
+ */
+async function fetchOrCreateRetirementAnalysis(args: {
+  userId: string;
+  question: string;
+  userProfile: string;
+  holdings: any[];
+  securities: any[];
+}): Promise<FinancialContextSnapshot['retirementAnalysis'] | undefined> {
+  const { userId, question, userProfile, holdings, securities } = args;
+
+  // Parse retirement parameters from question
+  const { parseRetirementQuestion } = await import('../retirement-analytics/retirement-question-parser');
+  const questionParams = parseRetirementQuestion(question);
+
+  // Only proceed if question has retirement intent
+  if (!questionParams.hasRetirementIntent) {
+    return undefined;
+  }
+
+  // Extract age from profile if not in question
+  const { extractAgeFromProfile, extractRetirementAgeFromProfile } = await import('../retirement-analytics/profile-age-extractor');
+  const profileAge = extractAgeFromProfile(userProfile);
+  const profileRetirementAge = extractRetirementAgeFromProfile(userProfile);
+
+  const currentAge = questionParams.currentAge || profileAge;
+  const retirementAge = questionParams.retirementAge || profileRetirementAge || null;
+
+  // If we don't have enough info, we can't run analysis
+  // For now, require at least current age and withdrawal amount
+  // In production, Linc could ask for missing info
+  if (!currentAge || !questionParams.annualWithdrawalAmount) {
+    console.log('Retirement analysis: Missing required parameters (age or withdrawal amount)');
+    return undefined;
+  }
+
+  // Check for recent analysis in database (within last 7 days)
+  const { getPrismaClient } = await import('../prisma-client');
+  const prisma = getPrismaClient();
+  const recentAnalysis = await prisma.retirementAnalysis.findFirst({
+    where: {
+      userId,
+      computedAt: {
+        gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // Last 7 days
+      }
+    },
+    orderBy: {
+      computedAt: 'desc'
+    }
+  });
+
+  // If recent analysis exists and parameters match, use it
+  if (recentAnalysis) {
+    const storedInput = recentAnalysis.analysisInput as any;
+    if (
+      storedInput.currentAge === currentAge &&
+      storedInput.retirementAge === retirementAge &&
+      storedInput.annualWithdrawalAmount === questionParams.annualWithdrawalAmount &&
+      storedInput.withdrawalStartAge === (questionParams.withdrawalStartAge || retirementAge)
+    ) {
+      console.log('Using cached retirement analysis');
+      // Return the full analysis output (stored in historicalImplications field as RetirementAnalysisOutput)
+      const cachedAnalysis = recentAnalysis.historicalImplications as any;
+      if (cachedAnalysis && cachedAnalysis.summary) {
+        // Full analysis result is stored, return it directly
+        return cachedAnalysis;
+      }
+      // Fallback: reconstruct from stored fields if needed
+      return {
+        summary: {
+          characteristics: recentAnalysis.characteristics as any,
+          tradeoffs: (recentAnalysis.characteristics as any).tradeoffs || cachedAnalysis?.summary?.tradeoffs || { upside: '', downside: '' },
+          primaryObservation: (recentAnalysis.characteristics as any).primaryObservation || cachedAnalysis?.summary?.primaryObservation || '',
+          confidence: cachedAnalysis?.summary?.confidence || 'medium' as const,
+          timelineBucket: cachedAnalysis?.summary?.timelineBucket || '20' as const,
+          timelineBucketNote: cachedAnalysis?.summary?.timelineBucketNote || ''
+        },
+        metrics: recentAnalysis.portfolioMetrics as any,
+        stressTest: recentAnalysis.stressTestResults as any,
+        historicalImplications: Array.isArray(cachedAnalysis?.historicalImplications) ? cachedAnalysis.historicalImplications : [],
+        dataQuality: {
+          completeness: recentAnalysis.dataQualityScore,
+          priceHistoryCoverage: 0.8,
+          metadataConfidence: 'medium' as const,
+          portfolioMappingConfidence: 'medium' as const,
+          proxiedValuePercentage: 0,
+          proxyUsage: {
+            usEquityProxy: 'VTI',
+            internationalEquityProxy: 'VXUS',
+            bondsProxy: 'AGG',
+            unmappedHoldings: [],
+            mappingMethod: 'direct'
+          },
+          assumptions: [],
+          missingData: []
+        },
+        disclaimers: []
+      };
+    }
+  }
+
+  // Create new analysis
+  try {
+    const { analyzeRetirementPortfolio } = await import('../retirement-analytics');
+
+    const analysisInput = {
+      holdings,
+      securities,
+      currentAge,
+      retirementAge,
+      lifeExpectancy: questionParams.lifeExpectancy || 95,
+      annualWithdrawalAmount: questionParams.annualWithdrawalAmount,
+      withdrawalStartAge: questionParams.withdrawalStartAge || retirementAge || currentAge + 20
+    };
+
+    console.log('Running new retirement analysis for user:', userId);
+    const analysisResult = await analyzeRetirementPortfolio(analysisInput);
+
+    // Store in database
+    // Note: Store full analysis result in historicalImplications field for retrieval
+    await prisma.retirementAnalysis.create({
+      data: {
+        userId,
+        analysisInput: analysisInput as any,
+        portfolioSnapshot: { holdings, securities } as any,
+        portfolioMetrics: {
+          equityAllocation: analysisResult.metrics.equityAllocation,
+          withdrawalRate: analysisResult.metrics.withdrawalRate,
+          yearsOfExpenses: analysisResult.metrics.yearsOfExpenses,
+          historicalWithdrawalRates: analysisResult.metrics.historicalWithdrawalRates
+        } as any,
+        characteristics: {
+          ...analysisResult.summary.characteristics,
+          tradeoffs: analysisResult.summary.tradeoffs,
+          primaryObservation: analysisResult.summary.primaryObservation
+        } as any,
+        stressTestResults: analysisResult.stressTest as any,
+        historicalImplications: analysisResult as any, // Store full result for retrieval
+        dataQualityScore: analysisResult.dataQuality.completeness,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // Expires in 7 days
+      }
+    });
+
+    console.log('Retirement analysis completed and stored');
+    return analysisResult as any;
+  } catch (error) {
+    console.error('Error creating retirement analysis:', error);
+    return undefined;
+  }
 }
 
 
