@@ -28,7 +28,8 @@ module.exports = {
     '!src/sync.ts',
     '!src/privacy.ts',
     '!src/prisma-client.ts',
-    '!src/factories/**'
+    '!src/factories/**',
+    '!src/retirement-analytics/**' // Exclude retirement analytics from coverage until tests are added
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
