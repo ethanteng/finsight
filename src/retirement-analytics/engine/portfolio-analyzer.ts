@@ -12,7 +12,8 @@ import { DataProviderFactory } from '../data/data-provider-factory';
 export async function analyzePortfolio(
   holdings: Holding[],
   securities: Security[],
-  dataProviderFactory?: DataProviderFactory
+  dataProviderFactory?: DataProviderFactory,
+  preFetchedMetadata?: Map<string, any>
 ): Promise<PortfolioCompositionMetrics> {
   if (holdings.length === 0) {
     return {
@@ -43,10 +44,11 @@ export async function analyzePortfolio(
     };
   }
 
-  // Fetch FMP metadata for all unique tickers in parallel (if dataProviderFactory is available)
-  // Reuse the same metadata map to avoid duplicate API calls
-  const tickerToMetadata = new Map<string, any>();
-  if (dataProviderFactory) {
+  // Use pre-fetched metadata if provided, otherwise fetch (for backward compatibility)
+  const tickerToMetadata = preFetchedMetadata || new Map<string, any>();
+  
+  if (!preFetchedMetadata && dataProviderFactory) {
+    // Fallback: fetch if not provided (for backward compatibility or standalone usage)
     const uniqueTickers = new Set<string>();
     for (const holding of holdings) {
       const security = securityMap.get(holding.security_id);
@@ -57,7 +59,8 @@ export async function analyzePortfolio(
     }
 
     if (uniqueTickers.size > 0) {
-      // Fetch metadata for all tickers in parallel
+      console.log(`📊 FMP: Fetching metadata for ${uniqueTickers.size} unique tickers (fallback mode)`);
+      
       const metadataPromises = Array.from(uniqueTickers).map(async (ticker) => {
         try {
           const metadata = await dataProviderFactory.getSecurityMetadata(ticker);

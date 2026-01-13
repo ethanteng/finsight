@@ -10,6 +10,7 @@ export class DatabaseCache {
 
   /**
    * Get cached price history from database
+   * OPTIMIZATION: If exact range not found, check if we have a broader range and slice from it
    */
   async getPriceHistory(
     ticker: string,
@@ -18,6 +19,7 @@ export class DatabaseCache {
     provider: string = 'tiingo'
   ): Promise<PriceTimeSeries | null> {
     try {
+      // First try: exact date range match
       const records = await this.prisma.assetPriceHistory.findMany({
         where: {
           tickerSymbol: ticker,
@@ -32,40 +34,100 @@ export class DatabaseCache {
         }
       });
 
-      if (records.length === 0) {
-        return null;
+      // If we have records within the requested range, return them
+      // The query filters to date >= startDate AND date <= endDate,
+      // so any records returned are within the requested range
+      if (records.length > 0) {
+        return this.convertRecordsToTimeSeries(records, ticker, startDate, endDate, provider);
       }
 
-      // Convert database records to PriceTimeSeries format
-      const dates: Date[] = [];
-      const prices: number[] = [];
-      const returns: number[] = [];
+      // Second try: check if we have broader range that covers the requested range
+      // OPTIMIZATION: Limit lookback to 50 years to avoid fetching millions of records
+      const maxLookbackYears = 50;
+      const minLookbackDate = new Date(startDate);
+      minLookbackDate.setFullYear(minLookbackDate.getFullYear() - maxLookbackYears);
+      
+      const broaderRecords = await this.prisma.assetPriceHistory.findMany({
+        where: {
+          tickerSymbol: ticker,
+          provider: provider,
+          date: {
+            gte: minLookbackDate, // Limit lookback to 50 years
+            lte: endDate
+          }
+        },
+        orderBy: {
+          date: 'asc'
+        }
+      });
 
-      for (let i = 0; i < records.length; i++) {
-        const record = records[i];
-        dates.push(record.date);
-        prices.push(record.adjustedClose || record.close);
+      if (broaderRecords.length > 0) {
+        const earliestDate = broaderRecords[0].date;
+        const latestDate = broaderRecords[broaderRecords.length - 1].date;
         
-        // Calculate monthly return if we have previous price
-        if (i > 0 && prices[i - 1] > 0) {
-          const monthlyReturn = (prices[i] - prices[i - 1]) / prices[i - 1];
-          returns.push(monthlyReturn);
-        } else {
-          returns.push(0);
+        // If we have data that covers the requested range, slice it
+        if (earliestDate <= startDate && latestDate >= endDate) {
+          const filteredRecords = broaderRecords.filter(r => r.date >= startDate && r.date <= endDate);
+          if (filteredRecords.length > 0) {
+            return this.convertRecordsToTimeSeries(filteredRecords, ticker, startDate, endDate, provider);
+          }
         }
       }
 
-      return {
-        ticker,
-        dates,
-        prices,
-        returns,
-        provider: 'tiingo'
-      };
+      return null;
     } catch (error) {
       console.error(`Error fetching price history from database for ${ticker}:`, error);
       return null;
     }
+  }
+
+  /**
+   * Convert database records to PriceTimeSeries format
+   * Matches Tiingo provider format: N-1 elements for dates, prices, and returns
+   * (returns are calculated between dates, so there's one fewer return than dates)
+   */
+  private convertRecordsToTimeSeries(
+    records: any[],
+    ticker: string,
+    startDate: Date,
+    endDate: Date,
+    provider: string = 'tiingo'
+  ): PriceTimeSeries {
+    if (records.length === 0) {
+      throw new Error('Cannot convert empty records to PriceTimeSeries');
+    }
+
+    const dates: Date[] = [];
+    const prices: number[] = [];
+    const returns: number[] = [];
+
+    // Build dates and prices arrays (one per record)
+    for (let i = 0; i < records.length; i++) {
+      const record = records[i];
+      dates.push(record.date);
+      prices.push(record.adjustedClose || record.close);
+    }
+
+    // Calculate monthly returns (one fewer than dates/prices)
+    // This matches Tiingo provider format where returns are between dates
+    for (let i = 1; i < prices.length; i++) {
+      if (prices[i - 1] > 0) {
+        const monthlyReturn = (prices[i] - prices[i - 1]) / prices[i - 1];
+        returns.push(monthlyReturn);
+      } else {
+        returns.push(0);
+      }
+    }
+
+    // Align dates and prices with returns (remove first element to match returns length)
+    // This matches Tiingo provider: dates.slice(1), prices.slice(1), returns
+    return {
+      ticker,
+      dates: dates.slice(1), // Remove first date to align with returns
+      prices: prices.slice(1), // Remove first price to align with returns
+      returns,
+      provider: provider as 'polygon' | 'tiingo' | 'alpha_vantage'
+    };
   }
 
   /**

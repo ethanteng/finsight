@@ -205,7 +205,7 @@ export class FMPProvider {
       securityName: data.name || ticker,
       assetClass,
       fundCategory,
-      expenseRatio: data.expenseRatio ? data.expenseRatio / 100 : undefined, // Convert from percentage (0.0945) to decimal (0.000945)
+      expenseRatio: data.expenseRatio, // FMP API returns expenseRatio already in decimal form (e.g., 0.0075 = 0.75%)
       geographicFocus,
       isETF: true, // This endpoint is specifically for ETFs
       provider: 'fmp',

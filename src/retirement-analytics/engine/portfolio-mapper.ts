@@ -14,7 +14,8 @@ export async function mapPortfolioToAssetBasket(
   holdings: Holding[],
   securities: Security[],
   totalValue: number,
-  dataProviderFactory?: DataProviderFactory
+  dataProviderFactory?: DataProviderFactory,
+  preFetchedMetadata?: Map<string, any>
 ): Promise<PortfolioMapping> {
   const mapping: PortfolioMapping = {
     usEquityWeight: 0,
@@ -35,9 +36,11 @@ export async function mapPortfolioToAssetBasket(
   let inferredCount = 0;
   let unmappedCount = 0;
 
-  // Fetch FMP metadata for all unique tickers in parallel (if dataProviderFactory is available)
-  const tickerToMetadata = new Map<string, any>();
-  if (dataProviderFactory) {
+  // Use pre-fetched metadata if provided, otherwise fetch (for backward compatibility)
+  const tickerToMetadata = preFetchedMetadata || new Map<string, any>();
+  
+  if (!preFetchedMetadata && dataProviderFactory) {
+    // Fallback: fetch if not provided (for backward compatibility or standalone usage)
     const uniqueTickers = new Set<string>();
     for (const holding of holdings) {
       const security = securityMap.get(holding.security_id);
@@ -48,9 +51,8 @@ export async function mapPortfolioToAssetBasket(
     }
 
     if (uniqueTickers.size > 0) {
-      console.log(`📊 FMP: Fetching metadata for ${uniqueTickers.size} unique tickers: ${Array.from(uniqueTickers).slice(0, 10).join(', ')}${uniqueTickers.size > 10 ? '...' : ''}`);
+      console.log(`📊 FMP: Fetching metadata for ${uniqueTickers.size} unique tickers (fallback mode)`);
       
-      // Fetch metadata for all tickers in parallel
       const metadataPromises = Array.from(uniqueTickers).map(async (ticker) => {
         try {
           const metadata = await dataProviderFactory.getSecurityMetadata(ticker);
@@ -62,14 +64,11 @@ export async function mapPortfolioToAssetBasket(
       });
 
       const metadataResults = await Promise.all(metadataPromises);
-      let fetchedCount = 0;
       for (const { ticker, metadata } of metadataResults) {
         if (metadata) {
           tickerToMetadata.set(ticker, metadata);
-          fetchedCount++;
         }
       }
-      console.log(`✅ FMP: Successfully fetched metadata for ${fetchedCount}/${uniqueTickers.size} tickers`);
     }
   }
 

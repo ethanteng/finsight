@@ -36,10 +36,51 @@ export async function analyzeRetirementPortfolio(
   
   const dataProviderFactory = new DataProviderFactory(tiingoApiKey, fmpApiKey, alphaVantageApiKey);
 
+  // OPTIMIZATION: Fetch FMP metadata once for all unique tickers, then share between functions
+  // This avoids duplicate API calls between analyzePortfolio and mapPortfolioToAssetBasket
+  const tickerToMetadata = new Map<string, any>();
+  if (dataProviderFactory) {
+    const uniqueTickers = new Set<string>();
+    const securityMap = new Map(input.securities.map(sec => [sec.security_id, sec]));
+    
+    for (const holding of input.holdings) {
+      const security = securityMap.get(holding.security_id);
+      const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase();
+      if (ticker && ticker.length > 0 && ticker.length <= 10) {
+        uniqueTickers.add(ticker);
+      }
+    }
+
+    if (uniqueTickers.size > 0) {
+      console.log(`📊 FMP: Fetching metadata once for ${uniqueTickers.size} unique tickers: ${Array.from(uniqueTickers).slice(0, 10).join(', ')}${uniqueTickers.size > 10 ? '...' : ''}`);
+      
+      // Fetch metadata for all tickers in parallel (only once)
+      const metadataPromises = Array.from(uniqueTickers).map(async (ticker) => {
+        try {
+          const metadata = await dataProviderFactory.getSecurityMetadata(ticker);
+          return { ticker, metadata };
+        } catch (error) {
+          console.warn(`⚠️ Failed to fetch FMP metadata for ${ticker}:`, error);
+          return { ticker, metadata: null };
+        }
+      });
+
+      const metadataResults = await Promise.all(metadataPromises);
+      let fetchedCount = 0;
+      for (const { ticker, metadata } of metadataResults) {
+        if (metadata) {
+          tickerToMetadata.set(ticker, metadata);
+          fetchedCount++;
+        }
+      }
+      console.log(`✅ FMP: Successfully fetched metadata for ${fetchedCount}/${uniqueTickers.size} tickers (will be shared across functions)`);
+    }
+  }
+
   // Phase 1: Portfolio metrics & mapping (now with FMP metadata support)
-  const portfolioMetrics = await analyzePortfolio(input.holdings, input.securities, dataProviderFactory);
+  const portfolioMetrics = await analyzePortfolio(input.holdings, input.securities, dataProviderFactory, tickerToMetadata);
   const totalValue = input.holdings.reduce((sum, h) => sum + (h.institution_value || 0), 0);
-  const portfolioMapping = await mapPortfolioToAssetBasket(input.holdings, input.securities, totalValue, dataProviderFactory);
+  const portfolioMapping = await mapPortfolioToAssetBasket(input.holdings, input.securities, totalValue, dataProviderFactory, tickerToMetadata);
   const assumptions = populateAssumptions(portfolioMapping, input.holdings, input.securities);
 
   // Calculate timeline metrics
