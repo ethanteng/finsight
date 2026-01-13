@@ -22,7 +22,7 @@ export async function persistTransactionsToDb(
       // ✅ CRITICAL: Always use account_id (Plaid ID), NEVER use id (database ID)
       // Using account.id causes chaining where each sync creates a duplicate with the previous DB ID
       // ✅ Ensure plaidAccountId is always set from account_id if not already present
-      let plaidAccountId = account.account_id || (account as any).plaidAccountId;
+      const plaidAccountId = account.account_id || (account as any).plaidAccountId;
       
       // Skip SnapTrade or non-Plaid accounts to avoid polluting Plaid account table
       if (!plaidAccountId) {

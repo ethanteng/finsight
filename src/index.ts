@@ -2982,7 +2982,7 @@ app.get('/profile/tokens', requireAuth, async (req: Request, res: Response) => {
     
     // Validate tokens and update institution names
     const updatedTokens = await Promise.all(tokens.map(async (token: any) => {
-      let updatedToken = { ...token };
+      const updatedToken = { ...token };
       
       // Validate token if it hasn't been checked recently (within last hour)
       const shouldValidate = !token.lastChecked || 

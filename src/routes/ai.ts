@@ -178,7 +178,7 @@ router.get('/transactions/comparison', requireAuth, async (req, res) => {
                                    'deposit', 'withdrawal', 'fee', 'refund', 'adjustment'];
     
     // Build filter conditions
-    let whereClause: any = {
+    const whereClause: any = {
       account: { userId },
     };
     

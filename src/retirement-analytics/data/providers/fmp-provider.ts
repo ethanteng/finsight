@@ -120,14 +120,13 @@ export class FMPProvider {
     // Determine geographic focus from name/description
     let geographicFocus: string | undefined;
     const name = data.name?.toLowerCase() || '';
-    const description = data.longDescription?.toLowerCase() || '';
     
-    if (name.includes('international') || name.includes('ex-us') || name.includes('global')) {
+    if (name.includes('international') || name.includes('ex-us')) {
       geographicFocus = 'International';
-    } else if (name.includes('us') || name.includes('united states')) {
-      geographicFocus = 'US';
     } else if (name.includes('global')) {
       geographicFocus = 'Global';
+    } else if (name.includes('us') || name.includes('united states')) {
+      geographicFocus = 'US';
     }
 
     return {

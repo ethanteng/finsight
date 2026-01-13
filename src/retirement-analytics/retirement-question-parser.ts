@@ -84,7 +84,7 @@ export function parseRetirementQuestion(question: string): RetirementQuestionPar
   for (const pattern of withdrawalPatterns) {
     const match = qLower.match(pattern);
     if (match) {
-      let amount = match[1].replace(/,/g, '');
+      const amount = match[1].replace(/,/g, '');
       const multiplier = qLower.includes('million') ? 1000000 : (qLower.includes('k') || qLower.includes('thousand') ? 1000 : 1);
       annualWithdrawalAmount = parseFloat(amount) * multiplier;
       break;
