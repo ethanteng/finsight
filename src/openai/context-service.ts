@@ -1,6 +1,6 @@
 import { UserTier } from '../data/types';
 import { dataOrchestrator } from '../data/orchestrator';
-import { FinancialDataService, Account, Transaction, UnifiedFinancialData, HomeData } from '../services/financial-data-service';
+import { Account, Transaction, UnifiedFinancialData, HomeData } from '../services/financial-data-service';
 import { TokenStatus } from '../services/token-validation-service';
 import { QuestionNeeds, FinancialContextSnapshot, AccountSummaryItem, TransactionSummaryItem, InvestmentSnapshot } from './types';
 import type { DemoAccount, DemoTransaction } from '../demo-data';
@@ -61,7 +61,6 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   let homeValueSummary: string | undefined;
   let metadata: UnifiedFinancialData['metadata'] = { ...DEFAULT_METADATA };
   let financialSummary: { financialOverview?: any; investmentPortfolio?: any } | null = null;
-  let investmentPortfolio: any = null;
 
   if (isDemo) {
     const { demoData } = await import('../demo-data');
@@ -144,7 +143,6 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
         financialOverview: snapshot.financialOverview,
         investmentPortfolio: snapshot.investmentPortfolio
       };
-      investmentPortfolio = snapshot.investmentPortfolio;
 
       // Load investments if needed for investments OR retirement analysis
       if (questionNeeds.needsInvestments || questionNeeds.needsRetirement) {
@@ -185,8 +183,6 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
             securitiesLength: investmentsSnapshot.securities?.length || 0
           });
         }
-      } else if (questionNeeds.needsRetirement) {
-        console.log('⚠️ Retirement question detected but investments not loaded (needsInvestments=false)');
       }
 
       if (questionNeeds.needsHomeValue) {
