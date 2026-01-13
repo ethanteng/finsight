@@ -22,10 +22,16 @@ import { calculateDataQuality } from './interpretation/uncertainty-quantifier';
 export async function analyzeRetirementPortfolio(
   input: RetirementAnalysisInput
 ): Promise<RetirementAnalysisOutput> {
-  // Phase 1: Portfolio metrics & mapping
-  const portfolioMetrics = analyzePortfolio(input.holdings, input.securities);
+  // Phase 2: Initialize data providers (needed for FMP metadata)
+  const tiingoApiKey = process.env.TIINGO_API_KEY || 'test_tiingo_key';
+  const fmpApiKey = process.env.FMP_API_KEY || 'test_fmp_key';
+  const alphaVantageApiKey = process.env.ALPHA_VANTAGE_API_KEY;
+  const dataProviderFactory = new DataProviderFactory(tiingoApiKey, fmpApiKey, alphaVantageApiKey);
+
+  // Phase 1: Portfolio metrics & mapping (now with FMP metadata support)
+  const portfolioMetrics = await analyzePortfolio(input.holdings, input.securities, dataProviderFactory);
   const totalValue = input.holdings.reduce((sum, h) => sum + (h.institution_value || 0), 0);
-  const portfolioMapping = mapPortfolioToAssetBasket(input.holdings, input.securities, totalValue);
+  const portfolioMapping = await mapPortfolioToAssetBasket(input.holdings, input.securities, totalValue, dataProviderFactory);
   const assumptions = populateAssumptions(portfolioMapping, input.holdings, input.securities);
 
   // Calculate timeline metrics
@@ -36,12 +42,6 @@ export async function analyzeRetirementPortfolio(
     ? `Analysis uses ${timelineBucket}-year horizon bucket for computational efficiency. Your actual horizon of ${withdrawalYearsOriginal} years was rounded to the nearest supported period.`
     : '';
 
-  // Phase 2: Initialize data providers
-  const tiingoApiKey = process.env.TIINGO_API_KEY || 'test_tiingo_key';
-  const fmpApiKey = process.env.FMP_API_KEY || 'test_fmp_key';
-  const alphaVantageApiKey = process.env.ALPHA_VANTAGE_API_KEY;
-  const dataProviderFactory = new DataProviderFactory(tiingoApiKey, fmpApiKey, alphaVantageApiKey);
-  
   const fredApiKey = process.env.FRED_API_KEY || 'test_fred_key';
   const fredProvider = new FREDProvider(fredApiKey);
 

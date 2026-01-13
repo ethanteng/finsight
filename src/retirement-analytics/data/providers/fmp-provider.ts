@@ -50,12 +50,14 @@ export class FMPProvider {
     // Check in-memory cache first (fastest)
     const cached = await cacheService.get<SecurityMetadata>(cacheKey);
     if (cached) {
+      console.log(`📦 FMP: Using in-memory cache for ${ticker}`);
       return cached;
     }
 
     // Check database cache (persistent across restarts)
     const dbCached = await dbCache.getSecurityMetadata(ticker);
     if (dbCached) {
+      console.log(`💾 FMP: Using database cache for ${ticker}`);
       // Also populate in-memory cache for faster subsequent access
       await cacheService.set(cacheKey, dbCached, 7 * 24 * 60 * 60 * 1000);
       return dbCached;
@@ -84,10 +86,14 @@ export class FMPProvider {
           const etfData: FMPETFProfile[] = await etfResponse.json();
           if (etfData && etfData.length > 0) {
             const metadata = this.parseETFProfile(etfData[0], ticker);
+            console.log(`✅ FMP: Successfully fetched ETF metadata for ${ticker}`);
             // Cache in memory
             await cacheService.set(cacheKey, metadata, 7 * 24 * 60 * 60 * 1000); // 7 days
             // Also persist to database
-            await dbCache.saveSecurityMetadata(ticker, metadata, 'fmp');
+            console.log(`💾 FMP: Saving to database cache for ${ticker}`);
+            await dbCache.saveSecurityMetadata(ticker, metadata, 'fmp').catch((err) => {
+              console.error(`⚠️ Failed to save metadata to database for ${ticker}:`, err);
+            });
             return metadata;
           }
         }
@@ -110,11 +116,15 @@ export class FMPProvider {
       }
 
       const metadata = this.parseProfile(data[0], ticker);
+      console.log(`✅ FMP: Successfully fetched profile metadata for ${ticker}`);
       
       // Cache in memory for 7 days (metadata changes rarely)
       await cacheService.set(cacheKey, metadata, 7 * 24 * 60 * 60 * 1000);
       // Also persist to database
-      await dbCache.saveSecurityMetadata(ticker, metadata, 'fmp');
+      console.log(`💾 FMP: Saving to database cache for ${ticker}`);
+      await dbCache.saveSecurityMetadata(ticker, metadata, 'fmp').catch((err) => {
+        console.error(`⚠️ Failed to save metadata to database for ${ticker}:`, err);
+      });
       
       return metadata;
     } catch (error) {

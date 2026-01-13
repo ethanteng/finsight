@@ -47,12 +47,14 @@ export class TiingoProvider {
     // Check in-memory cache first (fastest)
     const cached = await this.cache.get(ticker, startDate, endDate);
     if (cached) {
+      console.log(`📦 Tiingo: Using in-memory cache for ${ticker}`);
       return cached;
     }
 
     // Check database cache (persistent across restarts)
     const dbCached = await dbCache.getPriceHistory(ticker, startDate, endDate, 'tiingo');
     if (dbCached) {
+      console.log(`💾 Tiingo: Using database cache for ${ticker}`);
       // Also populate in-memory cache for faster subsequent access
       await this.cache.set(ticker, startDate, endDate, dbCached, 24 * 60 * 60 * 1000);
       return dbCached;
@@ -64,14 +66,15 @@ export class TiingoProvider {
       const mockData = this.generateMockData(ticker, startDate, endDate);
       // Still save mock data to database for consistency (but only in non-CI environments)
       if (!process.env.GITHUB_ACTIONS) {
-        await dbCache.savePriceHistory(ticker, mockData, 'tiingo').catch(() => {
-          // Ignore errors saving mock data
+        await dbCache.savePriceHistory(ticker, mockData, 'tiingo').catch((err) => {
+          console.error(`Failed to save mock data to database for ${ticker}:`, err);
         });
       }
       return mockData;
     }
 
     try {
+      console.log(`🌐 Tiingo: Fetching from API for ${ticker} (${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]})`);
       const startStr = startDate.toISOString().split('T')[0];
       const endStr = endDate.toISOString().split('T')[0];
       const url = `${this.baseUrl}/${ticker}/prices?startDate=${startStr}&endDate=${endStr}&format=json&resampleFreq=daily`;
@@ -84,7 +87,9 @@ export class TiingoProvider {
       });
 
       if (!response.ok) {
-        throw new Error(`Tiingo API error: ${response.status} ${response.statusText}`);
+        const errorMsg = `Tiingo API error: ${response.status} ${response.statusText}`;
+        console.error(`❌ ${errorMsg} for ${ticker}`);
+        throw new Error(errorMsg);
       }
 
       const data: TiingoResponse = await response.json();
@@ -92,11 +97,17 @@ export class TiingoProvider {
       // Convert daily prices to monthly returns
       const timeSeries = this.convertToMonthlyReturns(data, ticker);
       
+      console.log(`✅ Tiingo: Successfully fetched ${timeSeries.dates.length} data points for ${ticker}`);
+      
       // Cache in memory for 24 hours (historical data changes infrequently)
       await this.cache.set(ticker, startDate, endDate, timeSeries, 24 * 60 * 60 * 1000);
       
       // Also persist to database for long-term storage
-      await dbCache.savePriceHistory(ticker, timeSeries, 'tiingo');
+      console.log(`💾 Tiingo: Saving to database cache for ${ticker}`);
+      await dbCache.savePriceHistory(ticker, timeSeries, 'tiingo').catch((err) => {
+        console.error(`⚠️ Failed to save price history to database for ${ticker}:`, err);
+        // Don't throw - cache failures shouldn't break the analysis
+      });
       
       return timeSeries;
     } catch (error) {
