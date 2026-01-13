@@ -7,34 +7,37 @@ import { dbCache } from '../db-cache';
 
 interface FMPProfileResponse {
   symbol: string;
-  companyName: string;
-  industry: string;
-  sector: string;
-  exchange: string;
-  currency: string;
-  isEtf: boolean;
-  isActivelyTrading: boolean;
-  price: number;
-  beta: number;
-  country: string;
+  companyName?: string;
+  name?: string;
+  industry?: string;
+  sector?: string;
+  exchange?: string;
+  currency?: string;
+  isEtf?: boolean;
+  isActivelyTrading?: boolean;
+  price?: number;
+  beta?: number;
+  country?: string;
   description?: string;
 }
 
-interface FMPETFProfile {
+interface FMPETFInfo {
   symbol: string;
   name: string;
-  type: string;
-  industry: string;
-  sector: string;
-  sectorEn: string;
-  industryEn: string;
-  isEtf: boolean;
-  longDescription?: string;
-  country: string;
+  description?: string;
+  assetClass: string;
+  domicile?: string;
+  expenseRatio?: number;
+  isActivelyTrading?: boolean;
+  sectorsList?: Array<{
+    industry: string;
+    exposure: number;
+  }>;
+  country?: string;
 }
 
 export class FMPProvider {
-  private baseUrl = 'https://financialmodelingprep.com/api/v3';
+  private baseUrl = 'https://financialmodelingprep.com/stable';
   private apiKey: string;
 
   constructor(apiKey: string) {
@@ -90,16 +93,16 @@ export class FMPProvider {
 
     try {
       console.log(`🌐 FMP: Attempting to fetch metadata for ${ticker} from API`);
-      // Try ETF profile first (more detailed metadata)
+      // Try ETF info first (more detailed metadata including expense ratio)
       try {
-        const etfUrl = `${this.baseUrl}/etf-profile/${ticker}?apikey=${this.apiKey}`;
-        console.log(`🔗 FMP: Fetching ETF profile for ${ticker}`);
+        const etfUrl = `${this.baseUrl}/etf/info?symbol=${ticker}&apikey=${this.apiKey}`;
+        console.log(`🔗 FMP: Fetching ETF info for ${ticker}`);
         const etfResponse = await fetch(etfUrl);
         
         if (etfResponse.ok) {
-          const etfData: FMPETFProfile[] = await etfResponse.json();
+          const etfData: FMPETFInfo[] = await etfResponse.json();
           if (etfData && etfData.length > 0) {
-            const metadata = this.parseETFProfile(etfData[0], ticker);
+            const metadata = this.parseETFInfo(etfData[0], ticker);
             console.log(`✅ FMP: Successfully fetched ETF metadata for ${ticker}`);
             // Cache in memory
             await cacheService.set(cacheKey, metadata, 7 * 24 * 60 * 60 * 1000); // 7 days
@@ -110,17 +113,18 @@ export class FMPProvider {
             });
             return metadata;
           } else {
-            console.log(`⚠️ FMP: ETF profile returned empty data for ${ticker}`);
+            console.log(`⚠️ FMP: ETF info returned empty data for ${ticker}`);
           }
         } else {
-          console.log(`⚠️ FMP: ETF profile request failed for ${ticker}: ${etfResponse.status} ${etfResponse.statusText}`);
+          const errorText = await etfResponse.text().catch(() => 'Unable to read error response');
+          console.log(`⚠️ FMP: ETF info request failed for ${ticker}: ${etfResponse.status} ${etfResponse.statusText} - ${errorText}`);
         }
       } catch (etfError) {
-        console.log(`⚠️ FMP: ETF profile error for ${ticker}, trying regular profile:`, etfError instanceof Error ? etfError.message : String(etfError));
+        console.log(`⚠️ FMP: ETF info error for ${ticker}, trying regular profile:`, etfError instanceof Error ? etfError.message : String(etfError));
       }
 
       // Fallback to regular profile
-      const profileUrl = `${this.baseUrl}/profile/${ticker}?apikey=${this.apiKey}`;
+      const profileUrl = `${this.baseUrl}/profile?symbol=${ticker}&apikey=${this.apiKey}`;
       console.log(`🔗 FMP: Fetching regular profile for ${ticker}`);
       const response = await fetch(profileUrl);
 
@@ -164,13 +168,59 @@ export class FMPProvider {
   }
 
   /**
-   * Parse ETF profile response
+   * Parse ETF info response (new /stable/etf/info endpoint)
    */
-  private parseETFProfile(data: FMPETFProfile, ticker: string): SecurityMetadata {
-    // Determine asset class from sector/industry
+  private parseETFInfo(data: FMPETFInfo, ticker: string): SecurityMetadata {
+    // Asset class is directly provided in the new API
+    const assetClass = data.assetClass || undefined;
+
+    // Determine geographic focus from domicile, name, or description
+    let geographicFocus: string | undefined;
+    const domicile = data.domicile?.toLowerCase() || '';
+    const name = data.name?.toLowerCase() || '';
+    const description = data.description?.toLowerCase() || '';
+    
+    if (domicile === 'us' || name.includes('us') || name.includes('united states') || description.includes('us index')) {
+      geographicFocus = 'US';
+    } else if (name.includes('international') || name.includes('ex-us') || description.includes('international')) {
+      geographicFocus = 'International';
+    } else if (name.includes('global') || description.includes('global')) {
+      geographicFocus = 'Global';
+    } else if (domicile && domicile !== 'us') {
+      geographicFocus = 'International';
+    }
+
+    // Determine fund category from sectors list if available
+    let fundCategory: string | undefined;
+    if (data.sectorsList && data.sectorsList.length > 0) {
+      // Use the sector with highest exposure
+      const topSector = data.sectorsList.reduce((max, sector) => 
+        sector.exposure > max.exposure ? sector : max
+      );
+      fundCategory = topSector.industry;
+    }
+
+    return {
+      tickerSymbol: ticker,
+      securityName: data.name || ticker,
+      assetClass,
+      fundCategory,
+      expenseRatio: data.expenseRatio ? data.expenseRatio / 100 : undefined, // Convert from percentage (0.0945) to decimal (0.000945)
+      geographicFocus,
+      isETF: true, // This endpoint is specifically for ETFs
+      provider: 'fmp',
+      lastUpdated: new Date()
+    };
+  }
+
+  /**
+   * Parse regular profile response (new /stable/profile endpoint)
+   */
+  private parseProfile(data: FMPProfileResponse, ticker: string): SecurityMetadata {
+    // Determine asset class from sector/industry or infer from ETF status
     let assetClass: string | undefined;
-    const sector = data.sectorEn?.toLowerCase() || data.sector?.toLowerCase() || '';
-    const industry = data.industryEn?.toLowerCase() || data.industry?.toLowerCase() || '';
+    const sector = data.sector?.toLowerCase() || '';
+    const industry = data.industry?.toLowerCase() || '';
     
     if (sector.includes('bond') || industry.includes('bond') || industry.includes('fixed income')) {
       assetClass = 'Fixed Income';
@@ -178,61 +228,21 @@ export class FMPProvider {
       assetClass = 'Equity';
     }
 
-    // Determine geographic focus from name/description
-    let geographicFocus: string | undefined;
-    const name = data.name?.toLowerCase() || '';
-    
-    if (name.includes('international') || name.includes('ex-us')) {
-      geographicFocus = 'International';
-    } else if (name.includes('global')) {
-      geographicFocus = 'Global';
-    } else if (name.includes('us') || name.includes('united states')) {
-      geographicFocus = 'US';
-    }
-
-    return {
-      tickerSymbol: ticker,
-      securityName: data.name || ticker,
-      assetClass,
-      fundCategory: industry || sector || undefined,
-      expenseRatio: undefined, // FMP doesn't provide expense ratio in profile
-      geographicFocus,
-      isETF: data.isEtf || false,
-      provider: 'fmp',
-      lastUpdated: new Date()
-    };
-  }
-
-  /**
-   * Parse regular profile response
-   */
-  private parseProfile(data: FMPProfileResponse, ticker: string): SecurityMetadata {
-    // Determine asset class from sector/industry
-    let assetClass: string | undefined;
-    const sector = data.sector?.toLowerCase() || '';
-    const industry = data.industry?.toLowerCase() || '';
-    
-    if (sector.includes('bond') || industry.includes('bond') || industry.includes('fixed income')) {
-      assetClass = 'Fixed Income';
-    } else if (sector.includes('equity') || industry.includes('equity')) {
-      assetClass = 'Equity';
-    }
-
     // Determine geographic focus
     let geographicFocus: string | undefined;
     const country = data.country?.toLowerCase() || '';
-    if (country.includes('united states') || country.includes('usa')) {
+    if (country.includes('united states') || country.includes('usa') || country === 'us') {
       geographicFocus = 'US';
-    } else if (country && country !== 'united states') {
+    } else if (country && country !== 'united states' && country !== 'us') {
       geographicFocus = 'International';
     }
 
     return {
       tickerSymbol: ticker,
-      securityName: data.companyName || ticker,
+      securityName: data.companyName || data.name || ticker,
       assetClass,
       fundCategory: industry || sector || undefined,
-      expenseRatio: undefined, // FMP doesn't provide expense ratio in profile
+      expenseRatio: undefined, // Regular profile doesn't provide expense ratio
       geographicFocus,
       isETF: data.isEtf || false,
       provider: 'fmp',
