@@ -3,6 +3,7 @@
 
 import { PriceTimeSeries } from '../../types';
 import { TimeSeriesCache } from '../time-series-cache';
+import { dbCache } from '../db-cache';
 
 interface TiingoDailyPrice {
   date: string;
@@ -43,10 +44,18 @@ export class TiingoProvider {
    * Returns dividend/split adjusted monthly returns
    */
   async getPriceHistory(ticker: string, startDate: Date, endDate: Date): Promise<PriceTimeSeries> {
-    // Check cache first
+    // Check in-memory cache first (fastest)
     const cached = await this.cache.get(ticker, startDate, endDate);
     if (cached) {
       return cached;
+    }
+
+    // Check database cache (persistent across restarts)
+    const dbCached = await dbCache.getPriceHistory(ticker, startDate, endDate, 'tiingo');
+    if (dbCached) {
+      // Also populate in-memory cache for faster subsequent access
+      await this.cache.set(ticker, startDate, endDate, dbCached, 24 * 60 * 60 * 1000);
+      return dbCached;
     }
 
     // Use mock data for test environment
@@ -76,8 +85,11 @@ export class TiingoProvider {
       // Convert daily prices to monthly returns
       const timeSeries = this.convertToMonthlyReturns(data, ticker);
       
-      // Cache for 24 hours (historical data changes infrequently)
+      // Cache in memory for 24 hours (historical data changes infrequently)
       await this.cache.set(ticker, startDate, endDate, timeSeries, 24 * 60 * 60 * 1000);
+      
+      // Also persist to database for long-term storage
+      await dbCache.savePriceHistory(ticker, timeSeries, 'tiingo');
       
       return timeSeries;
     } catch (error) {

@@ -3,6 +3,7 @@
 
 import { SecurityMetadata } from '../../types';
 import { cacheService } from '../../../data/cache';
+import { dbCache } from '../db-cache';
 
 interface FMPProfileResponse {
   symbol: string;
@@ -46,9 +47,18 @@ export class FMPProvider {
    */
   async getSecurityMetadata(ticker: string): Promise<SecurityMetadata> {
     const cacheKey = `fmp_metadata_${ticker}`;
+    // Check in-memory cache first (fastest)
     const cached = await cacheService.get<SecurityMetadata>(cacheKey);
     if (cached) {
       return cached;
+    }
+
+    // Check database cache (persistent across restarts)
+    const dbCached = await dbCache.getSecurityMetadata(ticker);
+    if (dbCached) {
+      // Also populate in-memory cache for faster subsequent access
+      await cacheService.set(cacheKey, dbCached, 7 * 24 * 60 * 60 * 1000);
+      return dbCached;
     }
 
     // Use mock data for test environment
@@ -67,7 +77,10 @@ export class FMPProvider {
           const etfData: FMPETFProfile[] = await etfResponse.json();
           if (etfData && etfData.length > 0) {
             const metadata = this.parseETFProfile(etfData[0], ticker);
+            // Cache in memory
             await cacheService.set(cacheKey, metadata, 7 * 24 * 60 * 60 * 1000); // 7 days
+            // Also persist to database
+            await dbCache.saveSecurityMetadata(ticker, metadata, 'fmp');
             return metadata;
           }
         }
@@ -91,14 +104,21 @@ export class FMPProvider {
 
       const metadata = this.parseProfile(data[0], ticker);
       
-      // Cache for 7 days (metadata changes rarely)
+      // Cache in memory for 7 days (metadata changes rarely)
       await cacheService.set(cacheKey, metadata, 7 * 24 * 60 * 60 * 1000);
+      // Also persist to database
+      await dbCache.saveSecurityMetadata(ticker, metadata, 'fmp');
       
       return metadata;
     } catch (error) {
       console.error(`Error fetching FMP metadata for ${ticker}:`, error);
       // Return inferred metadata instead of throwing
-      return this.inferMetadata(ticker);
+      const inferredMetadata = this.inferMetadata(ticker);
+      // Cache inferred metadata in database too (so we don't keep trying API)
+      await dbCache.saveSecurityMetadata(ticker, inferredMetadata, 'inferred').catch(() => {
+        // Ignore errors saving inferred metadata
+      });
+      return inferredMetadata;
     }
   }
 

@@ -37,7 +37,8 @@ function buildSystemPrompt(snapshot: FinancialContextSnapshot): string {
   const sections: string[] = [];
 
   sections.push(
-    '# Role\nYou are Linc, an AI financial analyst. Use only the information in this prompt. Provide concise, practical guidance with plain language calculations when needed.'
+    '# Role\nYou are Linc, an AI financial analyst. Use only the information in this prompt. Provide concise, practical guidance with plain language calculations when needed.\n\n' +
+    'IMPORTANT: If a Retirement Portfolio Analysis section is present below, you MUST use it to answer retirement-related questions. Do not provide generic retirement advice when specific analysis data is available.'
   );
 
   sections.push(
@@ -301,9 +302,23 @@ function formatRetirementAnalysis(analysis: FinancialContextSnapshot['retirement
 
   sections.push('# Retirement Portfolio Analysis');
   
+  sections.push('## CRITICAL: You MUST Use This Analysis');
+  sections.push(
+    'A comprehensive retirement portfolio analysis has been performed on the user\'s holdings. You MUST reference and use this analysis when answering retirement-related questions.\n\n' +
+    'DO NOT provide generic retirement advice or calculations. Instead, USE the specific findings from the analysis below:\n' +
+    '- Reference the Portfolio Characteristics (Growth Potential, Drawdown Resistance, Withdrawal Fragility, Inflation Protection)\n' +
+    '- Discuss the Tradeoffs (both upside and downside)\n' +
+    '- Use the Primary Observation as the foundation for your response\n' +
+    '- Reference the Portfolio Metrics (withdrawal rate, years of expenses, historical withdrawal rate percentiles)\n' +
+    '- Discuss the Stress Test Results (survival rate, depletion percentiles)\n' +
+    '- Reference Historical Implications when relevant\n' +
+    '- Incorporate the analysis findings into your response naturally, not as a separate section\n\n' +
+    'If the user asks about retirement feasibility, withdrawal sustainability, or portfolio adequacy, you MUST base your answer on this analysis.'
+  );
+  
   sections.push('## Analysis Instructions');
   sections.push(
-    'IMPORTANT: When discussing retirement portfolio analysis:\n' +
+    'When discussing retirement portfolio analysis:\n' +
     '1. Use descriptive language from summary.characteristics. Avoid categorical terms like "too risky" or "too conservative."\n' +
     '2. Frame observations in terms of historical ranges and percentiles, not single numbers. Use "median historical outcome" or "typical result across sequences" instead of "expected returns" or "average returns."\n' +
     '3. Never claim certainty about future performance. Always use phrases like "based on historical patterns" or "historical data suggests" or "historical central tendency shows."\n' +
@@ -336,31 +351,34 @@ function formatRetirementAnalysis(analysis: FinancialContextSnapshot['retirement
   );
 
   sections.push('## Primary Observation');
-  sections.push(analysis.summary.primaryObservation);
-
-  sections.push('## Portfolio Metrics');
   sections.push(
-    `Equity Allocation: ${analysis.metrics.equityAllocation.toFixed(1)}%\n` +
-    `Withdrawal Rate: ${(analysis.metrics.withdrawalRate * 100).toFixed(2)}%\n` +
-    `Years of Expenses: ${analysis.metrics.yearsOfExpenses.toFixed(1)} years\n` +
-    `Historical Sustainable Withdrawal Rates (percentiles):\n` +
-    `  - 10th percentile: ${(analysis.metrics.historicalWithdrawalRates.p10 * 100).toFixed(2)}%\n` +
+    `THIS IS THE KEY FINDING - USE THIS IN YOUR RESPONSE:\n${analysis.summary.primaryObservation}`
+  );
+
+  sections.push('## Portfolio Metrics (USE THESE IN YOUR RESPONSE)');
+  sections.push(
+    `Current Withdrawal Rate: ${(analysis.metrics.withdrawalRate * 100).toFixed(2)}% of portfolio value\n` +
+    `Years of Expenses Covered: ${analysis.metrics.yearsOfExpenses.toFixed(1)} years\n` +
+    `Equity Allocation: ${analysis.metrics.equityAllocation.toFixed(1)}%\n\n` +
+    `Historical Sustainable Withdrawal Rates (based on ${analysis.stressTest.totalSequences} historical sequences):\n` +
+    `  - 10th percentile (worst 10%): ${(analysis.metrics.historicalWithdrawalRates.p10 * 100).toFixed(2)}%\n` +
     `  - 25th percentile: ${(analysis.metrics.historicalWithdrawalRates.p25 * 100).toFixed(2)}%\n` +
     `  - 50th percentile (median): ${(analysis.metrics.historicalWithdrawalRates.p50 * 100).toFixed(2)}%\n` +
     `  - 75th percentile: ${(analysis.metrics.historicalWithdrawalRates.p75 * 100).toFixed(2)}%\n` +
-    `  - 90th percentile: ${(analysis.metrics.historicalWithdrawalRates.p90 * 100).toFixed(2)}%`
+    `  - 90th percentile (best 10%): ${(analysis.metrics.historicalWithdrawalRates.p90 * 100).toFixed(2)}%\n\n` +
+    `Compare the user's withdrawal rate (${(analysis.metrics.withdrawalRate * 100).toFixed(2)}%) to these historical percentiles when answering feasibility questions.`
   );
 
-  sections.push('## Stress Test Results');
+  sections.push('## Stress Test Results (CRITICAL FOR FEASIBILITY ASSESSMENT)');
   sections.push(
-    `Total Historical Sequences Analyzed: ${analysis.stressTest.totalSequences}\n` +
-    `Survival Rate: ${(analysis.stressTest.survivalRate * 100).toFixed(1)}% of sequences sustained withdrawals\n` +
-    `Depletion Percentiles (years until depletion):\n` +
-    `  - 10th percentile: ${analysis.stressTest.depletionPercentiles.p10?.toFixed(1) || 'N/A'} years\n` +
+    `Survival Rate: ${(analysis.stressTest.survivalRate * 100).toFixed(1)}% of ${analysis.stressTest.totalSequences} historical sequences sustained withdrawals without depletion\n\n` +
+    `Years Until Portfolio Depletion (if withdrawals fail):\n` +
+    `  - 10th percentile (worst case): ${analysis.stressTest.depletionPercentiles.p10?.toFixed(1) || 'N/A'} years\n` +
     `  - 25th percentile: ${analysis.stressTest.depletionPercentiles.p25?.toFixed(1) || 'N/A'} years\n` +
     `  - 50th percentile (median): ${analysis.stressTest.depletionPercentiles.p50?.toFixed(1) || 'N/A'} years\n` +
     `  - 75th percentile: ${analysis.stressTest.depletionPercentiles.p75?.toFixed(1) || 'N/A'} years\n` +
-    `  - 90th percentile: ${analysis.stressTest.depletionPercentiles.p90?.toFixed(1) || 'N/A'} years`
+    `  - 90th percentile (best case): ${analysis.stressTest.depletionPercentiles.p90?.toFixed(1) || 'N/A'} years\n\n` +
+    `USE THIS DATA: If survival rate is below 70%, mention that historical patterns suggest higher risk. If above 80%, mention historically favorable outcomes. Reference specific depletion years when discussing worst-case scenarios.`
   );
 
   if (analysis.stressTest.notablePeriods && analysis.stressTest.notablePeriods.length > 0) {
