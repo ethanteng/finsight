@@ -47,25 +47,37 @@ export class FMPProvider {
    */
   async getSecurityMetadata(ticker: string): Promise<SecurityMetadata> {
     const cacheKey = `fmp_metadata_${ticker}`;
+    const isTestKey = this.apiKey === 'test_fmp_key' || this.apiKey.startsWith('test_') || process.env.GITHUB_ACTIONS;
+    
     // Check in-memory cache first (fastest)
     const cached = await cacheService.get<SecurityMetadata>(cacheKey);
     if (cached) {
-      console.log(`📦 FMP: Using in-memory cache for ${ticker}`);
-      return cached;
+      // If we have a real API key and cached data is inferred, try API anyway
+      if (!isTestKey && cached.provider === 'inferred') {
+        console.log(`🔄 FMP: Cached data for ${ticker} is inferred, will try API with real key`);
+      } else {
+        console.log(`📦 FMP: Using in-memory cache for ${ticker}`);
+        return cached;
+      }
     }
 
     // Check database cache (persistent across restarts)
     const dbCached = await dbCache.getSecurityMetadata(ticker);
     if (dbCached) {
-      console.log(`💾 FMP: Using database cache for ${ticker}`);
-      // Also populate in-memory cache for faster subsequent access
-      await cacheService.set(cacheKey, dbCached, 7 * 24 * 60 * 60 * 1000);
-      return dbCached;
+      // If we have a real API key and cached data is inferred, try API anyway to get better data
+      if (!isTestKey && dbCached.provider === 'inferred') {
+        console.log(`🔄 FMP: Database cache for ${ticker} is inferred, will try API with real key`);
+      } else {
+        console.log(`💾 FMP: Using database cache for ${ticker}`);
+        // Also populate in-memory cache for faster subsequent access
+        await cacheService.set(cacheKey, dbCached, 7 * 24 * 60 * 60 * 1000);
+        return dbCached;
+      }
     }
 
     // Use mock data for test environment
     if (this.apiKey === 'test_fmp_key' || this.apiKey.startsWith('test_') || process.env.GITHUB_ACTIONS) {
-      console.log('FMP Provider: Using mock data for test environment');
+      console.log(`⚠️ FMP Provider: Using inferred metadata for ${ticker} (test key or CI environment detected)`);
       const mockMetadata = this.generateMockMetadata(ticker);
       // Still save mock metadata to database for consistency (but only in non-CI environments)
       if (!process.env.GITHUB_ACTIONS) {
@@ -77,9 +89,11 @@ export class FMPProvider {
     }
 
     try {
+      console.log(`🌐 FMP: Attempting to fetch metadata for ${ticker} from API`);
       // Try ETF profile first (more detailed metadata)
       try {
         const etfUrl = `${this.baseUrl}/etf-profile/${ticker}?apikey=${this.apiKey}`;
+        console.log(`🔗 FMP: Fetching ETF profile for ${ticker}`);
         const etfResponse = await fetch(etfUrl);
         
         if (etfResponse.ok) {
@@ -95,23 +109,31 @@ export class FMPProvider {
               console.error(`⚠️ Failed to save metadata to database for ${ticker}:`, err);
             });
             return metadata;
+          } else {
+            console.log(`⚠️ FMP: ETF profile returned empty data for ${ticker}`);
           }
+        } else {
+          console.log(`⚠️ FMP: ETF profile request failed for ${ticker}: ${etfResponse.status} ${etfResponse.statusText}`);
         }
       } catch (etfError) {
-        console.log(`FMP: ETF profile not available for ${ticker}, trying regular profile`);
+        console.log(`⚠️ FMP: ETF profile error for ${ticker}, trying regular profile:`, etfError instanceof Error ? etfError.message : String(etfError));
       }
 
       // Fallback to regular profile
       const profileUrl = `${this.baseUrl}/profile/${ticker}?apikey=${this.apiKey}`;
+      console.log(`🔗 FMP: Fetching regular profile for ${ticker}`);
       const response = await fetch(profileUrl);
 
       if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unable to read error response');
+        console.error(`❌ FMP API error for ${ticker}: ${response.status} ${response.statusText} - ${errorText}`);
         throw new Error(`FMP API error: ${response.status} ${response.statusText}`);
       }
 
       const data: FMPProfileResponse[] = await response.json();
       
       if (!data || data.length === 0) {
+        console.warn(`⚠️ FMP: No metadata found in profile response for ${ticker}`);
         throw new Error(`No metadata found for ${ticker}`);
       }
 
@@ -128,7 +150,9 @@ export class FMPProvider {
       
       return metadata;
     } catch (error) {
-      console.error(`Error fetching FMP metadata for ${ticker}:`, error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`❌ Error fetching FMP metadata for ${ticker}:`, errorMessage);
+      console.log(`🔄 FMP: Falling back to inferred metadata for ${ticker}`);
       // Return inferred metadata instead of throwing
       const inferredMetadata = this.inferMetadata(ticker);
       // Cache inferred metadata in database too (so we don't keep trying API)

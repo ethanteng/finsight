@@ -26,6 +26,14 @@ export async function analyzeRetirementPortfolio(
   const tiingoApiKey = process.env.TIINGO_API_KEY || 'test_tiingo_key';
   const fmpApiKey = process.env.FMP_API_KEY || 'test_fmp_key';
   const alphaVantageApiKey = process.env.ALPHA_VANTAGE_API_KEY;
+  
+  // Log FMP API key status (without exposing the actual key)
+  if (fmpApiKey === 'test_fmp_key' || fmpApiKey.startsWith('test_')) {
+    console.warn('⚠️ FMP_API_KEY not set or is test key - FMP metadata will use inference only');
+  } else {
+    console.log('✅ FMP_API_KEY is set - will attempt to fetch real metadata');
+  }
+  
   const dataProviderFactory = new DataProviderFactory(tiingoApiKey, fmpApiKey, alphaVantageApiKey);
 
   // Phase 1: Portfolio metrics & mapping (now with FMP metadata support)
