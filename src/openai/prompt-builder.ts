@@ -140,6 +140,11 @@ function buildSystemPrompt(snapshot: FinancialContextSnapshot): string {
     sections.push(formatRetirementAnalysis(snapshot.retirementAnalysis));
   }
 
+  // Add retirement analysis info request if parameters are missing
+  if (snapshot.retirementAnalysisNeedsInfo) {
+    sections.push(formatRetirementAnalysisInfoRequest(snapshot.retirementAnalysisNeedsInfo));
+  }
+
   sections.push(buildTierDetails(snapshot));
 
   const fullPrompt = sections.join('\n\n').trim();
@@ -397,6 +402,55 @@ function formatRetirementAnalysis(analysis: FinancialContextSnapshot['retirement
 
   sections.push('## Disclaimers');
   sections.push(analysis.disclaimers.join('\n'));
+
+  return sections.join('\n\n');
+}
+
+/**
+ * Format retirement analysis info request for LLM
+ * Instructs Linc to ask user for missing retirement analysis parameters
+ */
+function formatRetirementAnalysisInfoRequest(needsInfo: FinancialContextSnapshot['retirementAnalysisNeedsInfo']): string {
+  if (!needsInfo) return '';
+
+  const sections: string[] = [];
+  sections.push('# Retirement Analysis - Missing Information');
+
+  const paramLabels: Record<string, string> = {
+    currentAge: 'your current age',
+    retirementAge: 'your planned retirement age',
+    annualWithdrawalAmount: 'your desired annual withdrawal amount (in today\'s dollars)',
+    withdrawalStartAge: 'when you plan to start withdrawals'
+  };
+
+  const detectedInfo: string[] = [];
+  if (needsInfo.detectedParams.currentAge) {
+    detectedInfo.push(`Current age: ${needsInfo.detectedParams.currentAge}`);
+  }
+  if (needsInfo.detectedParams.retirementAge) {
+    detectedInfo.push(`Retirement age: ${needsInfo.detectedParams.retirementAge}`);
+  }
+  if (needsInfo.detectedParams.annualWithdrawalAmount) {
+    detectedInfo.push(`Annual withdrawal: $${needsInfo.detectedParams.annualWithdrawalAmount.toLocaleString()}`);
+  }
+  if (needsInfo.detectedParams.withdrawalStartAge) {
+    detectedInfo.push(`Withdrawal start age: ${needsInfo.detectedParams.withdrawalStartAge}`);
+  }
+
+  const missingLabels = needsInfo.missingParams.map(p => paramLabels[p] || p);
+
+  sections.push('## Instructions for Linc');
+  sections.push(
+    'The user asked a retirement-related question, but some required information is missing.\n\n' +
+    'YOU MUST ask the user for the missing information before you can provide retirement analysis.\n\n' +
+    (detectedInfo.length > 0 
+      ? `Information already provided:\n${detectedInfo.map(i => `- ${i}`).join('\n')}\n\n`
+      : '') +
+    `Missing information needed:\n${missingLabels.map(l => `- ${l}`).join('\n')}\n\n` +
+    'Ask the user politely and clearly for this information. Use natural language, not a form.\n' +
+    'Example: "To analyze your retirement portfolio, I need a few details. What is your current age, and how much would you like to withdraw annually in retirement?"\n\n' +
+    'Once the user provides the missing information, you can run the retirement analysis.'
+  );
 
   return sections.join('\n\n');
 }

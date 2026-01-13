@@ -333,15 +333,48 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
 
   // Fetch or create retirement analysis if question is retirement-related
   let retirementAnalysis: FinancialContextSnapshot['retirementAnalysis'] | undefined;
+  let retirementAnalysisNeedsInfo: FinancialContextSnapshot['retirementAnalysisNeedsInfo'] | undefined;
   if (userId && !isDemo && (questionNeeds.needsRetirement || questionNeeds.needsMarketContext) && investmentsSnapshot?.holdings && investmentsSnapshot.holdings.length > 0) {
     try {
-      retirementAnalysis = await fetchOrCreateRetirementAnalysis({
-        userId,
-        question,
-        userProfile: userProfile || '',
-        holdings: investmentsSnapshot.holdings,
-        securities: investmentsSnapshot.securities || []
-      });
+      // First check if we have the required parameters
+      const { parseRetirementQuestion } = await import('../retirement-analytics/retirement-question-parser');
+      const { extractAgeFromProfile, extractRetirementAgeFromProfile } = await import('../retirement-analytics/profile-age-extractor');
+      const questionParams = parseRetirementQuestion(question);
+      const profileAge = extractAgeFromProfile(userProfile || '');
+      const profileRetirementAge = extractRetirementAgeFromProfile(userProfile || '');
+      
+      const currentAge = questionParams.currentAge || profileAge;
+      const retirementAge = questionParams.retirementAge || profileRetirementAge || null;
+      const annualWithdrawalAmount = questionParams.annualWithdrawalAmount;
+      const withdrawalStartAge = questionParams.withdrawalStartAge || retirementAge || null;
+      
+      // Check what's missing
+      const missingParams: Array<'currentAge' | 'retirementAge' | 'annualWithdrawalAmount' | 'withdrawalStartAge'> = [];
+      if (!currentAge) missingParams.push('currentAge');
+      if (!annualWithdrawalAmount) missingParams.push('annualWithdrawalAmount');
+      
+      if (missingParams.length > 0) {
+        // Set needsInfo flag so Linc will ask
+        retirementAnalysisNeedsInfo = {
+          missingParams,
+          detectedParams: {
+            currentAge: currentAge || undefined,
+            retirementAge: retirementAge || undefined,
+            annualWithdrawalAmount: annualWithdrawalAmount || undefined,
+            withdrawalStartAge: withdrawalStartAge || undefined
+          }
+        };
+      } else {
+        // We have all required info, proceed with analysis
+        const result = await fetchOrCreateRetirementAnalysis({
+          userId,
+          question,
+          userProfile: userProfile || '',
+          holdings: investmentsSnapshot.holdings,
+          securities: investmentsSnapshot.securities || []
+        });
+        retirementAnalysis = result;
+      }
     } catch (error) {
       console.error('Error fetching/creating retirement analysis:', error);
       // Don't fail the entire context gathering if retirement analysis fails
@@ -360,7 +393,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     userProfile,
     homeValueSummary,
     financialSummary: financialSummary || undefined,
-    retirementAnalysis
+    retirementAnalysis,
+    retirementAnalysisNeedsInfo
   };
 }
 
@@ -392,13 +426,29 @@ async function fetchOrCreateRetirementAnalysis(args: {
 
   const currentAge = questionParams.currentAge || profileAge;
   const retirementAge = questionParams.retirementAge || profileRetirementAge || null;
+  const annualWithdrawalAmount = questionParams.annualWithdrawalAmount;
+  const withdrawalStartAge = questionParams.withdrawalStartAge || retirementAge || null;
 
-  // If we don't have enough info, we can't run analysis
-  // For now, require at least current age and withdrawal amount
-  // In production, Linc could ask for missing info
-  if (!currentAge || !questionParams.annualWithdrawalAmount) {
-    console.log('Retirement analysis: Missing required parameters (age or withdrawal amount)');
-    return undefined;
+  // Check what's missing
+  const missingParams: Array<'currentAge' | 'retirementAge' | 'annualWithdrawalAmount' | 'withdrawalStartAge'> = [];
+  if (!currentAge) missingParams.push('currentAge');
+  if (!annualWithdrawalAmount) missingParams.push('annualWithdrawalAmount');
+  // retirementAge and withdrawalStartAge are optional (user might already be retired)
+
+  // If we don't have enough info, return a signal for Linc to ask
+  if (missingParams.length > 0) {
+    console.log(`Retirement analysis: Missing required parameters: ${missingParams.join(', ')}`);
+    // Return a special indicator that will trigger Linc to ask for missing info
+    return {
+      needsInfo: true,
+      missingParams,
+      detectedParams: {
+        currentAge: currentAge || undefined,
+        retirementAge: retirementAge || undefined,
+        annualWithdrawalAmount: annualWithdrawalAmount || undefined,
+        withdrawalStartAge: withdrawalStartAge || undefined
+      }
+    } as any; // Cast to any to match the return type, will be handled in prompt builder
   }
 
   // Check for recent analysis in database (within last 7 days)
@@ -473,11 +523,11 @@ async function fetchOrCreateRetirementAnalysis(args: {
     const analysisInput = {
       holdings,
       securities,
-      currentAge,
+      currentAge: currentAge!, // Non-null assertion: validated above
       retirementAge,
       lifeExpectancy: questionParams.lifeExpectancy || 95,
-      annualWithdrawalAmount: questionParams.annualWithdrawalAmount,
-      withdrawalStartAge: questionParams.withdrawalStartAge || retirementAge || currentAge + 20
+      annualWithdrawalAmount: annualWithdrawalAmount!, // Non-null assertion: validated above
+      withdrawalStartAge: withdrawalStartAge || retirementAge || currentAge! + 20
     };
 
     console.log('Running new retirement analysis for user:', userId);

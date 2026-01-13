@@ -123,6 +123,15 @@ export interface FinancialContextSnapshot {
     };
     disclaimers: string[];
   };
+  retirementAnalysisNeedsInfo?: {
+    missingParams: Array<'currentAge' | 'retirementAge' | 'annualWithdrawalAmount' | 'withdrawalStartAge'>;
+    detectedParams: {
+      currentAge?: number;
+      retirementAge?: number | null;
+      annualWithdrawalAmount?: number;
+      withdrawalStartAge?: number;
+    };
+  };
   financialSummary?: {
     financialOverview?: {
       netWorth: number;
