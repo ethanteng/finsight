@@ -10,7 +10,7 @@ services:
       # Optional: set auth method to scram for new clusters
       POSTGRES_INITDB_ARGS: "--auth=scram-sha-256"
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./scripts/db-init:/docker-entrypoint-initdb.d  # put init-user-db.sql here

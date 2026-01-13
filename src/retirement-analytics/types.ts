@@ -1,0 +1,319 @@
+// Retirement Portfolio Analysis Module - Type Definitions
+// Phase 0: Scaffolding & Contracts
+
+import { Holding, Security } from '../services/financial-data-service';
+
+// ============================================================================
+// Input Types (Section 2.1)
+// ============================================================================
+
+export interface RetirementAnalysisInput {
+  // Portfolio data (from FinancialSummarySnapshot)
+  holdings: Holding[];
+  securities: Security[];
+  
+  // User profile (required)
+  currentAge: number;
+  retirementAge: number | null; // null if already retired
+  lifeExpectancy: number; // default: 95 if not provided
+  
+  // Withdrawal assumptions (required)
+  annualWithdrawalAmount: number; // in today's dollars
+  withdrawalStartAge: number; // when withdrawals begin
+  
+  // Optional overrides
+  inflationAssumption?: number; // override FRED data
+  riskTolerance?: 'conservative' | 'moderate' | 'aggressive'; // user preference
+}
+
+// ============================================================================
+// Portfolio Composition Metrics (Section 2.3)
+// ============================================================================
+
+export interface PortfolioCompositionMetrics {
+  equityAllocation: number; // percentage (stocks + stock ETFs)
+  fixedIncomeAllocation: number; // percentage (bonds + bond ETFs)
+  cashAllocation: number; // percentage
+  internationalAllocation: number; // percentage (non-US holdings)
+  concentrationRisk: number; // Herfindahl-Hirschman Index (HHI) across top 10 holdings
+  expenseRatioWeighted: number; // weighted average expense ratio
+}
+
+export interface TimelineMetrics {
+  yearsToRetirement: number; // or negative if retired
+  withdrawalYears: number; // snapped to nearest supported bucket: 10, 20, or 30 years
+  withdrawalYearsOriginal: number; // original user input before snapping
+  withdrawalMonths: number; // withdrawalYears * 12, for simulation granularity
+  timelineBucket: '10' | '20' | '30'; // supported horizon bucket used for analysis
+}
+
+export interface HistoricalPerformanceMetrics {
+  tenYearReturn: number; // median annualized return across 10-year rolling windows
+  tenYearVolatility: number; // median standard deviation of monthly returns across 10-year windows
+  worstDrawdown: number; // maximum peak-to-trough decline observed in 10-year windows
+  inflationAdjustedReturn: number; // median real return (nominal - inflation) across historical windows
+}
+
+export interface WithdrawalSustainabilityMetrics {
+  withdrawalRate: number; // annualWithdrawalAmount / portfolioValue (descriptive, not prescriptive)
+  yearsOfExpenses: number; // portfolioValue / annualWithdrawalAmount
+  historicalWithdrawalRates: {
+    p10: number;
+    p25: number;
+    p50: number;
+    p75: number;
+    p90: number;
+  };
+  withdrawalFailureRate: number; // percentage of historical sequences where portfolio depleted before withdrawal period ended
+  worstCaseDepletionYear: number | null; // year (relative to withdrawal start) when portfolio would deplete in worst historical sequence
+}
+
+// ============================================================================
+// Portfolio Mapping (Section 4.2)
+// ============================================================================
+
+export interface AssetBasket {
+  usEquity: string; // e.g., "VTI" or "SPY" as proxy
+  internationalEquity: string; // e.g., "VXUS" or "EFA" as proxy
+  nominalBonds: string; // e.g., "AGG" or "BND" as proxy
+  cash: string; // "CASHX" or use treasury bill rate
+}
+
+export interface PortfolioMapping {
+  usEquityWeight: number; // 0-1
+  internationalEquityWeight: number; // 0-1
+  nominalBondsWeight: number; // 0-1
+  cashWeight: number; // 0-1
+  mappingConfidence: 'high' | 'medium' | 'low'; // based on how well holdings map
+  unmappedHoldings: string[]; // tickers that couldn't be mapped
+  mappingMethod: 'direct' | 'inferred' | 'proxy'; // how mapping was determined
+}
+
+// ============================================================================
+// Historical Sequences & Outcomes (Section 4.1)
+// ============================================================================
+
+export interface HistoricalSequence {
+  startDate: Date;
+  endDate: Date;
+  sequenceId: string; // e.g., "1970-01_to_1985-01"
+  assetBasketReturns: {
+    usEquity: number[]; // monthly returns
+    internationalEquity: number[]; // monthly returns
+    nominalBonds: number[]; // monthly returns
+    cash: number[]; // monthly returns (near-zero)
+  };
+  inflationRates: number[]; // monthly inflation
+  portfolioOutcome?: PortfolioOutcome; // computed after simulation
+}
+
+export interface PortfolioOutcome {
+  withdrawalSustainability: boolean;
+  yearsUntilDepletion: number | null;
+  finalValue: number; // inflation-adjusted
+  maximumDrawdown: number; // peak-to-trough decline
+  timeToRecovery: number | null; // months until recovery from worst drawdown
+  realReturn: number; // inflation-adjusted annualized return
+}
+
+// ============================================================================
+// Stress Test Results (Section 4.1)
+// ============================================================================
+
+export interface StressTestResult {
+  totalSequences: number;
+  survivalRate: number; // 0-1
+  depletionPercentiles: {
+    p10: number | null;
+    p25: number | null;
+    p50: number | null;
+    p75: number | null;
+    p90: number | null;
+  };
+  worstSequences: {
+    byDepletion: Array<{ sequenceId: string; yearsUntilDepletion: number }>;
+    byDrawdown: Array<{ sequenceId: string; maximumDrawdown: number }>;
+    byRecovery: Array<{ sequenceId: string; timeToRecovery: number }>;
+  };
+  // Named crises only if they appear in worst sequences
+  notablePeriods?: Array<{
+    period: string; // e.g., "2008 Financial Crisis"
+    rank: number; // rank among worst sequences
+    metric: 'depletion' | 'drawdown' | 'recovery';
+  }>;
+  historicalWithdrawalRates: {
+    p10: number;
+    p25: number;
+    p50: number;
+    p75: number;
+    p90: number;
+  };
+}
+
+// ============================================================================
+// Portfolio Characteristics (Section 2.4)
+// ============================================================================
+
+export interface PortfolioCharacteristics {
+  growthPotential: 'high' | 'moderate' | 'low';
+  drawdownResistance: 'high' | 'moderate' | 'low';
+  withdrawalFragility: 'high' | 'moderate' | 'low';
+  inflationProtection: 'high' | 'moderate' | 'low';
+}
+
+export interface PortfolioTradeoffs {
+  upside: string; // What this allocation historically provided
+  downside: string; // What this allocation historically lacked or risked
+}
+
+export interface PortfolioAssessment {
+  characteristics: PortfolioCharacteristics;
+  tradeoffs: PortfolioTradeoffs;
+  primaryObservation: string; // Descriptive, not prescriptive
+}
+
+// ============================================================================
+// Data Quality (Section 6.2)
+// ============================================================================
+
+export interface DataQualityReport {
+  completeness: number; // 0-1 (percentage of holdings with full metadata)
+  priceHistoryCoverage: number; // 0-1 (percentage with 10+ years of data)
+  metadataConfidence: 'high' | 'medium' | 'low'; // based on provider source
+  portfolioMappingConfidence: 'high' | 'medium' | 'low';
+  proxiedValuePercentage: number; // 0-1 (percentage of portfolio value mapped via proxies/inference)
+  proxyUsage: {
+    usEquityProxy: string; // e.g., "VTI"
+    internationalEquityProxy: string; // e.g., "VXUS"
+    bondsProxy: string; // e.g., "AGG"
+    unmappedHoldings: string[];
+    mappingMethod: string;
+  };
+  assumptions: string[]; // Explicit assumptions made during mapping/analysis
+  // Examples:
+  // "Unclassified equity holdings split 70% US / 30% international based on historical averages"
+  // "Bond exposure modeled using nominal bond index proxy"
+  // "Cash holdings assumed to earn treasury bill rate"
+  missingData: string[]; // list of tickers with incomplete data
+}
+
+// ============================================================================
+// Output Format (Section 6.3)
+// ============================================================================
+
+export interface RetirementAnalysisOutput {
+  summary: {
+    characteristics: PortfolioCharacteristics;
+    tradeoffs: PortfolioTradeoffs;
+    primaryObservation: string; // Descriptive, not prescriptive (e.g., "historically fragile given withdrawal timing")
+    confidence: 'high' | 'medium' | 'low'; // Must respect confidence ceiling rules
+    timelineBucket: '10' | '20' | '30';
+    timelineBucketNote: string; // Explanation if original input was snapped
+  };
+  
+  metrics: {
+    equityAllocation: number;
+    withdrawalRate: number; // Descriptive only
+    yearsOfExpenses: number;
+    historicalWithdrawalRates: {
+      p10: number;
+      p25: number;
+      p50: number;
+      p75: number;
+      p90: number;
+    };
+  };
+  
+  stressTest: {
+    totalSequences: number;
+    survivalRate: number; // 0-1
+    depletionPercentiles: {
+      p10: number | null;
+      p25: number | null;
+      p50: number | null;
+      p75: number | null;
+      p90: number | null;
+    };
+    worstSequences: {
+      byDepletion: Array<{ sequenceId: string; yearsUntilDepletion: number }>;
+      byDrawdown: Array<{ sequenceId: string; maximumDrawdown: number }>;
+      byRecovery: Array<{ sequenceId: string; timeToRecovery: number }>;
+    };
+    // Named crises only if they appear in worst sequences
+    notablePeriods?: Array<{
+      period: string; // e.g., "2008 Financial Crisis"
+      rank: number; // rank among worst sequences
+      metric: 'depletion' | 'drawdown' | 'recovery';
+    }>;
+  };
+  
+  historicalImplications: Array<{
+    category: 'allocation' | 'diversification' | 'expenses' | 'withdrawal';
+    observation: string; // Pattern-based observation, conditional on historical data
+    historicalContext: string; // Historical pattern that supports the observation
+  }>;
+  
+  dataQuality: DataQualityReport;
+  
+  disclaimers: string[]; // Pre-formatted disclaimer text
+}
+
+// ============================================================================
+// Price History & Metadata (Section 5.2)
+// ============================================================================
+
+export interface PriceTimeSeries {
+  ticker: string;
+  dates: Date[];
+  prices: number[];
+  returns: number[]; // monthly returns
+  provider: 'polygon' | 'tiingo' | 'alpha_vantage';
+}
+
+export interface SecurityMetadata {
+  tickerSymbol: string;
+  securityName: string;
+  assetClass?: string; // 'Equity', 'Fixed Income', 'Cash'
+  fundCategory?: string; // 'Large Cap Blend', etc.
+  expenseRatio?: number;
+  geographicFocus?: string; // 'US', 'International', 'Global'
+  isETF: boolean;
+  provider: 'fmp' | 'inferred';
+  lastUpdated: Date;
+}
+
+export interface PriceHistory {
+  ticker: string;
+  startDate: Date;
+  endDate: Date;
+  data: PriceTimeSeries;
+}
+
+// ============================================================================
+// Portfolio Snapshot (Section 5.2)
+// ============================================================================
+
+export interface PortfolioSnapshot {
+  holdings: Holding[];
+  securities: Security[];
+  totalValue: number;
+  computedAt: Date;
+}
+
+// ============================================================================
+// Internal Heuristics (Section 2.3 - not exposed to users)
+// ============================================================================
+
+export interface InternalHeuristics {
+  _internalEquityRiskHeuristic: number; // internal only, used for sorting/comparison
+  _internalSequenceRiskHeuristic: number; // internal only, used for identifying worst-case sequences
+}
+
+// ============================================================================
+// Helper Types
+// ============================================================================
+
+export type ConfidenceLevel = 'high' | 'medium' | 'low';
+export type TimelineBucket = '10' | '20' | '30';
+export type CharacteristicLevel = 'high' | 'moderate' | 'low';
+export type MappingMethod = 'direct' | 'inferred' | 'proxy';

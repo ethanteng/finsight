@@ -18,7 +18,7 @@ fi
 
 if [ -z "$LOCAL_DATABASE_URL" ]; then
     echo "❌ LOCAL_DATABASE_URL not set. Please set it to your local database URL."
-    echo "   export LOCAL_DATABASE_URL='postgresql://postgres:postgres@localhost:5432/finsight'"
+    echo "   export LOCAL_DATABASE_URL='postgresql://postgres:postgres@localhost:5433/finsight'"
     exit 1
 fi
 
@@ -37,7 +37,7 @@ docker volume ls | grep -i finsight | awk '{print $2}' | xargs -I {} docker volu
 
 # Recreate the container fresh
 echo "   Creating fresh Docker container..."
-docker run --name finsight-postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=finsight -p 5432:5432 -d postgres:15
+docker run --name finsight-postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=finsight -p 5433:5432 -d postgres:15
 
 # Wait for it to be ready
 echo "   Waiting for database to be ready..."

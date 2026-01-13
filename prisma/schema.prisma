@@ -35,6 +35,7 @@ model User {
   financialSummary       FinancialSummary?
   financialSummarySnapshot FinancialSummarySnapshot?
   financialSummaryHistory FinancialSummaryHistory[]
+  retirementAnalyses     RetirementAnalysis[]
 
   @@map("users")
 }
@@ -461,4 +462,67 @@ model ManualAccount {
 
   @@index([userId])
   @@map("manual_accounts")
+}
+
+/// Retirement portfolio analysis results
+model RetirementAnalysis {
+  id                    String   @id @default(cuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Input snapshot (denormalized for reproducibility)
+  analysisInput         Json     // Full RetirementAnalysisInput
+  portfolioSnapshot     Json     // Holdings + securities at analysis time
+  
+  // Computed metrics
+  portfolioMetrics      Json     // Core metrics (equityAllocation, etc.)
+  characteristics       Json     // Portfolio characteristics and tradeoffs (not risk levels)
+  stressTestResults     Json     // Historical scenario results
+  historicalImplications Json     // Pattern-based observations, not prescriptive recommendations
+  
+  // Metadata
+  computedAt            DateTime @default(now())
+  dataQualityScore      Float    // 0-1 confidence in data completeness
+  expiresAt             DateTime // When analysis becomes stale
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  
+  @@index([userId, computedAt])
+  @@map("retirement_analyses")
+}
+
+/// Historical asset price data cache
+model AssetPriceHistory {
+  id            String   @id @default(cuid())
+  tickerSymbol   String
+  date           DateTime
+  open           Float
+  high           Float
+  low            Float
+  close          Float
+  adjustedClose  Float?   // Dividend/split adjusted (from Tiingo)
+  volume         BigInt
+  provider       String   // 'polygon', 'tiingo', 'alpha_vantage'
+  cachedAt       DateTime @default(now())
+  
+  @@unique([tickerSymbol, date, provider])
+  @@index([tickerSymbol, date])
+  @@map("asset_price_history")
+}
+
+/// Security metadata cache (ETF/fund classifications)
+model SecurityMetadata {
+  id                String   @id @default(cuid())
+  tickerSymbol      String   @unique
+  securityName      String
+  assetClass        String?  // 'Equity', 'Fixed Income', 'Cash'
+  fundCategory      String?  // 'Large Cap Blend', etc.
+  expenseRatio      Float?
+  geographicFocus   String?  // 'US', 'International', 'Global'
+  isETF             Boolean  @default(false)
+  provider          String   // 'fmp', 'inferred'
+  lastUpdated       DateTime @default(now())
+  
+  @@map("security_metadata")
 }

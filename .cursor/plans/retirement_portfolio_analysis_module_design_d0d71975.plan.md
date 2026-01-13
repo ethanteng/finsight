@@ -4,7 +4,7 @@ overview: Design a production-grade standalone analytics module for retirement p
 todos:
   - id: data-providers
     content: Implement Tiingo and FMP data providers with caching and fallback logic
-    status: pending
+    status: completed
   - id: data-model
     content: Create Prisma schema extensions for RetirementAnalysis, AssetPriceHistory, and SecurityMetadata tables
     status: pending
@@ -19,7 +19,7 @@ todos:
     status: pending
   - id: stress-tester
     content: Build rolling window stress testing engine with fixed horizon bucket support (10/20/30 years) and input snapping
-    status: pending
+    status: in_progress
   - id: withdrawal-simulator
     content: Implement withdrawal sustainability calculator using historical return sequences
     status: pending
@@ -34,7 +34,7 @@ todos:
     status: pending
   - id: llm-integration
     content: Integrate retirement analysis output into existing prompt-builder system
-    status: pending
+    status: completed
 ---
 
 # Retirement Portfolio Analysis Module Design

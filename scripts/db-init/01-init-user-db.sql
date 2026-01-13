@@ -32,4 +32,4 @@ ALTER USER postgres CREATEDB;
 \echo 'Database: finsight'
 \echo 'User: postgres'
 \echo 'Password: postgres'
-\echo 'Connection string: postgresql://postgres:postgres@localhost:5432/finsight'
+\echo 'Connection string: postgresql://postgres:postgres@localhost:5433/finsight'

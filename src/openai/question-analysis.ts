@@ -40,11 +40,21 @@ export function analyzeQuestionNeeds(question: string): QuestionNeeds {
     qLower.includes('stock') ||
     qLower.includes('securities');
 
+  const needsRetirement =
+    qLower.includes('retirement') ||
+    qLower.includes('retire') ||
+    qLower.includes('withdrawal') ||
+    qLower.includes('retirement planning') ||
+    qLower.includes('retirement readiness') ||
+    qLower.includes('sustainable withdrawal') ||
+    qLower.includes('retirement portfolio');
+
   return {
     needsMarketContext,
     needsSearchContext,
     needsHomeValue,
-    needsInvestments
+    needsInvestments,
+    needsRetirement
   };
 }
 

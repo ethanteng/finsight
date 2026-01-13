@@ -135,6 +135,16 @@ function buildSystemPrompt(snapshot: FinancialContextSnapshot): string {
     sections.push(`# Investments\n${investmentSummary}`);
   }
 
+  // Add retirement analysis if available
+  if (snapshot.retirementAnalysis) {
+    sections.push(formatRetirementAnalysis(snapshot.retirementAnalysis));
+  }
+
+  // Add retirement analysis info request if parameters are missing
+  if (snapshot.retirementAnalysisNeedsInfo) {
+    sections.push(formatRetirementAnalysisInfoRequest(snapshot.retirementAnalysisNeedsInfo));
+  }
+
   sections.push(buildTierDetails(snapshot));
 
   const fullPrompt = sections.join('\n\n').trim();
@@ -278,6 +288,171 @@ function formatInvestmentSummary(investments: FinancialContextSnapshot['investme
   }
   
   return header;
+}
+
+/**
+ * Format retirement analysis for LLM consumption
+ * Includes explicit instructions for descriptive-only language
+ */
+function formatRetirementAnalysis(analysis: FinancialContextSnapshot['retirementAnalysis']): string {
+  if (!analysis) return '';
+
+  const sections: string[] = [];
+
+  sections.push('# Retirement Portfolio Analysis');
+  
+  sections.push('## Analysis Instructions');
+  sections.push(
+    'IMPORTANT: When discussing retirement portfolio analysis:\n' +
+    '1. Use descriptive language from summary.characteristics. Avoid categorical terms like "too risky" or "too conservative."\n' +
+    '2. Frame observations in terms of historical ranges and percentiles, not single numbers. Use "median historical outcome" or "typical result across sequences" instead of "expected returns" or "average returns."\n' +
+    '3. Never claim certainty about future performance. Always use phrases like "based on historical patterns" or "historical data suggests" or "historical central tendency shows."\n' +
+    '4. Every portfolio characterization must include both an upside and a downside tradeoff. Never present a characteristic without its corresponding tradeoff.\n' +
+    '5. Never reference the "4% rule" or present any withdrawal rate as normative or safe.\n' +
+    '6. When discussing worst sequences, only mention named historical periods if they appear in stressTest.notablePeriods.\n' +
+    '7. Always emphasize that past performance does not predict future results.\n' +
+    '8. Use "historically wide buffer" or "historically high survivability" instead of "margin of safety" or "exceptional sustainability."\n' +
+    '9. Never suggest specific securities. Only discuss general allocation principles.\n' +
+    '10. If dataQuality.completeness < 0.8, state: "Analysis based on partial data. Some holdings may have incomplete information."\n' +
+    '11. If dataQuality.metadataConfidence === "low", state: "Some security classifications were inferred and may be inaccurate."\n' +
+    '12. If dataQuality.portfolioMappingConfidence === "low" or "medium", state: "Portfolio mapped to historical asset classes using proxies. Some holdings may not perfectly match historical indices."\n' +
+    '13. If dataQuality.assumptions.length > 0, explicitly state: "Analysis assumptions: [list assumptions from dataQuality.assumptions]"\n' +
+    '14. If survival rate is in lower tercile relative to portfolios with similar equity allocations and horizon, describe as "historically fragile given withdrawal timing" rather than "too risky."'
+  );
+
+  sections.push('## Portfolio Characteristics');
+  sections.push(
+    `Growth Potential: ${analysis.summary.characteristics.growthPotential}\n` +
+    `Drawdown Resistance: ${analysis.summary.characteristics.drawdownResistance}\n` +
+    `Withdrawal Fragility: ${analysis.summary.characteristics.withdrawalFragility}\n` +
+    `Inflation Protection: ${analysis.summary.characteristics.inflationProtection}\n` +
+    `Confidence: ${analysis.summary.confidence}`
+  );
+
+  sections.push('## Tradeoffs');
+  sections.push(
+    `Upside: ${analysis.summary.tradeoffs.upside}\n` +
+    `Downside: ${analysis.summary.tradeoffs.downside}`
+  );
+
+  sections.push('## Primary Observation');
+  sections.push(analysis.summary.primaryObservation);
+
+  sections.push('## Portfolio Metrics');
+  sections.push(
+    `Equity Allocation: ${analysis.metrics.equityAllocation.toFixed(1)}%\n` +
+    `Withdrawal Rate: ${(analysis.metrics.withdrawalRate * 100).toFixed(2)}%\n` +
+    `Years of Expenses: ${analysis.metrics.yearsOfExpenses.toFixed(1)} years\n` +
+    `Historical Sustainable Withdrawal Rates (percentiles):\n` +
+    `  - 10th percentile: ${(analysis.metrics.historicalWithdrawalRates.p10 * 100).toFixed(2)}%\n` +
+    `  - 25th percentile: ${(analysis.metrics.historicalWithdrawalRates.p25 * 100).toFixed(2)}%\n` +
+    `  - 50th percentile (median): ${(analysis.metrics.historicalWithdrawalRates.p50 * 100).toFixed(2)}%\n` +
+    `  - 75th percentile: ${(analysis.metrics.historicalWithdrawalRates.p75 * 100).toFixed(2)}%\n` +
+    `  - 90th percentile: ${(analysis.metrics.historicalWithdrawalRates.p90 * 100).toFixed(2)}%`
+  );
+
+  sections.push('## Stress Test Results');
+  sections.push(
+    `Total Historical Sequences Analyzed: ${analysis.stressTest.totalSequences}\n` +
+    `Survival Rate: ${(analysis.stressTest.survivalRate * 100).toFixed(1)}% of sequences sustained withdrawals\n` +
+    `Depletion Percentiles (years until depletion):\n` +
+    `  - 10th percentile: ${analysis.stressTest.depletionPercentiles.p10?.toFixed(1) || 'N/A'} years\n` +
+    `  - 25th percentile: ${analysis.stressTest.depletionPercentiles.p25?.toFixed(1) || 'N/A'} years\n` +
+    `  - 50th percentile (median): ${analysis.stressTest.depletionPercentiles.p50?.toFixed(1) || 'N/A'} years\n` +
+    `  - 75th percentile: ${analysis.stressTest.depletionPercentiles.p75?.toFixed(1) || 'N/A'} years\n` +
+    `  - 90th percentile: ${analysis.stressTest.depletionPercentiles.p90?.toFixed(1) || 'N/A'} years`
+  );
+
+  if (analysis.stressTest.notablePeriods && analysis.stressTest.notablePeriods.length > 0) {
+    sections.push('## Notable Historical Periods');
+    sections.push(
+      'The following historical periods appeared among worst-case sequences:\n' +
+      analysis.stressTest.notablePeriods.map(np => 
+        `- ${np.period} (ranked #${np.rank} by ${np.metric})`
+      ).join('\n')
+    );
+  }
+
+  if (analysis.historicalImplications.length > 0) {
+    sections.push('## Historical Implications');
+    sections.push(
+      analysis.historicalImplications.map(impl => 
+        `${impl.category.toUpperCase()}: ${impl.observation}\nHistorical Context: ${impl.historicalContext}`
+      ).join('\n\n')
+    );
+  }
+
+  sections.push('## Data Quality');
+  sections.push(
+    `Completeness: ${(analysis.dataQuality.completeness * 100).toFixed(1)}%\n` +
+    `Price History Coverage: ${(analysis.dataQuality.priceHistoryCoverage * 100).toFixed(1)}%\n` +
+    `Metadata Confidence: ${analysis.dataQuality.metadataConfidence}\n` +
+    `Portfolio Mapping Confidence: ${analysis.dataQuality.portfolioMappingConfidence}\n` +
+    `Proxied Value Percentage: ${(analysis.dataQuality.proxiedValuePercentage * 100).toFixed(1)}%`
+  );
+
+  if (analysis.dataQuality.assumptions.length > 0) {
+    sections.push('## Analysis Assumptions');
+    sections.push(analysis.dataQuality.assumptions.join('\n'));
+  }
+
+  if (analysis.summary.timelineBucketNote) {
+    sections.push(`## Timeline Note\n${analysis.summary.timelineBucketNote}`);
+  }
+
+  sections.push('## Disclaimers');
+  sections.push(analysis.disclaimers.join('\n'));
+
+  return sections.join('\n\n');
+}
+
+/**
+ * Format retirement analysis info request for LLM
+ * Instructs Linc to ask user for missing retirement analysis parameters
+ */
+function formatRetirementAnalysisInfoRequest(needsInfo: FinancialContextSnapshot['retirementAnalysisNeedsInfo']): string {
+  if (!needsInfo) return '';
+
+  const sections: string[] = [];
+  sections.push('# Retirement Analysis - Missing Information');
+
+  const paramLabels: Record<string, string> = {
+    currentAge: 'your current age',
+    retirementAge: 'your planned retirement age',
+    annualWithdrawalAmount: 'your desired annual withdrawal amount (in today\'s dollars)',
+    withdrawalStartAge: 'when you plan to start withdrawals'
+  };
+
+  const detectedInfo: string[] = [];
+  if (needsInfo.detectedParams.currentAge) {
+    detectedInfo.push(`Current age: ${needsInfo.detectedParams.currentAge}`);
+  }
+  if (needsInfo.detectedParams.retirementAge) {
+    detectedInfo.push(`Retirement age: ${needsInfo.detectedParams.retirementAge}`);
+  }
+  if (needsInfo.detectedParams.annualWithdrawalAmount) {
+    detectedInfo.push(`Annual withdrawal: $${needsInfo.detectedParams.annualWithdrawalAmount.toLocaleString()}`);
+  }
+  if (needsInfo.detectedParams.withdrawalStartAge) {
+    detectedInfo.push(`Withdrawal start age: ${needsInfo.detectedParams.withdrawalStartAge}`);
+  }
+
+  const missingLabels = needsInfo.missingParams.map(p => paramLabels[p] || p);
+
+  sections.push('## Instructions for Linc');
+  sections.push(
+    'The user asked a retirement-related question, but some required information is missing.\n\n' +
+    'YOU MUST ask the user for the missing information before you can provide retirement analysis.\n\n' +
+    (detectedInfo.length > 0 
+      ? `Information already provided:\n${detectedInfo.map(i => `- ${i}`).join('\n')}\n\n`
+      : '') +
+    `Missing information needed:\n${missingLabels.map(l => `- ${l}`).join('\n')}\n\n` +
+    'Ask the user politely and clearly for this information. Use natural language, not a form.\n' +
+    'Example: "To analyze your retirement portfolio, I need a few details. What is your current age, and how much would you like to withdraw annually in retirement?"\n\n' +
+    'Once the user provides the missing information, you can run the retirement analysis.'
+  );
+
+  return sections.join('\n\n');
 }
 
 function buildTierDetails(snapshot: FinancialContextSnapshot): string {

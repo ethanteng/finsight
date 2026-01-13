@@ -42,7 +42,7 @@ else
 fi
 
 # Set local database URL to use the Docker container
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/finsight"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/finsight"
 export DATABASE_URL
 
 echo "✅ Using local development database: $DATABASE_URL"
