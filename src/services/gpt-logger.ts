@@ -154,6 +154,7 @@ async function cleanupOldLogs(logDir: string, userId: string, keepCount: number 
 
 /**
  * Get the latest GPT context for a user
+ * FIXED: Now sorts by timestamp in JSON content instead of file modification time
  */
 export async function getLatestGPTContext(userId: string): Promise<any | null> {
   try {
@@ -170,15 +171,56 @@ export async function getLatestGPTContext(userId: string): Promise<any | null> {
     console.log(`GPT Logger: All files in ${logDir}:`, allFiles);
     console.log(`GPT Logger: Looking for files matching: gpt-context-${userId}-*.json`);
     
+    // Helper function to get timestamp from file (from JSON content or filename)
+    const getFileTimestamp = (filePath: string, fileName: string): number => {
+      try {
+        // First try to read timestamp from JSON content (most reliable)
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const parsed = JSON.parse(content);
+        if (parsed.timestamp) {
+          return new Date(parsed.timestamp).getTime();
+        }
+      } catch (e) {
+        // If reading JSON fails, fall back to filename parsing
+      }
+      
+      // Fallback: parse timestamp from filename (format: gpt-context-{userId}-{timestamp}.json)
+      // Timestamp format in filename: YYYY-MM-DDTHH-MM-SS-MMMZ (ISO with colons/dots replaced by dashes)
+      // FIXED: Use non-greedy match for userId and specific pattern for timestamp to handle userIds with dashes
+      try {
+        // Match: gpt-context-{userId}-{timestamp}.json
+        // Group 1: userId (non-greedy, can contain dashes)
+        // Group 2: timestamp (specific pattern starting with 4-digit year)
+        const match = fileName.match(/^gpt-context-(.+?)-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z?)\.json$/);
+        if (match && match[2]) {
+          // Convert filename timestamp back to ISO format
+          // Replace dashes with colons/dots: YYYY-MM-DDTHH-MM-SS-MMMZ -> YYYY-MM-DDTHH:MM:SS.MMMZ
+          const timestampStr = match[2].replace(/(\d{4}-\d{2}-\d{2}T\d{2})-(\d{2})-(\d{2})-(\d{3})(Z?)/, '$1:$2:$3.$4$5');
+          const date = new Date(timestampStr);
+          if (!isNaN(date.getTime())) {
+            return date.getTime();
+          }
+        }
+      } catch (e) {
+        // If filename parsing fails, use file modification time as last resort
+      }
+      
+      // Last resort: use file modification time
+      return fs.statSync(filePath).mtime.getTime();
+    };
+    
     // First try exact match
     let files = allFiles
       .filter(file => file.startsWith(`gpt-context-${userId}-`) && file.endsWith('.json'))
-      .map(file => ({
-        name: file,
-        path: path.join(logDir, file),
-        stat: fs.statSync(path.join(logDir, file)),
-      }))
-      .sort((a, b) => b.stat.mtime.getTime() - a.stat.mtime.getTime()); // Sort by modified time, newest first
+      .map(file => {
+        const filePath = path.join(logDir, file);
+        return {
+          name: file,
+          path: filePath,
+          timestamp: getFileTimestamp(filePath, file),
+        };
+      })
+      .sort((a, b) => b.timestamp - a.timestamp); // Sort by timestamp, newest first
     
     console.log(`GPT Logger: Found ${files.length} matching files for user ${userId}`);
     
@@ -188,12 +230,15 @@ export async function getLatestGPTContext(userId: string): Promise<any | null> {
       // Get all context files and return the most recent one
       files = allFiles
         .filter(file => file.startsWith('gpt-context-') && file.endsWith('.json'))
-        .map(file => ({
-          name: file,
-          path: path.join(logDir, file),
-          stat: fs.statSync(path.join(logDir, file)),
-        }))
-        .sort((a, b) => b.stat.mtime.getTime() - a.stat.mtime.getTime()); // Sort by modified time, newest first
+        .map(file => {
+          const filePath = path.join(logDir, file);
+          return {
+            name: file,
+            path: filePath,
+            timestamp: getFileTimestamp(filePath, file),
+          };
+        })
+        .sort((a, b) => b.timestamp - a.timestamp); // Sort by timestamp, newest first
       
       console.log(`GPT Logger: Fuzzy match found ${files.length} total context files`);
     }
@@ -202,10 +247,15 @@ export async function getLatestGPTContext(userId: string): Promise<any | null> {
       return null;
     }
     
-    // Read and return the latest file
+    // Read and return the latest file (sorted by timestamp)
     const latestFile = files[0];
     const content = fs.readFileSync(latestFile.path, 'utf-8');
-    return JSON.parse(content);
+    const parsed = JSON.parse(content);
+    
+    // Log the timestamp for debugging
+    console.log(`GPT Logger: Returning context with timestamp: ${parsed.timestamp}`);
+    
+    return parsed;
   } catch (error) {
     console.error('GPT Logger: Error reading latest context:', error);
     return null;

@@ -19,13 +19,19 @@ export class DatabaseCache {
     provider: string = 'tiingo'
   ): Promise<PriceTimeSeries | null> {
     try {
-      // First try: exact date range match
+      // FIXED: Query for one month before startDate to get reference point for first return calculation
+      // This ensures we can calculate returns for all months in the requested range while matching
+      // Tiingo format (all arrays same length after slicing)
+      const queryStartDate = new Date(startDate);
+      queryStartDate.setMonth(queryStartDate.getMonth() - 1);
+      
+      // First try: query with one month lookback to get reference point
       const records = await this.prisma.assetPriceHistory.findMany({
         where: {
           tickerSymbol: ticker,
           provider: provider,
           date: {
-            gte: startDate,
+            gte: queryStartDate, // Include one month before for reference
             lte: endDate
           }
         },
@@ -34,17 +40,20 @@ export class DatabaseCache {
         }
       });
 
-      // If we have records within the requested range, return them
-      // The query filters to date >= startDate AND date <= endDate,
-      // so any records returned are within the requested range
-      if (records.length > 0) {
+      // Filter to requested range (startDate to endDate) for the final output
+      // The extra month before is only used for calculating the first return
+      const requestedRecords = records.filter(r => r.date >= startDate && r.date <= endDate);
+      
+      if (requestedRecords.length > 0) {
+        // Pass all records (including reference month) to conversion function
+        // It will use the reference month to calculate first return, then slice to match Tiingo format
         return this.convertRecordsToTimeSeries(records, ticker, startDate, endDate, provider);
       }
 
       // Second try: check if we have broader range that covers the requested range
       // OPTIMIZATION: Limit lookback to 50 years to avoid fetching millions of records
       const maxLookbackYears = 50;
-      const minLookbackDate = new Date(startDate);
+      const minLookbackDate = new Date(queryStartDate);
       minLookbackDate.setFullYear(minLookbackDate.getFullYear() - maxLookbackYears);
       
       const broaderRecords = await this.prisma.assetPriceHistory.findMany({
@@ -65,9 +74,9 @@ export class DatabaseCache {
         const earliestDate = broaderRecords[0].date;
         const latestDate = broaderRecords[broaderRecords.length - 1].date;
         
-        // If we have data that covers the requested range, slice it
-        if (earliestDate <= startDate && latestDate >= endDate) {
-          const filteredRecords = broaderRecords.filter(r => r.date >= startDate && r.date <= endDate);
+        // If we have data that covers the requested range (with reference month), use it
+        if (earliestDate <= queryStartDate && latestDate >= endDate) {
+          const filteredRecords = broaderRecords.filter(r => r.date >= queryStartDate && r.date <= endDate);
           if (filteredRecords.length > 0) {
             return this.convertRecordsToTimeSeries(filteredRecords, ticker, startDate, endDate, provider);
           }
@@ -83,8 +92,19 @@ export class DatabaseCache {
 
   /**
    * Convert database records to PriceTimeSeries format
-   * Matches Tiingo provider format: N-1 elements for dates, prices, and returns
-   * (returns are calculated between dates, so there's one fewer return than dates)
+   * FIXED: Now matches Tiingo provider format (all arrays same length) for compatibility with
+   * sliceAssetBasketReturns and other code that expects this format.
+   * 
+   * The records parameter may include one month before startDate (reference point for first return).
+   * We filter to the requested range, calculate returns, then slice to match Tiingo format where
+   * all arrays have the same length. This ensures:
+   * 1. No data loss - all months in requested range are included
+   * 2. Format compatibility - matches Tiingo format expected by sliceAssetBasketReturns
+   * 
+   * Format: dates, prices, and returns all have length N-1 (after slicing)
+   * - dates[i] = end date of period i (second month onwards in requested range)
+   * - prices[i] = price at end of period i
+   * - returns[i] = return from dates[i-1] to dates[i] (where dates[-1] is the reference month)
    */
   private convertRecordsToTimeSeries(
     records: any[],
@@ -97,19 +117,65 @@ export class DatabaseCache {
       throw new Error('Cannot convert empty records to PriceTimeSeries');
     }
 
+    // Filter records to requested range (startDate to endDate)
+    // Records may include one month before startDate for reference, which we'll use but not include in output
+    const requestedRecords = records.filter(r => r.date >= startDate && r.date <= endDate);
+    
+    if (requestedRecords.length === 0) {
+      throw new Error('No records in requested date range');
+    }
+
+    // Check if we have a reference month (one month before startDate) for calculating first return
+    // This must be checked BEFORE minimum record validation, as a reference record allows
+    // valid output with just 1 requested record (dates=[1], prices=[1], returns=[1] from reference)
+    const referenceRecord = records.find(r => {
+      const refDate = new Date(startDate);
+      refDate.setMonth(refDate.getMonth() - 1);
+      // Check if record date is in the same month as reference month
+      return r.date.getFullYear() === refDate.getFullYear() && 
+             r.date.getMonth() === refDate.getMonth();
+    });
+
+    // FIXED: Check minimum record count AFTER checking for reference record
+    // With reference record: 1 requested record is valid (can calculate return from reference)
+    // Without reference record: need at least 2 records (to calculate 1 return, then slice to match format)
+    // - With 1 record + reference: dates=[1], prices=[1], returns=[1] ✅ (all length 1, valid)
+    // - With 1 record + no reference: dates=[1], prices=[1], returns=[0], after slice: all empty ❌
+    // - With 2 records + no reference: dates=[2], prices=[2], returns=[1], after slice: dates=[1], prices=[1], returns=[1] ✅
+    if (!referenceRecord && requestedRecords.length < 2) {
+      throw new Error(
+        `Insufficient records for time series conversion: need at least 2 records in date range (or 1 record with reference month), ` +
+        `got ${requestedRecords.length} record(s) without reference month. ` +
+        `This violates Tiingo format contract which requires non-empty aligned arrays.`
+      );
+    }
+
     const dates: Date[] = [];
     const prices: number[] = [];
     const returns: number[] = [];
 
-    // Build dates and prices arrays (one per record)
-    for (let i = 0; i < records.length; i++) {
-      const record = records[i];
+    // Build dates and prices arrays from requested records
+    for (let i = 0; i < requestedRecords.length; i++) {
+      const record = requestedRecords[i];
       dates.push(record.date);
       prices.push(record.adjustedClose || record.close);
     }
 
-    // Calculate monthly returns (one fewer than dates/prices)
-    // This matches Tiingo provider format where returns are between dates
+    // Calculate monthly returns
+    // If we have a reference record, use it to calculate the first return
+    // This ensures we can calculate returns for all months in the requested range
+    if (referenceRecord && dates.length > 0) {
+      // Use reference month to calculate first return (from reference month to first month in range)
+      const refPrice = referenceRecord.adjustedClose || referenceRecord.close;
+      if (refPrice > 0 && prices[0] > 0) {
+        const firstReturn = (prices[0] - refPrice) / refPrice;
+        returns.push(firstReturn);
+      } else {
+        returns.push(0);
+      }
+    }
+
+    // Calculate remaining returns between consecutive dates in requested range
     for (let i = 1; i < prices.length; i++) {
       if (prices[i - 1] > 0) {
         const monthlyReturn = (prices[i] - prices[i - 1]) / prices[i - 1];
@@ -119,15 +185,56 @@ export class DatabaseCache {
       }
     }
 
-    // Align dates and prices with returns (remove first element to match returns length)
-    // This matches Tiingo provider: dates.slice(1), prices.slice(1), returns
-    return {
-      ticker,
-      dates: dates.slice(1), // Remove first date to align with returns
-      prices: prices.slice(1), // Remove first price to align with returns
-      returns,
-      provider: provider as 'polygon' | 'tiingo' | 'alpha_vantage'
-    };
+    // FIXED: When we have a reference month, we can calculate returns for ALL dates in the requested range
+    // Format: dates[i] and prices[i] correspond to returns[i], where returns[i] is the return TO dates[i]
+    // - returns[0] = return from reference month TO dates[0] (first month in requested range)
+    // - returns[1] = return from dates[0] TO dates[1] (second month)
+    // - etc.
+    // This preserves all requested months and matches Tiingo format (all arrays same length)
+    if (referenceRecord && returns.length === dates.length) {
+      // We have returns for all dates including first month - no slicing needed!
+      // All arrays already have the same length, matching Tiingo format
+      // This preserves the requested date range (no data loss)
+      if (dates.length === 0 || prices.length === 0 || returns.length === 0) {
+        throw new Error('Internal error: empty arrays despite validation');
+      }
+      
+      return {
+        ticker,
+        dates, // All dates in requested range (preserved)
+        prices, // All prices in requested range (preserved)
+        returns, // Returns for all periods (same length as dates/prices)
+        provider: provider as 'polygon' | 'tiingo' | 'alpha_vantage'
+      };
+    } else {
+      // No reference month - we're missing the first return
+      // We must slice dates/prices to match returns length (Tiingo format requirement)
+      // This causes data loss of the first month, but it's unavoidable without a reference
+      if (returns.length === 0) {
+        throw new Error(`Cannot produce valid time series: no returns calculated. Need at least 2 records or a reference month to calculate returns.`);
+      }
+      
+      const slicedDates = dates.slice(1);
+      const slicedPrices = prices.slice(1);
+      
+      // Final validation: ensure we have non-empty arrays
+      if (slicedDates.length === 0 || slicedPrices.length === 0 || returns.length === 0) {
+        throw new Error('Internal error: slicing resulted in empty arrays despite validation');
+      }
+      
+      // Validate that sliced arrays match returns length
+      if (slicedDates.length !== returns.length || slicedPrices.length !== returns.length) {
+        throw new Error(`Internal error: array length mismatch after slicing. dates: ${slicedDates.length}, prices: ${slicedPrices.length}, returns: ${returns.length}`);
+      }
+      
+      return {
+        ticker,
+        dates: slicedDates, // First month lost (unavoidable without reference)
+        prices: slicedPrices, // First month lost (unavoidable without reference)
+        returns, // Returns start from second month
+        provider: provider as 'polygon' | 'tiingo' | 'alpha_vantage'
+      };
+    }
   }
 
   /**

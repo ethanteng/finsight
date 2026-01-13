@@ -178,24 +178,77 @@ function sliceAssetBasketReturns(
     throw new Error(`Date range ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]} not available in asset basket data`);
   }
   
+  // FIXED: Validate date alignment between assets before slicing
+  // Extract the actual dates in each range to verify they match
+  const usDates = usEquityFull.dates.slice(usRange.startIdx, usRange.endIdx + 1);
+  const intlDates = intlEquityFull.dates.slice(intlRange.startIdx, intlRange.endIdx + 1);
+  const bondsDates = bondsFull.dates.slice(bondsRange.startIdx, bondsRange.endIdx + 1);
+  
+  // Validate that all three assets have the same dates in the requested range
+  // This ensures returns are aligned and prevents false zero returns from padding
+  if (usDates.length !== intlDates.length || usDates.length !== bondsDates.length) {
+    throw new Error(
+      `Date misalignment detected in asset basket data for range ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}: ` +
+      `VTI has ${usDates.length} data points, VXUS has ${intlDates.length}, AGG has ${bondsDates.length}. ` +
+      `All assets must have the same dates in the requested range to ensure aligned returns.`
+    );
+  }
+  
+  // Validate that dates match exactly (not just count)
+  // FIXED: Use UTC date normalization to avoid timezone-dependent comparisons
+  // Comparing date strings (YYYY-MM-DD) is timezone-independent and more reliable
+  for (let i = 0; i < usDates.length; i++) {
+    const usDate = usDates[i];
+    const intlDate = intlDates[i];
+    const bondsDate = bondsDates[i];
+    
+    // Extract date strings (YYYY-MM-DD) for timezone-independent comparison
+    // This compares the calendar date, ignoring time-of-day and timezone
+    const usDateStr = `${usDate.getUTCFullYear()}-${String(usDate.getUTCMonth() + 1).padStart(2, '0')}-${String(usDate.getUTCDate()).padStart(2, '0')}`;
+    const intlDateStr = `${intlDate.getUTCFullYear()}-${String(intlDate.getUTCMonth() + 1).padStart(2, '0')}-${String(intlDate.getUTCDate()).padStart(2, '0')}`;
+    const bondsDateStr = `${bondsDate.getUTCFullYear()}-${String(bondsDate.getUTCMonth() + 1).padStart(2, '0')}-${String(bondsDate.getUTCDate()).padStart(2, '0')}`;
+    
+    if (usDateStr !== intlDateStr || usDateStr !== bondsDateStr) {
+      throw new Error(
+        `Date misalignment at index ${i} in asset basket data: ` +
+        `VTI date=${usDateStr}, ` +
+        `VXUS date=${intlDateStr}, ` +
+        `AGG date=${bondsDateStr}. ` +
+        `All assets must have identical dates at each index.`
+      );
+    }
+  }
+  
   // Slice returns arrays for the date range
-  // IMPORTANT: Returns are calculated between dates, so if we have dates[startIdx:endIdx+1],
-  // we need returns[startIdx:endIdx] (one fewer return than dates)
-  // Example: dates[1:4] = [d1, d2, d3] (3 dates) needs returns[1:3] = [r1, r2] (2 returns between the 3 dates)
-  const usEquity = usEquityFull.returns.slice(usRange.startIdx, usRange.endIdx);
-  const internationalEquity = intlEquityFull.returns.slice(intlRange.startIdx, intlRange.endIdx);
-  const nominalBonds = bondsFull.returns.slice(bondsRange.startIdx, bondsRange.endIdx);
+  // IMPORTANT: Returns are calculated between dates, so if we have dates[startIdx:endIdx] (inclusive),
+  // we need returns[startIdx:endIdx] (inclusive) to cover all returns between those dates
+  // Since JavaScript's slice() uses exclusive end indices, we use endIdx + 1
+  // Example: dates[1:3] (inclusive) = [d1, d2, d3] needs returns[1:3] (inclusive) = [r1, r2, r3]
+  // where r1 = return from d0 to d1, r2 = return from d1 to d2, r3 = return from d2 to d3
+  const usEquity = usEquityFull.returns.slice(usRange.startIdx, usRange.endIdx + 1);
+  const internationalEquity = intlEquityFull.returns.slice(intlRange.startIdx, intlRange.endIdx + 1);
+  const nominalBonds = bondsFull.returns.slice(bondsRange.startIdx, bondsRange.endIdx + 1);
+  
+  // FIXED: Validate that sliced returns arrays have the same length (should be guaranteed by date alignment)
+  // This is a final safety check - if lengths differ, something is wrong with the data structure
+  if (usEquity.length !== internationalEquity.length || usEquity.length !== nominalBonds.length) {
+    throw new Error(
+      `Returns array length mismatch after slicing: ` +
+      `VTI returns=${usEquity.length}, VXUS returns=${internationalEquity.length}, AGG returns=${nominalBonds.length}. ` +
+      `This indicates a data structure issue despite date alignment validation.`
+    );
+  }
   
   // Cash returns are near-zero (treasury bill rate, approximated as 0 for simplicity)
-  const maxLength = Math.max(usEquity.length, internationalEquity.length, nominalBonds.length);
-  const cash = new Array(maxLength).fill(0);
+  const length = usEquity.length; // All arrays have same length (validated above)
+  const cash = new Array(length).fill(0);
   
-  // Ensure all arrays have same length (pad with zeros if needed)
+  // All arrays are guaranteed to have the same length (no padding needed)
   return {
-    usEquity: padArray(usEquity, maxLength, 0),
-    internationalEquity: padArray(internationalEquity, maxLength, 0),
-    nominalBonds: padArray(nominalBonds, maxLength, 0),
-    cash: padArray(cash, maxLength, 0)
+    usEquity,
+    internationalEquity,
+    nominalBonds,
+    cash
   };
 }
 

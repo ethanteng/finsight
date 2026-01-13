@@ -86,6 +86,11 @@ export const ViewAIContext: React.FC<ViewAIContextProps> = ({ isOpen, onClose })
     }
   }, [isOpen]);
 
+  // Add refresh capability - fetch latest context when user clicks refresh or periodically
+  const handleRefresh = () => {
+    fetchLatestContext();
+  };
+
   const fetchLatestContext = async () => {
     setLoading(true);
     setError(null);
@@ -211,6 +216,14 @@ export const ViewAIContext: React.FC<ViewAIContextProps> = ({ isOpen, onClose })
                       </a>
                     )}
                     <button
+                      onClick={handleRefresh}
+                      disabled={loading}
+                      className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Refresh to get latest context"
+                    >
+                      {loading ? 'Refreshing...' : '🔄 Refresh'}
+                    </button>
+                    <button
                       onClick={() => {
                         const content = getActiveContent();
                         if (content) copyToClipboard(content);
@@ -241,11 +254,26 @@ export const ViewAIContext: React.FC<ViewAIContextProps> = ({ isOpen, onClose })
         {/* Footer */}
         <div className="border-t p-4 bg-gray-50">
           <div className="flex justify-between items-center text-sm text-gray-600">
-            <div>
+            <div className="flex items-center gap-4">
               {context && (
                 <>
-                  <span className="font-medium">Timestamp:</span>{' '}
-                  {new Date(context.timestamp).toLocaleString()}
+                  <div>
+                    <span className="font-medium">Timestamp:</span>{' '}
+                    {new Date(context.timestamp).toLocaleString()}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {(() => {
+                      const contextTime = new Date(context.timestamp).getTime();
+                      const now = Date.now();
+                      const ageMinutes = Math.floor((now - contextTime) / (1000 * 60));
+                      const ageHours = Math.floor(ageMinutes / 60);
+                      const ageDays = Math.floor(ageHours / 24);
+                      if (ageDays > 0) return `${ageDays} day${ageDays !== 1 ? 's' : ''} old`;
+                      if (ageHours > 0) return `${ageHours} hour${ageHours !== 1 ? 's' : ''} old`;
+                      if (ageMinutes > 0) return `${ageMinutes} minute${ageMinutes !== 1 ? 's' : ''} old`;
+                      return 'Just now';
+                    })()}
+                  </div>
                 </>
               )}
             </div>
