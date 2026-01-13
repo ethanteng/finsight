@@ -61,7 +61,14 @@ export class TiingoProvider {
     // Use mock data for test environment
     if (this.apiKey === 'test_tiingo_key' || this.apiKey.startsWith('test_') || process.env.GITHUB_ACTIONS) {
       console.log('Tiingo Provider: Using mock data for test environment');
-      return this.generateMockData(ticker, startDate, endDate);
+      const mockData = this.generateMockData(ticker, startDate, endDate);
+      // Still save mock data to database for consistency (but only in non-CI environments)
+      if (!process.env.GITHUB_ACTIONS) {
+        await dbCache.savePriceHistory(ticker, mockData, 'tiingo').catch(() => {
+          // Ignore errors saving mock data
+        });
+      }
+      return mockData;
     }
 
     try {

@@ -64,7 +64,14 @@ export class FMPProvider {
     // Use mock data for test environment
     if (this.apiKey === 'test_fmp_key' || this.apiKey.startsWith('test_') || process.env.GITHUB_ACTIONS) {
       console.log('FMP Provider: Using mock data for test environment');
-      return this.generateMockMetadata(ticker);
+      const mockMetadata = this.generateMockMetadata(ticker);
+      // Still save mock metadata to database for consistency (but only in non-CI environments)
+      if (!process.env.GITHUB_ACTIONS) {
+        await dbCache.saveSecurityMetadata(ticker, mockMetadata, 'inferred').catch(() => {
+          // Ignore errors saving mock metadata
+        });
+      }
+      return mockMetadata;
     }
 
     try {
