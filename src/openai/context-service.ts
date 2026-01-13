@@ -85,6 +85,18 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     const snapshot = await SummaryCacheService.getLatestSnapshot(userId, 'full');
 
     if (snapshot) {
+      // Log snapshot metadata for debugging
+      console.log(`📊 gatherContextSnapshot: Snapshot found for user ${userId}`, {
+        computedAt: snapshot.computedAt,
+        hasHoldings: !!snapshot.holdings,
+        holdingsType: Array.isArray(snapshot.holdings) ? 'array' : typeof snapshot.holdings,
+        holdingsLength: Array.isArray(snapshot.holdings) ? snapshot.holdings.length : 'N/A',
+        hasSecurities: !!snapshot.securities,
+        securitiesType: Array.isArray(snapshot.securities) ? 'array' : typeof snapshot.securities,
+        securitiesLength: Array.isArray(snapshot.securities) ? snapshot.securities.length : 'N/A',
+        hasInvestmentPortfolio: !!snapshot.investmentPortfolio
+      });
+      
       // ✅ CRITICAL: snapshot.accounts is stored as JSON in the database
       // When retrieved, Prisma parses it, but we need to ensure it's an array
       const rawAccounts = snapshot.accounts as any;
@@ -134,9 +146,25 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       };
       investmentPortfolio = snapshot.investmentPortfolio;
 
-      if (questionNeeds.needsInvestments) {
+      // Load investments if needed for investments OR retirement analysis
+      if (questionNeeds.needsInvestments || questionNeeds.needsRetirement) {
         const holdings = (snapshot.holdings as any[] || []);
         const securities = (snapshot.securities as any[] || []);
+        
+        // Debug logging for retirement analysis
+        if (questionNeeds.needsRetirement) {
+          console.log('📊 Loading investments for retirement analysis:', {
+            needsInvestments: questionNeeds.needsInvestments,
+            needsRetirement: questionNeeds.needsRetirement,
+            holdingsCount: holdings.length,
+            securitiesCount: securities.length,
+            hasHoldings: Array.isArray(holdings) && holdings.length > 0,
+            holdingsType: typeof snapshot.holdings,
+            snapshotComputedAt: snapshot.computedAt,
+            investmentPortfolioTotalValue: (snapshot.investmentPortfolio as any)?.totalValue
+          });
+        }
+        
         investmentsSnapshot = {
           totalValue: (snapshot.investmentPortfolio as any).totalValue || 0,
           holdingCount: (snapshot.investmentPortfolio as any).holdingCount || 0,
@@ -148,6 +176,17 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
           holdings: holdings,
           securities: securities,
         };
+        
+        if (questionNeeds.needsRetirement) {
+          console.log('✅ Investments snapshot created:', {
+            totalValue: investmentsSnapshot.totalValue,
+            holdingCount: investmentsSnapshot.holdingCount,
+            holdingsLength: investmentsSnapshot.holdings?.length || 0,
+            securitiesLength: investmentsSnapshot.securities?.length || 0
+          });
+        }
+      } else if (questionNeeds.needsRetirement) {
+        console.log('⚠️ Retirement question detected but investments not loaded (needsInvestments=false)');
       }
 
       if (questionNeeds.needsHomeValue) {
@@ -334,14 +373,37 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   // Fetch or create retirement analysis if question is retirement-related
   let retirementAnalysis: FinancialContextSnapshot['retirementAnalysis'] | undefined;
   let retirementAnalysisNeedsInfo: FinancialContextSnapshot['retirementAnalysisNeedsInfo'] | undefined;
+  
+  // Debug logging for retirement analysis trigger
+  if (userId && !isDemo && questionNeeds.needsRetirement) {
+    console.log('🔍 Retirement analysis trigger check:', {
+      userId,
+      hasInvestments: !!investmentsSnapshot?.holdings,
+      holdingsCount: investmentsSnapshot?.holdings?.length || 0,
+      question: question.substring(0, 100)
+    });
+  }
+  
   if (userId && !isDemo && (questionNeeds.needsRetirement || questionNeeds.needsMarketContext) && investmentsSnapshot?.holdings && investmentsSnapshot.holdings.length > 0) {
     try {
+      console.log('✅ Retirement analysis conditions met, parsing question...');
       // First check if we have the required parameters
       const { parseRetirementQuestion } = await import('../retirement-analytics/retirement-question-parser');
       const { extractAgeFromProfile, extractRetirementAgeFromProfile } = await import('../retirement-analytics/profile-age-extractor');
       const questionParams = parseRetirementQuestion(question);
       const profileAge = extractAgeFromProfile(userProfile || '');
       const profileRetirementAge = extractRetirementAgeFromProfile(userProfile || '');
+      
+      console.log('📊 Retirement parameters parsed:', {
+        questionParams: {
+          hasRetirementIntent: questionParams.hasRetirementIntent,
+          currentAge: questionParams.currentAge,
+          retirementAge: questionParams.retirementAge,
+          annualWithdrawalAmount: questionParams.annualWithdrawalAmount
+        },
+        profileAge,
+        profileRetirementAge
+      });
       
       const currentAge = questionParams.currentAge || profileAge;
       const retirementAge = questionParams.retirementAge || profileRetirementAge || null;
@@ -354,6 +416,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       if (!annualWithdrawalAmount) missingParams.push('annualWithdrawalAmount');
       
       if (missingParams.length > 0) {
+        console.log('⚠️ Retirement analysis: Missing parameters:', missingParams);
         // Set needsInfo flag so Linc will ask
         retirementAnalysisNeedsInfo = {
           missingParams,
@@ -365,6 +428,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
           }
         };
       } else {
+        console.log('✅ All retirement parameters present, proceeding with analysis...');
         // We have all required info, proceed with analysis
         const result = await fetchOrCreateRetirementAnalysis({
           userId,
@@ -374,11 +438,22 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
           securities: investmentsSnapshot.securities || []
         });
         retirementAnalysis = result;
+        console.log('✅ Retirement analysis completed:', result ? 'Analysis returned' : 'No analysis returned');
       }
     } catch (error) {
-      console.error('Error fetching/creating retirement analysis:', error);
+      console.error('❌ Error fetching/creating retirement analysis:', error);
+      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       // Don't fail the entire context gathering if retirement analysis fails
     }
+  } else if (userId && !isDemo && questionNeeds.needsRetirement) {
+    // Log why retirement analysis didn't trigger
+    console.log('⚠️ Retirement analysis NOT triggered:', {
+      reason: !investmentsSnapshot?.holdings ? 'No investment holdings' : 
+              investmentsSnapshot.holdings.length === 0 ? 'Empty holdings array' :
+              'Unknown reason',
+      hasInvestmentsSnapshot: !!investmentsSnapshot,
+      holdingsLength: investmentsSnapshot?.holdings?.length || 0
+    });
   }
 
   return {
@@ -475,7 +550,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       storedInput.annualWithdrawalAmount === questionParams.annualWithdrawalAmount &&
       storedInput.withdrawalStartAge === (questionParams.withdrawalStartAge || retirementAge)
     ) {
-      console.log('Using cached retirement analysis');
+      console.log('📦 Using cached retirement analysis from database');
       // Return the full analysis output (stored in historicalImplications field as RetirementAnalysisOutput)
       const cachedAnalysis = recentAnalysis.historicalImplications as any;
       if (cachedAnalysis && cachedAnalysis.summary) {
@@ -530,8 +605,17 @@ async function fetchOrCreateRetirementAnalysis(args: {
       withdrawalStartAge: withdrawalStartAge || retirementAge || currentAge! + 20
     };
 
-    console.log('Running new retirement analysis for user:', userId);
+    console.log('🔄 Running new retirement analysis for user:', userId);
+    console.log('📋 Analysis input:', {
+      holdingsCount: analysisInput.holdings.length,
+      securitiesCount: analysisInput.securities.length,
+      currentAge: analysisInput.currentAge,
+      retirementAge: analysisInput.retirementAge,
+      annualWithdrawalAmount: analysisInput.annualWithdrawalAmount,
+      withdrawalStartAge: analysisInput.withdrawalStartAge
+    });
     const analysisResult = await analyzeRetirementPortfolio(analysisInput);
+    console.log('✅ Retirement analysis completed successfully');
 
     // Store in database
     // Note: Store full analysis result in historicalImplications field for retrieval
@@ -558,7 +642,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       }
     });
 
-    console.log('Retirement analysis completed and stored');
+    console.log('💾 Retirement analysis completed and stored in database');
     return analysisResult as any;
   } catch (error) {
     console.error('Error creating retirement analysis:', error);
