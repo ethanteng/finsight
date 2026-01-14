@@ -168,9 +168,16 @@ export async function generateRollingSequences(
   // Start from the quarter containing the earliest common date
   const effectiveStartQuarter = earliestCommonDate ? Math.floor(effectiveStartMonth / 3) : 0;
   
-  console.log(`📊 Generating sequences from ${effectiveStartYear}-Q${effectiveStartQuarter + 1} onwards (ensuring all ETFs have data)`);
+  // FIXED: For partial sequences, we need to iterate through all years up to current year
+  // The old condition `year <= endYear - snappedYears` would skip all sequences when horizon > available years
+  // Instead, iterate up to current year, allowing partial sequences
+  const currentYear = new Date().getFullYear();
+  const maxStartYear = Math.min(endYear, currentYear); // Don't start sequences in the future
   
-  for (let year = effectiveStartYear; year <= endYear - snappedYears; year++) {
+  console.log(`📊 Generating sequences from ${effectiveStartYear}-Q${effectiveStartQuarter + 1} onwards (ensuring all ETFs have data)`);
+  console.log(`📊 Max start year: ${maxStartYear}, Horizon: ${snappedYears} years, Current year: ${currentYear}`);
+  
+  for (let year = effectiveStartYear; year <= maxStartYear; year++) {
     // Start from effectiveStartQuarter if this is the first year, otherwise start from Q1
     const startQuarter = (year === effectiveStartYear) ? effectiveStartQuarter : 0;
     for (let quarter = startQuarter; quarter < 4; quarter++) {
@@ -203,6 +210,12 @@ export async function generateRollingSequences(
           bonds.data
         );
         
+        // Validate that we got valid returns (non-empty arrays)
+        if (!assetBasketReturns.usEquity || assetBasketReturns.usEquity.length === 0) {
+          console.warn(`⏭️ Skipping sequence ${year}-Q${quarter + 1}: empty asset basket returns`);
+          continue;
+        }
+        
         const inflationRates = await fetchInflationRates(startDate, effectiveEndDate, fredProvider);
         
         const sequenceId = `${year}-Q${quarter + 1}_to_${effectiveEndDate.getFullYear()}-Q${Math.floor(effectiveEndDate.getMonth() / 3) + 1}`;
@@ -214,8 +227,11 @@ export async function generateRollingSequences(
           assetBasketReturns,
           inflationRates
         });
+        
+        console.log(`✅ Generated sequence ${sequenceId} (${assetBasketReturns.usEquity.length} months)`);
       } catch (error) {
-        console.warn(`Failed to generate sequence ${year}-Q${quarter + 1}:`, error);
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.warn(`❌ Failed to generate sequence ${year}-Q${quarter + 1}: ${errorMsg}`);
         // Skip sequences with insufficient data
         continue;
       }
