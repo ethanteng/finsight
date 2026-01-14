@@ -78,18 +78,12 @@ export const ViewAIContext: React.FC<ViewAIContextProps> = ({ isOpen, onClose })
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<string>('systemPrompt');
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       fetchLatestContext();
     }
   }, [isOpen]);
-
-  // Add refresh capability - fetch latest context when user clicks refresh or periodically
-  const handleRefresh = () => {
-    fetchLatestContext();
-  };
 
   const fetchLatestContext = async () => {
     setLoading(true);
@@ -122,15 +116,6 @@ export const ViewAIContext: React.FC<ViewAIContextProps> = ({ isOpen, onClose })
     }
   };
 
-  const copyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
-  };
 
   const formatJSON = (obj: unknown) => {
     return JSON.stringify(obj, null, 2);
@@ -206,33 +191,14 @@ export const ViewAIContext: React.FC<ViewAIContextProps> = ({ isOpen, onClose })
                   <h3 className="text-lg font-semibold text-gray-800">
                     {activeSection.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
                   </h3>
-                  <div className="flex items-center gap-2">
-                    {activeSection === 'categorizationDetails' && (
-                      <a
-                        href="/transactions"
-                        className="px-3 py-1 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded-md transition-colors"
-                      >
-                        Manage Transactions
-                      </a>
-                    )}
-                    <button
-                      onClick={handleRefresh}
-                      disabled={loading}
-                      className="px-3 py-1 text-sm bg-gray-200 hover:bg-gray-300 text-gray-800 border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
-                      title="Refresh to get latest context"
+                  {activeSection === 'categorizationDetails' && (
+                    <a
+                      href="/transactions"
+                      className="px-3 py-1 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded-md transition-colors"
                     >
-                      {loading ? 'Refreshing...' : '🔄 Refresh'}
-                    </button>
-                    <button
-                      onClick={() => {
-                        const content = getActiveContent();
-                        if (content) copyToClipboard(content);
-                      }}
-                      className="px-3 py-1 text-sm bg-gray-200 hover:bg-gray-300 text-gray-800 border border-gray-300 rounded-md font-medium transition-colors"
-                    >
-                      {copied ? 'Copied!' : 'Copy'}
-                    </button>
-                  </div>
+                      Manage Transactions
+                    </a>
+                  )}
                 </div>
                 
                 <div className="bg-gray-50 rounded-lg p-4 overflow-x-auto">
