@@ -371,14 +371,16 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   let retirementAnalysisNeedsInfo: FinancialContextSnapshot['retirementAnalysisNeedsInfo'] | undefined;
   
   // Debug logging for retirement analysis trigger
-  if (userId && !isDemo && questionNeeds.needsRetirement) {
-    console.log('🔍 Retirement analysis trigger check:', {
-      userId,
-      hasInvestments: !!investmentsSnapshot?.holdings,
-      holdingsCount: investmentsSnapshot?.holdings?.length || 0,
-      question: question.substring(0, 100)
-    });
-  }
+  console.log('🔍 Retirement analysis trigger check:', {
+    userId,
+    isDemo,
+    needsRetirement: questionNeeds.needsRetirement,
+    needsMarketContext: questionNeeds.needsMarketContext,
+    hasInvestments: !!investmentsSnapshot?.holdings,
+    holdingsCount: investmentsSnapshot?.holdings?.length || 0,
+    question: question.substring(0, 100),
+    willTrigger: userId && !isDemo && (questionNeeds.needsRetirement || questionNeeds.needsMarketContext) && investmentsSnapshot?.holdings && investmentsSnapshot.holdings.length > 0
+  });
   
   if (userId && !isDemo && (questionNeeds.needsRetirement || questionNeeds.needsMarketContext) && investmentsSnapshot?.holdings && investmentsSnapshot.holdings.length > 0) {
     try {
@@ -484,9 +486,18 @@ async function fetchOrCreateRetirementAnalysis(args: {
   // Parse retirement parameters from question
   const { parseRetirementQuestion } = await import('../retirement-analytics/retirement-question-parser');
   const questionParams = parseRetirementQuestion(question);
+  
+  console.log('📋 Retirement question parser result:', {
+    hasRetirementIntent: questionParams.hasRetirementIntent,
+    currentAge: questionParams.currentAge,
+    retirementAge: questionParams.retirementAge,
+    annualWithdrawalAmount: questionParams.annualWithdrawalAmount,
+    withdrawalStartAge: questionParams.withdrawalStartAge
+  });
 
   // Only proceed if question has retirement intent
   if (!questionParams.hasRetirementIntent) {
+    console.log('⚠️ Question does not have retirement intent, skipping analysis');
     return undefined;
   }
 

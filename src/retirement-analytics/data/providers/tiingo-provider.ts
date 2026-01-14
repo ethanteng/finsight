@@ -92,7 +92,39 @@ export class TiingoProvider {
         throw new Error(errorMsg);
       }
 
-      const data: TiingoResponse = await response.json();
+      const rawData = await response.json();
+      
+      // Tiingo API can return data in two formats:
+      // 1. Direct array: [{date: "...", close: ...}, ...]
+      // 2. Wrapped object: {ticker: "...", results: [{date: "...", close: ...}, ...]}
+      // Handle both formats
+      let data: TiingoResponse;
+      if (Array.isArray(rawData)) {
+        // Direct array format - wrap it
+        data = {
+          ticker: ticker,
+          queryCount: rawData.length,
+          resultsCount: rawData.length,
+          adjusted: true,
+          results: rawData as TiingoDailyPrice[]
+        };
+        console.log(`📊 Tiingo: Received direct array format for ${ticker} (${rawData.length} records)`);
+      } else if (rawData && typeof rawData === 'object' && Array.isArray(rawData.results)) {
+        // Wrapped object format
+        data = rawData as TiingoResponse;
+        console.log(`📊 Tiingo: Received wrapped object format for ${ticker} (${rawData.results.length} records)`);
+      } else {
+        // Unexpected format
+        console.error(`❌ Tiingo API returned unexpected format for ${ticker}:`, {
+          responseStatus: response.status,
+          responseStatusText: response.statusText,
+          dataType: typeof rawData,
+          isArray: Array.isArray(rawData),
+          dataKeys: rawData && typeof rawData === 'object' ? Object.keys(rawData) : 'N/A',
+          fullResponse: JSON.stringify(rawData).substring(0, 500)
+        });
+        throw new Error(`Tiingo API returned unexpected data format for ${ticker}`);
+      }
       
       // Log API response details for debugging empty responses
       if (!data.results || data.results.length === 0) {

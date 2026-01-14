@@ -56,11 +56,11 @@ export function parseRetirementQuestion(question: string): RetirementQuestionPar
   }
 
   // Extract retirement age patterns
-  // "retire at 65" or "retirement age 65" or "planning to retire at 68"
+  // "retire at 65" or "retirement age 65" or "planning to retire at 68" or "retiring by 68"
   const retirementAgePatterns = [
-    /retir(?:e|ement)(?:\s+at|\s+age)?\s+(\d+)/i,
+    /retir(?:e|ing|ement)(?:\s+(?:at|by|age))?\s+(\d+)/i, // Matches "retire at 65", "retiring by 68", "retirement age 65"
     /retirement\s+age\s+(\d+)/i,
-    /planning\s+to\s+retire\s+at\s+(\d+)/i
+    /planning\s+to\s+retire\s+(?:at|by)\s+(\d+)/i
   ];
   
   let retirementAge: number | undefined;
