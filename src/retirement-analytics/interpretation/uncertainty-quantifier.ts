@@ -12,7 +12,8 @@ export function calculateDataQuality(
   securities: Security[],
   portfolioMapping: PortfolioMapping,
   priceHistoryCoverage: number,
-  assumptions: string[]
+  assumptions: string[],
+  stressTestMissingData: string[] = []
 ): DataQualityReport {
   // Calculate completeness (percentage of holdings with full metadata)
   const securityMap = new Map(securities.map(s => [s.security_id, s]));
@@ -63,7 +64,7 @@ export function calculateDataQuality(
       mappingMethod: portfolioMapping.mappingMethod
     },
     assumptions,
-    missingData: portfolioMapping.unmappedHoldings
+    missingData: [...portfolioMapping.unmappedHoldings, ...stressTestMissingData]
   };
 }
 
@@ -120,6 +121,15 @@ export function generateDisclaimers(
 
   if (dataQuality.assumptions.length > 0) {
     disclaimers.push(`Analysis assumptions: ${dataQuality.assumptions.join('; ')}`);
+  }
+
+  // Add disclaimers for missing stress test data
+  const stressTestMissing = dataQuality.missingData.filter(m => 
+    m.includes('International Equity') || m.includes('US Equity') || m.includes('Bonds')
+  );
+  if (stressTestMissing.length > 0) {
+    disclaimers.push(`⚠️ Analysis uses partial historical data. ${stressTestMissing.join('; ')}. ` +
+      `Missing asset classes use zero returns (conservative assumption). Results may be less accurate.`);
   }
 
   if (timelineBucketNote) {

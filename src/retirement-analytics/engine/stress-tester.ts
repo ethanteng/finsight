@@ -1,7 +1,7 @@
 // Stress Tester - Rolling Window Engine
 // Phase 3: Rolling Window Engine
 
-import { HistoricalSequence, TimelineBucket } from '../types';
+import { HistoricalSequence, TimelineBucket, PriceHistory, PriceTimeSeries } from '../types';
 import { DataProviderFactory } from '../data/data-provider-factory';
 import { FREDProvider } from '../../data/providers/fred';
 
@@ -11,6 +11,13 @@ const ASSET_BASKET = {
   internationalEquity: 'VXUS',
   nominalBonds: 'AGG',
   cash: 'CASHX' // Will use treasury bill rate
+};
+
+// Fallback proxies for graceful degradation
+const FALLBACK_PROXIES = {
+  internationalEquity: ['VEU', 'EFA', 'IXUS'], // Alternative international ETFs
+  usEquity: ['SPY', 'VOO'], // Alternative US equity ETFs
+  nominalBonds: ['BND', 'TLT'] // Alternative bond ETFs
 };
 
 /**
@@ -28,13 +35,14 @@ export function snapToHorizonBucket(withdrawalYears: number): TimelineBucket {
  * Generate rolling historical sequences for fixed horizon buckets
  * OPTIMIZED: Fetches full history once per ticker, then slices in memory
  * Uses quarterly rolling windows instead of monthly to reduce sequence count
+ * GRACEFUL DEGRADATION: Continues with partial data if some asset baskets fail
  */
 export async function generateRollingSequences(
   withdrawalYears: number,
   dataProviderFactory: DataProviderFactory,
   fredProvider: FREDProvider,
   minHistoryYears: number = 50
-): Promise<HistoricalSequence[]> {
+): Promise<{ sequences: HistoricalSequence[]; missingData: string[] }> {
   // Snap to supported bucket
   const snappedYears = parseInt(snapToHorizonBucket(withdrawalYears));
   const sequences: HistoricalSequence[] = [];
@@ -47,28 +55,95 @@ export async function generateRollingSequences(
   console.log(`📊 Generating rolling sequences: ${snappedYears}-year horizon, ${minHistoryYears} years of history`);
   console.log(`📅 Fetching full historical data once for date range: ${fullStartDate.toISOString().split('T')[0]} to ${fullEndDate.toISOString().split('T')[0]}`);
   
-  // OPTIMIZATION: Fetch full historical data once per ticker upfront
-  // This reduces API calls from hundreds to just 3 (one per asset basket)
+  // GRACEFUL DEGRADATION: Try primary proxies first, then fallbacks, then use zero returns
+  const missingData: string[] = [];
+  
+  // Helper function to try primary and fallback proxies
+  const fetchWithFallback = async (
+    primaryTicker: string,
+    fallbackTickers: string[],
+    assetName: string
+  ): Promise<PriceHistory | null> => {
+    // Try primary ticker first
+    try {
+      const data = await dataProviderFactory.getPriceHistory(primaryTicker, fullStartDate, fullEndDate);
+      console.log(`✅ Successfully fetched ${assetName} data from ${primaryTicker}`);
+      return data;
+    } catch (err) {
+      console.warn(`⚠️ Failed to fetch ${assetName} from ${primaryTicker}, trying fallbacks...`);
+      
+      // Try fallback tickers
+      for (const fallbackTicker of fallbackTickers) {
+        try {
+          const data = await dataProviderFactory.getPriceHistory(fallbackTicker, fullStartDate, fullEndDate);
+          console.log(`✅ Successfully fetched ${assetName} data from fallback ${fallbackTicker}`);
+          missingData.push(`${assetName} (using fallback ${fallbackTicker} instead of ${primaryTicker})`);
+          return data;
+        } catch (fallbackErr) {
+          console.warn(`⚠️ Fallback ${fallbackTicker} also failed for ${assetName}`);
+          continue;
+        }
+      }
+      
+      // All attempts failed
+      console.error(`❌ All attempts failed for ${assetName} (primary: ${primaryTicker}, fallbacks: ${fallbackTickers.join(', ')})`);
+      missingData.push(`${assetName} (all proxies failed, using zero returns)`);
+      return null;
+    }
+  };
+  
+  // Fetch asset basket data with fallbacks
   const [usEquityFull, intlEquityFull, bondsFull] = await Promise.all([
-    dataProviderFactory.getPriceHistory(ASSET_BASKET.usEquity, fullStartDate, fullEndDate).catch((err) => {
-      console.error(`Failed to fetch ${ASSET_BASKET.usEquity}:`, err);
-      return null;
-    }),
-    dataProviderFactory.getPriceHistory(ASSET_BASKET.internationalEquity, fullStartDate, fullEndDate).catch((err) => {
-      console.error(`Failed to fetch ${ASSET_BASKET.internationalEquity}:`, err);
-      return null;
-    }),
-    dataProviderFactory.getPriceHistory(ASSET_BASKET.nominalBonds, fullStartDate, fullEndDate).catch((err) => {
-      console.error(`Failed to fetch ${ASSET_BASKET.nominalBonds}:`, err);
-      return null;
-    })
+    fetchWithFallback(ASSET_BASKET.usEquity, FALLBACK_PROXIES.usEquity, 'US Equity'),
+    fetchWithFallback(ASSET_BASKET.internationalEquity, FALLBACK_PROXIES.internationalEquity, 'International Equity'),
+    fetchWithFallback(ASSET_BASKET.nominalBonds, FALLBACK_PROXIES.nominalBonds, 'Bonds')
   ]);
   
-  if (!usEquityFull || !intlEquityFull || !bondsFull) {
-    throw new Error('Failed to fetch required asset basket data');
+  // GRACEFUL DEGRADATION: Use zero returns for missing asset classes
+  // This allows analysis to continue with partial data (conservative approach)
+  const createZeroReturns = (referenceData: PriceHistory | null): PriceTimeSeries => {
+    if (referenceData) {
+      // Use same date structure as reference data
+      return {
+        ticker: 'ZERO',
+        dates: referenceData.data.dates,
+        prices: referenceData.data.prices.map(() => 1), // Constant price
+        returns: new Array(referenceData.data.returns.length).fill(0), // Zero returns
+        provider: 'tiingo'
+      };
+    }
+    // If no reference, create minimal structure (will be handled by date alignment)
+    return {
+      ticker: 'ZERO',
+      dates: [],
+      prices: [],
+      returns: [],
+      provider: 'tiingo'
+    };
+  };
+  
+  // Determine reference data for date alignment (use first available)
+  const referenceData = usEquityFull || intlEquityFull || bondsFull;
+  if (!referenceData) {
+    // All asset baskets failed - cannot proceed
+    throw new Error('Failed to fetch any asset basket data. Cannot generate stress test sequences without at least one asset class.');
   }
   
-  console.log(`✅ Fetched full history: VTI (${usEquityFull.data.dates.length} months), VXUS (${intlEquityFull.data.dates.length} months), AGG (${bondsFull.data.dates.length} months)`);
+  // Use actual data or zero returns for each asset class
+  const usEquity = usEquityFull || { data: createZeroReturns(referenceData) };
+  const intlEquity = intlEquityFull || { data: createZeroReturns(referenceData) };
+  const bonds = bondsFull || { data: createZeroReturns(referenceData) };
+  
+  // Log what we're using
+  const usEquityTicker = usEquityFull ? ASSET_BASKET.usEquity : 'ZERO (fallback)';
+  const intlEquityTicker = intlEquityFull ? ASSET_BASKET.internationalEquity : 'ZERO (fallback)';
+  const bondsTicker = bondsFull ? ASSET_BASKET.nominalBonds : 'ZERO (fallback)';
+  
+  console.log(`✅ Asset basket data: ${usEquityTicker} (${usEquity.data.dates.length} months), ${intlEquityTicker} (${intlEquity.data.dates.length} months), ${bondsTicker} (${bonds.data.dates.length} months)`);
+  
+  if (missingData.length > 0) {
+    console.warn(`⚠️ Graceful degradation active. Missing data: ${missingData.join('; ')}`);
+  }
   
   // OPTIMIZATION: Use quarterly rolling windows instead of monthly
   // Reduces sequence count from ~480 to ~120 for 10-year horizon
@@ -89,9 +164,9 @@ export async function generateRollingSequences(
         const assetBasketReturns = sliceAssetBasketReturns(
           startDate,
           endDate,
-          usEquityFull.data,
-          intlEquityFull.data,
-          bondsFull.data
+          usEquity.data,
+          intlEquity.data,
+          bonds.data
         );
         
         const inflationRates = await fetchInflationRates(startDate, endDate, fredProvider);
@@ -115,7 +190,7 @@ export async function generateRollingSequences(
   
   console.log(`✅ Generated ${sequences.length} rolling sequences (quarterly windows)`);
   
-  return sequences;
+  return { sequences, missingData };
 }
 
 /**
@@ -173,49 +248,57 @@ function sliceAssetBasketReturns(
   const intlRange = findDateRange(intlEquityFull.dates, startDate, endDate);
   const bondsRange = findDateRange(bondsFull.dates, startDate, endDate);
   
-  // Validate that all ranges are available
-  if (!usRange || !intlRange || !bondsRange) {
-    throw new Error(`Date range ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]} not available in asset basket data`);
+  // GRACEFUL DEGRADATION: If a range is missing, use zero returns for that asset class
+  // Use the first available range as reference for length
+  const referenceRange = usRange || intlRange || bondsRange;
+  if (!referenceRange) {
+    throw new Error(`Date range ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]} not available in any asset basket data`);
   }
   
-  // FIXED: Validate date alignment between assets before slicing
-  // Extract the actual dates in each range to verify they match
-  const usDates = usEquityFull.dates.slice(usRange.startIdx, usRange.endIdx + 1);
-  const intlDates = intlEquityFull.dates.slice(intlRange.startIdx, intlRange.endIdx + 1);
-  const bondsDates = bondsFull.dates.slice(bondsRange.startIdx, bondsRange.endIdx + 1);
+  const expectedLength = referenceRange.endIdx - referenceRange.startIdx + 1;
   
-  // Validate that all three assets have the same dates in the requested range
-  // This ensures returns are aligned and prevents false zero returns from padding
-  if (usDates.length !== intlDates.length || usDates.length !== bondsDates.length) {
-    throw new Error(
-      `Date misalignment detected in asset basket data for range ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}: ` +
-      `VTI has ${usDates.length} data points, VXUS has ${intlDates.length}, AGG has ${bondsDates.length}. ` +
-      `All assets must have the same dates in the requested range to ensure aligned returns.`
-    );
-  }
-  
-  // Validate that dates match exactly (not just count)
-  // FIXED: Use UTC date normalization to avoid timezone-dependent comparisons
-  // Comparing date strings (YYYY-MM-DD) is timezone-independent and more reliable
-  for (let i = 0; i < usDates.length; i++) {
-    const usDate = usDates[i];
-    const intlDate = intlDates[i];
-    const bondsDate = bondsDates[i];
+  // GRACEFUL DEGRADATION: Validate date alignment only for available ranges
+  // If a range is null, we'll use zero returns (handled below)
+  if (usRange && intlRange && bondsRange) {
+    // FIXED: Validate date alignment between assets before slicing
+    // Extract the actual dates in each range to verify they match
+    const usDates = usEquityFull.dates.slice(usRange.startIdx, usRange.endIdx + 1);
+    const intlDates = intlEquityFull.dates.slice(intlRange.startIdx, intlRange.endIdx + 1);
+    const bondsDates = bondsFull.dates.slice(bondsRange.startIdx, bondsRange.endIdx + 1);
     
-    // Extract date strings (YYYY-MM-DD) for timezone-independent comparison
-    // This compares the calendar date, ignoring time-of-day and timezone
-    const usDateStr = `${usDate.getUTCFullYear()}-${String(usDate.getUTCMonth() + 1).padStart(2, '0')}-${String(usDate.getUTCDate()).padStart(2, '0')}`;
-    const intlDateStr = `${intlDate.getUTCFullYear()}-${String(intlDate.getUTCMonth() + 1).padStart(2, '0')}-${String(intlDate.getUTCDate()).padStart(2, '0')}`;
-    const bondsDateStr = `${bondsDate.getUTCFullYear()}-${String(bondsDate.getUTCMonth() + 1).padStart(2, '0')}-${String(bondsDate.getUTCDate()).padStart(2, '0')}`;
-    
-    if (usDateStr !== intlDateStr || usDateStr !== bondsDateStr) {
+    // Validate that all three assets have the same dates in the requested range
+    // This ensures returns are aligned and prevents false zero returns from padding
+    if (usDates.length !== intlDates.length || usDates.length !== bondsDates.length) {
       throw new Error(
-        `Date misalignment at index ${i} in asset basket data: ` +
-        `VTI date=${usDateStr}, ` +
-        `VXUS date=${intlDateStr}, ` +
-        `AGG date=${bondsDateStr}. ` +
-        `All assets must have identical dates at each index.`
+        `Date misalignment detected in asset basket data for range ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}: ` +
+        `VTI has ${usDates.length} data points, VXUS has ${intlDates.length}, AGG has ${bondsDates.length}. ` +
+        `All assets must have the same dates in the requested range to ensure aligned returns.`
       );
+    }
+    
+    // Validate that dates match exactly (not just count)
+    // FIXED: Use UTC date normalization to avoid timezone-dependent comparisons
+    // Comparing date strings (YYYY-MM-DD) is timezone-independent and more reliable
+    for (let i = 0; i < usDates.length; i++) {
+      const usDate = usDates[i];
+      const intlDate = intlDates[i];
+      const bondsDate = bondsDates[i];
+      
+      // Extract date strings (YYYY-MM-DD) for timezone-independent comparison
+      // This compares the calendar date, ignoring time-of-day and timezone
+      const usDateStr = `${usDate.getUTCFullYear()}-${String(usDate.getUTCMonth() + 1).padStart(2, '0')}-${String(usDate.getUTCDate()).padStart(2, '0')}`;
+      const intlDateStr = `${intlDate.getUTCFullYear()}-${String(intlDate.getUTCMonth() + 1).padStart(2, '0')}-${String(intlDate.getUTCDate()).padStart(2, '0')}`;
+      const bondsDateStr = `${bondsDate.getUTCFullYear()}-${String(bondsDate.getUTCMonth() + 1).padStart(2, '0')}-${String(bondsDate.getUTCDate()).padStart(2, '0')}`;
+      
+      if (usDateStr !== intlDateStr || usDateStr !== bondsDateStr) {
+        throw new Error(
+          `Date misalignment at index ${i} in asset basket data: ` +
+          `VTI date=${usDateStr}, ` +
+          `VXUS date=${intlDateStr}, ` +
+          `AGG date=${bondsDateStr}. ` +
+          `All assets must have identical dates at each index.`
+        );
+      }
     }
   }
   
@@ -225,9 +308,16 @@ function sliceAssetBasketReturns(
   // Since JavaScript's slice() uses exclusive end indices, we use endIdx + 1
   // Example: dates[1:3] (inclusive) = [d1, d2, d3] needs returns[1:3] (inclusive) = [r1, r2, r3]
   // where r1 = return from d0 to d1, r2 = return from d1 to d2, r3 = return from d2 to d3
-  const usEquity = usEquityFull.returns.slice(usRange.startIdx, usRange.endIdx + 1);
-  const internationalEquity = intlEquityFull.returns.slice(intlRange.startIdx, intlRange.endIdx + 1);
-  const nominalBonds = bondsFull.returns.slice(bondsRange.startIdx, bondsRange.endIdx + 1);
+  // GRACEFUL DEGRADATION: Use zero returns if range is missing
+  const usEquity = usRange 
+    ? usEquityFull.returns.slice(usRange.startIdx, usRange.endIdx + 1)
+    : new Array(expectedLength).fill(0);
+  const internationalEquity = intlRange
+    ? intlEquityFull.returns.slice(intlRange.startIdx, intlRange.endIdx + 1)
+    : new Array(expectedLength).fill(0);
+  const nominalBonds = bondsRange
+    ? bondsFull.returns.slice(bondsRange.startIdx, bondsRange.endIdx + 1)
+    : new Array(expectedLength).fill(0);
   
   // FIXED: Validate that sliced returns arrays have the same length (should be guaranteed by date alignment)
   // This is a final safety check - if lengths differ, something is wrong with the data structure

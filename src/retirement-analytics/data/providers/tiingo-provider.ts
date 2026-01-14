@@ -94,6 +94,17 @@ export class TiingoProvider {
 
       const data: TiingoResponse = await response.json();
       
+      // Log API response details for debugging empty responses
+      if (!data.results || data.results.length === 0) {
+        console.error(`❌ Tiingo API returned empty data for ${ticker}:`, {
+          responseStatus: response.status,
+          responseStatusText: response.statusText,
+          dataKeys: Object.keys(data),
+          dataLength: Array.isArray(data.results) ? data.results.length : 'not an array',
+          fullResponse: JSON.stringify(data).substring(0, 500) // First 500 chars for debugging
+        });
+      }
+      
       // Convert daily prices to monthly returns
       const timeSeries = this.convertToMonthlyReturns(data, ticker);
       

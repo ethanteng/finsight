@@ -94,8 +94,8 @@ export async function analyzeRetirementPortfolio(
   const fredApiKey = process.env.FRED_API_KEY || 'test_fred_key';
   const fredProvider = new FREDProvider(fredApiKey);
 
-  // Phase 3: Generate rolling sequences
-  const sequences = await generateRollingSequences(
+  // Phase 3: Generate rolling sequences (with graceful degradation)
+  const { sequences, missingData: stressTestMissingData } = await generateRollingSequences(
     withdrawalYears,
     dataProviderFactory,
     fredProvider,
@@ -134,12 +134,15 @@ export async function analyzeRetirementPortfolio(
   const priceHistoryCoverage = 0.8; // Placeholder - would calculate from actual data availability
 
   // Phase 6: Calculate data quality and format output
+  // Include missing data from stress test in data quality report
+  const allMissingData = [...(portfolioMapping.unmappedHoldings || []), ...stressTestMissingData];
   const dataQuality = calculateDataQuality(
     input.holdings,
     input.securities,
     portfolioMapping,
     priceHistoryCoverage,
-    assumptions
+    assumptions,
+    stressTestMissingData
   );
 
   const withdrawalMetrics = {

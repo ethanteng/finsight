@@ -641,7 +641,26 @@ async function fetchOrCreateRetirementAnalysis(args: {
     console.log('💾 Retirement analysis completed and stored in database');
     return analysisResult as any;
   } catch (error) {
-    console.error('Error creating retirement analysis:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : 'No stack trace';
+    
+    console.error('❌ Error creating retirement analysis:', {
+      error: errorMessage,
+      stack: errorStack,
+      userId,
+      holdingsCount: holdings.length,
+      securitiesCount: securities.length
+    });
+    
+    // Log specific error details for common failure modes
+    if (errorMessage.includes('Failed to fetch required asset basket data')) {
+      console.error('💡 Retirement analysis failed due to missing asset basket data (VTI/VXUS/AGG). ' +
+        'This usually indicates: 1) Tiingo API rate limits, 2) Missing API key, 3) Network issues, or 4) Empty API response.');
+    } else if (errorMessage.includes('No price data returned')) {
+      console.error('💡 Retirement analysis failed due to empty price data from Tiingo API. ' +
+        'Check Tiingo API status and rate limits.');
+    }
+    
     return undefined;
   }
 }
