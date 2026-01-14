@@ -145,13 +145,35 @@ export async function generateRollingSequences(
     console.warn(`⚠️ Graceful degradation active. Missing data: ${missingData.join('; ')}`);
   }
   
+  // FIXED: Find the earliest date when all asset baskets have data (intersection start)
+  // This ensures we only generate sequences where all ETFs have data
+  let earliestCommonDate: Date | null = null;
+  if (usEquityFull && intlEquityFull && bondsFull) {
+    const usFirstDate = usEquityFull.data.dates[0];
+    const intlFirstDate = intlEquityFull.data.dates[0];
+    const bondsFirstDate = bondsFull.data.dates[0];
+    // Latest start date = when all three have data
+    earliestCommonDate = new Date(Math.max(usFirstDate.getTime(), intlFirstDate.getTime(), bondsFirstDate.getTime()));
+    console.log(`📅 Earliest common date for all asset baskets: ${earliestCommonDate.toISOString().split('T')[0]}`);
+  }
+  
   // OPTIMIZATION: Use quarterly rolling windows instead of monthly
   // Reduces sequence count from ~480 to ~120 for 10-year horizon
   const rollingWindowMonths = 3; // Quarterly instead of monthly
   
   // Generate rolling windows: each quarter as a potential start date
-  for (let year = startYear; year <= endYear - snappedYears; year++) {
-    for (let quarter = 0; quarter < 4; quarter++) {
+  // FIXED: Start from the earliest common date if available, otherwise use startYear
+  const effectiveStartYear = earliestCommonDate ? earliestCommonDate.getFullYear() : startYear;
+  const effectiveStartMonth = earliestCommonDate ? earliestCommonDate.getMonth() : 0;
+  // Start from the quarter containing the earliest common date
+  const effectiveStartQuarter = earliestCommonDate ? Math.floor(effectiveStartMonth / 3) : 0;
+  
+  console.log(`📊 Generating sequences from ${effectiveStartYear}-Q${effectiveStartQuarter + 1} onwards (ensuring all ETFs have data)`);
+  
+  for (let year = effectiveStartYear; year <= endYear - snappedYears; year++) {
+    // Start from effectiveStartQuarter if this is the first year, otherwise start from Q1
+    const startQuarter = (year === effectiveStartYear) ? effectiveStartQuarter : 0;
+    for (let quarter = startQuarter; quarter < 4; quarter++) {
       const month = quarter * 3;
       const startDate = new Date(year, month, 1);
       const endDate = new Date(year + snappedYears, month, 1);
@@ -255,52 +277,89 @@ function sliceAssetBasketReturns(
     throw new Error(`Date range ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]} not available in any asset basket data`);
   }
   
-  const expectedLength = referenceRange.endIdx - referenceRange.startIdx + 1;
-  
-  // GRACEFUL DEGRADATION: Validate date alignment only for available ranges
-  // If a range is null, we'll use zero returns (handled below)
+  // FIXED: Handle different ETF inception dates by finding the intersection of available dates
+  // ETFs have different start dates (VTI: 2001, VXUS: 2011, AGG: 2003), so we need to find
+  // the common date range where all assets have data, then align to that intersection
   if (usRange && intlRange && bondsRange) {
-    // FIXED: Validate date alignment between assets before slicing
-    // Extract the actual dates in each range to verify they match
-    const usDates = usEquityFull.dates.slice(usRange.startIdx, usRange.endIdx + 1);
-    const intlDates = intlEquityFull.dates.slice(intlRange.startIdx, intlRange.endIdx + 1);
-    const bondsDates = bondsFull.dates.slice(bondsRange.startIdx, bondsRange.endIdx + 1);
+    // Find the latest start date (when all three assets have data)
+    const usStartDate = usEquityFull.dates[usRange.startIdx];
+    const intlStartDate = intlEquityFull.dates[intlRange.startIdx];
+    const bondsStartDate = bondsFull.dates[bondsRange.startIdx];
+    const alignedStartDate = new Date(Math.max(usStartDate.getTime(), intlStartDate.getTime(), bondsStartDate.getTime()));
     
-    // Validate that all three assets have the same dates in the requested range
-    // This ensures returns are aligned and prevents false zero returns from padding
-    if (usDates.length !== intlDates.length || usDates.length !== bondsDates.length) {
+    // Find the earliest end date (when all three assets still have data)
+    const usEndDate = usEquityFull.dates[usRange.endIdx];
+    const intlEndDate = intlEquityFull.dates[intlRange.endIdx];
+    const bondsEndDate = bondsFull.dates[bondsRange.endIdx];
+    const alignedEndDate = new Date(Math.min(usEndDate.getTime(), intlEndDate.getTime(), bondsEndDate.getTime()));
+    
+    // If the aligned range is invalid (start >= end) or too short, skip this sequence
+    if (alignedStartDate >= alignedEndDate) {
       throw new Error(
-        `Date misalignment detected in asset basket data for range ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}: ` +
-        `VTI has ${usDates.length} data points, VXUS has ${intlDates.length}, AGG has ${bondsDates.length}. ` +
-        `All assets must have the same dates in the requested range to ensure aligned returns.`
+        `No overlapping date range available for ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}. ` +
+        `VTI starts ${usStartDate.toISOString().split('T')[0]}, VXUS starts ${intlStartDate.toISOString().split('T')[0]}, AGG starts ${bondsStartDate.toISOString().split('T')[0]}.`
       );
     }
     
-    // Validate that dates match exactly (not just count)
-    // FIXED: Use UTC date normalization to avoid timezone-dependent comparisons
-    // Comparing date strings (YYYY-MM-DD) is timezone-independent and more reliable
+    // Re-find ranges using the aligned dates (intersection)
+    const alignedUsRange = findDateRange(usEquityFull.dates, alignedStartDate, alignedEndDate);
+    const alignedIntlRange = findDateRange(intlEquityFull.dates, alignedStartDate, alignedEndDate);
+    const alignedBondsRange = findDateRange(bondsFull.dates, alignedStartDate, alignedEndDate);
+    
+    if (!alignedUsRange || !alignedIntlRange || !alignedBondsRange) {
+      throw new Error(`Failed to find aligned date ranges after intersection calculation`);
+    }
+    
+    // Extract dates from aligned ranges
+    const usDates = usEquityFull.dates.slice(alignedUsRange.startIdx, alignedUsRange.endIdx + 1);
+    const intlDates = intlEquityFull.dates.slice(alignedIntlRange.startIdx, alignedIntlRange.endIdx + 1);
+    const bondsDates = bondsFull.dates.slice(alignedBondsRange.startIdx, alignedBondsRange.endIdx + 1);
+    
+    // Validate lengths match (they should, since we're using the intersection)
+    if (usDates.length !== intlDates.length || usDates.length !== bondsDates.length) {
+      throw new Error(
+        `Date misalignment after intersection: VTI has ${usDates.length} data points, VXUS has ${intlDates.length}, AGG has ${bondsDates.length}`
+      );
+    }
+    
+    // Validate dates match exactly at each index
     for (let i = 0; i < usDates.length; i++) {
-      const usDate = usDates[i];
-      const intlDate = intlDates[i];
-      const bondsDate = bondsDates[i];
-      
-      // Extract date strings (YYYY-MM-DD) for timezone-independent comparison
-      // This compares the calendar date, ignoring time-of-day and timezone
-      const usDateStr = `${usDate.getUTCFullYear()}-${String(usDate.getUTCMonth() + 1).padStart(2, '0')}-${String(usDate.getUTCDate()).padStart(2, '0')}`;
-      const intlDateStr = `${intlDate.getUTCFullYear()}-${String(intlDate.getUTCMonth() + 1).padStart(2, '0')}-${String(intlDate.getUTCDate()).padStart(2, '0')}`;
-      const bondsDateStr = `${bondsDate.getUTCFullYear()}-${String(bondsDate.getUTCMonth() + 1).padStart(2, '0')}-${String(bondsDate.getUTCDate()).padStart(2, '0')}`;
+      const usDateStr = `${usDates[i].getUTCFullYear()}-${String(usDates[i].getUTCMonth() + 1).padStart(2, '0')}-${String(usDates[i].getUTCDate()).padStart(2, '0')}`;
+      const intlDateStr = `${intlDates[i].getUTCFullYear()}-${String(intlDates[i].getUTCMonth() + 1).padStart(2, '0')}-${String(intlDates[i].getUTCDate()).padStart(2, '0')}`;
+      const bondsDateStr = `${bondsDates[i].getUTCFullYear()}-${String(bondsDates[i].getUTCMonth() + 1).padStart(2, '0')}-${String(bondsDates[i].getUTCDate()).padStart(2, '0')}`;
       
       if (usDateStr !== intlDateStr || usDateStr !== bondsDateStr) {
         throw new Error(
-          `Date misalignment at index ${i} in asset basket data: ` +
-          `VTI date=${usDateStr}, ` +
-          `VXUS date=${intlDateStr}, ` +
-          `AGG date=${bondsDateStr}. ` +
-          `All assets must have identical dates at each index.`
+          `Date misalignment at index ${i}: VTI=${usDateStr}, VXUS=${intlDateStr}, AGG=${bondsDateStr}`
         );
       }
     }
+    
+    // Slice returns using aligned ranges
+    const usEquity = usEquityFull.returns.slice(alignedUsRange.startIdx, alignedUsRange.endIdx + 1);
+    const internationalEquity = intlEquityFull.returns.slice(alignedIntlRange.startIdx, alignedIntlRange.endIdx + 1);
+    const nominalBonds = bondsFull.returns.slice(alignedBondsRange.startIdx, alignedBondsRange.endIdx + 1);
+    
+    // Validate lengths match
+    if (usEquity.length !== internationalEquity.length || usEquity.length !== nominalBonds.length) {
+      throw new Error(
+        `Returns array length mismatch: VTI=${usEquity.length}, VXUS=${internationalEquity.length}, AGG=${nominalBonds.length}`
+      );
+    }
+    
+    // Cash returns are near-zero (treasury bill rate, approximated as 0 for simplicity)
+    const cash = new Array(usEquity.length).fill(0);
+    
+    return {
+      usEquity,
+      internationalEquity,
+      nominalBonds,
+      cash
+    };
   }
+  
+  // Fallback: If not all ranges are available, use graceful degradation
+  const expectedLength = referenceRange.endIdx - referenceRange.startIdx + 1;
   
   // Slice returns arrays for the date range
   // IMPORTANT: Returns are calculated between dates, so if we have dates[startIdx:endIdx] (inclusive),
