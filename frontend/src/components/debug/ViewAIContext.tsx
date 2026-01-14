@@ -218,7 +218,7 @@ export const ViewAIContext: React.FC<ViewAIContextProps> = ({ isOpen, onClose })
                     <button
                       onClick={handleRefresh}
                       disabled={loading}
-                      className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-3 py-1 text-sm bg-gray-200 hover:bg-gray-300 text-gray-800 border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
                       title="Refresh to get latest context"
                     >
                       {loading ? 'Refreshing...' : '🔄 Refresh'}
@@ -228,7 +228,7 @@ export const ViewAIContext: React.FC<ViewAIContextProps> = ({ isOpen, onClose })
                         const content = getActiveContent();
                         if (content) copyToClipboard(content);
                       }}
-                      className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-md"
+                      className="px-3 py-1 text-sm bg-gray-200 hover:bg-gray-300 text-gray-800 border border-gray-300 rounded-md font-medium transition-colors"
                     >
                       {copied ? 'Copied!' : 'Copy'}
                     </button>

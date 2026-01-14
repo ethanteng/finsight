@@ -3,10 +3,11 @@ import * as Sentry from '@sentry/node';
 import { analyzeQuestionNeeds } from './openai/question-analysis';
 import { filterConversationHistory, analyzeConversationContext } from './openai/conversation-context';
 import { gatherContextSnapshot } from './openai/context-service';
-import { buildPromptPayload } from './openai/prompt-builder';
+import { buildPromptPayload, formatAccountSummary, formatTransactionSummary, formatInvestmentSummary } from './openai/prompt-builder';
 import { postProcessAnswer } from './openai/response-processor';
 import { UserTier } from './data/types';
 import { ConversationEntry } from './openai/types';
+import { logGPTContext } from './services/gpt-logger';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 export const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
@@ -63,6 +64,40 @@ export async function askOpenAIWithEnhancedContext(
       conversationHistory: filteredHistory,
       contextInstruction
     });
+
+    // Log GPT context for debugging (only for authenticated users, not demo)
+    // ✅ IMPORTANT: This logs NON-ANONYMIZED data - all account names, transaction details,
+    // institution names, merchant names, and profile information are logged as-is.
+    // The snapshot from gatherContextSnapshot() uses getOriginalProfile() and raw account/transaction data.
+    if (userId && !isDemo && process.env.PERSIST_GPT_CONTEXT === 'true') {
+      try {
+        // Format summaries using non-anonymized data from snapshot
+        const accountSummary = formatAccountSummary(snapshot.accounts);
+        const transactionSummary = formatTransactionSummary(snapshot.bankingTransactions);
+        const investmentSummary = snapshot.investments ? formatInvestmentSummary(snapshot.investments) : undefined;
+        
+        await logGPTContext({
+          userId,
+          question,
+          systemPrompt: promptPayload.systemPrompt, // Contains non-anonymized profile, accounts, transactions
+          conversationHistory: filteredHistory.map(conv => ({
+            id: conv.id,
+            question: conv.question,
+            answer: conv.answer,
+            createdAt: conv.createdAt
+          })),
+          accountSummary, // Non-anonymized account names and institutions
+          transactionSummary, // Non-anonymized transaction names and merchants
+          investmentSummary, // Non-anonymized investment holdings
+          marketContextSummary: snapshot.marketContext,
+          searchContext: snapshot.searchContext,
+          timestamp: new Date()
+        });
+      } catch (logError) {
+        // Don't fail the request if logging fails
+        console.warn('Failed to log GPT context:', logError);
+      }
+    }
 
     const completion = await openai.chat.completions.create({
       model: model || 'gpt-4o',

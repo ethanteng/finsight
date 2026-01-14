@@ -227,7 +227,7 @@ function deduplicateLiabilitySections(promptText: string): string {
   return deduplicated;
 }
 
-function formatAccountSummary(accounts: AccountSummaryItem[]): string {
+export function formatAccountSummary(accounts: AccountSummaryItem[]): string {
   if (accounts.length === 0) {
     return 'No account data available.';
   }
@@ -242,7 +242,7 @@ function formatAccountSummary(accounts: AccountSummaryItem[]): string {
     .join('\n');
 }
 
-function formatTransactionSummary(transactions: TransactionSummaryItem[]): string {
+export function formatTransactionSummary(transactions: TransactionSummaryItem[]): string {
   if (transactions.length === 0) {
     return 'No recent transactions available.';
   }
@@ -258,7 +258,7 @@ function formatTransactionSummary(transactions: TransactionSummaryItem[]): strin
     .join('\n');
 }
 
-function formatInvestmentSummary(investments: FinancialContextSnapshot['investments']): string {
+export function formatInvestmentSummary(investments: FinancialContextSnapshot['investments']): string {
   if (!investments) {
     return '';
   }
