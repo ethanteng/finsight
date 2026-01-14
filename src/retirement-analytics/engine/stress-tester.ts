@@ -178,26 +178,38 @@ export async function generateRollingSequences(
       const startDate = new Date(year, month, 1);
       const endDate = new Date(year + snappedYears, month, 1);
       
-      // Skip if end date exceeds available data
-      if (endDate > new Date()) continue;
+      // FIXED: For sequences that extend into the future, use current date as end date
+      // This allows us to generate sequences even if they haven't completed yet
+      // We'll use available historical data up to today
+      const effectiveEndDate = endDate > new Date() ? new Date() : endDate;
+      
+      // Skip if start date is in the future or if we don't have enough data
+      if (startDate > new Date()) continue;
+      
+      // Skip if the effective range is too short (less than 1 year)
+      const rangeYears = (effectiveEndDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 365);
+      if (rangeYears < 1) {
+        console.log(`⏭️ Skipping sequence ${year}-Q${quarter + 1}: range too short (${rangeYears.toFixed(1)} years)`);
+        continue;
+      }
       
       try {
         // OPTIMIZATION: Slice from pre-fetched full history instead of making new API calls
         const assetBasketReturns = sliceAssetBasketReturns(
           startDate,
-          endDate,
+          effectiveEndDate,
           usEquity.data,
           intlEquity.data,
           bonds.data
         );
         
-        const inflationRates = await fetchInflationRates(startDate, endDate, fredProvider);
+        const inflationRates = await fetchInflationRates(startDate, effectiveEndDate, fredProvider);
         
-        const sequenceId = `${year}-Q${quarter + 1}_to_${year + snappedYears}-Q${quarter + 1}`;
+        const sequenceId = `${year}-Q${quarter + 1}_to_${effectiveEndDate.getFullYear()}-Q${Math.floor(effectiveEndDate.getMonth() / 3) + 1}`;
         
         sequences.push({
           startDate,
-          endDate,
+          endDate: effectiveEndDate,
           sequenceId,
           assetBasketReturns,
           inflationRates

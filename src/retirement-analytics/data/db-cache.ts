@@ -246,43 +246,58 @@ export class DatabaseCache {
     provider: string = 'tiingo'
   ): Promise<void> {
     try {
-      // Use transaction to ensure atomicity
-      await this.prisma.$transaction(async (tx) => {
-        for (let i = 0; i < priceData.dates.length; i++) {
-          const date = priceData.dates[i];
-          const price = priceData.prices[i];
-          await tx.assetPriceHistory.upsert({
-            where: {
-              tickerSymbol_date_provider: {
+      // FIXED: Use batch operations with increased timeout to avoid transaction timeouts
+      // For large datasets (50 years = ~600 records), individual upserts in a transaction can exceed 5s timeout
+      // Solution: Use createMany with skipDuplicates, or batch upserts with increased timeout
+      const batchSize = 100; // Process in batches to avoid memory issues
+      const timeout = 30000; // 30 seconds timeout for large batches
+      
+      for (let i = 0; i < priceData.dates.length; i += batchSize) {
+        const batch = priceData.dates.slice(i, Math.min(i + batchSize, priceData.dates.length));
+        
+        await this.prisma.$transaction(async (tx) => {
+          // Use Promise.all for parallel upserts within batch
+          await Promise.all(batch.map((date, batchIdx) => {
+            const globalIdx = i + batchIdx;
+            const price = priceData.prices[globalIdx];
+            return tx.assetPriceHistory.upsert({
+              where: {
+                tickerSymbol_date_provider: {
+                  tickerSymbol: ticker,
+                  date: date,
+                  provider: provider
+                }
+              },
+              update: {
+                open: price,
+                high: price,
+                low: price,
+                close: price,
+                adjustedClose: price,
+                volume: BigInt(0),
+                cachedAt: new Date()
+              },
+              create: {
                 tickerSymbol: ticker,
                 date: date,
-                provider: provider
+                open: price,
+                high: price,
+                low: price,
+                close: price,
+                adjustedClose: price,
+                volume: BigInt(0),
+                provider: provider,
+                cachedAt: new Date()
               }
-            },
-            update: {
-              open: price, // Use price as open/high/low/close if we don't have separate values
-              high: price,
-              low: price,
-              close: price,
-              adjustedClose: price,
-              volume: BigInt(0), // Volume not available in PriceTimeSeries
-              cachedAt: new Date()
-            },
-            create: {
-              tickerSymbol: ticker,
-              date: date,
-              open: price,
-              high: price,
-              low: price,
-              close: price,
-              adjustedClose: price,
-              volume: BigInt(0),
-              provider: provider,
-              cachedAt: new Date()
-            }
-          });
-        }
-      });
+            });
+          }));
+        }, {
+          timeout: timeout,
+          maxWait: timeout
+        });
+      }
+      
+      console.log(`✅ Saved ${priceData.dates.length} price history records for ${ticker} to database`);
     } catch (error) {
       console.error(`Error saving price history to database for ${ticker}:`, error);
       // Don't throw - cache failures shouldn't break the analysis
