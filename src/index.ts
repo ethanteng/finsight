@@ -2740,14 +2740,20 @@ app.post('/profile/home', requireAuth, async (req: Request, res: Response) => {
       });
     }
     
-    // Invalidate financial summary cache so net worth includes new home value
+    // Invalidate financial summary caches so net worth includes new home value
+    // Refresh both FinancialSummaryService (for /finances page) and SummaryCacheService (for GPT prompts)
     try {
       const { FinancialSummaryService } = await import('./services/financial-summary-service');
+      const { SummaryCacheService } = await import('./services/summary-cache-service');
       const financialSummaryService = new FinancialSummaryService();
-      // Trigger async refresh of financial summary with new home value
+      
+      // Trigger async refresh of both caches with new home value
       setImmediate(() => {
-        financialSummaryService.refreshUserSummary(req.user!.id).catch(error => {
-          console.error(`Failed to refresh financial summary after home value update:`, error);
+        Promise.all([
+          financialSummaryService.refreshUserSummary(req.user!.id),
+          SummaryCacheService.computeForUser(req.user!.id, { categorize: false })
+        ]).catch(error => {
+          console.error(`Failed to refresh financial summaries after home value update:`, error);
         });
       });
     } catch (error) {
@@ -2817,14 +2823,20 @@ app.post('/profile/home/refresh', requireAuth, async (req: Request, res: Respons
       });
     }
     
-    // Invalidate financial summary cache so net worth includes refreshed home value
+    // Invalidate financial summary caches so net worth includes refreshed home value
+    // Refresh both FinancialSummaryService (for /finances page) and SummaryCacheService (for GPT prompts)
     try {
       const { FinancialSummaryService } = await import('./services/financial-summary-service');
+      const { SummaryCacheService } = await import('./services/summary-cache-service');
       const financialSummaryService = new FinancialSummaryService();
-      // Trigger async refresh of financial summary with refreshed home value
+      
+      // Trigger async refresh of both caches with refreshed home value
       setImmediate(() => {
-        financialSummaryService.refreshUserSummary(req.user!.id).catch(error => {
-          console.error(`Failed to refresh financial summary after home value refresh:`, error);
+        Promise.all([
+          financialSummaryService.refreshUserSummary(req.user!.id),
+          SummaryCacheService.computeForUser(req.user!.id, { categorize: false })
+        ]).catch(error => {
+          console.error(`Failed to refresh financial summaries after home value refresh:`, error);
         });
       });
     } catch (error) {
@@ -2887,14 +2899,20 @@ app.put('/profile/home/value', requireAuth, async (req: Request, res: Response) 
     // Update manual override
     const homeData = await profileManager.updateManualHomeValue(req.user!.id, value);
     
-    // Invalidate financial summary cache so net worth includes updated home value
+    // Invalidate financial summary caches so net worth includes updated home value
+    // Refresh both FinancialSummaryService (for /finances page) and SummaryCacheService (for GPT prompts)
     try {
       const { FinancialSummaryService } = await import('./services/financial-summary-service');
+      const { SummaryCacheService } = await import('./services/summary-cache-service');
       const financialSummaryService = new FinancialSummaryService();
-      // Trigger async refresh of financial summary with new home value
+      
+      // Trigger async refresh of both caches with updated home value
       setImmediate(() => {
-        financialSummaryService.refreshUserSummary(req.user!.id).catch(error => {
-          console.error(`Failed to refresh financial summary after home value update:`, error);
+        Promise.all([
+          financialSummaryService.refreshUserSummary(req.user!.id),
+          SummaryCacheService.computeForUser(req.user!.id, { categorize: false })
+        ]).catch(error => {
+          console.error(`Failed to refresh financial summaries after home value update:`, error);
         });
       });
     } catch (error) {
@@ -2947,14 +2965,20 @@ app.delete('/profile/home/value', requireAuth, async (req: Request, res: Respons
     // Remove manual override
     const homeData = await profileManager.removeManualHomeValue(req.user!.id);
     
-    // Invalidate financial summary cache so net worth reflects removed manual override
+    // Invalidate financial summary caches so net worth reflects removed manual override
+    // Refresh both FinancialSummaryService (for /finances page) and SummaryCacheService (for GPT prompts)
     try {
       const { FinancialSummaryService } = await import('./services/financial-summary-service');
+      const { SummaryCacheService } = await import('./services/summary-cache-service');
       const financialSummaryService = new FinancialSummaryService();
-      // Trigger async refresh of financial summary
+      
+      // Trigger async refresh of both caches
       setImmediate(() => {
-        financialSummaryService.refreshUserSummary(req.user!.id).catch(error => {
-          console.error(`Failed to refresh financial summary after removing manual home value:`, error);
+        Promise.all([
+          financialSummaryService.refreshUserSummary(req.user!.id),
+          SummaryCacheService.computeForUser(req.user!.id, { categorize: false })
+        ]).catch(error => {
+          console.error(`Failed to refresh financial summaries after removing manual home value:`, error);
         });
       });
     } catch (error) {
