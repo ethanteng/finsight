@@ -286,9 +286,15 @@ export class SummaryCacheService {
       }
       return sum;
     }, 0);
-    // Extract homeValue: treat 0 as null (no value set)
-    const rawHomeValue = data?.homeValue?.valueMid;
-    const homeValue = (rawHomeValue != null && rawHomeValue > 0) ? rawHomeValue : null;
+    // Extract homeValue: prioritize valueMid (manual override or RentCast estimate), then fall back to valueHigh or valueLow
+    // Use explicit null checks to handle 0 values correctly (0 is a valid home value, though unlikely)
+    const homeValue = data?.homeValue?.valueMid != null && data.homeValue.valueMid > 0
+      ? data.homeValue.valueMid
+      : (data?.homeValue?.valueHigh != null && data.homeValue.valueHigh > 0
+        ? data.homeValue.valueHigh
+        : (data?.homeValue?.valueLow != null && data.homeValue.valueLow > 0
+          ? data.homeValue.valueLow
+          : null));
     const netWorth = totalCash + totalInvestments + (homeValue ?? 0) - totalDebt;
     return { netWorth, totalCash, totalInvestments, totalDebt, homeValue };
   }

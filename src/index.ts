@@ -2740,6 +2740,21 @@ app.post('/profile/home', requireAuth, async (req: Request, res: Response) => {
       });
     }
     
+    // Invalidate financial summary cache so net worth includes new home value
+    try {
+      const { FinancialSummaryService } = await import('./services/financial-summary-service');
+      const financialSummaryService = new FinancialSummaryService();
+      // Trigger async refresh of financial summary with new home value
+      setImmediate(() => {
+        financialSummaryService.refreshUserSummary(req.user!.id).catch(error => {
+          console.error(`Failed to refresh financial summary after home value update:`, error);
+        });
+      });
+    } catch (error) {
+      console.error('Failed to trigger financial summary refresh:', error);
+      // Don't fail the request if cache refresh fails
+    }
+    
     // Get updated home data
     const profileText = await profileManager.getOriginalProfile(req.user!.id);
     const homeData = profileManager.extractHomeData(profileText);
@@ -2802,6 +2817,21 @@ app.post('/profile/home/refresh', requireAuth, async (req: Request, res: Respons
       });
     }
     
+    // Invalidate financial summary cache so net worth includes refreshed home value
+    try {
+      const { FinancialSummaryService } = await import('./services/financial-summary-service');
+      const financialSummaryService = new FinancialSummaryService();
+      // Trigger async refresh of financial summary with refreshed home value
+      setImmediate(() => {
+        financialSummaryService.refreshUserSummary(req.user!.id).catch(error => {
+          console.error(`Failed to refresh financial summary after home value refresh:`, error);
+        });
+      });
+    } catch (error) {
+      console.error('Failed to trigger financial summary refresh:', error);
+      // Don't fail the request if cache refresh fails
+    }
+    
     // Get updated home data
     const updatedProfileText = await profileManager.getOriginalProfile(req.user!.id);
     const homeData = profileManager.extractHomeData(updatedProfileText);
@@ -2857,6 +2887,21 @@ app.put('/profile/home/value', requireAuth, async (req: Request, res: Response) 
     // Update manual override
     const homeData = await profileManager.updateManualHomeValue(req.user!.id, value);
     
+    // Invalidate financial summary cache so net worth includes updated home value
+    try {
+      const { FinancialSummaryService } = await import('./services/financial-summary-service');
+      const financialSummaryService = new FinancialSummaryService();
+      // Trigger async refresh of financial summary with new home value
+      setImmediate(() => {
+        financialSummaryService.refreshUserSummary(req.user!.id).catch(error => {
+          console.error(`Failed to refresh financial summary after home value update:`, error);
+        });
+      });
+    } catch (error) {
+      console.error('Failed to trigger financial summary refresh:', error);
+      // Don't fail the request if cache refresh fails
+    }
+    
     // Ensure valueLow and valueHigh are always numbers (use value as fallback if null)
     const valueLow = homeData.valueLow ?? homeData.value ?? 0;
     const valueHigh = homeData.valueHigh ?? homeData.value ?? 0;
@@ -2901,6 +2946,21 @@ app.delete('/profile/home/value', requireAuth, async (req: Request, res: Respons
     
     // Remove manual override
     const homeData = await profileManager.removeManualHomeValue(req.user!.id);
+    
+    // Invalidate financial summary cache so net worth reflects removed manual override
+    try {
+      const { FinancialSummaryService } = await import('./services/financial-summary-service');
+      const financialSummaryService = new FinancialSummaryService();
+      // Trigger async refresh of financial summary
+      setImmediate(() => {
+        financialSummaryService.refreshUserSummary(req.user!.id).catch(error => {
+          console.error(`Failed to refresh financial summary after removing manual home value:`, error);
+        });
+      });
+    } catch (error) {
+      console.error('Failed to trigger financial summary refresh:', error);
+      // Don't fail the request if cache refresh fails
+    }
     
     // Ensure valueLow and valueHigh are always numbers (use value as fallback if null)
     const valueLow = homeData.valueLow ?? homeData.value ?? 0;

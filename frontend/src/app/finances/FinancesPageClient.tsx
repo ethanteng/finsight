@@ -422,23 +422,24 @@ export default function FinancesPageClient() {
 
       <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
         {/* Net Worth Card */}
+        {/* Use snapshot.homeValue first (backend-calculated), then fall back to homeData.value for display */}
         <NetWorthCard 
           netWorth={Math.round(
             snapshot.financialOverview.totalCash + 
             snapshot.financialOverview.totalInvestments + 
-            (homeData?.value || snapshot.financialOverview.homeValue || 0) - 
+            (snapshot.financialOverview.homeValue ?? homeData?.value ?? 0) - 
             snapshot.financialOverview.totalDebt
           )}
           totalCash={Math.round(snapshot.financialOverview.totalCash)}
           totalInvestments={Math.round(snapshot.financialOverview.totalInvestments)}
           totalDebt={Math.round(snapshot.financialOverview.totalDebt)}
-          homeValue={homeData?.value || snapshot.financialOverview.homeValue || null}
+          homeValue={snapshot.financialOverview.homeValue ?? homeData?.value ?? null}
         />
 
         {/* Financial Metrics Chart */}
         {!historicalDataLoading && snapshot && (() => {
-          // Get current home value (prefer homeData, then snapshot, then null)
-          const currentHomeValue = homeData?.value || snapshot.financialOverview.homeValue || null;
+          // Get current home value (prefer snapshot.homeValue - backend-calculated, then fall back to homeData.value)
+          const currentHomeValue = snapshot.financialOverview.homeValue ?? homeData?.value ?? null;
           
           // Create current snapshot with accurate values
           const currentSnapshot = {

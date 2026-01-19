@@ -290,7 +290,9 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
         totalCash: s.totalCash && s.totalCash > 0 ? s.totalCash : derived.totalCash,
         totalDebt: s.totalDebt && s.totalDebt > 0 ? s.totalDebt : derived.totalDebt,
         totalInvestments: s.totalInvestments && s.totalInvestments > 0 ? s.totalInvestments : derived.totalInvestments,
-        totalHomeValue: (s.homeValue ?? 0) > 0 ? (s.homeValue as number) : derived.totalHomeValue,
+        // Use snapshot homeValue if available (backend-calculated), otherwise fall back to derived
+        // This ensures consistency with backend net worth calculation
+        totalHomeValue: s.homeValue != null && s.homeValue > 0 ? s.homeValue : (derived.totalHomeValue || 0),
         uncategorizedAccounts: derived.uncategorizedAccounts
       };
     }

@@ -121,7 +121,15 @@ export class FinancialSummaryService {
     }
     
     const totalInvestments = investments.portfolio.totalValue || 0;
-    const homeValueAmount = homeValue?.valueMid || homeValue?.valueHigh || homeValue?.valueLow || null;
+    // Prioritize valueMid (manual override or RentCast estimate), then fall back to valueHigh or valueLow
+    // Use explicit null checks to handle 0 values correctly (0 is a valid home value, though unlikely)
+    const homeValueAmount = homeValue?.valueMid != null && homeValue.valueMid > 0 
+      ? homeValue.valueMid 
+      : (homeValue?.valueHigh != null && homeValue.valueHigh > 0 
+        ? homeValue.valueHigh 
+        : (homeValue?.valueLow != null && homeValue.valueLow > 0 
+          ? homeValue.valueLow 
+          : null));
     
     console.log(`📊 Financial Summary Calculation:
       - Total Cash: $${totalCash.toFixed(2)}

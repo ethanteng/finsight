@@ -390,10 +390,13 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
       result.address = addressMatch[1].trim();
     }
 
-    // Extract manual override value first (takes precedence)
-    const manualValueMatch = profileText.match(/HOME_VALUE_MANUAL:\s*(\d+(?:\.\d+)?)/);
+    // Extract manual override value first (takes precedence over RentCast estimate)
+    // Regex handles numbers with optional decimals, and also handles commas (though they shouldn't be in stored values)
+    const manualValueMatch = profileText.match(/HOME_VALUE_MANUAL:\s*([\d,]+(?:\.\d+)?)/);
     if (manualValueMatch) {
-      const manualValue = parseFloat(manualValueMatch[1]);
+      // Remove commas if present (shouldn't happen, but handle it)
+      const cleanedValue = manualValueMatch[1].replace(/,/g, '');
+      const manualValue = parseFloat(cleanedValue);
       if (manualValue > 0) {
         result.value = manualValue;
         result.isManualOverride = true;
@@ -402,22 +405,28 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
 
     // Extract home value (RentCast estimate) - only use if no manual override
     if (!result.isManualOverride) {
-      const valueMatch = profileText.match(/HOME_VALUE:\s*(\d+(?:\.\d+)?)/);
+      const valueMatch = profileText.match(/HOME_VALUE:\s*([\d,]+(?:\.\d+)?)/);
       if (valueMatch) {
-        result.value = parseFloat(valueMatch[1]);
+        const cleanedValue = valueMatch[1].replace(/,/g, '');
+        const parsedValue = parseFloat(cleanedValue);
+        if (parsedValue > 0) {
+          result.value = parsedValue;
+        }
       }
     }
 
-    // Extract home value low (supports both integers and decimals)
-    const valueLowMatch = profileText.match(/HOME_VALUE_LOW:\s*(\d+(?:\.\d+)?)/);
+    // Extract home value low (supports both integers and decimals, handles commas)
+    const valueLowMatch = profileText.match(/HOME_VALUE_LOW:\s*([\d,]+(?:\.\d+)?)/);
     if (valueLowMatch) {
-      result.valueLow = parseFloat(valueLowMatch[1]);
+      const cleanedValue = valueLowMatch[1].replace(/,/g, '');
+      result.valueLow = parseFloat(cleanedValue);
     }
 
-    // Extract home value high (supports both integers and decimals)
-    const valueHighMatch = profileText.match(/HOME_VALUE_HIGH:\s*(\d+(?:\.\d+)?)/);
+    // Extract home value high (supports both integers and decimals, handles commas)
+    const valueHighMatch = profileText.match(/HOME_VALUE_HIGH:\s*([\d,]+(?:\.\d+)?)/);
     if (valueHighMatch) {
-      result.valueHigh = parseFloat(valueHighMatch[1]);
+      const cleanedValue = valueHighMatch[1].replace(/,/g, '');
+      result.valueHigh = parseFloat(cleanedValue);
     }
 
     // Extract last updated timestamp
