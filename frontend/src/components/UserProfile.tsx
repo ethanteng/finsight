@@ -13,6 +13,7 @@ interface HomeData {
   valueLow: number;
   valueHigh: number;
   lastUpdated: string;
+  isManualOverride?: boolean;
 }
 
 export default function UserProfile({ userId, isDemo }: UserProfileProps) {
@@ -33,6 +34,12 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
   const [homeEditing, setHomeEditing] = useState(false);
   const [homeError, setHomeError] = useState('');
   const [homeSuccess, setHomeSuccess] = useState('');
+  
+  // Home value override state
+  const [isEditingValue, setIsEditingValue] = useState(false);
+  const [editValue, setEditValue] = useState('');
+  const [isSavingValue, setIsSavingValue] = useState(false);
+  const [valueError, setValueError] = useState<string | null>(null);
   
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -260,6 +267,93 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
     }
   };
 
+  const handleSaveValue = async () => {
+    const numericValue = parseFloat(editValue.replace(/[^0-9.]/g, ''));
+    
+    if (isNaN(numericValue) || numericValue <= 0) {
+      setValueError('Please enter a valid positive number');
+      return;
+    }
+
+    setIsSavingValue(true);
+    setValueError(null);
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      
+      const response = await fetch(`${API_URL}/profile/home/value`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ value: numericValue })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update home value');
+      }
+
+      const data = await response.json();
+      setHomeData(data.homeData);
+      setIsEditingValue(false);
+      setHomeSuccess('Home value updated successfully!');
+      setTimeout(() => setHomeSuccess(''), 3000);
+    } catch (err) {
+      setValueError(err instanceof Error ? err.message : 'Failed to update home value');
+    } finally {
+      setIsSavingValue(false);
+    }
+  };
+
+  const handleResetValue = async () => {
+    setIsSavingValue(true);
+    setValueError(null);
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      
+      const response = await fetch(`${API_URL}/profile/home/value`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to reset home value');
+      }
+
+      const data = await response.json();
+      setHomeData(data.homeData);
+      setIsEditingValue(false);
+      setHomeSuccess('Home value reset to estimate!');
+      setTimeout(() => setHomeSuccess(''), 3000);
+    } catch (err) {
+      setValueError(err instanceof Error ? err.message : 'Failed to reset home value');
+    } finally {
+      setIsSavingValue(false);
+    }
+  };
+
+  const handleCancelValueEdit = () => {
+    if (homeData) {
+      setEditValue(homeData.value.toString());
+    }
+    setIsEditingValue(false);
+    setValueError(null);
+  };
+
+  // Sync editValue with homeData.value when it changes
+  useEffect(() => {
+    if (!isEditingValue && homeData) {
+      setEditValue(homeData.value.toString());
+    }
+  }, [homeData?.value, isEditingValue]);
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -397,20 +491,99 @@ Note: This profile reflects our financial situation as of August 2025.`;
                     <div className="text-white">{homeData.address}</div>
                   </div>
                   <div className="mb-2">
-                    <span className="text-gray-400 text-sm">Estimated Value:</span>
-                    <div className="text-white font-medium text-lg">
-                      {formatCurrency(homeData.valueLow)} - {formatCurrency(homeData.valueHigh)}
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-gray-400 text-sm">Home Value:</span>
+                      {homeData.isManualOverride && (
+                        <span className="px-2 py-1 bg-blue-900/30 text-blue-300 text-xs rounded border border-blue-700/50">
+                          Manual
+                        </span>
+                      )}
                     </div>
-                    <div className="text-gray-500 text-xs">
-                      (Mid-range estimate: {formatCurrency(homeData.value)})
-                    </div>
+                    {isEditingValue ? (
+                      <div className="space-y-3">
+                        <input
+                          type="text"
+                          value={editValue}
+                          onChange={(e) => {
+                            // Allow only numbers and a single decimal point
+                            let value = e.target.value.replace(/[^0-9.]/g, '');
+                            
+                            // Prevent multiple decimal points - keep only the first decimal part
+                            const parts = value.split('.');
+                            if (parts.length > 2) {
+                              // Keep only the first part and the second part (first decimal part)
+                              value = parts[0] + '.' + parts[1];
+                            }
+                            
+                            setEditValue(value);
+                            setValueError(null);
+                          }}
+                          className="w-full bg-gray-800 text-white text-2xl font-bold px-3 py-2 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+                          placeholder="Enter value"
+                          disabled={isSavingValue}
+                          autoFocus
+                        />
+                        {valueError && (
+                          <div className="text-red-400 text-sm">{valueError}</div>
+                        )}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleSaveValue}
+                            disabled={isSavingValue}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isSavingValue ? 'Saving...' : 'Save'}
+                          </button>
+                          <button
+                            onClick={handleCancelValueEdit}
+                            disabled={isSavingValue}
+                            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="text-white font-bold text-2xl mb-1">
+                          {formatCurrency(homeData.value)}
+                        </div>
+                        {!homeData.isManualOverride && (
+                          <>
+                            <div className="text-gray-400 text-sm mb-1">
+                              Range: {formatCurrency(homeData.valueLow)} - {formatCurrency(homeData.valueHigh)}
+                            </div>
+                            <div className="text-gray-500 text-xs">
+                              (Mid-range estimate)
+                            </div>
+                          </>
+                        )}
+                      </>
+                    )}
                   </div>
-                  <div className="text-gray-500 text-xs">
+                  <div className="text-gray-500 text-xs mt-2">
                     Last updated: {formatDate(homeData.lastUpdated)}
                   </div>
                 </div>
                 
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
+                  {!isEditingValue && (
+                    <button
+                      onClick={() => setIsEditingValue(true)}
+                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm"
+                    >
+                      Edit Value
+                    </button>
+                  )}
+                  {homeData.isManualOverride && !isEditingValue && (
+                    <button
+                      onClick={handleResetValue}
+                      disabled={isSavingValue}
+                      className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:bg-gray-800 transition-colors text-sm"
+                    >
+                      Reset to Estimate
+                    </button>
+                  )}
                   <button
                     onClick={handleEditHome}
                     className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition-colors text-sm"

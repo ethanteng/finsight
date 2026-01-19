@@ -1642,7 +1642,7 @@ export class FinancialDataService {
                 available: balance,
                 iso_currency_code: 'USD'
               },
-              institution: 'SnapTrade',
+              institution: account.institution || 'Unknown', // ✅ Use actual institution name (e.g., "Public") instead of hardcoded "SnapTrade"
               source: 'snaptrade',
               persistentAccountId: accountId, // ✅ Set for SnapTrade accounts
               // ✅ Do NOT set plaidAccountId - SnapTrade accounts don't have one

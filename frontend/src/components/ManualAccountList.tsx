@@ -110,8 +110,7 @@ export default function ManualAccountList({ accounts, onRefresh, isDemo = false 
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold text-white">Manual Accounts</h3>
+      <div className="flex justify-end">
         <button
           onClick={() => setShowForm(true)}
           className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors text-sm"
