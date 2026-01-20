@@ -481,6 +481,54 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     });
   }
 
+  // Always fetch existing retirement analysis for investment/portfolio/retirement questions
+  // This ensures follow-up questions can reference the analysis even without exact parameter matching
+  let retirementPortfolioSnapshot: FinancialContextSnapshot['retirementPortfolioSnapshot'] | undefined;
+  let retirementSecurityMetadata: FinancialContextSnapshot['retirementSecurityMetadata'] | undefined;
+  let existingAnalysisInput: any = undefined;
+  
+  if (userId && !isDemo && (questionNeeds.needsRetirement || questionNeeds.needsMarketContext || questionNeeds.needsInvestments)) {
+    try {
+      console.log('🔍 Checking for existing retirement analysis (triggered by retirement/investment/portfolio question)');
+      const existingAnalysisData = await fetchExistingRetirementAnalysis(userId);
+      
+      if (existingAnalysisData.analysis && !retirementAnalysis) {
+        // Use existing analysis if we don't have a new one
+        // Attach stored input params to the analysis object for reference
+        if (existingAnalysisData.analysisInput) {
+          (existingAnalysisData.analysis as any)._storedInputParams = existingAnalysisData.analysisInput;
+        }
+        retirementAnalysis = existingAnalysisData.analysis;
+        existingAnalysisInput = existingAnalysisData.analysisInput;
+        console.log('📦 Using existing retirement analysis for investment/portfolio question (no new analysis created)');
+      } else if (existingAnalysisData.analysis && retirementAnalysis) {
+        // We have both existing and new analysis - log this case
+        existingAnalysisInput = existingAnalysisData.analysisInput;
+        console.log('📦 Both existing and new retirement analysis available - using new analysis, but existing analysis data also available');
+      }
+      
+      if (existingAnalysisData.portfolioSnapshot) {
+        retirementPortfolioSnapshot = existingAnalysisData.portfolioSnapshot;
+        console.log(`📊 Including portfolio snapshot: ${retirementPortfolioSnapshot.holdings.length} holdings, ${retirementPortfolioSnapshot.securities.length} securities`);
+        
+        // Fetch security metadata for all tickers in the portfolio
+        const metadataStartTime = Date.now();
+        retirementSecurityMetadata = await fetchSecurityMetadataForPortfolio(existingAnalysisData.portfolioSnapshot);
+        const metadataFetchTime = Date.now() - metadataStartTime;
+        const metadataCount = Object.keys(retirementSecurityMetadata).length;
+        console.log(`📋 Fetched security metadata for ${metadataCount} tickers in ${metadataFetchTime}ms`);
+        
+        // Log cache hit/miss details
+        if (metadataCount > 0) {
+          console.log(`✅ Security metadata available for tickers: ${Object.keys(retirementSecurityMetadata).slice(0, 10).join(', ')}${metadataCount > 10 ? '...' : ''}`);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error fetching existing retirement analysis:', error);
+      // Don't fail if we can't fetch existing analysis
+    }
+  }
+
   return {
     accounts: accountSummaries,
     bankingTransactions: transactionSummaries,
@@ -495,8 +543,164 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     homeValueSummary,
     financialSummary: financialSummary || undefined,
     retirementAnalysis,
-    retirementAnalysisNeedsInfo
+    retirementAnalysisNeedsInfo,
+    retirementPortfolioSnapshot,
+    retirementSecurityMetadata
   };
+}
+
+/**
+ * Fetch existing retirement analysis without parameter matching
+ * Used to include analysis in context for any investment/portfolio/retirement question
+ */
+async function fetchExistingRetirementAnalysis(userId: string): Promise<{
+  analysis: FinancialContextSnapshot['retirementAnalysis'] | null;
+  portfolioSnapshot: { holdings: any[]; securities: any[] } | null;
+  analysisInput?: any; // Store input parameters for comparison
+}> {
+  try {
+    const { getPrismaClient } = await import('../prisma-client');
+    const prisma = getPrismaClient();
+    
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    console.log(`🔍 Checking for existing retirement analysis for user ${userId} (within last 7 days, since ${sevenDaysAgo.toISOString()})`);
+    
+    const recentAnalysis = await prisma.retirementAnalysis.findFirst({
+      where: {
+        userId,
+        computedAt: {
+          gte: sevenDaysAgo
+        }
+      },
+      orderBy: {
+        computedAt: 'desc'
+      }
+    });
+    
+    if (!recentAnalysis) {
+      console.log('📭 No recent retirement analysis found (within 7 days)');
+      return { analysis: null, portfolioSnapshot: null };
+    }
+    
+    const ageInDays = Math.floor((Date.now() - recentAnalysis.computedAt.getTime()) / (24 * 60 * 60 * 1000));
+    console.log(`✅ Found existing retirement analysis from ${ageInDays} days ago (computed at ${recentAnalysis.computedAt.toISOString()})`);
+    
+    // Extract analysis from historicalImplications field
+    const cachedAnalysis = recentAnalysis.historicalImplications as any;
+    const portfolioSnapshot = recentAnalysis.portfolioSnapshot as any;
+    const analysisInput = recentAnalysis.analysisInput as any;
+    
+    console.log('📊 Analysis details:', {
+      hasFullAnalysis: !!(cachedAnalysis && cachedAnalysis.summary),
+      hasPortfolioSnapshot: !!portfolioSnapshot,
+      portfolioSnapshotHoldings: portfolioSnapshot?.holdings?.length || 0,
+      portfolioSnapshotSecurities: portfolioSnapshot?.securities?.length || 0,
+      storedInputParams: analysisInput ? {
+        currentAge: analysisInput.currentAge,
+        retirementAge: analysisInput.retirementAge,
+        annualWithdrawalAmount: analysisInput.annualWithdrawalAmount,
+        withdrawalStartAge: analysisInput.withdrawalStartAge
+      } : null
+    });
+    
+    if (cachedAnalysis && cachedAnalysis.summary) {
+      // Full analysis result is stored, return it directly
+      console.log('✅ Using full stored analysis from historicalImplications field');
+      return {
+        analysis: cachedAnalysis,
+        portfolioSnapshot: portfolioSnapshot || null,
+        analysisInput
+      };
+    }
+    
+    // Fallback: reconstruct from stored fields if needed
+    console.log('⚠️ Full analysis not found in historicalImplications, reconstructing from stored fields');
+    const reconstructedAnalysis: FinancialContextSnapshot['retirementAnalysis'] = {
+      summary: {
+        characteristics: recentAnalysis.characteristics as any,
+        tradeoffs: (recentAnalysis.characteristics as any).tradeoffs || cachedAnalysis?.summary?.tradeoffs || { upside: '', downside: '' },
+        primaryObservation: (recentAnalysis.characteristics as any).primaryObservation || cachedAnalysis?.summary?.primaryObservation || '',
+        confidence: cachedAnalysis?.summary?.confidence || 'medium' as const,
+        timelineBucket: cachedAnalysis?.summary?.timelineBucket || '20' as const,
+        timelineBucketNote: cachedAnalysis?.summary?.timelineBucketNote || ''
+      },
+      metrics: recentAnalysis.portfolioMetrics as any,
+      stressTest: recentAnalysis.stressTestResults as any,
+      historicalImplications: Array.isArray(cachedAnalysis?.historicalImplications) ? cachedAnalysis.historicalImplications : [],
+      dataQuality: {
+        completeness: recentAnalysis.dataQualityScore,
+        priceHistoryCoverage: 0.8,
+        metadataConfidence: 'medium' as const,
+        portfolioMappingConfidence: 'medium' as const,
+        proxiedValuePercentage: 0,
+        proxyUsage: {
+          usEquityProxy: 'VTI',
+          internationalEquityProxy: 'VXUS',
+          bondsProxy: 'AGG',
+          unmappedHoldings: [],
+          mappingMethod: 'direct'
+        },
+        assumptions: [],
+        missingData: []
+      },
+      disclaimers: []
+    };
+    
+    return {
+      analysis: reconstructedAnalysis,
+      portfolioSnapshot: portfolioSnapshot || null,
+      analysisInput
+    };
+  } catch (error) {
+    console.error('❌ Error fetching existing retirement analysis:', error);
+    return { analysis: null, portfolioSnapshot: null };
+  }
+}
+
+/**
+ * Fetch security metadata for all tickers in a portfolio snapshot
+ */
+async function fetchSecurityMetadataForPortfolio(portfolioSnapshot: { holdings: any[]; securities: any[] }): Promise<Record<string, any>> {
+  const metadataMap: Record<string, any> = {};
+  
+  try {
+    const { dbCache } = await import('../retirement-analytics/data/db-cache');
+    
+    // Extract unique tickers from holdings
+    const tickers = new Set<string>();
+    const securityMap = new Map(portfolioSnapshot.securities.map((sec: any) => [sec.security_id, sec]));
+    
+    for (const holding of portfolioSnapshot.holdings) {
+      const security = securityMap.get(holding.security_id);
+      const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase();
+      if (ticker && ticker.length > 0 && ticker.length <= 10) {
+        tickers.add(ticker);
+      }
+    }
+    
+    // Fetch metadata for each ticker in parallel
+    const metadataPromises = Array.from(tickers).map(async (ticker) => {
+      try {
+        const metadata = await dbCache.getSecurityMetadata(ticker);
+        return { ticker, metadata };
+      } catch (error) {
+        console.warn(`⚠️ Failed to fetch security metadata for ${ticker}:`, error);
+        return { ticker, metadata: null };
+      }
+    });
+    
+    const metadataResults = await Promise.all(metadataPromises);
+    for (const { ticker, metadata } of metadataResults) {
+      if (metadata) {
+        metadataMap[ticker] = metadata;
+      }
+    }
+    
+    return metadataMap;
+  } catch (error) {
+    console.error('Error fetching security metadata for portfolio:', error);
+    return metadataMap;
+  }
 }
 
 /**

@@ -150,6 +150,16 @@ function buildSystemPrompt(snapshot: FinancialContextSnapshot): string {
     sections.push(formatRetirementAnalysisInfoRequest(snapshot.retirementAnalysisNeedsInfo));
   }
 
+  // Add portfolio snapshot from stored retirement analysis if available
+  if (snapshot.retirementPortfolioSnapshot) {
+    sections.push(formatRetirementPortfolioSnapshot(snapshot.retirementPortfolioSnapshot));
+  }
+
+  // Add security metadata from stored retirement analysis if available
+  if (snapshot.retirementSecurityMetadata && Object.keys(snapshot.retirementSecurityMetadata).length > 0) {
+    sections.push(formatRetirementSecurityMetadata(snapshot.retirementSecurityMetadata));
+  }
+
   sections.push(buildTierDetails(snapshot));
 
   const fullPrompt = sections.join('\n\n').trim();
@@ -299,12 +309,26 @@ export function formatInvestmentSummary(investments: FinancialContextSnapshot['i
  * Format retirement analysis for LLM consumption
  * Includes explicit instructions for descriptive-only language
  */
-function formatRetirementAnalysis(analysis: FinancialContextSnapshot['retirementAnalysis']): string {
+function formatRetirementAnalysis(analysis: FinancialContextSnapshot['retirementAnalysis'], storedInputParams?: any, currentQuestionParams?: any): string {
   if (!analysis) return '';
 
   const sections: string[] = [];
 
   sections.push('# Retirement Portfolio Analysis');
+  
+  // Add note if this is from stored analysis with input params
+  const storedParams = (analysis as any)._storedInputParams;
+  if (storedParams) {
+    sections.push('## Analysis Parameters');
+    sections.push(
+      'This analysis was computed with the following parameters:\n' +
+      `- Current Age: ${storedParams.currentAge || 'N/A'}\n` +
+      `- Retirement Age: ${storedParams.retirementAge || 'N/A'}\n` +
+      `- Annual Withdrawal Amount: $${storedParams.annualWithdrawalAmount?.toLocaleString() || 'N/A'}\n` +
+      `- Withdrawal Start Age: ${storedParams.withdrawalStartAge || 'N/A'}\n\n` +
+      'Note: The current question may have different parameters, but the portfolio composition and analysis results remain valid for reference.'
+    );
+  }
   
   sections.push('## CRITICAL: You MUST Use This Analysis');
   sections.push(
@@ -473,6 +497,90 @@ function formatRetirementAnalysisInfoRequest(needsInfo: FinancialContextSnapshot
     'Example: "To analyze your retirement portfolio, I need a few details. What is your current age, and how much would you like to withdraw annually in retirement?"\n\n' +
     'Once the user provides the missing information, you can run the retirement analysis.'
   );
+
+  return sections.join('\n\n');
+}
+
+/**
+ * Format retirement portfolio snapshot for LLM consumption
+ * Includes holdings and securities from stored retirement analysis
+ */
+function formatRetirementPortfolioSnapshot(snapshot: FinancialContextSnapshot['retirementPortfolioSnapshot']): string {
+  if (!snapshot) return '';
+
+  const sections: string[] = [];
+  sections.push('# Retirement Portfolio Snapshot (from stored analysis)');
+  sections.push('This portfolio snapshot was captured when the retirement analysis was computed. Use this data when answering questions about the user\'s portfolio composition, holdings, or investments.\n');
+
+  // Format holdings
+  if (snapshot.holdings && snapshot.holdings.length > 0) {
+    sections.push('## Holdings');
+    const holdingsList = snapshot.holdings.map((holding: any, idx: number) => {
+      const security = snapshot.securities?.find((s: any) => s.security_id === holding.security_id);
+      const ticker = security?.ticker_symbol || holding.ticker_symbol || 'Unknown';
+      const name = security?.name || security?.security_name || holding.name || 'Unknown';
+      const value = holding.institution_value || holding.value || 0;
+      const quantity = holding.quantity || holding.shares || 'N/A';
+      
+      return `${idx + 1}. ${ticker} - ${name}\n   Value: $${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n   Quantity: ${quantity}`;
+    }).join('\n\n');
+    sections.push(holdingsList);
+  }
+
+  // Format securities summary
+  if (snapshot.securities && snapshot.securities.length > 0) {
+    sections.push('\n## Securities Summary');
+    sections.push(`Total Securities: ${snapshot.securities.length}`);
+    const securitiesList = snapshot.securities.map((security: any) => {
+      const ticker = security.ticker_symbol || 'Unknown';
+      const name = security.name || security.security_name || 'Unknown';
+      const type = security.type || security.security_type || 'Unknown';
+      return `- ${ticker}: ${name} (${type})`;
+    }).join('\n');
+    sections.push(securitiesList);
+  }
+
+  return sections.join('\n\n');
+}
+
+/**
+ * Format security metadata for LLM consumption
+ * Includes expense ratios, asset classes, and other metadata from database
+ */
+function formatRetirementSecurityMetadata(metadata: FinancialContextSnapshot['retirementSecurityMetadata']): string {
+  if (!metadata || Object.keys(metadata).length === 0) return '';
+
+  const sections: string[] = [];
+  sections.push('# Security Metadata (from stored analysis)');
+  sections.push('This metadata provides detailed information about the securities in the user\'s portfolio. Use this when discussing expense ratios, asset classes, fund categories, or other security-specific details.\n');
+
+  const metadataEntries = Object.entries(metadata);
+  
+  for (const [ticker, meta] of metadataEntries) {
+    const metaSections: string[] = [];
+    metaSections.push(`## ${ticker}: ${meta.securityName}`);
+    
+    if (meta.assetClass) {
+      metaSections.push(`Asset Class: ${meta.assetClass}`);
+    }
+    
+    if (meta.fundCategory) {
+      metaSections.push(`Fund Category: ${meta.fundCategory}`);
+    }
+    
+    if (meta.expenseRatio !== undefined && meta.expenseRatio !== null) {
+      metaSections.push(`Expense Ratio: ${(meta.expenseRatio * 100).toFixed(2)}%`);
+    }
+    
+    if (meta.geographicFocus) {
+      metaSections.push(`Geographic Focus: ${meta.geographicFocus}`);
+    }
+    
+    metaSections.push(`Type: ${meta.isETF ? 'ETF' : 'Mutual Fund'}`);
+    metaSections.push(`Data Source: ${meta.provider === 'fmp' ? 'Financial Modeling Prep API' : 'Inferred'}`);
+    
+    sections.push(metaSections.join('\n'));
+  }
 
   return sections.join('\n\n');
 }

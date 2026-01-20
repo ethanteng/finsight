@@ -123,6 +123,12 @@ export interface FinancialContextSnapshot {
       missingData: string[];
     };
     disclaimers: string[];
+    _storedInputParams?: {
+      currentAge?: number;
+      retirementAge?: number | null;
+      annualWithdrawalAmount?: number;
+      withdrawalStartAge?: number;
+    };
   };
   retirementAnalysisNeedsInfo?: {
     missingParams: Array<'currentAge' | 'retirementAge' | 'annualWithdrawalAmount' | 'withdrawalStartAge'>;
@@ -133,6 +139,21 @@ export interface FinancialContextSnapshot {
       withdrawalStartAge?: number;
     };
   };
+  retirementPortfolioSnapshot?: {
+    holdings: any[];
+    securities: any[];
+  };
+  retirementSecurityMetadata?: Record<string, {
+    tickerSymbol: string;
+    securityName: string;
+    assetClass?: string;
+    fundCategory?: string;
+    expenseRatio?: number;
+    geographicFocus?: string;
+    isETF: boolean;
+    provider: 'fmp' | 'inferred';
+    lastUpdated: Date;
+  }>;
   financialSummary?: {
     financialOverview?: {
       netWorth: number;
