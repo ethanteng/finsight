@@ -46,6 +46,7 @@ export interface FinancialContextSnapshot {
   metadata: UnifiedFinancialData['metadata'];
   tierContext: TierAwareContext;
   incomeAnalysis?: string;
+  expenseAnalysis?: string;
   searchContext?: string;
   marketContext?: string;
   userProfile?: string;

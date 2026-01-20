@@ -20,6 +20,8 @@ model User {
   updatedAt              DateTime                @updatedAt
   stripeCustomerId       String?
   subscriptionStatus     String                  @default("inactive")
+  monthlyIncomeOverride  Float?
+  monthlyExpenseOverride Float?
   accessTokens           AccessToken[]
   accounts               Account[]
   manualAccounts         ManualAccount[]

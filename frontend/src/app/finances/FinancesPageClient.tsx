@@ -6,6 +6,7 @@ import HomeValueCard from '../../components/finances/HomeValueCard';
 import AccountGroupCard from '../../components/finances/AccountGroupCard';
 import AccountDetailModal from '../../components/finances/AccountDetailModal';
 import FinancialMetricsChart, { HistoricalSnapshot } from '../../components/finances/FinancialMetricsChart';
+import IncomeExpenseOverrides from '../../components/finances/IncomeExpenseOverrides';
 import { groupAccounts } from '../../components/finances/AccountGrouping';
 import type { ManualAccount } from '../../types/manual-account';
 
@@ -555,6 +556,32 @@ export default function FinancesPageClient() {
             </div>
           </div>
         </div>
+
+        {/* Monthly Income/Expense Overrides */}
+        {snapshot && (
+          <IncomeExpenseOverrides
+            calculatedIncome={(() => {
+              if (snapshot.transactionsSummary?.byMonth) {
+                const months = Object.values(snapshot.transactionsSummary.byMonth);
+                if (months.length > 0) {
+                  const totalIncome = months.reduce((sum, month) => sum + (month.income || 0), 0);
+                  return totalIncome / months.length;
+                }
+              }
+              return undefined;
+            })()}
+            calculatedExpense={(() => {
+              if (snapshot.transactionsSummary?.byMonth) {
+                const months = Object.values(snapshot.transactionsSummary.byMonth);
+                if (months.length > 0) {
+                  const totalExpense = months.reduce((sum, month) => sum + (month.expense || 0), 0);
+                  return totalExpense / months.length;
+                }
+              }
+              return undefined;
+            })()}
+          />
+        )}
 
         {/* Home Value */}
         {homeData && homeData.value > 0 && (

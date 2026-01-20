@@ -113,6 +113,10 @@ function buildSystemPrompt(snapshot: FinancialContextSnapshot): string {
     sections.push(`# Income Analysis (authoritative)\n${snapshot.incomeAnalysis}`);
   }
 
+  if (snapshot.expenseAnalysis) {
+    sections.push(`# Expense Analysis (authoritative)\n${snapshot.expenseAnalysis}`);
+  }
+
   if (snapshot.marketContext) {
     sections.push(`# Market Context\n${snapshot.marketContext}`);
   }

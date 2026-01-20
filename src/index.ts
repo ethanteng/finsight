@@ -3043,6 +3043,158 @@ app.delete('/profile/home', requireAuth, async (req: Request, res: Response) => 
   }
 });
 
+// Monthly income/expense override endpoints
+app.get('/api/finances/overrides', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { getPrismaClient } = await import('./prisma-client');
+    const prisma = getPrismaClient();
+    
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: {
+        monthlyIncomeOverride: true,
+        monthlyExpenseOverride: true
+      }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Calculate current values from transactions for display
+    let calculatedIncome: number | undefined;
+    let calculatedExpense: number | undefined;
+    
+    try {
+      const { SummaryCacheService } = await import('./services/summary-cache-service');
+      const snapshot = await SummaryCacheService.getLatestSnapshot(req.user!.id, 'full');
+      
+      if (snapshot && snapshot.transactions) {
+        const transactions = Array.isArray(snapshot.transactions) ? snapshot.transactions : [];
+        
+        // Calculate income
+        const incomeTransactions = transactions.filter((tx: any) => {
+          const type = tx.transaction_type || tx.aiCategory;
+          const amount = Number(tx.amount) || 0;
+          return typeof type === 'string' && type.toLowerCase() === 'income' && amount > 0;
+        });
+        
+        if (incomeTransactions.length > 0) {
+          const monthlyTotals = new Map<string, number>();
+          for (const tx of incomeTransactions) {
+            const amount = Number(tx.amount) || 0;
+            const date = new Date(tx.date);
+            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            monthlyTotals.set(monthKey, (monthlyTotals.get(monthKey) || 0) + amount);
+          }
+          const monthEntries = Array.from(monthlyTotals.entries());
+          const totalIncome = monthEntries.reduce((sum, [, value]) => sum + value, 0);
+          calculatedIncome = monthEntries.length > 0 ? totalIncome / monthEntries.length : 0;
+        }
+        
+        // Calculate expenses
+        const expenseTransactions = transactions.filter((tx: any) => {
+          const type = tx.transaction_type || tx.aiCategory;
+          return typeof type === 'string' && (type.toLowerCase() === 'expense' || type.toLowerCase() === 'fee');
+        });
+        
+        if (expenseTransactions.length > 0) {
+          const monthlyTotals = new Map<string, number>();
+          for (const tx of expenseTransactions) {
+            const amount = Math.abs(Number(tx.amount) || 0);
+            const date = new Date(tx.date);
+            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            monthlyTotals.set(monthKey, (monthlyTotals.get(monthKey) || 0) + amount);
+          }
+          const monthEntries = Array.from(monthlyTotals.entries());
+          const totalExpense = monthEntries.reduce((sum, [, value]) => sum + value, 0);
+          calculatedExpense = monthEntries.length > 0 ? totalExpense / monthEntries.length : 0;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to calculate current values:', error);
+      // Continue without calculated values
+    }
+    
+    res.json({
+      monthlyIncome: user.monthlyIncomeOverride,
+      monthlyExpense: user.monthlyExpenseOverride,
+      calculatedIncome,
+      calculatedExpense
+    });
+  } catch (error) {
+    console.error('Failed to fetch overrides:', error);
+    
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in fetch overrides endpoint', 'error');
+    }
+    
+    res.status(500).json({ error: 'Failed to fetch overrides' });
+  }
+});
+
+app.put('/api/finances/overrides', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { monthlyIncome, monthlyExpense } = req.body;
+    
+    const { getPrismaClient } = await import('./prisma-client');
+    const prisma = getPrismaClient();
+    
+    const updateData: any = {};
+    
+    if (monthlyIncome !== undefined) {
+      if (monthlyIncome === null) {
+        updateData.monthlyIncomeOverride = null;
+      } else if (typeof monthlyIncome === 'number' && monthlyIncome >= 0) {
+        updateData.monthlyIncomeOverride = monthlyIncome;
+      } else {
+        return res.status(400).json({ error: 'monthlyIncome must be a non-negative number or null' });
+      }
+    }
+    
+    if (monthlyExpense !== undefined) {
+      if (monthlyExpense === null) {
+        updateData.monthlyExpenseOverride = null;
+      } else if (typeof monthlyExpense === 'number' && monthlyExpense >= 0) {
+        updateData.monthlyExpenseOverride = monthlyExpense;
+      } else {
+        return res.status(400).json({ error: 'monthlyExpense must be a non-negative number or null' });
+      }
+    }
+    
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: 'At least one field (monthlyIncome or monthlyExpense) must be provided' });
+    }
+    
+    const user = await prisma.user.update({
+      where: { id: req.user!.id },
+      data: updateData,
+      select: {
+        monthlyIncomeOverride: true,
+        monthlyExpenseOverride: true
+      }
+    });
+    
+    res.json({
+      success: true,
+      monthlyIncome: user.monthlyIncomeOverride,
+      monthlyExpense: user.monthlyExpenseOverride
+    });
+  } catch (error) {
+    console.error('Failed to update overrides:', error);
+    
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in update overrides endpoint', 'error');
+    }
+    
+    res.status(500).json({ error: 'Failed to update overrides' });
+  }
+});
+
 // Get user's Plaid access tokens with status
 app.get('/profile/tokens', requireAuth, async (req: Request, res: Response) => {
   try {

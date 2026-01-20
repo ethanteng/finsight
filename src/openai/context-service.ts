@@ -352,7 +352,34 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   const searchContext = await maybeFetchSearchContext(question, questionNeeds, tier, isDemo);
   const marketContext = await maybeFetchMarketContext(questionNeeds, tier, isDemo);
 
-  const incomeAnalysis = buildIncomeAnalysis(sortedTransactions);
+  // Fetch user overrides for monthly income/expenses
+  let monthlyIncomeOverride: number | null | undefined = undefined;
+  let monthlyExpenseOverride: number | null | undefined = undefined;
+  
+  if (userId && !isDemo) {
+    try {
+      const { getPrismaClient } = await import('../prisma-client');
+      const prisma = getPrismaClient();
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          monthlyIncomeOverride: true,
+          monthlyExpenseOverride: true
+        }
+      });
+      
+      if (user) {
+        monthlyIncomeOverride = user.monthlyIncomeOverride;
+        monthlyExpenseOverride = user.monthlyExpenseOverride;
+      }
+    } catch (error) {
+      console.error('Failed to fetch user overrides:', error);
+      // Continue without overrides if fetch fails
+    }
+  }
+
+  const incomeAnalysis = buildIncomeAnalysis(sortedTransactions, monthlyIncomeOverride);
+  const expenseAnalysis = buildExpenseAnalysis(sortedTransactions, monthlyExpenseOverride);
   
   // ✅ Pass deduplicated accounts and sorted transactions to loadUserProfile
   // The profile enhancer needs the actual account data, not anonymized tokens
@@ -461,6 +488,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     metadata,
     tierContext,
     incomeAnalysis,
+    expenseAnalysis,
     searchContext,
     marketContext,
     userProfile,
@@ -1177,7 +1205,17 @@ async function maybeFetchMarketContext(
   }
 }
 
-function buildIncomeAnalysis(transactions: Transaction[]): string | undefined {
+function buildIncomeAnalysis(transactions: Transaction[], override?: number | null): string | undefined {
+  // If override is provided (not null/undefined), use it
+  if (override !== null && override !== undefined) {
+    return [
+      `Average Monthly Income: $${override.toFixed(2)} (Manual Override)`,
+      `Income Transactions Analyzed: N/A (using manual override)`,
+      `Months Covered: N/A (using manual override)`,
+      `Top Sources: N/A (using manual override)`
+    ].join('\n');
+  }
+
   if (transactions.length === 0) {
     return undefined;
   }
@@ -1223,6 +1261,64 @@ function buildIncomeAnalysis(transactions: Transaction[]): string | undefined {
     `Income Transactions Analyzed: ${incomeTransactions.length}`,
     `Months Covered: ${monthEntries.length}`,
     `Top Sources: ${topSources || 'Not available'}`
+  ].join('\n');
+}
+
+function buildExpenseAnalysis(transactions: Transaction[], override?: number | null): string | undefined {
+  // If override is provided (not null/undefined), use it
+  if (override !== null && override !== undefined) {
+    return [
+      `Average Monthly Expenses: $${override.toFixed(2)} (Manual Override)`,
+      `Expense Transactions Analyzed: N/A (using manual override)`,
+      `Months Covered: N/A (using manual override)`,
+      `Top Categories: N/A (using manual override)`
+    ].join('\n');
+  }
+
+  if (transactions.length === 0) {
+    return undefined;
+  }
+
+  const expenseTransactions = transactions.filter(transaction => {
+    const type = (transaction as any).transaction_type || transaction.aiCategory;
+    return typeof type === 'string' && (type.toLowerCase() === 'expense' || type.toLowerCase() === 'fee');
+  });
+
+  if (expenseTransactions.length === 0) {
+    return undefined;
+  }
+
+  const monthlyTotals = new Map<string, number>();
+  const categoryTotals = new Map<string, number>();
+
+  for (const transaction of expenseTransactions) {
+    const amount = Math.abs(Number(transaction.amount) || 0);
+    const date = new Date(transaction.date);
+    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    monthlyTotals.set(monthKey, (monthlyTotals.get(monthKey) || 0) + amount);
+
+    const category = deriveCategory(transaction) || 'Uncategorized';
+    categoryTotals.set(category, (categoryTotals.get(category) || 0) + amount);
+  }
+
+  const monthEntries = Array.from(monthlyTotals.entries()).sort(([a], [b]) =>
+    a.localeCompare(b)
+  );
+  const totalExpense = monthEntries.reduce((sum, [, value]) => sum + value, 0);
+  const averageMonthlyExpense =
+    monthEntries.length > 0 ? totalExpense / monthEntries.length : 0;
+
+  const topCategories = Array.from(categoryTotals.entries())
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 5)
+    .map(([label, value]) => `${label}: $${value.toFixed(2)}`)
+    .join(', ');
+
+  return [
+    `Average Monthly Expenses: $${averageMonthlyExpense.toFixed(2)}`,
+    `Expense Transactions Analyzed: ${expenseTransactions.length}`,
+    `Months Covered: ${monthEntries.length}`,
+    `Top Categories: ${topCategories || 'Not available'}`
   ].join('\n');
 }
 
