@@ -569,7 +569,14 @@ function formatRetirementSecurityMetadata(metadata: FinancialContextSnapshot['re
     }
     
     if (meta.expenseRatio !== undefined && meta.expenseRatio !== null) {
-      metaSections.push(`Expense Ratio: ${(meta.expenseRatio * 100).toFixed(2)}%`);
+      // Expense ratios should be stored as decimals (0.0003 = 0.03%)
+      // However, some data sources may return them as percentages (0.03 = 0.03%)
+      // Detect format: if value is >= 0.01, it's likely already a percentage; otherwise it's a decimal
+      // Typical expense ratios are < 0.01 when stored as decimals (e.g., 0.0003 for 0.03%)
+      const expenseRatio = meta.expenseRatio >= 0.01 
+        ? meta.expenseRatio  // Already in percentage form (0.03 = 0.03%)
+        : meta.expenseRatio * 100;  // Convert from decimal (0.0003 -> 0.03%)
+      metaSections.push(`Expense Ratio: ${expenseRatio.toFixed(2)}%`);
     }
     
     if (meta.geographicFocus) {
