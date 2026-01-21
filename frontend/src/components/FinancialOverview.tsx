@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import MarketNewsModal from './MarketNewsModal';
 
 interface Account {
   id: string;
@@ -61,6 +62,7 @@ interface FinancialSummaryData {
 
 interface FinancialOverviewProps {
   isDemo?: boolean;
+  tier?: string;
 }
 
 interface HomeData {
@@ -71,7 +73,7 @@ interface HomeData {
   lastUpdated: string;
 }
 
-export default function FinancialOverview({ isDemo = false }: FinancialOverviewProps) {
+export default function FinancialOverview({ isDemo = false, tier }: FinancialOverviewProps) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [snapTradeAccounts, setSnapTradeAccounts] = useState<SnapTradeAccount[]>([]);
   const [investmentData, setInvestmentData] = useState<InvestmentData | null>(null);
@@ -79,6 +81,7 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
   const [financialSummary, setFinancialSummary] = useState<FinancialSummaryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [_error, setError] = useState('');
+  const [showMarketNewsModal, setShowMarketNewsModal] = useState(false);
   const router = useRouter();
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -417,40 +420,57 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
   // Calculate Net Worth
   const netWorth = totalCash + totalInvestments + totalHomeValue - totalDebt;
 
+  // Check if user has access to market news (standard or premium tier)
+  const hasMarketNewsAccess = tier === 'standard' || tier === 'premium';
+
   return (
-    <div 
-      className="bg-blue-900 border-2 border-blue-700 rounded-lg p-3 mb-4 cursor-pointer hover:bg-blue-800 hover:border-blue-500 hover:shadow-lg hover:shadow-blue-900/50 transition-all duration-200"
-      onClick={handleOverviewClick}
-      title="Click to view full financial dashboard"
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          handleOverviewClick();
-        }
-      }}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center space-x-2">
-          <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-          <h3 className="text-base font-semibold text-blue-100">Your Financial Overview</h3>
+    <>
+      <div 
+        className="bg-blue-900 border-2 border-blue-700 rounded-lg p-3 mb-4 cursor-pointer hover:bg-blue-800 hover:border-blue-500 hover:shadow-lg hover:shadow-blue-900/50 transition-all duration-200"
+        onClick={handleOverviewClick}
+        title="Click to view full financial dashboard"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleOverviewClick();
+          }
+        }}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center space-x-2">
+            <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+            <h3 className="text-base font-semibold text-blue-100">Your Financial Overview</h3>
+            {/* Market News link - only show for standard and premium tiers */}
+            {hasMarketNewsAccess && !isDemo && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMarketNewsModal(true);
+                }}
+                className="text-blue-300 hover:text-blue-200 text-sm transition-colors underline decoration-blue-400/30 hover:decoration-blue-400/60 ml-3"
+                title="View current market news"
+              >
+                Market News
+              </button>
+            )}
+          </div>
+          
+          {/* Add More Accounts link - only show when user has accounts */}
+          {hasAccounts && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleAddAccounts();
+              }}
+              className="text-blue-300 hover:text-blue-200 text-sm transition-colors underline decoration-blue-400/30 hover:decoration-blue-400/60"
+              title="Add more accounts"
+            >
+              Add More Accounts
+            </button>
+          )}
         </div>
-        
-        {/* Add More Accounts link - only show when user has accounts */}
-        {hasAccounts && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleAddAccounts();
-            }}
-            className="text-blue-300 hover:text-blue-200 text-sm transition-colors underline decoration-blue-400/30 hover:decoration-blue-400/60"
-            title="Add more accounts"
-          >
-            Add More Accounts
-          </button>
-        )}
-      </div>
       
       {/* Net Worth - Featured Card */}
       <div className="bg-gradient-to-br from-blue-700 to-blue-800 rounded-lg p-4 mb-3 border border-blue-600">
@@ -527,5 +547,15 @@ export default function FinancialOverview({ isDemo = false }: FinancialOverviewP
         </div>
       )}
     </div>
+    
+    {/* Market News Modal */}
+    {hasMarketNewsAccess && tier && (
+      <MarketNewsModal
+        isOpen={showMarketNewsModal}
+        onClose={() => setShowMarketNewsModal(false)}
+        tier={tier}
+      />
+    )}
+    </>
   );
 }

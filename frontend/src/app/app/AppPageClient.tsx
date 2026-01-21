@@ -382,7 +382,7 @@ export default function AppPageClient() {
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto p-4 md:p-6">
             {/* Financial Overview */}
-            <FinancialOverview />
+            <FinancialOverview tier={subscriptionStatus?.tier} />
             
             {/* Q&A Interface */}
             <div className="bg-gray-800 rounded-lg p-4 md:p-6">
