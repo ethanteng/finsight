@@ -64,6 +64,7 @@ function buildSystemPrompt(snapshot: FinancialContextSnapshot): string {
       }
     }
     sections.push(`# Financial Overview\n` +
+      `CRITICAL: These are the AUTHORITATIVE financial values. Use these exact values when discussing net worth, portfolio value, or total investments. Do NOT recalculate from holdings, accounts, or retirement portfolio snapshots - these values already include all accounts (including manual investment accounts) and are the source of truth.\n\n` +
       `Net Worth: $${overview.netWorth.toFixed(2)}\n` +
       `Total Cash: $${overview.totalCash.toFixed(2)}\n` +
       `Total Investments: $${overview.totalInvestments.toFixed(2)}\n` +
@@ -385,6 +386,7 @@ function formatRetirementAnalysis(analysis: FinancialContextSnapshot['retirement
 
   sections.push('## Portfolio Metrics (USE THESE IN YOUR RESPONSE)');
   sections.push(
+    `IMPORTANT: When referencing portfolio value or net worth, use the values from the Financial Overview section above. The withdrawal rate below is calculated based on the portfolio value used in the retirement analysis.\n\n` +
     `Current Withdrawal Rate: ${(analysis.metrics.withdrawalRate * 100).toFixed(2)}% of portfolio value\n` +
     `Years of Expenses Covered: ${analysis.metrics.yearsOfExpenses.toFixed(1)} years\n` +
     `Equity Allocation: ${analysis.metrics.equityAllocation.toFixed(1)}%\n\n` +
@@ -510,7 +512,7 @@ function formatRetirementPortfolioSnapshot(snapshot: FinancialContextSnapshot['r
 
   const sections: string[] = [];
   sections.push('# Retirement Portfolio Snapshot (from stored analysis)');
-  sections.push('This portfolio snapshot was captured when the retirement analysis was computed. Use this data when answering questions about the user\'s portfolio composition, holdings, or investments.\n');
+  sections.push('IMPORTANT: This portfolio snapshot was captured when the retirement analysis was computed. Use this data when answering questions about portfolio composition, holdings, or individual investments. However, for net worth and total portfolio value calculations, ALWAYS use the values from the Financial Overview section above, as those include all accounts (including manual investment accounts) and are the authoritative source.\n');
 
   // Format holdings
   if (snapshot.holdings && snapshot.holdings.length > 0) {
