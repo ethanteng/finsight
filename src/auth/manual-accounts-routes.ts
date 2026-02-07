@@ -43,6 +43,12 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
       console.error('Failed to refresh snapshot after creating manual account:', err);
     });
 
+    // Refresh financial summary (updates FinancialSummary table)
+    const { FinancialSummaryService } = await import('../services/financial-summary-service');
+    await new FinancialSummaryService().refreshUserSummary(userId).catch(err => {
+      console.error('Failed to refresh financial summary after creating manual account:', err);
+    });
+
     res.status(201).json({
       success: true,
       data: manualAccount,
@@ -134,6 +140,12 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
       console.error('Failed to refresh snapshot after updating manual account:', err);
     });
 
+    // Refresh financial summary (updates FinancialSummary table)
+    const { FinancialSummaryService } = await import('../services/financial-summary-service');
+    await new FinancialSummaryService().refreshUserSummary(userId).catch(err => {
+      console.error('Failed to refresh financial summary after updating manual account:', err);
+    });
+
     res.json({
       success: true,
       data: updatedAccount,
@@ -177,17 +189,27 @@ router.delete('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
 
     // If there's a corresponding Account entry, delete it and its transactions
     if (accountEntry) {
+      // Security: Double-check that accountEntry belongs to the user before deletion
+      // This prevents any potential race conditions or authorization bypass
+      if (accountEntry.userId !== userId) {
+        return res.status(403).json({
+          success: false,
+          error: 'Unauthorized: Account does not belong to user',
+        });
+      }
+
       // First, delete any transactions associated with this account
       await prisma.transaction.deleteMany({
         where: { accountId: accountEntry.id },
       });
 
-      // Then delete the Account entry
-      await prisma.account.delete({
-        where: { id: accountEntry.id },
+      // Then delete the Account entry using deleteMany with userId check for extra security
+      await prisma.account.deleteMany({
+        where: {
+          id: accountEntry.id,
+          userId, // Extra security check
+        },
       });
-
-      console.log(`Deleted Account entry ${accountEntry.id} (plaidAccountId: ${plaidAccountId}) and its transactions`);
     }
 
     // Delete the ManualAccount entry
@@ -203,6 +225,12 @@ router.delete('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
     const { SummaryCacheService } = await import('../services/summary-cache-service');
     await SummaryCacheService.computeForUser(userId).catch(err => {
       console.error('Failed to refresh snapshot after deleting manual account:', err);
+    });
+
+    // Refresh financial summary (updates FinancialSummary table)
+    const { FinancialSummaryService } = await import('../services/financial-summary-service');
+    await new FinancialSummaryService().refreshUserSummary(userId).catch(err => {
+      console.error('Failed to refresh financial summary after deleting manual account:', err);
     });
 
     res.json({
