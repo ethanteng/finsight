@@ -28,15 +28,32 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
       });
     }
 
+    // Decode the ID in case it was URL encoded
+    const decodedId = decodeURIComponent(id);
+    
+    console.log(`🔍 Updating account name: userId=${userId}, plaidAccountId=${decodedId}, newName=${name}`);
+    
     // Find account by plaidAccountId and ensure it belongs to the user
     const account = await prisma.account.findFirst({
       where: {
-        plaidAccountId: id,
+        plaidAccountId: decodedId,
         userId: userId,
       },
     });
 
     if (!account) {
+      // Try to find any account with this ID for debugging
+      const anyAccount = await prisma.account.findFirst({
+        where: { plaidAccountId: decodedId },
+      });
+      
+      console.error(`❌ Account not found: plaidAccountId=${decodedId}, userId=${userId}`);
+      if (anyAccount) {
+        console.error(`   Account exists but belongs to userId=${anyAccount.userId}`);
+      } else {
+        console.error(`   No account found with plaidAccountId=${decodedId}`);
+      }
+      
       return res.status(404).json({
         success: false,
         error: 'Account not found',

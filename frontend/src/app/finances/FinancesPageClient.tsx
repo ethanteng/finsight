@@ -302,11 +302,15 @@ export default function FinancesPageClient() {
 
   const refreshAccounts = useCallback(async () => {
     try {
+      console.log('🔄 Refreshing accounts after rename...');
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
       const token = localStorage.getItem('auth_token');
-      if (!token) return;
+      if (!token) {
+        console.warn('No auth token found, skipping refresh');
+        return;
+      }
       headers['Authorization'] = `Bearer ${token}`;
 
       // Reload Plaid accounts
@@ -315,10 +319,13 @@ export default function FinancesPageClient() {
         if (accountsRes.ok) {
           const accountsData = await accountsRes.json();
           const accounts = accountsData.accounts || [];
+          console.log(`✅ Refreshed ${accounts.length} Plaid accounts`);
           setFreshAccounts(accounts);
+        } else {
+          console.error(`❌ Failed to refresh accounts: ${accountsRes.status}`);
         }
       } catch (accountsError) {
-        console.log('Error refreshing accounts:', accountsError);
+        console.error('Error refreshing accounts:', accountsError);
       }
 
       // Reload SnapTrade accounts
@@ -331,11 +338,12 @@ export default function FinancesPageClient() {
               ...acc,
               id: acc.id.startsWith('snaptrade-') ? acc.id : `snaptrade-${acc.id}`,
             }));
+            console.log(`✅ Refreshed ${normalizedAccounts.length} SnapTrade accounts`);
             setSnapTradeAccounts(normalizedAccounts);
           }
         }
       } catch (snapTradeError) {
-        console.log('Error refreshing SnapTrade accounts:', snapTradeError);
+        console.error('Error refreshing SnapTrade accounts:', snapTradeError);
       }
     } catch (error) {
       console.error('Error refreshing accounts:', error);

@@ -130,6 +130,8 @@ export default function AccountGroupCard({
         return;
       }
 
+      console.log(`🔄 Renaming account: accountId=${accountId}, newName=${editName.trim()}`);
+
       const response = await fetch(`${API_URL}/api/accounts/${encodeURIComponent(accountId)}`, {
         method: 'PUT',
         headers: {
@@ -140,14 +142,17 @@ export default function AccountGroupCard({
       });
 
       if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Account renamed successfully:', result);
         setEditingAccountId(null);
         setEditName('');
         // Trigger refresh of accounts
         if (onAccountRenamed) {
-          onAccountRenamed();
+          await onAccountRenamed();
         }
       } else {
         const data = await response.json();
+        console.error('❌ Failed to rename account:', data);
         alert(data.error || 'Failed to rename account');
       }
     } catch (error) {

@@ -126,7 +126,7 @@ export async function syncAllAccounts(userId?: string): Promise<SyncResult> {
       await getPrismaClient().account.upsert({
         where: { plaidAccountId: account.account_id },
         update: {
-          name: account.name,
+          // Don't update name - preserve user customizations
           mask: account.mask,
           type: account.type,
           subtype: account.subtype,

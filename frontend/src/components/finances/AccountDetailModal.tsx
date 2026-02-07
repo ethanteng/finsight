@@ -409,7 +409,11 @@ export default function AccountDetailModal({
       }
 
       // Get the account ID (plaidAccountId or snaptrade-{id})
+      // For Plaid accounts, use account_id if available, otherwise id
+      // For SnapTrade accounts, use id
       const accId = (account as Account).account_id || (account as Account).id || (account as SnapTradeAccount).id;
+
+      console.log(`🔄 Renaming account in modal: accountId=${accId}, newName=${editName.trim()}`);
 
       const response = await fetch(`${API_URL}/api/accounts/${encodeURIComponent(accId)}`, {
         method: 'PUT',
@@ -421,15 +425,18 @@ export default function AccountDetailModal({
       });
 
       if (response.ok) {
-        // Update local account name
+        const result = await response.json();
+        console.log('✅ Account renamed successfully:', result);
+        // Update local account name (create new object to trigger re-render)
         account.name = editName.trim();
         setIsEditingName(false);
         // Trigger refresh if callback provided
         if (onAccountRenamed) {
-          onAccountRenamed();
+          await onAccountRenamed();
         }
       } else {
         const data = await response.json();
+        console.error('❌ Failed to rename account:', data);
         alert(data.error || 'Failed to rename account');
       }
     } catch (error) {

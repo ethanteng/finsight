@@ -30,20 +30,20 @@ export async function persistTransactionsToDb(
       }
 
       const source = account.source || account.provider;
-      // ✅ Skip SnapTrade accounts - they should not be persisted to the Plaid Account table
+      // ✅ Allow SnapTrade accounts to be stored in Account table for rename functionality
       // SnapTrade accounts are identified by:
       // 1. account_id starting with "snaptrade-"
       // 2. source field set to 'snaptrade'
-      // 3. institution name containing "Robinhood" (common SnapTrade account)
+      // Note: We now store SnapTrade accounts so users can rename them
       const isSnapTrade = (typeof plaidAccountId === 'string' && plaidAccountId.startsWith('snaptrade-')) ||
-                          source === 'snaptrade' ||
-                          (account.institution && account.institution.toLowerCase().includes('robinhood')) ||
-                          (account.name && account.name.toLowerCase().includes('robinhood'));
+                          source === 'snaptrade';
       
+      // Log SnapTrade accounts for debugging
       if (isSnapTrade) {
-        console.log(`⏭️ Persistence: Skipping SnapTrade account "${account.name}" (${plaidAccountId})`);
-        continue;
+        console.log(`📊 Persistence: Processing SnapTrade account "${account.name}" (${plaidAccountId})`);
       }
+      
+      // Continue processing all accounts (including SnapTrade) so they can be stored and renamed
 
       // ✅ Skip manual accounts - they should not be persisted to the Account table
       // Manual accounts are stored in the ManualAccount table and should not be duplicated here
@@ -115,7 +115,8 @@ export async function persistTransactionsToDb(
             lastSynced: new Date(),
           },
           update: {
-            name: account.name,
+            // Don't update name on sync - preserve user customizations
+            // Only update other fields that change over time
             type: account.type,
             subtype: account.subtype || null,
             currentBalance: account.balance?.current || account.currentBalance || 0,
