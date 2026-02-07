@@ -45,6 +45,21 @@ export async function persistTransactionsToDb(
         continue;
       }
 
+      // ✅ Skip manual accounts - they should not be persisted to the Account table
+      // Manual accounts are stored in the ManualAccount table and should not be duplicated here
+      // Manual accounts are identified by:
+      // 1. account_id starting with "manual-"
+      // 2. source field set to 'manual'
+      // 3. institution name set to "Manual"
+      const isManualAccount = (typeof plaidAccountId === 'string' && plaidAccountId.startsWith('manual-')) ||
+                              source === 'manual' ||
+                              (account.institution && account.institution.toLowerCase() === 'manual');
+      
+      if (isManualAccount) {
+        console.log(`⏭️ Persistence: Skipping manual account "${account.name}" (${plaidAccountId}) - stored in ManualAccount table`);
+        continue;
+      }
+
       // ✅ CRITICAL SAFEGUARD: Never allow plaidAccountId to be set to account.id (database ID)
       // This prevents creating corrupted records where plaidAccountId points to another account's database id
       // BUT: Check if account.id is actually the same as account_id (which means account.id is the Plaid ID, not a DB ID)

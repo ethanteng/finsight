@@ -165,6 +165,32 @@ router.delete('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
       });
     }
 
+    // Find the corresponding Account entry in the Account table
+    // Manual accounts have plaidAccountId = "manual-{manualAccountId}"
+    const plaidAccountId = `manual-${id}`;
+    const accountEntry = await prisma.account.findFirst({
+      where: {
+        plaidAccountId,
+        userId,
+      },
+    });
+
+    // If there's a corresponding Account entry, delete it and its transactions
+    if (accountEntry) {
+      // First, delete any transactions associated with this account
+      await prisma.transaction.deleteMany({
+        where: { accountId: accountEntry.id },
+      });
+
+      // Then delete the Account entry
+      await prisma.account.delete({
+        where: { id: accountEntry.id },
+      });
+
+      console.log(`Deleted Account entry ${accountEntry.id} (plaidAccountId: ${plaidAccountId}) and its transactions`);
+    }
+
+    // Delete the ManualAccount entry
     await prisma.manualAccount.delete({
       where: { id },
     });
