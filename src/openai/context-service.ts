@@ -402,14 +402,13 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     userId,
     isDemo,
     needsRetirement: questionNeeds.needsRetirement,
-    needsMarketContext: questionNeeds.needsMarketContext,
     hasInvestments: !!investmentsSnapshot?.holdings,
     holdingsCount: investmentsSnapshot?.holdings?.length || 0,
     question: question.substring(0, 100),
-    willTrigger: userId && !isDemo && (questionNeeds.needsRetirement || questionNeeds.needsMarketContext) && investmentsSnapshot?.holdings && investmentsSnapshot.holdings.length > 0
+    willTrigger: userId && !isDemo && questionNeeds.needsRetirement && investmentsSnapshot?.holdings && investmentsSnapshot.holdings.length > 0
   });
   
-  if (userId && !isDemo && (questionNeeds.needsRetirement || questionNeeds.needsMarketContext) && investmentsSnapshot?.holdings && investmentsSnapshot.holdings.length > 0) {
+  if (userId && !isDemo && questionNeeds.needsRetirement && investmentsSnapshot?.holdings && investmentsSnapshot.holdings.length > 0) {
     try {
       console.log('✅ Retirement analysis conditions met, parsing question...');
       // First check if we have the required parameters
@@ -430,18 +429,24 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
         profileRetirementAge
       });
       
-      const currentAge = questionParams.currentAge || profileAge;
-      const retirementAge = questionParams.retirementAge || profileRetirementAge || null;
-      const annualWithdrawalAmount = questionParams.annualWithdrawalAmount;
-      const withdrawalStartAge = questionParams.withdrawalStartAge || retirementAge || null;
+      // Calculate portfolio value for withdrawal amount estimation
+      const portfolioValue = investmentsSnapshot.totalValue || 
+        investmentsSnapshot.holdings.reduce((sum: number, h: any) => sum + (h.institution_value || h.value || 0), 0);
       
-      // Check what's missing
+      // Apply reasonable defaults for missing parameters
+      const currentAge = questionParams.currentAge || profileAge || 45; // Default to 45 if not available
+      const retirementAge = questionParams.retirementAge || profileRetirementAge || 65; // Default to 65 if not available
+      // Use 4% rule (portfolio value * 0.04) as default annual withdrawal if not specified
+      const annualWithdrawalAmount = questionParams.annualWithdrawalAmount || (portfolioValue > 0 ? portfolioValue * 0.04 : undefined);
+      const withdrawalStartAge = questionParams.withdrawalStartAge || retirementAge;
+      
+      // Check what's still missing (after applying defaults)
       const missingParams: Array<'currentAge' | 'retirementAge' | 'annualWithdrawalAmount' | 'withdrawalStartAge'> = [];
       if (!currentAge) missingParams.push('currentAge');
       if (!annualWithdrawalAmount) missingParams.push('annualWithdrawalAmount');
       
       if (missingParams.length > 0) {
-        console.log('⚠️ Retirement analysis: Missing parameters:', missingParams);
+        console.log('⚠️ Retirement analysis: Missing parameters after defaults:', missingParams);
         // Set needsInfo flag so Linc will ask
         retirementAnalysisNeedsInfo = {
           missingParams,
@@ -453,8 +458,19 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
           }
         };
       } else {
-        console.log('✅ All retirement parameters present, proceeding with analysis...');
-        // We have all required info, proceed with analysis
+        console.log('✅ Retirement parameters ready (with defaults applied):', {
+          currentAge,
+          retirementAge,
+          annualWithdrawalAmount,
+          withdrawalStartAge,
+          portfolioValue,
+          usedDefaults: {
+            currentAge: !questionParams.currentAge && !profileAge,
+            retirementAge: !questionParams.retirementAge && !profileRetirementAge,
+            annualWithdrawalAmount: !questionParams.annualWithdrawalAmount
+          }
+        });
+        // We have all required info (with defaults), proceed with analysis
         const result = await fetchOrCreateRetirementAnalysis({
           userId,
           question,
@@ -727,31 +743,49 @@ async function fetchOrCreateRetirementAnalysis(args: {
     withdrawalStartAge: questionParams.withdrawalStartAge
   });
 
-  // Only proceed if question has retirement intent
-  if (!questionParams.hasRetirementIntent) {
-    console.log('⚠️ Question does not have retirement intent, skipping analysis');
-    return undefined;
-  }
+  // Note: We already check for retirement keywords at the trigger level,
+  // so we proceed with parameter extraction even if parser doesn't detect intent
+
+  // Calculate portfolio value for withdrawal amount estimation
+  const portfolioValue = holdings.reduce((sum: number, h: any) => sum + (h.institution_value || h.value || 0), 0);
 
   // Extract age from profile if not in question
   const { extractAgeFromProfile, extractRetirementAgeFromProfile } = await import('../retirement-analytics/profile-age-extractor');
   const profileAge = extractAgeFromProfile(userProfile);
   const profileRetirementAge = extractRetirementAgeFromProfile(userProfile);
 
-  const currentAge = questionParams.currentAge || profileAge;
-  const retirementAge = questionParams.retirementAge || profileRetirementAge || null;
-  const annualWithdrawalAmount = questionParams.annualWithdrawalAmount;
-  const withdrawalStartAge = questionParams.withdrawalStartAge || retirementAge || null;
+  // Apply reasonable defaults for missing parameters
+  const currentAge = questionParams.currentAge || profileAge || 45; // Default to 45 if not available
+  const retirementAge = questionParams.retirementAge || profileRetirementAge || 65; // Default to 65 if not available
+  // Use 4% rule (portfolio value * 0.04) as default annual withdrawal if not specified
+  const annualWithdrawalAmount = questionParams.annualWithdrawalAmount || (portfolioValue > 0 ? portfolioValue * 0.04 : undefined);
+  const withdrawalStartAge = questionParams.withdrawalStartAge || retirementAge;
 
-  // Check what's missing
+  // Check what's still missing (after applying defaults)
   const missingParams: Array<'currentAge' | 'retirementAge' | 'annualWithdrawalAmount' | 'withdrawalStartAge'> = [];
   if (!currentAge) missingParams.push('currentAge');
   if (!annualWithdrawalAmount) missingParams.push('annualWithdrawalAmount');
   // retirementAge and withdrawalStartAge are optional (user might already be retired)
 
-  // If we don't have enough info, return a signal for Linc to ask
+  // Log defaults being used
+  if (missingParams.length === 0) {
+    console.log('✅ Retirement parameters ready (with defaults applied):', {
+      currentAge,
+      retirementAge,
+      annualWithdrawalAmount,
+      withdrawalStartAge,
+      portfolioValue,
+      usedDefaults: {
+        currentAge: !questionParams.currentAge && !profileAge,
+        retirementAge: !questionParams.retirementAge && !profileRetirementAge,
+        annualWithdrawalAmount: !questionParams.annualWithdrawalAmount
+      }
+    });
+  }
+
+  // If we don't have enough info after defaults, return a signal for Linc to ask
   if (missingParams.length > 0) {
-    console.log(`Retirement analysis: Missing required parameters: ${missingParams.join(', ')}`);
+    console.log(`Retirement analysis: Missing required parameters after defaults: ${missingParams.join(', ')}`);
     // Return a special indicator that will trigger Linc to ask for missing info
     return {
       needsInfo: true,
