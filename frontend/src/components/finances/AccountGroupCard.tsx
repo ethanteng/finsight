@@ -105,13 +105,13 @@ export default function AccountGroupCard({
     setEditName(getAccountName(account));
   };
 
-  const handleCancelEdit = (e: React.MouseEvent) => {
+  const handleCancelEdit = (e: React.SyntheticEvent) => {
     e.stopPropagation();
     setEditingAccountId(null);
     setEditName('');
   };
 
-  const handleSaveEdit = async (accountId: string, e: React.MouseEvent) => {
+  const handleSaveEdit = async (accountId: string, e: React.SyntheticEvent) => {
     e.stopPropagation();
     
     if (!editName.trim()) {
@@ -206,9 +206,9 @@ export default function AccountGroupCard({
                           onChange={(e) => setEditName(e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
-                              handleSaveEdit(accountId, e as any);
+                              handleSaveEdit(accountId, e);
                             } else if (e.key === 'Escape') {
-                              handleCancelEdit(e as any);
+                              handleCancelEdit(e);
                             }
                           }}
                           onClick={(e) => e.stopPropagation()}
