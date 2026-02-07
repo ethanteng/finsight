@@ -8,6 +8,7 @@ import { dataOrchestrator } from './data/orchestrator';
 import { isFeatureEnabled } from './config/features';
 import authRoutes from './auth/routes';
 import manualAccountsRoutes from './auth/manual-accounts-routes';
+import accountsRoutes from './auth/accounts-routes';
 import stripeRoutes from './routes/stripe';
 import aiRoutes from './routes/ai';
 import { optionalAuth, requireAuth, adminAuth } from './auth/middleware';
@@ -204,6 +205,9 @@ app.use('/auth', authRoutes);
 
 // Setup Manual Accounts routes
 app.use('/api/manual-accounts', manualAccountsRoutes);
+
+// Setup Accounts routes (for Plaid and SnapTrade accounts)
+app.use('/api/accounts', accountsRoutes);
 
 // Setup AI routes
 app.use('/api/ai', aiRoutes);

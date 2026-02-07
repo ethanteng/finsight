@@ -1,4 +1,5 @@
 "use client";
+import { useState } from 'react';
 
 interface Account {
   id: string;
@@ -32,6 +33,7 @@ interface AccountGroupCardProps {
   isExpanded: boolean;
   onToggle: () => void;
   onAccountClick: (accountId: string) => void;
+  onAccountRenamed?: () => void;
 }
 
 export default function AccountGroupCard({
@@ -40,8 +42,12 @@ export default function AccountGroupCard({
   totalBalance,
   isExpanded,
   onToggle,
-  onAccountClick
+  onAccountClick,
+  onAccountRenamed
 }: AccountGroupCardProps) {
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  const [editName, setEditName] = useState<string>('');
+  const [isSaving, setIsSaving] = useState(false);
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -92,6 +98,66 @@ export default function AccountGroupCard({
     return (account as SnapTradeAccount).id || '';
   };
 
+  const handleStartEdit = (account: Account | SnapTradeAccount, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering onAccountClick
+    const accountId = getAccountId(account);
+    setEditingAccountId(accountId);
+    setEditName(getAccountName(account));
+  };
+
+  const handleCancelEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingAccountId(null);
+    setEditName('');
+  };
+
+  const handleSaveEdit = async (accountId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (!editName.trim()) {
+      alert('Account name cannot be empty');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      const token = localStorage.getItem('auth_token');
+      
+      if (!token) {
+        alert('Authentication required. Please log in again.');
+        setIsSaving(false);
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/accounts/${encodeURIComponent(accountId)}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ name: editName.trim() }),
+      });
+
+      if (response.ok) {
+        setEditingAccountId(null);
+        setEditName('');
+        // Trigger refresh of accounts
+        if (onAccountRenamed) {
+          onAccountRenamed();
+        }
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to rename account');
+      }
+    } catch (error) {
+      console.error('Error renaming account:', error);
+      alert('Network error. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700">
       <button
@@ -122,24 +188,72 @@ export default function AccountGroupCard({
             const name = getAccountName(account);
             const institution = getAccountInstitution(account);
 
+            const isEditing = editingAccountId === accountId;
+
             return (
               <div
                 key={accountId}
-                onClick={() => onAccountClick(accountId)}
-                className="bg-gray-700 rounded-lg p-4 cursor-pointer hover:bg-gray-600 transition-colors"
+                onClick={() => !isEditing && onAccountClick(accountId)}
+                className="bg-gray-700 rounded-lg p-4 cursor-pointer hover:bg-gray-600 transition-colors group"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <div className="font-medium text-white">{name}</div>
-                    {institution && (
+                    {isEditing ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              handleSaveEdit(accountId, e as any);
+                            } else if (e.key === 'Escape') {
+                              handleCancelEdit(e as any);
+                            }
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex-1 px-2 py-1 bg-gray-800 text-white border border-gray-600 rounded focus:outline-none focus:border-blue-500"
+                          autoFocus
+                          disabled={isSaving}
+                        />
+                        <button
+                          onClick={(e) => handleSaveEdit(accountId, e)}
+                          disabled={isSaving}
+                          className="px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                        >
+                          {isSaving ? 'Saving...' : 'Save'}
+                        </button>
+                        <button
+                          onClick={handleCancelEdit}
+                          disabled={isSaving}
+                          className="px-2 py-1 bg-gray-600 text-white rounded hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <div className="font-medium text-white">{name}</div>
+                        <button
+                          onClick={(e) => handleStartEdit(account, e)}
+                          className="text-gray-400 hover:text-white text-sm transition-opacity"
+                          title="Rename account"
+                        >
+                          ✏️
+                        </button>
+                      </div>
+                    )}
+                    {institution && !isEditing && (
                       <div className="text-sm text-gray-400">{institution}</div>
                     )}
                   </div>
-                  <div className="text-right">
-                    <div className="font-semibold text-white">
-                      {formatCurrency(balance)}
+                  {!isEditing && (
+                    <div className="text-right">
+                      <div className="font-semibold text-white">
+                        {formatCurrency(balance)}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             );

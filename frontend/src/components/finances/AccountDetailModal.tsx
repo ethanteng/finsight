@@ -85,6 +85,7 @@ interface AccountDetailModalProps {
   holdings?: Holding[];
   investmentTransactions?: InvestmentTransaction[];
   onClose: () => void;
+  onAccountRenamed?: () => void;
 }
 
 type CashDebtView = 'categories' | 'transactions';
@@ -95,8 +96,12 @@ export default function AccountDetailModal({
   transactions,
   holdings = [],
   investmentTransactions = [],
-  onClose
+  onClose,
+  onAccountRenamed
 }: AccountDetailModalProps) {
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editName, setEditName] = useState<string>(account.name || '');
+  const [isSavingName, setIsSavingName] = useState(false);
   const isInvestment = (account as Account).type === 'investment' || 
                       ['401k', 'ira', 'roth', 'brokerage', 'hsa', '529'].includes((account as Account).subtype?.toLowerCase() || '') ||
                       (account as SnapTradeAccount).type === 'investment' ||
@@ -376,6 +381,65 @@ export default function AccountDetailModal({
     return account.name || 'Unknown Account';
   };
 
+  const handleStartEditName = () => {
+    setIsEditingName(true);
+    setEditName(getAccountName());
+  };
+
+  const handleCancelEditName = () => {
+    setIsEditingName(false);
+    setEditName(getAccountName());
+  };
+
+  const handleSaveName = async () => {
+    if (!editName.trim()) {
+      alert('Account name cannot be empty');
+      return;
+    }
+
+    setIsSavingName(true);
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      const token = localStorage.getItem('auth_token');
+      
+      if (!token) {
+        alert('Authentication required. Please log in again.');
+        setIsSavingName(false);
+        return;
+      }
+
+      // Get the account ID (plaidAccountId or snaptrade-{id})
+      const accId = (account as Account).account_id || (account as Account).id || (account as SnapTradeAccount).id;
+
+      const response = await fetch(`${API_URL}/api/accounts/${encodeURIComponent(accId)}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ name: editName.trim() }),
+      });
+
+      if (response.ok) {
+        // Update local account name
+        account.name = editName.trim();
+        setIsEditingName(false);
+        // Trigger refresh if callback provided
+        if (onAccountRenamed) {
+          onAccountRenamed();
+        }
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to rename account');
+      }
+    } catch (error) {
+      console.error('Error renaming account:', error);
+      alert('Network error. Please try again.');
+    } finally {
+      setIsSavingName(false);
+    }
+  };
+
   const getAccountInstitution = (): string => {
     if ('institution' in account) {
       return (account as Account).institution || (account as SnapTradeAccount).institution || '';
@@ -390,8 +454,51 @@ export default function AccountDetailModal({
         <div className="bg-gray-800 rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-700">
-            <div>
-              <h2 className="text-2xl font-bold text-white">{getAccountName()}</h2>
+            <div className="flex-1">
+              {isEditingName ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleSaveName();
+                      } else if (e.key === 'Escape') {
+                        handleCancelEditName();
+                      }
+                    }}
+                    className="text-2xl font-bold px-2 py-1 bg-gray-700 text-white border border-gray-600 rounded focus:outline-none focus:border-blue-500"
+                    autoFocus
+                    disabled={isSavingName}
+                  />
+                  <button
+                    onClick={handleSaveName}
+                    disabled={isSavingName}
+                    className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    {isSavingName ? 'Saving...' : 'Save'}
+                  </button>
+                  <button
+                    onClick={handleCancelEditName}
+                    disabled={isSavingName}
+                    className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <h2 className="text-2xl font-bold text-white">{getAccountName()}</h2>
+                  <button
+                    onClick={handleStartEditName}
+                    className="text-gray-400 hover:text-white text-lg"
+                    title="Rename account"
+                  >
+                    ✏️
+                  </button>
+                </div>
+              )}
               <div className="text-sm text-gray-400 mt-1">
                 {getAccountInstitution()} • {(account as Account).type} • {(account as Account).subtype}
               </div>
@@ -423,8 +530,51 @@ export default function AccountDetailModal({
       <div className="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-700">
-          <div>
-            <h2 className="text-2xl font-bold text-white">{getAccountName()}</h2>
+          <div className="flex-1">
+            {isEditingName ? (
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSaveName();
+                    } else if (e.key === 'Escape') {
+                      handleCancelEditName();
+                    }
+                  }}
+                  className="text-2xl font-bold px-2 py-1 bg-gray-700 text-white border border-gray-600 rounded focus:outline-none focus:border-blue-500"
+                  autoFocus
+                  disabled={isSavingName}
+                />
+                <button
+                  onClick={handleSaveName}
+                  disabled={isSavingName}
+                  className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  {isSavingName ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  onClick={handleCancelEditName}
+                  disabled={isSavingName}
+                  className="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 mb-2">
+                <h2 className="text-2xl font-bold text-white">{getAccountName()}</h2>
+                <button
+                  onClick={handleStartEditName}
+                  className="text-gray-400 hover:text-white text-lg"
+                  title="Rename account"
+                >
+                  ✏️
+                </button>
+              </div>
+            )}
             <div className="text-sm text-gray-400 mt-1">
               {getAccountInstitution()} • {(account as Account).type} • {(account as Account).subtype}
             </div>

@@ -300,6 +300,48 @@ export default function FinancesPageClient() {
     loadFinancialData();
   }, [API_URL, router]);
 
+  const refreshAccounts = useCallback(async () => {
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+      headers['Authorization'] = `Bearer ${token}`;
+
+      // Reload Plaid accounts
+      try {
+        const accountsRes = await fetch(`${API_URL}/plaid/all-accounts`, { headers });
+        if (accountsRes.ok) {
+          const accountsData = await accountsRes.json();
+          const accounts = accountsData.accounts || [];
+          setFreshAccounts(accounts);
+        }
+      } catch (accountsError) {
+        console.log('Error refreshing accounts:', accountsError);
+      }
+
+      // Reload SnapTrade accounts
+      try {
+        const snapTradeRes = await fetch(`${API_URL}/snaptrade/accounts`, { headers });
+        if (snapTradeRes.ok) {
+          const snapTradeData = await snapTradeRes.json();
+          if (snapTradeData.success && snapTradeData.data?.accounts) {
+            const normalizedAccounts = snapTradeData.data.accounts.map((acc: SnapTradeAccount) => ({
+              ...acc,
+              id: acc.id.startsWith('snaptrade-') ? acc.id : `snaptrade-${acc.id}`,
+            }));
+            setSnapTradeAccounts(normalizedAccounts);
+          }
+        }
+      } catch (snapTradeError) {
+        console.log('Error refreshing SnapTrade accounts:', snapTradeError);
+      }
+    } catch (error) {
+      console.error('Error refreshing accounts:', error);
+    }
+  }, [API_URL]);
+
   const refreshManualAccounts = useCallback(async () => {
     try {
       const headers: Record<string, string> = {
@@ -627,6 +669,7 @@ export default function FinancesPageClient() {
                   setSelectedAccountId(accountId);
                 }
               }}
+              onAccountRenamed={refreshAccounts}
             />
           )}
 
@@ -645,6 +688,7 @@ export default function FinancesPageClient() {
                   setSelectedAccountId(accountId);
                 }
               }}
+              onAccountRenamed={refreshAccounts}
             />
           )}
 
@@ -666,6 +710,7 @@ export default function FinancesPageClient() {
                   setSelectedAccountId(accountId);
                 }
               }}
+              onAccountRenamed={refreshAccounts}
             />
           )}
 
@@ -696,6 +741,7 @@ export default function FinancesPageClient() {
             setSelectedAccount(null);
             setSelectedAccountId(null);
           }}
+          onAccountRenamed={refreshAccounts}
         />
       )}
     </div>
