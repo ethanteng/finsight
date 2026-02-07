@@ -1624,17 +1624,43 @@ export class FinancialDataService {
         accountsData = accountsResult; // Store for later reuse
         
         if (accountsResult.success && accountsResult.data?.accounts) {
+          // ✅ Merge with database accounts to get custom names
+          const dbAccounts = await prisma.account.findMany({
+            where: {
+              userId
+            },
+            select: {
+              plaidAccountId: true,
+              name: true
+            }
+          });
+          
+          // Filter to only SnapTrade accounts
+          const snapTradeDbAccounts = dbAccounts.filter(acc => 
+            acc.plaidAccountId && acc.plaidAccountId.startsWith('snaptrade-')
+          );
+          
+          // Create a map of plaidAccountId -> custom name
+          const customNamesMap = new Map<string, string>();
+          snapTradeDbAccounts.forEach(acc => {
+            customNamesMap.set(acc.plaidAccountId, acc.name);
+          });
+          
           const fetchedAt = new Date().toISOString();
 
           for (const account of accountsResult.data.accounts) {
             const balance = account.balance?.value || account.currentBalance || 0;
             // ✅ CRITICAL: SnapTrade accounts use account_id format: snaptrade-{id}
             // Do NOT set plaidAccountId for SnapTrade accounts (they don't have one)
-            const accountId = `snaptrade-${account.id}`;
+            const accountId = account.id.startsWith('snaptrade-') ? account.id : `snaptrade-${account.id}`;
+            
+            // Use custom name from database if available, otherwise use name from SnapTrade API
+            const accountName = customNamesMap.get(accountId) || account.name;
+            
             accounts.push({
               account_id: accountId, // ✅ Primary unique identifier for SnapTrade accounts
               id: accountId, // Alias for compatibility
-              name: account.name,
+              name: accountName, // ✅ Use custom name from database if available
               type: 'investment',
               subtype: 'brokerage',
               balance: {

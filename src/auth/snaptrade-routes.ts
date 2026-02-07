@@ -184,6 +184,48 @@ router.get('/accounts', requireAuth, async (req, res) => {
     const result = await snapTradeService.getUserAccounts(userId, user.userSecret);
     
     if (result.success) {
+      // ✅ Merge with database accounts to get custom names
+      // Fetch accounts from database to get any custom names
+      const dbAccounts = await db.account.findMany({
+        where: {
+          userId
+        },
+        select: {
+          plaidAccountId: true,
+          name: true
+        }
+      });
+      
+      // Filter to only SnapTrade accounts
+      const snapTradeDbAccounts = dbAccounts.filter(acc => 
+        acc.plaidAccountId && acc.plaidAccountId.startsWith('snaptrade-')
+      );
+      
+      // Create a map of plaidAccountId -> custom name
+      const customNamesMap = new Map<string, string>();
+      snapTradeDbAccounts.forEach(acc => {
+        customNamesMap.set(acc.plaidAccountId, acc.name);
+      });
+      
+      // Update account names with custom names from database
+      if (result.data?.accounts) {
+        result.data.accounts = result.data.accounts.map((account: any) => {
+          const accountId = account.id.startsWith('snaptrade-') ? account.id : `snaptrade-${account.id}`;
+          const customName = customNamesMap.get(accountId);
+          if (customName) {
+            return {
+              ...account,
+              id: accountId,
+              name: customName // Use custom name from database
+            };
+          }
+          return {
+            ...account,
+            id: accountId
+          };
+        });
+      }
+      
       res.json({
         success: true,
         message: 'Accounts retrieved successfully',
