@@ -69,25 +69,28 @@ const NewHomepage = () => {
               <Link href="/" className="text-muted-foreground hover:text-primary transition-colors">Home</Link>
               <Link href="/features" className="text-muted-foreground hover:text-primary transition-colors">Features</Link>
               <button onClick={() => scrollToSection('pricing')} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
-              <Link 
-                href="/demo" 
+              <a 
+                href="https://www.asklinc.com/blog" 
+                target="_blank" 
+                rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-primary transition-colors"
               >
-                Demo
-              </Link>
+                Blog
+              </a>
               <Button 
                 variant="hero" 
                 size="sm"
-                onClick={() => window.location.href = '/login'}
+                onClick={() => handleBuyClick('premium')}
+                disabled={isLoading === 'premium'}
               >
-                Login
+                {isLoading === 'premium' ? 'Loading...' : 'Get started'}
               </Button>
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => window.location.href = '/register'}
+                onClick={() => window.location.href = '/login'}
               >
-                Sign up
+                Login
               </Button>
             </div>
           </div>
@@ -358,10 +361,10 @@ const NewHomepage = () => {
                   variant="hero" 
                   className="w-full" 
                   size="lg"
-                  onClick={() => handleBuyClick('starter')}
-                  disabled={isLoading === 'starter'}
+                  onClick={() => handleBuyClick('premium')}
+                  disabled={isLoading === 'premium'}
                 >
-                  {isLoading === 'starter' ? 'Creating...' : 'Get started'}
+                  {isLoading === 'premium' ? 'Creating...' : 'Get started'}
                 </Button>
                 <p className="text-center text-xs text-muted-foreground mt-3">
                   Cancel anytime.
@@ -483,10 +486,10 @@ const NewHomepage = () => {
                 variant="hero" 
                 size="xl" 
                 className="group w-full sm:w-auto"
-                onClick={() => handleBuyClick('starter')}
-                disabled={isLoading === 'starter'}
+                onClick={() => handleBuyClick('premium')}
+                disabled={isLoading === 'premium'}
               >
-                {isLoading === 'starter' ? 'Creating...' : 'Get started'}
+                {isLoading === 'premium' ? 'Creating...' : 'Get started'}
               </Button>
               <p className="text-sm text-primary font-medium">$9/month. Cancel anytime.</p>
             </div>

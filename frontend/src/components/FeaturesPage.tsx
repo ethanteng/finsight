@@ -63,25 +63,28 @@ const FeaturesPage = () => {
               <Link href="/" className="text-muted-foreground hover:text-primary transition-colors">Home</Link>
               <Link href="/features" className="text-primary hover:text-primary/80 transition-colors">Features</Link>
               <button onClick={() => window.location.href = '/#pricing'} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
-              <Link 
-                href="/demo" 
+              <a 
+                href="https://www.asklinc.com/blog" 
+                target="_blank" 
+                rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-primary transition-colors"
               >
-                Demo
-              </Link>
+                Blog
+              </a>
               <Button 
                 variant="hero" 
                 size="sm"
-                onClick={() => window.location.href = '/login'}
+                onClick={() => handleBuyClick('premium')}
+                disabled={isLoading === 'premium'}
               >
-                Login
+                {isLoading === 'premium' ? 'Loading...' : 'Get started'}
               </Button>
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => window.location.href = '/register'}
+                onClick={() => window.location.href = '/login'}
               >
-                Sign up
+                Login
               </Button>
             </div>
           </div>
@@ -200,10 +203,10 @@ const FeaturesPage = () => {
               <Button 
                 variant="hero" 
                 size="xl"
-                onClick={() => handleBuyClick('starter')}
-                disabled={isLoading === 'starter'}
+                onClick={() => handleBuyClick('premium')}
+                disabled={isLoading === 'premium'}
               >
-                {isLoading === 'starter' ? 'Creating...' : 'Get started'}
+                {isLoading === 'premium' ? 'Creating...' : 'Get started'}
               </Button>
               <p className="text-sm text-primary font-medium">$9/month. Cancel anytime.</p>
             </div>

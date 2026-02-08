@@ -65,16 +65,13 @@ export default function ContactForm() {
                 Home
               </Link>
               <a 
-                href="/blog" 
+                href="https://www.asklinc.com/blog" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-primary transition-colors"
               >
-                Our Blog
+                Blog
               </a>
-              <Link href="/demo" className="text-muted-foreground hover:text-primary transition-colors">
-                Demo
-              </Link>
             </div>
           </div>
         </div>

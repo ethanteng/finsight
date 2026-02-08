@@ -17,6 +17,7 @@ export default function DemoPageClient() {
   const [selectedPrompt, setSelectedPrompt] = useState<PromptHistory | null>(null);
   const [showSidebar, setShowSidebar] = useState(true); // Show by default on desktop
   const [sessionId, setSessionId] = useState<string>('');
+  const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
 
   // Generate or retrieve session ID for demo mode from localStorage (client-side only)
   useEffect(() => {
@@ -99,6 +100,41 @@ export default function DemoPageClient() {
     setSelectedPrompt(null);
   };
 
+  const handleBuyClick = async (planId: string) => {
+    setIsCheckoutLoading(true);
+    
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      
+      // Create checkout session for anyone (new or existing users)
+      const response = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          tier: planId,
+          successUrl: `${window.location.origin}/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=${planId}`,
+          cancelUrl: `${window.location.origin}/demo`
+        })
+      });
+
+      if (response.ok) {
+        const { url } = await response.json();
+        window.location.href = url;
+      } else {
+        const error = await response.json();
+        console.error('Failed to create checkout session:', error);
+        alert('Failed to create checkout session. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error creating checkout session:', error);
+      alert('An error occurred. Please try again.');
+    } finally {
+      setIsCheckoutLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       {/* Header */}
@@ -118,12 +154,13 @@ export default function DemoPageClient() {
           <div className="flex items-center space-x-3">
             {/* Hide Get Started button on mobile */}
             <div className="hidden md:block">
-              <Link 
-                href="/#pricing" 
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+              <button
+                onClick={() => handleBuyClick('premium')}
+                disabled={isCheckoutLoading}
+                className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
               >
-                Get Started
-              </Link>
+                {isCheckoutLoading ? 'Loading...' : 'Get Started'}
+              </button>
             </div>
             <a 
               href="/contact" 

@@ -14,6 +14,7 @@ function LoginFormContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [error, setError] = useState('');
   const [subscriptionContext, setSubscriptionContext] = useState<SubscriptionContext | null>(null);
   const router = useRouter();
@@ -21,6 +22,9 @@ function LoginFormContent() {
 
   // Check if user came from subscription context or has access denied message
   useEffect(() => {
+    // Only run on client side to avoid hydration mismatches
+    if (typeof window === 'undefined') return;
+
     const subscriptionParam = searchParams.get('subscription');
     const tierParam = searchParams.get('tier');
     const emailParam = searchParams.get('email');
@@ -99,6 +103,41 @@ function LoginFormContent() {
     
     const lowerError = errorMessage.toLowerCase();
     return paymentKeywords.some(keyword => lowerError.includes(keyword));
+  };
+
+  const handleBuyClick = async (planId: string) => {
+    setIsCheckoutLoading(true);
+    
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      
+      // Create checkout session for anyone (new or existing users)
+      const response = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          tier: planId,
+          successUrl: `${window.location.origin}/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=${planId}`,
+          cancelUrl: `${window.location.origin}/login`
+        })
+      });
+
+      if (response.ok) {
+        const { url } = await response.json();
+        window.location.href = url;
+      } else {
+        const error = await response.json();
+        console.error('Failed to create checkout session:', error);
+        alert('Failed to create checkout session. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error creating checkout session:', error);
+      alert('An error occurred. Please try again.');
+    } finally {
+      setIsCheckoutLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -183,7 +222,7 @@ function LoginFormContent() {
             </div>
           )}
 
-          <div>
+          <div suppressHydrationWarning>
             <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
               Email
             </label>
@@ -198,7 +237,7 @@ function LoginFormContent() {
             />
           </div>
 
-          <div>
+          <div suppressHydrationWarning>
             <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
               Password
             </label>
@@ -230,9 +269,13 @@ function LoginFormContent() {
         <div className="text-center">
           <p className="text-gray-400 text-sm">
             Don't have an account?{' '}
-            <Link href="/#pricing" className="text-primary hover:text-primary/80">
-              Sign up
-            </Link>
+            <button
+              onClick={() => handleBuyClick('premium')}
+              disabled={isCheckoutLoading}
+              className="text-primary hover:text-primary/80 disabled:opacity-50"
+            >
+              {isCheckoutLoading ? 'Loading...' : 'Get started'}
+            </button>
           </p>
         </div>
 
