@@ -110,23 +110,26 @@ const NewHomepage = () => {
               The AI that reasons about your finances — combining your real accounts, goals, and live market conditions to deliver answers that help you make smarter decisions.
             </p>
             
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-8">
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-start pt-8">
               <a href="/demo">
                 <Button 
                   variant="hero" 
                   size="xl" 
                   className="group"
                 >
-                  Ask a real financial question
+                  Ask your first question
                 </Button>
               </a>
-              <Button 
-                variant="outline" 
-                size="xl"
-                onClick={() => scrollToSection('how-it-works')}
-              >
-                See how it works
-              </Button>
+              <div className="flex flex-col items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="xl"
+                  onClick={() => scrollToSection('pricing')}
+                >
+                  Get started
+                </Button>
+                <p className="text-sm text-primary font-medium">$9/month. Cancel anytime.</p>
+              </div>
             </div>
             
             <div className="pt-12 max-w-2xl mx-auto">
@@ -303,148 +306,77 @@ const NewHomepage = () => {
       </section>
 
       {/* Pricing Section */}
-      <section id="pricing" className="py-20 bg-muted/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center space-y-4 mb-16">
+      <section id="pricing" className="py-16 bg-muted/30">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center space-y-4 mb-8">
             <h2 className="text-3xl md:text-4xl font-bold">
-              Choose your <span className="gradient-text">financial journey</span>
+              One plan. <span className="gradient-text">Full access.</span>
             </h2>
-            <p className="text-xl text-muted-foreground">
-              Pick the plan that fits where you are with your money today
+            <p className="text-lg text-muted-foreground">
+              We believe financial reasoning shouldn't be gated or tiered.
             </p>
           </div>
           
-          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            {[{
-              id: 'starter',
-              name: "Starter",
-              price: "$9",
-              period: "/month",
-              description: "Understand your money in isolation.",
-              features: ["Ask anything about your money and get clear, instant answers", "Connect up to 5 accounts", "See personalized suggestions to reach your goals"],
-              bestFor: "Anyone who wants quick answers about their finances.",
-              popular: false
-            }, {
-              id: 'standard',
-              name: "Standard",
-              price: "$19",
-              period: "/month",
-              description: "Understand your money in context.",
-              features: ["Everything in Starter","Connect unlimited accounts", "Factor in key U.S. economic data", "Get recommendations shaped by real-world events"],
-              bestFor: "People who want to make smarter decisions by seeing the big picture.",
-              popular: true
-            }, {
-              id: 'premium',
-              name: "Premium",
-              price: "$29",
-              period: "/month",
-              description: "Understand your money as part of the broader financial system.",
-              features: ["Everything in Standard", "Live market data: CD rates, Treasury yields, mortgage rates, stocks & crypto", "Real-time news feeds from 60+ trusted sources", "Get notified when markets move"],
-              bestFor: "Investors or anyone who wants a live pulse on the economy.",
-              popular: false
-            }].map((plan, index) => (
-              <Card key={index} className={`relative overflow-hidden hover:shadow-2xl transition-all duration-300 hover:scale-105 ${plan.popular ? 'ring-2 ring-primary shadow-xl' : ''}`}>
-                {plan.popular && (
-                  <div className="absolute top-0 right-0 bg-gradient-to-l from-primary to-secondary text-primary-foreground text-xs font-medium px-3 py-1 rounded-bl-lg">
-                    Most Popular
-                  </div>
-                )}
-                <CardContent className="p-8 flex flex-col h-full">
-                  <div className="space-y-2">
-                    <h3 className="text-2xl font-bold">{plan.name}</h3>
-                    <div className="flex items-baseline space-x-1">
-                      <span className="text-4xl font-bold gradient-text">{plan.price}</span>
-                      <span className="text-muted-foreground">{plan.period}</span>
-                    </div>
-                    <p className="text-muted-foreground text-sm leading-relaxed">{plan.description}</p>
-                  </div>
-                  
-                  <ul className="space-y-3 mt-6">
-                    {plan.features.map((feature, featureIndex) => {
-                      const isHighlighted = feature.includes("Factor in economic indicators") || feature.includes("Factor in key economic indicators") || feature.includes("Factor in key U.S. economic data") || feature.includes("Get recommendations shaped by real-world events") || feature.includes("Pull from trusted sources") || feature.includes("Pulls the latest financial news") || feature.includes("Searches the web for current financial headlines") || feature.includes("Live market data") || feature.includes("Real-time news feeds from 60+ trusted sources");
-                      const isNewFeature = feature.includes("Get notified when markets move");
-                      return (
-                        <li key={featureIndex} className="flex items-center space-x-3">
-                          {feature.startsWith('LIMIT:') ? (
-                            <>
-                              <XCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
-                              <span className="text-sm">{feature.replace('LIMIT: ', '')}</span>
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle className="h-5 w-5 text-primary flex-shrink-0" />
-                              <span className={`text-sm ${isHighlighted ? 'text-[hsl(158,64%,52%)]' : ''} flex items-center`}>
-                                {feature}
-                                {isNewFeature && (
-                                  <span className="ml-2 inline-block bg-gradient-to-l from-primary to-secondary text-primary-foreground text-xs px-2 py-0.5 rounded-full flex items-center space-x-1">
-                                    <span>New</span>
-                                    <span>✨</span>
-                                  </span>
-                                )}
-                              </span>
-                            </>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  
-                  {/* Best For section */}
-                  <div className="mt-6 pt-4 border-t border-muted/30">
-                    <p className="text-sm text-muted-foreground">
-                      <span className="font-medium text-foreground">Best for:</span> {plan.bestFor}
-                    </p>
-                  </div>
-                  
-                  <div className={`mt-auto pt-6 ${plan.id === 'premium' ? 'pt-8' : ''}`}>
-                    <Button 
-                      variant={plan.popular ? "hero" : "outline"} 
-                      className="w-full" 
-                      size="lg"
-                      onClick={() => handleBuyClick(plan.id)}
-                      disabled={isLoading === plan.id}
-                    >
-                      {isLoading === plan.id ? 'Creating...' : (plan.id === 'standard' ? 'Get Started' : `Get ${plan.name}`)}
-                    </Button>
-                    
-                    {/* Data sources callout - only for Standard and Premium */}
-                    {plan.id !== 'starter' ? (
-                      <div className="mt-3 text-center">
-                        <p className="text-xs text-muted-foreground/70">
-                          {plan.id === 'standard' ? 'Included data sources: FRED, Brave Search' : 'Additional data sources: Alpha Vantage, Polygon.io'}
-                        </p>
-                      </div>
-                    ) : (
-                      /* Placeholder div to maintain button alignment for Starter plan */
-                      <div className="mt-3 h-5"></div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          
-          {/* Blog link for plan selection help */}
-          <div className="text-center mt-12">
-            <p className="text-muted-foreground">
-              Not sure which plan is right?{" "}
-              <a 
-                href="/blog/which-ask-linc-plan-fits-you/" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-[hsl(158,64%,52%)] hover:text-[hsl(158,64%,62%)] transition-colors font-medium"
-              >
-                Read our blog
-              </a>{" "}
-              to help you choose.
-            </p>
-          </div>
-
+          <Card className="relative overflow-hidden hover:shadow-2xl transition-all duration-300">
+            <CardContent className="p-8 flex flex-col">
+              <div className="text-center space-y-4 mb-8">
+                <h3 className="text-2xl font-bold">Ask Linc</h3>
+                <div className="flex items-baseline justify-center space-x-1">
+                  <span className="text-5xl font-bold gradient-text">$9</span>
+                  <span className="text-muted-foreground text-xl">/ month</span>
+                </div>
+                <p className="text-muted-foreground text-lg">
+                  Full access to Ask Linc's financial reasoning platform.
+                </p>
+              </div>
+              
+              <ul className="space-y-4 mb-8">
+                <li className="flex items-start space-x-3">
+                  <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <span className="text-sm">Unlimited questions about your money</span>
+                </li>
+                <li className="flex items-start space-x-3">
+                  <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <span className="text-sm">All connected accounts</span>
+                </li>
+                <li className="flex items-start space-x-3">
+                  <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <span className="text-sm">Market-aware financial reasoning</span>
+                </li>
+                <li className="flex items-start space-x-3">
+                  <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <span className="text-sm">Retirement & risk analysis</span>
+                </li>
+                <li className="flex items-start space-x-3">
+                  <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <span className="text-sm">Privacy-first architecture</span>
+                </li>
+              </ul>
+              
+              <div className="mt-auto">
+                <Button 
+                  variant="hero" 
+                  className="w-full" 
+                  size="lg"
+                  onClick={() => handleBuyClick('starter')}
+                  disabled={isLoading === 'starter'}
+                >
+                  {isLoading === 'starter' ? 'Creating...' : 'Get started'}
+                </Button>
+                <p className="text-center text-xs text-muted-foreground mt-3">
+                  Cancel anytime.
+                </p>
+                <p className="text-center text-sm text-muted-foreground mt-4">
+                  This works best when you bring real questions and real decisions.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </section>
 
       {/* Privacy Section */}
-      <section id="security" className="py-20 bg-muted/30">
+      <section id="security" className="py-16 bg-muted/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-6 mb-16">
             <h2 className="text-3xl md:text-4xl font-bold">
@@ -510,6 +442,9 @@ const NewHomepage = () => {
               question: "Is this just another tracking app?",
               answer: "No. Tracking apps show what happened. Linc explains what it means — connecting your accounts, layering in market data, and giving you clear reasoning without tracking your every move."
             }, {
+              question: "Is there a free plan or trial?",
+              answer: "No. Ask Linc provides full access for $9/month. We've found people get the most value when they start using it seriously from day one."
+            }, {
               question: "I don't want to give OpenAI all my financial data...",
               answer: "We use Plaid, not your login info. Your data is read-only, never stored, and never used to train models."
             }, {
@@ -543,11 +478,18 @@ const NewHomepage = () => {
             Start understanding your money
           </h2>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <a href="/demo" className="w-full sm:w-auto">
-              <Button variant="hero" size="xl" className="group w-full sm:w-auto">
-                Ask your first question
+            <div className="flex flex-col items-center gap-2">
+              <Button 
+                variant="hero" 
+                size="xl" 
+                className="group w-full sm:w-auto"
+                onClick={() => handleBuyClick('starter')}
+                disabled={isLoading === 'starter'}
+              >
+                {isLoading === 'starter' ? 'Creating...' : 'Get started'}
               </Button>
-            </a>
+              <p className="text-sm text-primary font-medium">$9/month. Cancel anytime.</p>
+            </div>
           </div>
         </div>
       </section>

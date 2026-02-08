@@ -36,12 +36,16 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
 
   // Demo placeholder questions that rotate
   const demoPlaceholders = [
-    "Is my savings account really keeping up?",
-    "Should I pay off debt or invest first?",
-    "Does it make sense to refinance my mortgage now?",
-    "What’s smarter: keep buying stocks or wait?",
-    "How much emergency cash should I actually keep?",
-    "Am I missing out by not using a Roth IRA?"
+    "What breaks first if interest rates stay high longer than expected?",
+    "If markets underperform for 5 years, can my retirement plan still hold?",
+    "Am I taking more risk than I realize by staying in cash right now?",
+    "What happens to my plan if inflation never really goes back to 2%?",
+    "Assuming today's rates, what's the smartest thing to do with excess cash?",
+    "If I stop increasing contributions now, what does that cost me later?",
+    "Which matters more right now: paying down debt or staying liquid?",
+    "How exposed am I to a recession if it hits next year?",
+    "What assumptions in my plan matter most if they're wrong?",
+    "Given everything going on right now, am I actually doing okay?"
   ];
 
   // Regular user placeholder questions that also rotate

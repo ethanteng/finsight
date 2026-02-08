@@ -3,12 +3,50 @@ import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Brain, Shield, Zap, TrendingUp, MessageCircle, ArrowRight, Lock, Users } from 'lucide-react';
 import Link from 'next/link';
+import { useState } from 'react';
 
 const FeaturesPage = () => {
+  const [isLoading, setIsLoading] = useState<string | null>(null);
+
   const scrollToSection = (id: string) => {
     document.getElementById(id)?.scrollIntoView({
       behavior: 'smooth'
     });
+  };
+
+  const handleBuyClick = async (planId: string) => {
+    setIsLoading(planId);
+    
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      
+      // Create checkout session for anyone (new or existing users)
+      const response = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          tier: planId,
+          successUrl: `${window.location.origin}/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=${planId}`,
+          cancelUrl: `${window.location.origin}/`
+        })
+      });
+
+      if (response.ok) {
+        const { url } = await response.json();
+        window.location.href = url;
+      } else {
+        const error = await response.json();
+        console.error('Failed to create checkout session:', error);
+        alert('Failed to create checkout session. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error creating checkout session:', error);
+      alert('An error occurred. Please try again.');
+    } finally {
+      setIsLoading(null);
+    }
   };
 
   return (
@@ -155,21 +193,20 @@ const FeaturesPage = () => {
       <section className="py-20 bg-muted/30">
         <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8">
           <h2 className="text-3xl md:text-4xl font-bold">
-            Ready to get started?
+            Start understanding your money
           </h2>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Link href="/demo">
-              <Button variant="hero" size="xl" className="group">
-                Try the Demo
+            <div className="flex flex-col items-center gap-2">
+              <Button 
+                variant="hero" 
+                size="xl"
+                onClick={() => handleBuyClick('starter')}
+                disabled={isLoading === 'starter'}
+              >
+                {isLoading === 'starter' ? 'Creating...' : 'Get started'}
               </Button>
-            </Link>
-            <Button 
-              variant="outline" 
-              size="xl"
-              onClick={() => window.location.href = '/#pricing'}
-            >
-              View Pricing
-            </Button>
+              <p className="text-sm text-primary font-medium">$9/month. Cancel anytime.</p>
+            </div>
           </div>
         </div>
       </section>
