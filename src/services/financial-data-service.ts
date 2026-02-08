@@ -1247,6 +1247,31 @@ export class FinancialDataService {
       };
       const errors: ErrorDetail[] = [];
 
+      // ✅ Merge with database accounts to get custom names for Plaid accounts
+      // Fetch all accounts from database once (more efficient than querying per token)
+      const dbAccounts = await prisma.account.findMany({
+        where: {
+          userId
+        },
+        select: {
+          plaidAccountId: true,
+          name: true
+        }
+      });
+      
+      // Filter to only Plaid accounts (exclude SnapTrade and manual accounts)
+      const plaidDbAccounts = dbAccounts.filter(acc => 
+        acc.plaidAccountId && 
+        !acc.plaidAccountId.startsWith('snaptrade-') && 
+        !acc.plaidAccountId.startsWith('manual-')
+      );
+      
+      // Create a map of plaidAccountId -> custom name
+      const customNamesMap = new Map<string, string>();
+      plaidDbAccounts.forEach(acc => {
+        customNamesMap.set(acc.plaidAccountId, acc.name);
+      });
+
       // Fetch data for each token
       for (const tokenRecord of accessTokens) {
         try {
@@ -1270,10 +1295,14 @@ export class FinancialDataService {
             // ✅ CRITICAL: Always set plaidAccountId from account.account_id for Plaid accounts
             // This ensures consistent account identity across the system
             const plaidAccountId = account.account_id;
+            
+            // Use custom name from database if available, otherwise use name from Plaid API
+            const accountName = customNamesMap.get(plaidAccountId) || account.name;
+            
             accounts.push({
               account_id: plaidAccountId,
               id: plaidAccountId, // Alias for compatibility
-              name: account.name,
+              name: accountName, // ✅ Use custom name from database if available
               type: account.type,
               subtype: account.subtype,
               balance: {
@@ -2196,21 +2225,35 @@ export class FinancialDataService {
         continue;
       }
 
-      // Duplicate found - keep the most recent based on timestamp
-      const existingTimestamp = parseSnapshotTimestamp(existing);
-      const candidateTimestamp = parseSnapshotTimestamp(account);
-
+      // Duplicate found - prioritize accounts from database (persisted) to preserve custom names
+      // If both are persisted or both are not persisted, keep the most recent based on timestamp
+      const existingIsPersisted = existing.persisted === true;
+      const candidateIsPersisted = account.persisted === true;
+      
       let shouldReplace = false;
-
-      if (candidateTimestamp !== null && (existingTimestamp === null || candidateTimestamp > existingTimestamp)) {
-        shouldReplace = true;
-      } else if (existingTimestamp !== null && candidateTimestamp === null) {
+      
+      // ✅ Prioritize persisted accounts (from database) to preserve custom names
+      if (existingIsPersisted && !candidateIsPersisted) {
+        // Existing is from database, candidate is from API - keep existing (has custom name)
         shouldReplace = false;
-      } else if (candidateTimestamp === null && existingTimestamp === null) {
-        // Both missing timestamps - prefer the one with higher balance (more recent data)
-        const existingBalance = existing.balance?.current ?? existing.balance?.available ?? 0;
-        const candidateBalance = account.balance?.current ?? account.balance?.available ?? 0;
-        shouldReplace = candidateBalance >= existingBalance;
+      } else if (!existingIsPersisted && candidateIsPersisted) {
+        // Candidate is from database, existing is from API - use candidate (has custom name)
+        shouldReplace = true;
+      } else {
+        // Both from same source - keep the most recent based on timestamp
+        const existingTimestamp = parseSnapshotTimestamp(existing);
+        const candidateTimestamp = parseSnapshotTimestamp(account);
+
+        if (candidateTimestamp !== null && (existingTimestamp === null || candidateTimestamp > existingTimestamp)) {
+          shouldReplace = true;
+        } else if (existingTimestamp !== null && candidateTimestamp === null) {
+          shouldReplace = false;
+        } else if (candidateTimestamp === null && existingTimestamp === null) {
+          // Both missing timestamps - prefer the one with higher balance (more recent data)
+          const existingBalance = existing.balance?.current ?? existing.balance?.available ?? 0;
+          const candidateBalance = account.balance?.current ?? account.balance?.available ?? 0;
+          shouldReplace = candidateBalance >= existingBalance;
+        }
       }
 
       if (shouldReplace) {
