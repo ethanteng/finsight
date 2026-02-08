@@ -126,7 +126,10 @@ export interface SubscriptionPlan {
 }
 
 // Single price ID for all tiers (single-tier pricing model)
-const SINGLE_PRICE_ID = process.env.STRIPE_PRICE_STARTER || process.env.STRIPE_PRICE_STANDARD || process.env.STRIPE_PRICE_PREMIUM || 'price_1SyeXEBDHiWEJZBMAu9P57zI';
+// Product ID: prod_SraoEdrNSHuQ1W
+// Price ID: price_1SyeXEBDHiWEJZBMAu9P57zI ($9/month)
+// Use STRIPE_PRICE_PREMIUM env var if set, otherwise fallback to hardcoded correct value
+const SINGLE_PRICE_ID = process.env.STRIPE_PRICE_PREMIUM || 'price_1SyeXEBDHiWEJZBMAu9P57zI';
 
 export function getSubscriptionPlans(): Record<SubscriptionTier, SubscriptionPlan> {
   return {
@@ -180,7 +183,8 @@ export const SUBSCRIPTION_PLANS = getSubscriptionPlans();
 // Product ID: prod_SraoEdrNSHuQ1W
 // Price ID: price_1SyeXEBDHiWEJZBMAu9P57zI ($9/month)
 // All subscription tiers (starter/standard/premium) use the same price ID
-export const SINGLE_TIER_PRICE_ID = process.env.STRIPE_PRICE_STARTER || process.env.STRIPE_PRICE_STANDARD || process.env.STRIPE_PRICE_PREMIUM || 'price_1SyeXEBDHiWEJZBMAu9P57zI';
+// Use STRIPE_PRICE_PREMIUM env var if set, otherwise fallback to hardcoded correct value
+export const SINGLE_TIER_PRICE_ID = process.env.STRIPE_PRICE_PREMIUM || 'price_1SyeXEBDHiWEJZBMAu9P57zI';
 export const SINGLE_TIER_PRODUCT_ID = 'prod_SraoEdrNSHuQ1W';
 
 // Function to fetch live pricing from Stripe API

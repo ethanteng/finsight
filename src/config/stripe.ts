@@ -102,7 +102,8 @@ export function getTierFromPriceId(priceId: string): SubscriptionTier | null {
   }
   
   // If not found in static plans, check if it's our single price ID
-  const singlePriceId = process.env.STRIPE_PRICE_STARTER || process.env.STRIPE_PRICE_STANDARD || process.env.STRIPE_PRICE_PREMIUM || 'price_1SyeXEBDHiWEJZBMAu9P57zI';
+  // Use STRIPE_PRICE_PREMIUM env var if set, otherwise fallback to hardcoded correct value
+  const singlePriceId = process.env.STRIPE_PRICE_PREMIUM || 'price_1SyeXEBDHiWEJZBMAu9P57zI';
   if (priceId === singlePriceId || priceId.startsWith('price_')) {
     // With single-tier pricing model, default to 'premium' for any valid price ID
     return 'premium';
