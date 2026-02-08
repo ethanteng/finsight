@@ -66,26 +66,28 @@ const NewHomepage = () => {
               <span className="text-xl font-bold gradient-text">Ask Linc</span>
             </div>
             <div className="hidden md:flex items-center space-x-8">
-              <button onClick={() => scrollToSection('features')} className="text-muted-foreground hover:text-primary transition-colors">Features</button>
+              <Link href="/" className="text-muted-foreground hover:text-primary transition-colors">Home</Link>
+              <Link href="/features" className="text-muted-foreground hover:text-primary transition-colors">Features</Link>
               <button onClick={() => scrollToSection('pricing')} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
               <Link 
-                href="/blog" 
+                href="/demo" 
                 className="text-muted-foreground hover:text-primary transition-colors"
               >
-                Our Blog
+                Demo
               </Link>
-              <a 
-                href="/how-we-protect-your-data" 
-                className="text-primary hover:text-primary/80 transition-colors cursor-pointer"
-              >
-                How We Protect Your Data
-              </a>
               <Button 
                 variant="hero" 
                 size="sm"
                 onClick={() => window.location.href = '/login'}
               >
                 Login
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => window.location.href = '/register'}
+              >
+                Sign up
               </Button>
             </div>
           </div>
@@ -99,226 +101,96 @@ const NewHomepage = () => {
         
         <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-8">
-            <Badge variant="secondary" className="animate-pulse-glow">
-              <Sparkles className="h-4 w-4 mr-2" />
-              Built with OpenAI • Powered by your data
-            </Badge>
-            
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold leading-tight">
-              Hey, I'm Linc{" — "}A{" "}
-              <span className="gradient-text">Privacy-First</span>{" "}
-              AI built for your finances
+              Not Just Charts.{" "}
+              <span className="gradient-text">Real Answers.</span>
             </h1>
             
             <p className="text-xl md:text-2xl text-muted-foreground max-w-4xl mx-auto leading-relaxed">
-            Combines OpenAI's intelligence with real financial data and live market insights{" — "}
-            <span className="gradient-text">without compromising your privacy.</span>
+              The AI that reasons about your finances — combining your real accounts, goals, and live market conditions to deliver answers that help you make smarter decisions.
             </p>
             
-            {/* Animated Prompt Demo */}
-            <div className="max-w-2xl mx-auto pt-8">
-              <AnimatedPrompt />
-            </div>
-            
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center sm:items-start pt-8">
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-8">
+              <a href="/demo">
+                <Button 
+                  variant="hero" 
+                  size="xl" 
+                  className="group"
+                >
+                  Ask a real financial question
+                </Button>
+              </a>
               <Button 
-                variant="hero" 
-                size="xl" 
-                className="group"
-                onClick={() => scrollToSection('pricing')}
+                variant="outline" 
+                size="xl"
+                onClick={() => scrollToSection('how-it-works')}
               >
-                Get Started
+                See how it works
               </Button>
-              <div className="flex flex-col items-center">
-                <a href="/demo">
-                  <Button variant="outline" size="xl">Try the Demo</Button>
-                </a>
-                <p className="mt-2 text-sm text-muted-foreground">No login • Uses sample data</p>
-              </div>
             </div>
             
-            <div className="flex items-center justify-center space-x-6 pt-8 text-sm text-muted-foreground">
-              <div className="flex items-center space-x-2">
-                <Shield className="h-4 w-4 text-primary" />
-                <span>Bank-grade security</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Lock className="h-4 w-4 text-primary" />
-                <span>Privacy-first by design</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Users className="h-4 w-4 text-primary" />
-                <span>Built with your trust in mind</span>
-              </div>
+            <div className="pt-12 max-w-2xl mx-auto">
+              <AnimatedPrompt />
             </div>
           </div>
         </div>
       </section>
 
-      {/* AI Demo Section */}
-      <section className="py-20 bg-muted/30">
+      {/* Value Differentiators Section */}
+      <section className="py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
-            <div className="space-y-8">
-              <h2 className="text-3xl md:text-4xl font-bold">
-                No dashboards. No spreadsheets.{" "}
-                <span className="gradient-text">Just ask.</span>
-              </h2>
-              
-              <div className="space-y-6">
-                <div className="glass-card p-6 rounded-xl">
-                  <div className="flex items-start space-x-4">
-                    <MessageCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
-                    <div>
-                      <p className="font-medium mb-2">&quot;How much am I actually saving each month?&quot;</p>
-                      <p className="text-sm text-muted-foreground">
-                        Based on your last 6 months of transactions, you're averaging $1,247 in savings per month. 
-                        Your highest saving month was March at $1,890.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="glass-card p-6 rounded-xl">
-                  <div className="flex items-start space-x-4">
-                    <MessageCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
-                    <div>
-                      <p className="font-medium mb-2">&quot;Should I move my emergency fund to a higher-yield account?&quot;</p>
-                      <p className="text-sm text-muted-foreground">
-                        Yes! Your current savings account yields 0.5%, but top high-yield accounts offer 4.8%. 
-                        Moving your $12,000 emergency fund could earn an extra $516 annually.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            <Card className="glass-card hover:shadow-xl transition-all duration-300">
+              <CardContent className="p-8 space-y-4">
+                <h3 className="text-2xl font-bold">Built for decisions, not just tracking</h3>
+                <p className="text-muted-foreground leading-relaxed">
+                  Connects your cash, investments, debt, home value, and goals into one continuous line of reasoning.
+                </p>
+              </CardContent>
+            </Card>
             
-            <div className="relative">
-              <div className="absolute inset-0 bg-primary/20 rounded-2xl blur-3xl animate-pulse-glow" />
-              <div className="relative rounded-2xl shadow-2xl w-full animate-float bg-card p-8 border border-border/50">
-                {/* Smartphone Frame */}
-                <div className="bg-black rounded-3xl p-2 mx-auto max-w-xs">
-                  {/* Status Bar */}
-                  <div className="flex justify-between items-center px-4 py-2 text-white text-xs">
-                    <span>9:41</span>
-                    <div className="flex items-center space-x-1">
-                      <div className="w-1 h-1 bg-white rounded-full"></div>
-                      <div className="w-1 h-1 bg-white rounded-full"></div>
-                      <div className="w-1 h-1 bg-white rounded-full"></div>
-                    </div>
-                  </div>
-                  
-                  {/* Chat Interface */}
-                  <div className="bg-gray-900 rounded-2xl p-4 h-80 flex flex-col">
-                    {/* Header */}
-                    <div className="flex items-center space-x-3 mb-4">
-                      <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                        <Brain className="w-4 h-4 text-white" />
-                      </div>
-                      <div>
-                        <div className="text-white font-medium">Linc</div>
-                        <div className="text-gray-400 text-xs">AI Financial Assistant</div>
-                      </div>
-                    </div>
-                    
-                    {/* Chat Messages */}
-                    <div className="flex-1 space-y-3 overflow-hidden">
-                      {/* AI Message */}
-                      <div className="flex items-start space-x-2">
-                        <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
-                          <Brain className="w-3 h-3 text-white" />
-                        </div>
-                        <div className="bg-gray-800 rounded-lg p-3 max-w-xs">
-                          <p className="text-white text-sm">Hi! I'm here to help with your financial questions. What would you like to know?</p>
-                        </div>
-                      </div>
-                      
-                      {/* User Message */}
-                      <div className="flex items-start space-x-2 justify-end">
-                        <div className="bg-primary rounded-lg p-3 max-w-xs">
-                          <p className="text-white text-sm">How much am I saving each month?</p>
-                        </div>
-                        <div className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0">
-                          <div className="w-2 h-2 bg-white rounded-full"></div>
-                        </div>
-                      </div>
-                      
-                      {/* AI Response */}
-                      <div className="flex items-start space-x-2">
-                        <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
-                          <Brain className="w-3 h-3 text-white" />
-                        </div>
-                        <div className="bg-gray-800 rounded-lg p-3 max-w-xs">
-                          <p className="text-white text-sm">Based on your last 6 months, you're averaging $1,247/month in savings. Your highest month was March at $1,890.</p>
-                        </div>
-                      </div>
-                      
-                      {/* User Message */}
-                      <div className="flex items-start space-x-2 justify-end">
-                        <div className="bg-primary rounded-lg p-3 max-w-xs">
-                          <p className="text-white text-sm">Should I move my emergency fund?</p>
-                        </div>
-                        <div className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0">
-                          <div className="w-2 h-2 bg-white rounded-full"></div>
-                        </div>
-                      </div>
-                      
-                      {/* AI Response */}
-                      <div className="flex items-start space-x-2">
-                        <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
-                          <Brain className="w-3 h-3 text-white" />
-                        </div>
-                        <div className="bg-gray-800 rounded-lg p-3 max-w-xs">
-                          <p className="text-white text-sm">Yes! Your current account yields 0.5%, but top high-yield accounts offer 4.8%. Moving your $12,000 could earn an extra $516 annually.</p>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Input Bar */}
-                    <div className="mt-4 flex items-center space-x-2">
-                      <div className="flex-1 bg-gray-800 rounded-full px-4 py-2">
-                        <div className="text-gray-400 text-sm">Ask me anything...</div>
-                      </div>
-                      <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                        <ArrowRight className="w-4 h-4 text-white" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <Card className="glass-card hover:shadow-xl transition-all duration-300">
+              <CardContent className="p-8 space-y-4">
+                <h3 className="text-2xl font-bold">Understands the real world, not just your accounts</h3>
+                <p className="text-muted-foreground leading-relaxed">
+                  Live interest rates, inflation, market conditions, and economic data are baked into every answer.
+                </p>
+              </CardContent>
+            </Card>
+            
+            <Card className="glass-card hover:shadow-xl transition-all duration-300">
+              <CardContent className="p-8 space-y-4">
+                <h3 className="text-2xl font-bold">Learns as you ask questions</h3>
+                <p className="text-muted-foreground leading-relaxed">
+                  Ask follow-ups, change assumptions, explore scenarios — Linc remembers context and builds on it.
+                </p>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </section>
 
       {/* How Linc Works Section */}
-      <section className="py-20 bg-muted/30">
+      <section id="how-it-works" className="py-20 bg-muted/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-16">
             <h2 className="text-3xl md:text-4xl font-bold">
               How <span className="gradient-text">Linc Works</span>
             </h2>
-            <p className="text-xl text-muted-foreground">
-              No dashboards. No spreadsheets. No setup required.
-            </p>
           </div>
           
           <div className="grid md:grid-cols-3 gap-12 items-start">
             {[{
-              step: "1",
               title: "Connect your accounts",
               description: "Link your financial accounts securely via Plaid",
               icon: Target
             }, {
-              step: "2",
-              title: "Ask a question in plain English",
-              description: "No complex setup or navigation required",
+              title: "Ask a question",
+              description: "No setup or navigation required",
               icon: MessageCircle
             }, {
-              step: "3",
               title: "Get actionable answers",
-              description: "Linc uses your data + live market info to provide smart insights",
+              description: "Your data + live market info = meaningful analysis",
               icon: Brain
             }].map((step, index) => (
               <div key={index} className="text-center space-y-6 group">
@@ -326,7 +198,6 @@ const NewHomepage = () => {
                   <div className="h-20 w-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto group-hover:bg-primary/20 transition-colors border-4 border-primary/20">
                     <step.icon className="h-10 w-10 text-primary" />
                   </div>
-
                 </div>
                 <div className="space-y-2">
                   <h3 className="text-xl font-bold">{step.title}</h3>
@@ -338,107 +209,84 @@ const NewHomepage = () => {
         </div>
       </section>
 
-      {/* What GPT Knows Section */}
+      {/* Example Questions Section */}
       <section className="py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center space-y-4 mb-16">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center space-y-6">
             <h2 className="text-3xl md:text-4xl font-bold">
-              What <span className="gradient-text">ChatGPT Knows</span>
+              Ask the questions <span className="gradient-text">dashboards can't answer</span>
             </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Most people don't realize this, but ChatGPT doesn't come with live market knowledge. That's where Linc makes a real difference.
+            <p className="text-lg text-muted-foreground md:whitespace-nowrap">
+              Dashboards show what happened. Linc explains what it means — and what changes if you act.
             </p>
-          </div>
-          
-          <div className="grid lg:grid-cols-2 gap-12 max-w-5xl mx-auto justify-items-center">
-            <div className="space-y-6 max-w-md">
-              <div className="flex items-center space-x-3 mb-6">
-                <CheckCircle className="h-6 w-6 text-emerald-500" />
-                <h3 className="text-2xl font-bold text-emerald-500">ChatGPT Knows:</h3>
-              </div>
-              
-              <div className="space-y-4">
-                {["Financial theory (e.g. asset allocation, tax optimization)", "Best practices for budgeting and investing", "How to reason through questions with logic"].map((item, index) => (
-                  <div key={index} className="flex items-start space-x-3">
-                    <CheckCircle className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
-                    <p className="text-muted-foreground">{item}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
             
-            <div className="space-y-6 max-w-md">
-              <div className="flex items-center space-x-3 mb-6">
-                <X className="h-6 w-6 text-red-500" />
-                <h3 className="text-2xl font-bold text-red-500">It Doesn't Know:</h3>
-              </div>
-              
-              <div className="space-y-4">
-                {["Today's CD or Treasury rates", "Current economic headlines or Fed moves", "Anything that's happened since late 2023"].map((item, index) => (
-                  <div key={index} className="flex items-start space-x-3">
-                    <X className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
-                    <p className="text-muted-foreground">{item}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          
-          <div className="mt-16 max-w-4xl mx-auto">
-            <Card className="glass-card border-primary/20 bg-gradient-to-r from-primary/5 to-secondary/5">
-              <CardContent className="p-8 text-center space-y-4">
-                <h3 className="text-2xl font-bold">That's where Linc <span className="gradient-text">makes a real difference.</span></h3>
-                <p className="text-lg text-muted-foreground leading-relaxed">
-                  Linc feeds trusted real-time data into OpenAI behind the scenes — so when you ask,{" "}
-                  <span className="font-semibold text-foreground">&quot;Should I roll over this CD?&quot;</span>{" "}
-                  you get an answer based on{" "}
-                  <span className="gradient-text font-semibold">today's best rates</span>{" "}
-                  and{" "}
-                  <span className="gradient-text font-semibold">your actual accounts.</span>
+            <ul className="space-y-4 max-w-2xl mx-auto mt-8">
+              <li className="flex items-start space-x-3">
+                <MessageCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
+                <p className="text-lg text-muted-foreground">
+                  "Are Treasuries better than CDs right now for excess cash?"
                 </p>
-              </CardContent>
-            </Card>
+              </li>
+              <li className="flex items-start space-x-3">
+                <MessageCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
+                <p className="text-lg text-muted-foreground">
+                  "Are we overestimating how safe our retirement plan actually is?"
+                </p>
+              </li>
+              <li className="flex items-start space-x-3">
+                <MessageCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
+                <p className="text-lg text-muted-foreground">
+                  "Which matters more right now: paying down debt or investing?"
+                </p>
+              </li>
+              <li className="flex items-start space-x-3">
+                <MessageCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
+                <p className="text-lg text-muted-foreground">
+                  "What breaks first if inflation stays high for longer than expected?"
+                </p>
+              </li>
+            </ul>
           </div>
         </div>
       </section>
 
-      {/* Features Section */}
-      <section id="features" className="py-20">
+      {/* Why Ask Linc is Not Just ChatGPT Section */}
+      <section className="py-20 bg-muted/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-16">
             <h2 className="text-3xl md:text-4xl font-bold">
-              Why Linc is <span className="gradient-text">different</span>
+              Why Ask Linc is not just <span className="gradient-text">ChatGPT with money</span>
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              Linc is not a budget tracker, robo-advisor, or complicated dashboard. It's your on-demand financial analyst, powered by OpenAI + real-time market awareness.
+              ChatGPT reasons in theory. Ask Linc reasons with your actual financial reality — live rates, real accounts, real tradeoffs.
             </p>
           </div>
           
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[{
               icon: Brain,
-              title: "AI-Powered Insights",
-              description: "OpenAI analyzes your financial data to provide personalized, intelligent answers to your money questions."
+              title: "Financial Reasoning",
+              description: "Personalized answers powered by OpenAI analysis of your financial data."
             }, {
               icon: TrendingUp,
               title: "Real-Time Market Data",
-              description: "Get answers based on current interest rates, market conditions, and economic trends, not outdated information."
+              description: "Answers based on current rates, conditions, and economic trends."
             }, {
               icon: Zap,
               title: "Instant Analysis",
-              description: "No setup required. Ask questions in plain English and get immediate, actionable insights about your finances."
+              description: "Ask questions and get decision-ready answers immediately."
             }, {
               icon: Shield,
               title: "Bank-Grade Security",
-              description: "Your data is protected with the same security technology used by major banks and financial institutions."
+              description: "Same security technology used by major banks and financial institutions."
             }, {
               icon: Eye,
               title: "Complete Transparency",
-              description: "See exactly what data we have, export it anytime, or delete everything with a single click."
+              description: "View, export, or delete all your data anytime."
             }, {
               icon: Database,
               title: "Privacy First",
-              description: "Your financial data is never used to train AI models. Everything is anonymized and encrypted."
+              description: "Your data is never used to train AI models."
             }].map((feature, index) => (
               <Card key={index} className="group hover:shadow-xl transition-all duration-300 hover:scale-105 glass-card">
                 <CardContent className="p-6 space-y-4">
@@ -472,27 +320,27 @@ const NewHomepage = () => {
               name: "Starter",
               price: "$9",
               period: "/month",
-              description: "Get clarity without complexity. Simpler than spreadsheets, smarter than budgeting apps.",
-              features: ["Ask anything about your money and get clear, instant answers", "Connect up to 5 accounts — like your checking, savings, credit card, 401(k), and student loans", "See personalized suggestions to reach your goals"],
-              bestFor: "Anyone who wants quick answers about their finances — without setup or spreadsheets.",
+              description: "Understand your money in isolation.",
+              features: ["Ask anything about your money and get clear, instant answers", "Connect up to 5 accounts", "See personalized suggestions to reach your goals"],
+              bestFor: "Anyone who wants quick answers about their finances.",
               popular: false
             }, {
               id: 'standard',
               name: "Standard",
               price: "$19",
               period: "/month",
-              description: "See your finances in context. Go beyond budgets — see how the economy affects your money.",
-              features: ["Everything in Starter","Connect unlimited accounts — from mortgages and student loans to retirement and investment accounts", "Factor in key U.S. economic data like inflation, interest rates, mortgages, APRs, and unemployment", "Get recommendations shaped by real-world events, not just your spending"],
-              bestFor: "People who want to make smarter decisions by seeing the big picture — how their money moves with the economy.",
+              description: "Understand your money in context.",
+              features: ["Everything in Starter","Connect unlimited accounts", "Factor in key U.S. economic data", "Get recommendations shaped by real-world events"],
+              bestFor: "People who want to make smarter decisions by seeing the big picture.",
               popular: true
             }, {
               id: 'premium',
               name: "Premium",
               price: "$29",
               period: "/month",
-              description: "Your personal Bloomberg Terminal — without the $2,000/month price tag.",
-              features: ["Everything in Standard", "Live market data: CD rates, Treasury yields, mortgage rates, stocks & crypto", "Real-time news feeds from 60+ trusted sources like Bloomberg and Reuters", "Know how your retirement timeline is impacted by the economy — and what you can do about it", "Get notified when markets move — instantly"],
-              bestFor: "Investors, finance nerds, or anyone who wants a live pulse on the economy — and how it affects their bottom line.",
+              description: "Understand your money as part of the broader financial system.",
+              features: ["Everything in Standard", "Live market data: CD rates, Treasury yields, mortgage rates, stocks & crypto", "Real-time news feeds from 60+ trusted sources", "Get notified when markets move"],
+              bestFor: "Investors or anyone who wants a live pulse on the economy.",
               popular: false
             }].map((plan, index) => (
               <Card key={index} className={`relative overflow-hidden hover:shadow-2xl transition-all duration-300 hover:scale-105 ${plan.popular ? 'ring-2 ring-primary shadow-xl' : ''}`}>
@@ -595,16 +443,15 @@ const NewHomepage = () => {
         </div>
       </section>
 
-      {/* Security Section */}
-      <section id="security" className="py-20">
+      {/* Privacy Section */}
+      <section id="security" className="py-20 bg-muted/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center space-y-4 mb-16">
+          <div className="text-center space-y-6 mb-16">
             <h2 className="text-3xl md:text-4xl font-bold">
-              Your data is <span className="gradient-text">protected</span>
+              Privacy that <span className="gradient-text">actually means something</span>
             </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              We never store sensitive information, never train on your data, and give you full control 
-              over what's connected or deleted.
+            <p className="text-xl text-muted-foreground max-w-3xl mx-auto md:whitespace-nowrap">
+              The AI never sees your real financial data — only abstracted signals it can reason over.
             </p>
           </div>
           
@@ -660,21 +507,17 @@ const NewHomepage = () => {
           
           <div className="space-y-6">
             {[{
-              question: "What's the difference between ChatGPT and OpenAI? And which do you use?",
-              answer: "OpenAI is the company that developed the GPT models, including the one behind ChatGPT. Ask Linc uses OpenAI’s most advanced model, GPT-4o — but through a private, secure API that’s very different from using the public ChatGPT app."
-            },
-               {
+              question: "Is this just another tracking app?",
+              answer: "No. Tracking apps show what happened. Linc explains what it means — connecting your accounts, layering in market data, and giving you clear reasoning without tracking your every move."
+            }, {
               question: "I don't want to give OpenAI all my financial data...",
-              answer: "Totally fair. That's why we use Plaid, not your login info — and your data is read-only, never stored, and never used to train models."
+              answer: "We use Plaid, not your login info. Your data is read-only, never stored, and never used to train models."
             }, {
               question: "How do you know what's going on in the market?",
-              answer: "On its own, ChatGPT doesn't. That's why Linc pulls in real-time data — like CD rates, bond yields, and current news — and feeds it into OpenAI as context for your questions."
-            }, {
-              question: "Is this just another budgeting app?",
-              answer: "Nope. Budgeting apps track every transaction and show you charts. Linc helps you make sense of it all. It answers questions like “Am I saving enough?” or “Will I ever be able to buy a house?” by connecting to your real accounts, layering in market data, and giving you clear, personalized answers — without tracking your every move or selling your data."
+              answer: "Linc pulls in real-time data — CD rates, bond yields, current news — and feeds it into OpenAI as context for your questions."
             }, {
               question: "What if I want to delete everything?",
-              answer: "Easy. You can view, export, or delete all your data anytime with a single click. Full transparency, full control."
+              answer: "You can view, export, or delete all your data anytime."
             }].map((faq, index) => (
               <Card key={index} className="glass-card hover:shadow-lg transition-all duration-300">
                 <CardContent className="p-6">
@@ -693,39 +536,31 @@ const NewHomepage = () => {
         </div>
       </section>
 
-
-
-      {/* Demo CTA Section */}
-      {/*<section className="py-20 bg-gradient-to-r from-primary/10 via-secondary/10 to-primary/10">
+      {/* Final CTA Section */}
+      <section className="py-20 bg-gradient-to-r from-primary/10 via-secondary/10 to-primary/10">
         <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8">
           <h2 className="text-3xl md:text-4xl font-bold">
-            Join the <span className="gradient-text">Waitlist</span>
+            Start understanding your money
           </h2>
-          <p className="text-xl text-muted-foreground">
-            Be among the first to experience Linc when we launch. Get early access and exclusive updates.
-          </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <a href="/demo" className="w-full sm:w-auto">
-              <Button variant="glass" size="xl" className="group w-full sm:w-auto">
-                Try Demo First
+              <Button variant="hero" size="xl" className="group w-full sm:w-auto">
+                Ask your first question
               </Button>
             </a>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Try the demo with realistic financial data • No account required • See how it works
-          </p>
         </div>
-      </section>*/}
+      </section>
 
       {/* Newsletter Subscription Section */}
-      <section className="py-20 bg-gradient-to-r from-primary/10 via-secondary/10 to-primary/10">
+      <section className="py-20 bg-muted/30 border-t border-border/50">
         <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8">
           <div className="space-y-4">
             <h2 className="text-3xl md:text-4xl font-bold">
               Stay <span className="gradient-text">Informed</span>
             </h2>
             <p className="text-xl text-muted-foreground">
-              Get daily insights on the economy, markets, and how they impact your wallet.
+              Get daily analysis on the economy, markets, and how they impact your wallet.
             </p>
           </div>
           

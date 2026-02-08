@@ -12,16 +12,17 @@ const AnimatedPrompt = () => {
   }, []);
 
   const questions = [
-    "Given today’s mortgage rates, should I pay extra on my loan or invest instead?",
-    "Are CDs still better than Treasuries with current yields?",
-    "How much can I safely spend each month without risking retirement?",
-    "If inflation stays at 3%, is my emergency fund losing value?",
-    "Does my portfolio need more bonds now that yields are higher?",
-    "Should I move some cash out of savings into short-term Treasuries?",
-    "Am I on track to retire at 62 if I keep saving at this pace?",
-    "How much would a Fed rate cut change my interest income?",
-    "What happens to my retirement plan if stocks stay flat for 3 years?"
-  ];
+    "What breaks first if interest rates stay high longer than expected?",
+    "If markets underperform for 5 years, can my retirement plan still hold?",
+    "Am I taking more risk than I realize by staying in cash right now?",
+    "What happens to my plan if inflation never really goes back to 2%?",
+    "Assuming today’s rates, what’s the smartest thing to do with excess cash?",
+    "If I stop increasing contributions now, what does that cost me later?",
+    "Which matters more right now: paying down debt or staying liquid?",
+    "How exposed am I to a recession if it hits next year?",
+    "What assumptions in my plan matter most if they’re wrong?",
+    "Given everything going on right now, am I actually doing okay?"
+  ];  
 
   if (!isVisible) {
     return (
