@@ -1,7 +1,46 @@
+"use client";
 import { Button } from "@/components/ui/button";
 import { CheckCircle } from "lucide-react";
+import { useState } from "react";
 
 export const Pricing = () => {
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleBuyClick = async () => {
+    setIsLoading(true);
+    
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      
+      // Create checkout session for anyone (new or existing users)
+      const response = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          tier: 'premium',
+          successUrl: `${window.location.origin}/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=premium`,
+          cancelUrl: `${window.location.origin}/`
+        })
+      });
+
+      if (response.ok) {
+        const { url } = await response.json();
+        window.location.href = url;
+      } else {
+        const error = await response.json();
+        console.error('Failed to create checkout session:', error);
+        alert('Failed to create checkout session. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error creating checkout session:', error);
+      alert('An error occurred. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <section className="py-24 bg-background">
       <div className="container mx-auto px-4">
@@ -53,8 +92,10 @@ export const Pricing = () => {
               <Button 
                 className="w-full bg-green hover:bg-green-light text-white"
                 size="lg"
+                onClick={handleBuyClick}
+                disabled={isLoading}
               >
-                Get started
+                {isLoading ? 'Creating...' : 'Get started'}
               </Button>
               <p className="text-center text-xs text-muted-foreground mt-3">
                 Cancel anytime.

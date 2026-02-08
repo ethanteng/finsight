@@ -75,7 +75,7 @@ router.get('/verify', async (req: Request, res: Response) => {
 // Register new user
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { email, password, tier = 'starter', stripeSessionId, session_id } = req.body;
+    const { email, password, tier = 'premium', stripeSessionId, session_id } = req.body;
     
     // Handle both parameter names for Stripe session ID
     const stripeSessionIdToUse = stripeSessionId || session_id;

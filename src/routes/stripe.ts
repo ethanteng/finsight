@@ -35,13 +35,14 @@ router.get('/payment-success', async (req, res) => {
 
     // Helper function to get Google Ads conversion value based on tier
     // Maps internal tier names to conversion values: starter=$9, standard=$19, premium=$29
+    // Note: With single-tier pricing, all users are on the premium plan ($9/month)
     const getTierValue = (tierName: string | undefined): number => {
-      const tierLower = (tierName || 'standard').toLowerCase() as SubscriptionTier;
+      const tierLower = (tierName || 'premium').toLowerCase() as SubscriptionTier;
       // Match exact internal tier names: 'starter', 'standard', 'premium'
       if (tierLower === 'starter') return 9;
       if (tierLower === 'standard') return 19;
       if (tierLower === 'premium') return 29;
-      return 19; // default to standard
+      return 29; // default to premium (single plan is the former premium plan)
     };
 
     // Verify the session with Stripe to ensure it's legitimate
@@ -61,7 +62,7 @@ router.get('/payment-success', async (req, res) => {
       console.log('Customer email from session:', customerEmail);
 
       // Determine tier and value for Google Ads tracking
-      const tierName = (tier as string) || 'standard';
+      const tierName = (tier as string) || 'premium';
       const conversionValue = getTierValue(tierName);
 
       // Check if user already exists
@@ -117,7 +118,7 @@ router.get('/payment-success', async (req, res) => {
       console.error('Error verifying Stripe session:', stripeError);
       // Fallback: redirect to register anyway
       const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
-      const registerUrl = `${baseUrl}/register?subscription=success&tier=${tier || 'standard'}`;
+      const registerUrl = `${baseUrl}/register?subscription=success&tier=${tier || 'premium'}`;
       return res.json({ 
         success: true,
         paid: false,

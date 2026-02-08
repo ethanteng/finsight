@@ -163,7 +163,7 @@ export class StripeService {
     const subscription = eventData.object;
     const customerId = subscription.customer as string;
     const subscriptionId = subscription.id;
-    const tier = subscription.metadata?.tier as SubscriptionTier || 'starter';
+    const tier = subscription.metadata?.tier as SubscriptionTier || 'premium';
 
     console.log(`New subscription created: ${subscriptionId} for customer: ${customerId} with tier: ${tier}`);
 
@@ -230,7 +230,7 @@ export class StripeService {
   private async handleSubscriptionUpdated(eventData: any): Promise<void> {
     const subscription = eventData.object;
     const subscriptionId = subscription.id;
-    const tier = subscription.metadata?.tier as SubscriptionTier || 'starter';
+    const tier = subscription.metadata?.tier as SubscriptionTier || 'premium';
     const customerId = subscription.customer as string;
 
     console.log(`Subscription updated: ${subscriptionId} with tier: ${tier} for customer: ${customerId}`);
