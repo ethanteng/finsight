@@ -125,21 +125,24 @@ export interface SubscriptionPlan {
   stripePriceId: string;
 }
 
+// Single price ID for all tiers (single-tier pricing model)
+const SINGLE_PRICE_ID = process.env.STRIPE_PRICE_STARTER || process.env.STRIPE_PRICE_STANDARD || process.env.STRIPE_PRICE_PREMIUM || 'price_1SyeXEBDHiWEJZBMAu9P57zI';
+
 export function getSubscriptionPlans(): Record<SubscriptionTier, SubscriptionPlan> {
   return {
     starter: {
       id: 'starter',
       name: 'Starter',
-      price: 9.99,
+      price: 9.00,
       currency: 'usd',
       interval: 'month',
       features: ['Basic financial analysis', 'Account balances', 'Transaction history'],
-      stripePriceId: process.env.STRIPE_PRICE_STARTER || 'price_starter'
+      stripePriceId: SINGLE_PRICE_ID
     },
     standard: {
       id: 'standard',
       name: 'Standard',
-      price: 19.99,
+      price: 9.00,
       currency: 'usd',
       interval: 'month',
       features: [
@@ -149,12 +152,12 @@ export function getSubscriptionPlans(): Record<SubscriptionTier, SubscriptionPla
         'Economic indicators',
         'RAG system access'
       ],
-      stripePriceId: process.env.STRIPE_PRICE_STANDARD || 'price_standard'
+      stripePriceId: SINGLE_PRICE_ID
     },
     premium: {
       id: 'premium',
       name: 'Premium',
-      price: 39.99,
+      price: 9.00,
       currency: 'usd',
       interval: 'month',
       features: [
@@ -166,12 +169,19 @@ export function getSubscriptionPlans(): Record<SubscriptionTier, SubscriptionPla
         'Live market data',
         'Advanced analytics'
       ],
-      stripePriceId: process.env.STRIPE_PRICE_PREMIUM || 'price_premium'
+      stripePriceId: SINGLE_PRICE_ID
     }
   };
 }
 
 export const SUBSCRIPTION_PLANS = getSubscriptionPlans();
+
+// Single-tier pricing configuration
+// Product ID: prod_SraoEdrNSHuQ1W
+// Price ID: price_1SyeXEBDHiWEJZBMAu9P57zI ($9/month)
+// All subscription tiers (starter/standard/premium) use the same price ID
+export const SINGLE_TIER_PRICE_ID = process.env.STRIPE_PRICE_STARTER || process.env.STRIPE_PRICE_STANDARD || process.env.STRIPE_PRICE_PREMIUM || 'price_1SyeXEBDHiWEJZBMAu9P57zI';
+export const SINGLE_TIER_PRODUCT_ID = 'prod_SraoEdrNSHuQ1W';
 
 // Function to fetch live pricing from Stripe API
 export async function getLiveSubscriptionPlans(): Promise<Record<SubscriptionTier, SubscriptionPlan>> {

@@ -1,7 +1,53 @@
 import { Inter } from 'next/font/google'
 import './globals.css'
+import StructuredData from '../components/StructuredData'
+import type { Metadata } from 'next'
 
 const inter = Inter({ subsets: ['latin'] })
+
+// Organization structured data
+const organizationSchema = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Ask Linc",
+  "url": "https://asklinc.com",
+  "logo": "https://asklinc.com/logo.png",
+  "description": "AI-powered financial reasoning platform that helps users understand and optimize their financial health using real data, goals, and live market conditions.",
+  "sameAs": [
+    "https://bsky.app/profile/asklinc.com",
+    "https://asklinc.substack.com/"
+  ],
+  "contactPoint": {
+    "@type": "ContactPoint",
+    "contactType": "Customer Service",
+    "url": "https://asklinc.com/contact"
+  }
+};
+
+// Website structured data
+const websiteSchema = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "Ask Linc",
+  "url": "https://asklinc.com",
+  "description": "AI Financial Reasoning Platform - Get decisions-ready answers about your finances using your real data, goals, and live market conditions.",
+  "potentialAction": {
+    "@type": "SearchAction",
+    "target": {
+      "@type": "EntryPoint",
+      "urlTemplate": "https://asklinc.com/search?q={search_term_string}"
+    },
+    "query-input": "required name=search_term_string"
+  }
+};
+
+export const metadata: Metadata = {
+  metadataBase: new URL('https://asklinc.com'),
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
+};
 
 export default function RootLayout({
   children,
@@ -11,6 +57,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
+        {/* Structured Data */}
+        <StructuredData data={organizationSchema} />
+        <StructuredData data={websiteSchema} />
+        
         {/* Google Tag Manager */}
         <script
           dangerouslySetInnerHTML={{

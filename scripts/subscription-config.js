@@ -7,11 +7,13 @@
 
 module.exports = {
   // Stripe Price ID to Tier Mapping
-  // Update these with your actual Stripe price IDs
+  // Single-tier pricing: all price IDs map to 'premium' tier (the single plan is the old premium plan)
   priceToTierMap: {
-    'price_1RwzrlBDHiWEJZBMbLKSPb3N': 'standard',  // Standard plan
-    'price_1RwzscBDHiWEJZBMZGIIztNB': 'premium',    // Premium plan
-    'price_1RwzpgBDHiWEJZBMLFM6vTwr': 'starter'   // Starter plan
+    'price_1SyeXEBDHiWEJZBMAu9P57zI': 'premium',  // Single price for all tiers ($9/month, prod_SraoEdrNSHuQ1W)
+    // Legacy price IDs - map to premium for backward compatibility
+    'price_1RwzrlBDHiWEJZBMbLKSPb3N': 'premium',
+    'price_1RwzscBDHiWEJZBMZGIIztNB': 'premium',
+    'price_1RwzpgBDHiWEJZBMLFM6vTwr': 'premium'
   },
 
   // Price Nickname to Tier Mapping (fallback)
@@ -25,8 +27,8 @@ module.exports = {
     'enterprise': 'premium'
   },
 
-  // Default tier when mapping fails
-  defaultTier: 'standard',
+  // Default tier when mapping fails (single plan is the old premium plan)
+  defaultTier: 'premium',
 
   // Logging configuration
   logging: {

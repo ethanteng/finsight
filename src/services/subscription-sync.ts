@@ -19,17 +19,9 @@ export class SubscriptionSyncService {
       
       const currentPrice = stripeSubscription.items.data[0]?.price?.id;
       
-      // Use environment-aware price ID mapping
-      const { getSubscriptionPlans } = await import('../types/stripe');
-      const plans = getSubscriptionPlans();
-      
-      // Create reverse mapping from price ID to tier
-      const PRICE_TO_TIER: Record<string, string> = {};
-      for (const [tier, plan] of Object.entries(plans)) {
-        PRICE_TO_TIER[plan.stripePriceId] = tier;
-      }
-      
-      const correctTier = PRICE_TO_TIER[currentPrice] || 'starter';
+      // Use getTierFromPriceId to map price ID to tier (handles single-tier pricing)
+      const { getTierFromPriceId } = await import('../config/stripe');
+      const correctTier = getTierFromPriceId(currentPrice) || 'premium';
       const metadataTier = stripeSubscription.metadata?.tier || 'unknown';
       
       console.log(`Auto-sync: Price ${currentPrice} maps to tier: ${correctTier}, metadata shows: ${metadataTier}`);

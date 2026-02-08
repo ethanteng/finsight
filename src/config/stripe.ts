@@ -90,30 +90,22 @@ export function getStripePriceId(tier: SubscriptionTier): string {
 }
 
 // Get subscription tier from Stripe price ID
+// With single-tier pricing, all price IDs map to 'premium' tier (the single plan is the old premium plan)
 export function getTierFromPriceId(priceId: string): SubscriptionTier | null {
   // First check against static plans
   const plans = getSubscriptionPlans();
   for (const [tier, plan] of Object.entries(plans)) {
     if (plan.stripePriceId === priceId) {
-      return tier as SubscriptionTier;
+      // With single-tier pricing, return 'premium' as the default tier
+      return 'premium';
     }
   }
   
-  // If not found in static plans, try to determine tier from Stripe API
-  // This handles cases where price IDs are real Stripe IDs
-  if (priceId.startsWith('price_')) {
-    try {
-      // For now, return a default tier based on common patterns
-      // You can enhance this by making an API call to Stripe to get product details
-      console.log(`Price ID ${priceId} not found in static plans, using default tier mapping`);
-      
-      // You could make this configurable via environment variables
-      // For now, we'll need to add the real price IDs to the environment
-      return null;
-    } catch (error) {
-      console.error('Error determining tier from Stripe price ID:', error);
-      return null;
-    }
+  // If not found in static plans, check if it's our single price ID
+  const singlePriceId = process.env.STRIPE_PRICE_STARTER || process.env.STRIPE_PRICE_STANDARD || process.env.STRIPE_PRICE_PREMIUM || 'price_1SyeXEBDHiWEJZBMAu9P57zI';
+  if (priceId === singlePriceId || priceId.startsWith('price_')) {
+    // With single-tier pricing model, default to 'premium' for any valid price ID
+    return 'premium';
   }
   
   return null;

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import BlogSubscription from '@/components/BlogSubscription';
+import StructuredData from '@/components/StructuredData';
 import type { Metadata } from 'next';
 
 export const revalidate = 60; // Revalidate every minute
@@ -30,16 +31,61 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     return {
       title: 'Blog Post | Ask Linc',
       description: 'Read the latest financial insights and market analysis from Ask Linc.',
+      alternates: {
+        canonical: `https://asklinc.com/blog/${slug}`,
+      },
     };
   }
+
+  const postUrl = `https://asklinc.com/blog/${slug}`;
+  const publishedTime = post.published_at ? new Date(post.published_at).toISOString() : undefined;
+  const modifiedTime = post.updated_at ? new Date(post.updated_at).toISOString() : undefined;
+  const ogImage = post.feature_image || 'https://asklinc.com/og-image.jpg';
+  const authorName = post.authors?.[0]?.name || 'Ask Linc';
+  const tags = post.tags?.map(tag => tag.name) || [];
 
   return {
     title: `${post.title} | Ask Linc Financial Blog`,
     description: post.excerpt || `Read ${post.title} on Ask Linc's financial blog. Get expert insights on markets, investments, and personal finance.`,
+    keywords: tags.length > 0 ? tags : ['financial insights', 'market analysis', 'investment advice', 'personal finance'],
+    alternates: {
+      canonical: postUrl,
+    },
     openGraph: {
       title: `${post.title} | Ask Linc`,
       description: post.excerpt || `Read ${post.title} on Ask Linc's financial blog.`,
       type: 'article',
+      url: postUrl,
+      siteName: 'Ask Linc',
+      images: [
+        {
+          url: ogImage,
+          width: 1200,
+          height: 630,
+          alt: post.title,
+        },
+      ],
+      publishedTime: publishedTime,
+      modifiedTime: modifiedTime,
+      authors: [authorName],
+      tags: tags,
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `${post.title} | Ask Linc`,
+      description: post.excerpt || `Read ${post.title} on Ask Linc's financial blog.`,
+      images: [ogImage],
+    },
+    robots: {
+      index: true,
+      follow: true,
+      googleBot: {
+        index: true,
+        follow: true,
+        'max-video-preview': -1,
+        'max-image-preview': 'large',
+        'max-snippet': -1,
+      },
     },
   };
 }
@@ -55,8 +101,39 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
   // Process HTML content to preserve Ghost formatting and fix links
   const processedHtml = processGhostHtml(post.html);
 
+  // Article structured data
+  const articleSchema = {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": post.title,
+    "description": post.excerpt || `Read ${post.title} on Ask Linc's financial blog.`,
+    "image": post.feature_image || "https://asklinc.com/og-image.jpg",
+    "datePublished": post.published_at ? new Date(post.published_at).toISOString() : undefined,
+    "dateModified": post.updated_at ? new Date(post.updated_at).toISOString() : undefined,
+    "author": {
+      "@type": "Person",
+      "name": post.authors?.[0]?.name || "Ask Linc",
+      "image": post.authors?.[0]?.profile_image,
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Ask Linc",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://asklinc.com/logo.png",
+      },
+    },
+    "mainEntityOfPage": {
+      "@type": "WebPage",
+      "@id": `https://asklinc.com/blog/${slug}`,
+    },
+    "keywords": post.tags?.map(tag => tag.name).join(", ") || "financial insights, market analysis",
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <>
+      <StructuredData data={articleSchema} />
+      <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto px-4 py-12">
         {/* Back to blog link */}
         <Link 
@@ -172,5 +249,6 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         </div>
       </div>
     </div>
+    </>
   );
 }
