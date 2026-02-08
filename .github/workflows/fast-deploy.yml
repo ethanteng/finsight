@@ -49,7 +49,7 @@ jobs:
       - name: Quick frontend validation
         run: |
           cd frontend
-          # Basic TypeScript check (no strict mode, exclude tests)
+          # Basic TypeScript check (exclude tests for fast deployment)
           # Skip linting and tests for fast deployment
           npm run type-check
           # Basic ESLint check (only critical errors, exclude tests)
