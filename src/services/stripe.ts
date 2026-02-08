@@ -898,7 +898,7 @@ export class StripeService {
       const correctTier = getTierFromPriceId(currentPrice) || 'premium';
       
       // If metadata is unknown, try to get the current tier from the database
-      let currentMetadataTier = metadataTier;
+      let currentMetadataTier: SubscriptionTier | 'unknown' = metadataTier as SubscriptionTier | 'unknown';
       if (metadataTier === 'unknown') {
         try {
           const prisma = getPrismaClient();
@@ -906,7 +906,7 @@ export class StripeService {
             where: { stripeSubscriptionId: subscriptionId },
             select: { tier: true }
           });
-          currentMetadataTier = dbSubscription?.tier || 'unknown';
+          currentMetadataTier = (dbSubscription?.tier as SubscriptionTier) || 'unknown';
         } catch (dbError) {
           console.log(`Auto-sync: Could not fetch current tier from database: ${dbError}`);
         }
@@ -915,7 +915,8 @@ export class StripeService {
       console.log(`Auto-sync: Price ${currentPrice} maps to tier: ${correctTier}, metadata shows: ${currentMetadataTier}`);
       
       // If there's a mismatch or metadata is unknown, update both Stripe metadata and database
-      if (correctTier !== currentMetadataTier || currentMetadataTier === 'unknown') {
+      const needsUpdate = currentMetadataTier === 'unknown' || correctTier !== currentMetadataTier;
+      if (needsUpdate) {
         const action = currentMetadataTier === 'unknown' ? 'syncing' : 'fixing mismatch';
         console.log(`Auto-sync: ${action} from ${currentMetadataTier} to ${correctTier}`);
         
