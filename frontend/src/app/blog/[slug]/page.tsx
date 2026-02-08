@@ -42,7 +42,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const modifiedTime = post.updated_at ? new Date(post.updated_at).toISOString() : undefined;
   const ogImage = post.feature_image || 'https://asklinc.com/og-image.jpg';
   const authorName = post.authors?.[0]?.name || 'Ask Linc';
-  const tags = post.tags?.map(tag => tag.name) || [];
+  const tags = post.tags?.map(tag => tag.name).filter((name): name is string => Boolean(name)) || [];
 
   return {
     title: `${post.title} | Ask Linc Financial Blog`,
