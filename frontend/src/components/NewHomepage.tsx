@@ -387,7 +387,7 @@ const NewHomepage = () => {
               Privacy that <span className="gradient-text">actually means something</span>
             </h2>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto md:whitespace-nowrap">
-              The AI never sees your real financial data — only abstracted signals it can reason over.
+              The AI doesn’t see your real account details—only what’s necessary to provide answers.
             </p>
           </div>
           
@@ -443,8 +443,8 @@ const NewHomepage = () => {
           
           <div className="space-y-6">
             {[{
-              question: "Is this just another tracking app?",
-              answer: "No. Tracking apps show you what already happened. Ask Linc helps you reason about what's happening now—and what it means for your specific situation—by combining your accounts with market context and plain-English explanations."
+              question: "Is this just another budget tracking app?",
+              answer: "No. Budget tracking apps show you what already happened. Ask Linc helps you reason about what's happening now—and what it means for your specific situation—by combining your accounts with market context and plain-English explanations."
             }, {
               question: "Is there a free plan or trial?",
               answer: "No. Ask Linc is $9/month for full access. We've found it works best when people use it with real questions from day one."
