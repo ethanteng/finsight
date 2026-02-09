@@ -340,7 +340,7 @@ const NewHomepage = () => {
                 </p>
               </div>
               
-              <ul className="space-y-4 mb-8">
+              <ul className="space-y-4 mb-8 mx-auto max-w-md">
                 <li className="flex items-start space-x-3">
                   <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
                   <span className="text-sm">Unlimited questions about your money</span>
@@ -498,7 +498,7 @@ const NewHomepage = () => {
               >
                 {isLoading === 'premium' ? 'Creating...' : 'Get started'}
               </Button>
-              <p className="text-sm text-primary font-medium">$9/month. Cancel anytime.</p>
+              <p className="text-[1.00625rem] text-primary font-medium">$9/month. Cancel anytime.</p>
             </div>
           </div>
         </div>
