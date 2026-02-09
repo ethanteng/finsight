@@ -98,19 +98,26 @@ const NewHomepage = () => {
       </nav>
 
       {/* Hero Section */}
-      <section className="relative pt-24 pb-20 overflow-hidden">
+      <section className="relative pt-20 pb-20 overflow-hidden">
         <div className="absolute inset-0 z-0 opacity-20 bg-gradient-to-br from-primary/20 to-secondary/20" />
         <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/50 to-background z-10" />
         
         <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Pre-hero strip */}
+          <div className="text-center mb-6">
+            <p className="text-[0.9375rem] sm:text-[1.09375rem] text-secondary">
+              Built for real financial decisions — not just tracking
+            </p>
+          </div>
+          
           <div className="text-center space-y-8">
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold leading-tight">
-              Not Just Charts.{" "}
-              <span className="gradient-text">Real Answers.</span>
+              Stop tracking.{" "}
+              <span className="gradient-text">Start deciding.</span>
             </h1>
             
             <p className="text-xl md:text-2xl text-muted-foreground max-w-4xl mx-auto leading-relaxed">
-              Ask questions about your money — and get answers based on your actual accounts, goals, and today's market conditions.
+              Ask questions about your finances and get answers grounded in your real accounts, goals, and live market conditions.
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-start pt-8">
