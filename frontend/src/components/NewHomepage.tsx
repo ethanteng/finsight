@@ -110,7 +110,7 @@ const NewHomepage = () => {
             </h1>
             
             <p className="text-xl md:text-2xl text-muted-foreground max-w-4xl mx-auto leading-relaxed">
-              The AI that reasons about your finances — combining your real accounts, goals, and live market conditions to deliver answers that help you make smarter decisions.
+              Ask questions about your money — and get answers based on your actual accounts, goals, and today's market conditions.
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-start pt-8">
@@ -131,7 +131,7 @@ const NewHomepage = () => {
                 >
                   Get started
                 </Button>
-                <p className="text-sm text-primary font-medium">$9/month. Cancel anytime.</p>
+                <p className="text-[1.00625rem] text-primary font-medium">$9/month. Cancel anytime.</p>
               </div>
             </div>
             

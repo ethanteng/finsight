@@ -208,7 +208,7 @@ const FeaturesPage = () => {
               >
                 {isLoading === 'premium' ? 'Creating...' : 'Get started'}
               </Button>
-              <p className="text-sm text-primary font-medium">$9/month. Cancel anytime.</p>
+              <p className="text-[1.00625rem] text-primary font-medium">$9/month. Cancel anytime.</p>
             </div>
           </div>
         </div>
