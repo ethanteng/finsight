@@ -322,9 +322,6 @@ const NewHomepage = () => {
             <h2 className="text-3xl md:text-4xl font-bold">
               One plan. <span className="gradient-text">Full access.</span>
             </h2>
-            <p className="text-lg text-muted-foreground">
-              We believe financial reasoning shouldn't be gated or tiered.
-            </p>
           </div>
           
           <Card className="relative overflow-hidden hover:shadow-2xl transition-all duration-300">
@@ -375,9 +372,6 @@ const NewHomepage = () => {
                 </Button>
                 <p className="text-center text-xs text-muted-foreground mt-3">
                   Cancel anytime.
-                </p>
-                <p className="text-center text-sm text-muted-foreground mt-4">
-                  This works best when you bring real questions and real decisions.
                 </p>
               </div>
             </CardContent>
@@ -450,19 +444,19 @@ const NewHomepage = () => {
           <div className="space-y-6">
             {[{
               question: "Is this just another tracking app?",
-              answer: "No. Tracking apps show what happened. Linc explains what it means — connecting your accounts, layering in market data, and giving you clear reasoning without tracking your every move."
+              answer: "No. Tracking apps show you what already happened. Ask Linc helps you reason about what's happening now—and what it means for your specific situation—by combining your accounts with market context and plain-English explanations."
             }, {
               question: "Is there a free plan or trial?",
-              answer: "No. Ask Linc provides full access for $9/month. We've found people get the most value when they start using it seriously from day one."
+              answer: "No. Ask Linc is $9/month for full access. We've found it works best when people use it with real questions from day one."
             }, {
               question: "I don't want to give OpenAI all my financial data...",
-              answer: "We use Plaid, not your login info. Your data is read-only, never stored, and never used to train models."
+              answer: "You don't give OpenAI your bank logins. We use Plaid to securely connect accounts in read-only mode. Your credentials are never shared with us, and your financial data is not used to train AI models. You're always in control and can disconnect accounts at any time."
             }, {
               question: "How do you know what's going on in the market?",
-              answer: "Linc pulls in real-time data — CD rates, bond yields, current news — and feeds it into OpenAI as context for your questions."
+              answer: "Ask Linc pulls in current market context—interest rates, bond yields, inflation data, and relevant news—and uses it to ground answers in what's happening right now, not generic advice."
             }, {
               question: "What if I want to delete everything?",
-              answer: "You can view, export, or delete all your data anytime."
+              answer: "You can view, export, or delete your data at any time. Deleting your data permanently removes it from our systems."
             }].map((faq, index) => (
               <Card key={index} className="glass-card hover:shadow-lg transition-all duration-300">
                 <CardContent className="p-6">
