@@ -106,7 +106,7 @@ const NewHomepage = () => {
           {/* Pre-hero strip */}
           <div className="text-center mb-6 w-full">
             <p className="text-[0.9375rem] sm:text-[1.09375rem] text-secondary">
-              Built for real financial decisions — not just tracking
+              Built to help you make real financial decisions — not just track your spending
             </p>
           </div>
           
@@ -344,7 +344,7 @@ const NewHomepage = () => {
                 </li>
                 <li className="flex items-start space-x-3">
                   <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                  <span className="text-sm">All connected accounts</span>
+                  <span className="text-sm">Unlimited number ofconnected accounts</span>
                 </li>
                 <li className="flex items-start space-x-3">
                   <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
