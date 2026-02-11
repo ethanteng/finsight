@@ -6,12 +6,13 @@ import MailerLiteForm from './MailerLiteForm';
 import MailerLiteScript from './MailerLiteScript';
 import AnimatedPrompt from './AnimatedPrompt';
 import BlogSubscription from './BlogSubscription';
-import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, Database, BarChart3, MessageCircle, ArrowRight, Sparkles, X, Target, XCircle } from 'lucide-react';
+import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, Database, BarChart3, MessageCircle, ArrowRight, Sparkles, X, Target, XCircle, Menu } from 'lucide-react';
 import { useState } from 'react';
 import Link from 'next/link';
 
 const NewHomepage = () => {
   const [isLoading, setIsLoading] = useState<string | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const scrollToSection = (id: string) => {
     document.getElementById(id)?.scrollIntoView({
@@ -93,8 +94,86 @@ const NewHomepage = () => {
                 Login
               </Button>
             </div>
+            {/* Mobile hamburger menu - visible only on mobile */}
+            <div className="md:hidden flex items-center">
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="p-2 text-muted-foreground hover:text-primary transition-colors"
+                aria-label="Toggle menu"
+              >
+                {isMobileMenuOpen ? (
+                  <X className="h-6 w-6" />
+                ) : (
+                  <Menu className="h-6 w-6" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
+        {/* Mobile menu overlay */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden absolute top-16 left-0 right-0 bg-background/95 backdrop-blur-lg border-b border-border/50 shadow-lg">
+            <div className="px-4 py-4 space-y-1">
+              <Link 
+                href="/" 
+                className="block py-3 text-muted-foreground hover:text-primary transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Home
+              </Link>
+              <Link 
+                href="/features" 
+                className="block py-3 text-muted-foreground hover:text-primary transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Features
+              </Link>
+              <button 
+                onClick={() => {
+                  scrollToSection('pricing');
+                  setIsMobileMenuOpen(false);
+                }} 
+                className="block w-full text-left py-3 text-muted-foreground hover:text-primary transition-colors"
+              >
+                Pricing
+              </button>
+              <a 
+                href="https://www.asklinc.com/blog" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="block py-3 text-muted-foreground hover:text-primary transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Blog
+              </a>
+              <div className="pt-4 space-y-2 border-t border-border/50">
+                <Button 
+                  variant="hero" 
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    handleBuyClick('premium');
+                    setIsMobileMenuOpen(false);
+                  }}
+                  disabled={isLoading === 'premium'}
+                >
+                  {isLoading === 'premium' ? 'Loading...' : 'Get started'}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    window.location.href = '/login';
+                    setIsMobileMenuOpen(false);
+                  }}
+                >
+                  Login
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* Hero Section */}
