@@ -23,6 +23,9 @@
     --secondary: 43 74% 66%;
     --secondary-foreground: 217 32% 6%;
     
+    /* Accent teal - Cool secondary for editorial emphasis */
+    --accent-teal: 174 55% 52%;
+    
     /* Muted elements */
     --muted: 217 25% 12%;
     --muted-foreground: 210 15% 65%;
@@ -65,6 +68,7 @@
   .light {
     --background: 210 20% 98%;
     --foreground: 217 32% 6%;
+    --accent-teal: 174 55% 42%;
     --card: 210 20% 100%;
     --card-foreground: 217 32% 8%;
     --primary: 158 64% 45%;
@@ -125,6 +129,17 @@
   /* Glow effect */
   .glow-effect {
     box-shadow: var(--shadow-glow);
+  }
+  
+  /* Soft halo for feature icons */
+  .feature-icon-glow {
+    box-shadow: 0 0 40px -8px hsl(var(--primary) / 0.25);
+  }
+  .feature-icon-glow-secondary {
+    box-shadow: 0 0 40px -8px hsl(var(--secondary) / 0.25);
+  }
+  .feature-icon-glow-teal {
+    box-shadow: 0 0 40px -8px hsl(var(--accent-teal) / 0.25);
   }
   
   /* Glassmorphism effect */
