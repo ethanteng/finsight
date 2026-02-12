@@ -306,7 +306,7 @@ export default function PrivacyContent() {
             </div>
           </div>
           <div className="mt-8 pt-8 border-t border-border text-center text-sm text-muted-foreground">
-            <p>&copy; 2025 Ask Linc. Your AI financial analyst. Built with privacy in mind.</p>
+            <p>&copy; {new Date().getFullYear()} Ask Linc. Your AI financial analyst. Built with privacy in mind.</p>
           </div>
         </div>
       </footer>

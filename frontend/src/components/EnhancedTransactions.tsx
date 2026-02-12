@@ -198,9 +198,9 @@ export default function EnhancedTransactions({ isDemo = false, tier = 'standard'
       <div className="bg-gray-800 rounded-lg p-6">
         <div className="text-center py-8">
           <div className="text-2xl mb-4">🔒</div>
-          <h3 className="text-lg font-semibold text-white mb-2">Standard+ Feature</h3>
+          <h3 className="text-lg font-semibold text-white mb-2">Enhanced feature</h3>
           <p className="text-gray-400 mb-4">
-            Upgrade to Standard or Premium for enhanced transaction insights
+            Sign in to access enhanced transaction insights
           </p>
           <p className="text-sm text-gray-500">
             Get detailed merchant information, website links, and enhanced transaction analysis

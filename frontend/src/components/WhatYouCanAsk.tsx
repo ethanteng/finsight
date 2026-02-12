@@ -32,16 +32,16 @@ export const WhatYouCanAsk = () => {
               What You Can Ask Linc
             </h2>
             <p className="text-xl text-muted-foreground">
-              Choose the plan that fits your current financial journey.
+              Example questions across savings, investing, and planning.
             </p>
           </div>
           
           <div className="grid md:grid-cols-3 gap-8">
-            {/* Starter Tier */}
+            {/* Getting started */}
             <div className="space-y-6">
               <div className="text-center space-y-3">
                 <span className="inline-block px-6 py-3 rounded-full text-lg font-semibold bg-green/10 text-green">
-                  Starter Tier
+                  Getting started
                 </span>
                 <p className="text-sm text-muted-foreground">
                   For people with checking, savings, and maybe a 401(k). You&apos;re focused on saving more and getting clarity, not adding complexity.
@@ -60,19 +60,19 @@ export const WhatYouCanAsk = () => {
               <div className="bg-green/5 p-4 rounded-lg border border-green/20">
                 <p className="text-sm text-green-700 font-semibold mb-3">You get:</p>
                 <div className="text-sm text-green-600 space-y-2">
-                  <p>You get a clear view of your own data — no charts, no spreadsheets, no budgeting guilt.</p>
+                  <p>A clear view of your own data — no charts, no spreadsheets, no budgeting guilt.</p>
                 </div>
               </div>
             </div>
 
-            {/* Standard Tier */}
+            {/* Growing your wealth */}
             <div className="space-y-6">
               <div className="text-center space-y-3">
                 <span className="inline-block px-6 py-3 rounded-full text-lg font-semibold bg-blue-500/10 text-blue-500">
-                  Standard Tier
+                  Growing your wealth
                 </span>
                 <p className="text-sm text-muted-foreground">
-                  You&apos;ve leveled up. You&apos;re exploring CDs, investing a bit, maybe thinking about buying a home. You want smarter context to grow your money.
+                  You&apos;re exploring CDs, investing a bit, maybe thinking about buying a home. You want smarter context to grow your money.
                 </p>
               </div>
               {standardQuestions.map((question, index) => (
@@ -88,19 +88,19 @@ export const WhatYouCanAsk = () => {
               <div className="bg-blue-500/5 p-4 rounded-lg border border-blue-500/20">
                 <p className="text-sm text-blue-700 font-semibold mb-3">You also get:</p>
                 <div className="text-sm text-blue-600 space-y-2">
-                  <p>Answers are based on your data, plus real-world context like CPI, average rates, and economic trends — so you&apos;re not flying blind.</p>
+                  <p>Answers based on your data, plus real-world context like CPI, average rates, and economic trends — so you&apos;re not flying blind.</p>
                 </div>
               </div>
             </div>
 
-            {/* Premium Tier */}
+            {/* Advanced planning */}
             <div className="space-y-6">
               <div className="text-center space-y-3">
                 <span className="inline-block px-6 py-3 rounded-full text-lg font-semibold bg-purple-500/10 text-purple-500">
-                  Premium Tier
+                  Advanced planning
                 </span>
                 <p className="text-sm text-muted-foreground">
-                  You have more complex finances: a mortgage, long-term goals, maybe retirement on the horizon. You&apos;ve worked with advisors before, but want smarter, faster answers without the fees.
+                  You have more complex finances: a mortgage, long-term goals, maybe retirement on the horizon. You want smarter, faster answers without the fees.
                 </p>
               </div>
               {premiumQuestions.map((question, index) => (
@@ -116,7 +116,7 @@ export const WhatYouCanAsk = () => {
               <div className="bg-purple-500/5 p-4 rounded-lg border border-purple-500/20">
                 <p className="text-sm text-purple-700 font-semibold mb-3">You unlock:</p>
                 <div className="text-sm text-purple-600 space-y-2">
-                  <p>Premium includes live market data and forward-looking planning tools — so you can stress-test decisions and understand the tradeoffs.</p>
+                  <p>Live market data and forward-looking planning tools — so you can stress-test decisions and understand the tradeoffs.</p>
                 </div>
               </div>
             </div>

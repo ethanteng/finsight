@@ -341,7 +341,7 @@ const FeaturesPage = () => {
                         <div>
                           <h3 className="font-semibold text-foreground mb-1">FRED (Federal Reserve)</h3>
                           <p className="text-[1rem] text-muted-foreground leading-relaxed">
-                            CPI, Fed funds rate, mortgage rates, credit card APR, unemployment. Powers <span className="text-primary/90">inflation-aware analysis</span>, refinance decisions, and debt strategy. Standard+ and Premium.
+                            CPI, Fed funds rate, mortgage rates, credit card APR, unemployment. Powers <span className="text-primary/90">inflation-aware analysis</span>, refinance decisions, and debt strategy.
                           </p>
                         </div>
                       </div>
@@ -352,7 +352,7 @@ const FeaturesPage = () => {
                         <div>
                           <h3 className="font-semibold text-foreground mb-1">Alpha Vantage</h3>
                           <p className="text-[1rem] text-muted-foreground leading-relaxed">
-                            Live CD rates, Treasury yields, mortgage rates, and stock data. Used for <span className="text-primary/90">real-time market context</span> when comparing savings options or tracking investments. Premium.
+                            Live CD rates, Treasury yields, mortgage rates, and stock data. Used for <span className="text-primary/90">real-time market context</span> when comparing savings options or tracking investments.
                           </p>
                         </div>
                       </div>
@@ -363,7 +363,7 @@ const FeaturesPage = () => {
                         <div>
                           <h3 className="font-semibold text-foreground mb-1">Polygon.io</h3>
                           <p className="text-[1rem] text-muted-foreground leading-relaxed">
-                            Stock aggregates, Treasury yields, inflation, and inflation expectations. Powers <span className="text-primary/90">comprehensive market intelligence</span> for Premium tier answers. Premium.
+                            Stock aggregates, Treasury yields, inflation, and inflation expectations. Powers <span className="text-primary/90">comprehensive market intelligence</span> for answers.
                           </p>
                         </div>
                       </div>
@@ -374,7 +374,7 @@ const FeaturesPage = () => {
                         <div>
                           <h3 className="font-semibold text-foreground mb-1">Brave Search</h3>
                           <p className="text-[1rem] text-muted-foreground leading-relaxed">
-                            Real-time financial news and current rates. Supplements market context so answers reference <span className="text-primary/90">what&apos;s happening now</span>, not last month&apos;s data. Standard+ and Premium.
+                            Real-time financial news and current rates. Supplements market context so answers reference <span className="text-primary/90">what&apos;s happening now</span>, not last month&apos;s data.
                           </p>
                         </div>
                       </div>
@@ -385,7 +385,7 @@ const FeaturesPage = () => {
                         <div>
                           <h3 className="font-semibold text-foreground mb-1">RentCast (Home Valuations)</h3>
                           <p className="text-[1rem] text-muted-foreground leading-relaxed">
-                            Property valuations when you add your address. Low, mid, and high estimates feed into <span className="text-primary/90">net worth</span> and retirement planning. All tiers.
+                            Property valuations when you add your address. Low, mid, and high estimates feed into <span className="text-primary/90">net worth</span> and retirement planning.
                           </p>
                         </div>
                       </div>
@@ -474,7 +474,7 @@ const FeaturesPage = () => {
           </div>
           <div className="mt-8 pt-8 border-t border-border text-center">
             <p className="text-sm text-muted-foreground">
-              &copy; 2025 Ask Linc. Your AI financial analyst. Built with privacy in mind.
+              &copy; {new Date().getFullYear()} Ask Linc. Your AI financial analyst. Built with privacy in mind.
             </p>
           </div>
         </div>
