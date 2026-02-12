@@ -200,24 +200,17 @@ const NewHomepage = () => {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center sm:items-start pt-8 w-full">
-              <a href="/demo">
-                <Button 
-                  variant="hero" 
-                  size="xl" 
-                  className="group"
-                >
-                  Ask your first question
-                </Button>
-              </a>
-              <div className="flex flex-col items-center gap-2">
-                <Button 
-                  variant="outline" 
-                  size="xl"
-                  onClick={() => scrollToSection('pricing')}
-                >
-                  Get started
-                </Button>
-                <p className="text-[1.00625rem] text-primary font-medium">$9/month. Cancel anytime.</p>
+              <div className="flex flex-col items-center gap-3">
+                <a href="/demo">
+                  <Button 
+                    variant="hero" 
+                    size="xl" 
+                    className="group h-[4.235rem] px-[3.025rem] text-[1.36125rem]"
+                  >
+                    See It In Action
+                  </Button>
+                </a>
+                <p className="text-sm text-secondary">Interactive example — no signup required</p>
               </div>
             </div>
             
@@ -423,7 +416,7 @@ const NewHomepage = () => {
                 </li>
                 <li className="flex items-start space-x-3">
                   <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                  <span className="text-sm">Unlimited number ofconnected accounts</span>
+                  <span className="text-sm">Unlimited number of connected accounts</span>
                 </li>
                 <li className="flex items-start space-x-3">
                   <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
