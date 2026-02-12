@@ -1,11 +1,12 @@
 "use client";
 import { Button } from './ui/button';
-import { Brain, TrendingUp, MessageCircle, Lock, Users, Link2, Briefcase, Wallet, Banknote, BarChart3, Search, Home, Layers } from 'lucide-react';
+import { Brain, TrendingUp, MessageCircle, Lock, Users, Link2, Briefcase, Wallet, Banknote, BarChart3, Search, Home, Layers, Menu, X } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 
 const FeaturesPage = () => {
   const [isLoading, setIsLoading] = useState<string | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleBuyClick = async (planId: string) => {
     setIsLoading(planId);
@@ -43,7 +44,7 @@ const FeaturesPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background overflow-x-hidden">
       {/* Navigation */}
       <nav className="fixed top-0 w-full z-50 backdrop-blur-lg bg-background/80 border-b border-border/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -80,12 +81,39 @@ const FeaturesPage = () => {
                 Login
               </Button>
             </div>
+            <div className="md:hidden flex items-center">
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="p-2 text-muted-foreground hover:text-primary transition-colors"
+                aria-label="Toggle menu"
+              >
+                {isMobileMenuOpen ? (
+                  <X className="h-6 w-6" />
+                ) : (
+                  <Menu className="h-6 w-6" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
+        {isMobileMenuOpen && (
+          <div className="md:hidden absolute top-16 left-0 right-0 bg-background/95 backdrop-blur-lg border-b border-border/50 shadow-lg">
+            <div className="px-4 py-4 space-y-1">
+              <Link href="/" className="block py-3 text-muted-foreground hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Home</Link>
+              <Link href="/features" className="block py-3 text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Features</Link>
+              <button onClick={() => { window.location.href = '/#pricing'; setIsMobileMenuOpen(false); }} className="block w-full text-left py-3 text-muted-foreground hover:text-primary transition-colors">Pricing</button>
+              <a href="https://www.asklinc.com/blog" target="_blank" rel="noopener noreferrer" className="block py-3 text-muted-foreground hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Blog</a>
+              <div className="pt-4 space-y-2 border-t border-border/50">
+                <Button variant="hero" size="sm" className="w-full" onClick={() => { handleBuyClick('premium'); setIsMobileMenuOpen(false); }} disabled={isLoading === 'premium'}>{isLoading === 'premium' ? 'Loading...' : 'Get started'}</Button>
+                <Button variant="outline" size="sm" className="w-full" onClick={() => { window.location.href = '/login'; setIsMobileMenuOpen(false); }}>Login</Button>
+              </div>
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* Hero Section */}
-      <section className="relative pt-28 pb-24 overflow-hidden">
+      <section className="relative pt-20 pb-10 sm:pt-24 sm:pb-14 overflow-hidden">
         {/* Radial glow behind hero text */}
         <div className="absolute inset-0 z-0 flex items-center justify-center pointer-events-none">
           <div className="w-[800px] h-[500px] rounded-full bg-primary/8 blur-3xl" />
@@ -93,13 +121,13 @@ const FeaturesPage = () => {
         <div className="absolute inset-0 z-0 opacity-30 bg-gradient-to-b from-primary/5 via-transparent to-background" />
         <div className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/40 to-background z-10" />
         
-        <div className="relative z-20 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center space-y-12">
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold leading-[1.08] tracking-tight">
+        <div className="relative z-20 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center space-y-6 sm:space-y-10 md:space-y-12">
+            <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-bold leading-[1.08] tracking-tight px-1">
               Get Answers to Your <span className="text-primary">Real Financial Questions</span>
             </h1>
             
-            <p className="text-lg text-muted-foreground leading-relaxed max-w-2xl mx-auto">
+            <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-2xl mx-auto px-1">
               Ask Linc isn&apos;t another budgeting app or robo-advisor. It&apos;s a financial reasoning system designed to help you <span className="text-secondary">make confident decisions across investing, retirement, and major life choices</span>—using your real situation, not generic assumptions.
             </p>
           </div>
@@ -109,19 +137,19 @@ const FeaturesPage = () => {
       {/* Feature Bands */}
       <div className="divide-y divide-primary/15">
         {/* Section 1: Icon left, content right */}
-        <section id="conversational" className="py-20 md:py-28 bg-primary/[0.02]">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid md:grid-cols-[auto_1fr] gap-12 md:gap-16 items-start">
-              <div className="flex items-center gap-4 md:flex-col md:items-start">
+        <section id="conversational" className="py-10 sm:py-12 md:py-16 bg-primary/[0.02]">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-center">
+            <div className="grid md:grid-cols-[auto_1fr] gap-6 sm:gap-8 md:gap-16 items-start w-full max-w-5xl">
+              <div className="flex items-center gap-4 md:flex-col md:items-start md:translate-x-[4rem] lg:translate-x-[7rem]">
                 <div className="relative h-14 w-14 rounded-xl flex items-center justify-center shrink-0 bg-primary/10 ring-2 ring-primary/20 feature-icon-glow">
                   <MessageCircle className="h-7 w-7 text-primary" />
                 </div>
                 <div className="md:hidden">
-                  <h2 className="text-2xl font-bold tracking-tight">Conversational Financial <span className="text-primary">Reasoning</span></h2>
+                  <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Conversational Financial <span className="text-primary">Reasoning</span></h2>
                   <p className="mt-1 text-xs text-primary/60 tracking-[0.12em] uppercase">Ask follow-ups. Change assumptions. Explore tradeoffs.</p>
                 </div>
               </div>
-              <div className="space-y-6 max-w-[65ch]">
+              <div className="space-y-4 sm:space-y-6 max-w-[65ch] min-w-0 md:pl-8 lg:pl-[15%]">
                 <div className="hidden md:block">
                   <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Conversational Financial <span className="text-primary">Reasoning</span></h2>
                   <p className="mt-2 text-xs text-primary/60 tracking-[0.12em] uppercase">Ask follow-ups. Change assumptions. Explore tradeoffs.</p>
@@ -143,19 +171,19 @@ const FeaturesPage = () => {
         </section>
 
         {/* Section 2: Icon left, content right */}
-        <section id="market-aware" className="py-20 md:py-28 bg-muted/25">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid md:grid-cols-[auto_1fr] gap-12 md:gap-16 items-start">
-              <div className="flex items-center gap-4 md:flex-col md:items-start">
+        <section id="market-aware" className="py-10 sm:py-12 md:py-16 bg-muted/25">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-center">
+            <div className="grid md:grid-cols-[auto_1fr] gap-6 sm:gap-8 md:gap-16 items-start w-full max-w-5xl">
+              <div className="flex items-center gap-4 md:flex-col md:items-start md:translate-x-[4rem] lg:translate-x-[7rem]">
                 <div className="h-14 w-14 rounded-xl flex items-center justify-center shrink-0 bg-primary/8 ring-2 ring-primary/15 feature-icon-glow">
                   <TrendingUp className="h-7 w-7 text-primary" />
                 </div>
                 <div className="md:hidden">
-                  <h2 className="text-2xl font-bold tracking-tight">Market-Aware <span className="text-primary">Analysis</span></h2>
+                  <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Market-Aware <span className="text-primary">Analysis</span></h2>
                   <p className="mt-1 text-xs text-primary/60 tracking-[0.12em] uppercase">Your decisions don&apos;t happen in a vacuum. Neither do Ask Linc&apos;s answers.</p>
                 </div>
               </div>
-              <div className="space-y-6 max-w-[65ch]">
+              <div className="space-y-4 sm:space-y-6 max-w-[65ch] min-w-0 md:pl-8 lg:pl-[15%]">
                 <div className="hidden md:block">
                   <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Market-Aware <span className="text-primary">Analysis</span></h2>
                   <p className="mt-2 text-xs text-primary/60 tracking-[0.12em] uppercase">Your decisions don&apos;t happen in a vacuum. Neither do Ask Linc&apos;s answers.</p>
@@ -178,19 +206,19 @@ const FeaturesPage = () => {
         </section>
 
         {/* Section 3: Icon left, content right */}
-        <section id="retirement-risk" className="py-20 md:py-28 bg-primary/[0.02]">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid md:grid-cols-[auto_1fr] gap-12 md:gap-16 items-start">
-              <div className="flex items-center gap-4 md:flex-col md:items-start">
+        <section id="retirement-risk" className="py-10 sm:py-12 md:py-16 bg-primary/[0.02]">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-center">
+            <div className="grid md:grid-cols-[auto_1fr] gap-6 sm:gap-8 md:gap-16 items-start w-full max-w-5xl">
+              <div className="flex items-center gap-4 md:flex-col md:items-start md:translate-x-[4rem] lg:translate-x-[7rem]">
                 <div className="h-14 w-14 rounded-xl flex items-center justify-center shrink-0 bg-secondary/10 ring-2 ring-secondary/20 feature-icon-glow-secondary">
                   <Brain className="h-7 w-7 text-primary" />
                 </div>
                 <div className="md:hidden">
-                  <h2 className="text-2xl font-bold tracking-tight">Retirement & <span className="text-primary">Risk</span> Analysis</h2>
+                  <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Retirement & <span className="text-primary">Risk</span> Analysis</h2>
                   <p className="mt-1 text-xs text-primary/60 tracking-[0.12em] uppercase">Stress-test your plan before real life does.</p>
                 </div>
               </div>
-              <div className="space-y-6 max-w-[65ch]">
+              <div className="space-y-4 sm:space-y-6 max-w-[65ch] min-w-0 md:pl-8 lg:pl-[15%]">
                 <div className="hidden md:block">
                   <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Retirement & <span className="text-primary">Risk</span> Analysis</h2>
                   <p className="mt-2 text-xs text-primary/60 tracking-[0.12em] uppercase">Stress-test your plan before real life does.</p>
@@ -213,19 +241,19 @@ const FeaturesPage = () => {
         </section>
 
         {/* Section 4: Icon left, content right */}
-        <section id="privacy" className="py-20 md:py-28 bg-muted/25">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid md:grid-cols-[auto_1fr] gap-12 md:gap-16 items-start">
-              <div className="flex items-center gap-4 md:flex-col md:items-start">
+        <section id="privacy" className="py-10 sm:py-12 md:py-16 bg-muted/25">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-center">
+            <div className="grid md:grid-cols-[auto_1fr] gap-6 sm:gap-8 md:gap-16 items-start w-full max-w-5xl">
+              <div className="flex items-center gap-4 md:flex-col md:items-start md:translate-x-[4rem] lg:translate-x-[7rem]">
                 <div className="h-14 w-14 rounded-xl flex items-center justify-center shrink-0 bg-teal/10 ring-2 ring-teal/20 feature-icon-glow-teal">
                   <Lock className="h-7 w-7 text-teal" />
                 </div>
                 <div className="md:hidden">
-                  <h2 className="text-2xl font-bold tracking-tight">Privacy-First <span className="text-teal">Architecture</span></h2>
+                  <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Privacy-First <span className="text-teal">Architecture</span></h2>
                   <p className="mt-1 text-xs text-primary/60 tracking-[0.12em] uppercase">Your real data never gets handed to an AI model.</p>
                 </div>
               </div>
-              <div className="space-y-6 max-w-[65ch]">
+              <div className="space-y-4 sm:space-y-6 max-w-[65ch] min-w-0 md:pl-8 lg:pl-[15%]">
                 <div className="hidden md:block">
                   <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Privacy-First <span className="text-teal">Architecture</span></h2>
                   <p className="mt-2 text-xs text-primary/60 tracking-[0.12em] uppercase">Your real data never gets handed to an AI model.</p>
@@ -242,19 +270,19 @@ const FeaturesPage = () => {
         </section>
 
         {/* Section 5: Icon left, content right */}
-        <section id="who-its-for" className="py-20 md:py-28">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid md:grid-cols-[auto_1fr] gap-12 md:gap-16 items-start">
-              <div className="flex items-center gap-4 md:flex-col md:items-start">
+        <section id="who-its-for" className="py-10 sm:py-12 md:py-16">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-center">
+            <div className="grid md:grid-cols-[auto_1fr] gap-6 sm:gap-8 md:gap-16 items-start w-full max-w-5xl">
+              <div className="flex items-center gap-4 md:flex-col md:items-start md:translate-x-[4rem] lg:translate-x-[7rem]">
                 <div className="h-14 w-14 rounded-xl flex items-center justify-center shrink-0 bg-primary/10 ring-2 ring-primary/20 feature-icon-glow">
                   <Users className="h-7 w-7 text-primary" />
                 </div>
                 <div className="md:hidden">
-                  <h2 className="text-2xl font-bold tracking-tight">Built for People Making <span className="text-primary">Real</span> Decisions</h2>
+                  <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Built for People Making <span className="text-primary">Real</span> Decisions</h2>
                   <p className="mt-1 text-xs text-primary/60 tracking-[0.12em] uppercase">Not day traders. Not spreadsheet hobbyists.</p>
                 </div>
               </div>
-              <div className="space-y-6 max-w-[65ch]">
+              <div className="space-y-4 sm:space-y-6 max-w-[65ch] min-w-0 md:pl-8 lg:pl-[15%]">
                 <div className="hidden md:block">
                   <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Built for People Making <span className="text-primary">Real</span> Decisions</h2>
                   <p className="mt-2 text-xs text-primary/60 tracking-[0.12em] uppercase">Not day traders. Not spreadsheet hobbyists.</p>
@@ -276,19 +304,19 @@ const FeaturesPage = () => {
         </section>
 
         {/* Integrations Section */}
-        <section id="integrations" className="py-20 md:py-28 bg-muted/25">
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid md:grid-cols-[auto_1fr] gap-12 md:gap-16 items-start">
-              <div className="flex items-center gap-4 md:flex-col md:items-start">
+        <section id="integrations" className="py-10 sm:py-12 md:py-16 bg-muted/25">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-center">
+            <div className="grid md:grid-cols-[auto_1fr] gap-6 sm:gap-8 md:gap-16 items-start w-full max-w-5xl">
+              <div className="flex items-center gap-4 md:flex-col md:items-start md:translate-x-[4rem] lg:translate-x-[7rem]">
                 <div className="h-14 w-14 rounded-xl flex items-center justify-center shrink-0 bg-primary/10 ring-2 ring-primary/20 feature-icon-glow">
                   <Link2 className="h-7 w-7 text-primary" />
                 </div>
                 <div className="md:hidden">
-                  <h2 className="text-2xl font-bold tracking-tight">Integrations & <span className="text-primary">Data</span> Sources</h2>
+                  <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Integrations & <span className="text-primary">Data</span> Sources</h2>
                   <p className="mt-1 text-xs text-primary/60 tracking-[0.12em] uppercase">Connect your accounts. Get analysis grounded in reality.</p>
                 </div>
               </div>
-              <div className="space-y-6 max-w-[65ch]">
+              <div className="space-y-4 sm:space-y-6 max-w-[65ch] min-w-0 md:pl-8 lg:pl-[15%]">
                 <div className="hidden md:block">
                   <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Integrations & <span className="text-primary">Data</span> Sources</h2>
                   <p className="mt-2 text-xs text-primary/60 tracking-[0.12em] uppercase">Connect your accounts. Get analysis grounded in reality.</p>
@@ -298,7 +326,7 @@ const FeaturesPage = () => {
                 </p>
                 <div className="space-y-6">
                   <p className="text-xs text-muted-foreground/80 tracking-wide uppercase">Account connections</p>
-                  <div className="flex gap-4">
+                  <div className="flex flex-col sm:flex-row gap-4 items-start">
                     <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                       <Wallet className="h-5 w-5 text-primary" />
                     </div>
@@ -309,7 +337,7 @@ const FeaturesPage = () => {
                       </p>
                     </div>
                   </div>
-                  <div className="flex gap-4">
+                  <div className="flex flex-col sm:flex-row gap-4 items-start">
                     <div className="h-10 w-10 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0">
                       <Briefcase className="h-5 w-5 text-secondary" />
                     </div>
@@ -320,7 +348,7 @@ const FeaturesPage = () => {
                       </p>
                     </div>
                   </div>
-                  <div className="flex gap-4">
+                  <div className="flex flex-col sm:flex-row gap-4 items-start">
                     <div className="h-10 w-10 rounded-lg bg-teal/10 flex items-center justify-center shrink-0">
                       <Banknote className="h-5 w-5 text-teal" />
                     </div>
@@ -334,7 +362,7 @@ const FeaturesPage = () => {
                   <div className="pt-2 border-t border-border/50 mt-6">
                     <p className="text-xs text-muted-foreground/80 tracking-wide uppercase mb-4">Market & economic context</p>
                     <div className="space-y-4">
-                      <div className="flex gap-4">
+                      <div className="flex flex-col sm:flex-row gap-4 items-start">
                         <div className="h-10 w-10 rounded-lg bg-primary/8 flex items-center justify-center shrink-0">
                           <BarChart3 className="h-5 w-5 text-primary" />
                         </div>
@@ -345,7 +373,7 @@ const FeaturesPage = () => {
                           </p>
                         </div>
                       </div>
-                      <div className="flex gap-4">
+                      <div className="flex flex-col sm:flex-row gap-4 items-start">
                         <div className="h-10 w-10 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0">
                           <BarChart3 className="h-5 w-5 text-secondary" />
                         </div>
@@ -356,7 +384,7 @@ const FeaturesPage = () => {
                           </p>
                         </div>
                       </div>
-                      <div className="flex gap-4">
+                      <div className="flex flex-col sm:flex-row gap-4 items-start">
                         <div className="h-10 w-10 rounded-lg bg-primary/8 flex items-center justify-center shrink-0">
                           <BarChart3 className="h-5 w-5 text-primary" />
                         </div>
@@ -367,7 +395,7 @@ const FeaturesPage = () => {
                           </p>
                         </div>
                       </div>
-                      <div className="flex gap-4">
+                      <div className="flex flex-col sm:flex-row gap-4 items-start">
                         <div className="h-10 w-10 rounded-lg bg-teal/10 flex items-center justify-center shrink-0">
                           <Search className="h-5 w-5 text-teal" />
                         </div>
@@ -378,7 +406,7 @@ const FeaturesPage = () => {
                           </p>
                         </div>
                       </div>
-                      <div className="flex gap-4">
+                      <div className="flex flex-col sm:flex-row gap-4 items-start">
                         <div className="h-10 w-10 rounded-lg bg-primary/8 flex items-center justify-center shrink-0">
                           <Home className="h-5 w-5 text-primary" />
                         </div>
@@ -394,7 +422,7 @@ const FeaturesPage = () => {
                   <div className="pt-2 border-t border-border/50 mt-6">
                     <p className="text-xs text-muted-foreground/80 tracking-wide uppercase mb-4">Retirement & portfolio analysis</p>
                     <div className="space-y-4">
-                      <div className="flex gap-4">
+                      <div className="flex flex-col sm:flex-row gap-4 items-start">
                         <div className="h-10 w-10 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0">
                           <TrendingUp className="h-5 w-5 text-secondary" />
                         </div>
@@ -405,7 +433,7 @@ const FeaturesPage = () => {
                           </p>
                         </div>
                       </div>
-                      <div className="flex gap-4">
+                      <div className="flex flex-col sm:flex-row gap-4 items-start">
                         <div className="h-10 w-10 rounded-lg bg-teal/10 flex items-center justify-center shrink-0">
                           <Layers className="h-5 w-5 text-teal" />
                         </div>
@@ -429,11 +457,11 @@ const FeaturesPage = () => {
       </div>
 
       {/* CTA Section */}
-      <section className="py-28 md:py-36 relative overflow-hidden">
+      <section className="py-12 sm:py-16 md:py-24 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-muted/20 via-primary/[0.04] to-muted/30 pointer-events-none" />
         <div className="absolute top-0 left-0 right-0 h-px bg-primary/20" />
-        <div className="relative max-w-3xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-10">
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight">
+        <div className="relative max-w-3xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8 sm:space-y-10">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight">
             Start understanding your money
           </h2>
           <div className="flex flex-col items-center gap-4">
@@ -453,14 +481,14 @@ const FeaturesPage = () => {
       </section>
 
       {/* Footer */}
-      <footer className="bg-muted/50 py-12">
+      <footer className="bg-muted/50 py-8 sm:py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4 md:gap-0 text-center md:text-left">
             <div className="flex items-center space-x-2">
               <Brain className="h-6 w-6 text-primary" />
               <span className="text-lg font-bold gradient-text">Ask Linc</span>
             </div>
-            <div className="flex items-center space-x-6 text-sm text-muted-foreground">
+            <div className="flex flex-wrap justify-center md:justify-start items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
               <Link href="/privacy" className="hover:text-primary transition-colors">
                 Privacy Policy
               </Link>
@@ -472,7 +500,7 @@ const FeaturesPage = () => {
               </Link>
             </div>
           </div>
-          <div className="mt-8 pt-8 border-t border-border text-center">
+          <div className="mt-6 sm:mt-8 pt-6 sm:pt-8 border-t border-border text-center">
             <p className="text-sm text-muted-foreground">
               &copy; {new Date().getFullYear()} Ask Linc. Your AI financial analyst. Built with privacy in mind.
             </p>
