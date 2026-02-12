@@ -462,6 +462,36 @@ Note: This profile reflects our financial situation as of August 2025.`,
   }
 };
 
+// Default pre-populated conversation for demo (recession exposure Q&A)
+export const defaultDemoConversation = {
+  id: 'demo-default-recession',
+  question: 'How exposed am I if a recession hits next year?',
+  answer: `To assess your exposure to a potential recession next year, let's consider various aspects of your financial situation:
+
+1. **Income Stability:** Both you and your husband have stable jobs with good security in the tech and marketing industries. This provides a solid foundation, although it's important to remember that no job is entirely recession-proof.
+
+2. **Emergency Fund:** You currently have $28,450 saved towards your $50,000 emergency fund goal. This amounts to about 16 months of your average monthly expenses ($1,782.86). While this is a good start, continuing to build this fund is crucial in case of unexpected job loss or other financial emergencies.
+
+3. **Debt and Liabilities:**
+   - **Mortgage:** You own a home with a $485,000 mortgage. The interest rate of 3.25% is relatively low, which helps manage monthly payments.
+   - **Credit Card Debt:** You have $3,240.50 on your Chase Sapphire Reserve card. Paying down this debt can reduce financial strain and improve your resilience.
+
+4. **Investments:** Your retirement accounts total $246,200, with a conservative investment strategy in index funds. While these may be less volatile, a recession could still impact their value. It's important to maintain a long-term perspective and avoid panic selling.
+
+5. **Savings Goals:** You are actively saving for a family vacation, a house down payment, and retirement. Prioritizing these savings, especially the emergency fund, can provide more financial security.
+
+6. **Monthly Cash Flow:** With an average monthly income of $4,250 and expenses of $1,782.86, you're in a position to continue saving each month. This buffer can help you manage potential income disruptions.
+
+**Recommendations:**
+- **Increase Emergency Fund:** Aim to reach your $50,000 target as soon as possible to cover approximately 28 months of expenses.
+- **Reduce Credit Card Debt:** Focus on paying down your credit card balance to decrease financial obligations and improve liquidity.
+- **Diversify Income Sources:** Consider additional income streams or side projects as a safety net.
+- **Monitor Expenses:** Continue tracking expenses to identify areas where you can cut back if needed.
+
+Overall, you have a strong financial position with manageable risks. By focusing on building your emergency fund and reducing debt, you can increase your resilience to withstand potential economic downturns.`,
+  timestamp: Date.now() - 86400000, // 24 hours ago so it appears as recent
+};
+
 // Helper functions for demo data analysis
 export const getDemoDataAnalysis = () => {
   const accounts = demoData.accounts;

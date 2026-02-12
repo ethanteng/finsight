@@ -1167,18 +1167,27 @@ app.get('/demo/conversations', async (req: Request, res: Response) => {
       }
     });
     
-    if (!demoSession) {
-      return res.json({ conversations: [] });
+    let conversations = demoSession
+      ? demoSession.conversations.map((conv: any) => ({
+          id: conv.id,
+          question: conv.question,
+          answer: conv.answer,
+          timestamp: conv.createdAt.getTime()
+        }))
+      : [];
+    
+    // When no session or no conversations, inject default recession Q&A
+    if (conversations.length === 0) {
+      const { defaultDemoConversation } = await import('./demo-data');
+      conversations = [{
+        id: defaultDemoConversation.id,
+        question: defaultDemoConversation.question,
+        answer: defaultDemoConversation.answer,
+        timestamp: defaultDemoConversation.timestamp
+      }];
     }
     
-    res.json({ 
-      conversations: demoSession.conversations.map((conv: any) => ({
-        id: conv.id,
-        question: conv.question,
-        answer: conv.answer,
-        timestamp: conv.createdAt.getTime()
-      }))
-    });
+    res.json({ conversations });
   } catch (err) {
     // Capture error in Sentry
     if (err instanceof Error) {
