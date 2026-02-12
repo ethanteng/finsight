@@ -210,7 +210,7 @@ const NewHomepage = () => {
                     See It In Action
                   </Button>
                 </a>
-                <p className="text-sm text-secondary">Interactive example — no signup required</p>
+                <p className="text-[0.7875rem]">Interactive demo — no signup required</p>
               </div>
             </div>
             
