@@ -11,10 +11,22 @@ const getApp = async () => {
   return app;
 };
 
-// Mock external dependencies
-jest.mock('../../openai', () => ({
-  askOpenAI: jest.fn().mockResolvedValue('Mocked AI response'),
-}));
+// Mock external dependencies - must include all exports used by index (ask, handleUserRequest, handleDemoRequest)
+jest.mock('../../openai', () => {
+  const mockResponse = 'Mocked AI response';
+  return {
+    askOpenAI: jest.fn().mockResolvedValue(mockResponse),
+    askOpenAIWithEnhancedContext: jest.fn().mockResolvedValue(mockResponse),
+    askOpenAIForTests: jest.fn().mockResolvedValue(mockResponse),
+    PromptValidationError: class PromptValidationError extends Error {
+      constructor(message: string, _reason?: string, public userMessage = message) {
+        super(message);
+        this.name = 'PromptValidationError';
+      }
+    },
+    openai: { chat: { completions: { create: jest.fn() } } },
+  };
+});
 
 jest.mock('../../data/orchestrator', () => ({
   dataOrchestrator: {
