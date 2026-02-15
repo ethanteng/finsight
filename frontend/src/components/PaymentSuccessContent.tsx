@@ -47,22 +47,23 @@ function PaymentSuccessContentInner() {
           // Fire Google Ads conversion event if payment was successful and not already fired
           if (
             data.paid &&
-            !sessionStorage.getItem('ads_conversion_fired')
+            !sessionStorage.getItem('purchase_event_fired')
           ) {
             window.dataLayer = window.dataLayer || [];
             window.dataLayer.push({
-              event: 'subscription_purchase',
+              event: 'purchase',
+              transaction_id: data.session_id,
               value: data.amount,
               currency: data.currency,
-              transaction_id: data.session_id
-            });
+              tier: tier || 'premium'
+            });            
 
-            sessionStorage.setItem('ads_conversion_fired', 'true');
-            console.log('Google Ads conversion event fired:', {
-              event: 'subscription_purchase',
+            sessionStorage.setItem('purchase_event_fired', 'true');
+            console.log('Purchase event fired:', {
+              transaction_id: data.session_id,
               value: data.amount,
               currency: data.currency,
-              transaction_id: data.session_id
+              tier: tier || 'premium'
             });
           }
 
