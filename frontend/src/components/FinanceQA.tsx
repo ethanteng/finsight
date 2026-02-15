@@ -216,6 +216,19 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       }
 
       const data = await res.json();
+
+      // Handle error responses (4xx, 5xx) - show backend message when available
+      if (!res.ok && data.error) {
+        setError(data.error);
+        return;
+      }
+
+      // Handle 200 with error but no answer (e.g. validation rejected after response started)
+      if (data.error && !data.answer) {
+        setError(data.error);
+        return;
+      }
+
       if (data.answer) {
         // ✅ Disabled streaming simulation - display answer immediately
         setAnswer(data.answer);

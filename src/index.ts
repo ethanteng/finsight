@@ -234,7 +234,8 @@ app.post('/ask', aiRateLimitMiddleware, async (req: Request, res: Response) => {
             // Demo mode always works (no auth required)
         if (isDemo) {
           // Create Sentry performance span for AI request and handle demo request within it
-          return Sentry.startSpan({
+          // Must await so PromptValidationError and other rejections are caught
+          await Sentry.startSpan({
             op: 'ai.request',
             name: 'AI Financial Advice Request - Demo Mode',
           }, async (span: any) => {
@@ -253,6 +254,7 @@ app.post('/ask', aiRateLimitMiddleware, async (req: Request, res: Response) => {
             // Set final response time
             span.setAttribute('ai.response_time_ms', Date.now() - startTime);
           });
+          return;
         }
     
     // User mode requires auth when enabled
@@ -262,7 +264,8 @@ app.post('/ask', aiRateLimitMiddleware, async (req: Request, res: Response) => {
     }
     
     // Create Sentry performance span for AI request and handle user request within it
-    return Sentry.startSpan({
+    // Must await so PromptValidationError and other rejections are caught
+    await Sentry.startSpan({
       op: 'ai.request',
       name: 'AI Financial Advice Request - User Mode',
     }, async (span: any) => {
@@ -338,7 +341,8 @@ app.post('/ask/tier-aware', aiRateLimitMiddleware, async (req: Request, res: Res
             // Demo mode always works (no auth required)
         if (isDemo) {
           // Create Sentry performance span for AI request and handle demo request within it
-          return Sentry.startSpan({
+          // Must await so PromptValidationError and other rejections are caught
+          await Sentry.startSpan({
             op: 'ai.request',
             name: 'AI Financial Advice Request - Tier-Aware Demo',
           }, async (span: any) => {
@@ -356,6 +360,7 @@ app.post('/ask/tier-aware', aiRateLimitMiddleware, async (req: Request, res: Res
             // Set final response time
             span.setAttribute('ai.response_time_ms', Date.now() - startTime);
           });
+          return;
         }
     
     // User mode requires auth when enabled
@@ -365,7 +370,8 @@ app.post('/ask/tier-aware', aiRateLimitMiddleware, async (req: Request, res: Res
     }
     
         // Create Sentry performance span for AI request and handle user request within it
-        return Sentry.startSpan({
+        // Must await so PromptValidationError and other rejections are caught
+        await Sentry.startSpan({
           op: 'ai.request',
           name: 'AI Financial Advice Request - Tier-Aware User',
         }, async (span: any) => {
@@ -467,8 +473,9 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
     }
 
     // Create Sentry performance span for AI request BEFORE processing
+    // Must await so PromptValidationError and other rejections are caught by the outer try/catch
     const totalTime = Date.now() - startTime;
-    Sentry.startSpan({
+    await Sentry.startSpan({
       op: 'ai.request',
       name: isDemo ? 'AI Financial Advice Request - Display Real Demo' : 'AI Financial Advice Request - Display Real Production',
     }, async (span: any) => {
