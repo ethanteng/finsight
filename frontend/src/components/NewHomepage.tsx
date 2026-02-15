@@ -10,6 +10,7 @@ import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, Database
 import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { pushBeginCheckout } from '@/lib/dataLayer';
 
 const NewHomepage = () => {
   const [isLoading, setIsLoading] = useState<string | null>(null);
@@ -24,10 +25,7 @@ const NewHomepage = () => {
   };
 
   const handleBuyClick = async (planId: string) => {
-    if (typeof window !== 'undefined') {
-      (window as any).dataLayer = (window as any).dataLayer || [];
-      (window as any).dataLayer.push({ event: 'begin_checkout' });
-    }
+    pushBeginCheckout();
     setIsLoading(planId);
     
     try {

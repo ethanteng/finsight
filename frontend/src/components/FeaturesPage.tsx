@@ -1,5 +1,6 @@
 "use client";
 import { Button } from './ui/button';
+import { pushBeginCheckout } from '@/lib/dataLayer';
 import { Brain, TrendingUp, MessageCircle, Lock, Users, Link2, Briefcase, Wallet, Banknote, BarChart3, Search, Home, Layers, Menu, X } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -9,10 +10,7 @@ const FeaturesPage = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleBuyClick = async (planId: string) => {
-    if (typeof window !== 'undefined') {
-      (window as any).dataLayer = (window as any).dataLayer || [];
-      (window as any).dataLayer.push({ event: 'begin_checkout' });
-    }
+    pushBeginCheckout();
     setIsLoading(planId);
     
     try {

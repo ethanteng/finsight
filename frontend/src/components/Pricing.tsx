@@ -1,5 +1,6 @@
 "use client";
 import { Button } from "@/components/ui/button";
+import { pushBeginCheckout } from '@/lib/dataLayer';
 import { CheckCircle } from "lucide-react";
 import { useState } from "react";
 
@@ -7,10 +8,7 @@ export const Pricing = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleBuyClick = async () => {
-    if (typeof window !== 'undefined') {
-      (window as any).dataLayer = (window as any).dataLayer || [];
-      (window as any).dataLayer.push({ event: 'begin_checkout' });
-    }
+    pushBeginCheckout();
     setIsLoading(true);
     
     try {

@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, Suspense } from 'react';
+import { pushBeginCheckout } from '@/lib/dataLayer';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
@@ -106,10 +107,7 @@ function LoginFormContent() {
   };
 
   const handleBuyClick = async (planId: string) => {
-    if (typeof window !== 'undefined') {
-      (window as any).dataLayer = (window as any).dataLayer || [];
-      (window as any).dataLayer.push({ event: 'begin_checkout' });
-    }
+    pushBeginCheckout();
     setIsCheckoutLoading(true);
     
     try {

@@ -1,9 +1,8 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import FinanceQA from '../../components/FinanceQA';
 import TierBanner from '../../components/TierBanner';
-import Link from 'next/link';
+import { pushBeginCheckout } from '@/lib/dataLayer';
 
 interface PromptHistory {
   id: string;
@@ -113,10 +112,7 @@ export default function DemoPageClient() {
   };
 
   const handleBuyClick = async (planId: string) => {
-    if (typeof window !== 'undefined') {
-      (window as any).dataLayer = (window as any).dataLayer || [];
-      (window as any).dataLayer.push({ event: 'begin_checkout' });
-    }
+    pushBeginCheckout();
     setIsCheckoutLoading(true);
     
     try {
