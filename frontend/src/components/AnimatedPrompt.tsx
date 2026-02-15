@@ -1,20 +1,35 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Typewriter from 'typewriter-effect';
 
 interface AnimatedPromptProps {
   /** When true, renders as div instead of anchor (use when nested inside a Link) */
   nestedInLink?: boolean;
+  /** Ref to receive a function that returns the currently displayed question (for hero click) */
+  getCurrentQuestionRef?: React.MutableRefObject<(() => string) | null>;
 }
 
-const AnimatedPrompt = ({ nestedInLink = false }: AnimatedPromptProps) => {
+const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef }: AnimatedPromptProps) => {
   const [isVisible, setIsVisible] = useState(false);
+  const typewriterRef = useRef<{ state: { elements: { wrapper: HTMLElement } } } | null>(null);
 
   useEffect(() => {
     // Delay the animation to start after the page loads
     const timer = setTimeout(() => setIsVisible(true), 1000);
     return () => clearTimeout(timer);
   }, []);
+
+  // Expose getter for current question text (wrapper has text only, cursor is separate)
+  // Must be before any early return to satisfy Rules of Hooks
+  useEffect(() => {
+    if (getCurrentQuestionRef) {
+      getCurrentQuestionRef.current = () => {
+        const wrapper = typewriterRef.current?.state?.elements?.wrapper;
+        return wrapper?.textContent?.trim() || '';
+      };
+      return () => { getCurrentQuestionRef.current = null; };
+    }
+  }, [getCurrentQuestionRef, isVisible]);
 
   const questions = [
     "What breaks first if interest rates stay high longer than expected?",
@@ -43,8 +58,9 @@ const AnimatedPrompt = ({ nestedInLink = false }: AnimatedPromptProps) => {
         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
         <span className="text-sm text-gray-400 group-hover:text-gray-300 transition-colors">Ask Linc</span>
       </div>
-      <div className="text-white text-lg h-16 flex items-center justify-center group-hover:text-gray-100 transition-colors">
+      <div className="text-white text-lg h-16 flex items-center justify-center group-hover:text-gray-100 transition-colors" data-hero-question>
         <Typewriter
+          onInit={(tw) => { (typewriterRef as React.MutableRefObject<unknown>).current = tw; }}
           options={{
             strings: questions,
             autoStart: true,
@@ -66,6 +82,7 @@ const AnimatedPrompt = ({ nestedInLink = false }: AnimatedPromptProps) => {
       </div>
       <div className="text-white text-lg h-16 flex items-center justify-center group-hover:text-gray-100 transition-colors">
         <Typewriter
+          onInit={(tw) => { (typewriterRef as React.MutableRefObject<unknown>).current = tw; }}
           options={{
             strings: questions,
             autoStart: true,

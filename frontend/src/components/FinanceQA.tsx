@@ -19,9 +19,11 @@ interface FinanceQAProps {
   onNewQuestion?: () => void;
   isDemo?: boolean;
   sessionId?: string;
+  /** Pre-fill and auto-submit this question (e.g. from hero click on homepage) */
+  initialQuestion?: string | null;
 }
 
-export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: _onNewQuestion, isDemo = false, sessionId: propSessionId }: FinanceQAProps) {
+export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: _onNewQuestion, isDemo = false, sessionId: propSessionId, initialQuestion: propInitialQuestion }: FinanceQAProps) {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(false);
@@ -115,6 +117,21 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     fetchUserTier();
   }, [API_URL]);
 
+  // Auto-submit initial question when coming from hero click (demo only)
+  const initialQuestionRef = React.useRef<string | null>(null);
+  const initialQuestionSubmitted = React.useRef(false);
+  useEffect(() => {
+    if (!isDemo || !propSessionId || !propInitialQuestion?.trim() || initialQuestionSubmitted.current) return;
+    initialQuestionSubmitted.current = true;
+    initialQuestionRef.current = propInitialQuestion.trim();
+    setQuestion(propInitialQuestion.trim());
+    const timer = setTimeout(() => {
+      const form = document.querySelector('#finance-qa-form');
+      form?.requestSubmit();
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [isDemo, propSessionId, propInitialQuestion]);
+
   // Update question and answer when selectedPrompt changes
   useEffect(() => {
     if (selectedPrompt) {
@@ -135,8 +152,9 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
 
   const askQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Use current placeholder if user didn't type their own question
-    const questionToAsk = question.trim() || (isDemo ? demoPlaceholders[placeholderIndex] : userPlaceholders[placeholderIndex]);
+    // Use initial question from hero click, then typed question, then placeholder
+    const questionToAsk = initialQuestionRef.current || question.trim() || (isDemo ? demoPlaceholders[placeholderIndex] : userPlaceholders[placeholderIndex]);
+    if (initialQuestionRef.current) initialQuestionRef.current = null;
 
     setLoading(true);
     setLoadingMessageIndex(0); // Reset to first message
@@ -262,7 +280,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
             </button>
           )}
         </div>
-        <form onSubmit={askQuestion} className="space-y-4">
+        <form id="finance-qa-form" onSubmit={askQuestion} className="space-y-4">
           <div>
             <textarea
               id="finance-question"

@@ -18,6 +18,18 @@ export default function DemoPageClient() {
   const [showSidebar, setShowSidebar] = useState(true); // Show by default on desktop
   const [sessionId, setSessionId] = useState<string>('');
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
+  const [initialQuestion, setInitialQuestion] = useState<string | null>(null);
+
+  // Read initial question from sessionStorage (set when clicking hero on homepage)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const q = sessionStorage.getItem('demo_initial_question');
+      if (q) {
+        sessionStorage.removeItem('demo_initial_question');
+        setInitialQuestion(q);
+      }
+    }
+  }, []);
 
   // Generate or retrieve session ID for demo mode from localStorage (client-side only)
   useEffect(() => {
@@ -278,6 +290,7 @@ export default function DemoPageClient() {
                 onNewQuestion={handleNewQuestion}
                 isDemo={true}
                 sessionId={sessionId}
+                initialQuestion={initialQuestion}
               />
             </div>
           </div>

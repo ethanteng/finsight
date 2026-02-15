@@ -7,12 +7,15 @@ import MailerLiteScript from './MailerLiteScript';
 import AnimatedPrompt from './AnimatedPrompt';
 import BlogSubscription from './BlogSubscription';
 import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, Database, BarChart3, MessageCircle, ArrowRight, Sparkles, X, Target, XCircle, Menu } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 const NewHomepage = () => {
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const router = useRouter();
+  const getCurrentQuestionRef = useRef<(() => string) | null>(null);
 
   const scrollToSection = (id: string) => {
     document.getElementById(id)?.scrollIntoView({
@@ -177,7 +180,28 @@ const NewHomepage = () => {
       </nav>
 
       {/* Hero Section */}
-      <Link href="/demo" className="block cursor-pointer group/hero">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => {
+          const question = getCurrentQuestionRef.current?.() || '';
+          if (question) {
+            sessionStorage.setItem('demo_initial_question', question);
+          }
+          router.push('/demo');
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            const question = getCurrentQuestionRef.current?.() || '';
+            if (question) {
+              sessionStorage.setItem('demo_initial_question', question);
+            }
+            router.push('/demo');
+          }
+        }}
+        className="block cursor-pointer group/hero"
+      >
         <section className="relative pt-20 pb-20 overflow-hidden transition-opacity group-hover/hero:opacity-95">
           <div className="absolute inset-0 z-0 opacity-20 bg-gradient-to-br from-primary/20 to-secondary/20" />
           <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/50 to-background z-10" />
@@ -214,12 +238,12 @@ const NewHomepage = () => {
               </div>
               
               <div className="pt-12 max-w-2xl mx-auto">
-                <AnimatedPrompt nestedInLink />
+                <AnimatedPrompt nestedInLink getCurrentQuestionRef={getCurrentQuestionRef} />
               </div>
             </div>
           </div>
         </section>
-      </Link>
+      </div>
 
       {/* Value Differentiators Section */}
       <section className="py-20">
