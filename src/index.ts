@@ -47,7 +47,8 @@ console.log('  SNAPTRADE_CONSUMER_KEY_PROD:', process.env.SNAPTRADE_CONSUMER_KEY
 
 // Now import Plaid after environment variables are loaded
 import { setupPlaidRoutes } from './plaid';
-import { askOpenAI, askOpenAIWithEnhancedContext } from './openai';
+import { askOpenAI, askOpenAIWithEnhancedContext, PromptValidationError } from './openai';
+import { aiRateLimitMiddleware } from './security/ai-rate-limiter';
 
 // Import SnapTrade configuration
 import './snaptrade';
@@ -216,7 +217,7 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/stripe', stripeRoutes);
 
 // OpenAI Q&A endpoint with tier-aware system
-app.post('/ask', async (req: Request, res: Response) => {
+app.post('/ask', aiRateLimitMiddleware, async (req: Request, res: Response) => {
   const startTime = Date.now();
   
   try {
@@ -307,7 +308,9 @@ app.post('/ask', async (req: Request, res: Response) => {
     res.set('X-AI-Response-Time', totalTime.toString());
     res.set('X-AI-Mode', 'error');
     
-    if (err instanceof Error) {
+    if (err instanceof PromptValidationError) {
+      res.status(400).json({ error: err.userMessage });
+    } else if (err instanceof Error) {
       // Capture error in Sentry
       Sentry.captureException(err);
       res.status(500).json({ error: err.message });
@@ -320,7 +323,7 @@ app.post('/ask', async (req: Request, res: Response) => {
 });
 
 // New tier-aware endpoint for enhanced context
-app.post('/ask/tier-aware', async (req: Request, res: Response) => {
+app.post('/ask/tier-aware', aiRateLimitMiddleware, async (req: Request, res: Response) => {
   const startTime = Date.now();
   
   try {
@@ -406,7 +409,9 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
     res.set('X-AI-Response-Time', totalTime.toString());
     res.set('X-AI-Mode', 'tier-aware-error');
     
-    if (err instanceof Error) {
+    if (err instanceof PromptValidationError) {
+      res.status(400).json({ error: err.userMessage });
+    } else if (err instanceof Error) {
       // Capture error in Sentry
       Sentry.captureException(err);
       res.status(500).json({ error: err.message });
@@ -421,7 +426,7 @@ app.post('/ask/tier-aware', async (req: Request, res: Response) => {
 // New endpoint for AI responses with real data display
 // ✅ AI now receives real data directly (no anonymization)
 // User sees real data in responses
-app.post('/ask/display-real', async (req: Request, res: Response) => {
+app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: Response) => {
   const startTime = Date.now();
   
   try {
@@ -652,14 +657,15 @@ app.post('/ask/display-real', async (req: Request, res: Response) => {
       span.setAttribute('ai.status', 'error');
     });
     
-    // Capture error in Sentry
-    if (error instanceof Error) {
+    if (error instanceof PromptValidationError) {
+      res.status(400).json({ error: error.userMessage });
+    } else if (error instanceof Error) {
       Sentry.captureException(error);
+      res.status(500).json({ error: error.message });
     } else {
       Sentry.captureMessage('Unknown error in display-real AI endpoint', 'error');
+      res.status(500).json({ error: 'Failed to process question' });
     }
-    
-    res.status(500).json({ error: 'Failed to process question' });
   }
 });
 
@@ -896,8 +902,9 @@ const handleDemoRequest = async (req: Request, res: Response) => {
       res.json({ answer });
     }
   } catch (err) {
-    // Capture error in Sentry
-    if (err instanceof Error) {
+    if (err instanceof PromptValidationError) {
+      res.status(400).json({ error: err.userMessage });
+    } else if (err instanceof Error) {
       Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
@@ -948,8 +955,9 @@ const handleUserRequest = async (req: Request, res: Response) => {
     
     res.json({ answer });
   } catch (err) {
-    // Capture error in Sentry
-    if (err instanceof Error) {
+    if (err instanceof PromptValidationError) {
+      res.status(400).json({ error: err.userMessage });
+    } else if (err instanceof Error) {
       Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
@@ -996,8 +1004,9 @@ const handleTierAwareUserRequest = async (req: Request, res: Response) => {
     
     res.json({ answer });
   } catch (err) {
-    // Capture error in Sentry
-    if (err instanceof Error) {
+    if (err instanceof PromptValidationError) {
+      res.status(400).json({ error: err.userMessage });
+    } else if (err instanceof Error) {
       Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {
@@ -1137,8 +1146,9 @@ const handleTierAwareDemoRequest = async (req: Request, res: Response) => {
     
     res.json({ answer });
   } catch (err) {
-    // Capture error in Sentry
-    if (err instanceof Error) {
+    if (err instanceof PromptValidationError) {
+      res.status(400).json({ error: err.userMessage });
+    } else if (err instanceof Error) {
       Sentry.captureException(err);
       res.status(500).json({ error: err.message });
     } else {

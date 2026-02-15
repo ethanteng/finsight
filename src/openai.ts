@@ -8,6 +8,9 @@ import { postProcessAnswer } from './openai/response-processor';
 import { UserTier } from './data/types';
 import { ConversationEntry } from './openai/types';
 import { logGPTContext } from './services/gpt-logger';
+import { validateUserPrompt, getRejectionMessage } from './security/prompt-validation';
+import { validateLLMResponse } from './security/output-validation';
+import { logRejectedPrompt, logFlaggedOutput } from './security/security-logger';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 export const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
@@ -17,6 +20,18 @@ export interface Conversation {
   question: string;
   answer: string;
   createdAt: Date;
+}
+
+/** Thrown when user prompt fails validation (security or off-topic) */
+export class PromptValidationError extends Error {
+  constructor(
+    message: string,
+    public readonly reason?: string,
+    public readonly userMessage: string = message
+  ) {
+    super(message);
+    this.name = 'PromptValidationError';
+  }
 }
 
 export async function askOpenAIWithEnhancedContext(
@@ -31,6 +46,22 @@ export async function askOpenAIWithEnhancedContext(
   const tier = typeof userTier === 'string' ? (userTier as UserTier) : userTier;
 
   try {
+    // Input validation - reject before sending to LLM
+    const historyForValidation = conversationHistory.map(c => ({ question: c.question }));
+    const validation = validateUserPrompt(question, historyForValidation);
+    if (!validation.allowed) {
+      logRejectedPrompt(question, validation.reason || 'unknown', {
+        userId: isDemo ? undefined : userId,
+        sessionId: isDemo ? undefined : undefined,
+      });
+      const userMessage = getRejectionMessage(validation.reason);
+      throw new PromptValidationError(
+        `Prompt rejected: ${validation.reason}`,
+        validation.reason,
+        userMessage
+      );
+    }
+
     const questionNeeds = analyzeQuestionNeeds(question);
 
     const normalizedHistory: ConversationEntry[] = conversationHistory.map(item => ({
@@ -112,6 +143,15 @@ export async function askOpenAIWithEnhancedContext(
 
     answer = postProcessAnswer(answer);
 
+    // Output validation - sanitize before returning to user
+    const outputValidation = validateLLMResponse(answer);
+    if (!outputValidation.safe) {
+      logFlaggedOutput(answer, outputValidation.flagged || 'unknown', { userId });
+      answer = outputValidation.sanitized;
+    } else {
+      answer = outputValidation.sanitized;
+    }
+
     if (userId && !isDemo) {
       try {
         const { ProfileManager } = await import('./profile/manager');
@@ -129,7 +169,10 @@ export async function askOpenAIWithEnhancedContext(
 
     return answer;
   } catch (error) {
-    Sentry.captureException(error);
+    // Skip Sentry for expected validation failures - they pollute error tracking
+    if (!(error instanceof PromptValidationError)) {
+      Sentry.captureException(error);
+    }
     throw error;
   }
 }
