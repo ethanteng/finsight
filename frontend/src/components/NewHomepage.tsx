@@ -24,6 +24,10 @@ const NewHomepage = () => {
   };
 
   const handleBuyClick = async (planId: string) => {
+    if (typeof window !== 'undefined') {
+      (window as any).dataLayer = (window as any).dataLayer || [];
+      (window as any).dataLayer.push({ event: 'begin_checkout' });
+    }
     setIsLoading(planId);
     
     try {

@@ -7,6 +7,10 @@ export const Pricing = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleBuyClick = async () => {
+    if (typeof window !== 'undefined') {
+      (window as any).dataLayer = (window as any).dataLayer || [];
+      (window as any).dataLayer.push({ event: 'begin_checkout' });
+    }
     setIsLoading(true);
     
     try {

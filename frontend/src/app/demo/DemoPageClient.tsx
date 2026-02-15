@@ -113,6 +113,10 @@ export default function DemoPageClient() {
   };
 
   const handleBuyClick = async (planId: string) => {
+    if (typeof window !== 'undefined') {
+      (window as any).dataLayer = (window as any).dataLayer || [];
+      (window as any).dataLayer.push({ event: 'begin_checkout' });
+    }
     setIsCheckoutLoading(true);
     
     try {
