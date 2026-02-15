@@ -2,7 +2,12 @@
 import { useEffect, useState } from 'react';
 import Typewriter from 'typewriter-effect';
 
-const AnimatedPrompt = () => {
+interface AnimatedPromptProps {
+  /** When true, renders as div instead of anchor (use when nested inside a Link) */
+  nestedInLink?: boolean;
+}
+
+const AnimatedPrompt = ({ nestedInLink = false }: AnimatedPromptProps) => {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
@@ -30,11 +35,31 @@ const AnimatedPrompt = () => {
     );
   }
 
-  return (
-    <a 
-      href="/demo" 
-      className="block w-full bg-gray-700 rounded-lg p-4 border border-gray-600 hover:bg-gray-600 hover:border-gray-500 transition-all duration-200 cursor-pointer group"
-    >
+  const className = "block w-full bg-gray-700 rounded-lg p-4 border border-gray-600 hover:bg-gray-600 hover:border-gray-500 transition-all duration-200 cursor-pointer group";
+
+  return nestedInLink ? (
+    <div className={className}>
+      <div className="flex items-center space-x-2 mb-2">
+        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+        <span className="text-sm text-gray-400 group-hover:text-gray-300 transition-colors">Ask Linc</span>
+      </div>
+      <div className="text-white text-lg h-16 flex items-center justify-center group-hover:text-gray-100 transition-colors">
+        <Typewriter
+          options={{
+            strings: questions,
+            autoStart: true,
+            loop: true,
+            delay: 15,
+            deleteSpeed: 1,
+            cursor: '|',
+            wrapperClassName: 'text-white text-lg group-hover:text-gray-100 transition-colors text-center',
+            cursorClassName: 'text-green-500'
+          }}
+        />
+      </div>
+    </div>
+  ) : (
+    <a href="/demo" className={className}>
       <div className="flex items-center space-x-2 mb-2">
         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
         <span className="text-sm text-gray-400 group-hover:text-gray-300 transition-colors">Ask Linc</span>

@@ -135,7 +135,8 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
 
   const askQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!question.trim()) return;
+    // Use current placeholder if user didn't type their own question
+    const questionToAsk = question.trim() || (isDemo ? demoPlaceholders[placeholderIndex] : userPlaceholders[placeholderIndex]);
 
     setLoading(true);
     setLoadingMessageIndex(0); // Reset to first message
@@ -145,7 +146,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     
     // Track question submission
     trackEvent('question_asked', {
-      question_length: question.length,
+      question_length: questionToAsk.length,
       user_tier: userTier,
       is_demo: isDemo
     });
@@ -172,11 +173,11 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       // Use different endpoints for demo vs production
       const endpoint = isDemo ? '/ask' : '/ask/display-real';
       const requestBody = isDemo ? {
-        question,
+        question: questionToAsk,
         userTier: 'premium', // Demo mode gets premium tier access
         isDemo: true
       } : {
-        question,
+        question: questionToAsk,
         isDemo: isDemo,
         sessionId: propSessionId
       };
@@ -210,7 +211,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
         }
         // Call onNewAnswer callback if provided
         if (onNewAnswer) {
-          onNewAnswer(question, data.answer);
+          onNewAnswer(questionToAsk, data.answer);
         }
         
         // Track successful answer
@@ -273,12 +274,11 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
                 ? demoPlaceholders[placeholderIndex]
                 : userPlaceholders[placeholderIndex]
               }
-              required
             />
           </div>
           <button
             type="submit"
-            disabled={loading || !question.trim()}
+            disabled={loading}
             className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
           >
             {loading ? (

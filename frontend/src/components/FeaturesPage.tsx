@@ -126,16 +126,164 @@ const FeaturesPage = () => {
             <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-bold leading-[1.08] tracking-tight px-1">
               Get Answers to Your <span className="text-primary">Real Financial Questions</span>
             </h1>
-            
-            <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-2xl mx-auto px-1">
-              Ask Linc isn&apos;t another budgeting app or robo-advisor. It&apos;s a financial reasoning system designed to help you <span className="text-secondary">make confident decisions across investing, retirement, and major life choices</span>—using your real situation, not generic assumptions.
-            </p>
           </div>
         </div>
       </section>
 
       {/* Feature Bands */}
       <div className="divide-y divide-primary/15">
+        {/* Integrations Section - First under hero */}
+        <section id="integrations" className="py-10 sm:py-12 md:py-16 bg-muted/25">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-center">
+            <div className="grid md:grid-cols-[auto_1fr] gap-6 sm:gap-8 md:gap-16 items-start w-full max-w-5xl">
+              <div className="flex items-center gap-4 md:flex-col md:items-start md:translate-x-[4rem] lg:translate-x-[7rem]">
+                <div className="h-14 w-14 rounded-xl flex items-center justify-center shrink-0 bg-primary/10 ring-2 ring-primary/20 feature-icon-glow">
+                  <Link2 className="h-7 w-7 text-primary" />
+                </div>
+                <div className="md:hidden">
+                  <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Integrations & <span className="text-primary">Data</span> Sources</h2>
+                  <p className="mt-1 text-xs text-primary/60 tracking-[0.12em] uppercase">Connect your accounts. Get analysis grounded in reality.</p>
+                </div>
+              </div>
+              <div className="space-y-4 sm:space-y-6 max-w-[65ch] min-w-0 md:pl-8 lg:pl-[15%]">
+                <div className="hidden md:block">
+                  <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Integrations & <span className="text-primary">Data</span> Sources</h2>
+                  <p className="mt-2 text-xs text-primary/60 tracking-[0.12em] uppercase">Connect your accounts. Get analysis grounded in reality.</p>
+                </div>
+                <p className="text-[1.0625rem] text-muted-foreground leading-[1.75]">
+                  Ask Linc combines your real account data with live market and economic context. You connect accounts; we pull in rates, inflation, and market data from trusted sources. Together, these enable <span className="text-primary/90">scenario modeling</span>, tradeoff analysis, and answers grounded in your actual situation—not hypotheticals.
+                </p>
+                <div className="space-y-6">
+                  <p className="text-xs text-muted-foreground/80 tracking-wide uppercase">Account connections</p>
+                  <div className="flex flex-col sm:flex-row gap-4 items-start">
+                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <Wallet className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground mb-1">Banking (Plaid)</h3>
+                      <p className="text-[1rem] text-muted-foreground leading-relaxed">
+                        Over 11,000 institutions—banks, credit unions, fintechs. Balances, transactions (90+ days), interest rates, and APRs. Powers <span className="text-primary/90">cash flow analysis</span>, spending patterns, and debt payoff scenarios.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-4 items-start">
+                    <div className="h-10 w-10 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0">
+                      <Briefcase className="h-5 w-5 text-secondary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground mb-1">Investments (SnapTrade)</h3>
+                      <p className="text-[1rem] text-muted-foreground leading-relaxed">
+                        Fidelity, Vanguard, Schwab, Robinhood, E*TRADE, and more. Holdings, asset allocation, market values, and 2+ years of buy/sell history. Essential for <span className="text-primary/90">retirement modeling</span>, withdrawal sequencing, and portfolio stress tests.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-4 items-start">
+                    <div className="h-10 w-10 rounded-lg bg-teal/10 flex items-center justify-center shrink-0">
+                      <Banknote className="h-5 w-5 text-teal" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground mb-1">Manual Accounts</h3>
+                      <p className="text-[1rem] text-muted-foreground leading-relaxed">
+                        Cash, real estate, or assets that can&apos;t be linked. Add balances manually to round out your net worth and ensure scenario analysis reflects your <span className="text-primary/90">full financial picture</span>.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-border/50 mt-6">
+                    <p className="text-xs text-muted-foreground/80 tracking-wide uppercase mb-4">Market & economic context</p>
+                    <div className="space-y-4">
+                      <div className="flex flex-col sm:flex-row gap-4 items-start">
+                        <div className="h-10 w-10 rounded-lg bg-primary/8 flex items-center justify-center shrink-0">
+                          <BarChart3 className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-foreground mb-1">FRED (Federal Reserve)</h3>
+                          <p className="text-[1rem] text-muted-foreground leading-relaxed">
+                            CPI, Fed funds rate, mortgage rates, credit card APR, unemployment. Powers <span className="text-primary/90">inflation-aware analysis</span>, refinance decisions, and debt strategy.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-4 items-start">
+                        <div className="h-10 w-10 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0">
+                          <BarChart3 className="h-5 w-5 text-secondary" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-foreground mb-1">Alpha Vantage</h3>
+                          <p className="text-[1rem] text-muted-foreground leading-relaxed">
+                            Live CD rates, Treasury yields, mortgage rates, and stock data. Used for <span className="text-primary/90">real-time market context</span> when comparing savings options or tracking investments.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-4 items-start">
+                        <div className="h-10 w-10 rounded-lg bg-primary/8 flex items-center justify-center shrink-0">
+                          <BarChart3 className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-foreground mb-1">Polygon.io</h3>
+                          <p className="text-[1rem] text-muted-foreground leading-relaxed">
+                            Stock aggregates, Treasury yields, inflation, and inflation expectations. Powers <span className="text-primary/90">comprehensive market intelligence</span> for answers.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-4 items-start">
+                        <div className="h-10 w-10 rounded-lg bg-teal/10 flex items-center justify-center shrink-0">
+                          <Search className="h-5 w-5 text-teal" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-foreground mb-1">Brave Search</h3>
+                          <p className="text-[1rem] text-muted-foreground leading-relaxed">
+                            Real-time financial news and current rates. Supplements market context so answers reference <span className="text-primary/90">what&apos;s happening now</span>, not last month&apos;s data.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-4 items-start">
+                        <div className="h-10 w-10 rounded-lg bg-primary/8 flex items-center justify-center shrink-0">
+                          <Home className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-foreground mb-1">RentCast (Home Valuations)</h3>
+                          <p className="text-[1rem] text-muted-foreground leading-relaxed">
+                            Property valuations when you add your address. Low, mid, and high estimates feed into <span className="text-primary/90">net worth</span> and retirement planning.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="pt-2 border-t border-border/50 mt-6">
+                    <p className="text-xs text-muted-foreground/80 tracking-wide uppercase mb-4">Retirement & portfolio analysis</p>
+                    <div className="space-y-4">
+                      <div className="flex flex-col sm:flex-row gap-4 items-start">
+                        <div className="h-10 w-10 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0">
+                          <TrendingUp className="h-5 w-5 text-secondary" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-foreground mb-1">Tiingo</h3>
+                          <p className="text-[1rem] text-muted-foreground leading-relaxed">
+                            Historical price data with dividend and split adjustments. Powers <span className="text-primary/90">retirement stress testing</span> and portfolio Monte Carlo simulations with accurate long-horizon returns.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-4 items-start">
+                        <div className="h-10 w-10 rounded-lg bg-teal/10 flex items-center justify-center shrink-0">
+                          <Layers className="h-5 w-5 text-teal" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-foreground mb-1">Financial Modeling Prep (FMP)</h3>
+                          <p className="text-[1rem] text-muted-foreground leading-relaxed">
+                            ETF and fund metadata: expense ratios, asset class, geographic focus. Enables accurate <span className="text-primary/90">portfolio mapping</span> and asset allocation analysis for retirement projections.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[0.8rem] text-muted-foreground leading-[1.75]">
+                  Account connections are read-only—Ask Linc cannot move money. Your credentials are never stored on our servers. All market and economic data is fetched by Ask Linc to enrich your analysis; you don&apos;t connect to these sources directly.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* Section 1: Icon left, content right */}
         <section id="conversational" className="py-10 sm:py-12 md:py-16 bg-primary/[0.02]">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-center">
@@ -297,158 +445,6 @@ const FeaturesPage = () => {
                 </ul>
                 <p className="text-[1.0625rem] text-muted-foreground leading-[1.75]">
                   If you want constant alerts, pretty charts, or generic advice, this isn&apos;t it. If you want to understand <span className="text-primary/90">where you stand</span>, <span className="text-primary/90">what actually matters</span>, and <span className="text-primary/90">what to do next</span>, Ask Linc was built for you.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Integrations Section */}
-        <section id="integrations" className="py-10 sm:py-12 md:py-16 bg-muted/25">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-center">
-            <div className="grid md:grid-cols-[auto_1fr] gap-6 sm:gap-8 md:gap-16 items-start w-full max-w-5xl">
-              <div className="flex items-center gap-4 md:flex-col md:items-start md:translate-x-[4rem] lg:translate-x-[7rem]">
-                <div className="h-14 w-14 rounded-xl flex items-center justify-center shrink-0 bg-primary/10 ring-2 ring-primary/20 feature-icon-glow">
-                  <Link2 className="h-7 w-7 text-primary" />
-                </div>
-                <div className="md:hidden">
-                  <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Integrations & <span className="text-primary">Data</span> Sources</h2>
-                  <p className="mt-1 text-xs text-primary/60 tracking-[0.12em] uppercase">Connect your accounts. Get analysis grounded in reality.</p>
-                </div>
-              </div>
-              <div className="space-y-4 sm:space-y-6 max-w-[65ch] min-w-0 md:pl-8 lg:pl-[15%]">
-                <div className="hidden md:block">
-                  <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Integrations & <span className="text-primary">Data</span> Sources</h2>
-                  <p className="mt-2 text-xs text-primary/60 tracking-[0.12em] uppercase">Connect your accounts. Get analysis grounded in reality.</p>
-                </div>
-                <p className="text-[1.0625rem] text-muted-foreground leading-[1.75]">
-                  Ask Linc combines your real account data with live market and economic context. You connect accounts; we pull in rates, inflation, and market data from trusted sources. Together, these enable <span className="text-primary/90">scenario modeling</span>, tradeoff analysis, and answers grounded in your actual situation—not hypotheticals.
-                </p>
-                <div className="space-y-6">
-                  <p className="text-xs text-muted-foreground/80 tracking-wide uppercase">Account connections</p>
-                  <div className="flex flex-col sm:flex-row gap-4 items-start">
-                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <Wallet className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-foreground mb-1">Banking (Plaid)</h3>
-                      <p className="text-[1rem] text-muted-foreground leading-relaxed">
-                        Over 11,000 institutions—banks, credit unions, fintechs. Balances, transactions (90+ days), interest rates, and APRs. Powers <span className="text-primary/90">cash flow analysis</span>, spending patterns, and debt payoff scenarios.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-4 items-start">
-                    <div className="h-10 w-10 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0">
-                      <Briefcase className="h-5 w-5 text-secondary" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-foreground mb-1">Investments (SnapTrade)</h3>
-                      <p className="text-[1rem] text-muted-foreground leading-relaxed">
-                        Fidelity, Vanguard, Schwab, Robinhood, E*TRADE, and more. Holdings, asset allocation, market values, and 2+ years of buy/sell history. Essential for <span className="text-primary/90">retirement modeling</span>, withdrawal sequencing, and portfolio stress tests.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-4 items-start">
-                    <div className="h-10 w-10 rounded-lg bg-teal/10 flex items-center justify-center shrink-0">
-                      <Banknote className="h-5 w-5 text-teal" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-foreground mb-1">Manual Accounts</h3>
-                      <p className="text-[1rem] text-muted-foreground leading-relaxed">
-                        Cash, real estate, or assets that can&apos;t be linked. Add balances manually to round out your net worth and ensure scenario analysis reflects your <span className="text-primary/90">full financial picture</span>.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="pt-2 border-t border-border/50 mt-6">
-                    <p className="text-xs text-muted-foreground/80 tracking-wide uppercase mb-4">Market & economic context</p>
-                    <div className="space-y-4">
-                      <div className="flex flex-col sm:flex-row gap-4 items-start">
-                        <div className="h-10 w-10 rounded-lg bg-primary/8 flex items-center justify-center shrink-0">
-                          <BarChart3 className="h-5 w-5 text-primary" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-foreground mb-1">FRED (Federal Reserve)</h3>
-                          <p className="text-[1rem] text-muted-foreground leading-relaxed">
-                            CPI, Fed funds rate, mortgage rates, credit card APR, unemployment. Powers <span className="text-primary/90">inflation-aware analysis</span>, refinance decisions, and debt strategy.
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex flex-col sm:flex-row gap-4 items-start">
-                        <div className="h-10 w-10 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0">
-                          <BarChart3 className="h-5 w-5 text-secondary" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-foreground mb-1">Alpha Vantage</h3>
-                          <p className="text-[1rem] text-muted-foreground leading-relaxed">
-                            Live CD rates, Treasury yields, mortgage rates, and stock data. Used for <span className="text-primary/90">real-time market context</span> when comparing savings options or tracking investments.
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex flex-col sm:flex-row gap-4 items-start">
-                        <div className="h-10 w-10 rounded-lg bg-primary/8 flex items-center justify-center shrink-0">
-                          <BarChart3 className="h-5 w-5 text-primary" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-foreground mb-1">Polygon.io</h3>
-                          <p className="text-[1rem] text-muted-foreground leading-relaxed">
-                            Stock aggregates, Treasury yields, inflation, and inflation expectations. Powers <span className="text-primary/90">comprehensive market intelligence</span> for answers.
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex flex-col sm:flex-row gap-4 items-start">
-                        <div className="h-10 w-10 rounded-lg bg-teal/10 flex items-center justify-center shrink-0">
-                          <Search className="h-5 w-5 text-teal" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-foreground mb-1">Brave Search</h3>
-                          <p className="text-[1rem] text-muted-foreground leading-relaxed">
-                            Real-time financial news and current rates. Supplements market context so answers reference <span className="text-primary/90">what&apos;s happening now</span>, not last month&apos;s data.
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex flex-col sm:flex-row gap-4 items-start">
-                        <div className="h-10 w-10 rounded-lg bg-primary/8 flex items-center justify-center shrink-0">
-                          <Home className="h-5 w-5 text-primary" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-foreground mb-1">RentCast (Home Valuations)</h3>
-                          <p className="text-[1rem] text-muted-foreground leading-relaxed">
-                            Property valuations when you add your address. Low, mid, and high estimates feed into <span className="text-primary/90">net worth</span> and retirement planning.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="pt-2 border-t border-border/50 mt-6">
-                    <p className="text-xs text-muted-foreground/80 tracking-wide uppercase mb-4">Retirement & portfolio analysis</p>
-                    <div className="space-y-4">
-                      <div className="flex flex-col sm:flex-row gap-4 items-start">
-                        <div className="h-10 w-10 rounded-lg bg-secondary/10 flex items-center justify-center shrink-0">
-                          <TrendingUp className="h-5 w-5 text-secondary" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-foreground mb-1">Tiingo</h3>
-                          <p className="text-[1rem] text-muted-foreground leading-relaxed">
-                            Historical price data with dividend and split adjustments. Powers <span className="text-primary/90">retirement stress testing</span> and portfolio Monte Carlo simulations with accurate long-horizon returns.
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex flex-col sm:flex-row gap-4 items-start">
-                        <div className="h-10 w-10 rounded-lg bg-teal/10 flex items-center justify-center shrink-0">
-                          <Layers className="h-5 w-5 text-teal" />
-                        </div>
-                        <div>
-                          <h3 className="font-semibold text-foreground mb-1">Financial Modeling Prep (FMP)</h3>
-                          <p className="text-[1rem] text-muted-foreground leading-relaxed">
-                            ETF and fund metadata: expense ratios, asset class, geographic focus. Enables accurate <span className="text-primary/90">portfolio mapping</span> and asset allocation analysis for retirement projections.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <p className="text-[0.8rem] text-muted-foreground leading-[1.75]">
-                  Account connections are read-only—Ask Linc cannot move money. Your credentials are never stored on our servers. All market and economic data is fetched by Ask Linc to enrich your analysis; you don&apos;t connect to these sources directly.
                 </p>
               </div>
             </div>
