@@ -118,18 +118,20 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   // Update question and answer when selectedPrompt changes
   useEffect(() => {
     if (selectedPrompt) {
-      setQuestion(selectedPrompt.question);
+      // In demo mode, don't populate the question box so the rotating sample questions stay visible
+      if (!isDemo) {
+        setQuestion(selectedPrompt.question);
+      } else {
+        setQuestion('');
+      }
       setAnswer(selectedPrompt.answer);
       setError('');
     } else {
-      // Only clear if not currently showing a selected prompt
-      if (!selectedPrompt) {
-        setAnswer('');
-        setError('');
-      }
+      setAnswer('');
+      setError('');
       // Don't clear the question - keep it in the textarea
     }
-  }, [selectedPrompt]);
+  }, [selectedPrompt, isDemo]);
 
   const askQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -265,7 +267,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
               id="finance-question"
               value={question}
               onChange={e => setQuestion(e.target.value)}
-              className="w-full h-32 p-4 bg-gray-600 border border-gray-500 rounded-lg text-white placeholder-gray-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full h-32 p-4 bg-gray-600 border border-gray-500 rounded-lg text-white placeholder-gray-200 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={loading}
               placeholder={isDemo 
                 ? demoPlaceholders[placeholderIndex]

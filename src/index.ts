@@ -1167,7 +1167,7 @@ app.get('/demo/conversations', async (req: Request, res: Response) => {
       }
     });
     
-    let conversations = demoSession
+    const conversations = demoSession
       ? demoSession.conversations.map((conv: any) => ({
           id: conv.id,
           question: conv.question,
@@ -1175,17 +1175,6 @@ app.get('/demo/conversations', async (req: Request, res: Response) => {
           timestamp: conv.createdAt.getTime()
         }))
       : [];
-    
-    // When no session or no conversations, inject default recession Q&A
-    if (conversations.length === 0) {
-      const { defaultDemoConversation } = await import('./demo-data');
-      conversations = [{
-        id: defaultDemoConversation.id,
-        question: defaultDemoConversation.question,
-        answer: defaultDemoConversation.answer,
-        timestamp: defaultDemoConversation.timestamp
-      }];
-    }
     
     res.json({ conversations });
   } catch (err) {

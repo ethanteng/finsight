@@ -221,8 +221,8 @@ export default function DemoPageClient() {
         {/* Main Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto p-4 md:p-6">
-            {/* Demo Info Banner */}
-            <div className="bg-blue-900 border border-blue-700 rounded-lg p-4 mb-6">
+            {/* Demo Info Banner - hidden by default on all platforms */}
+            <div className="hidden bg-blue-900 border border-blue-700 rounded-lg p-4 mb-6">
               <div className="flex items-center space-x-2 mb-2">
                 <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
                 <h3 className="text-lg font-semibold text-blue-100">Demo Mode Active</h3>
