@@ -126,7 +126,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     initialQuestionRef.current = propInitialQuestion.trim();
     setQuestion(propInitialQuestion.trim());
     const timer = setTimeout(() => {
-      const form = document.querySelector('#finance-qa-form');
+      const form = document.querySelector<HTMLFormElement>('#finance-qa-form');
       form?.requestSubmit();
     }, 50);
     return () => clearTimeout(timer);
