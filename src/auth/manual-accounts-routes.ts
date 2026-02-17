@@ -89,7 +89,7 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res) => {
 router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.user!.id;
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
     const { name, amount, type } = req.body;
 
     // Check if account exists and belongs to user
@@ -163,7 +163,7 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
 router.delete('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.user!.id;
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
 
     // Check if account exists and belongs to user
     const existingAccount = await prisma.manualAccount.findFirst({

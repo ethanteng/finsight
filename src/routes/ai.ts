@@ -4,6 +4,10 @@ import { getLatestGPTContext, getGPTContextById } from '../services/gpt-logger';
 import { getPrismaClient } from '../prisma-client';
 import { openai } from '../openai';
 
+function asString(v: string | string[] | undefined): string {
+  return Array.isArray(v) ? v[0] ?? '' : v ?? '';
+}
+
 const router = Router();
 const prisma = getPrismaClient();
 
@@ -47,7 +51,7 @@ router.get('/context/latest', requireAuth, async (req, res) => {
 router.get('/context/:contextId', requireAuth, async (req, res) => {
   try {
     const userId = (req as any).user.id;
-    const { contextId } = req.params;
+    const contextId = asString(req.params.contextId);
     
     // Check if context logging is enabled
     if (process.env.PERSIST_GPT_CONTEXT !== 'true') {
@@ -101,7 +105,7 @@ router.post('/categorize-transactions', requireAuth, async (req, res) => {
 router.put('/transactions/:transactionId/transaction-type', requireAuth, async (req, res) => {
   try {
     const userId = (req as any).user.id;
-    const { transactionId } = req.params;
+    const transactionId = asString(req.params.transactionId);
     const { transaction_type, reason } = req.body;
 
     // Validate transaction_type
@@ -151,7 +155,7 @@ router.put('/transactions/:transactionId/transaction-type', requireAuth, async (
       merchantName: updatedTransaction.merchantName,
       amount: updatedTransaction.amount,
       date: updatedTransaction.date,
-      account: updatedTransaction.account,
+      account: (updatedTransaction as { account?: { name: string; institution: string | null } }).account,
       originalCategory: updatedTransaction.category,
       transaction_type: updatedTransaction.aiCategory, // aiCategory now stores transaction_type
       aiCategoryReason: updatedTransaction.aiCategoryReason,

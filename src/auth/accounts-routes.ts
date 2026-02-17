@@ -10,7 +10,7 @@ const prisma = getPrismaClient();
 router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.user!.id;
-    const { id } = req.params; // This is the plaidAccountId
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id ?? '';
     const { name } = req.body;
 
     // Validation

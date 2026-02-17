@@ -29,6 +29,11 @@ declare global {
   }
 }
 
+// Helper to safely get string from req.params/req.query (Express types can be string | string[])
+function asString(v: string | string[] | undefined): string {
+  return Array.isArray(v) ? v[0] ?? '' : v ?? '';
+}
+
 // Load environment variables from .env.local (for local development only)
 // In production, environment variables should come from Render's environment settings
 if (process.env.NODE_ENV !== 'production') {
@@ -1325,7 +1330,7 @@ app.post('/log-demo', async (req: Request, res: Response) => {
 // Test endpoint for market data (development only)
 app.get('/test/market-data/:tier', async (req: Request, res: Response) => {
   try {
-    const { tier } = req.params;
+    const tier = asString(req.params.tier);
     const tierMap: Record<string, string> = {
       'starter': 'starter',
       'standard': 'standard', 
@@ -1981,24 +1986,20 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         const { getPrismaClient } = await import('./prisma-client');
         const prisma = getPrismaClient();
         
-        const { sessionId } = req.params;
+        const sessionId = asString(req.params.sessionId);
         console.log('Admin: Deleting demo session:', sessionId);
         
         // First check if the session exists
         const session = await prisma.demoSession.findUnique({
-          where: { sessionId },
-          include: {
-            _count: {
-              select: { conversations: true }
-            }
-          }
+          where: { sessionId }
         });
         
         if (!session) {
           return res.status(404).json({ error: 'Demo session not found' });
         }
         
-        console.log(`Admin: Deleting session with ${session._count.conversations} conversations`);
+        const convCount = await prisma.demoConversation.count({ where: { sessionId } });
+        console.log(`Admin: Deleting session with ${convCount} conversations`);
         
         // Delete the session (this will cascade delete conversations due to foreign key constraints)
         await prisma.demoSession.delete({
@@ -2008,7 +2009,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         console.log('Admin: Demo session deleted successfully');
         res.json({ 
           success: true, 
-          message: `Demo session deleted with ${session._count.conversations} conversations`,
+          message: `Demo session deleted with ${convCount} conversations`,
           deletedSessionId: sessionId
         });
       } catch (error) {
@@ -2250,7 +2251,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         const { getPrismaClient } = await import('./prisma-client');
         const prisma = getPrismaClient();
         
-        const { userId } = req.params;
+        const userId = asString(req.params.userId);
         
         if (!userId) {
           return res.status(400).json({ error: 'Missing userId' });
@@ -3606,7 +3607,7 @@ app.get('/test/search-context', async (req: Request, res: Response) => {
 // Get current market context for a tier
 app.get('/market-news/context/:tier', async (req: Request, res: Response) => {
   try {
-    const { tier } = req.params;
+    const tier = asString(req.params.tier);
     const { MarketNewsManager } = await import('./market-news/manager');
     const manager = new MarketNewsManager();
     const contextText = await manager.getMarketContext(tier as UserTier);
@@ -3647,7 +3648,7 @@ app.get('/market-news/context/:tier', async (req: Request, res: Response) => {
 // Admin: Update market context manually
 app.put('/admin/market-news/context/:tier', adminAuth, async (req: Request, res: Response) => {
   try {
-    const { tier } = req.params;
+    const tier = asString(req.params.tier);
     const { contextText } = req.body;
     
     if (!contextText || typeof contextText !== 'string') {
@@ -3845,7 +3846,7 @@ if (require.main === module) {
 // Admin: Revoke user access (prevent login)
 app.put('/admin/revoke-user-access/:userId', adminAuth, async (req: Request, res: Response) => {
   try {
-    const { userId } = req.params;
+    const userId = asString(req.params.userId);
     
     if (!userId) {
       return res.status(400).json({ error: 'Missing userId' });
@@ -3900,7 +3901,7 @@ app.put('/admin/revoke-user-access/:userId', adminAuth, async (req: Request, res
 // Admin: Restore user access (re-enable login)
 app.put('/admin/restore-user-access/:userId', adminAuth, async (req: Request, res: Response) => {
   try {
-    const { userId } = req.params;
+    const userId = asString(req.params.userId);
     
     if (!userId) {
       return res.status(400).json({ error: 'Missing userId' });
@@ -3955,7 +3956,7 @@ app.put('/admin/restore-user-access/:userId', adminAuth, async (req: Request, re
 // Admin: Delete user account completely (including login/email)
 app.delete('/admin/delete-user-account/:userId', adminAuth, async (req: Request, res: Response) => {
   try {
-    const { userId } = req.params;
+    const userId = asString(req.params.userId);
     
     if (!userId) {
       return res.status(400).json({ error: 'Missing userId' });
