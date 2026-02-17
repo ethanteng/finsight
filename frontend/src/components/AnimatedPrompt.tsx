@@ -32,15 +32,15 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef }: Animate
   }, [getCurrentQuestionRef, isVisible]);
 
   const questions = [
-    "What breaks first if interest rates stay high longer than expected?",
+    "What part of my retirement plan breaks first if interest rates stay high longer than expected?",
     "If markets underperform for 5 years, can my retirement plan still hold?",
     "Am I taking more risk than I realize by staying in cash right now?",
-    "What happens to my plan if inflation never really goes back to 2%?",
+    "What happens to my retirement plan if inflation never really goes back to 2%?",
     "Assuming today’s rates, what’s the smartest thing to do with excess cash?",
-    "If I stop increasing contributions now, what does that cost me later?",
+    "If I stop increasing my retirementcontributions now, what does that cost me later?",
     "Which matters more right now: paying down debt or staying liquid?",
     "How exposed am I to a recession if it hits next year?",
-    "What assumptions in my plan matter most if they’re wrong?",
+    "What assumptions in my retirementplan matter most if they’re wrong?",
     "Given everything going on right now, am I actually doing okay?"
   ];  
 
