@@ -100,7 +100,7 @@ export class FMPProvider {
         const etfResponse = await fetch(etfUrl);
         
         if (etfResponse.ok) {
-          const etfData: FMPETFInfo[] = await etfResponse.json();
+          const etfData = (await etfResponse.json()) as FMPETFInfo[];
           if (etfData && etfData.length > 0) {
             const metadata = this.parseETFInfo(etfData[0], ticker);
             console.log(`✅ FMP: Successfully fetched ETF metadata for ${ticker}`);
@@ -134,7 +134,7 @@ export class FMPProvider {
         throw new Error(`FMP API error: ${response.status} ${response.statusText}`);
       }
 
-      const data: FMPProfileResponse[] = await response.json();
+      const data = (await response.json()) as FMPProfileResponse[];
       
       if (!data || data.length === 0) {
         console.warn(`⚠️ FMP: No metadata found in profile response for ${ticker}`);

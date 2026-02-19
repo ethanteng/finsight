@@ -370,7 +370,7 @@ export class MarketNewsAggregator {
             continue;
           }
           
-          const data = await response.json();
+          const data = (await response.json()) as { observations?: Array<{ date: string; value: string }> };
           const latestObservation = data.observations?.[0];
           
           if (latestObservation && latestObservation.value !== '.') {

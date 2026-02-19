@@ -129,7 +129,7 @@ export class AlphaVantageProvider implements DataProvider {
         throw new Error(`Alpha Vantage API error: ${response.status}`);
       }
 
-      const data: AlphaVantageResponse = await response.json();
+      const data = (await response.json()) as AlphaVantageResponse;
       
       if (data['Note']) {
         throw new Error(`Alpha Vantage API limit reached: ${data['Note']}`);

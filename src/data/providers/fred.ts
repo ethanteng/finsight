@@ -138,7 +138,7 @@ export class FREDProvider implements DataProvider {
         throw new Error(`FRED API error: ${response.status}`);
       }
 
-      const data: FREDResponse = await response.json();
+      const data = (await response.json()) as FREDResponse;
       const observation = data.observations[0];
       
       const dataPoint: MarketDataPoint = {

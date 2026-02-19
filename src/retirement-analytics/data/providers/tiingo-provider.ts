@@ -109,10 +109,11 @@ export class TiingoProvider {
           results: rawData as TiingoDailyPrice[]
         };
         console.log(`📊 Tiingo: Received direct array format for ${ticker} (${rawData.length} records)`);
-      } else if (rawData && typeof rawData === 'object' && Array.isArray(rawData.results)) {
+      } else if (rawData && typeof rawData === 'object' && Array.isArray((rawData as { results?: unknown }).results)) {
         // Wrapped object format
-        data = rawData as TiingoResponse;
-        console.log(`📊 Tiingo: Received wrapped object format for ${ticker} (${rawData.results.length} records)`);
+        const wrapped = rawData as TiingoResponse;
+        data = wrapped;
+        console.log(`📊 Tiingo: Received wrapped object format for ${ticker} (${wrapped.results.length} records)`);
       } else {
         // Unexpected format
         console.error(`❌ Tiingo API returned unexpected format for ${ticker}:`, {
