@@ -4,6 +4,7 @@ import type { NextConfig } from "next";
 const { withSentryConfig } = require("@sentry/nextjs");
 
 const nextConfig: NextConfig = {
+  outputFileTracingRoot: require("path").join(__dirname),
   images: {
     remotePatterns: [
       {
