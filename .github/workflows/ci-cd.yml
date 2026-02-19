@@ -30,30 +30,33 @@ jobs:
       - name: Install dependencies
         run: |
           # Retry npm ci with exponential backoff for network issues
+          # Only break on success; on failure, retry or exit after 3 attempts
           for i in 1 2 3; do
             echo "Attempt $i of 3: Installing dependencies..."
-            npm ci --prefer-offline --no-audit || {
-              if [ $i -eq 3 ]; then
-                echo "Failed to install dependencies after 3 attempts"
-                exit 1
-              fi
-              echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
-              sleep $((i * 10))
-            } && break
+            if npm ci --prefer-offline --no-audit; then
+              break
+            fi
+            if [ $i -eq 3 ]; then
+              echo "Failed to install dependencies after 3 attempts"
+              exit 1
+            fi
+            echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
+            sleep $((i * 10))
           done
           
           # Install frontend dependencies
           cd frontend
           for i in 1 2 3; do
             echo "Attempt $i of 3: Installing frontend dependencies..."
-            npm ci --prefer-offline --no-audit || {
-              if [ $i -eq 3 ]; then
-                echo "Failed to install frontend dependencies after 3 attempts"
-                exit 1
-              fi
-              echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
-              sleep $((i * 10))
-            } && break
+            if npm ci --prefer-offline --no-audit; then
+              break
+            fi
+            if [ $i -eq 3 ]; then
+              echo "Failed to install frontend dependencies after 3 attempts"
+              exit 1
+            fi
+            echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
+            sleep $((i * 10))
           done
           cd ${{ github.workspace }}
 
@@ -162,14 +165,10 @@ jobs:
           # Retry npm ci with exponential backoff for network issues
           for i in 1 2 3; do
             echo "Attempt $i of 3: Installing dependencies..."
-            npm ci --prefer-offline --no-audit || {
-              if [ $i -eq 3 ]; then
-                echo "Failed to install dependencies after 3 attempts"
-                exit 1
-              fi
-              echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
-              sleep $((i * 10))
-            } && break
+            if npm ci --prefer-offline --no-audit; then break; fi
+            if [ $i -eq 3 ]; then echo "Failed after 3 attempts"; exit 1; fi
+            echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
+            sleep $((i * 10))
           done
 
       - name: Wait for database
@@ -237,17 +236,12 @@ jobs:
       - name: Install frontend dependencies
         run: |
           cd frontend
-          # Retry npm ci with exponential backoff for network issues
           for i in 1 2 3; do
             echo "Attempt $i of 3: Installing frontend dependencies..."
-            npm ci --prefer-offline --no-audit || {
-              if [ $i -eq 3 ]; then
-                echo "Failed to install frontend dependencies after 3 attempts"
-                exit 1
-              fi
-              echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
-              sleep $((i * 10))
-            } && break
+            if npm ci --prefer-offline --no-audit; then break; fi
+            if [ $i -eq 3 ]; then echo "Failed after 3 attempts"; exit 1; fi
+            echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
+            sleep $((i * 10))
           done
 
       - name: Build frontend
@@ -287,14 +281,10 @@ jobs:
           # Retry npm ci with exponential backoff for network issues
           for i in 1 2 3; do
             echo "Attempt $i of 3: Installing dependencies..."
-            npm ci --prefer-offline --no-audit || {
-              if [ $i -eq 3 ]; then
-                echo "Failed to install dependencies after 3 attempts"
-                exit 1
-              fi
-              echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
-              sleep $((i * 10))
-            } && break
+            if npm ci --prefer-offline --no-audit; then break; fi
+            if [ $i -eq 3 ]; then echo "Failed after 3 attempts"; exit 1; fi
+            echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
+            sleep $((i * 10))
           done
 
       - name: Wait for database
@@ -401,14 +391,10 @@ jobs:
           # Retry npm ci with exponential backoff for network issues
           for i in 1 2 3; do
             echo "Attempt $i of 3: Installing dependencies..."
-            npm ci --prefer-offline --no-audit || {
-              if [ $i -eq 3 ]; then
-                echo "Failed to install dependencies after 3 attempts"
-                exit 1
-              fi
-              echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
-              sleep $((i * 10))
-            } && break
+            if npm ci --prefer-offline --no-audit; then break; fi
+            if [ $i -eq 3 ]; then echo "Failed after 3 attempts"; exit 1; fi
+            echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
+            sleep $((i * 10))
           done
 
       - name: Wait for database
@@ -534,31 +520,20 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Retry npm ci with exponential backoff for network issues
           for i in 1 2 3; do
             echo "Attempt $i of 3: Installing dependencies..."
-            npm ci --prefer-offline --no-audit --include=dev || {
-              if [ $i -eq 3 ]; then
-                echo "Failed to install dependencies after 3 attempts"
-                exit 1
-              fi
-              echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
-              sleep $((i * 10))
-            } && break
+            if npm ci --prefer-offline --no-audit --include=dev; then break; fi
+            if [ $i -eq 3 ]; then echo "Failed after 3 attempts"; exit 1; fi
+            echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
+            sleep $((i * 10))
           done
-          
-          # Install frontend dependencies
           cd frontend
           for i in 1 2 3; do
             echo "Attempt $i of 3: Installing frontend dependencies..."
-            npm ci --prefer-offline --no-audit || {
-              if [ $i -eq 3 ]; then
-                echo "Failed to install frontend dependencies after 3 attempts"
-                exit 1
-              fi
-              echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
-              sleep $((i * 10))
-            } && break
+            if npm ci --prefer-offline --no-audit; then break; fi
+            if [ $i -eq 3 ]; then echo "Failed after 3 attempts"; exit 1; fi
+            echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
+            sleep $((i * 10))
           done
 
       - name: Enforce no-migrate-in-build
@@ -592,17 +567,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Retry npm ci with exponential backoff for network issues
           for i in 1 2 3; do
             echo "Attempt $i of 3: Installing dependencies..."
-            npm ci --prefer-offline --no-audit || {
-              if [ $i -eq 3 ]; then
-                echo "Failed to install dependencies after 3 attempts"
-                exit 1
-              fi
-              echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
-              sleep $((i * 10))
-            } && break
+            if npm ci --prefer-offline --no-audit; then break; fi
+            if [ $i -eq 3 ]; then echo "Failed after 3 attempts"; exit 1; fi
+            echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
+            sleep $((i * 10))
           done
 
       - name: Apply migrations with guards
