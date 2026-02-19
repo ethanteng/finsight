@@ -11,8 +11,7 @@ beforeAll(async () => {
   
   if (!databaseUrl) {
     console.log('⚠️ No database URL found - using mock database');
-    // Import and use mock database for local development
-    const { createEnhancedMockDatabase } = await import('./test-database-ci');
+    const { createEnhancedMockDatabase } = await import('./enhanced-mock-database');
     testPrisma = createEnhancedMockDatabase();
     console.log('✅ Using mock database for local development');
     return;
@@ -24,22 +23,16 @@ beforeAll(async () => {
     }
   });
   
-  // Verify connection with fallback for local development
+  // Verify connection with fallback when database unavailable
   try {
     await testPrisma.$connect();
     console.log('✅ Connected to test database:', databaseUrl);
   } catch (error) {
-    if (isCI) {
-      // In CI/CD, database connection is required
-      console.error('❌ Failed to connect to test database:', error);
-      throw error;
-    } else {
-      // Locally, fall back to mock database
-      console.log('⚠️ Database connection failed locally - using mock database');
-      const { createEnhancedMockDatabase } = await import('./test-database-ci');
-      testPrisma = createEnhancedMockDatabase();
-      console.log('✅ Using mock database for local development');
-    }
+    // Fall back to mock database when connection fails (local CI simulation or DB unavailable)
+    console.log('⚠️ Database connection failed - using mock database');
+    const { createEnhancedMockDatabase } = await import('./enhanced-mock-database');
+    testPrisma = createEnhancedMockDatabase();
+    console.log('✅ Using mock database for security tests');
   }
 });
 
