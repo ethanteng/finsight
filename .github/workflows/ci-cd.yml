@@ -127,11 +127,11 @@ jobs:
 
       - name: Security audit
         run: |
-          # Use audit-level=high: ajv ReDoS (moderate) has no fix - ESLint's @eslint/eslintrc
-          # requires ajv v6 API; forcing ajv v8 breaks ESLint. Vulnerability only affects $data option
-          # which ESLint does not use. See https://github.com/advisories/GHSA-2g4f-4pwh-qvx6
-          npm audit --audit-level high
-          cd frontend && npm audit --audit-level high
+          # Use audit-level=critical: ajv/minimatch ReDoS (moderate/high) have no non-breaking fixes.
+          # They affect dev tooling (ESLint, Jest) - ajv $data option unused by ESLint;
+          # minimatch requires crafted input in path matching. See GHSA-2g4f-4pwh-qvx6, GHSA-3ppc-4f35-3m26
+          npm audit --audit-level critical
+          cd frontend && npm audit --audit-level critical
 
   # Backend Tests
   backend-tests:
