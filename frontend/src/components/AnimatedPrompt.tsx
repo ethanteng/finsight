@@ -2,6 +2,19 @@
 import { useEffect, useState, useRef } from 'react';
 import Typewriter from 'typewriter-effect';
 
+const QUESTIONS = [
+  "What part of my retirement plan breaks first if interest rates stay high longer than expected?",
+  "If markets underperform for 5 years, can my retirement plan still hold?",
+  "Am I taking more risk than I realize by staying in cash right now?",
+  "What happens to my retirement plan if inflation never really goes back to 2%?",
+  "Assuming today's rates, what's the smartest thing to do with excess cash?",
+  "If I stop increasing my retirement contributions now, what does that cost me later?",
+  "Which matters more right now: paying down debt or staying liquid?",
+  "How exposed am I to a recession if it hits next year?",
+  "What assumptions in my retirement plan matter most if they're wrong?",
+  "Given everything going on right now, am I actually doing okay?"
+];
+
 interface AnimatedPromptProps {
   /** When true, renders as div instead of anchor (use when nested inside a Link) */
   nestedInLink?: boolean;
@@ -19,30 +32,23 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef }: Animate
     return () => clearTimeout(timer);
   }, []);
 
-  // Expose getter for current question text (wrapper has text only, cursor is separate)
+
+  // Expose getter for current question text - resolves partial (mid-typing) text to full question
   // Must be before any early return to satisfy Rules of Hooks
   useEffect(() => {
     if (getCurrentQuestionRef) {
       getCurrentQuestionRef.current = () => {
         const wrapper = typewriterRef.current?.state?.elements?.wrapper;
-        return wrapper?.textContent?.trim() || '';
+        const displayedText = wrapper?.textContent?.trim() || '';
+        // Find the full question that the displayed text is a prefix of (handles mid-typing)
+        const fullQuestion = displayedText
+          ? QUESTIONS.find((q) => q.startsWith(displayedText) || displayedText.startsWith(q))
+          : null;
+        return fullQuestion ?? QUESTIONS[0] ?? '';
       };
       return () => { getCurrentQuestionRef.current = null; };
     }
   }, [getCurrentQuestionRef, isVisible]);
-
-  const questions = [
-    "What part of my retirement plan breaks first if interest rates stay high longer than expected?",
-    "If markets underperform for 5 years, can my retirement plan still hold?",
-    "Am I taking more risk than I realize by staying in cash right now?",
-    "What happens to my retirement plan if inflation never really goes back to 2%?",
-    "Assuming today’s rates, what’s the smartest thing to do with excess cash?",
-    "If I stop increasing my retirementcontributions now, what does that cost me later?",
-    "Which matters more right now: paying down debt or staying liquid?",
-    "How exposed am I to a recession if it hits next year?",
-    "What assumptions in my retirementplan matter most if they’re wrong?",
-    "Given everything going on right now, am I actually doing okay?"
-  ];  
 
   if (!isVisible) {
     return (
@@ -62,7 +68,7 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef }: Animate
         <Typewriter
           onInit={(tw) => { (typewriterRef as React.MutableRefObject<unknown>).current = tw; }}
           options={{
-            strings: questions,
+            strings: QUESTIONS,
             autoStart: true,
             loop: true,
             delay: 15,
@@ -84,7 +90,7 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef }: Animate
         <Typewriter
           onInit={(tw) => { (typewriterRef as React.MutableRefObject<unknown>).current = tw; }}
           options={{
-            strings: questions,
+            strings: QUESTIONS,
             autoStart: true,
             loop: true,
             delay: 15,
