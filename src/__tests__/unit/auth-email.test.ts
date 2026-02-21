@@ -1,4 +1,4 @@
-import { generateRandomCode, generateRandomToken } from '../../auth/email';
+import { generateRandomCode, generateRandomToken } from '../../auth/resend-email';
 
 describe('Email Service', () => {
   describe('generateRandomCode', () => {

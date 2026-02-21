@@ -1,4 +1,4 @@
-const { sendEmailVerificationCode, sendPasswordResetEmail, testEmailConfiguration } = require('../dist/auth/email');
+const { sendEmailVerificationCode, sendPasswordResetEmail, testEmailConfiguration } = require('../dist/auth/resend-email');
 
 async function testUpdatedEmails() {
   console.log('🧪 Testing Updated Email Templates...\n');

@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import crypto from 'crypto';
+import { createEmailHtml, getBaseUrl } from '../email/templates';
 
 // Initialize Resend client function
 function getResendClient(): Resend | null {
@@ -32,62 +33,54 @@ export async function sendEmailVerificationCode(
   userName?: string
 ): Promise<boolean> {
   try {
-    // Get Resend client
     const resend = getResendClient();
-    
-    // Check if Resend is available
+
     if (!resend) {
       console.log('Resend not configured, skipping email send');
-      return true; // Return true for testing purposes
+      return true;
     }
 
-    // Use localhost for development, production URL for production
-    const isDevelopment = !process.env.NODE_ENV || 
-                         process.env.NODE_ENV === 'development' || 
-                         process.env.FRONTEND_URL?.includes('localhost');
-    
+    const baseUrl = getBaseUrl();
+
+    const content = `
+      <div class="welcome-message">
+        Verify your email address
+      </div>
+
+      <div class="description">
+        Thank you for signing up for Ask Linc. To complete your account setup, please enter the verification code below.
+      </div>
+
+      <div class="verification-code">
+        ${code}
+      </div>
+
+      <div class="expiration-notice">
+        <p><strong>This code expires in 15 minutes.</strong></p>
+      </div>
+
+      <div style="text-align: center;">
+        <a href="${baseUrl}" class="cta-button" style="color: #0f766e; background-color: #ffffff; border: 2px solid #0f766e; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: 600; display: inline-block;">
+          Visit Ask Linc
+        </a>
+      </div>
+
+      <div class="security-note">
+        <p><strong>Security note:</strong> If you did not create an account with Ask Linc, you may safely ignore this email. Your address will not be used for any other purpose.</p>
+      </div>
+    `;
+
+    const html = createEmailHtml(content, {
+      title: 'Verify your Ask Linc email address',
+      headerSubtitle: 'Verify your email address',
+      footerNote: `This email was sent to ${email} to verify your account.`,
+    });
+
     const { data, error } = await resend.emails.send({
       from: 'Ask Linc <noreply@asklinc.com>',
-      to: [email],
-      subject: 'Verify your Ask Linc account',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; color: white;">
-            <h1 style="margin: 0; font-size: 28px;">Ask Linc</h1>
-            <p style="margin: 10px 0 0 0; opacity: 0.9;">Verify your email address</p>
-          </div>
-          
-          <div style="padding: 30px; background: #f8f9fa;">
-            <h2 style="color: #333; margin-bottom: 20px;">Hello${userName ? ` ${userName}` : ''}!</h2>
-            
-            <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-              Thanks for signing up for Ask Linc! To complete your registration, please enter the verification code below:
-            </p>
-            
-            <div style="background: #fff; border: 2px solid #667eea; border-radius: 8px; padding: 20px; text-align: center; margin: 25px 0;">
-              <div style="font-size: 32px; font-weight: bold; color: #667eea; letter-spacing: 8px; font-family: 'Courier New', monospace;">
-                ${code}
-              </div>
-            </div>
-            
-            <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-              This code will expire in 15 minutes. If you didn't create an account with Ask Linc, you can safely ignore this email.
-            </p>
-            
-            <div style="text-align: center; margin-top: 30px;">
-              <a href="${isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'http://localhost:3001')}" 
-                 style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block;">
-                Visit Ask Linc
-              </a>
-            </div>
-          </div>
-          
-          <div style="background: #333; color: #999; padding: 20px; text-align: center; font-size: 12px;">
-            <p style="margin: 0;">© 2024 Ask Linc. All rights reserved.</p>
-            <p style="margin: 5px 0 0 0;">This email was sent to ${email}</p>
-          </div>
-        </div>
-      `,
+      to: email,
+      subject: 'Verify your Ask Linc email address',
+      html,
     });
 
     if (error) {
@@ -110,66 +103,56 @@ export async function sendPasswordResetEmail(
   userName?: string
 ): Promise<boolean> {
   try {
-    // Get Resend client
     const resend = getResendClient();
-    
-    // Check if Resend is available
+
     if (!resend) {
       console.log('Resend not configured, skipping email send');
-      return true; // Return true for testing purposes
+      return true;
     }
 
-    // Use localhost for development, production URL for production
-    const isDevelopment = !process.env.NODE_ENV || 
-                         process.env.NODE_ENV === 'development' || 
-                         process.env.FRONTEND_URL?.includes('localhost');
-    const baseUrl = isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'http://localhost:3001');
+    const baseUrl = getBaseUrl();
     const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
-    
+
+    const content = `
+      <div class="welcome-message">
+        Password reset request
+      </div>
+
+      <div class="description">
+        We received a request to reset the password for your Ask Linc account. Click the button below to create a new password.
+      </div>
+
+      <div style="text-align: center;">
+        <a href="${resetUrl}" class="cta-button" style="color: #0f766e; background-color: #ffffff; border: 2px solid #0f766e; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: 600; display: inline-block;">
+          Reset password
+        </a>
+      </div>
+
+      <div class="fallback-link">
+        <strong>If the button does not work, copy and paste this link into your browser:</strong><br>
+        ${resetUrl}
+      </div>
+
+      <div class="time-limit">
+        <p><strong>This link expires in 1 hour.</strong></p>
+      </div>
+
+      <div class="security-note">
+        <p><strong>Security note:</strong> If you did not request a password reset, you may safely ignore this email. Your password will remain unchanged.</p>
+      </div>
+    `;
+
+    const html = createEmailHtml(content, {
+      title: 'Reset your Ask Linc password',
+      headerSubtitle: 'Password Reset Request',
+      footerNote: `This email was sent to ${email} to reset your password.`,
+    });
+
     const { data, error } = await resend.emails.send({
       from: 'Ask Linc <noreply@asklinc.com>',
-      to: [email],
+      to: email,
       subject: 'Reset your Ask Linc password',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; color: white;">
-            <h1 style="margin: 0; font-size: 28px;">Ask Linc</h1>
-            <p style="margin: 10px 0 0 0; opacity: 0.9;">Password Reset Request</p>
-          </div>
-          
-          <div style="padding: 30px; background: #f8f9fa;">
-            <h2 style="color: #333; margin-bottom: 20px;">Hello${userName ? ` ${userName}` : ''}!</h2>
-            
-            <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-              We received a request to reset your password for your Ask Linc account. Click the button below to create a new password:
-            </p>
-            
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${resetUrl}" 
-                 style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 40px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">
-                Reset Password
-              </a>
-            </div>
-            
-            <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-              This link will expire in 1 hour. If you didn't request a password reset, you can safely ignore this email.
-            </p>
-            
-            <p style="color: #666; line-height: 1.6; margin-bottom: 25px;">
-              If the button doesn't work, copy and paste this link into your browser:
-            </p>
-            
-            <p style="color: #667eea; word-break: break-all; font-size: 12px;">
-              ${resetUrl}
-            </p>
-          </div>
-          
-          <div style="background: #333; color: #999; padding: 20px; text-align: center; font-size: 12px;">
-            <p style="margin: 0;">© 2024 Ask Linc. All rights reserved.</p>
-            <p style="margin: 5px 0 0 0;">This email was sent to ${email}</p>
-          </div>
-        </div>
-      `,
+      html,
     });
 
     if (error) {
@@ -191,58 +174,55 @@ export async function sendContactEmail(
   message: string
 ): Promise<boolean> {
   try {
-    // Get admin emails from environment variable
-    const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(email => email.trim()).filter(email => email.length > 0) || [];
-    
-    // Get Resend client
+    const adminEmails =
+      process.env.ADMIN_EMAILS?.split(',')
+        .map((email) => email.trim())
+        .filter((email) => email.length > 0) || [];
+
     const resend = getResendClient();
-    
-    // Check if Resend is available
+
     if (!resend) {
       console.log('Resend not configured, skipping contact email send');
-      return true; // Return true for testing purposes
+      return true;
     }
-    
+
     if (adminEmails.length === 0) {
       console.warn('No admin emails configured for contact form');
       return false;
     }
 
+    const baseUrl = getBaseUrl();
+
+    const content = `
+      <div class="welcome-message">
+        Contact Form Message
+      </div>
+
+      <div class="message-block">
+        <p style="color: #4b5563; margin-bottom: 10px;"><strong>From:</strong> ${userEmail}</p>
+        <p style="color: #4b5563; margin-bottom: 10px;"><strong>Date:</strong> ${new Date().toLocaleString()}</p>
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 15px 0;">
+        <p style="color: #1a1a1a; line-height: 1.6; white-space: pre-wrap;">${message}</p>
+      </div>
+
+      <div style="text-align: center;">
+        <a href="${baseUrl}/contact" class="cta-button" style="color: #0f766e; background-color: #ffffff; border: 2px solid #0f766e; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: 600; display: inline-block;">
+          Contact support
+        </a>
+      </div>
+    `;
+
+    const html = createEmailHtml(content, {
+      title: 'New Contact Form Submission',
+      headerSubtitle: 'New Contact Form Submission',
+      footerNote: 'This email was sent to admin team.',
+    });
+
     const { data, error } = await resend.emails.send({
       from: 'Ask Linc Contact Form <noreply@asklinc.com>',
       to: adminEmails,
       subject: 'New Contact Form Submission - Ask Linc',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; color: white;">
-            <h1 style="margin: 0; font-size: 28px;">Ask Linc</h1>
-            <p style="margin: 10px 0 0 0; opacity: 0.9;">New Contact Form Submission</p>
-          </div>
-          
-          <div style="padding: 30px; background: #f8f9fa;">
-            <h2 style="color: #333; margin-bottom: 20px;">Contact Form Message</h2>
-            
-            <div style="background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin: 20px 0;">
-              <p style="color: #666; margin-bottom: 10px;"><strong>From:</strong> ${userEmail}</p>
-              <p style="color: #666; margin-bottom: 10px;"><strong>Date:</strong> ${new Date().toLocaleString()}</p>
-              <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 15px 0;">
-              <p style="color: #333; line-height: 1.6; white-space: pre-wrap;">${message}</p>
-            </div>
-            
-            <div style="text-align: center; margin-top: 30px;">
-              <a href="${process.env.FRONTEND_URL || 'http://localhost:3001'}" 
-                 style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block;">
-                Contact Support →
-              </a>
-            </div>
-          </div>
-          
-          <div style="background: #333; color: #999; padding: 20px; text-align: center; font-size: 12px;">
-            <p style="margin: 0;">© 2025 Ask Linc. All rights reserved.</p>
-            <p style="margin: 5px 0 0 0;">This email was sent to admin team</p>
-          </div>
-        </div>
-      `,
+      html,
     });
 
     if (error) {
@@ -261,7 +241,6 @@ export async function sendContactEmail(
 // Test email configuration
 export async function testEmailConfiguration(): Promise<boolean> {
   try {
-    // Test by sending a verification email to a test address
     const testResult = await sendEmailVerificationCode(
       'test@example.com',
       '123456',
@@ -273,7 +252,7 @@ export async function testEmailConfiguration(): Promise<boolean> {
     console.error('Email configuration error:', error);
     return false;
   }
-} 
+}
 
 // Send admin notification for user account actions
 export async function sendAdminNotification(
@@ -281,62 +260,60 @@ export async function sendAdminNotification(
   userEmail: string
 ): Promise<boolean> {
   try {
-    // Get admin emails from environment variable
-    const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(email => email.trim()).filter(email => email.length > 0) || [];
-    
-    // Check if admin emails are configured first
+    const adminEmails =
+      process.env.ADMIN_EMAILS?.split(',')
+        .map((email) => email.trim())
+        .filter((email) => email.length > 0) || [];
+
     if (adminEmails.length === 0) {
       console.warn('No admin emails configured for admin notifications');
       return false;
     }
-    
-    // Get Resend client
+
     const resend = getResendClient();
-    
-    // Check if Resend is available
+
     if (!resend) {
       console.log('Resend not configured, skipping admin notification email send');
-      return true; // Return true for testing purposes
+      return true;
     }
 
-    const actionText = action === 'account_disconnected' ? 'disconnected their accounts' : 'deactivated their account';
+    const actionText =
+      action === 'account_disconnected'
+        ? 'disconnected their accounts'
+        : 'deactivated their account';
     const subject = `User ${actionText} - Ask Linc`;
     const timestamp = new Date().toLocaleString();
+    const baseUrl = getBaseUrl();
+
+    const content = `
+      <div class="welcome-message">
+        User Account Action
+      </div>
+
+      <div class="message-block">
+        <p style="color: #4b5563; margin-bottom: 10px;"><strong>User Email:</strong> ${userEmail}</p>
+        <p style="color: #4b5563; margin-bottom: 10px;"><strong>Action:</strong> ${actionText}</p>
+        <p style="color: #4b5563; margin-bottom: 0;"><strong>Timestamp:</strong> ${timestamp}</p>
+      </div>
+
+      <div style="text-align: center;">
+        <a href="${baseUrl}/admin" class="cta-button" style="color: #0f766e; background-color: #ffffff; border: 2px solid #0f766e; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: 600; display: inline-block;">
+          View admin dashboard
+        </a>
+      </div>
+    `;
+
+    const html = createEmailHtml(content, {
+      title: 'Admin Notification',
+      headerSubtitle: 'Admin Notification',
+      footerNote: 'This email was sent to admin team.',
+    });
 
     const { data, error } = await resend.emails.send({
       from: 'Ask Linc Admin Notifications <noreply@asklinc.com>',
       to: adminEmails,
       subject: subject,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; color: white;">
-            <h1 style="margin: 0; font-size: 28px;">Ask Linc</h1>
-            <p style="margin: 10px 0 0 0; opacity: 0.9;">Admin Notification</p>
-          </div>
-          
-          <div style="padding: 30px; background: #f8f9fa;">
-            <h2 style="color: #333; margin-bottom: 20px;">User Account Action</h2>
-            
-            <div style="background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin: 20px 0;">
-              <p style="color: #666; margin-bottom: 10px;"><strong>User Email:</strong> ${userEmail}</p>
-              <p style="color: #666; margin-bottom: 10px;"><strong>Action:</strong> ${actionText}</p>
-              <p style="color: #666; margin-bottom: 10px;"><strong>Timestamp:</strong> ${timestamp}</p>
-            </div>
-            
-            <div style="text-align: center; margin-top: 30px;">
-              <a href="${process.env.FRONTEND_URL || 'http://localhost:3001'}/admin" 
-                 style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block;">
-                View Admin Dashboard →
-              </a>
-            </div>
-          </div>
-          
-          <div style="background: #333; color: #999; padding: 20px; text-align: center; font-size: 12px;">
-            <p style="margin: 0;">© 2025 Ask Linc. All rights reserved.</p>
-            <p style="margin: 5px 0 0 0;">This email was sent to admin team</p>
-          </div>
-        </div>
-      `,
+      html,
       text: `Ask Linc Admin Notification
 
 User Account Action
@@ -345,9 +322,9 @@ User Email: ${userEmail}
 Action: ${actionText}
 Timestamp: ${timestamp}
 
-View Admin Dashboard: ${process.env.FRONTEND_URL || 'http://localhost:3001'}/admin
+View Admin Dashboard: ${baseUrl}/admin
 
-© 2025 Ask Linc. All rights reserved.`
+© ${new Date().getFullYear()} Ask Linc. All rights reserved.`,
     });
 
     if (error) {
@@ -361,4 +338,4 @@ View Admin Dashboard: ${process.env.FRONTEND_URL || 'http://localhost:3001'}/adm
     console.error('Error sending admin notification email:', error);
     return false;
   }
-} 
+}

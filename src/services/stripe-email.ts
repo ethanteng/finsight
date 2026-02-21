@@ -1,5 +1,5 @@
 import { Resend } from 'resend';
-import { getPrismaClient } from '../prisma-client';
+import { createEmailHtml, getBaseUrl } from '../email/templates';
 
 // Initialize Resend client function
 function getResendClient(): Resend | null {
@@ -15,236 +15,12 @@ function getResendClient(): Resend | null {
   }
 }
 
-// Get base URL for development vs production
-const getBaseUrl = (): string => {
-  const isDevelopment = !process.env.NODE_ENV || 
-                       process.env.NODE_ENV === 'development' || 
-                       process.env.FRONTEND_URL?.includes('localhost');
-  return isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'http://localhost:3001');
-};
-
 // Generate the complete setup link for new users
 const generateSetupLink = (email: string, tier: string): string => {
   const baseUrl = getBaseUrl();
   const encodedEmail = encodeURIComponent(email);
   const encodedTier = encodeURIComponent(tier);
   return `${baseUrl}/register?email=${encodedEmail}&tier=${encodedTier}&source=stripe`;
-};
-
-// Email template with Ask Linc branding
-const createEmailTemplate = (content: string, subject: string): string => {
-  const baseUrl = getBaseUrl();
-  
-  return `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${subject}</title>
-      <style>
-        body {
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-          line-height: 1.6;
-          color: #1a1a1a;
-          margin: 0;
-          padding: 0;
-          background-color: #f8f9fa;
-        }
-        .container {
-          max-width: 600px;
-          margin: 0 auto;
-          background-color: #ffffff;
-          border-radius: 12px;
-          overflow: hidden;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-        }
-        .header {
-          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-          padding: 40px 30px;
-          text-align: center;
-          color: white;
-        }
-        .logo {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin-bottom: 20px;
-        }
-        .logo-icon {
-          width: 40px;
-          height: 40px;
-          background-color: rgba(255, 255, 255, 0.2);
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin-right: 16px;
-        }
-        .logo-text {
-          font-size: 28px;
-          font-weight: 700;
-          letter-spacing: -0.5px;
-        }
-        .header-subtitle {
-          font-size: 18px;
-          opacity: 0.9;
-          margin: 0;
-          font-weight: 500;
-        }
-        .content {
-          padding: 40px 30px;
-          background-color: #ffffff;
-        }
-        .welcome-message {
-          font-size: 24px;
-          font-weight: 600;
-          color: #1a1a1a;
-          margin-bottom: 24px;
-        }
-        .description {
-          font-size: 16px;
-          color: #4b5563;
-          line-height: 1.7;
-          margin-bottom: 32px;
-        }
-        .tier-badge {
-          display: inline-block;
-          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-          color: white;
-          padding: 8px 20px;
-          border-radius: 20px;
-          font-weight: 600;
-          font-size: 14px;
-          margin-bottom: 24px;
-        }
-        .feature-list {
-          background-color: #f8f9fa;
-          border-radius: 8px;
-          padding: 24px;
-          margin: 24px 0;
-        }
-        .feature-item {
-          display: flex;
-          align-items: center;
-          margin-bottom: 12px;
-          font-size: 14px;
-          color: #4b5563;
-        }
-        .feature-item:last-child {
-          margin-bottom: 0;
-        }
-        .feature-check {
-          color: #10b981;
-          margin-right: 12px;
-          font-size: 16px;
-        }
-        .cta-button {
-          display: inline-block;
-          background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-          color: white;
-          padding: 16px 32px;
-          text-decoration: none;
-          border-radius: 8px;
-          font-weight: 600;
-          font-size: 16px;
-          margin: 24px 0;
-          text-align: center;
-          transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-        .cta-button:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 25px rgba(16, 185, 129, 0.3);
-        }
-        .footer {
-          background-color: #1f2937;
-          color: #9ca3af;
-          padding: 30px;
-          text-align: center;
-        }
-        .footer-links {
-          margin-bottom: 20px;
-        }
-        .footer-link {
-          color: #9ca3af;
-          text-decoration: none;
-          margin: 0 12px;
-          font-size: 14px;
-        }
-        .footer-link:hover {
-          color: #d1d5db;
-        }
-        .social-links {
-          margin-top: 20px;
-        }
-        .social-icon {
-          display: inline-block;
-          width: 32px;
-          height: 32px;
-          background-color: #374151;
-          border-radius: 50%;
-          margin: 0 8px;
-          text-align: center;
-          line-height: 32px;
-          color: #9ca3af;
-          text-decoration: none;
-        }
-        .social-icon:hover {
-          background-color: #4b5563;
-          color: #d1d5db;
-        }
-        @media (max-width: 600px) {
-          .container {
-            margin: 0;
-            border-radius: 0;
-          }
-          .header, .content, .footer {
-            padding: 20px;
-          }
-          .cta-button {
-            display: block;
-            margin: 20px 0;
-          }
-        }
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <div class="header">
-          <div class="logo">
-            <div class="logo-icon">🧠</div>
-            <div class="logo-text">Ask Linc</div>
-          </div>
-          <p class="header-subtitle">Your AI Financial Assistant</p>
-        </div>
-        
-        <div class="content">
-          ${content}
-        </div>
-        
-        <div class="footer">
-          <div class="footer-links">
-            <a href="${baseUrl}" class="footer-link">Home</a>
-            <a href="${baseUrl}/pricing" class="footer-link">Pricing</a>
-            <a href="${baseUrl}/how-we-protect-your-data" class="footer-link">Privacy</a>
-                            <a href="https://asklinc.com/blog" class="footer-link">Blog</a>
-          </div>
-          
-          <p style="margin: 0; color: #6b7280;">© 2024 Ask Linc. All rights reserved.</p>
-          <p style="margin: 5px 0 0 0; color: #6b7280; font-size: 12px;">
-            This email was sent to you as part of your Ask Linc subscription.
-          </p>
-          
-          <div class="social-links">
-            <a href="#" class="social-icon">📧</a>
-            <a href="#" class="social-icon">🐦</a>
-            <a href="#" class="social-icon">💼</a>
-          </div>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
 };
 
 // Send welcome email for new users
@@ -271,7 +47,7 @@ export async function sendWelcomeEmail(
     
     const content = `
       <div class="welcome-message">
-        Welcome to Ask Linc! 🎉
+        Welcome to Ask Linc
       </div>
       
       <div class="tier-badge">
@@ -279,9 +55,7 @@ export async function sendWelcomeEmail(
       </div>
       
       <div class="description">
-        Hi${customerName ? ` ${customerName}` : ''}! Thank you for choosing Ask Linc. 
-        Your payment has been processed successfully, and you're now ready to set up your account 
-        and start getting intelligent financial insights.
+        Thank you for choosing Ask Linc. Your payment has been processed, and your account is ready for setup.
       </div>
       
       <div class="feature-list">
@@ -298,22 +72,20 @@ export async function sendWelcomeEmail(
       </div>
       
       <div style="text-align: center;">
-        <a href="${setupLink}" class="cta-button">
-          Complete Your Account Setup →
+        <a href="${setupLink}" class="cta-button" style="color: #0f766e; background-color: #ffffff; border: 2px solid #0f766e; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: 600; display: inline-block;">
+          Complete account setup
         </a>
       </div>
       
       <div class="description">
-        <strong>Next Steps:</strong><br>
+        <strong>Next steps:</strong><br>
         1. Click the button above to set up your account<br>
         2. Connect your financial accounts securely<br>
-        3. Start asking Linc your financial questions!
+        3. Begin asking Linc your financial questions
       </div>
       
-      <div style="background-color: #f0f9ff; border-left: 4px solid #0ea5e9; padding: 16px; margin: 24px 0; border-radius: 4px;">
-        <p style="margin: 0; color: #0c4a6e; font-size: 14px;">
-          <strong>🔒 Security Note:</strong> Your financial data is protected with bank-grade encryption.
-        </p>
+      <div class="security-note">
+        <p><strong>Security note:</strong> Your financial data is protected with bank-grade encryption.</p>
       </div>
     `;
 
@@ -321,7 +93,10 @@ export async function sendWelcomeEmail(
       from: 'Ask Linc <noreply@asklinc.com>',
       to: email,
       subject: `Welcome to Ask Linc! Complete Your ${tier.charAt(0).toUpperCase() + tier.slice(1)} Account Setup`,
-      html: createEmailTemplate(content, 'Welcome to Ask Linc'),
+      html: createEmailHtml(content, {
+      title: 'Welcome to Ask Linc',
+      footerNote: 'This email was sent to you as part of your Ask Linc subscription.',
+    }),
     });
 
     if (error) {
@@ -361,7 +136,7 @@ export async function sendTierChangeEmail(
     
     const content = `
       <div class="welcome-message">
-        Your Ask Linc Plan Has Been Updated! 🚀
+        Plan updated
       </div>
       
       <div class="tier-badge">
@@ -369,14 +144,13 @@ export async function sendTierChangeEmail(
       </div>
       
       <div class="description">
-        Hi${customerName ? ` ${customerName}` : ''}! Your Ask Linc subscription has been successfully updated 
-        from ${oldTier} to ${newTier}. Welcome to your enhanced experience!
+        Your Ask Linc subscription has been updated from ${oldTier} to ${newTier}. Your new plan is now active.
       </div>
       
       <div class="feature-list">
         <div class="feature-item">
           <span class="feature-check">✓</span>
-          Your new ${newTier} plan includes:
+          Your ${newTier} plan includes:
         </div>
         ${tierFeatures.map(feature => `
           <div class="feature-item">
@@ -387,22 +161,16 @@ export async function sendTierChangeEmail(
       </div>
       
       <div style="text-align: center;">
-        <a href="${baseUrl}/app" class="cta-button">
-          Access Your Account →
+        <a href="${baseUrl}/app" class="cta-button" style="color: #0f766e; background-color: #ffffff; border: 2px solid #0f766e; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: 600; display: inline-block;">
+          Access your account
         </a>
       </div>
       
       <div class="description">
-        <strong>What's Next:</strong><br>
-        1. Log in to your account to access new features<br>
-        2. Explore your enhanced capabilities<br>
-        3. Start using your new ${newTier} features!
-      </div>
-      
-      <div style="background-color: #fefce8; border-left: 4px solid #eab308; padding: 16px; margin: 24px 0; border-radius: 4px;">
-        <p style="margin: 0; color: #713f12; font-size: 14px;">
-          <strong>🎉 Upgrade Bonus:</strong> You now have access to more powerful features and insights.
-        </p>
+        <strong>Next steps:</strong><br>
+        1. Log in to access your new features<br>
+        2. Review your updated capabilities<br>
+        3. Configure any new ${newTier} features as needed
       </div>
     `;
 
@@ -410,7 +178,10 @@ export async function sendTierChangeEmail(
       from: 'Ask Linc <noreply@asklinc.com>',
       to: email,
       subject: `Ask Linc Plan Updated: ${oldTier.charAt(0).toUpperCase() + oldTier.slice(1)} → ${newTier.charAt(0).toUpperCase() + newTier.slice(1)}`,
-      html: createEmailTemplate(content, 'Plan Updated'),
+      html: createEmailHtml(content, {
+      title: 'Plan Updated',
+      footerNote: 'This email was sent to you as part of your Ask Linc subscription.',
+    }),
     });
 
     if (error) {
@@ -442,60 +213,42 @@ export async function sendCancellationEmail(
       return true; // Return true to not break webhook processing
     }
     
-    // Use localhost for development, production URL for production
-    const isDevelopment = !process.env.NODE_ENV || 
-                         process.env.NODE_ENV === 'development' || 
-                         process.env.FRONTEND_URL?.includes('localhost');
-    const baseUrl = isDevelopment ? 'http://localhost:3001' : (process.env.FRONTEND_URL || 'http://localhost:3001');
-    
+    const baseUrl = getBaseUrl();
+
     const content = `
       <div class="welcome-message">
-        Your Ask Linc Subscription Has Been Cancelled 📋
+        Subscription cancelled
       </div>
       
       <div class="description">
-        Hi${customerName ? ` ${customerName}` : ''}! We're sorry to see you go. Your Ask Linc subscription 
-        has been successfully cancelled as requested.
+        Your Ask Linc subscription has been cancelled as requested.
       </div>
       
-      <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 16px; margin: 24px 0; border-radius: 4px;">
+      <div style="background-color: #fef2f2; border-left: 3px solid #dc2626; padding: 14px 16px; margin: 20px 0; border-radius: 0 4px 4px 0;">
         <p style="margin: 0; color: #7f1d1d; font-size: 14px;">
-          <strong>⚠️ Important:</strong> Your subscription has been cancelled and you will lose access to 
-          your <strong>${oldTier}</strong> plan features at the end of your current billing period.
+          <strong>Important:</strong> You will lose access to your <strong>${oldTier}</strong> plan features at the end of your current billing period.
         </p>
       </div>
       
       <div class="description">
         <strong>What happens next:</strong><br>
-        1. You'll continue to have access to your current plan until the end of your billing period<br>
-        2. After that, your account will be downgraded to the starter tier<br>
-        3. You can reactivate your subscription at any time by visiting your account settings
+        1. You retain access until the end of your billing period<br>
+        2. Your account will then be downgraded to the starter tier<br>
+        3. You may reactivate at any time in your account settings
       </div>
       
       <div style="text-align: center;">
-        <a href="${baseUrl}/app" class="cta-button">
-          Access Your Account →
+        <a href="${baseUrl}/app" class="cta-button" style="color: #0f766e; background-color: #ffffff; border: 2px solid #0f766e; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: 600; display: inline-block;">
+          Access your account
         </a>
       </div>
       
-      <div style="text-align: center; margin-top: 24px;">
-        <a href="${baseUrl}/pricing" class="cta-button" style="background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);">
-          View Plans Again →
-        </a>
+      <div class="security-note">
+        <p><strong>Reactivate:</strong> You may reactivate your subscription at any time in your account settings.</p>
       </div>
       
-      <div style="background-color: #f0f9ff; border-left: 4px solid #0ea5e9; padding: 16px; margin: 24px 0; border-radius: 4px;">
-        <p style="margin: 0; color: #0c4a6e; font-size: 14px;">
-          <strong>💡 Change your mind?</strong> You can reactivate your subscription at any time by visiting 
-          your account settings. We'd love to have you back!
-        </p>
-      </div>
-      
-      <div style="background-color: #fefce8; border-left: 4px solid #eab308; padding: 16px; margin: 24px 0; border-radius: 4px;">
-        <p style="margin: 0; color: #713f12; font-size: 14px;">
-          <strong>📧 Need help?</strong> If you have any questions or if this cancellation was made in error, 
-          please contact our support team. We're here to help!
-        </p>
+      <div class="security-note">
+        <p><strong>Support:</strong> If you have questions or believe this cancellation was made in error, contact support.</p>
       </div>
     `;
 
@@ -503,7 +256,10 @@ export async function sendCancellationEmail(
       from: 'Ask Linc <noreply@asklinc.com>',
       to: email,
       subject: `Ask Linc Subscription Cancelled`,
-      html: createEmailTemplate(content, 'Subscription Cancelled'),
+      html: createEmailHtml(content, {
+      title: 'Subscription Cancelled',
+      footerNote: 'This email was sent to you as part of your Ask Linc subscription.',
+    }),
     });
 
     if (error) {

@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { testEmailConfiguration } from './auth/email';
+import { testEmailConfiguration } from './auth/resend-email';
 
 async function testEmail() {
   console.log('Testing email configuration...');
