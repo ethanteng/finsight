@@ -5,6 +5,30 @@ const { withSentryConfig } = require("@sentry/nextjs");
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: require("path").join(__dirname),
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://plausible.io",
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              "img-src 'self' data: https: blob:",
+              "font-src 'self' data: https://fonts.gstatic.com",
+              "connect-src 'self' http://localhost:3000 http://localhost:3001 https://*.sentry.io https://www.google-analytics.com https://plausible.io https://*.asklinc.com wss://*.asklinc.com",
+              "frame-src 'self' https://*.plaid.com",
+              "object-src 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
+            ].join("; "),
+          },
+        ],
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       {
