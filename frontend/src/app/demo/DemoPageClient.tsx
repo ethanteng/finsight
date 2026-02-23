@@ -149,6 +149,10 @@ export default function DemoPageClient() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
+      {/* Demo notice */}
+      <div className="bg-amber-900/80 border-b border-amber-700/50 px-4 py-2 text-center text-sm text-amber-100">
+        This is an interactive demo using sample financial data.
+      </div>
       {/* Header */}
       <div className="bg-gray-800 border-b border-gray-700 p-4">
         <div className="flex items-center justify-between">
@@ -196,7 +200,7 @@ export default function DemoPageClient() {
         </div>
       </div>
 
-      <div className="flex h-[calc(100vh-80px)]">
+      <div className="flex h-[calc(100vh-116px)]">
         {/* Sidebar - Hidden on mobile, visible on desktop */}
         {showSidebar && (
           <div className="w-80 bg-gray-800 border-r border-gray-700 overflow-y-auto hidden lg:block">
