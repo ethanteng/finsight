@@ -151,7 +151,7 @@ export default function DemoPageClient() {
     <div className="min-h-screen bg-gray-900 text-white">
       {/* Demo notice */}
       <div className="bg-amber-900/80 border-b border-amber-700/50 px-4 py-2 text-center text-sm text-amber-100">
-        This is an interactive demo using sample financial data.
+        This interactive demo runs on sample financial data. Connect your real accounts when you’re ready.
       </div>
       {/* Header */}
       <div className="bg-gray-800 border-b border-gray-700 p-4">
