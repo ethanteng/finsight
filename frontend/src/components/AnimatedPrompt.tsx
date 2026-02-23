@@ -20,9 +20,14 @@ interface AnimatedPromptProps {
   nestedInLink?: boolean;
   /** Ref to receive a function that returns the currently displayed question (for hero click) */
   getCurrentQuestionRef?: React.MutableRefObject<(() => string) | null>;
+  /** Optional custom questions to display (overrides default QUESTIONS) */
+  questions?: string[];
+  /** When true, uses 20% larger font for the carousel text */
+  largerText?: boolean;
 }
 
-const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef }: AnimatedPromptProps) => {
+const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef, questions: customQuestions, largerText = false }: AnimatedPromptProps) => {
+  const questions = customQuestions ?? QUESTIONS;
   const [isVisible, setIsVisible] = useState(false);
   const typewriterRef = useRef<{ state: { elements: { wrapper: HTMLElement } } } | null>(null);
 
@@ -42,13 +47,13 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef }: Animate
         const displayedText = wrapper?.textContent?.trim() || '';
         // Find the full question that the displayed text is a prefix of (handles mid-typing)
         const fullQuestion = displayedText
-          ? QUESTIONS.find((q) => q.startsWith(displayedText) || displayedText.startsWith(q))
+          ? questions.find((q) => q.startsWith(displayedText) || displayedText.startsWith(q))
           : null;
-        return fullQuestion ?? QUESTIONS[0] ?? '';
+        return fullQuestion ?? questions[0] ?? '';
       };
       return () => { getCurrentQuestionRef.current = null; };
     }
-  }, [getCurrentQuestionRef, isVisible]);
+  }, [getCurrentQuestionRef, isVisible, questions]);
 
   if (!isVisible) {
     return (
@@ -57,6 +62,7 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef }: Animate
   }
 
   const className = "block w-full bg-gray-700 rounded-lg p-4 border border-gray-600 hover:bg-gray-600 hover:border-gray-500 transition-all duration-200 cursor-pointer group";
+  const textSizeClass = largerText ? "text-[1.35rem]" : "text-lg";
 
   return nestedInLink ? (
     <div className={className}>
@@ -64,17 +70,17 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef }: Animate
         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
         <span className="text-sm text-gray-400 group-hover:text-gray-300 transition-colors">Ask Linc</span>
       </div>
-      <div className="text-white text-lg h-16 w-full min-w-full flex items-center justify-center group-hover:text-gray-100 transition-colors" data-hero-question>
+      <div className={`text-white ${textSizeClass} h-16 w-full min-w-full flex items-center justify-center group-hover:text-gray-100 transition-colors`} data-hero-question>
         <Typewriter
           onInit={(tw) => { (typewriterRef as React.MutableRefObject<unknown>).current = tw; }}
           options={{
-            strings: QUESTIONS,
+            strings: questions,
             autoStart: true,
             loop: true,
             delay: 15,
             deleteSpeed: 1,
             cursor: '',
-            wrapperClassName: 'text-white text-lg group-hover:text-gray-100 transition-colors text-center w-full block'
+            wrapperClassName: `text-white ${textSizeClass} group-hover:text-gray-100 transition-colors text-center w-full block`
           }}
         />
       </div>
@@ -85,17 +91,17 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef }: Animate
         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
         <span className="text-sm text-gray-400 group-hover:text-gray-300 transition-colors">Ask Linc</span>
       </div>
-      <div className="text-white text-lg h-16 w-full min-w-full flex items-center justify-center group-hover:text-gray-100 transition-colors">
+      <div className={`text-white ${textSizeClass} h-16 w-full min-w-full flex items-center justify-center group-hover:text-gray-100 transition-colors`}>
         <Typewriter
           onInit={(tw) => { (typewriterRef as React.MutableRefObject<unknown>).current = tw; }}
           options={{
-            strings: QUESTIONS,
+            strings: questions,
             autoStart: true,
             loop: true,
             delay: 15,
             deleteSpeed: 1,
             cursor: '',
-            wrapperClassName: 'text-white text-lg group-hover:text-gray-100 transition-colors text-center w-full block'
+            wrapperClassName: `text-white ${textSizeClass} group-hover:text-gray-100 transition-colors text-center w-full block`
           }}
         />
       </div>

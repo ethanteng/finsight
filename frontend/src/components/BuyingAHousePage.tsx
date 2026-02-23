@@ -1,311 +1,680 @@
 "use client";
+import { Button } from './ui/button';
+import { Card, CardContent } from './ui/card';
+import { Badge } from './ui/badge';
+import MailerLiteForm from './MailerLiteForm';
+import MailerLiteScript from './MailerLiteScript';
+import AnimatedPrompt from './AnimatedPrompt';
+import BlogSubscription from './BlogSubscription';
+import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, Database, BarChart3, MessageCircle, Sparkles, X, Target, XCircle, Menu } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { pushBeginCheckout } from '@/lib/dataLayer';
 
-import { Button } from "./ui/button";
-import { Card, CardContent } from "./ui/card";
-import { Brain, Shield, Lock, Eye, MessageCircle, CheckCircle } from "lucide-react";
-import { useState } from "react";
-import Link from "next/link";
+const HOW_LINC_STEPS = [
+  { title: "Connect your accounts", description: "Link your financial accounts securely via Plaid", icon: Target },
+  { title: "Ask a question", description: "No setup or navigation required", icon: MessageCircle },
+  { title: "Get actionable answers", description: "Your data + live market info = meaningful analysis", icon: Brain },
+];
 
 const BuyingAHousePage = () => {
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState<string | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [howItWorksInView, setHowItWorksInView] = useState(false);
+  const [revealedStepCount, setRevealedStepCount] = useState(0);
+  const [highlightedStep, setHighlightedStep] = useState(0);
+  const router = useRouter();
+  const getCurrentQuestionRef = useRef<(() => string) | null>(null);
+  const howItWorksRef = useRef<HTMLElement | null>(null);
 
-  const handlePrimaryCTA = async () => {
-    setIsLoading(true);
+  const scrollToSection = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({
+      behavior: 'smooth'
+    });
+  };
+
+  // How Linc Works: detect when section is in view
+  useEffect(() => {
+    const el = howItWorksRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setHowItWorksInView(entry.isIntersecting),
+      { threshold: 0.2, rootMargin: '0px 0px -50px 0px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // How Linc Works: sequential reveal when in view
+  useEffect(() => {
+    if (!howItWorksInView) return;
+    if (revealedStepCount >= 3) return;
+    const t = setTimeout(() => setRevealedStepCount((c) => Math.min(c + 1, 3)), 350);
+    return () => clearTimeout(t);
+  }, [howItWorksInView, revealedStepCount]);
+
+  // How Linc Works: cycle highlight after all steps revealed
+  useEffect(() => {
+    if (revealedStepCount < 3) return;
+    const t = setInterval(() => setHighlightedStep((s) => (s + 1) % 3), 2500);
+    return () => clearInterval(t);
+  }, [revealedStepCount]);
+
+  const handleBuyClick = async (planId: string) => {
+    pushBeginCheckout();
+    setIsLoading(planId);
+    
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const response = await fetch(
-        `${API_URL}/api/stripe/create-checkout-session`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            tier: "premium",
-            successUrl: `${window.location.origin}/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=premium`,
-            cancelUrl: `${window.location.origin}/buying-a-house`,
-          }),
-        }
-      );
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      
+      // Create checkout session for anyone (new or existing users)
+      const response = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          tier: planId,
+          successUrl: `${window.location.origin}/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=${planId}`,
+          cancelUrl: `${window.location.origin}/`
+        })
+      });
 
       if (response.ok) {
         const { url } = await response.json();
         window.location.href = url;
       } else {
-        window.location.href = "/login";
+        const error = await response.json();
+        console.error('Failed to create checkout session:', error);
+        alert('Failed to create checkout session. Please try again.');
       }
-    } catch {
-      window.location.href = "/login";
+    } catch (error) {
+      console.error('Error creating checkout session:', error);
+      alert('An error occurred. Please try again.');
     } finally {
-      setIsLoading(false);
+      setIsLoading(null);
     }
   };
 
-  const rentVsBuyPrompts = [
-    "Should I buy now?",
-    "Does this delay retirement?",
-    "Is renting smarter?",
-  ];
-
   return (
     <div className="min-h-screen bg-background">
-      <nav
-        className="fixed top-0 w-full z-50 backdrop-blur-lg bg-background/80 border-b border-border/50"
-        aria-label="Main navigation"
-      >
+      <MailerLiteScript />
+      {/* Navigation */}
+      <nav className="fixed top-0 w-full z-50 backdrop-blur-lg bg-background/80 border-b border-border/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <Link
-              href="/"
-              className="flex items-center space-x-2 hover:opacity-90 transition-opacity"
-            >
+            <div className="flex items-center space-x-2">
               <Brain className="h-8 w-8 text-primary" />
               <span className="text-xl font-bold gradient-text">Ask Linc</span>
-            </Link>
+            </div>
+            <div className="hidden md:flex items-center space-x-8">
+              <Link href="/" className="text-muted-foreground hover:text-primary transition-colors">Home</Link>
+              <Link href="/features" className="text-muted-foreground hover:text-primary transition-colors">Features</Link>
+              <button onClick={() => scrollToSection('pricing')} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
+              <a 
+                href="https://www.asklinc.com/blog" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-muted-foreground hover:text-primary transition-colors"
+              >
+                Blog
+              </a>
+              <Button 
+                variant="hero" 
+                size="sm"
+                onClick={() => handleBuyClick('premium')}
+                disabled={isLoading === 'premium'}
+              >
+                {isLoading === 'premium' ? 'Loading...' : 'Get started'}
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => window.location.href = '/login'}
+              >
+                Login
+              </Button>
+            </div>
+            {/* Mobile hamburger menu - visible only on mobile */}
+            <div className="md:hidden flex items-center">
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="p-2 text-muted-foreground hover:text-primary transition-colors"
+                aria-label="Toggle menu"
+              >
+                {isMobileMenuOpen ? (
+                  <X className="h-6 w-6" />
+                ) : (
+                  <Menu className="h-6 w-6" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
+        {/* Mobile menu overlay */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden absolute top-16 left-0 right-0 bg-background/95 backdrop-blur-lg border-b border-border/50 shadow-lg">
+            <div className="px-4 py-4 space-y-1">
+              <Link 
+                href="/" 
+                className="block py-3 text-muted-foreground hover:text-primary transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Home
+              </Link>
+              <Link 
+                href="/features" 
+                className="block py-3 text-muted-foreground hover:text-primary transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Features
+              </Link>
+              <button 
+                onClick={() => {
+                  scrollToSection('pricing');
+                  setIsMobileMenuOpen(false);
+                }} 
+                className="block w-full text-left py-3 text-muted-foreground hover:text-primary transition-colors"
+              >
+                Pricing
+              </button>
+              <a 
+                href="https://www.asklinc.com/blog" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="block py-3 text-muted-foreground hover:text-primary transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Blog
+              </a>
+              <div className="pt-4 space-y-2 border-t border-border/50">
+                <Button 
+                  variant="hero" 
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    handleBuyClick('premium');
+                    setIsMobileMenuOpen(false);
+                  }}
+                  disabled={isLoading === 'premium'}
+                >
+                  {isLoading === 'premium' ? 'Loading...' : 'Get started'}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    window.location.href = '/login';
+                    setIsMobileMenuOpen(false);
+                  }}
+                >
+                  Login
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </nav>
 
-      <main>
-        {/* 1. Hero */}
-        <section
-          id="hero"
-          className="scroll-mt-24 pt-28 pb-20"
-          aria-labelledby="hero-heading"
-        >
-          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h1
-              id="hero-heading"
-              className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight text-foreground"
-            >
-              Can You Afford This House — Without Regretting It?
-            </h1>
-            <p className="mt-6 text-xl text-muted-foreground leading-relaxed">
-              Model mortgage payments, down payments, and long-term impact
-              using your real financial data.
-            </p>
-
-            <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <Button
-                variant="hero"
-                size="xl"
-                onClick={handlePrimaryCTA}
-                disabled={isLoading}
-              >
-                {isLoading ? "Loading..." : "Run the Numbers"}
-              </Button>
-              <Link
-                href="#affordability"
-                className="text-primary hover:text-primary/80 font-medium transition-colors underline-offset-4 hover:underline"
-              >
-                How It Works
-              </Link>
+      {/* Hero Section */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => {
+          const question = getCurrentQuestionRef.current?.() || '';
+          if (question) {
+            sessionStorage.setItem('demo_initial_question', question);
+          }
+          router.push('/demo');
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            const question = getCurrentQuestionRef.current?.() || '';
+            if (question) {
+              sessionStorage.setItem('demo_initial_question', question);
+            }
+            router.push('/demo');
+          }
+        }}
+        className="block cursor-pointer group/hero"
+      >
+        <section className="relative pt-20 pb-20 overflow-hidden transition-opacity group-hover/hero:opacity-95">
+          <div className="absolute inset-0 z-0 opacity-20 bg-gradient-to-br from-primary/20 to-secondary/20" />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/50 to-background z-10" />
+          
+          <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center">
+            {/* Pre-hero strip */}
+            <div className="text-center mb-6 w-full">
+              <p className="text-[0.9375rem] sm:text-[1.09375rem] text-secondary">
+                Built to help you make real financial decisions — not just track your spending
+              </p>
             </div>
-
-            <div className="mt-12 pt-8 border-t border-border/50">
-              <div className="flex flex-wrap justify-center gap-x-8 gap-y-2 text-sm text-muted-foreground">
-                <span className="flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-primary/70" />
-                  Secure account linking
-                </span>
-                <span className="flex items-center gap-2">
-                  <Eye className="h-4 w-4 text-primary/70" />
-                  Read-only access
-                </span>
-                <span className="flex items-center gap-2">
-                  <Lock className="h-4 w-4 text-primary/70" />
-                  Bank-level encryption
-                </span>
+            
+            <div className="text-center space-y-8 w-full max-w-4xl flex flex-col items-center">
+              <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold leading-tight">
+                Stop tracking.{" "}
+                <span className="gradient-text">Start deciding.</span>
+              </h1>
+              
+              <p className="text-xl md:text-2xl text-muted-foreground max-w-4xl leading-relaxed">
+                <span className="gradient-text font-semibold">Ask questions about your plan to buy a home</span>
+                {" "}and get answers based on your actual finances, goals, and current market rates.
+              </p>
+              
+              <div className="pt-8 w-full max-w-2xl mx-auto">
+                <AnimatedPrompt
+                  nestedInLink
+                  getCurrentQuestionRef={getCurrentQuestionRef}
+                  largerText
+                  questions={[
+                    "How much house can I afford?",
+                    "Should I buy a house now?",
+                    "How much down payment do I really need?",
+                  ]}
+                />
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center sm:items-start pt-2 w-full">
+                <div className="flex flex-col items-center gap-3">
+                  <Button 
+                    variant="hero" 
+                    size="xl" 
+                    className="group h-[4.235rem] px-[3.025rem] text-[1.36125rem] pointer-events-none"
+                  >
+                    See the answer
+                  </Button>
+                  <p className="text-[0.7875rem]">No signup required</p>
+                </div>
               </div>
             </div>
           </div>
         </section>
+      </div>
 
-        {/* 2. Affordability */}
-        <section
-          id="affordability"
-          className="scroll-mt-24 py-20 bg-muted/20"
-          aria-labelledby="affordability-heading"
-        >
-          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h2
-              id="affordability-heading"
-              className="text-2xl md:text-3xl font-bold text-center mb-12"
-            >
-              See Your Real Buying Power
-            </h2>
-            <div className="space-y-6 text-muted-foreground leading-relaxed">
-              <p>
-                True affordability goes beyond the monthly payment. It includes
-                what you give up — liquidity, investment returns, and
-                flexibility.
-              </p>
-              <p>
-                Liquidity impact: a large down payment locks up capital that
-                could otherwise compound. See the opportunity cost.
-              </p>
-              <p>
-                Rate sensitivity: model how payment changes if rates move. Plan
-                for refinancing scenarios.
-              </p>
-              <p>
-                Portfolio effects: understand how the purchase affects your
-                overall wealth trajectory and retirement timeline.
-              </p>
-            </div>
-            <div className="mt-12 flex justify-center">
-              <Button
-                variant="hero"
-                size="lg"
-                onClick={handlePrimaryCTA}
-                disabled={isLoading}
-              >
-                {isLoading ? "Loading..." : "Model My Home Purchase"}
-              </Button>
-            </div>
-          </div>
-        </section>
-
-        {/* 3. Rent vs Buy */}
-        <section
-          id="rent-vs-buy"
-          className="scroll-mt-24 py-20"
-          aria-labelledby="rent-vs-buy-heading"
-        >
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h2
-              id="rent-vs-buy-heading"
-              className="text-2xl md:text-3xl font-bold text-center mb-12"
-            >
-              Rent vs Buy — Modeled With Context
-            </h2>
-            <div className="space-y-6 text-muted-foreground leading-relaxed mb-12">
-              <p>
-                Investment opportunity cost: renting frees capital for the
-                market. Buying locks it in equity. Model both paths with your
-                real numbers.
-              </p>
-              <p>
-                Long-term wealth impact: see how each choice affects your net
-                worth over 10, 20, 30 years — not just monthly cash flow.
-              </p>
-              <p>
-                Retirement tradeoffs: a mortgage today affects when you can
-                retire. Understand the full picture before you decide.
-              </p>
-            </div>
-            <div className="grid sm:grid-cols-3 gap-4">
-              {rentVsBuyPrompts.map((prompt, i) => (
-                <Card
-                  key={i}
-                  className="border-border/50 hover:border-primary/30 hover:bg-card/80 transition-colors cursor-default"
-                >
-                  <CardContent className="p-5 flex items-center gap-3">
-                    <MessageCircle className="h-5 w-5 text-primary flex-shrink-0" />
-                    <span className="text-foreground font-medium">{prompt}</span>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* 4. Mortgage */}
-        <section
-          id="mortgage"
-          className="scroll-mt-24 py-20 bg-muted/20"
-          aria-labelledby="mortgage-heading"
-        >
-          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h2
-              id="mortgage-heading"
-              className="text-2xl md:text-3xl font-bold text-center mb-12"
-            >
-              Test Down Payments and Rates
-            </h2>
-            <div className="space-y-6 text-muted-foreground leading-relaxed">
-              <p>
-                10% vs 20% down: compare payment impact, PMI, and the capital
-                you keep invested. See which path builds more wealth.
-              </p>
-              <p>
-                Rate increases: model what happens if rates rise before you
-                lock. Stress test your budget.
-              </p>
-              <p>
-                Monthly payment impact: understand exactly how down payment and
-                rate changes affect your cash flow.
-              </p>
-              <p>
-                Long-term compounding effect: the money you don&apos;t put
-                down can grow. Model the opportunity cost over decades.
-              </p>
-            </div>
-            <div className="mt-12 flex justify-center">
-              <Button
-                variant="hero"
-                size="lg"
-                onClick={handlePrimaryCTA}
-                disabled={isLoading}
-              >
-                {isLoading ? "Loading..." : "Run Mortgage Scenarios"}
-              </Button>
-            </div>
-          </div>
-        </section>
-
-        {/* 5. Security */}
-        <section
-          id="security"
-          className="scroll-mt-24 py-20 bg-muted/40"
-          aria-labelledby="security-heading"
-        >
-          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h2
-              id="security-heading"
-              className="text-2xl md:text-3xl font-bold text-center"
-            >
-              Secure. Private. Read-Only.
-            </h2>
-            <ul className="mt-8 space-y-4 flex flex-col mx-auto max-w-sm">
-              {[
-                { icon: Lock, text: "Encrypted connections" },
-                { icon: Shield, text: "No data selling" },
-                { icon: CheckCircle, text: "No affiliate incentives" },
-                { icon: Eye, text: "Bank-level security" },
-              ].map(({ icon: Icon, text }, i) => (
-                <li key={i} className="flex items-center gap-3">
-                  <Icon className="h-5 w-5 text-primary flex-shrink-0" />
-                  <span className="text-muted-foreground">{text}</span>
-                </li>
-              ))}
-            </ul>
-            <div className="mt-10 flex justify-center">
-              <Button
-                variant="hero"
-                size="lg"
-                onClick={handlePrimaryCTA}
-                disabled={isLoading}
-              >
-                {isLoading ? "Loading..." : "Start My Analysis"}
-              </Button>
-            </div>
-          </div>
-        </section>
-      </main>
-
-      <footer className="py-8 border-t border-border/50" role="contentinfo">
+      {/* How Linc Works Section */}
+      <section
+        id="how-it-works"
+        ref={howItWorksRef}
+        className="py-20 bg-muted/30"
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-            <div className="flex items-center space-x-2">
-              <Brain className="h-5 w-5 text-primary" />
-              <span className="font-semibold gradient-text">Ask Linc</span>
+          <div className="text-center space-y-4 mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold">
+              How <span className="gradient-text">Linc Works</span>
+            </h2>
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-12 items-start">
+            {HOW_LINC_STEPS.map((step, index) => {
+              const StepIcon = step.icon;
+              const isRevealed = revealedStepCount > index;
+              const isHighlighted = revealedStepCount >= 3 && highlightedStep === index;
+              return (
+                <div
+                  key={index}
+                  className={`text-center space-y-6 group transition-all duration-500 ease-out ${
+                    isRevealed
+                      ? 'opacity-100 translate-y-0'
+                      : 'opacity-0 translate-y-6 pointer-events-none'
+                  }`}
+                  style={{
+                    transitionDelay: isRevealed ? '0ms' : `${index * 100}ms`,
+                  }}
+                >
+                  <div className="relative">
+                    <div
+                      className={`h-20 w-20 rounded-full flex items-center justify-center mx-auto border-4 transition-all duration-500 ${
+                        isHighlighted
+                          ? 'bg-primary/25 border-primary/50 scale-110 shadow-lg shadow-primary/20'
+                          : 'bg-primary/10 border-primary/20 group-hover:bg-primary/20'
+                      }`}
+                    >
+                      <StepIcon className="h-10 w-10 text-primary" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className={`text-xl font-bold transition-colors duration-300 ${isHighlighted ? 'text-primary' : ''}`}>
+                      {step.title}
+                    </h3>
+                    <p className="text-muted-foreground">{step.description}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Value Differentiators Section */}
+      <section className="py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid md:grid-cols-3 gap-8">
+            <Card className="glass-card hover:shadow-xl transition-all duration-300">
+              <CardContent className="p-8 space-y-4">
+                <h3 className="text-2xl font-bold">Built for decisions, not just tracking</h3>
+                <p className="text-muted-foreground leading-relaxed">
+                  Connects your cash, investments, debt, home value, and goals into one continuous line of reasoning.
+                </p>
+              </CardContent>
+            </Card>
+            
+            <Card className="glass-card hover:shadow-xl transition-all duration-300">
+              <CardContent className="p-8 space-y-4">
+                <h3 className="text-2xl font-bold">Understands the real world, not just your accounts</h3>
+                <p className="text-muted-foreground leading-relaxed">
+                  Live interest rates, inflation, market conditions, and economic data are baked into every answer.
+                </p>
+              </CardContent>
+            </Card>
+            
+            <Card className="glass-card hover:shadow-xl transition-all duration-300">
+              <CardContent className="p-8 space-y-4">
+                <h3 className="text-2xl font-bold">Learns as you ask questions</h3>
+                <p className="text-muted-foreground leading-relaxed">
+                  Ask follow-ups, change assumptions, explore scenarios — Linc remembers context and builds on it.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* Why Ask Linc is Not Just ChatGPT Section */}
+      <section className="py-20 bg-muted/30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center space-y-4 mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold">
+              Why Ask Linc is not just <span className="gradient-text">ChatGPT with money</span>
+            </h2>
+            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+              ChatGPT reasons in theory. Ask Linc reasons with your actual financial reality — live rates, real accounts, real tradeoffs.
+            </p>
+          </div>
+          
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {[{
+              icon: Brain,
+              title: "Financial Reasoning",
+              description: "Personalized answers powered by OpenAI analysis of your financial data."
+            }, {
+              icon: TrendingUp,
+              title: "Real-Time Market Data",
+              description: "Answers based on current rates, conditions, and economic trends."
+            }, {
+              icon: Zap,
+              title: "Instant Analysis",
+              description: "Ask questions and get decision-ready answers immediately."
+            }, {
+              icon: Shield,
+              title: "Bank-Grade Security",
+              description: "Same security technology used by major banks and financial institutions."
+            }, {
+              icon: Eye,
+              title: "Complete Transparency",
+              description: "View, export, or delete all your data anytime."
+            }, {
+              icon: Database,
+              title: "Privacy First",
+              description: "Your data is never used to train AI models."
+            }].map((feature, index) => (
+              <Card key={index} className="group hover:shadow-xl transition-all duration-300 hover:scale-105 glass-card">
+                <CardContent className="p-6 space-y-4">
+                  <div className="h-12 w-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                    <feature.icon className="h-6 w-6 text-primary" />
+                  </div>
+                  <h3 className="text-xl font-semibold">{feature.title}</h3>
+                  <p className="text-muted-foreground leading-relaxed">{feature.description}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing Section */}
+      <section id="pricing" className="py-16">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center space-y-4 mb-8">
+            <h2 className="text-3xl md:text-4xl font-bold">
+              One plan. <span className="gradient-text">Full access.</span>
+            </h2>
+          </div>
+          
+          <Card className="relative overflow-hidden hover:shadow-2xl transition-all duration-300">
+            <CardContent className="p-8 flex flex-col">
+              <div className="text-center space-y-4 mb-8">
+                <h3 className="text-2xl font-bold">Ask Linc</h3>
+                <div className="flex items-baseline justify-center space-x-1">
+                  <span className="text-5xl font-bold gradient-text">$9</span>
+                  <span className="text-muted-foreground text-xl">/ month</span>
+                </div>
+                <p className="text-muted-foreground text-lg">
+                  Full access to Ask Linc's financial reasoning platform.
+                </p>
+              </div>
+              
+              <ul className="space-y-4 mb-8 mx-auto max-w-md">
+                <li className="flex items-start space-x-3">
+                  <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <span className="text-sm">Unlimited questions about your money</span>
+                </li>
+                <li className="flex items-start space-x-3">
+                  <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <span className="text-sm">Unlimited number of connected accounts</span>
+                </li>
+                <li className="flex items-start space-x-3">
+                  <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <span className="text-sm">Market-aware financial reasoning</span>
+                </li>
+                <li className="flex items-start space-x-3">
+                  <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <span className="text-sm">Retirement & risk analysis</span>
+                </li>
+                <li className="flex items-start space-x-3">
+                  <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <span className="text-sm">Privacy-first architecture</span>
+                </li>
+              </ul>
+              
+              <div className="mt-auto">
+                <Button 
+                  variant="hero" 
+                  className="w-full" 
+                  size="lg"
+                  onClick={() => handleBuyClick('premium')}
+                  disabled={isLoading === 'premium'}
+                >
+                  {isLoading === 'premium' ? 'Creating...' : 'Get started'}
+                </Button>
+                <p className="text-center text-xs text-muted-foreground mt-3">
+                  Cancel anytime.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      {/* Privacy Section */}
+      <section id="security" className="py-16 bg-muted/30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center space-y-6 mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold">
+              Privacy that <span className="gradient-text">actually means something</span>
+            </h2>
+            <p className="text-xl text-muted-foreground max-w-3xl mx-auto md:whitespace-nowrap">
+              The AI doesn't see your real account details—only what's necessary to provide answers.
+            </p>
+          </div>
+          
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {[{
+              icon: Shield,
+              title: "Powered by Plaid",
+              description: "The same secure tech used by Venmo, AmEx, and thousands of banks"
+            }, {
+              icon: Eye,
+              title: "Read-only access",
+              description: "We can't move your money — ever"
+            }, {
+              icon: Lock,
+              title: "Data anonymization",
+              description: "All sensitive data is anonymized before AI analysis"
+            }, {
+              icon: Brain,
+              title: "Privacy-protected AI",
+              description: "Your data is never used to train AI models"
+            }, {
+              icon: Zap,
+              title: "Complete control",
+              description: "View, export, or delete all your data anytime"
+            }, {
+              icon: BarChart3,
+              title: "Transparency",
+              description: "See exactly what data we have about you"
+            }].map((item, index) => (
+              <div key={index} className="text-center space-y-4 group">
+                <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto group-hover:bg-primary/20 transition-colors">
+                  <item.icon className="h-8 w-8 text-primary" />
+                </div>
+                <h3 className="text-lg font-semibold">{item.title}</h3>
+                <p className="text-muted-foreground text-sm leading-relaxed">{item.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Final CTA Section */}
+      <section className="py-20 bg-gradient-to-r from-primary/10 via-secondary/10 to-primary/10">
+        <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8">
+          <h2 className="text-3xl md:text-4xl font-bold">
+            Start understanding your money
+          </h2>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <div className="flex flex-col items-center gap-2">
+              <Button 
+                variant="hero" 
+                size="xl" 
+                className="group w-full sm:w-auto"
+                onClick={() => handleBuyClick('premium')}
+                disabled={isLoading === 'premium'}
+              >
+                {isLoading === 'premium' ? 'Creating...' : 'Get started'}
+              </Button>
+              <p className="text-[1.00625rem] text-primary font-medium">$9/month. Cancel anytime.</p>
             </div>
-            <div className="flex items-center gap-6 text-sm text-muted-foreground">
-              <Link href="/privacy" className="hover:text-primary transition-colors">
-                Privacy
+          </div>
+        </div>
+      </section>
+
+      {/* Newsletter Subscription Section - hidden for now */}
+      {/* <section className="py-20 bg-muted/30 border-t border-border/50">
+        <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8">
+          <div className="space-y-4">
+            <h2 className="text-3xl md:text-4xl font-bold">
+              Stay <span className="gradient-text">Informed</span>
+            </h2>
+            <p className="text-xl text-muted-foreground">
+              Get daily analysis on the economy, markets, and how they impact your wallet.
+            </p>
+          </div>
+          
+          <div className="flex justify-center">
+            <BlogSubscription />
+          </div>
+        </div>
+      </section> */}
+
+      {/* Footer */}
+      <footer className="bg-muted/50 py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+            <div className="flex items-center space-x-2">
+              <Brain className="h-6 w-6 text-primary" />
+              <span className="text-lg font-bold gradient-text">Ask Linc</span>
+            </div>
+            <div className="flex items-center space-x-6 text-sm text-muted-foreground">
+              <Link 
+                href="/faq" 
+                className="hover:text-primary transition-colors"
+              >
+                FAQ
               </Link>
-              <Link href="/terms" className="hover:text-primary transition-colors">
-                Terms
+              <Link 
+                href="/how-we-protect-your-data" 
+                className="hover:text-primary transition-colors"
+              >
+                How We Protect Your Data
               </Link>
+              <a 
+                href="/privacy" 
+                className="hover:text-primary transition-colors"
+              >
+                Privacy Policy
+              </a>
+              <a 
+                href="/terms" 
+                className="hover:text-primary transition-colors"
+              >
+                Terms of Service
+              </a>
+              <a 
+                href="/contact" 
+                className="hover:text-primary transition-colors"
+              >
+                Contact
+              </a>
+            </div>
+          </div>
+          <div className="mt-8 pt-8 border-t border-border">
+            <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+              <p className="text-sm text-muted-foreground">
+                &copy; {new Date().getFullYear()} Ask Linc. Your AI financial analyst. Built with privacy in mind.
+              </p>
+              <div className="flex items-center space-x-4">
+                <a 
+                  href="https://bsky.app/profile/asklinc.com" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <img 
+                    src="/logos/bluesky.jpeg" 
+                    alt="Bluesky" 
+                    className="w-4 h-4"
+                    onError={(e) => {
+                      // Fallback to colored square if logo fails to load
+                      e.currentTarget.style.display = 'none';
+                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                    }}
+                  />
+                  <div className="w-4 h-4 bg-blue-500 rounded hidden"></div>
+                  <span>Bluesky</span>
+                </a>
+                <a 
+                  href="https://asklinc.substack.com/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <img 
+                    src="/logos/substack.png" 
+                    alt="Substack" 
+                    className="w-4 h-4"
+                    onError={(e) => {
+                      // Fallback to colored square if logo fails to load
+                      e.currentTarget.style.display = 'none';
+                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                    }}
+                  />
+                  <div className="w-4 h-4 bg-orange-500 rounded hidden"></div>
+                  <span>Substack</span>
+                </a>
+              </div>
             </div>
           </div>
         </div>

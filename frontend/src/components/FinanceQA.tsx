@@ -43,10 +43,10 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     "Am I taking more risk than I realize by staying in cash right now?",
     "What happens to my retirement plan if inflation never really goes back to 2%?",
     "Assuming today’s rates, what’s the smartest thing to do with excess cash?",
-    "If I stop increasing my retirementcontributions now, what does that cost me later?",
+    "If I stop increasing my retirement contributions now, what does that cost me later?",
     "Which matters more right now: paying down debt or staying liquid?",
     "How exposed am I to a recession if it hits next year?",
-    "What assumptions in my retirementplan matter most if they’re wrong?",
+    "What assumptions in my retirement plan matter most if they’re wrong?",
     "Given everything going on right now, am I actually doing okay?"
   ];
 
@@ -57,10 +57,10 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     "Am I taking more risk than I realize by staying in cash right now?",
     "What happens to my retirement plan if inflation never really goes back to 2%?",
     "Assuming today’s rates, what’s the smartest thing to do with excess cash?",
-    "If I stop increasing my retirementcontributions now, what does that cost me later?",
+    "If I stop increasing my retirement contributions now, what does that cost me later?",
     "Which matters more right now: paying down debt or staying liquid?",
     "How exposed am I to a recession if it hits next year?",
-    "What assumptions in my retirementplan matter most if they’re wrong?",
+    "What assumptions in my retirement plan matter most if they’re wrong?",
     "Given everything going on right now, am I actually doing okay?"
   ];
 
@@ -303,7 +303,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
               id="finance-question"
               value={question}
               onChange={e => setQuestion(e.target.value)}
-              className="w-full h-32 p-4 bg-gray-600 border border-gray-500 rounded-lg text-white placeholder-gray-200 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className={`w-full h-32 p-4 bg-gray-600 border border-gray-500 rounded-lg text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${isDemo ? 'placeholder-gray-400' : 'placeholder-gray-200'}`}
               disabled={loading}
               placeholder={isDemo 
                 ? demoPlaceholders[placeholderIndex]
