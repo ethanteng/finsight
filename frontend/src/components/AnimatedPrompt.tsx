@@ -64,7 +64,7 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef }: Animate
         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
         <span className="text-sm text-gray-400 group-hover:text-gray-300 transition-colors">Ask Linc</span>
       </div>
-      <div className="text-white text-lg h-16 flex items-center justify-center group-hover:text-gray-100 transition-colors" data-hero-question>
+      <div className="text-white text-lg h-16 w-full min-w-full flex items-center justify-center group-hover:text-gray-100 transition-colors" data-hero-question>
         <Typewriter
           onInit={(tw) => { (typewriterRef as React.MutableRefObject<unknown>).current = tw; }}
           options={{
@@ -73,9 +73,8 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef }: Animate
             loop: true,
             delay: 15,
             deleteSpeed: 1,
-            cursor: '|',
-            wrapperClassName: 'text-white text-lg group-hover:text-gray-100 transition-colors text-center',
-            cursorClassName: 'text-green-500'
+            cursor: '',
+            wrapperClassName: 'text-white text-lg group-hover:text-gray-100 transition-colors text-center w-full block'
           }}
         />
       </div>
@@ -86,7 +85,7 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef }: Animate
         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
         <span className="text-sm text-gray-400 group-hover:text-gray-300 transition-colors">Ask Linc</span>
       </div>
-      <div className="text-white text-lg h-16 flex items-center justify-center group-hover:text-gray-100 transition-colors">
+      <div className="text-white text-lg h-16 w-full min-w-full flex items-center justify-center group-hover:text-gray-100 transition-colors">
         <Typewriter
           onInit={(tw) => { (typewriterRef as React.MutableRefObject<unknown>).current = tw; }}
           options={{
@@ -95,9 +94,8 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef }: Animate
             loop: true,
             delay: 15,
             deleteSpeed: 1,
-            cursor: '|',
-            wrapperClassName: 'text-white text-lg group-hover:text-gray-100 transition-colors text-center',
-            cursorClassName: 'text-green-500'
+            cursor: '',
+            wrapperClassName: 'text-white text-lg group-hover:text-gray-100 transition-colors text-center w-full block'
           }}
         />
       </div>

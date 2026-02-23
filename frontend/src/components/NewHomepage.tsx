@@ -6,23 +6,60 @@ import MailerLiteForm from './MailerLiteForm';
 import MailerLiteScript from './MailerLiteScript';
 import AnimatedPrompt from './AnimatedPrompt';
 import BlogSubscription from './BlogSubscription';
-import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, Database, BarChart3, MessageCircle, ArrowRight, Sparkles, X, Target, XCircle, Menu } from 'lucide-react';
-import { useState, useRef } from 'react';
+import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, Database, BarChart3, MessageCircle, Sparkles, X, Target, XCircle, Menu } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 
+const HOW_LINC_STEPS = [
+  { title: "Connect your accounts", description: "Link your financial accounts securely via Plaid", icon: Target },
+  { title: "Ask a question", description: "No setup or navigation required", icon: MessageCircle },
+  { title: "Get actionable answers", description: "Your data + live market info = meaningful analysis", icon: Brain },
+];
+
 const NewHomepage = () => {
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [howItWorksInView, setHowItWorksInView] = useState(false);
+  const [revealedStepCount, setRevealedStepCount] = useState(0);
+  const [highlightedStep, setHighlightedStep] = useState(0);
   const router = useRouter();
   const getCurrentQuestionRef = useRef<(() => string) | null>(null);
+  const howItWorksRef = useRef<HTMLElement | null>(null);
 
   const scrollToSection = (id: string) => {
     document.getElementById(id)?.scrollIntoView({
       behavior: 'smooth'
     });
   };
+
+  // How Linc Works: detect when section is in view
+  useEffect(() => {
+    const el = howItWorksRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setHowItWorksInView(entry.isIntersecting),
+      { threshold: 0.2, rootMargin: '0px 0px -50px 0px' }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // How Linc Works: sequential reveal when in view
+  useEffect(() => {
+    if (!howItWorksInView) return;
+    if (revealedStepCount >= 3) return;
+    const t = setTimeout(() => setRevealedStepCount((c) => Math.min(c + 1, 3)), 350);
+    return () => clearTimeout(t);
+  }, [howItWorksInView, revealedStepCount]);
+
+  // How Linc Works: cycle highlight after all steps revealed
+  useEffect(() => {
+    if (revealedStepCount < 3) return;
+    const t = setInterval(() => setHighlightedStep((s) => (s + 1) % 3), 2500);
+    return () => clearInterval(t);
+  }, [revealedStepCount]);
 
   const handleBuyClick = async (planId: string) => {
     pushBeginCheckout();
@@ -226,26 +263,80 @@ const NewHomepage = () => {
                 Ask questions about your finances and get answers grounded in your real accounts, goals, and live market conditions.
               </p>
               
-              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center sm:items-start pt-8 w-full">
+              <div className="pt-8 w-full max-w-2xl mx-auto">
+                <AnimatedPrompt nestedInLink getCurrentQuestionRef={getCurrentQuestionRef} />
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center sm:items-start pt-2 w-full">
                 <div className="flex flex-col items-center gap-3">
                   <Button 
                     variant="hero" 
                     size="xl" 
                     className="group h-[4.235rem] px-[3.025rem] text-[1.36125rem] pointer-events-none"
                   >
-                    See It In Action
+                    See the answer
                   </Button>
-                  <p className="text-[0.7875rem]">Interactive demo — no signup required</p>
+                  <p className="text-[0.7875rem]">No signup required</p>
                 </div>
-              </div>
-              
-              <div className="pt-12 max-w-2xl mx-auto">
-                <AnimatedPrompt nestedInLink getCurrentQuestionRef={getCurrentQuestionRef} />
               </div>
             </div>
           </div>
         </section>
       </div>
+
+      {/* How Linc Works Section */}
+      <section
+        id="how-it-works"
+        ref={howItWorksRef}
+        className="py-20 bg-muted/30"
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center space-y-4 mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold">
+              How <span className="gradient-text">Linc Works</span>
+            </h2>
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-12 items-start">
+            {HOW_LINC_STEPS.map((step, index) => {
+              const StepIcon = step.icon;
+              const isRevealed = revealedStepCount > index;
+              const isHighlighted = revealedStepCount >= 3 && highlightedStep === index;
+              return (
+                <div
+                  key={index}
+                  className={`text-center space-y-6 group transition-all duration-500 ease-out ${
+                    isRevealed
+                      ? 'opacity-100 translate-y-0'
+                      : 'opacity-0 translate-y-6 pointer-events-none'
+                  }`}
+                  style={{
+                    transitionDelay: isRevealed ? '0ms' : `${index * 100}ms`,
+                  }}
+                >
+                  <div className="relative">
+                    <div
+                      className={`h-20 w-20 rounded-full flex items-center justify-center mx-auto border-4 transition-all duration-500 ${
+                        isHighlighted
+                          ? 'bg-primary/25 border-primary/50 scale-110 shadow-lg shadow-primary/20'
+                          : 'bg-primary/10 border-primary/20 group-hover:bg-primary/20'
+                      }`}
+                    >
+                      <StepIcon className="h-10 w-10 text-primary" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className={`text-xl font-bold transition-colors duration-300 ${isHighlighted ? 'text-primary' : ''}`}>
+                      {step.title}
+                    </h3>
+                    <p className="text-muted-foreground">{step.description}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
 
       {/* Value Differentiators Section */}
       <section className="py-20">
@@ -277,86 +368,6 @@ const NewHomepage = () => {
                 </p>
               </CardContent>
             </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* How Linc Works Section */}
-      <section id="how-it-works" className="py-20 bg-muted/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center space-y-4 mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold">
-              How <span className="gradient-text">Linc Works</span>
-            </h2>
-          </div>
-          
-          <div className="grid md:grid-cols-3 gap-12 items-start">
-            {[{
-              title: "Connect your accounts",
-              description: "Link your financial accounts securely via Plaid",
-              icon: Target
-            }, {
-              title: "Ask a question",
-              description: "No setup or navigation required",
-              icon: MessageCircle
-            }, {
-              title: "Get actionable answers",
-              description: "Your data + live market info = meaningful analysis",
-              icon: Brain
-            }].map((step, index) => (
-              <div key={index} className="text-center space-y-6 group">
-                <div className="relative">
-                  <div className="h-20 w-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto group-hover:bg-primary/20 transition-colors border-4 border-primary/20">
-                    <step.icon className="h-10 w-10 text-primary" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <h3 className="text-xl font-bold">{step.title}</h3>
-                  <p className="text-muted-foreground">{step.description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Example Questions Section */}
-      <section className="py-20">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center space-y-6">
-            <h2 className="text-3xl md:text-4xl font-bold">
-              Ask the questions <span className="gradient-text">dashboards can't answer</span>
-            </h2>
-            <p className="text-lg text-muted-foreground md:whitespace-nowrap">
-              Dashboards show what happened. Linc explains what it means — and what changes if you act.
-            </p>
-            
-            <ul className="space-y-4 max-w-2xl mx-auto mt-8">
-              <li className="flex items-start space-x-3">
-                <MessageCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
-                <p className="text-lg text-muted-foreground">
-                  "Are Treasuries better than CDs right now for excess cash?"
-                </p>
-              </li>
-              <li className="flex items-start space-x-3">
-                <MessageCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
-                <p className="text-lg text-muted-foreground">
-                  "Are we overestimating how safe our retirement plan actually is?"
-                </p>
-              </li>
-              <li className="flex items-start space-x-3">
-                <MessageCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
-                <p className="text-lg text-muted-foreground">
-                  "Which matters more right now: paying down debt or investing?"
-                </p>
-              </li>
-              <li className="flex items-start space-x-3">
-                <MessageCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
-                <p className="text-lg text-muted-foreground">
-                  "What breaks first if inflation stays high for longer than expected?"
-                </p>
-              </li>
-            </ul>
           </div>
         </div>
       </section>
@@ -414,7 +425,7 @@ const NewHomepage = () => {
       </section>
 
       {/* Pricing Section */}
-      <section id="pricing" className="py-16 bg-muted/30">
+      <section id="pricing" className="py-16">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-8">
             <h2 className="text-3xl md:text-4xl font-bold">
@@ -527,52 +538,6 @@ const NewHomepage = () => {
         </div>
       </section>
 
-      {/* FAQ Section */}
-      <section className="py-20 bg-muted/30">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center space-y-4 mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold">
-              Questions We Get <span className="gradient-text">A Lot</span>
-            </h2>
-            <p className="text-xl text-muted-foreground">
-              Let's clear up some common concerns
-            </p>
-          </div>
-          
-          <div className="space-y-6">
-            {[{
-              question: "Is this just another budget tracking app?",
-              answer: "No. Budget tracking apps show you what already happened. Ask Linc helps you reason about what's happening now—and what it means for your specific situation—by combining your accounts with market context and plain-English explanations."
-            }, {
-              question: "Is there a free plan or trial?",
-              answer: "No. Ask Linc is $9/month for full access. We've found it works best when people use it with real questions from day one."
-            }, {
-              question: "I don't want to give OpenAI all my financial data...",
-              answer: "You don't give OpenAI your bank logins. We use Plaid to securely connect accounts in read-only mode. Your credentials are never shared with us, and your financial data is not used to train AI models. You're always in control and can disconnect accounts at any time."
-            }, {
-              question: "How do you know what's going on in the market?",
-              answer: "Ask Linc pulls in current market context—interest rates, bond yields, inflation data, and relevant news—and uses it to ground answers in what's happening right now, not generic advice."
-            }, {
-              question: "What if I want to delete everything?",
-              answer: "You can view, export, or delete your data at any time. Deleting your data permanently removes it from our systems."
-            }].map((faq, index) => (
-              <Card key={index} className="glass-card hover:shadow-lg transition-all duration-300">
-                <CardContent className="p-6">
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-foreground">
-                      {faq.question}
-                    </h3>
-                    <p className="text-muted-foreground leading-relaxed">
-                      {faq.answer}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* Final CTA Section */}
       <section className="py-20 bg-gradient-to-r from-primary/10 via-secondary/10 to-primary/10">
         <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8">
@@ -596,8 +561,8 @@ const NewHomepage = () => {
         </div>
       </section>
 
-      {/* Newsletter Subscription Section */}
-      <section className="py-20 bg-muted/30 border-t border-border/50">
+      {/* Newsletter Subscription Section - hidden for now */}
+      {/* <section className="py-20 bg-muted/30 border-t border-border/50">
         <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8">
           <div className="space-y-4">
             <h2 className="text-3xl md:text-4xl font-bold">
@@ -612,7 +577,7 @@ const NewHomepage = () => {
             <BlogSubscription />
           </div>
         </div>
-      </section>
+      </section> */}
 
       {/* Footer */}
       <footer className="bg-muted/50 py-12">
@@ -623,14 +588,18 @@ const NewHomepage = () => {
               <span className="text-lg font-bold gradient-text">Ask Linc</span>
             </div>
             <div className="flex items-center space-x-6 text-sm text-muted-foreground">
-              <a 
-                href="/blog/i-pasted-my-bank-statements-into-chatgpt-and-immediately-regretted-it/" 
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:text-primary/80 transition-colors"
+              <Link 
+                href="/faq" 
+                className="hover:text-primary transition-colors"
               >
-                Our Story
-              </a>
+                FAQ
+              </Link>
+              <Link 
+                href="/how-we-protect-your-data" 
+                className="hover:text-primary transition-colors"
+              >
+                How We Protect Your Data
+              </Link>
               <a 
                 href="/privacy" 
                 className="hover:text-primary transition-colors"
