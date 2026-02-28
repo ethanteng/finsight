@@ -159,38 +159,35 @@ export default function DemoPageClient() {
             <h1 className="text-2xl font-bold text-white">Ask Linc</h1>
           </div>
           <div className="flex items-center space-x-3">
-            {/* Hide Get Started button on mobile */}
-            <div className="hidden md:block">
-              <button
-                onClick={() => handleBuyClick('premium')}
-                disabled={isCheckoutLoading}
-                className={`relative bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 hover:scale-105 shadow-lg shadow-green-500/40 hover:shadow-xl hover:shadow-green-500/50 ${!isCheckoutLoading ? 'animate-pulse-glow' : ''}`}
-              >
-                {isCheckoutLoading ? (
-                  'Loading...'
-                ) : (
-                  <>
-                    <span className="inline-block animate-sparkle mr-1.5">✨</span>
-                    Get Started
-                  </>
-                )}
-              </button>
-            </div>
+            <button
+              onClick={() => handleBuyClick('premium')}
+              disabled={isCheckoutLoading}
+              className={`relative bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 hover:scale-105 shadow-lg shadow-green-500/40 hover:shadow-xl hover:shadow-green-500/50 ${!isCheckoutLoading ? 'animate-pulse-glow' : ''}`}
+            >
+              {isCheckoutLoading ? (
+                'Loading...'
+              ) : (
+                <>
+                  <span className="inline-block animate-sparkle mr-1.5">✨</span>
+                  Get Started
+                </>
+              )}
+            </button>
             <a 
               href="/contact" 
-              className="text-blue-300 hover:text-blue-200 text-sm transition-colors font-medium"
+              className="hidden md:inline text-blue-300 hover:text-blue-200 text-sm transition-colors font-medium"
             >
               Give Feedback
             </a>
             <a 
               href="/profile?demo=true" 
-              className="text-gray-300 hover:text-white text-sm transition-colors"
+              className="hidden md:inline text-gray-300 hover:text-white text-sm transition-colors"
             >
               Profile
             </a>
             <button
               onClick={() => setShowSidebar(!showSidebar)}
-              className="lg:hidden bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm"
+              className="hidden lg:flex items-center bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm"
             >
               {showSidebar ? 'Hide' : 'Show'} History
             </button>
