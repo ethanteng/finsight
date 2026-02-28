@@ -180,6 +180,25 @@
   }
 }
 
+@keyframes sparkle {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.15);
+  }
+}
+
+.animate-sparkle {
+  animation: sparkle 1.2s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
 /* Line clamp utilities for blog posts */
 .line-clamp-2 {
   display: -webkit-box;

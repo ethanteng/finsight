@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect } from 'react';
 import FinanceQA from '../../components/FinanceQA';
-import TierBanner from '../../components/TierBanner';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 
 interface PromptHistory {
@@ -158,14 +157,6 @@ export default function DemoPageClient() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <h1 className="text-2xl font-bold text-white">Ask Linc</h1>
-            {/* Hide TierBanner on mobile */}
-            <div className="hidden md:block">
-              <TierBanner isDemoPage={true} />
-            </div>
-            {/* Hide DEMO MODE badge on mobile */}
-            <div className="hidden md:block px-3 py-1 bg-yellow-500 text-yellow-900 rounded-full text-xs font-medium">
-              DEMO MODE
-            </div>
           </div>
           <div className="flex items-center space-x-3">
             {/* Hide Get Started button on mobile */}
@@ -173,9 +164,16 @@ export default function DemoPageClient() {
               <button
                 onClick={() => handleBuyClick('premium')}
                 disabled={isCheckoutLoading}
-                className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                className={`relative bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 hover:scale-105 shadow-lg shadow-green-500/40 hover:shadow-xl hover:shadow-green-500/50 ${!isCheckoutLoading ? 'animate-pulse-glow' : ''}`}
               >
-                {isCheckoutLoading ? 'Loading...' : 'Get Started'}
+                {isCheckoutLoading ? (
+                  'Loading...'
+                ) : (
+                  <>
+                    <span className="inline-block animate-sparkle mr-1.5">✨</span>
+                    Get Started
+                  </>
+                )}
               </button>
             </div>
             <a 

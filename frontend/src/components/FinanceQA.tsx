@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { CircleArrowUp } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import { useAnalytics } from './Analytics';
 import Feedback from './Feedback';
@@ -317,10 +318,10 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
+            className="w-full flex items-center justify-between bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
           >
             {loading ? (
-              <span className="flex items-center justify-center">
+              <span className="flex items-center justify-center w-full">
                 <span>{loadingMessages[loadingMessageIndex]}</span>
                 <span className="ml-1 flex">
                   <span className="animate-bounce" style={{ animationDelay: '0ms' }}>.</span>
@@ -328,7 +329,12 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
                   <span className="animate-bounce" style={{ animationDelay: '300ms' }}>.</span>
                 </span>
               </span>
-            ) : 'Ask Linc'}
+            ) : (
+              <>
+                <span className="flex-1 text-center">Ask anything</span>
+                <CircleArrowUp className="w-5 h-5 shrink-0" />
+              </>
+            )}
           </button>
         </form>
       </div>
