@@ -307,7 +307,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
               id="finance-question"
               value={question}
               onChange={e => setQuestion(e.target.value)}
-              className={`w-full h-32 p-4 bg-gray-600 border border-gray-500 rounded-lg text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${isDemo ? 'placeholder-gray-400' : 'placeholder-gray-200'}`}
+              className="w-full h-32 p-4 bg-gray-600 border border-gray-500 rounded-lg text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
               disabled={loading}
               placeholder={isDemo 
                 ? demoPlaceholders[placeholderIndex]

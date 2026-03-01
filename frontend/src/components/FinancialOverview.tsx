@@ -408,7 +408,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
               e.stopPropagation();
               handleAddAccounts();
             }}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md text-sm font-medium transition-colors"
+            className="relative bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 hover:scale-105 shadow-lg shadow-blue-500/40 hover:shadow-xl hover:shadow-blue-500/50 animate-pulse-glow-blue"
           >
             Add Your Accounts
           </button>
