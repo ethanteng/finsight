@@ -6,16 +6,16 @@ import MailerLiteForm from './MailerLiteForm';
 import MailerLiteScript from './MailerLiteScript';
 import AnimatedPrompt from './AnimatedPrompt';
 import BlogSubscription from './BlogSubscription';
-import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, Database, BarChart3, MessageCircle, Sparkles, X, Target, XCircle, Menu } from 'lucide-react';
+import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, Database, BarChart3, MessageCircle, Sparkles, X, Target, Menu } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 
 const HOW_LINC_STEPS = [
-  { title: "Connect your accounts", description: "Link your financial accounts securely via Plaid", icon: Target },
-  { title: "Ask a question", description: "No setup or navigation required", icon: MessageCircle },
-  { title: "Get actionable answers", description: "Your data + live market info = meaningful analysis", icon: Brain },
+  { title: "Connect once", description: "Link your financial accounts securely via Plaid", icon: Target },
+  { title: "Ask anything", description: "No setup or navigation required", icon: MessageCircle },
+  { title: "Keep asking", description: "Your data + live market info = meaningful analysis", icon: Brain },
 ];
 
 const NewHomepage = () => {
@@ -219,29 +219,8 @@ const NewHomepage = () => {
       </nav>
 
       {/* Hero Section */}
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => {
-          const question = getCurrentQuestionRef.current?.() || '';
-          if (question) {
-            sessionStorage.setItem('demo_initial_question', question);
-          }
-          router.push('/demo');
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            const question = getCurrentQuestionRef.current?.() || '';
-            if (question) {
-              sessionStorage.setItem('demo_initial_question', question);
-            }
-            router.push('/demo');
-          }
-        }}
-        className="block cursor-pointer group/hero"
-      >
-        <section className="relative pt-20 pb-20 overflow-hidden transition-opacity group-hover/hero:opacity-95">
+      <div>
+        <section className="relative pt-20 pb-20 overflow-hidden">
           <div className="absolute inset-0 z-0 opacity-20 bg-gradient-to-br from-primary/20 to-secondary/20" />
           <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/50 to-background z-10" />
           
@@ -249,7 +228,7 @@ const NewHomepage = () => {
             {/* Pre-hero strip */}
             <div className="text-center mb-6 w-full">
               <p className="text-[0.9375rem] sm:text-[1.09375rem] text-secondary">
-                Built to help you make real financial decisions — not just track your spending
+              Built for real financial decisions — not just tracking your budget.
               </p>
             </div>
             
@@ -260,11 +239,26 @@ const NewHomepage = () => {
               </h1>
               
               <p className="text-xl md:text-2xl text-muted-foreground max-w-4xl leading-relaxed">
-                Ask questions about your finances and get answers grounded in your real accounts, goals, and live market conditions.
+                Skip the dashboards. Just ask what you want to know.
               </p>
               
               <div className="pt-8 w-full max-w-2xl mx-auto">
-                <AnimatedPrompt nestedInLink getCurrentQuestionRef={getCurrentQuestionRef} />
+                <AnimatedPrompt
+                nestedInLink
+                getCurrentQuestionRef={getCurrentQuestionRef}
+                questions={[
+                  "What if we retire at 60 instead of 65?",
+                  "Can we afford this house without touching investments?",
+                  "If inflation stays high, are we actually okay?",
+                ]}
+                onClick={() => {
+                  const question = getCurrentQuestionRef.current?.() || '';
+                  if (question) {
+                    sessionStorage.setItem('demo_initial_question', question);
+                  }
+                  router.push('/demo');
+                }}
+              />
               </div>
               
               <div className="flex flex-col sm:flex-row gap-4 justify-center items-center sm:items-start pt-2 w-full">
@@ -272,23 +266,81 @@ const NewHomepage = () => {
                   <Button 
                     variant="hero" 
                     size="xl" 
-                    className="group h-[4.235rem] px-[3.025rem] text-[1.36125rem] pointer-events-none"
+                    className="group h-[4.235rem] px-[3.025rem] text-[1.36125rem]"
+                    onClick={() => {
+                      const question = getCurrentQuestionRef.current?.() || '';
+                      if (question) {
+                        sessionStorage.setItem('demo_initial_question', question);
+                      }
+                      router.push('/demo');
+                    }}
                   >
-                    See the answer
+                    Try the demo
                   </Button>
                   <p className="text-[0.7875rem]">No signup required</p>
                 </div>
               </div>
             </div>
-          </div>
-        </section>
       </div>
+    </section>
+  </div>
+
+      {/* Kill Dashboard Fatigue Section */}
+      <section className="py-20 bg-muted/30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center space-y-4 mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold">
+              Stop staring at <span className="gradient-text">dashboards</span>
+            </h2>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-12 lg:gap-20 items-start max-w-5xl mx-auto">
+            <div className="space-y-6">
+              <p className="text-[1.05rem] font-medium text-primary uppercase tracking-wider">
+                Dashboards show you the past:
+              </p>
+              <div className="my-12 rounded-lg overflow-hidden border border-border/50 shadow-lg w-3/5 max-w-[33.6rem]">
+                <img
+                  src="/money-dashboard.png"
+                  alt="A typical money management dashboard with charts, graphs, and spending breakdowns"
+                  className="w-full h-auto blur-[2px]"
+                />
+              </div>
+              <p className="text-secondary">
+                But they don&apos;t tell you what to do next.
+              </p>
+            </div>
+
+            <div className="space-y-6">
+              <p className="text-[1.05rem] font-medium text-primary uppercase tracking-wider">
+                What you&apos;re actually thinking:
+              </p>
+              <ul className="space-y-5">
+                <li className="text-lg md:text-xl font-medium leading-relaxed text-foreground">
+                  &quot;What if we retire at 60 instead of 65?&quot;
+                </li>
+                <li className="text-lg md:text-xl font-medium leading-relaxed text-foreground">
+                  &quot;Can we afford this house without touching investments?&quot;
+                </li>
+                <li className="text-lg md:text-xl font-medium leading-relaxed text-foreground">
+                  &quot;If inflation stays high, are we actually okay?&quot;
+                </li>
+              </ul>
+              <p className="text-muted-foreground">
+                These are the questions that sit in your head at 2am.
+                <br />
+                <span className="text-secondary">Ask Linc runs the numbers and gives you answers to help you decide what to do next.</span>
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* How Linc Works Section */}
       <section
         id="how-it-works"
         ref={howItWorksRef}
-        className="py-20 bg-muted/30"
+        className="py-20"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-16">
@@ -339,7 +391,7 @@ const NewHomepage = () => {
       </section>
 
       {/* Value Differentiators Section */}
-      <section className="py-20">
+      <section className="py-20 bg-muted/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-3 gap-8">
             <Card className="glass-card hover:shadow-xl transition-all duration-300">
@@ -373,7 +425,7 @@ const NewHomepage = () => {
       </section>
 
       {/* Why Ask Linc is Not Just ChatGPT Section */}
-      <section className="py-20 bg-muted/30">
+      <section className="py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-16">
             <h2 className="text-3xl md:text-4xl font-bold">
@@ -425,7 +477,7 @@ const NewHomepage = () => {
       </section>
 
       {/* Pricing Section */}
-      <section id="pricing" className="py-16">
+      <section id="pricing" className="py-16 bg-muted/30">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-8">
             <h2 className="text-3xl md:text-4xl font-bold">
@@ -489,7 +541,7 @@ const NewHomepage = () => {
       </section>
 
       {/* Privacy Section */}
-      <section id="security" className="py-16 bg-muted/30">
+      <section id="security" className="py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-6 mb-16">
             <h2 className="text-3xl md:text-4xl font-bold">

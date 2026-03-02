@@ -24,9 +24,11 @@ interface AnimatedPromptProps {
   questions?: string[];
   /** When true, uses 20% larger font for the carousel text */
   largerText?: boolean;
+  /** Optional click handler (e.g. to navigate to demo with current question) */
+  onClick?: () => void;
 }
 
-const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef, questions: customQuestions, largerText = false }: AnimatedPromptProps) => {
+const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef, questions: customQuestions, largerText = false, onClick }: AnimatedPromptProps) => {
   const questions = customQuestions ?? QUESTIONS;
   const [isVisible, setIsVisible] = useState(false);
   const typewriterRef = useRef<{ state: { elements: { wrapper: HTMLElement } } } | null>(null);
@@ -65,7 +67,13 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef, questions
   const textSizeClass = largerText ? "text-[1.35rem]" : "text-lg";
 
   return nestedInLink ? (
-    <div className={className}>
+    <div
+      className={className}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+    >
       <div className="flex items-center space-x-2 mb-2">
         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
         <span className="text-sm text-gray-400 group-hover:text-gray-300 transition-colors">Ask Linc</span>
