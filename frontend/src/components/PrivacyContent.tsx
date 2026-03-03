@@ -1,41 +1,14 @@
 "use client";
-import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Shield, Eye, Lock, Database, FileText, MessageCircle, Brain, Users } from 'lucide-react';
+import { Shield, Eye, Lock, Database, FileText, MessageCircle, Users } from 'lucide-react';
 import Link from 'next/link';
+import SiteHeader from './SiteHeader';
+import SiteFooter from './SiteFooter';
 
 export default function PrivacyContent() {
   return (
     <div className="min-h-screen bg-background">
-      {/* Navigation */}
-      <nav className="fixed top-0 w-full z-50 backdrop-blur-lg bg-background/80 border-b border-border/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-2">
-              <Link href="/" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
-                <Brain className="h-8 w-8 text-primary" />
-                <span className="text-xl font-bold gradient-text">Ask Linc</span>
-              </Link>
-            </div>
-            <div className="hidden md:flex items-center space-x-8">
-              <a 
-                href="/how-we-protect-your-data" 
-                className="text-primary hover:text-primary/80 transition-colors cursor-pointer"
-              >
-                How We Protect Your Data
-              </a>
-              <Link href="/#pricing">
-                <Button 
-                  variant="hero" 
-                  size="sm"
-                >
-                  Get Started
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <SiteHeader />
 
       <main className="pt-24">
         {/* Hero Section */}
@@ -276,40 +249,7 @@ export default function PrivacyContent() {
         </section>
       </main>
 
-      {/* Footer */}
-      <footer className="bg-muted/50 py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-            <div className="flex items-center space-x-2">
-              <Brain className="h-6 w-6 text-primary" />
-              <span className="text-lg font-bold gradient-text">Ask Linc</span>
-            </div>
-            <div className="flex items-center space-x-6 text-sm text-muted-foreground">
-              <a 
-                href="/privacy" 
-                className="hover:text-primary transition-colors"
-              >
-                Privacy Policy
-              </a>
-              <a 
-                href="/terms" 
-                className="hover:text-primary transition-colors"
-              >
-                Terms of Service
-              </a>
-              <Link 
-                href="/contact"
-                className="hover:text-primary transition-colors"
-              >
-                Contact
-              </Link>
-            </div>
-          </div>
-          <div className="mt-8 pt-8 border-t border-border text-center text-sm text-muted-foreground">
-            <p>&copy; {new Date().getFullYear()} Ask Linc. Your AI financial analyst. Built with privacy in mind.</p>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

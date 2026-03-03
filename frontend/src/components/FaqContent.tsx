@@ -1,7 +1,7 @@
 "use client";
 import { Card, CardContent } from './ui/card';
-import { Brain } from 'lucide-react';
-import Link from 'next/link';
+import SiteHeader from './SiteHeader';
+import SiteFooter from './SiteFooter';
 
 const FAQ_ITEMS = [
   {
@@ -29,40 +29,7 @@ const FAQ_ITEMS = [
 export default function FaqContent() {
   return (
     <div className="min-h-screen bg-background">
-      {/* Navigation */}
-      <nav className="fixed top-0 w-full z-50 backdrop-blur-lg bg-background/80 border-b border-border/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-2">
-              <Link href="/" className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
-                <Brain className="h-8 w-8 text-primary" />
-                <span className="text-xl font-bold gradient-text">Ask Linc</span>
-              </Link>
-            </div>
-            <div className="hidden md:flex items-center space-x-8">
-              <Link href="/features" className="text-muted-foreground hover:text-primary transition-colors">
-                Product
-              </Link>
-              <Link href="/#pricing" className="text-muted-foreground hover:text-primary transition-colors">
-                Pricing
-              </Link>
-              <a 
-                href="https://www.asklinc.com/blog" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-muted-foreground hover:text-primary transition-colors"
-              >
-                Blog
-              </a>
-              <Link href="/#pricing">
-                <button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
-                  Get started
-                </button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <SiteHeader />
 
       <main className="pt-24">
         {/* Hero Section */}
@@ -105,58 +72,7 @@ export default function FaqContent() {
         </section>
       </main>
 
-      {/* Footer */}
-      <footer className="bg-muted/50 py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-            <div className="flex items-center space-x-2">
-              <Brain className="h-6 w-6 text-primary" />
-              <span className="text-lg font-bold gradient-text">Ask Linc</span>
-            </div>
-            <div className="flex items-center space-x-6 text-sm text-muted-foreground">
-              <a 
-                href="/blog/i-pasted-my-bank-statements-into-chatgpt-and-immediately-regretted-it/" 
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:text-primary/80 transition-colors"
-              >
-                Our Story
-              </a>
-              <Link 
-                href="/faq" 
-                className="text-primary font-medium hover:text-primary/80 transition-colors"
-              >
-                FAQ
-              </Link>
-              <Link 
-                href="/privacy" 
-                className="hover:text-primary transition-colors"
-              >
-                Privacy Policy
-              </Link>
-              <Link 
-                href="/terms" 
-                className="hover:text-primary transition-colors"
-              >
-                Terms of Service
-              </Link>
-              <Link 
-                href="/contact" 
-                className="hover:text-primary transition-colors"
-              >
-                Contact
-              </Link>
-            </div>
-          </div>
-          <div className="mt-8 pt-8 border-t border-border">
-            <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-              <p className="text-sm text-muted-foreground">
-                &copy; {new Date().getFullYear()} Ask Linc. Your AI financial analyst. Built with privacy in mind.
-              </p>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

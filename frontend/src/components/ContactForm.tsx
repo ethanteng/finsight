@@ -3,8 +3,9 @@ import { useState } from 'react';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
-import { Brain, MessageCircle, Send, CheckCircle, ExternalLink } from 'lucide-react';
+import { Brain, MessageCircle, Send, CheckCircle, ExternalLink, Menu, X } from 'lucide-react';
 import Link from 'next/link';
+import { pushBeginCheckout } from '@/lib/dataLayer';
 
 export default function ContactForm() {
   const [formData, setFormData] = useState({
@@ -14,6 +15,8 @@ export default function ContactForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [error, setError] = useState('');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,17 +53,48 @@ export default function ContactForm() {
     });
   };
 
+  const handleBuyClick = async (planId: string) => {
+    pushBeginCheckout();
+    setIsLoading(planId);
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      const response = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tier: planId,
+          successUrl: `${window.location.origin}/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=${planId}`,
+          cancelUrl: `${window.location.origin}/`
+        })
+      });
+      if (response.ok) {
+        const { url } = await response.json();
+        window.location.href = url;
+      } else {
+        const err = await response.json();
+        alert(err.error || 'Failed to create checkout session. Please try again.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('An error occurred. Please try again.');
+    } finally {
+      setIsLoading(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Navigation */}
       <nav className="fixed top-0 w-full z-50 backdrop-blur-lg bg-background/80 border-b border-border/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-2">
+            <Link href="/" className="flex items-center space-x-2 hover:opacity-90 transition-opacity">
               <Brain className="h-8 w-8 text-primary" />
               <span className="text-xl font-bold gradient-text">Ask Linc</span>
-            </div>
-            <div className="flex items-center space-x-6">
+            </Link>
+            <div className="hidden md:flex items-center space-x-8">
+              <Link href="/features" className="text-muted-foreground hover:text-primary transition-colors">Product</Link>
+              <Link href="/#pricing" className="text-muted-foreground hover:text-primary transition-colors">Pricing</Link>
               <a 
                 href="https://www.asklinc.com/blog" 
                 target="_blank" 
@@ -69,9 +103,91 @@ export default function ContactForm() {
               >
                 Blog
               </a>
+              <Button 
+                variant="hero" 
+                size="sm"
+                onClick={() => handleBuyClick('premium')}
+                disabled={isLoading === 'premium'}
+              >
+                {isLoading === 'premium' ? 'Loading...' : 'Get started'}
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => window.location.href = '/login'}
+              >
+                Login
+              </Button>
+            </div>
+            <div className="md:hidden flex items-center">
+              <button
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="p-2 text-muted-foreground hover:text-primary transition-colors"
+                aria-label="Toggle menu"
+              >
+                {isMobileMenuOpen ? (
+                  <X className="h-6 w-6" />
+                ) : (
+                  <Menu className="h-6 w-6" />
+                )}
+              </button>
             </div>
           </div>
         </div>
+        {isMobileMenuOpen && (
+          <div className="md:hidden absolute top-16 left-0 right-0 bg-background/95 backdrop-blur-lg border-b border-border/50 shadow-lg">
+            <div className="px-4 py-4 space-y-1">
+              <Link 
+                href="/features" 
+                className="block py-3 text-muted-foreground hover:text-primary transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Product
+              </Link>
+              <Link 
+                href="/#pricing" 
+                className="block py-3 text-muted-foreground hover:text-primary transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Pricing
+              </Link>
+              <a 
+                href="https://www.asklinc.com/blog" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="block py-3 text-muted-foreground hover:text-primary transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                Blog
+              </a>
+              <div className="pt-4 space-y-2 border-t border-border/50">
+                <Button 
+                  variant="hero" 
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    handleBuyClick('premium');
+                    setIsMobileMenuOpen(false);
+                  }}
+                  disabled={isLoading === 'premium'}
+                >
+                  {isLoading === 'premium' ? 'Loading...' : 'Get started'}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    window.location.href = '/login';
+                    setIsMobileMenuOpen(false);
+                  }}
+                >
+                  Login
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* Hero Section */}
@@ -275,37 +391,41 @@ export default function ContactForm() {
       <footer className="bg-muted/50 py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-            <div className="flex items-center space-x-2">
+            <Link href="/" className="flex items-center space-x-2 hover:opacity-90 transition-opacity">
               <Brain className="h-6 w-6 text-primary" />
               <span className="text-lg font-bold gradient-text">Ask Linc</span>
-            </div>
+            </Link>
             <div className="flex items-center space-x-6 text-sm text-muted-foreground">
-              <a 
-                href="/blog/i-pasted-my-bank-statements-into-chatgpt-and-immediately-regretted-it/" 
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:text-primary/80 transition-colors"
-              >
-                Our Story
-              </a>
               <Link 
+                href="/faq" 
+                className="hover:text-primary transition-colors"
+              >
+                FAQ
+              </Link>
+              <Link 
+                href="/how-we-protect-your-data" 
+                className="hover:text-primary transition-colors"
+              >
+                How We Protect Your Data
+              </Link>
+              <a 
                 href="/privacy" 
                 className="hover:text-primary transition-colors"
               >
                 Privacy Policy
-              </Link>
-              <Link 
+              </a>
+              <a 
                 href="/terms" 
                 className="hover:text-primary transition-colors"
               >
                 Terms of Service
-              </Link>
-              <Link 
+              </a>
+              <a 
                 href="/contact" 
                 className="hover:text-primary transition-colors"
               >
                 Contact
-              </Link>
+              </a>
             </div>
           </div>
           <div className="mt-8 pt-8 border-t border-border">
