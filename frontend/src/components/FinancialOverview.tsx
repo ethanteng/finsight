@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 interface Account {
   id: string;
   name: string;
@@ -74,6 +75,7 @@ interface HomeData {
 export default function FinancialOverview({ isDemo = false, tier }: FinancialOverviewProps) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [snapTradeAccounts, setSnapTradeAccounts] = useState<SnapTradeAccount[]>([]);
+  const [mobileExpanded, setMobileExpanded] = useState(false);
   const [investmentData, setInvestmentData] = useState<InvestmentData | null>(null);
   const [homeData, setHomeData] = useState<HomeData | null>(null);
   const [financialSummary, setFinancialSummary] = useState<FinancialSummaryData | null>(null);
@@ -460,8 +462,31 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
           {formatCurrency(netWorth)}
         </div>
       </div>
+
+      {/* Mobile expand/collapse toggle */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setMobileExpanded(!mobileExpanded);
+        }}
+        className="md:hidden flex items-center gap-1.5 w-full justify-center py-2 mb-2 text-blue-300 hover:text-blue-200 text-sm transition-colors"
+        aria-expanded={mobileExpanded}
+      >
+        {mobileExpanded ? (
+          <>
+            <ChevronUp className="w-4 h-4" />
+            Hide details
+          </>
+        ) : (
+          <>
+            <ChevronDown className="w-4 h-4" />
+            Show details
+          </>
+        )}
+      </button>
       
-      {/* Financial Metrics Row */}
+      {/* Financial Metrics Row - collapsible on mobile */}
+      <div className={`${!mobileExpanded ? 'hidden' : ''} md:block`}>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
         <div className="bg-blue-800 rounded p-2.5">
           <div className="text-blue-300 text-xs mb-1">Total Cash</div>
@@ -527,6 +552,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
           )}
         </div>
       )}
+      </div>
     </div>
     </>
   );

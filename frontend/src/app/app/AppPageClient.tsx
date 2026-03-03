@@ -307,11 +307,11 @@ export default function AppPageClient() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      {/* Market News Banner */}
+      {/* Market News Banner - mobile only */}
       {hasMarketNewsAccess && subscriptionStatus?.tier && (
         <button
           onClick={() => setShowMarketNewsModal(true)}
-          className="w-full bg-blue-900/80 hover:bg-blue-800/90 border-b border-blue-700 py-2 px-4 text-center text-blue-200 hover:text-white text-sm font-medium transition-colors"
+          className="md:hidden w-full bg-blue-900/80 hover:bg-blue-800/90 border-b border-blue-700 py-2 px-4 text-center text-blue-200 hover:text-white text-sm font-medium transition-colors"
           title="View current market news"
         >
           Read the latest market news
@@ -320,14 +320,25 @@ export default function AppPageClient() {
       {/* Header */}
       <div className="bg-gray-800 border-b border-gray-700 p-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 flex-1">
             <h1 className="text-2xl font-bold text-white">Ask Linc</h1>
             {/* Hide TierBanner on mobile */}
             <div className="hidden md:block">
               <TierBanner />
             </div>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex-1 flex justify-center hidden md:flex">
+            {hasMarketNewsAccess && subscriptionStatus?.tier && (
+              <button
+                onClick={() => setShowMarketNewsModal(true)}
+                className="text-blue-300 hover:text-blue-200 text-sm transition-colors"
+                title="View current market news"
+              >
+                Read the latest market news
+              </button>
+            )}
+          </div>
+          <div className="flex items-center space-x-3 flex-1 justify-end">
             {/* Hide email on mobile */}
             {userEmail && (
               <span className="hidden md:block text-gray-400 text-sm">
@@ -358,7 +369,7 @@ export default function AppPageClient() {
 
       {/* No subscription warning banner - access controlled at login level */}
 
-      <div className="flex h-[calc(100vh-116px)]">
+      <div className="flex h-[calc(100vh-116px)] md:h-[calc(100vh-80px)]">
         {/* Sidebar - Hidden on mobile, visible on desktop */}
         {showSidebar && (
           <div className="w-80 bg-gray-800 border-r border-gray-700 overflow-y-auto hidden lg:block">
