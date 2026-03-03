@@ -44,6 +44,11 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'blog.asklinc.com',
       },
+      // Ghost(Pro) subdomains - author profile images come from the blog's domain (e.g. ask-linc-blog.ghost.io)
+      {
+        protocol: 'https',
+        hostname: '**.ghost.io',
+      },
     ],
   },
 };
