@@ -71,8 +71,10 @@
     --accent-teal: 174 55% 42%;
     --card: 210 20% 100%;
     --card-foreground: 217 32% 8%;
-    --primary: 158 64% 45%;
+    --primary: 158 72% 36%;
+    --primary-glow: 158 72% 46%;
     --primary-foreground: 210 20% 98%;
+    --gradient-primary: linear-gradient(135deg, hsl(158, 72%, 36%), hsl(158, 72%, 46%));
     --muted: 210 15% 92%;
     --muted-foreground: 217 25% 35%;
     --border: 210 15% 88%;
