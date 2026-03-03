@@ -61,9 +61,6 @@ export default function ContactForm() {
               <span className="text-xl font-bold gradient-text">Ask Linc</span>
             </div>
             <div className="flex items-center space-x-6">
-              <Link href="/" className="text-muted-foreground hover:text-primary transition-colors">
-                Home
-              </Link>
               <a 
                 href="https://www.asklinc.com/blog" 
                 target="_blank" 

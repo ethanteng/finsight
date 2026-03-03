@@ -2,7 +2,6 @@
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Shield, Eye, Lock, Database, FileText, MessageCircle, Brain } from 'lucide-react';
-import Link from 'next/link';
 
 export default function PrivacyPolicyContent() {
   return (
@@ -12,12 +11,6 @@ export default function PrivacyPolicyContent() {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-white">Privacy Policy</h1>
           <div className="flex items-center space-x-3">
-            <Link 
-              href="/" 
-              className="text-gray-300 hover:text-white text-sm transition-colors"
-            >
-              Home
-            </Link>
             <a 
               href="/privacy" 
               className="text-gray-300 hover:text-white text-sm transition-colors"

@@ -56,8 +56,7 @@ const FeaturesPage = () => {
               <span className="text-xl font-bold gradient-text">Ask Linc</span>
             </Link>
             <div className="hidden md:flex items-center space-x-8">
-              <Link href="/" className="text-muted-foreground hover:text-primary transition-colors">Home</Link>
-              <Link href="/features" className="text-primary hover:text-primary/80 transition-colors">Features</Link>
+              <Link href="/features" className="text-primary hover:text-primary/80 transition-colors">Product</Link>
               <button onClick={() => window.location.href = '/#pricing'} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
               <a 
                 href="https://www.asklinc.com/blog" 
@@ -101,8 +100,7 @@ const FeaturesPage = () => {
         {isMobileMenuOpen && (
           <div className="md:hidden absolute top-16 left-0 right-0 bg-background/95 backdrop-blur-lg border-b border-border/50 shadow-lg">
             <div className="px-4 py-4 space-y-1">
-              <Link href="/" className="block py-3 text-muted-foreground hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Home</Link>
-              <Link href="/features" className="block py-3 text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Features</Link>
+              <Link href="/features" className="block py-3 text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Product</Link>
               <button onClick={() => { window.location.href = '/#pricing'; setIsMobileMenuOpen(false); }} className="block w-full text-left py-3 text-muted-foreground hover:text-primary transition-colors">Pricing</button>
               <a href="https://www.asklinc.com/blog" target="_blank" rel="noopener noreferrer" className="block py-3 text-muted-foreground hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Blog</a>
               <div className="pt-4 space-y-2 border-t border-border/50">
@@ -144,13 +142,13 @@ const FeaturesPage = () => {
                 </div>
                 <div className="md:hidden">
                   <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Conversational Financial <span className="text-primary">Reasoning</span></h2>
-                  <p className="mt-1 text-xs text-primary/60 tracking-[0.12em] uppercase">Ask follow-ups. Change assumptions. Explore tradeoffs.</p>
+                  <p className="mt-1 text-xs text-muted-foreground tracking-[0.12em] uppercase font-medium">Ask follow-ups. Change assumptions. Explore tradeoffs.</p>
                 </div>
               </div>
               <div className="space-y-4 sm:space-y-6 max-w-[65ch] min-w-0 md:pl-8 lg:pl-[15%]">
                 <div className="hidden md:block">
                   <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Conversational Financial <span className="text-primary">Reasoning</span></h2>
-                  <p className="mt-2 text-xs text-primary/60 tracking-[0.12em] uppercase">Ask follow-ups. Change assumptions. Explore tradeoffs.</p>
+                  <p className="mt-2 text-xs text-muted-foreground tracking-[0.12em] uppercase font-medium">Ask follow-ups. Change assumptions. Explore tradeoffs.</p>
                 </div>
                 <p className="text-[1.0625rem] text-muted-foreground leading-[1.75]">
                   Most financial tools treat every question as isolated. Ask Linc doesn&apos;t. It understands your finances as a <span className="text-primary/90">connected system</span>—remembering your goals, age, risk tolerance, and past assumptions as part of an ongoing conversation. That means you can ask:
@@ -178,13 +176,13 @@ const FeaturesPage = () => {
                 </div>
                 <div className="md:hidden">
                   <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Market-Aware <span className="text-primary">Analysis</span></h2>
-                  <p className="mt-1 text-xs text-primary/60 tracking-[0.12em] uppercase">Your decisions don&apos;t happen in a vacuum. Neither do Ask Linc&apos;s answers.</p>
+                  <p className="mt-1 text-xs text-muted-foreground tracking-[0.12em] uppercase font-medium">Your decisions don&apos;t happen in a vacuum. Neither do Ask Linc&apos;s answers.</p>
                 </div>
               </div>
               <div className="space-y-4 sm:space-y-6 max-w-[65ch] min-w-0 md:pl-8 lg:pl-[15%]">
                 <div className="hidden md:block">
                   <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Market-Aware <span className="text-primary">Analysis</span></h2>
-                  <p className="mt-2 text-xs text-primary/60 tracking-[0.12em] uppercase">Your decisions don&apos;t happen in a vacuum. Neither do Ask Linc&apos;s answers.</p>
+                  <p className="mt-2 text-xs text-muted-foreground tracking-[0.12em] uppercase font-medium">Your decisions don&apos;t happen in a vacuum. Neither do Ask Linc&apos;s answers.</p>
                 </div>
                 <p className="text-[1.0625rem] text-muted-foreground leading-[1.75]">
                   Ask Linc incorporates <span className="text-primary/90">current market conditions</span>—interest rates, inflation trends, mortgage dynamics, and macro context—so advice isn&apos;t frozen in time. That matters when you&apos;re deciding whether to:
@@ -213,13 +211,13 @@ const FeaturesPage = () => {
                 </div>
                 <div className="md:hidden">
                   <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Retirement & <span className="text-primary">Risk</span> Analysis</h2>
-                  <p className="mt-1 text-xs text-primary/60 tracking-[0.12em] uppercase">Stress-test your plan before real life does.</p>
+                  <p className="mt-1 text-xs text-muted-foreground tracking-[0.12em] uppercase font-medium">Stress-test your plan before real life does.</p>
                 </div>
               </div>
               <div className="space-y-4 sm:space-y-6 max-w-[65ch] min-w-0 md:pl-8 lg:pl-[15%]">
                 <div className="hidden md:block">
                   <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Retirement & <span className="text-primary">Risk</span> Analysis</h2>
-                  <p className="mt-2 text-xs text-primary/60 tracking-[0.12em] uppercase">Stress-test your plan before real life does.</p>
+                  <p className="mt-2 text-xs text-muted-foreground tracking-[0.12em] uppercase font-medium">Stress-test your plan before real life does.</p>
                 </div>
                 <p className="text-[1.0625rem] text-muted-foreground leading-[1.75]">
                   Ask Linc evaluates the <span className="text-primary/90">durability of your financial plan</span>, not just whether the numbers add up today. That includes:
@@ -248,13 +246,13 @@ const FeaturesPage = () => {
                 </div>
                 <div className="md:hidden">
                   <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Privacy-First <span className="text-teal">Architecture</span></h2>
-                  <p className="mt-1 text-xs text-primary/60 tracking-[0.12em] uppercase">Your real data never gets handed to an AI model.</p>
+                  <p className="mt-1 text-xs text-muted-foreground tracking-[0.12em] uppercase font-medium">Your real data never gets handed to an AI model.</p>
                 </div>
               </div>
               <div className="space-y-4 sm:space-y-6 max-w-[65ch] min-w-0 md:pl-8 lg:pl-[15%]">
                 <div className="hidden md:block">
                   <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Privacy-First <span className="text-teal">Architecture</span></h2>
-                  <p className="mt-2 text-xs text-primary/60 tracking-[0.12em] uppercase">Your real data never gets handed to an AI model.</p>
+                  <p className="mt-2 text-xs text-muted-foreground tracking-[0.12em] uppercase font-medium">Your real data never gets handed to an AI model.</p>
                 </div>
                 <p className="text-[1.0625rem] text-muted-foreground leading-[1.75]">
                   This matters, and most tools hand-wave it. Ask Linc abstracts and anonymizes your financial information before analysis. The AI reasons over <span className="text-primary/90">signals and structure</span>—not raw account details. Your balances, institutions, and identities are not exposed.
@@ -277,13 +275,13 @@ const FeaturesPage = () => {
                 </div>
                 <div className="md:hidden">
                   <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Built for People Making <span className="text-primary">Real</span> Decisions</h2>
-                  <p className="mt-1 text-xs text-primary/60 tracking-[0.12em] uppercase">Not day traders. Not spreadsheet hobbyists.</p>
+                  <p className="mt-1 text-xs text-muted-foreground tracking-[0.12em] uppercase font-medium">Not day traders. Not spreadsheet hobbyists.</p>
                 </div>
               </div>
               <div className="space-y-4 sm:space-y-6 max-w-[65ch] min-w-0 md:pl-8 lg:pl-[15%]">
                 <div className="hidden md:block">
                   <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Built for People Making <span className="text-primary">Real</span> Decisions</h2>
-                  <p className="mt-2 text-xs text-primary/60 tracking-[0.12em] uppercase">Not day traders. Not spreadsheet hobbyists.</p>
+                  <p className="mt-2 text-xs text-muted-foreground tracking-[0.12em] uppercase font-medium">Not day traders. Not spreadsheet hobbyists.</p>
                 </div>
                 <p className="text-[1.0625rem] text-muted-foreground leading-[1.75]">
                   Ask Linc is for people who need answers they can act on:
@@ -311,13 +309,13 @@ const FeaturesPage = () => {
                 </div>
                 <div className="md:hidden">
                   <h2 className="text-xl sm:text-2xl font-bold tracking-tight">Integrations & <span className="text-primary">Data</span> Sources</h2>
-                  <p className="mt-1 text-xs text-primary/60 tracking-[0.12em] uppercase">Connect your accounts. Get analysis grounded in reality.</p>
+                  <p className="mt-1 text-xs text-muted-foreground tracking-[0.12em] uppercase font-medium">Connect your accounts. Get analysis grounded in reality.</p>
                 </div>
               </div>
               <div className="space-y-4 sm:space-y-6 max-w-[65ch] min-w-0 md:pl-8 lg:pl-[15%]">
                 <div className="hidden md:block">
                   <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Integrations & <span className="text-primary">Data</span> Sources</h2>
-                  <p className="mt-2 text-xs text-primary/60 tracking-[0.12em] uppercase">Connect your accounts. Get analysis grounded in reality.</p>
+                  <p className="mt-2 text-xs text-muted-foreground tracking-[0.12em] uppercase font-medium">Connect your accounts. Get analysis grounded in reality.</p>
                 </div>
                 <p className="text-[1.0625rem] text-muted-foreground leading-[1.75]">
                   Ask Linc combines your real account data with live market and economic context. You connect accounts; we pull in rates, inflation, and market data from trusted sources. Together, these enable <span className="text-primary/90">scenario modeling</span>, tradeoff analysis, and answers grounded in your actual situation—not hypotheticals.
@@ -455,11 +453,10 @@ const FeaturesPage = () => {
       </div>
 
       {/* CTA Section */}
-      <section className="py-12 sm:py-16 md:py-24 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-muted/20 via-primary/[0.04] to-muted/30 pointer-events-none" />
-        <div className="absolute top-0 left-0 right-0 h-px bg-primary/20" />
+      <section className="py-12 sm:py-16 md:py-24 relative overflow-hidden bg-[hsl(217,32%,6%)]">
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-secondary/15 to-primary/20 pointer-events-none" />
         <div className="relative max-w-3xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8 sm:space-y-10">
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-white">
             Start understanding your money
           </h2>
           <div className="flex flex-col items-center gap-4">
@@ -471,7 +468,7 @@ const FeaturesPage = () => {
             >
               {isLoading === 'premium' ? 'Creating...' : 'Get started'}
             </Button>
-            <p className="text-[1.0625rem] font-medium">
+            <p className="text-[1.0625rem] font-medium text-white">
               <span className="text-primary">$9/month</span>. Cancel anytime.
             </p>
           </div>

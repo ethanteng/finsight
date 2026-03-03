@@ -6,7 +6,7 @@ import MailerLiteForm from './MailerLiteForm';
 import MailerLiteScript from './MailerLiteScript';
 import AnimatedPrompt from './AnimatedPrompt';
 import BlogSubscription from './BlogSubscription';
-import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, Database, BarChart3, MessageCircle, Sparkles, X, Target, XCircle, Menu } from 'lucide-react';
+import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, BarChart3, MessageCircle, Sparkles, X, Target, XCircle, Menu } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -15,7 +15,7 @@ import { pushBeginCheckout } from '@/lib/dataLayer';
 const HOW_LINC_STEPS = [
   { title: "Connect your accounts", description: "Link your financial accounts securely via Plaid", icon: Target },
   { title: "Ask a question", description: "No setup or navigation required", icon: MessageCircle },
-  { title: "Get actionable answers", description: "Your data + live market info = meaningful analysis", icon: Brain },
+  { title: "Get actionable answers", description: "Ask follow-ups, change assumptions, explore scenarios", icon: Brain },
 ];
 
 const BuyingAHousePage = () => {
@@ -109,8 +109,7 @@ const BuyingAHousePage = () => {
               <span className="text-xl font-bold gradient-text">Ask Linc</span>
             </div>
             <div className="hidden md:flex items-center space-x-8">
-              <Link href="/" className="text-muted-foreground hover:text-primary transition-colors">Home</Link>
-              <Link href="/features" className="text-muted-foreground hover:text-primary transition-colors">Features</Link>
+              <Link href="/features" className="text-muted-foreground hover:text-primary transition-colors">Product</Link>
               <button onClick={() => scrollToSection('pricing')} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
               <a 
                 href="https://www.asklinc.com/blog" 
@@ -157,18 +156,11 @@ const BuyingAHousePage = () => {
           <div className="md:hidden absolute top-16 left-0 right-0 bg-background/95 backdrop-blur-lg border-b border-border/50 shadow-lg">
             <div className="px-4 py-4 space-y-1">
               <Link 
-                href="/" 
-                className="block py-3 text-muted-foreground hover:text-primary transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Home
-              </Link>
-              <Link 
                 href="/features" 
                 className="block py-3 text-muted-foreground hover:text-primary transition-colors"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                Features
+                Product
               </Link>
               <button 
                 onClick={() => {
@@ -352,8 +344,11 @@ const BuyingAHousePage = () => {
       <section className="py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-3 gap-8">
-            <Card className="glass-card hover:shadow-xl transition-all duration-300">
+            <Card className="glass-card hover:shadow-xl transition-all duration-300 group">
               <CardContent className="p-8 space-y-4">
+                <div className="h-12 w-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                  <Brain className="h-6 w-6 text-primary" />
+                </div>
                 <h3 className="text-2xl font-bold">Built for decisions, not just tracking</h3>
                 <p className="text-muted-foreground leading-relaxed">
                   Connects your cash, investments, debt, home value, and goals into one continuous line of reasoning.
@@ -361,17 +356,23 @@ const BuyingAHousePage = () => {
               </CardContent>
             </Card>
             
-            <Card className="glass-card hover:shadow-xl transition-all duration-300">
+            <Card className="glass-card hover:shadow-xl transition-all duration-300 group">
               <CardContent className="p-8 space-y-4">
-                <h3 className="text-2xl font-bold">Understands the real world, not just your accounts</h3>
+                <div className="h-12 w-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                  <TrendingUp className="h-6 w-6 text-primary" />
+                </div>
+                <h3 className="text-2xl font-bold">Real-Time Market Intelligence</h3>
                 <p className="text-muted-foreground leading-relaxed">
                   Live interest rates, inflation, market conditions, and economic data are baked into every answer.
                 </p>
               </CardContent>
             </Card>
             
-            <Card className="glass-card hover:shadow-xl transition-all duration-300">
+            <Card className="glass-card hover:shadow-xl transition-all duration-300 group">
               <CardContent className="p-8 space-y-4">
+                <div className="h-12 w-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                  <Zap className="h-6 w-6 text-primary" />
+                </div>
                 <h3 className="text-2xl font-bold">Learns as you ask questions</h3>
                 <p className="text-muted-foreground leading-relaxed">
                   Ask follow-ups, change assumptions, explore scenarios — Linc remembers context and builds on it.
@@ -382,63 +383,11 @@ const BuyingAHousePage = () => {
         </div>
       </section>
 
-      {/* Why Ask Linc is Not Just ChatGPT Section */}
-      <section className="py-20 bg-muted/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center space-y-4 mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold">
-              Why Ask Linc is not just <span className="gradient-text">ChatGPT with money</span>
-            </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              ChatGPT reasons in theory. Ask Linc reasons with your actual financial reality — live rates, real accounts, real tradeoffs.
-            </p>
-          </div>
-          
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[{
-              icon: Brain,
-              title: "Financial Reasoning",
-              description: "Personalized answers powered by OpenAI analysis of your financial data."
-            }, {
-              icon: TrendingUp,
-              title: "Real-Time Market Data",
-              description: "Answers based on current rates, conditions, and economic trends."
-            }, {
-              icon: Zap,
-              title: "Instant Analysis",
-              description: "Ask questions and get decision-ready answers immediately."
-            }, {
-              icon: Shield,
-              title: "Bank-Grade Security",
-              description: "Same security technology used by major banks and financial institutions."
-            }, {
-              icon: Eye,
-              title: "Complete Transparency",
-              description: "View, export, or delete all your data anytime."
-            }, {
-              icon: Database,
-              title: "Privacy First",
-              description: "Your data is never used to train AI models."
-            }].map((feature, index) => (
-              <Card key={index} className="group hover:shadow-xl transition-all duration-300 hover:scale-105 glass-card">
-                <CardContent className="p-6 space-y-4">
-                  <div className="h-12 w-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                    <feature.icon className="h-6 w-6 text-primary" />
-                  </div>
-                  <h3 className="text-xl font-semibold">{feature.title}</h3>
-                  <p className="text-muted-foreground leading-relaxed">{feature.description}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* Pricing Section */}
-      <section id="pricing" className="py-16">
+      <section id="pricing" className="py-16 bg-[hsl(217,32%,6%)]">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-8">
-            <h2 className="text-3xl md:text-4xl font-bold">
+            <h2 className="text-3xl md:text-4xl font-bold text-white">
               One plan. <span className="gradient-text">Full access.</span>
             </h2>
           </div>
@@ -499,7 +448,7 @@ const BuyingAHousePage = () => {
       </section>
 
       {/* Privacy Section */}
-      <section id="security" className="py-16 bg-muted/30">
+      <section id="security" className="py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-6 mb-16">
             <h2 className="text-3xl md:text-4xl font-bold">
@@ -549,9 +498,10 @@ const BuyingAHousePage = () => {
       </section>
 
       {/* Final CTA Section */}
-      <section className="py-20 bg-gradient-to-r from-primary/10 via-secondary/10 to-primary/10">
-        <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8">
-          <h2 className="text-3xl md:text-4xl font-bold">
+      <section className="py-20 relative overflow-hidden bg-[hsl(217,32%,6%)]">
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-secondary/15 to-primary/20 pointer-events-none" />
+        <div className="relative max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8">
+          <h2 className="text-3xl md:text-4xl font-bold text-white">
             Start understanding your money
           </h2>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">

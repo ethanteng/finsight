@@ -6,7 +6,7 @@ import MailerLiteForm from './MailerLiteForm';
 import MailerLiteScript from './MailerLiteScript';
 import AnimatedPrompt from './AnimatedPrompt';
 import BlogSubscription from './BlogSubscription';
-import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, Database, BarChart3, MessageCircle, Sparkles, X, Target, Menu } from 'lucide-react';
+import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, BarChart3, MessageCircle, Sparkles, X, Target, Menu } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -15,7 +15,7 @@ import { pushBeginCheckout } from '@/lib/dataLayer';
 const HOW_LINC_STEPS = [
   { title: "Connect once", description: "Link your financial accounts securely via Plaid", icon: Target },
   { title: "Ask anything", description: "No setup or navigation required", icon: MessageCircle },
-  { title: "Keep asking", description: "Your data + live market info = meaningful analysis", icon: Brain },
+  { title: "Keep asking", description: "Ask follow-ups, change assumptions, stress-test scenarios", icon: Brain },
 ];
 
 const NewHomepage = () => {
@@ -24,6 +24,7 @@ const NewHomepage = () => {
   const [howItWorksInView, setHowItWorksInView] = useState(false);
   const [revealedStepCount, setRevealedStepCount] = useState(0);
   const [highlightedStep, setHighlightedStep] = useState(0);
+  const [highlightedValueBox, setHighlightedValueBox] = useState(0);
   const router = useRouter();
   const getCurrentQuestionRef = useRef<(() => string) | null>(null);
   const howItWorksRef = useRef<HTMLElement | null>(null);
@@ -60,6 +61,12 @@ const NewHomepage = () => {
     const t = setInterval(() => setHighlightedStep((s) => (s + 1) % 3), 2500);
     return () => clearInterval(t);
   }, [revealedStepCount]);
+
+  // Value Differentiators: sequential highlight cycle
+  useEffect(() => {
+    const t = setInterval(() => setHighlightedValueBox((s) => (s + 1) % 3), 2500);
+    return () => clearInterval(t);
+  }, []);
 
   const handleBuyClick = async (planId: string) => {
     pushBeginCheckout();
@@ -109,8 +116,7 @@ const NewHomepage = () => {
               <span className="text-xl font-bold gradient-text">Ask Linc</span>
             </div>
             <div className="hidden md:flex items-center space-x-8">
-              <Link href="/" className="text-muted-foreground hover:text-primary transition-colors">Home</Link>
-              <Link href="/features" className="text-muted-foreground hover:text-primary transition-colors">Features</Link>
+              <Link href="/features" className="text-muted-foreground hover:text-primary transition-colors">Product</Link>
               <button onClick={() => scrollToSection('pricing')} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
               <a 
                 href="https://www.asklinc.com/blog" 
@@ -157,18 +163,11 @@ const NewHomepage = () => {
           <div className="md:hidden absolute top-16 left-0 right-0 bg-background/95 backdrop-blur-lg border-b border-border/50 shadow-lg">
             <div className="px-4 py-4 space-y-1">
               <Link 
-                href="/" 
-                className="block py-3 text-muted-foreground hover:text-primary transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Home
-              </Link>
-              <Link 
                 href="/features" 
                 className="block py-3 text-muted-foreground hover:text-primary transition-colors"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                Features
+                Product
               </Link>
               <button 
                 onClick={() => {
@@ -227,8 +226,8 @@ const NewHomepage = () => {
           <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center">
             {/* Pre-hero strip */}
             <div className="text-center mb-6 w-full">
-              <p className="text-[0.9375rem] sm:text-[1.09375rem] text-secondary">
-              Built for real financial decisions — not just tracking your budget.
+              <p className="text-[0.9375rem] sm:text-[1.09375rem] text-foreground font-medium">
+              Built to help you make real financial decisions — not just track your budget.
               </p>
             </div>
             
@@ -285,62 +284,11 @@ const NewHomepage = () => {
     </section>
   </div>
 
-      {/* Kill Dashboard Fatigue Section */}
-      <section className="py-20 bg-muted/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center space-y-4 mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold">
-              Stop staring at <span className="gradient-text">dashboards</span>
-            </h2>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-12 lg:gap-20 items-start max-w-5xl mx-auto">
-            <div className="space-y-6">
-              <p className="text-[1.05rem] font-medium text-primary uppercase tracking-wider">
-                Dashboards show you the past:
-              </p>
-              <div className="my-12 rounded-lg overflow-hidden border border-border/50 shadow-lg w-3/5 max-w-[33.6rem]">
-                <img
-                  src="/money-dashboard.png"
-                  alt="A typical money management dashboard with charts, graphs, and spending breakdowns"
-                  className="w-full h-auto blur-[2px]"
-                />
-              </div>
-              <p className="text-secondary">
-                But they don&apos;t tell you what to do next.
-              </p>
-            </div>
-
-            <div className="space-y-6">
-              <p className="text-[1.05rem] font-medium text-primary uppercase tracking-wider">
-                What you&apos;re actually thinking:
-              </p>
-              <ul className="space-y-5">
-                <li className="text-lg md:text-xl font-medium leading-relaxed text-foreground">
-                  &quot;What if we retire at 60 instead of 65?&quot;
-                </li>
-                <li className="text-lg md:text-xl font-medium leading-relaxed text-foreground">
-                  &quot;Can we afford this house without touching investments?&quot;
-                </li>
-                <li className="text-lg md:text-xl font-medium leading-relaxed text-foreground">
-                  &quot;If inflation stays high, are we actually okay?&quot;
-                </li>
-              </ul>
-              <p className="text-muted-foreground">
-                These are the questions that sit in your head at 2am.
-                <br />
-                <span className="text-secondary">Ask Linc runs the numbers and gives you answers to help you decide what to do next.</span>
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* How Linc Works Section */}
       <section
         id="how-it-works"
         ref={howItWorksRef}
-        className="py-20"
+        className="py-20 bg-muted/30"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-16">
@@ -390,97 +338,152 @@ const NewHomepage = () => {
         </div>
       </section>
 
-      {/* Value Differentiators Section */}
-      <section className="py-20 bg-muted/30">
+      {/* Financial Institutions Connected Section */}
+      <section className="py-20 overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-3 gap-8">
-            <Card className="glass-card hover:shadow-xl transition-all duration-300">
-              <CardContent className="p-8 space-y-4">
-                <h3 className="text-2xl font-bold">Built for decisions, not just tracking</h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  Connects your cash, investments, debt, home value, and goals into one continuous line of reasoning.
-                </p>
-              </CardContent>
-            </Card>
-            
-            <Card className="glass-card hover:shadow-xl transition-all duration-300">
-              <CardContent className="p-8 space-y-4">
-                <h3 className="text-2xl font-bold">Understands the real world, not just your accounts</h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  Live interest rates, inflation, market conditions, and economic data are baked into every answer.
-                </p>
-              </CardContent>
-            </Card>
-            
-            <Card className="glass-card hover:shadow-xl transition-all duration-300">
-              <CardContent className="p-8 space-y-4">
-                <h3 className="text-2xl font-bold">Learns as you ask questions</h3>
-                <p className="text-muted-foreground leading-relaxed">
-                  Ask follow-ups, change assumptions, explore scenarios — Linc remembers context and builds on it.
-                </p>
-              </CardContent>
-            </Card>
+          <div className="text-center space-y-4 mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold">
+              Over 12,000 <span className="gradient-text">Financial Institutions</span> Connected
+            </h2>
+            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+              Linc is connected to over 12,000 financial institutions around the world, including in the US, Canada, the UK, and Europe.
+            </p>
+          </div>
+          <div className="relative min-h-[80px]">
+            <div className="absolute left-0 top-0 bottom-0 w-16 sm:w-24 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
+            <div className="absolute right-0 top-0 bottom-0 w-16 sm:w-24 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
+            <div className="flex overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_5%,black_95%,transparent)] [-webkit-mask-image:linear-gradient(to_right,transparent,black_5%,black_95%,transparent)] min-h-[80px]">
+              <div className="flex shrink-0 animate-marquee items-center gap-12 sm:gap-16 py-6">
+                {[
+                  { name: 'Chase', domain: 'chase.com' },
+                  { name: 'Bank of America', domain: 'bankofamerica.com' },
+                  { name: 'Wells Fargo', domain: 'wellsfargo.com' },
+                  { name: 'Citi', domain: 'citi.com' },
+                  { name: 'PNC', domain: 'pnc.com' },
+                  { name: 'US Bank', domain: 'usbank.com' },
+                  { name: 'TD Bank', domain: 'td.com' },
+                  { name: 'HSBC', domain: 'hsbc.com' },
+                  { name: 'Fidelity', domain: 'fidelity.com' },
+                  { name: 'Charles Schwab', domain: 'schwab.com' },
+                  { name: 'Capital One', domain: 'capitalone.com' },
+                  { name: 'Ally', domain: 'ally.com' },
+                  { name: 'Discover', domain: 'discover.com' },
+                  { name: 'American Express', domain: 'americanexpress.com' },
+                  { name: 'Morgan Stanley', domain: 'morganstanley.com' },
+                  { name: 'Goldman Sachs', domain: 'goldmansachs.com' },
+                ].map(({ name, domain }) => (
+                  <div
+                    key={name}
+                    className="flex shrink-0 items-center justify-center min-h-[48px] grayscale opacity-80 hover:grayscale-0 hover:opacity-100 transition-all duration-300"
+                  >
+                    <img
+                      src={`https://logo.clearbit.com/${domain}`}
+                      alt={name}
+                      className="h-10 w-auto max-w-[140px] object-contain object-center"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        const fallback = e.currentTarget.nextElementSibling;
+                        if (fallback) (fallback as HTMLElement).classList.remove('hidden');
+                      }}
+                    />
+                    <span className="hidden text-muted-foreground/80 font-semibold text-lg">{name}</span>
+                  </div>
+                ))}
+                {[
+                  { name: 'Chase', domain: 'chase.com' },
+                  { name: 'Bank of America', domain: 'bankofamerica.com' },
+                  { name: 'Wells Fargo', domain: 'wellsfargo.com' },
+                  { name: 'Citi', domain: 'citi.com' },
+                  { name: 'PNC', domain: 'pnc.com' },
+                  { name: 'US Bank', domain: 'usbank.com' },
+                  { name: 'TD Bank', domain: 'td.com' },
+                  { name: 'HSBC', domain: 'hsbc.com' },
+                  { name: 'Fidelity', domain: 'fidelity.com' },
+                  { name: 'Charles Schwab', domain: 'schwab.com' },
+                  { name: 'Capital One', domain: 'capitalone.com' },
+                  { name: 'Ally', domain: 'ally.com' },
+                  { name: 'Discover', domain: 'discover.com' },
+                  { name: 'American Express', domain: 'americanexpress.com' },
+                  { name: 'Morgan Stanley', domain: 'morganstanley.com' },
+                  { name: 'Goldman Sachs', domain: 'goldmansachs.com' },
+                ].map(({ name, domain }) => (
+                  <div
+                    key={`${name}-dup`}
+                    className="flex shrink-0 items-center justify-center min-h-[48px] grayscale opacity-80 hover:grayscale-0 hover:opacity-100 transition-all duration-300"
+                  >
+                    <img
+                      src={`https://logo.clearbit.com/${domain}`}
+                      alt={name}
+                      className="h-10 w-auto max-w-[140px] object-contain object-center"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        const fallback = e.currentTarget.nextElementSibling;
+                        if (fallback) (fallback as HTMLElement).classList.remove('hidden');
+                      }}
+                    />
+                    <span className="hidden text-muted-foreground/80 font-semibold text-lg">{name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Why Ask Linc is Not Just ChatGPT Section */}
-      <section className="py-20">
+      {/* Value Differentiators Section */}
+      <section className="py-20 bg-muted/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center space-y-4 mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold">
-              Why Ask Linc is not just <span className="gradient-text">ChatGPT with money</span>
-            </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              ChatGPT reasons in theory. Ask Linc reasons with your actual financial reality — live rates, real accounts, real tradeoffs.
-            </p>
-          </div>
-          
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[{
-              icon: Brain,
-              title: "Financial Reasoning",
-              description: "Personalized answers powered by OpenAI analysis of your financial data."
-            }, {
-              icon: TrendingUp,
-              title: "Real-Time Market Data",
-              description: "Answers based on current rates, conditions, and economic trends."
-            }, {
-              icon: Zap,
-              title: "Instant Analysis",
-              description: "Ask questions and get decision-ready answers immediately."
-            }, {
-              icon: Shield,
-              title: "Bank-Grade Security",
-              description: "Same security technology used by major banks and financial institutions."
-            }, {
-              icon: Eye,
-              title: "Complete Transparency",
-              description: "View, export, or delete all your data anytime."
-            }, {
-              icon: Database,
-              title: "Privacy First",
-              description: "Your data is never used to train AI models."
-            }].map((feature, index) => (
-              <Card key={index} className="group hover:shadow-xl transition-all duration-300 hover:scale-105 glass-card">
-                <CardContent className="p-6 space-y-4">
-                  <div className="h-12 w-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                    <feature.icon className="h-6 w-6 text-primary" />
-                  </div>
-                  <h3 className="text-xl font-semibold">{feature.title}</h3>
-                  <p className="text-muted-foreground leading-relaxed">{feature.description}</p>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="grid md:grid-cols-3 gap-8">
+            {[
+              {
+                icon: Brain,
+                title: "One connected financial model",
+                description: "Cash, investments, debt, home value, and goals flow into a single line of reasoning — not separate dashboards.",
+              },
+              {
+                icon: TrendingUp,
+                title: "Real-time market intelligence",
+                description: "Live interest rates, inflation, market conditions, and economic data are baked into every answer.",
+              },
+              {
+                icon: Zap,
+                title: "Run what-if scenarios",
+                description: "Model early retirement, home purchases, inflation spikes, or rate changes — before you decide.",
+              },
+            ].map((item, index) => {
+              const isHighlighted = highlightedValueBox === index;
+              return (
+                <Card
+                  key={index}
+                  className={`glass-card hover:shadow-xl transition-all duration-500 ease-out group ${
+                    isHighlighted
+                      ? "ring-2 ring-primary/50 shadow-xl shadow-primary/10 scale-[1.02]"
+                      : ""
+                  }`}
+                >
+                  <CardContent className="p-8 space-y-4">
+                    <div className="h-12 w-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                      <item.icon className="h-6 w-6 text-primary" />
+                    </div>
+                    <h3 className={`text-2xl font-bold transition-colors duration-300 ${isHighlighted ? "text-primary" : ""}`}>
+                      {item.title}
+                    </h3>
+                    <p className="text-muted-foreground leading-relaxed">
+                      {item.description}
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
       </section>
 
       {/* Pricing Section */}
-      <section id="pricing" className="py-16 bg-muted/30">
+      <section id="pricing" className="py-16 bg-[hsl(217,32%,6%)]">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-8">
-            <h2 className="text-3xl md:text-4xl font-bold">
+            <h2 className="text-3xl md:text-4xl font-bold text-white">
               One plan. <span className="gradient-text">Full access.</span>
             </h2>
           </div>
@@ -541,7 +544,7 @@ const NewHomepage = () => {
       </section>
 
       {/* Privacy Section */}
-      <section id="security" className="py-16">
+      <section id="security" className="py-16 bg-muted/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-6 mb-16">
             <h2 className="text-3xl md:text-4xl font-bold">
@@ -591,9 +594,10 @@ const NewHomepage = () => {
       </section>
 
       {/* Final CTA Section */}
-      <section className="py-20 bg-gradient-to-r from-primary/10 via-secondary/10 to-primary/10">
-        <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8">
-          <h2 className="text-3xl md:text-4xl font-bold">
+      <section className="py-20 relative overflow-hidden bg-[hsl(217,32%,6%)]">
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-secondary/15 to-primary/20 pointer-events-none" />
+        <div className="relative max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8">
+          <h2 className="text-3xl md:text-4xl font-bold text-white">
             Start understanding your money
           </h2>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">

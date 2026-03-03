@@ -40,11 +40,8 @@ export default function FaqContent() {
               </Link>
             </div>
             <div className="hidden md:flex items-center space-x-8">
-              <Link href="/" className="text-muted-foreground hover:text-primary transition-colors">
-                Home
-              </Link>
               <Link href="/features" className="text-muted-foreground hover:text-primary transition-colors">
-                Features
+                Product
               </Link>
               <Link href="/#pricing" className="text-muted-foreground hover:text-primary transition-colors">
                 Pricing

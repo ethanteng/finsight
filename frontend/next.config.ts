@@ -16,7 +16,7 @@ const nextConfig: NextConfig = {
               "default-src 'self'",
               "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://plausible.io https://t.contentsquare.net https://googleads.g.doubleclick.net https://cdn.plaid.com",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-              "img-src 'self' data: https: blob:",
+              "img-src 'self' data: https: blob: https://logo.clearbit.com",
               "font-src 'self' data: https://fonts.gstatic.com",
               "connect-src 'self' http://localhost:3000 http://localhost:3001 https://*.sentry.io https://www.google-analytics.com https://plausible.io https://*.asklinc.com wss://*.asklinc.com https://*.onrender.com https://production.plaid.com https://cdn.plaid.com https://*.contentsquare.net",
               "frame-src 'self' https://*.plaid.com https://cdn.plaid.com https://www.googletagmanager.com",

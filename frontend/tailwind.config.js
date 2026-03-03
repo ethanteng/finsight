@@ -103,6 +103,10 @@ module.exports = {
         'slide-up': {
           '0%': { transform: 'translateY(20px)', opacity: '0' },
           '100%': { transform: 'translateY(0)', opacity: '1' }
+        },
+        'marquee-scroll': {
+          '0%': { transform: 'translateX(0)' },
+          '100%': { transform: 'translateX(-50%)' }
         }
       },
       animation: {
@@ -111,7 +115,8 @@ module.exports = {
         'float': 'float 6s ease-in-out infinite',
         'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
         'pulse-glow-blue': 'pulse-glow-blue 2s ease-in-out infinite',
-        'slide-up': 'slide-up 0.6s ease-out'
+        'slide-up': 'slide-up 0.6s ease-out',
+        'marquee': 'marquee-scroll 30s linear infinite'
       }
     }
   },
