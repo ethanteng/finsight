@@ -19,28 +19,14 @@ const HOW_LINC_STEPS = [
 ];
 
 const INSTITUTIONS = [
-  { name: 'Chase', domain: 'chase.com' },
-  { name: 'Bank of America', domain: 'bankofamerica.com' },
-  { name: 'Wells Fargo', domain: 'wellsfargo.com' },
-  { name: 'Citi', domain: 'citi.com' },
-  { name: 'PNC', domain: 'pnc.com' },
-  { name: 'US Bank', domain: 'usbank.com' },
-  { name: 'TD Bank', domain: 'td.com' },
-  { name: 'HSBC', domain: 'hsbc.com' },
-  { name: 'Fidelity', domain: 'fidelity.com' },
-  { name: 'Charles Schwab', domain: 'schwab.com' },
-  { name: 'Capital One', domain: 'capitalone.com' },
-  { name: 'Ally', domain: 'ally.com' },
-  { name: 'Discover', domain: 'discover.com' },
-  { name: 'American Express', domain: 'americanexpress.com' },
-  { name: 'Morgan Stanley', domain: 'morganstanley.com' },
-  { name: 'Goldman Sachs', domain: 'goldmansachs.com' },
+  'Chase', 'Bank of America', 'Wells Fargo', 'Citi', 'PNC', 'US Bank', 'TD Bank', 'HSBC',
+  'Fidelity', 'Charles Schwab', 'Capital One', 'Ally', 'Discover', 'American Express',
+  'Morgan Stanley', 'Goldman Sachs',
 ];
 
 const NewHomepage = () => {
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [failedInstitutionLogos, setFailedInstitutionLogos] = useState<Set<string>>(new Set());
   const [howItWorksInView, setHowItWorksInView] = useState(false);
   const [revealedStepCount, setRevealedStepCount] = useState(0);
   const [highlightedStep, setHighlightedStep] = useState(0);
@@ -139,7 +125,7 @@ const NewHomepage = () => {
               <Link href="/features" className="text-muted-foreground hover:text-primary transition-colors">Product</Link>
               <button onClick={() => scrollToSection('pricing')} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
               <a 
-                href="https://www.asklinc.com/blog" 
+                href="https://blog.asklinc.com/" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-primary transition-colors"
@@ -199,7 +185,7 @@ const NewHomepage = () => {
                 Pricing
               </button>
               <a 
-                href="https://www.asklinc.com/blog" 
+                href="https://blog.asklinc.com/" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="block py-3 text-muted-foreground hover:text-primary transition-colors"
@@ -374,46 +360,22 @@ const NewHomepage = () => {
             <div className="absolute right-0 top-0 bottom-0 w-16 sm:w-24 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
             <div className="flex overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_5%,black_95%,transparent)] [-webkit-mask-image:linear-gradient(to_right,transparent,black_5%,black_95%,transparent)] min-h-[80px]">
               <div className="flex shrink-0 animate-marquee items-center gap-12 sm:gap-16 py-6">
-                {INSTITUTIONS.map(({ name, domain }) => {
-                  const showFallback = failedInstitutionLogos.has(name);
-                  return (
-                    <div
-                      key={name}
-                      className="flex shrink-0 items-center justify-center min-h-[48px] grayscale opacity-80 hover:grayscale-0 hover:opacity-100 transition-all duration-300 min-w-[100px] sm:min-w-[120px]"
-                    >
-                      {showFallback ? (
-                        <span className="text-muted-foreground/80 font-semibold text-sm sm:text-lg text-center">{name}</span>
-                      ) : (
-                        <img
-                          src={`https://logo.clearbit.com/${domain}`}
-                          alt={name}
-                          className="h-10 w-auto max-w-[140px] object-contain object-center"
-                          onError={() => setFailedInstitutionLogos((prev) => new Set(prev).add(name))}
-                        />
-                      )}
-                    </div>
-                  );
-                })}
-                {INSTITUTIONS.map(({ name, domain }) => {
-                  const showFallback = failedInstitutionLogos.has(name);
-                  return (
-                    <div
-                      key={`${name}-dup`}
-                      className="flex shrink-0 items-center justify-center min-h-[48px] grayscale opacity-80 hover:grayscale-0 hover:opacity-100 transition-all duration-300 min-w-[100px] sm:min-w-[120px]"
-                    >
-                      {showFallback ? (
-                        <span className="text-muted-foreground/80 font-semibold text-sm sm:text-lg text-center">{name}</span>
-                      ) : (
-                        <img
-                          src={`https://logo.clearbit.com/${domain}`}
-                          alt={name}
-                          className="h-10 w-auto max-w-[140px] object-contain object-center"
-                          onError={() => setFailedInstitutionLogos((prev) => new Set(prev).add(name))}
-                        />
-                      )}
-                    </div>
-                  );
-                })}
+                {INSTITUTIONS.map((name) => (
+                  <div
+                    key={name}
+                    className="flex shrink-0 items-center justify-center min-h-[48px] opacity-80 hover:opacity-100 transition-opacity duration-300 min-w-[100px] sm:min-w-[120px]"
+                  >
+                    <span className="text-muted-foreground/80 font-semibold text-sm sm:text-lg text-center">{name}</span>
+                  </div>
+                ))}
+                {INSTITUTIONS.map((name) => (
+                  <div
+                    key={`${name}-dup`}
+                    className="flex shrink-0 items-center justify-center min-h-[48px] opacity-80 hover:opacity-100 transition-opacity duration-300 min-w-[100px] sm:min-w-[120px]"
+                  >
+                    <span className="text-muted-foreground/80 font-semibold text-sm sm:text-lg text-center">{name}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>

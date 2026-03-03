@@ -118,7 +118,7 @@ const RetirementReadinessPage = () => {
               <Link href="/features" className="text-muted-foreground hover:text-primary transition-colors">Product</Link>
               <button onClick={() => scrollToSection('pricing')} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
               <a 
-                href="https://www.asklinc.com/blog" 
+                href="https://blog.asklinc.com/" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-primary transition-colors"
@@ -178,7 +178,7 @@ const RetirementReadinessPage = () => {
                 Pricing
               </button>
               <a 
-                href="https://www.asklinc.com/blog" 
+                href="https://blog.asklinc.com/" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="block py-3 text-muted-foreground hover:text-primary transition-colors"

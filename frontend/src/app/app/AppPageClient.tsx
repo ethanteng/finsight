@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import FinanceQA from '../../components/FinanceQA';
 import TierBanner from '../../components/TierBanner';
 import FinancialOverview from '../../components/FinancialOverview';
+import MarketNewsModal from '../../components/MarketNewsModal';
 import { resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
 
 interface PromptHistory {
@@ -31,7 +32,10 @@ export default function AppPageClient() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('');
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
+  const [showMarketNewsModal, setShowMarketNewsModal] = useState(false);
   const router = useRouter();
+
+  const hasMarketNewsAccess = subscriptionStatus?.tier === 'standard' || subscriptionStatus?.tier === 'premium';
 
   // Check subscription status
   const checkSubscriptionStatus = useCallback(async (token: string) => {
@@ -303,6 +307,16 @@ export default function AppPageClient() {
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
+      {/* Market News Banner */}
+      {hasMarketNewsAccess && subscriptionStatus?.tier && (
+        <button
+          onClick={() => setShowMarketNewsModal(true)}
+          className="w-full bg-blue-900/80 hover:bg-blue-800/90 border-b border-blue-700 py-2 px-4 text-center text-blue-200 hover:text-white text-sm font-medium transition-colors"
+          title="View current market news"
+        >
+          Read the latest market news
+        </button>
+      )}
       {/* Header */}
       <div className="bg-gray-800 border-b border-gray-700 p-4">
         <div className="flex items-center justify-between">
@@ -344,7 +358,7 @@ export default function AppPageClient() {
 
       {/* No subscription warning banner - access controlled at login level */}
 
-      <div className="flex h-[calc(100vh-80px)]">
+      <div className="flex h-[calc(100vh-116px)]">
         {/* Sidebar - Hidden on mobile, visible on desktop */}
         {showSidebar && (
           <div className="w-80 bg-gray-800 border-r border-gray-700 overflow-y-auto hidden lg:block">
@@ -395,6 +409,15 @@ export default function AppPageClient() {
           </div>
         </div>
       </div>
+
+      {/* Market News Modal */}
+      {hasMarketNewsAccess && subscriptionStatus?.tier && (
+        <MarketNewsModal
+          isOpen={showMarketNewsModal}
+          onClose={() => setShowMarketNewsModal(false)}
+          tier={subscriptionStatus.tier}
+        />
+      )}
     </div>
   );
 }

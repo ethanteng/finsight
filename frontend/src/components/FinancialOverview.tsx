@@ -1,8 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import MarketNewsModal from './MarketNewsModal';
-
 interface Account {
   id: string;
   name: string;
@@ -81,7 +79,6 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
   const [financialSummary, setFinancialSummary] = useState<FinancialSummaryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [_error, setError] = useState('');
-  const [showMarketNewsModal, setShowMarketNewsModal] = useState(false);
   const router = useRouter();
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -420,9 +417,6 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
   // Calculate Net Worth
   const netWorth = totalCash + totalInvestments + totalHomeValue - totalDebt;
 
-  // Check if user has access to market news (standard or premium tier)
-  const hasMarketNewsAccess = tier === 'standard' || tier === 'premium';
-
   return (
     <>
       <div 
@@ -442,19 +436,6 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
           <div className="flex items-center space-x-2">
             <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
             <h3 className="text-base font-semibold text-blue-100">Your Financial Overview</h3>
-            {/* Market News link - only show for standard and premium tiers */}
-            {hasMarketNewsAccess && !isDemo && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowMarketNewsModal(true);
-                }}
-                className="text-blue-300 hover:text-blue-200 text-sm transition-colors underline decoration-blue-400/30 hover:decoration-blue-400/60 ml-3"
-                title="View current market news"
-              >
-                Market News
-              </button>
-            )}
           </div>
           
           {/* Add More Accounts link - only show when user has accounts */}
@@ -547,15 +528,6 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
         </div>
       )}
     </div>
-    
-    {/* Market News Modal */}
-    {hasMarketNewsAccess && tier && (
-      <MarketNewsModal
-        isOpen={showMarketNewsModal}
-        onClose={() => setShowMarketNewsModal(false)}
-        tier={tier}
-      />
-    )}
     </>
   );
 }

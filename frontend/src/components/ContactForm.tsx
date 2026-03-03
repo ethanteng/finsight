@@ -96,7 +96,7 @@ export default function ContactForm() {
               <Link href="/features" className="text-muted-foreground hover:text-primary transition-colors">Product</Link>
               <Link href="/#pricing" className="text-muted-foreground hover:text-primary transition-colors">Pricing</Link>
               <a 
-                href="https://www.asklinc.com/blog" 
+                href="https://blog.asklinc.com/" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-primary transition-colors"
@@ -152,7 +152,7 @@ export default function ContactForm() {
                 Pricing
               </Link>
               <a 
-                href="https://www.asklinc.com/blog" 
+                href="https://blog.asklinc.com/" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="block py-3 text-muted-foreground hover:text-primary transition-colors"

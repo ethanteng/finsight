@@ -122,12 +122,12 @@
   
   <!-- Blog Section -->
   <url>
-    <loc>https://asklinc.com/blog</loc>
+    <loc>https://blog.asklinc.com/</loc>
     <lastmod>2026-02-08</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
   
   <!-- Note: Individual blog posts will be dynamically generated -->
-  <!-- Blog post URLs follow the pattern: https://asklinc.com/blog/[slug] -->
+  <!-- Blog post URLs follow the pattern: https://blog.asklinc.com/[slug] -->
 </urlset>

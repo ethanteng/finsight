@@ -272,7 +272,7 @@ export function createEmailHtml(content: string, options: CreateEmailHtmlOptions
         <a href="${baseUrl}" style="color: #0f766e; text-decoration: none; margin: 0 12px; font-size: 13px;">Home</a>
         <a href="https://asklinc.com/features" style="color: #0f766e; text-decoration: none; margin: 0 12px; font-size: 13px;">Features</a>
         <a href="${baseUrl}/how-we-protect-your-data" style="color: #0f766e; text-decoration: none; margin: 0 12px; font-size: 13px;">Privacy</a>
-        <a href="https://asklinc.com/blog" style="color: #0f766e; text-decoration: none; margin: 0 12px; font-size: 13px;">Blog</a>
+        <a href="https://blog.asklinc.com/" style="color: #0f766e; text-decoration: none; margin: 0 12px; font-size: 13px;">Blog</a>
       </div>
 
       <p style="margin: 0; color: #475569;">© ${new Date().getFullYear()} Ask Linc. All rights reserved.</p>
