@@ -210,7 +210,7 @@ export default function ContactForm() {
               href="https://bsky.app/profile/asklinc.com" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="flex items-center space-x-2 px-6 py-3 bg-input border border-border rounded-lg hover:bg-accent transition-colors group"
+              className="flex items-center space-x-2 px-6 py-3 bg-input border border-border rounded-lg hover:bg-primary/10 hover:border-primary/30 transition-colors group"
             >
               <img 
                 src="/logos/bluesky.jpeg" 
@@ -231,7 +231,7 @@ export default function ContactForm() {
               href="https://asklinc.substack.com/" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="flex items-center space-x-2 px-6 py-3 bg-input border border-border rounded-lg hover:bg-accent transition-colors group"
+              className="flex items-center space-x-2 px-6 py-3 bg-input border border-border rounded-lg hover:bg-primary/10 hover:border-primary/30 transition-colors group"
             >
               <img 
                 src="/logos/substack.png" 
@@ -245,6 +245,26 @@ export default function ContactForm() {
               />
               <div className="w-5 h-5 bg-orange-500 rounded hidden"></div>
               <span>Substack</span>
+              <ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+            </a>
+            <a 
+              href="https://www.linkedin.com/company/ask-linc/" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center space-x-2 px-6 py-3 bg-input border border-border rounded-lg hover:bg-primary/10 hover:border-primary/30 transition-colors group"
+            >
+              <img 
+                src="/logos/linkedin.png" 
+                alt="LinkedIn" 
+                className="w-5 h-5"
+                onError={(e) => {
+                  // Fallback to colored square if logo fails to load
+                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                }}
+              />
+              <div className="w-5 h-5 bg-[#0A66C2] rounded hidden"></div>
+              <span>LinkedIn</span>
               <ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
             </a>
           </div>
@@ -331,6 +351,25 @@ export default function ContactForm() {
                   />
                   <div className="w-4 h-4 bg-orange-500 rounded hidden"></div>
                   <span>Substack</span>
+                </a>
+                <a 
+                  href="https://www.linkedin.com/company/ask-linc/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <img 
+                    src="/logos/linkedin.png" 
+                    alt="LinkedIn" 
+                    className="w-4 h-4"
+                    onError={(e) => {
+                      // Fallback to colored square if logo fails to load
+                      e.currentTarget.style.display = 'none';
+                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                    }}
+                  />
+                  <div className="w-4 h-4 bg-[#0A66C2] rounded hidden"></div>
+                  <span>LinkedIn</span>
                 </a>
               </div>
             </div>
