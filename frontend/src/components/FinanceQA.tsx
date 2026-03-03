@@ -140,15 +140,8 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   // Update question and answer when selectedPrompt changes
   useEffect(() => {
     if (selectedPrompt) {
-      // In demo mode, don't populate the question box so the rotating sample questions stay visible
-      // Unless we have an initial question from homepage - keep that visible in the prompt box
-      if (!isDemo) {
-        setQuestion(selectedPrompt.question);
-      } else if (!propInitialQuestion?.trim()) {
-        setQuestion('');
-      } else {
-        setQuestion(propInitialQuestion.trim());
-      }
+      // Always show the selected prompt's question when viewing an answer (including user's own question)
+      setQuestion(selectedPrompt.question);
       setAnswer(selectedPrompt.answer);
       setError('');
     } else {
@@ -156,7 +149,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       setError('');
       // Don't clear the question - keep it in the textarea
     }
-  }, [selectedPrompt, isDemo, propInitialQuestion]);
+  }, [selectedPrompt]);
 
   const askQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
