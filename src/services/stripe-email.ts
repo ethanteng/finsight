@@ -50,10 +50,6 @@ export async function sendWelcomeEmail(
         Welcome to Ask Linc
       </div>
       
-      <div class="tier-badge">
-        ${tier.charAt(0).toUpperCase() + tier.slice(1)} Plan
-      </div>
-      
       <div class="description">
         Thank you for choosing Ask Linc. Your payment has been processed, and your account is ready for setup.
       </div>
@@ -83,16 +79,12 @@ export async function sendWelcomeEmail(
         2. Connect your financial accounts securely<br>
         3. Begin asking Linc your financial questions
       </div>
-      
-      <div class="security-note">
-        <p><strong>Security note:</strong> Your financial data is protected with bank-grade encryption.</p>
-      </div>
     `;
 
     const { data, error } = await resend.emails.send({
       from: 'Ask Linc <noreply@asklinc.com>',
       to: email,
-      subject: `Welcome to Ask Linc! Complete Your ${tier.charAt(0).toUpperCase() + tier.slice(1)} Account Setup`,
+      subject: 'Welcome to Ask Linc! Complete Your Account Setup',
       html: createEmailHtml(content, {
       title: 'Welcome to Ask Linc',
       footerNote: 'This email was sent to you as part of your Ask Linc subscription.',
@@ -293,7 +285,6 @@ function getTierFeatures(tier: string): string[] {
       ];
     case 'premium':
       return [
-        'Everything in Standard, plus:',
         'Live market data and news',
         'Real-time portfolio tracking',
         'Advanced investment insights',

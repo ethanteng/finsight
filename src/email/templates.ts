@@ -15,8 +15,6 @@ export function getBaseUrl(): string {
 export interface CreateEmailHtmlOptions {
   /** Page title (used in <title>) */
   title?: string;
-  /** Optional header subtitle override (default: "Your AI Financial Assistant") */
-  headerSubtitle?: string;
   /** Footer note shown below copyright (e.g. "This email was sent to X") */
   footerNote?: string;
 }
@@ -24,11 +22,11 @@ export interface CreateEmailHtmlOptions {
 /**
  * Creates a full HTML email with Ask Linc branding.
  * @param content - HTML content for the main body area
- * @param options - Optional title, header subtitle, and footer note
+ * @param options - Optional title and footer note
  */
 export function createEmailHtml(content: string, options: CreateEmailHtmlOptions = {}): string {
   const baseUrl = getBaseUrl();
-  const { title = 'Ask Linc', headerSubtitle = 'Your AI Financial Assistant', footerNote } = options;
+  const { title = 'Ask Linc', footerNote } = options;
 
   return `
 <!DOCTYPE html>
@@ -55,7 +53,7 @@ export function createEmailHtml(content: string, options: CreateEmailHtmlOptions
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
     }
     .header {
-      background-color: #0f766e;
+      background-color: #0C121D;
       padding: 32px 24px;
       text-align: center;
       color: white;
@@ -256,11 +254,10 @@ export function createEmailHtml(content: string, options: CreateEmailHtmlOptions
 </head>
 <body>
   <div class="container">
-    <div class="header" style="background-color: #0f766e; padding: 32px 24px; text-align: center; color: #ffffff;">
+    <div class="header" style="background-color: #0C121D; padding: 32px 24px; text-align: center; color: #ffffff;">
       <div class="logo">
-        <div class="logo-text" style="font-size: 22px; font-weight: 600; color: #ffffff;">Ask Linc</div>
+        <img src="${baseUrl}/ask-linc.png" alt="Ask Linc" width="200" height="48" style="max-width: 200px; height: auto; display: block; margin: 0 auto;" />
       </div>
-      <p class="header-subtitle" style="font-size: 14px; margin: 0; color: #ffffff; opacity: 0.95;">${headerSubtitle}</p>
     </div>
 
     <div class="content">
@@ -271,7 +268,7 @@ export function createEmailHtml(content: string, options: CreateEmailHtmlOptions
       <div class="footer-links" style="margin-bottom: 20px;">
         <a href="${baseUrl}" style="color: #0f766e; text-decoration: none; margin: 0 12px; font-size: 13px;">Home</a>
         <a href="https://asklinc.com/features" style="color: #0f766e; text-decoration: none; margin: 0 12px; font-size: 13px;">Features</a>
-        <a href="${baseUrl}/how-we-protect-your-data" style="color: #0f766e; text-decoration: none; margin: 0 12px; font-size: 13px;">Privacy</a>
+        <a href="${baseUrl}/privacy" style="color: #0f766e; text-decoration: none; margin: 0 12px; font-size: 13px;">Privacy</a>
         <a href="https://blog.asklinc.com/" style="color: #0f766e; text-decoration: none; margin: 0 12px; font-size: 13px;">Blog</a>
       </div>
 

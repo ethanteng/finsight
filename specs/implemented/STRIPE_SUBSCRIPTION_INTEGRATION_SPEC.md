@@ -193,7 +193,7 @@ The Stripe Email Notification System automatically sends professional, branded e
 ### **Email Templates**
 
 #### **Welcome Email (New Users)**
-- **Subject**: "Welcome to Ask Linc! Complete Your [Tier] Account Setup"
+- **Subject**: "Welcome to Ask Linc! Complete Your Account Setup"
 - **Content**:
   - Welcome message with tier confirmation
   - Feature list for the selected plan
