@@ -72,7 +72,6 @@ export async function sendEmailVerificationCode(
 
     const html = createEmailHtml(content, {
       title: 'Verify your Ask Linc email address',
-      headerSubtitle: 'Verify your email address',
       footerNote: `This email was sent to ${email} to verify your account.`,
     });
 
@@ -144,7 +143,6 @@ export async function sendPasswordResetEmail(
 
     const html = createEmailHtml(content, {
       title: 'Reset your Ask Linc password',
-      headerSubtitle: 'Password Reset Request',
       footerNote: `This email was sent to ${email} to reset your password.`,
     });
 
@@ -214,7 +212,6 @@ export async function sendContactEmail(
 
     const html = createEmailHtml(content, {
       title: 'New Contact Form Submission',
-      headerSubtitle: 'New Contact Form Submission',
       footerNote: 'This email was sent to admin team.',
     });
 
@@ -305,7 +302,6 @@ export async function sendAdminNotification(
 
     const html = createEmailHtml(content, {
       title: 'Admin Notification',
-      headerSubtitle: 'Admin Notification',
       footerNote: 'This email was sent to admin team.',
     });
 
