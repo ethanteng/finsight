@@ -12,7 +12,7 @@ import { AskLincResponse } from './structured-response';
 import { FinancialContextSnapshot } from './types';
 
 const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '';
-const DEFAULT_MODEL = 'gemini-1.5-flash';
+const DEFAULT_MODEL = process.env.GEMINI_VALIDATION_MODEL || 'gemini-3-flash-preview';
 
 export interface ValidationResult {
   valid: boolean;

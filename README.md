@@ -215,6 +215,7 @@ USE_ASK_LINC_PIPELINE="false"       # Enable Claude-based analysis pipeline (req
 ANTHROPIC_API_KEY="your_anthropic_api_key"  # Required when USE_ASK_LINC_PIPELINE=true
 ENABLE_RESPONSE_VALIDATION="false"  # Optional: validate responses with Gemini
 GOOGLE_AI_API_KEY="your_google_ai_key"     # Optional: for Gemini validation (or GEMINI_API_KEY)
+GEMINI_VALIDATION_MODEL="gemini-3-flash-preview" # Optional: override Gemini model (default)
 ```
 
 Create `.env.local` file in the `frontend` directory:

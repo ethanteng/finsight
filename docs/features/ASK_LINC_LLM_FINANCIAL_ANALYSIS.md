@@ -65,7 +65,7 @@ flowchart TB
 4. **Retrieve daily market summary** → `MarketNewsManager.getMarketContext(tier)` or `dataOrchestrator.getMarketContextSummary()`
 5. **Call RAG retrieval** → `dataOrchestrator.getSearchContext(question, tier, isDemo)` for question-specific financial knowledge
 6. **LLM financial reasoning** → Claude Sonnet 4.5 (`claude-sonnet-4-5`) with structured reasoning prompt
-7. **Optional validation** → Gemini checks calculation consistency, logical reasoning, unsupported assumptions
+7. **Optional validation** → Gemini 3 Flash (`gemini-3-flash-preview`) checks calculation consistency, logical reasoning, unsupported assumptions
 8. **Structured response** → JSON with `summary`, `key_numbers`, `insights`, `suggested_actions`
 
 ---
@@ -183,6 +183,7 @@ The API returns:
 | `ANTHROPIC_API_KEY` | Yes (when enabled) | Claude Sonnet API key |
 | `ENABLE_RESPONSE_VALIDATION` | No | Set to `true` for Gemini validation (default: `false`) |
 | `GOOGLE_AI_API_KEY` or `GEMINI_API_KEY` | No | For Gemini validation when enabled |
+| `GEMINI_VALIDATION_MODEL` | No | Override Gemini model (default: `gemini-3-flash-preview`) |
 
 ### Feature Flag
 
