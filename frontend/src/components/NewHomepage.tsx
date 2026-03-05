@@ -294,11 +294,11 @@ const NewHomepage = () => {
       <section
         id="how-it-works"
         ref={howItWorksRef}
-        className="py-20 bg-muted/30"
+        className="py-20 bg-slate-900"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center space-y-4 mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold">
+            <h2 className="text-3xl md:text-4xl font-bold text-white">
               How <span className="gradient-text">Linc Works</span>
             </h2>
           </div>
@@ -332,10 +332,10 @@ const NewHomepage = () => {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <h3 className={`text-xl font-bold transition-colors duration-300 ${isHighlighted ? 'text-primary' : ''}`}>
+                    <h3 className={`text-xl font-bold transition-colors duration-300 ${isHighlighted ? 'text-primary' : 'text-white'}`}>
                       {step.title}
                     </h3>
-                    <p className="text-muted-foreground">{step.description}</p>
+                    <p className="text-slate-400">{step.description}</p>
                   </div>
                 </div>
               );
