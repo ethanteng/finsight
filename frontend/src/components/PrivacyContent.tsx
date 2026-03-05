@@ -215,11 +215,19 @@ export default function PrivacyContent() {
                   </div>
                   <div className="flex items-start gap-3">
                     <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                    <p className="text-muted-foreground"><strong className="text-foreground">OpenAI</strong> for GPT-powered responses (with anonymized input)</p>
+                    <p className="text-muted-foreground"><strong className="text-foreground">SnapTrade</strong> for investment account linking</p>
                   </div>
                   <div className="flex items-start gap-3">
                     <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                    <p className="text-muted-foreground"><strong className="text-foreground">Hosting and analytics services</strong> that follow industry-standard security protocols</p>
+                    <p className="text-muted-foreground"><strong className="text-foreground">Claude</strong> (Anthropic) and <strong className="text-foreground">Google Gemini</strong> for AI-powered responses (with anonymized input)</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
+                    <p className="text-muted-foreground"><strong className="text-foreground">Stripe</strong> for secure payment processing</p>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
+                    <p className="text-muted-foreground"><strong className="text-foreground">Hosting and analytics services</strong> (Render, Vercel, Plausible) that follow industry-standard security protocols</p>
                   </div>
                 </div>
               </CardContent>

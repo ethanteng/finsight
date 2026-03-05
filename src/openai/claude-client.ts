@@ -8,7 +8,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { buildFinancialReasoningPrompt, FinancialReasoningPromptInput } from './financial-reasoning-prompt';
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
-const DEFAULT_MODEL = 'claude-3-5-sonnet-latest';
+const DEFAULT_MODEL = 'claude-sonnet-4-5';
 
 let anthropicClient: Anthropic | null = null;
 

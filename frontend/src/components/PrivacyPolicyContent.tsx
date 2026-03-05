@@ -115,7 +115,7 @@ export default function PrivacyPolicyContent() {
                   <div>
                     <h4 className="text-lg font-medium mb-3 text-green-400">No AI Training</h4>
                     <p className="text-gray-300 text-sm">
-                      We use OpenAI's API which does not train on your data. Your financial information is never used to improve AI models or shared with AI training datasets.
+                      We use Claude and Google Gemini APIs which do not train on your data. Your financial information is never used to improve AI models or shared with AI training datasets.
                     </p>
                   </div>
                 </div>
@@ -163,9 +163,24 @@ export default function PrivacyPolicyContent() {
                   We use Plaid to securely connect to your financial accounts. Plaid is SOC 2-compliant and used by major financial institutions. They handle the secure connection to your bank - we never see your login credentials.
                 </p>
 
-                <h4 className="text-lg font-medium mb-3">OpenAI</h4>
+                <h4 className="text-lg font-medium mb-3">SnapTrade</h4>
                 <p className="text-gray-300 mb-4">
-                  We use OpenAI's API to power our AI analysis. OpenAI does not train on your data and maintains strict privacy controls. All data sent to OpenAI is anonymized.
+                  We use SnapTrade to connect to your investment and brokerage accounts. SnapTrade provides read-only access to your holdings and transactions.
+                </p>
+
+                <h4 className="text-lg font-medium mb-3">Claude (Anthropic) and Google Gemini</h4>
+                <p className="text-gray-300 mb-4">
+                  We use Claude and Google Gemini to power our AI analysis. These providers do not train on your data and maintain strict privacy controls. All data sent to them is anonymized before processing.
+                </p>
+
+                <h4 className="text-lg font-medium mb-3">Stripe</h4>
+                <p className="text-gray-300 mb-4">
+                  We use Stripe for secure payment processing. Stripe is PCI-compliant and we do not store your full payment card details.
+                </p>
+
+                <h4 className="text-lg font-medium mb-3">Hosting and Analytics</h4>
+                <p className="text-gray-300 mb-4">
+                  We use Render and Vercel for hosting, and Plausible for privacy-focused analytics. These services follow industry-standard security protocols.
                 </p>
               </section>
 

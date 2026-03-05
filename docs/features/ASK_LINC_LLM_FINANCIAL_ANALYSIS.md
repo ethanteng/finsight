@@ -64,7 +64,7 @@ flowchart TB
 3. **Retrieve persistent user profile** → `ProfileManager.getOriginalProfile(userId)`
 4. **Retrieve daily market summary** → `MarketNewsManager.getMarketContext(tier)` or `dataOrchestrator.getMarketContextSummary()`
 5. **Call RAG retrieval** → `dataOrchestrator.getSearchContext(question, tier, isDemo)` for question-specific financial knowledge
-6. **LLM financial reasoning** → Claude Sonnet with structured reasoning prompt
+6. **LLM financial reasoning** → Claude Sonnet 4.5 (`claude-sonnet-4-5`) with structured reasoning prompt
 7. **Optional validation** → Gemini checks calculation consistency, logical reasoning, unsupported assumptions
 8. **Structured response** → JSON with `summary`, `key_numbers`, `insights`, `suggested_actions`
 

@@ -137,21 +137,21 @@ export default function DataProtectionContent() {
                     <div className="h-12 w-12 bg-primary/10 rounded-lg flex items-center justify-center">
                       <MessageCircle className="h-6 w-6 text-primary" />
                     </div>
-                    <CardTitle className="text-xl">GPT, But Smarter (And Safer)</CardTitle>
+                    <CardTitle className="text-xl">LLM-Powered, But Smarter (And Safer)</CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-muted-foreground">
-                    Ask Linc uses OpenAI's GPT models to answer your financial questions. But unlike typing into ChatGPT directly, we:
+                    Ask Linc uses LLMs to answer your financial questions. But unlike typing into a general chatbot directly, we:
                   </p>
                   <div className="space-y-3">
                     <div className="flex items-start gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                      <p className="text-muted-foreground">Anonymize your financial data before it's passed to GPT</p>
+                      <p className="text-muted-foreground">Anonymize your financial data before it's passed to the LLM</p>
                     </div>
                     <div className="flex items-start gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
-                      <p className="text-muted-foreground">Use the OpenAI API, not ChatGPT — your data is not used to train any models</p>
+                      <p className="text-muted-foreground">Use the best available LLMs — your data is not used to train any models</p>
                     </div>
                     <div className="flex items-start gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-primary mt-2 flex-shrink-0"></div>
@@ -159,7 +159,7 @@ export default function DataProtectionContent() {
                     </div>
                   </div>
                   <p className="text-sm font-medium text-primary">
-                    So you get the clarity of GPT — without the exposure.
+                    So you get the clarity of an LLM — without the exposure.
                   </p>
                 </CardContent>
               </Card>
@@ -284,7 +284,7 @@ export default function DataProtectionContent() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center glass-card rounded-xl p-8 border border-primary/20">
               <blockquote className="text-lg italic text-muted-foreground mb-4">
-                "Ask Linc was built because existing tools made us feel vulnerable — pasting bank statements into ChatGPT, 
+                "Ask Linc was built because existing tools made us feel vulnerable — pasting bank statements into public AI chatbots, 
                 hoping no one sees. That's not good enough. So we made something better."
               </blockquote>
               <div className="text-primary font-semibold text-xl">
