@@ -209,6 +209,12 @@ JWT_SECRET="your_jwt_secret"
 # Transaction & Context Persistence (optional, for debugging)
 PERSIST_TRANSACTIONS="false"        # Toggle transaction persistence to database
 PERSIST_GPT_CONTEXT="false"         # Toggle GPT context logging to /opt/render/project/src/logs
+
+# Ask Linc LLM Pipeline (optional - uses Claude Sonnet for financial reasoning)
+USE_ASK_LINC_PIPELINE="false"       # Enable Claude-based analysis pipeline (requires ANTHROPIC_API_KEY)
+ANTHROPIC_API_KEY="your_anthropic_api_key"  # Required when USE_ASK_LINC_PIPELINE=true
+ENABLE_RESPONSE_VALIDATION="false"  # Optional: validate responses with Gemini
+GOOGLE_AI_API_KEY="your_google_ai_key"     # Optional: for Gemini validation (or GEMINI_API_KEY)
 ```
 
 Create `.env.local` file in the `frontend` directory:

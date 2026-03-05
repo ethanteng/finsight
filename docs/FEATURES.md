@@ -11,6 +11,7 @@ This document covers the core features of the Ask Linc platform, including the t
 - [📈 SnapTrade Investment Integration System](#-snaptrade-investment-integration-system)
 - [🧠 Enhanced Market Context System](#-enhanced-market-context-system)
 - [🤖 AI Conversation Context Enhancement System](#-ai-conversation-context-enhancement-system)
+- [📊 Ask Linc LLM Financial Analysis Layer](features/ASK_LINC_LLM_FINANCIAL_ANALYSIS.md)
 - [📰 Financial Market News Context System](#-financial-market-news-context-system)
 - [🎭 Demo Profile System](#-demo-profile-system)
 - [🛠️ Admin Dashboard & Management System](#️-admin-dashboard--management-system)

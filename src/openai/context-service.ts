@@ -12,6 +12,8 @@ interface GatherContextArgs {
   questionNeeds: QuestionNeeds;
   tier: UserTier;
   demoProfile?: string;
+  /** When true, always fetch market and RAG context (for Ask Linc financial reasoning pipeline) */
+  alwaysIncludeMarketAndRAG?: boolean;
 }
 
 const MAX_PROMPT_TRANSACTIONS = parseInt(process.env.MAX_PROMPT_TRANSACTIONS || '75', 10);
@@ -52,7 +54,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     question,
     questionNeeds,
     tier,
-    demoProfile
+    demoProfile,
+    alwaysIncludeMarketAndRAG = false
   } = args;
 
   let accounts: Account[] = [];
@@ -349,8 +352,11 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     isDemo
   );
 
-  const searchContext = await maybeFetchSearchContext(question, questionNeeds, tier, isDemo);
-  const marketContext = await maybeFetchMarketContext(questionNeeds, tier, isDemo);
+  const effectiveQuestionNeeds = alwaysIncludeMarketAndRAG
+    ? { ...questionNeeds, needsMarketContext: true, needsSearchContext: true }
+    : questionNeeds;
+  const searchContext = await maybeFetchSearchContext(question, effectiveQuestionNeeds, tier, isDemo);
+  const marketContext = await maybeFetchMarketContext(effectiveQuestionNeeds, tier, isDemo);
 
   // Fetch user overrides for monthly income/expenses
   let monthlyIncomeOverride: number | null | undefined = undefined;

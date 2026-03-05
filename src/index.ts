@@ -53,6 +53,7 @@ console.log('  SNAPTRADE_CONSUMER_KEY_PROD:', process.env.SNAPTRADE_CONSUMER_KEY
 // Now import Plaid after environment variables are loaded
 import { setupPlaidRoutes } from './plaid';
 import { askOpenAI, askOpenAIWithEnhancedContext, PromptValidationError } from './openai';
+import { runAskLincAnalysis } from './openai/analysis-pipeline';
 import { aiRateLimitMiddleware } from './security/ai-rate-limiter';
 
 // Import SnapTrade configuration
@@ -530,8 +531,34 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
         });
       }
       
-      // Get AI response using enhanced context with RAG and conversation history
-      const aiResponse = await askOpenAIWithEnhancedContext(question, conversationHistory, userTier, isDemo, userId);
+      // Get AI response - use Ask Linc pipeline when enabled, else OpenAI
+      const useAskLincPipeline = process.env.USE_ASK_LINC_PIPELINE === 'true';
+      let aiResponse: string;
+      let structuredResponse: { summary: string; key_numbers?: Record<string, number>; insights?: string[]; suggested_actions?: string[] } | undefined;
+
+      if (useAskLincPipeline) {
+        try {
+          const result = await runAskLincAnalysis({
+            question,
+            userId,
+            isDemo,
+            userTier,
+            conversationHistory,
+            demoProfile: undefined,
+            enableValidation: process.env.ENABLE_RESPONSE_VALIDATION === 'true'
+          });
+          aiResponse = result.displayText;
+          structuredResponse = result.structuredResponse;
+        } catch (err) {
+          if (err instanceof PromptValidationError) {
+            throw err;
+          }
+          console.error('Ask Linc pipeline failed, falling back to OpenAI:', err);
+          aiResponse = await askOpenAIWithEnhancedContext(question, conversationHistory, userTier, isDemo, userId);
+        }
+      } else {
+        aiResponse = await askOpenAIWithEnhancedContext(question, conversationHistory, userTier, isDemo, userId);
+      }
 
       // For demo mode, use the AI response directly (no tokenization needed for fake data)
       if (isDemo) {
@@ -599,7 +626,8 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
         
         return res.json({ 
           answer: displayResponse,
-          conversationId: null
+          conversationId: null,
+          ...(structuredResponse && { structuredResponse })
         });
       }
 
@@ -633,7 +661,8 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
           
           return res.json({ 
             answer: displayResponse,
-            conversationId: conversation.id
+            conversationId: conversation.id,
+            ...(structuredResponse && { structuredResponse })
           });
         } catch (error) {
           console.error('Error saving conversation:', error);
@@ -648,7 +677,8 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
       
       return res.json({ 
         answer: displayResponse,
-        conversationId: null
+        conversationId: null,
+        ...(structuredResponse && { structuredResponse })
       });
     });
   } catch (error) {

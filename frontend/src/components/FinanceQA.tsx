@@ -34,6 +34,12 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const [showContextModal, setShowContextModal] = useState(false);
+  const [structuredResponse, setStructuredResponse] = useState<{
+    summary: string;
+    key_numbers?: Record<string, number>;
+    insights?: string[];
+    suggested_actions?: string[];
+  } | null>(null);
   // ✅ Streaming disabled - removed streaming state variables
   const { trackEvent } = useAnalytics();
 
@@ -140,14 +146,14 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   // Update question and answer when selectedPrompt changes
   useEffect(() => {
     if (selectedPrompt) {
-      // Always show the selected prompt's question when viewing an answer (including user's own question)
       setQuestion(selectedPrompt.question);
       setAnswer(selectedPrompt.answer);
+      setStructuredResponse(null); // Previous answers don't have structured data
       setError('');
     } else {
       setAnswer('');
+      setStructuredResponse(null);
       setError('');
-      // Don't clear the question - keep it in the textarea
     }
   }, [selectedPrompt]);
 
@@ -160,8 +166,8 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     setLoading(true);
     setLoadingMessageIndex(0); // Reset to first message
     setError('');
-    // ✅ Streaming disabled - removed streaming state resets
     setAnswer('');
+    setStructuredResponse(null);
     
     // Track question submission
     trackEvent('question_asked', {
@@ -231,8 +237,10 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       }
 
       if (data.answer) {
-        // ✅ Disabled streaming simulation - display answer immediately
         setAnswer(data.answer);
+        if (data.structuredResponse) {
+          setStructuredResponse(data.structuredResponse);
+        }
         // Store conversation ID for feedback
         if (data.conversationId) {
           setConversationId(data.conversationId);
@@ -335,10 +343,57 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       {/* Results Area */}
       {answer && (
         <div className="bg-gray-700 rounded-lg p-6">
-          <div className="bg-gray-800 rounded-lg p-4">
-            <div className="text-gray-200 leading-relaxed">
-              <MarkdownRenderer>{answer}</MarkdownRenderer>
-            </div>
+          <div className="bg-gray-800 rounded-lg p-4 space-y-4">
+            {structuredResponse ? (
+              <>
+                <div className="text-gray-200 leading-relaxed">
+                  <MarkdownRenderer>{structuredResponse.summary}</MarkdownRenderer>
+                </div>
+                {structuredResponse.key_numbers && Object.keys(structuredResponse.key_numbers).length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(structuredResponse.key_numbers).map(([key, value]) => (
+                      <span
+                        key={key}
+                        className="inline-flex items-center px-3 py-1 rounded-md bg-gray-700 text-gray-300 text-sm"
+                      >
+                        <span className="text-gray-400 mr-1">{key.replace(/_/g, ' ')}:</span>
+                        <span className="font-medium">
+                          {typeof value === 'number' && value >= 1000
+                            ? `$${value.toLocaleString()}`
+                            : typeof value === 'number'
+                              ? `$${value}`
+                              : String(value)}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {structuredResponse.insights && structuredResponse.insights.length > 0 && (
+                  <div>
+                    <h4 className="text-gray-400 text-sm font-medium mb-2">Insights</h4>
+                    <ul className="list-disc list-inside text-gray-300 space-y-1">
+                      {structuredResponse.insights.map((insight, i) => (
+                        <li key={i}>{insight}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {structuredResponse.suggested_actions && structuredResponse.suggested_actions.length > 0 && (
+                  <div>
+                    <h4 className="text-gray-400 text-sm font-medium mb-2">Suggested Actions</h4>
+                    <ul className="list-disc list-inside text-gray-300 space-y-1">
+                      {structuredResponse.suggested_actions.map((action, i) => (
+                        <li key={i}>{action}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-gray-200 leading-relaxed">
+                <MarkdownRenderer>{answer}</MarkdownRenderer>
+              </div>
+            )}
           </div>
           
           {/* Feedback Component */}
