@@ -13,8 +13,8 @@ const FAQ_ITEMS = [
     answer: "No. Ask Linc is $9/month for full access. We've found it works best when people use it with real questions from day one."
   },
   {
-    question: "I don't want to give OpenAI all my financial data...",
-    answer: "You don't give OpenAI your bank logins. We use Plaid to securely connect accounts in read-only mode. Your credentials are never shared with us, and your financial data is not used to train AI models. You're always in control and can disconnect accounts at any time."
+    question: "I don't want to give AI companies all my financial data...",
+    answer: "You don't give AI providers your bank logins. We use Plaid to securely connect accounts in read-only mode. Your credentials are never shared with us, and your financial data is not used to train AI models. You're always in control and can disconnect accounts at any time."
   },
   {
     question: "How do you know what's going on in the market?",

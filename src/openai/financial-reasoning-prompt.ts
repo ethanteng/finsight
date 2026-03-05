@@ -44,13 +44,18 @@ Rules:
 - Clearly state assumptions.
 - Show formulas when performing calculations.
 - Be conservative with estimates.
-- At the end of your response, output a JSON block with this exact structure (no other text after it):
+
+CRITICAL - JSON output: At the end of your response, output ONLY a valid JSON object. No other text before or after. Use this exact structure with each key appearing ONCE:
 {
   "summary": "One paragraph summary for the user",
-  "key_numbers": { "metric_name": number, ... },
-  "insights": ["insight 1", "insight 2", ...],
-  "suggested_actions": ["action 1", "action 2", ...]
-}`;
+  "key_numbers": { "metric_name": number },
+  "insights": ["insight 1", "insight 2"],
+  "suggested_actions": ["action 1", "action 2"]
+}
+
+- Keep arrays to 3-5 items max to avoid truncation.
+- Ensure all strings are properly closed with double quotes.
+- Do not duplicate keys. Output valid, complete JSON.`;
 
 /**
  * Build the full prompt for Claude with all context.

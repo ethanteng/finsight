@@ -38,7 +38,7 @@ export async function askClaudeWithFinancialContext(
   const { systemPrompt, userMessage } = buildFinancialReasoningPrompt(input);
   const client = getClient();
   const model = options.model || DEFAULT_MODEL;
-  const maxTokens = options.maxTokens ?? 4096;
+  const maxTokens = options.maxTokens ?? 8192;
 
   const response = await client.messages.create({
     model,

@@ -4,12 +4,12 @@ import { useState } from 'react';
 export const FAQ = () => {
   const faqs = [
     {
-      question: "I don't want to give ChatGPT all my financial data...",
+      question: "I don't want to give AI companies all my financial data...",
       answer: "Totally fair. That's why we use Plaid, not your login info — and your data is read-only, never stored, and never used to train models."
     },
     {
-      question: "How does GPT know what's going on in the market?",
-      answer: "On its own, it doesn't. That's why Linc pulls in real-time data — like CD rates, bond yields, and current news — and feeds it into ChatGPT as context for your questions."
+      question: "How does the AI know what's going on in the market?",
+      answer: "On its own, it doesn't. That's why Linc pulls in real-time data — like CD rates, bond yields, and current news — and feeds it into the AI as context for your questions."
     }
   ];
 
