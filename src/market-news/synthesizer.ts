@@ -1,7 +1,10 @@
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { UserTier } from '../data/types';
 import { MarketNewsData } from './aggregator';
 import crypto from 'crypto';
+
+const GEMINI_API_KEY = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '';
+const DEFAULT_MODEL = process.env.GEMINI_MARKET_SYNTHESIS_MODEL || 'gemini-2.5-flash';
 
 export interface MarketNewsContext {
   id: string;
@@ -12,33 +15,41 @@ export interface MarketNewsContext {
   tier: UserTier;
 }
 
-export class MarketNewsSynthesizer {
-  private openai: OpenAI;
-  
-  constructor() {
-    this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+let genAIClient: GoogleGenerativeAI | null = null;
+
+function getClient(): GoogleGenerativeAI {
+  if (!genAIClient) {
+    if (!GEMINI_API_KEY) {
+      throw new Error('GOOGLE_AI_API_KEY or GEMINI_API_KEY is required for market news synthesis.');
+    }
+    genAIClient = new GoogleGenerativeAI(GEMINI_API_KEY);
   }
-  
+  return genAIClient;
+}
+
+export class MarketNewsSynthesizer {
   async synthesizeMarketContext(
-    rawData: MarketNewsData[], 
+    rawData: MarketNewsData[],
     tier: UserTier
   ): Promise<MarketNewsContext> {
-    
     // Filter data based on tier access
     const tierData = this.filterDataForTier(rawData, tier);
-    
+
     // Create synthesis prompt
     const prompt = this.buildSynthesisPrompt(tierData, tier);
-    
-    // Generate AI synthesis
-    const response = await this.openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      max_tokens: 1500
+
+    // Generate AI synthesis via Gemini
+    const client = getClient();
+    const model = client.getGenerativeModel({
+      model: DEFAULT_MODEL,
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 1500
+      }
     });
-    
-    const contextText = response.choices[0].message.content || '';
+
+    const result = await model.generateContent(prompt);
+    const contextText = result.response.text().trim() || '';
     
     // Extract key events and sources
     const keyEvents = this.extractKeyEvents(tierData);

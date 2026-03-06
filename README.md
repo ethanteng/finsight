@@ -174,57 +174,134 @@ Create `.env` file in the root directory:
 # Database
 DATABASE_URL="postgresql://username:password@localhost:5432/finsight"
 
-# OpenAI
+# Authentication & Security
+JWT_SECRET="your_jwt_secret"
+PROFILE_ENCRYPTION_KEY="your_32_byte_encryption_key"  # Required for encrypted user profiles
+
+# OpenAI (main AI chat, fallback when Ask Linc disabled)
 OPENAI_API_KEY="your_openai_api_key"
 
-# Plaid
+# Plaid (banking data)
 PLAID_CLIENT_ID="your_plaid_client_id"
 PLAID_SECRET="your_plaid_secret"
+PLAID_MODE="sandbox"                    # sandbox or production (default: sandbox)
+PLAID_CLIENT_ID_PROD="..."              # Optional: production credentials
+PLAID_SECRET_PROD="..."
+PLAID_ENV_PROD="production"
+PLAID_ACCESS_LEVEL="sandbox"            # Optional: access level when not sandbox (default: sandbox)
+PLAID_WEBHOOK_URL="https://..."         # Optional: for webhook events
 
-# SnapTrade
+# SnapTrade (investment data)
 SNAPTRADE_CLIENT_ID="your_snaptrade_client_id"
 SNAPTRADE_CONSUMER_KEY="your_snaptrade_consumer_key"
+SNAPTRADE_MODE="sandbox"                # sandbox or production (default: sandbox)
+SNAPTRADE_CLIENT_ID_PROD="..."          # Optional: production credentials
+SNAPTRADE_CONSUMER_KEY_PROD="..."
+SNAPTRADE_ENV_PROD="production"
 
 # Market Data APIs
 FRED_API_KEY="your_fred_api_key"
 ALPHA_VANTAGE_API_KEY="your_alpha_vantage_api_key"
+POLYGON_API_KEY="your_polygon_api_key"  # For Premium tier market news (Polygon.io)
 
 # Home Valuation API
 RENTCAST_API_KEY="your_rentcast_api_key"
 
-# Transaction History Configuration
-TRANSACTION_HISTORY_DAYS="90"           # Number of days to fetch banking transactions (default: 90)
-INVESTMENT_HISTORY_YEARS="2"            # Number of years to fetch investment transactions (default: 2)
-
 # Search API (for RAG system)
 SEARCH_API_KEY="your_search_api_key"
+SEARCH_PROVIDER="brave"                 # brave or google (default: brave)
+GOOGLE_SEARCH_ENGINE_ID="..."           # Required when SEARCH_PROVIDER=google
+
+# Transaction & Investment History
+TRANSACTION_HISTORY_DAYS="90"           # Days of banking transactions (default: 90)
+INVESTMENT_HISTORY_YEARS="2"            # Years of investment history (default: 2)
 
 # MailerLite (for user sync)
 MAILER_LITE_API_KEY="your_mailerlite_api_key"
 MAILER_LITE_GROUP_ID="your_mailerlite_group_id"
 
-# JWT Secret
-JWT_SECRET="your_jwt_secret"
+# Stripe (subscriptions)
+STRIPE_SECRET_KEY="sk_..."
+STRIPE_PUBLISHABLE_KEY="pk_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."
+STRIPE_PRICE_PREMIUM="price_..."        # Stripe price ID for premium tier
+STRIPE_CHECKOUT_SUCCESS_URL="..."      # Optional (default: /api/stripe/payment-success)
+STRIPE_CHECKOUT_CANCEL_URL="..."       # Optional (default: /pricing)
+STRIPE_PORTAL_RETURN_URL="..."          # Optional (default: /profile)
+STRIPE_PORTAL_CANCEL_RETURN_URL="..."  # Optional
+STRIPE_PORTAL_UPDATE_RETURN_URL="..."  # Optional
+STRIPE_ACCOUNT_REFRESH_URL="..."       # Optional
+STRIPE_ACCOUNT_RETURN_URL="..."        # Optional
+
+# Email (Resend)
+RESEND_API_KEY="re_..."
+ADMIN_EMAILS="admin@example.com,other@example.com"  # Comma-separated for admin access
+
+# URLs
+FRONTEND_URL="http://localhost:3001"    # Base URL for frontend (default: http://localhost:3001)
+PORT="3000"                             # Backend port (default: 3000)
 
 # Transaction & Context Persistence (optional, for debugging)
-PERSIST_TRANSACTIONS="false"        # Toggle transaction persistence to database
-PERSIST_GPT_CONTEXT="false"         # Toggle GPT context logging to /opt/render/project/src/logs
+PERSIST_TRANSACTIONS="false"            # Toggle transaction persistence to database
+PERSIST_GPT_CONTEXT="false"             # Toggle GPT context logging to /opt/render/project/src/logs
 
 # Ask Linc LLM Pipeline (optional - uses Claude Sonnet for financial reasoning)
-USE_ASK_LINC_PIPELINE="false"       # Enable Claude-based analysis pipeline (requires ANTHROPIC_API_KEY)
+USE_ASK_LINC_PIPELINE="false"           # Enable Claude-based analysis pipeline (requires ANTHROPIC_API_KEY)
 ANTHROPIC_API_KEY="your_anthropic_api_key"  # Required when USE_ASK_LINC_PIPELINE=true
-ENABLE_RESPONSE_VALIDATION="false"  # Optional: validate responses with Gemini
-GOOGLE_AI_API_KEY="your_google_ai_key"     # Optional: for Gemini validation (or GEMINI_API_KEY)
-GEMINI_VALIDATION_MODEL="gemini-3-flash-preview" # Optional: override Gemini model (default)
+ENABLE_RESPONSE_VALIDATION="false"      # Optional: validate Claude responses with Gemini
+
+# Gemini (market news synthesis + optional validation)
+GOOGLE_AI_API_KEY="your_google_ai_key"  # Required for market news; optional for validation (or GEMINI_API_KEY)
+GEMINI_API_KEY="..."                    # Alternative to GOOGLE_AI_API_KEY
+GEMINI_VALIDATION_MODEL="gemini-3-flash-preview"    # Model for Claude validation (default)
+GEMINI_MARKET_SYNTHESIS_MODEL="gemini-2.5-flash"    # Model for market news synthesis (default)
+
+# Feature Flags
+ENABLE_USER_AUTH="true"                 # Enable JWT auth (default: false)
+ENABLE_TIER_ENFORCEMENT="true"          # Enforce tier-based access (default: false)
+ENABLE_PLAID_ENRICH="false"             # Use Plaid enrich for categorization (default: false)
+
+# AI Rate Limiting
+AI_RATE_LIMIT_AUTHENTICATED="30"        # Requests per minute for authenticated users (default: 30)
+AI_RATE_LIMIT_DEMO="20"                 # Requests per minute for demo users (default: 20)
+
+# Caching & Performance (optional)
+MAX_PROMPT_TRANSACTIONS="75"            # Max transactions in AI prompt (default: 75)
+CATEGORIZATION_CACHE_TTL_HOURS="24"     # Transaction categorization cache (default: 24)
+FINANCIAL_DATA_CACHE_TTL_MS="300000"    # Financial data cache in ms (default: 300000)
+PERSISTED_DATA_MAX_AGE_MINUTES="120"    # Max age for persisted snapshot (default: 120)
+
+# Retirement Analytics (optional)
+TIINGO_API_KEY="..."                    # For retirement analytics
+FMP_API_KEY="..."                      # For retirement analytics
+
+# Monitoring
+SENTRY_DSN="https://..."                # Optional: Sentry error tracking
 ```
 
 Create `.env.local` file in the `frontend` directory:
 ```bash
-# Backend API URL (already configured in your project)
+# Backend API URL
 NEXT_PUBLIC_API_URL="http://localhost:3000"
 
-# GPT Context Logging (should match backend setting)
+# GPT Context Logging (should match backend PERSIST_GPT_CONTEXT)
 NEXT_PUBLIC_PERSIST_GPT_CONTEXT="false"
+
+# Stripe Customer Portal (optional - for subscription management)
+NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL_URL="https://..."
+
+# Google Analytics (optional)
+NEXT_PUBLIC_GA_ID="G-..."
+
+# Sentry (optional - error tracking)
+NEXT_PUBLIC_SENTRY_DSN="https://..."
+
+# App Version (optional - for Sentry releases)
+NEXT_PUBLIC_APP_VERSION="1.0.0"
+
+# Ghost CMS (optional - for blog content)
+GHOST_URL="https://..."
+GHOST_CONTENT_KEY="..."
 ```
 
 4. **Database Setup**

@@ -723,32 +723,24 @@ export interface MarketNewsContext {
 }
 
 export class MarketNewsSynthesizer {
-  private openai: OpenAI;
-  
-  constructor() {
-    this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  }
-  
   async synthesizeMarketContext(
-    rawData: MarketNewsData[], 
+    rawData: MarketNewsData[],
     tier: UserTier
   ): Promise<MarketNewsContext> {
-    
     // Filter data based on tier access
     const tierData = this.filterDataForTier(rawData, tier);
-    
+
     // Create synthesis prompt
     const prompt = this.buildSynthesisPrompt(tierData, tier);
-    
-    // Generate AI synthesis
-    const response = await this.openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      max_tokens: 1500
+
+    // Generate AI synthesis via Gemini (GOOGLE_AI_API_KEY or GEMINI_API_KEY)
+    const client = getClient();
+    const model = client.getGenerativeModel({
+      model: process.env.GEMINI_MARKET_SYNTHESIS_MODEL || 'gemini-2.5-flash',
+      generationConfig: { temperature: 0.3, maxOutputTokens: 1500 }
     });
-    
-    const contextText = response.choices[0].message.content || '';
+    const result = await model.generateContent(prompt);
+    const contextText = result.response.text().trim() || '';
     
     // Extract key events and sources
     const keyEvents = this.extractKeyEvents(tierData);
@@ -1725,7 +1717,7 @@ The Financial Market News Context System has been successfully implemented with 
 - Supports tier-based data access (Starter: FRED only, Standard: FRED + Brave Search, Premium: Polygon.io + all sources)
 
 **2. MarketNewsSynthesizer (`src/market-news/synthesizer.ts`)**
-- Uses OpenAI GPT-4 to synthesize raw market data into actionable insights
+- Uses Google Gemini to synthesize raw market data into actionable insights
 - Implements tier-aware filtering and context generation
 - Extracts key events and identifies market trends
 - Provides structured, professional market summaries

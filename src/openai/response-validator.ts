@@ -128,6 +128,7 @@ export async function validateWithGemini(
     const model = client.getGenerativeModel({ model: DEFAULT_MODEL });
 
     const snapshotSummary = buildSnapshotSummaryForValidation(context.snapshot);
+    console.log('Ask Linc: Gemini validation prompt includes snapshot summary, length:', snapshotSummary.length);
 
     const prompt = `${VALIDATION_PROMPT}
 

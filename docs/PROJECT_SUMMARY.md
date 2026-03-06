@@ -158,7 +158,7 @@ The platform now features a comprehensive **Financial Market News Context System
 - **Real-Time Market Data**: Polygon.io integration for Premium tier users
 - **Economic Indicators**: FRED data for Standard+ users (CPI, Fed rates, mortgage rates)
 - **Professional News**: Reuters, Bloomberg, and other professional sources
-- **AI Synthesis**: GPT-4 powered market context generation
+- **AI Synthesis**: Gemini-powered market context generation
 - **Tier-Based Access**: Different market intelligence levels per subscription tier
 - **Admin Management**: Manual override and management capabilities
 
@@ -189,7 +189,7 @@ The platform now features a comprehensive **Financial Market News Context System
 
 **Core Components:**
 - **MarketNewsAggregator**: Collects data from multiple sources with tier-based filtering
-- **MarketNewsSynthesizer**: AI-powered market context generation using GPT-4
+- **MarketNewsSynthesizer**: AI-powered market context generation using Gemini
 - **MarketNewsManager**: Database operations and admin management
 - **Scheduled Updates**: Hourly market context refresh via cron jobs
 

@@ -1,18 +1,20 @@
-// Mock OpenAI before imports
-jest.mock('openai', () => {
-  const mockOpenAI = jest.fn().mockImplementation(() => ({
-    chat: {
-      completions: {
-        create: jest.fn().mockResolvedValue({
-          choices: [{ message: { content: 'Mock AI response' } }]
-        })
-      }
+// Set Gemini API key for synthesizer (required by getClient)
+process.env.GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || 'dummy_gemini_key';
+
+// Mock @google/generative-ai (Gemini) before imports
+jest.mock('@google/generative-ai', () => {
+  const mockGenerateContent = jest.fn().mockResolvedValue({
+    response: {
+      text: () => 'Mock AI response'
     }
-  }));
-  
+  });
+  const mockGetGenerativeModel = jest.fn().mockReturnValue({
+    generateContent: mockGenerateContent
+  });
   return {
-    __esModule: true,
-    default: mockOpenAI
+    GoogleGenerativeAI: jest.fn().mockImplementation(() => ({
+      getGenerativeModel: mockGetGenerativeModel
+    }))
   };
 });
 

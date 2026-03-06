@@ -1169,7 +1169,7 @@ The **Financial Market News Context System** provides comprehensive real-time ma
 - **Polygon.io Integration**: Complete market intelligence platform for Premium tier
 - **Economic Indicators**: FRED data for Standard+ users (CPI, Fed rates, mortgage rates)
 - **Professional News**: Reuters, Bloomberg, and other professional sources
-- **AI Synthesis**: GPT-4 powered market context generation
+- **AI Synthesis**: Gemini-powered market context generation
 - **Tier-Based Access**: Different market intelligence levels per subscription tier
 
 #### **2. Tier-Specific Market Intelligence**
@@ -1199,7 +1199,7 @@ The **Financial Market News Context System** provides comprehensive real-time ma
 
 **Core Components:**
 - **MarketNewsAggregator**: Collects data from multiple sources with tier-based filtering
-- **MarketNewsSynthesizer**: AI-powered market context generation using GPT-4
+- **MarketNewsSynthesizer**: AI-powered market context generation using Gemini
 - **MarketNewsManager**: Database operations and admin management
 - **Scheduled Updates**: Hourly market context refresh via cron jobs
 
@@ -1282,7 +1282,7 @@ ALPHA_VANTAGE_API_KEY_REAL=your_production_alpha_vantage_key
 ✅ **Real-time market intelligence** for Premium tier users
 ✅ **Tier-based access control** with clear upgrade incentives
 ✅ **Professional news integration** from Reuters, Bloomberg, and other sources
-✅ **AI-powered market synthesis** using GPT-4
+✅ **AI-powered market synthesis** using Gemini
 ✅ **Admin management interface** with manual override capabilities
 ✅ **Comprehensive testing coverage** with 324 tests passing
 ✅ **Production-ready deployment** with all security measures in place
