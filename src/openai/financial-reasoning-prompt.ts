@@ -15,6 +15,8 @@ export interface FinancialReasoningPromptInput {
   marketSummary: string;
   ragKnowledge: string;
   conversationHistory?: Array< { question: string; answer: string }>;
+  /** When present, instructs Claude to fix these validation issues from a previous response. */
+  validationFeedback?: string[];
 }
 
 const REASONING_SYSTEM_PROMPT = `You are a financial analysis assistant.
@@ -64,9 +66,22 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
   systemPrompt: string;
   userMessage: string;
 } {
-  const { question, canonicalSnapshot, userProfile, marketSummary, ragKnowledge, conversationHistory } = input;
+  const { question, canonicalSnapshot, userProfile, marketSummary, ragKnowledge, conversationHistory, validationFeedback } = input;
 
-  const contextParts: string[] = [
+  const contextParts: string[] = [];
+
+  if (validationFeedback && validationFeedback.length > 0) {
+    contextParts.push(
+      '## Validation Feedback — Must Fix',
+      'Your previous response had the following issues. Correct them in your new response:',
+      ...validationFeedback.map((issue) => `- ${issue}`),
+      '',
+      'Use ONLY the financial data provided below. Do not invent numbers or cite analyses not present in the snapshot.',
+      ''
+    );
+  }
+
+  contextParts.push(
     '## User Question',
     question,
     '',
@@ -81,7 +96,7 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
     '',
     '## Retrieved Financial Knowledge',
     ragKnowledge || '(No additional knowledge retrieved)'
-  ];
+  );
 
   if (conversationHistory && conversationHistory.length > 0) {
     contextParts.push('', '## Recent Conversation History');

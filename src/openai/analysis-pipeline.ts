@@ -97,8 +97,12 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       const { validateWithGemini } = await import('./response-validator');
       const validationResult = await validateWithGemini(structuredResponse, { question, snapshot });
       if (!validationResult.valid && validationResult.issues?.length) {
-        console.warn('Ask Linc: Gemini validation failed, regenerating:', validationResult.issues);
-        rawResponse = await askClaudeWithFinancialContext(promptInput);
+        console.warn('Ask Linc: Gemini validation failed, regenerating with feedback:', validationResult.issues);
+        const retryPromptInput = {
+          ...promptInput,
+          validationFeedback: validationResult.issues
+        };
+        rawResponse = await askClaudeWithFinancialContext(retryPromptInput);
         structuredResponse = parseStructuredResponse(rawResponse);
       }
     } catch (err) {
