@@ -7,6 +7,15 @@ import { useAnalytics } from './Analytics';
 import Feedback from './Feedback';
 import { ViewAIContext } from './debug/ViewAIContext';
 
+/** Format key_number for display: % for percent keys, plain number for years, $ for dollar amounts */
+function formatKeyNumberValue(key: string, value: number | unknown): string {
+  if (typeof value !== 'number') return String(value);
+  const keyLower = key.toLowerCase();
+  if (keyLower.includes('years')) return value.toLocaleString();
+  if (keyLower.includes('percent')) return `${value}%`;
+  return value >= 1000 ? `$${value.toLocaleString()}` : `$${value}`;
+}
+
 interface PromptHistory {
   id: string;
   question: string;
@@ -358,11 +367,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
                       >
                         <span className="text-gray-400 mr-1">{key.replace(/_/g, ' ')}:</span>
                         <span className="font-medium">
-                          {typeof value === 'number' && value >= 1000
-                            ? `$${value.toLocaleString()}`
-                            : typeof value === 'number'
-                              ? `$${value}`
-                              : String(value)}
+                          {formatKeyNumberValue(key, value)}
                         </span>
                       </span>
                     ))}

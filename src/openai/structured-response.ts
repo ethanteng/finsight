@@ -234,6 +234,23 @@ function normalizeResponse(obj: Record<string, unknown>): AskLincResponse {
 }
 
 /**
+ * Format a key_number value for display based on the key name.
+ * - Keys containing "percent" (but not "years") → percentage, e.g. 2.35%
+ * - Keys containing "years" → plain number, e.g. 30
+ * - Default → dollar amount, e.g. $1,533,881
+ */
+export function formatKeyNumberValue(key: string, value: number): string {
+  const keyLower = key.toLowerCase();
+  if (keyLower.includes('years')) {
+    return value.toLocaleString();
+  }
+  if (keyLower.includes('percent')) {
+    return `${value}%`;
+  }
+  return value >= 1000 ? `$${value.toLocaleString()}` : `$${value}`;
+}
+
+/**
  * Convert structured response to display text for backward compatibility.
  */
 export function toDisplayText(response: AskLincResponse): string {
@@ -243,7 +260,8 @@ export function toDisplayText(response: AskLincResponse): string {
     parts.push('\n\n**Key Numbers:**');
     for (const [k, v] of Object.entries(response.key_numbers)) {
       const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-      parts.push(`- ${label}: $${typeof v === 'number' ? v.toLocaleString() : v}`);
+      const formatted = typeof v === 'number' ? formatKeyNumberValue(k, v) : String(v);
+      parts.push(`- ${label}: ${formatted}`);
     }
   }
 
