@@ -92,14 +92,36 @@ function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnapshot): 
     );
   }
   if (ra?.stressTest) {
+    const st = ra.stressTest;
     parts.push(
-      `Stress test: survivalRate=${ra.stressTest.survivalRate}, totalSequences=${ra.stressTest.totalSequences}`
+      `Stress test (Monte Carlo): totalSequences=${st.totalSequences}, survivalRate=${(st.survivalRate * 100).toFixed(1)}%`
     );
+    if (st.depletionPercentiles) {
+      const dp = st.depletionPercentiles;
+      const pParts: string[] = [];
+      if (dp.p10 != null) pParts.push(`p10=${dp.p10}y`);
+      if (dp.p25 != null) pParts.push(`p25=${dp.p25}y`);
+      if (dp.p50 != null) pParts.push(`p50=${dp.p50}y`);
+      if (dp.p75 != null) pParts.push(`p75=${dp.p75}y`);
+      if (dp.p90 != null) pParts.push(`p90=${dp.p90}y`);
+      if (pParts.length) parts.push(`Depletion percentiles (years until depletion): ${pParts.join(', ')}`);
+    }
+    if (st.worstSequences?.byDepletion?.length) {
+      const top = st.worstSequences.byDepletion.slice(0, 3).map((s) => `${s.sequenceId}:${s.yearsUntilDepletion}y`).join(', ');
+      parts.push(`Worst depletion sequences (sample): ${top}`);
+    }
   }
   if (ra?.metrics) {
+    const m = ra.metrics;
     parts.push(
-      `Retirement metrics: withdrawalRate=${ra.metrics.withdrawalRate}, yearsOfExpenses=${ra.metrics.yearsOfExpenses}, equityAllocation=${ra.metrics.equityAllocation}`
+      `Retirement metrics: withdrawalRate=${(m.withdrawalRate * 100).toFixed(2)}%, yearsOfExpenses=${m.yearsOfExpenses.toFixed(1)}, equityAllocation=${m.equityAllocation.toFixed(1)}%`
     );
+    if (m.historicalWithdrawalRates) {
+      const hwr = m.historicalWithdrawalRates;
+      parts.push(
+        `Historical withdrawal rates (percentiles): p10=${(hwr.p10 * 100).toFixed(2)}%, p25=${(hwr.p25 * 100).toFixed(2)}%, p50=${(hwr.p50 * 100).toFixed(2)}%, p75=${(hwr.p75 * 100).toFixed(2)}%, p90=${(hwr.p90 * 100).toFixed(2)}%`
+      );
+    }
   }
 
   if (snapshot.incomeAnalysis) {
