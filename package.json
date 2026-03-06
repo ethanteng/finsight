@@ -77,13 +77,13 @@
     "concurrently": "^9.2.0",
     "eslint": "^8.57.0",
     "jest": "^29.7.0",
-    "patch-package": "^8.0.0",
     "supertest": "^7.0.0",
     "ts-jest": "^29.1.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "patch-package": "^8.0.0",
     "@anthropic-ai/sdk": "^0.32.1",
     "@google/generative-ai": "^0.21.0",
     "@polygon.io/client-js": "^8.0.0",
