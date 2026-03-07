@@ -6,11 +6,12 @@ import MailerLiteForm from './MailerLiteForm';
 import MailerLiteScript from './MailerLiteScript';
 import AnimatedPrompt from './AnimatedPrompt';
 import BlogSubscription from './BlogSubscription';
+import RealExamplesModal from './RealExamplesModal';
 import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, BarChart3, MessageCircle, Sparkles, X, Target, Menu } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { pushBeginCheckout } from '@/lib/dataLayer';
+import { pushBeginCheckout, pushViewExamples } from '@/lib/dataLayer';
 
 const HOW_LINC_STEPS = [
   { title: "Connect once", description: "Link your financial accounts securely via Plaid", icon: Target },
@@ -27,6 +28,7 @@ const INSTITUTIONS = [
 const NewHomepage = () => {
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isExamplesModalOpen, setIsExamplesModalOpen] = useState(false);
   const [howItWorksInView, setHowItWorksInView] = useState(false);
   const [revealedStepCount, setRevealedStepCount] = useState(0);
   const [highlightedStep, setHighlightedStep] = useState(0);
@@ -267,7 +269,20 @@ const NewHomepage = () => {
               </div>
               
               <div className="flex flex-col sm:flex-row gap-4 justify-center items-center sm:items-start pt-2 w-full">
-                <div className="flex flex-col items-center gap-3">
+                <div className="flex flex-col items-center gap-3 order-2 sm:order-1">
+                  <Button 
+                    variant="outline" 
+                    size="xl" 
+                    className="group h-[4.235rem] px-[3.025rem] text-[1.36125rem] border-2"
+                    onClick={() => {
+                    pushViewExamples();
+                    setIsExamplesModalOpen(true);
+                  }}
+                  >
+                    See real examples
+                  </Button>
+                </div>
+                <div className="flex flex-col items-center gap-3 order-1 sm:order-2">
                   <Button 
                     variant="hero" 
                     size="xl" 
@@ -696,6 +711,11 @@ const NewHomepage = () => {
           </div>
         </div>
       </footer>
+
+      <RealExamplesModal
+        isOpen={isExamplesModalOpen}
+        onClose={() => setIsExamplesModalOpen(false)}
+      />
     </div>
   );
 };

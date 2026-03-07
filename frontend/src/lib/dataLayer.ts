@@ -11,3 +11,23 @@ export function pushBeginCheckout(): void {
     source_page: window.location.pathname,
   });
 }
+
+export function pushViewExamples(): void {
+  if (typeof window === 'undefined') return;
+  const win = window as unknown as DataLayerWindow;
+  win.dataLayer = win.dataLayer || [];
+  win.dataLayer.push({
+    event: 'view_examples',
+    source_page: window.location.pathname,
+  });
+}
+
+export function pushViewMoreExamples(): void {
+  if (typeof window === 'undefined') return;
+  const win = window as unknown as DataLayerWindow;
+  win.dataLayer = win.dataLayer || [];
+  win.dataLayer.push({
+    event: 'view_more_examples',
+    source_page: window.location.pathname,
+  });
+}
