@@ -35,6 +35,19 @@ export class MarketNewsSynthesizer {
     // Filter data based on tier access
     const tierData = this.filterDataForTier(rawData, tier);
 
+    // No market data for this tier - return fixed message without calling LLM
+    // (tierContext is for LLM prompts only, not user-facing empty-state messages)
+    if (tierData.length === 0) {
+      return {
+        id: crypto.randomUUID(),
+        contextText: `ECONOMIC INDICATORS:\nNo market context available for this tier. Market data could not be fetched or is not configured.\n\nMARKET TRENDS:\nN/A\n\nKEY DEVELOPMENTS:\nN/A\n\nMARKET OUTLOOK:\nN/A`,
+        dataSources: [],
+        keyEvents: [],
+        lastUpdate: new Date(),
+        tier
+      };
+    }
+
     // Create synthesis prompt
     const prompt = this.buildSynthesisPrompt(tierData, tier);
 
@@ -44,7 +57,7 @@ export class MarketNewsSynthesizer {
       model: DEFAULT_MODEL,
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 1500
+        maxOutputTokens: 3000  // Increased from 1500 to prevent truncation (Premium has more data)
       }
     });
 
@@ -86,26 +99,28 @@ export class MarketNewsSynthesizer {
   
   private buildSynthesisPrompt(data: MarketNewsData[], tier: UserTier): string {
     const tierContext = this.getTierContext(tier);
-    
+    const formattedData = this.formatDataForPrompt(data);
+
     return `You are a financial market analyst. Synthesize the following market data into a clear, actionable market context summary.
 
 TIER CONTEXT: ${tierContext}
 
-AVAILABLE DATA:
-${data.map(d => `- ${d.source}: ${JSON.stringify(d.data)}`).join('\n')}
+AVAILABLE DATA (use ONLY this data - do not invent or assume values for missing indicators):
+${formattedData}
 
 INSTRUCTIONS:
 - Create a concise but comprehensive market summary (max 800 words)
+- Include EVERY data point provided above with its specific value - never leave blanks like "( )" or incomplete sentences
+- For economic indicators: state the exact value and date (e.g., "Federal Funds Rate: 4.33% as of 2024-01-15")
+- Only mention indicators that appear in the data - omit any that are not listed
 - Focus on the most relevant and impactful market developments
-- Include specific numbers, rates, and trends where available
-- Highlight any significant changes or emerging patterns
 - Use clear, professional language suitable for financial advice
-- Structure the summary with clear sections (Economic Indicators, Market Trends, Key Developments)
+- Complete every section fully - never truncate mid-sentence
 - Avoid speculation - stick to factual information from the data
 
-OUTPUT FORMAT:
+OUTPUT FORMAT (complete all sections):
 ECONOMIC INDICATORS:
-[Summary of economic data]
+[Summary of economic data with specific values and dates]
 
 MARKET TRENDS:
 [Current market trends and movements]
@@ -115,6 +130,49 @@ KEY DEVELOPMENTS:
 
 MARKET OUTLOOK:
 [Brief outlook based on current data]`;
+  }
+
+  /** Format data in a clear, parseable way for the LLM (avoids raw JSON) */
+  private formatDataForPrompt(data: MarketNewsData[]): string {
+    const lines: string[] = [];
+
+    for (const item of data) {
+      const d = item.data as Record<string, unknown> | null;
+      if (!d) continue;
+
+      if (item.type === 'economic_indicator') {
+        // FRED format: { series, name, value, date }
+        if (d.series && d.value != null) {
+          const units = d.series === 'CPIAUCSL' ? ' (CPI index)' : ['FEDFUNDS', 'MORTGAGE30US', 'DGS10'].includes(String(d.series)) ? '%' : '';
+          lines.push(`- ${item.source} | ${d.name || d.series}: ${d.value}${units} (${d.date || 'N/A'})`);
+        } else if (d.inflationContext) {
+          lines.push(`- ${item.source} | ${d.inflationContext}`);
+        } else if (d.expectationsContext) {
+          lines.push(`- ${item.source} | ${d.expectationsContext}`);
+        } else {
+          lines.push(`- ${item.source} | ${JSON.stringify(d)}`);
+        }
+      } else if (item.type === 'rate_information') {
+        if (d.rateContext) {
+          lines.push(`- ${item.source} | ${d.rateContext}`);
+        } else if (d.yields && typeof d.yields === 'object') {
+          const yields = d.yields as Record<string, unknown>;
+          lines.push(`- ${item.source} | Treasury Yields: ${JSON.stringify(yields)}`);
+        } else {
+          lines.push(`- ${item.source}: ${JSON.stringify(item.data)}`);
+        }
+      } else if (item.type === 'market_data') {
+        const parts = [`${d.symbol || 'Market'}: $${d.currentPrice ?? 'N/A'}`];
+        if (d.changePercent != null) parts.push(`(${Number(d.changePercent).toFixed(2)}% change)`);
+        lines.push(`- ${item.source} | ${parts.join(' ')}`);
+      } else if (item.type === 'news_article') {
+        lines.push(`- ${item.source} | News: "${d.title || 'Untitled'}" - ${String(d.description || '').slice(0, 150)}...`);
+      } else {
+        lines.push(`- ${item.source}: ${JSON.stringify(item.data)}`);
+      }
+    }
+
+    return lines.join('\n');
   }
   
   private getTierContext(tier: UserTier): string {
@@ -132,22 +190,27 @@ MARKET OUTLOOK:
   
   private extractKeyEvents(data: MarketNewsData[]): string[] {
     const events: string[] = [];
-    
+
     for (const item of data) {
       if (item.type === 'economic_indicator') {
-        const indicator = item.data;
-        if (indicator.series === 'FEDFUNDS' && indicator.value > 5) {
-          events.push(`Federal Reserve rate at ${indicator.value}% - high interest rate environment`);
+        const ind = item.data as Record<string, unknown>;
+        // FRED format
+        if (ind.series === 'FEDFUNDS' && Number(ind.value) > 5) {
+          events.push(`Federal Reserve rate at ${ind.value}% - high interest rate environment`);
         }
-        if (indicator.series === 'CPIAUCSL' && indicator.value > 300) {
-          events.push(`Inflation rate elevated at ${indicator.value} - cost of living concerns`);
+        if (ind.series === 'CPIAUCSL' && Number(ind.value) > 300) {
+          events.push(`Inflation rate elevated at ${ind.value} - cost of living concerns`);
         }
-        if (indicator.series === 'MORTGAGE30US' && indicator.value > 7) {
-          events.push(`Mortgage rates high at ${indicator.value}% - housing market impact`);
+        if (ind.series === 'MORTGAGE30US' && Number(ind.value) > 7) {
+          events.push(`Mortgage rates high at ${ind.value}% - housing market impact`);
+        }
+        // Polygon inflation format
+        if (ind.cpi != null && Number(ind.cpi_year_over_year) > 3) {
+          events.push(`Inflation year-over-year at ${Number(ind.cpi_year_over_year).toFixed(1)}% - cost of living concerns`);
         }
       }
     }
-    
+
     return events;
   }
 }

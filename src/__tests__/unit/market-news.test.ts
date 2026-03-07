@@ -237,7 +237,9 @@ describe('Market News System', () => {
       const standardContext = await synthesizer.synthesizeMarketContext(mockData, UserTier.STANDARD);
       const premiumContext = await synthesizer.synthesizeMarketContext(mockData, UserTier.PREMIUM);
 
-      expect(starterContext.contextText).toBe('Mock AI response');
+      // Starter tier has no data - returns fixed message without calling LLM
+      expect(starterContext.contextText).toContain('No market context available');
+      expect(starterContext.dataSources).toEqual([]);
       expect(standardContext.contextText).toBe('Mock AI response');
       expect(premiumContext.contextText).toBe('Mock AI response');
     });
@@ -312,9 +314,9 @@ describe('Market News System', () => {
         { source: 'brave_search', timestamp: new Date(), data: {}, type: 'news_article' as const, relevance: 0.6 }
       ];
 
-      // Starter tier should have no access
+      // Starter tier should have no access - returns fixed message
       const starterContext = await synthesizer.synthesizeMarketContext(mockData, UserTier.STARTER);
-      expect(starterContext.contextText).toBe('Mock AI response');
+      expect(starterContext.contextText).toContain('No market context available');
 
       // Standard tier should have access to FRED and Brave Search
       const standardContext = await synthesizer.synthesizeMarketContext(mockData, UserTier.STANDARD);
@@ -355,9 +357,10 @@ describe('Market News System', () => {
 
     test('should handle empty data gracefully', async () => {
       const synthesizer = new MarketNewsSynthesizer();
+      // Empty data for STANDARD tier triggers early return (same as Starter - no data)
       const context = await synthesizer.synthesizeMarketContext([], UserTier.STANDARD);
-      
-      expect(context.contextText).toBe('Mock AI response');
+
+      expect(context.contextText).toContain('No market context available');
       expect(context.dataSources).toEqual([]);
     });
   });
