@@ -196,8 +196,12 @@ export default function RealExamplesModal({ isOpen, onClose }: RealExamplesModal
               variant="outline"
               size="sm"
               onClick={goPrev}
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                if (canGoPrev) goPrev();
+              }}
               disabled={!canGoPrev}
-              className="shrink-0"
+              className="shrink-0 touch-manipulation min-w-[44px] min-h-[44px]"
               aria-label="Previous example"
             >
               <ChevronLeft className="h-4 w-4 sm:mr-1" />
@@ -210,8 +214,12 @@ export default function RealExamplesModal({ isOpen, onClose }: RealExamplesModal
               variant="outline"
               size="sm"
               onClick={goNext}
+              onTouchEnd={(e) => {
+                e.preventDefault();
+                if (canGoNext) goNext();
+              }}
               disabled={!canGoNext}
-              className="shrink-0"
+              className="shrink-0 touch-manipulation min-w-[44px] min-h-[44px]"
               aria-label="Next example"
             >
               <span className="hidden sm:inline">Next</span>
