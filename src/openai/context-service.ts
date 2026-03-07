@@ -14,6 +14,8 @@ interface GatherContextArgs {
   demoProfile?: string;
   /** When true, always fetch market and RAG context (for Ask Linc financial reasoning pipeline) */
   alwaysIncludeMarketAndRAG?: boolean;
+  /** Optional callback for progress updates (e.g. for SSE streaming) */
+  onProgress?: (message: string) => void;
 }
 
 const MAX_PROMPT_TRANSACTIONS = parseInt(process.env.MAX_PROMPT_TRANSACTIONS || '75', 10);
@@ -55,7 +57,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     questionNeeds,
     tier,
     demoProfile,
-    alwaysIncludeMarketAndRAG = false
+    alwaysIncludeMarketAndRAG = false,
+    onProgress
   } = args;
 
   let accounts: Account[] = [];
@@ -273,11 +276,13 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
         errors: { plaid: [], snaptrade: [], homeValue: { error: 'No snapshot available', timestamp: new Date() } },
         partialData: true,
       };
-      if (questionNeeds.needsHomeValue) {
-        homeValueSummary = 'Home value data is not estimated yet.';
-      }
+    if (questionNeeds.needsHomeValue) {
+      homeValueSummary = 'Home value data is not estimated yet.';
     }
   }
+  }
+
+  onProgress?.('Reviewing your transaction history');
 
   // ✅ CRITICAL: Deduplicate accounts by account_id/plaidAccountId as a safety net
   // Even though the snapshot should already be deduplicated, we add this as a defensive check
@@ -355,7 +360,9 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   const effectiveQuestionNeeds = alwaysIncludeMarketAndRAG
     ? { ...questionNeeds, needsMarketContext: true, needsSearchContext: true }
     : questionNeeds;
+  onProgress?.('Searching financial knowledge base');
   const searchContext = await maybeFetchSearchContext(question, effectiveQuestionNeeds, tier, isDemo);
+  onProgress?.('Fetching market context');
   const marketContext = await maybeFetchMarketContext(effectiveQuestionNeeds, tier, isDemo);
 
   // Fetch user overrides for monthly income/expenses
@@ -390,7 +397,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   // ✅ Pass deduplicated accounts and sorted transactions to loadUserProfile
   // The profile enhancer needs the actual account data, not anonymized tokens
   console.log(`📊 gatherContextSnapshot: Passing ${deduplicatedAccounts.length} deduplicated accounts to loadUserProfile`);
-  
+  onProgress?.('Preparing your profile');
+
   const userProfile = await loadUserProfile({
     userId,
     isDemo,
@@ -416,6 +424,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   
   if (userId && !isDemo && questionNeeds.needsRetirement && investmentsSnapshot?.holdings && investmentsSnapshot.holdings.length > 0) {
     try {
+      onProgress?.('Building your retirement snapshot');
       console.log('✅ Retirement analysis conditions met, parsing question...');
       // First check if we have the required parameters
       const { parseRetirementQuestion } = await import('../retirement-analytics/retirement-question-parser');

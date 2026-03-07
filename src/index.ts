@@ -435,12 +435,21 @@ app.post('/ask/tier-aware', aiRateLimitMiddleware, async (req: Request, res: Res
   }
 });
 
+/** Write an SSE event to the response */
+function writeSSE(res: Response, event: string, data: object): void {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
 // New endpoint for AI responses with real data display
 // ✅ AI now receives real data directly (no anonymization)
 // User sees real data in responses
 app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: Response) => {
   const startTime = Date.now();
-  
+  const wantsStreaming = req.headers.accept?.includes('text/event-stream');
+  const useAskLincPipeline = process.env.USE_ASK_LINC_PIPELINE === 'true';
+  const useStreaming = wantsStreaming && useAskLincPipeline;
+
   try {
     const { question, isDemo = false, sessionId } = req.body;
     
@@ -476,6 +485,15 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
       const demoTier = process.env.TEST_USER_TIER || 'premium';
       userTier = demoTier as UserTier;
       console.log('Demo mode - using tier from environment:', { demoTier, userTier });
+    }
+
+    // Set SSE headers early if streaming
+    if (useStreaming) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+      res.flushHeaders?.();
     }
 
     // Create Sentry performance span for AI request BEFORE processing
@@ -532,9 +550,12 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
       }
       
       // Get AI response - use Ask Linc pipeline when enabled, else OpenAI
-      const useAskLincPipeline = process.env.USE_ASK_LINC_PIPELINE === 'true';
       let aiResponse: string;
       let structuredResponse: { summary: string; key_numbers?: Record<string, number>; insights?: string[]; suggested_actions?: string[] } | undefined;
+
+      const onProgress = useStreaming
+        ? (message: string) => writeSSE(res, 'progress', { message })
+        : undefined;
 
       if (useAskLincPipeline) {
         try {
@@ -545,7 +566,8 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
             userTier,
             conversationHistory,
             demoProfile: undefined,
-            enableValidation: process.env.ENABLE_RESPONSE_VALIDATION === 'true'
+            enableValidation: process.env.ENABLE_RESPONSE_VALIDATION === 'true',
+            onProgress
           });
           aiResponse = result.displayText;
           structuredResponse = result.structuredResponse;
@@ -624,6 +646,14 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
         // Keep console logging for immediate visibility
         console.log(`📊 AI Response Time - Display Real Demo: ${Date.now() - startTime}ms | Question Length: ${question.length} | User Tier: ${userTier}`);
         
+        if (useStreaming) {
+          writeSSE(res, 'result', {
+            answer: displayResponse,
+            conversationId: null,
+            ...(structuredResponse && { structuredResponse })
+          });
+          return res.end();
+        }
         return res.json({ 
           answer: displayResponse,
           conversationId: null,
@@ -659,6 +689,14 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
           // Keep console logging for immediate visibility
           console.log(`📊 AI Response Time - Display Real Production: ${Date.now() - startTime}ms | Question Length: ${question.length} | User Tier: ${userTier} | User ID: ${userId || 'none'}`);
           
+          if (useStreaming) {
+            writeSSE(res, 'result', {
+              answer: displayResponse,
+              conversationId: conversation.id,
+              ...(structuredResponse && { structuredResponse })
+            });
+            return res.end();
+          }
           return res.json({ 
             answer: displayResponse,
             conversationId: conversation.id,
@@ -675,6 +713,14 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
       // Keep console logging for immediate visibility
       console.log(`📊 AI Response Time - Display Real Production: ${Date.now() - startTime}ms | Question Length: ${question.length} | User Tier: ${userTier} | User ID: ${userId || 'none'}`);
       
+      if (useStreaming) {
+        writeSSE(res, 'result', {
+          answer: displayResponse,
+          conversationId: null,
+          ...(structuredResponse && { structuredResponse })
+        });
+        return res.end();
+      }
       return res.json({ 
         answer: displayResponse,
         conversationId: null,
@@ -698,15 +744,28 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
       span.setAttribute('ai.error', error instanceof Error ? error.message : 'Unknown error');
       span.setAttribute('ai.status', 'error');
     });
-    
-    if (error instanceof PromptValidationError) {
-      res.status(400).json({ error: error.userMessage });
-    } else if (error instanceof Error) {
+
+    const errorMessage = error instanceof PromptValidationError
+      ? error.userMessage
+      : error instanceof Error
+        ? error.message
+        : 'Failed to process question';
+
+    if (error instanceof Error && !(error instanceof PromptValidationError)) {
       Sentry.captureException(error);
-      res.status(500).json({ error: error.message });
-    } else {
+    } else if (!(error instanceof PromptValidationError)) {
       Sentry.captureMessage('Unknown error in display-real AI endpoint', 'error');
-      res.status(500).json({ error: 'Failed to process question' });
+    }
+
+    if (useStreaming) {
+      writeSSE(res, 'error', { error: errorMessage });
+      res.end();
+    } else {
+      if (error instanceof PromptValidationError) {
+        res.status(400).json({ error: error.userMessage });
+      } else {
+        res.status(500).json({ error: errorMessage });
+      }
     }
   }
 });

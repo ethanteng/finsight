@@ -41,7 +41,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   const [userTier, setUserTier] = useState<string>('starter');
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+  const [progressMessage, setProgressMessage] = useState<string | null>(null);
   const [showContextModal, setShowContextModal] = useState(false);
   const [structuredResponse, setStructuredResponse] = useState<{
     summary: string;
@@ -80,20 +80,6 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     "Given everything going on right now, am I actually doing okay?"
   ];
 
-  // Fun loading messages that rotate
-  const loadingMessages = [
-    "Crunching numbers",
-    "Consulting the financial oracle",
-    "Reading tea leaves",
-    "Asking my crystal ball",
-    "Channeling Warren Buffett",
-    "Doing the math",
-    "Consulting the money gods",
-    "Running the numbers",
-    "Summoning financial wisdom",
-    "Decoding your finances"
-  ];
-
   // Rotate placeholder every 4 seconds for all users
   useEffect(() => {
     const interval = setInterval(() => {
@@ -106,17 +92,6 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
 
     return () => clearInterval(interval);
   }, [isDemo, demoPlaceholders.length, userPlaceholders.length]);
-
-  // Rotate loading messages every 2 seconds while loading
-  useEffect(() => {
-    if (!loading) return;
-    
-    const interval = setInterval(() => {
-      setLoadingMessageIndex((prev) => (prev + 1) % loadingMessages.length);
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [loading, loadingMessages.length]);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -173,7 +148,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     if (initialQuestionRef.current) initialQuestionRef.current = null;
 
     setLoading(true);
-    setLoadingMessageIndex(0); // Reset to first message
+    setProgressMessage(null);
     setError('');
     setAnswer('');
     setStructuredResponse(null);
@@ -215,7 +190,12 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
         isDemo: isDemo,
         sessionId: propSessionId
       };
-      
+
+      // Request SSE streaming for production (Ask Linc pipeline)
+      if (!isDemo) {
+        headers['Accept'] = 'text/event-stream';
+      }
+
       const res = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers,
@@ -231,52 +211,86 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
         return;
       }
 
-      const data = await res.json();
+      const contentType = res.headers.get('content-type') || '';
+      const isSSE = contentType.includes('text/event-stream');
 
-      // Handle error responses (4xx, 5xx) - show backend message when available
-      if (!res.ok && data.error) {
-        setError(data.error);
-        return;
-      }
+      if (isSSE && res.body) {
+        // Parse SSE stream
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let currentEvent = '';
+        let currentData = '';
 
-      // Handle 200 with error but no answer (e.g. validation rejected after response started)
-      if (data.error && !data.answer) {
-        setError(data.error);
-        return;
-      }
+        const processLine = (line: string) => {
+          if (line.startsWith('event: ')) {
+            currentEvent = line.slice(7).trim();
+          } else if (line.startsWith('data: ')) {
+            currentData = line.slice(6);
+          } else if (line === '' && currentEvent && currentData) {
+            try {
+              const data = JSON.parse(currentData);
+              if (currentEvent === 'progress' && data.message) {
+                setProgressMessage(data.message);
+              } else if (currentEvent === 'result') {
+                if (data.answer) {
+                  setAnswer(data.answer);
+                  if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
+                  if (data.conversationId) setConversationId(data.conversationId);
+                  if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
+                  trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier, is_demo: isDemo });
+                } else {
+                  setError('No answer returned.');
+                  trackEvent('question_error', { error: 'No answer returned', user_tier: userTier, is_demo: isDemo });
+                }
+              } else if (currentEvent === 'error' && data.error) {
+                setError(data.error);
+                trackEvent('question_error', { error: data.error, user_tier: userTier, is_demo: isDemo });
+              }
+            } catch (err) {
+              console.error('SSE parse error:', err);
+            }
+            currentEvent = '';
+            currentData = '';
+          }
+        };
 
-      if (data.answer) {
-        setAnswer(data.answer);
-        if (data.structuredResponse) {
-          setStructuredResponse(data.structuredResponse);
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            processLine(line);
+          }
         }
-        // Store conversation ID for feedback
-        if (data.conversationId) {
-          setConversationId(data.conversationId);
-        } else if (isDemo) {
-          // Generate a demo conversation ID if none is provided
-          const demoConversationId = `demo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          setConversationId(demoConversationId);
+        if (buffer) {
+          buffer.split('\n').forEach(processLine);
         }
-        // Call onNewAnswer callback if provided
-        if (onNewAnswer) {
-          onNewAnswer(questionToAsk, data.answer);
-        }
-        
-        // Track successful answer
-        trackEvent('answer_received', {
-          answer_length: data.answer.length,
-          user_tier: userTier,
-          is_demo: isDemo
-        });
       } else {
-        setError('No answer returned.');
-        // Track error
-        trackEvent('question_error', {
-          error: 'No answer returned',
-          user_tier: userTier,
-          is_demo: isDemo
-        });
+        // JSON response (demo or non-streaming backend)
+        const data = await res.json();
+
+        if (!res.ok && data.error) {
+          setError(data.error);
+          return;
+        }
+        if (data.error && !data.answer) {
+          setError(data.error);
+          return;
+        }
+        if (data.answer) {
+          setAnswer(data.answer);
+          if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
+          if (data.conversationId) setConversationId(data.conversationId);
+          else if (isDemo) setConversationId(`demo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+          if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
+          trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier, is_demo: isDemo });
+        } else {
+          setError('No answer returned.');
+          trackEvent('question_error', { error: 'No answer returned', user_tier: userTier, is_demo: isDemo });
+        }
       }
     } catch (error) {
       setError('Error contacting backend.');
@@ -290,6 +304,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       });
     } finally {
       setLoading(false);
+      setProgressMessage(null);
     }
   };
   // ✅ Streaming disabled - removed useEffect that was simulating streaming
@@ -331,13 +346,18 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
             className="w-full flex items-center justify-between bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
           >
             {loading ? (
-              <span className="flex items-center justify-center w-full">
-                <span>{loadingMessages[loadingMessageIndex]}</span>
-                <span className="ml-1 flex">
-                  <span className="animate-bounce" style={{ animationDelay: '0ms' }}>.</span>
-                  <span className="animate-bounce" style={{ animationDelay: '150ms' }}>.</span>
-                  <span className="animate-bounce" style={{ animationDelay: '300ms' }}>.</span>
+              <span className="flex flex-col items-center justify-center w-full gap-1">
+                <span className="flex items-center">
+                  <span>Generating response</span>
+                  <span className="ml-1 flex">
+                    <span className="animate-bounce" style={{ animationDelay: '0ms' }}>.</span>
+                    <span className="animate-bounce" style={{ animationDelay: '150ms' }}>.</span>
+                    <span className="animate-bounce" style={{ animationDelay: '300ms' }}>.</span>
+                  </span>
                 </span>
+                {progressMessage && (
+                  <span className="text-sm font-normal text-gray-400">{progressMessage}</span>
+                )}
               </span>
             ) : (
               <>

@@ -31,6 +31,8 @@ export interface RunAskLincAnalysisOptions {
   conversationHistory?: Array<{ id: string; question: string; answer: string; createdAt: Date }>;
   demoProfile?: string;
   enableValidation?: boolean;
+  /** Optional callback for progress updates (e.g. for SSE streaming) */
+  onProgress?: (message: string) => void;
 }
 
 export interface RunAskLincAnalysisResult {
@@ -49,7 +51,8 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     userTier = UserTier.STARTER,
     conversationHistory = [],
     demoProfile,
-    enableValidation = process.env.ENABLE_RESPONSE_VALIDATION === 'true'
+    enableValidation = process.env.ENABLE_RESPONSE_VALIDATION === 'true',
+    onProgress
   } = options;
 
   const tier = typeof userTier === 'string' ? (userTier as UserTier) : userTier;
@@ -63,6 +66,8 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     throw new PromptValidationError(`Prompt rejected: ${validation.reason}`, validation.reason, userMessage);
   }
 
+  onProgress?.('Loading your account and transaction data');
+
   const questionNeeds = analyzeQuestionNeeds(question);
 
   // Step 1: Retrieve context (snapshot, profile, market summary, RAG)
@@ -73,10 +78,12 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     questionNeeds,
     tier,
     demoProfile,
-    alwaysIncludeMarketAndRAG: true
+    alwaysIncludeMarketAndRAG: true,
+    onProgress
   });
 
   // Step 2: Build canonical snapshot and prompt input
+  onProgress?.('Submitting to Claude for analysis');
   const canonicalSnapshot = toCanonicalSnapshot(snapshot);
   const promptInput = buildPromptInputFromSnapshot(
     question,
@@ -94,6 +101,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   // Step 5: Optional validation with Gemini (if enabled)
   if (enableValidation) {
     try {
+      onProgress?.('Sanity-checking with Gemini');
       const { validateWithGemini } = await import('./response-validator');
       const validationResult = await validateWithGemini(structuredResponse, { question, snapshot });
       if (!validationResult.valid && validationResult.issues?.length) {
@@ -109,6 +117,8 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       console.warn('Ask Linc: Validation layer failed, using initial response:', err);
     }
   }
+
+  onProgress?.('Formatting response');
 
   // Step 6: Output validation (security)
   const displayText = toDisplayText(structuredResponse);
