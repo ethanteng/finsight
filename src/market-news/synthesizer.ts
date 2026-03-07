@@ -57,7 +57,7 @@ export class MarketNewsSynthesizer {
       model: DEFAULT_MODEL,
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 3000  // Increased from 1500 to prevent truncation (Premium has more data)
+        maxOutputTokens: 65536  // Model limit for gemini-2.5-flash; ensures full market context
       }
     });
 
