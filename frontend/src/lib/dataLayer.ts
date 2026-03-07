@@ -12,13 +12,6 @@ interface DataLayerWindow {
   dataLayer?: Array<Record<string, unknown> | unknown[]>;
 }
 
-declare global {
-  interface Window {
-    plausible?: (eventName: string, options?: { props?: Record<string, string> }) => void;
-    gtag?: (command: 'event', eventName: string, params?: Record<string, unknown>) => void;
-  }
-}
-
 function pushToDataLayer(payload: Record<string, unknown>): void {
   if (typeof window === 'undefined') return;
   const win = window as unknown as DataLayerWindow;
@@ -41,13 +34,13 @@ export function pushViewExamples(): void {
   pushToDataLayer(payload);
 
   // Plausible: call plausible() - add "view_examples" as a goal in Plausible dashboard
-  if (typeof window !== 'undefined' && typeof window.plausible === 'function') {
-    window.plausible('view_examples', { props: { page: window.location.pathname } });
+  if (typeof window !== 'undefined' && typeof (window as Window & { plausible?: unknown }).plausible === 'function') {
+    (window as Window & { plausible: (e: string, o?: { props?: Record<string, string> }) => void }).plausible('view_examples', { props: { page: window.location.pathname } });
   }
 
   // GA4 via gtag (when loaded directly, e.g. NEXT_PUBLIC_GA_ID)
-  if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
-    window.gtag('event', 'view_examples', { source_page: window.location.pathname });
+  if (typeof window !== 'undefined' && typeof (window as Window & { gtag?: unknown }).gtag === 'function') {
+    (window as Window & { gtag: (c: 'event', e: string, p?: Record<string, unknown>) => void }).gtag('event', 'view_examples', { source_page: window.location.pathname });
   }
 }
 
@@ -59,12 +52,12 @@ export function pushViewMoreExamples(): void {
   pushToDataLayer(payload);
 
   // Plausible: add "view_more_examples" as a goal in Plausible dashboard
-  if (typeof window !== 'undefined' && typeof window.plausible === 'function') {
-    window.plausible('view_more_examples', { props: { page: window.location.pathname } });
+  if (typeof window !== 'undefined' && typeof (window as Window & { plausible?: unknown }).plausible === 'function') {
+    (window as Window & { plausible: (e: string, o?: { props?: Record<string, string> }) => void }).plausible('view_more_examples', { props: { page: window.location.pathname } });
   }
 
   // GA4 via gtag (when loaded directly)
-  if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
-    window.gtag('event', 'view_more_examples', { source_page: window.location.pathname });
+  if (typeof window !== 'undefined' && typeof (window as Window & { gtag?: unknown }).gtag === 'function') {
+    (window as Window & { gtag: (c: 'event', e: string, p?: Record<string, unknown>) => void }).gtag('event', 'view_more_examples', { source_page: window.location.pathname });
   }
 }
