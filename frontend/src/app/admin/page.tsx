@@ -1326,8 +1326,8 @@ export default function AdminPage() {
               <div className="text-sm text-gray-400">Setup Required</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold text-red-400">{usersForManagement?.filter(u => u.accessLevel === 'none' && !u.subscriptionMessage.includes('account setup incomplete')).length || 0}</div>
-              <div className="text-sm text-gray-400">Access Revoked</div>
+              <div className="text-2xl font-bold text-red-400">{usersForManagement?.filter(u => !u.isActive || (u.accessLevel === 'none' && !u.subscriptionMessage.includes('account setup incomplete'))).length || 0}</div>
+              <div className="text-sm text-gray-400">No Access</div>
             </div>
           </div>
           
@@ -1366,24 +1366,28 @@ export default function AdminPage() {
                         {user.email}
                       </div>
                       <div className="flex items-center space-x-2">
-                                                                      <span className={`px-2 py-1 text-xs rounded-full ${
-                          user.accessLevel === 'full'
-                            ? user.subscriptionStatus === 'active'
-                              ? 'bg-green-600 text-white'
-                              : 'bg-blue-600 text-white'
-                            : (user.subscriptionStatus === 'active' && user.subscriptionMessage.includes('account setup incomplete')) ||
-                              (user.subscriptionStatus === 'incomplete' && user.subscriptionMessage.includes('setup incomplete'))
-                              ? 'bg-orange-600 text-white'
-                              : 'bg-red-600 text-white'
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          !user.isActive
+                            ? 'bg-red-600 text-white'
+                            : user.accessLevel === 'full'
+                              ? user.subscriptionStatus === 'active'
+                                ? 'bg-green-600 text-white'
+                                : 'bg-blue-600 text-white'
+                              : (user.subscriptionStatus === 'active' && user.subscriptionMessage.includes('account setup incomplete')) ||
+                                (user.subscriptionStatus === 'incomplete' && user.subscriptionMessage.includes('setup incomplete'))
+                                ? 'bg-orange-600 text-white'
+                                : 'bg-red-600 text-white'
                         }`}>
-                          {user.accessLevel === 'full'
-                            ? user.subscriptionStatus === 'active'
-                              ? 'Active'
-                              : 'Admin Created'
-                            : (user.subscriptionStatus === 'active' && user.subscriptionMessage.includes('account setup incomplete')) ||
-                              (user.subscriptionStatus === 'incomplete' && user.subscriptionMessage.includes('setup incomplete'))
-                              ? 'Setup Required'
-                              : 'Access Revoked'}
+                          {!user.isActive
+                            ? 'Admin Revoked'
+                            : user.accessLevel === 'full'
+                              ? user.subscriptionStatus === 'active'
+                                ? 'Active'
+                                : 'Admin Created'
+                              : (user.subscriptionStatus === 'active' && user.subscriptionMessage.includes('account setup incomplete')) ||
+                                (user.subscriptionStatus === 'incomplete' && user.subscriptionMessage.includes('setup incomplete'))
+                                ? 'Setup Required'
+                                : 'Subscription Expired'}
                         </span>
                       </div>
                     </div>

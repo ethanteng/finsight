@@ -350,7 +350,36 @@ describe('Admin User Management', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ conversations: [] }) }) // demo-conversations
       .mockResolvedValueOnce({ ok: true, json: async () => ({ users: [] }) }) // production-sessions
       .mockResolvedValueOnce({ ok: true, json: async () => ({ conversations: [] }) }) // production-conversations
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ users: [] }) }) // production-users
+      .mockResolvedValueOnce({ ok: true, json: async () => ({
+        users: [
+          {
+            id: 'user1',
+            email: 'test@example.com',
+            tier: 'starter',
+            createdAt: '2024-01-01T00:00:00Z',
+            lastLoginAt: '2024-01-02T00:00:00Z',
+            isActive: true,
+            subscriptionStatus: 'active',
+            accessLevel: 'full',
+            upgradeRequired: false,
+            subscriptionMessage: '',
+            _count: { conversations: 5 }
+          },
+          {
+            id: 'user2',
+            email: 'test2@example.com',
+            tier: 'premium',
+            createdAt: '2024-01-01T00:00:00Z',
+            lastLoginAt: null,
+            isActive: false,
+            subscriptionStatus: 'canceled',
+            accessLevel: 'none',
+            upgradeRequired: true,
+            subscriptionMessage: 'Subscription canceled.',
+            _count: { conversations: 0 }
+          }
+        ]
+      }) }) // production-users
       .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'starter' }) }) // market-news/context/starter
       .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'standard' }) }) // market-news/context/standard
       .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'premium' }) }); // market-news/context/premium
@@ -374,7 +403,7 @@ describe('Admin User Management', () => {
 
     // Check that active/inactive status is displayed
     expect(screen.getByText('Active')).toBeInTheDocument();
-    expect(screen.getByText('Access Revoked')).toBeInTheDocument();
+    expect(screen.getByText('Admin Revoked')).toBeInTheDocument();
   });
 
   it('should allow revoking user access', async () => {
@@ -470,9 +499,10 @@ describe('Admin User Management', () => {
       );
     });
 
-    // Verify the user status changed
+    // Verify the user status changed to Admin Revoked (and Restore Access button appears)
     await waitFor(() => {
-      expect(screen.getByText('Access Revoked')).toBeInTheDocument();
+      expect(screen.getByText('Admin Revoked')).toBeInTheDocument();
+      expect(screen.getByText('Restore Access')).toBeInTheDocument();
     });
   });
 
