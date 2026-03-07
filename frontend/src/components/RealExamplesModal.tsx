@@ -191,40 +191,42 @@ export default function RealExamplesModal({ isOpen, onClose }: RealExamplesModal
       >
         <div className="grid grid-cols-3 items-center p-6 border-b border-border/50 shrink-0">
           <div />
-          <div className="flex items-center justify-center gap-2 sm:gap-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={goPrev}
-              onTouchEnd={(e) => {
-                e.preventDefault();
-                if (canGoPrev) goPrev();
-              }}
-              disabled={!canGoPrev}
-              className="shrink-0 touch-manipulation min-w-[44px] min-h-[44px]"
-              aria-label="Previous example"
-            >
-              <ChevronLeft className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline">Previous</span>
-            </Button>
-            <span className="text-sm text-primary shrink-0 min-w-[6rem] text-center">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-4">
+            {/* Mobile: example counter + swipe indicator */}
+            <span className="text-sm text-primary sm:hidden">
               Example {currentIndex + 1} of {EXAMPLES.length}
             </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={goNext}
-              onTouchEnd={(e) => {
-                e.preventDefault();
-                if (canGoNext) goNext();
-              }}
-              disabled={!canGoNext}
-              className="shrink-0 touch-manipulation min-w-[44px] min-h-[44px]"
-              aria-label="Next example"
-            >
-              <span className="hidden sm:inline">Next</span>
-              <ChevronRight className="h-4 w-4 sm:ml-1" />
-            </Button>
+            <span className="text-xs text-muted-foreground sm:hidden">
+              ← Swipe →
+            </span>
+            {/* Desktop: prev/next buttons */}
+            <div className="hidden sm:flex items-center gap-2 sm:gap-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={goPrev}
+                disabled={!canGoPrev}
+                className="shrink-0"
+                aria-label="Previous example"
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </Button>
+              <span className="text-sm text-primary shrink-0 min-w-[6rem] text-center">
+                Example {currentIndex + 1} of {EXAMPLES.length}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={goNext}
+                disabled={!canGoNext}
+                className="shrink-0"
+                aria-label="Next example"
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
           </div>
           <div className="flex justify-end">
             <button
