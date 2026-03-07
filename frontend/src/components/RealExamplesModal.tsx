@@ -88,6 +88,30 @@ const EXAMPLES = [
       "Schedule annual portfolio reviews to adjust for any changes in health, expenses, or market conditions",
     ],
   },
+  {
+    prompt: "How much emergency funds should I have? Do I already have enough?",
+    response: "Your emergency fund of $133,937 provides nearly 12 months of expense coverage, which significantly exceeds the recommended 3-6 months for most households and even the 9-month recommendation for high-income dual-earner professionals. You are well-positioned and could consider redeploying $20,000-$35,000 of excess cash into investments or debt reduction while maintaining a robust 9-10 month emergency cushion of approximately $100,000-$112,500.",
+    keyNumbers: [
+      { label: "Current Cash", value: "$133,937" },
+      { label: "Months Covered", value: "11.9" },
+      { label: "Recommended Minimum", value: "$67,500" },
+      { label: "Optimal Emergency Fund", value: "$106,250" },
+      { label: "Excess Available", value: "$27,687" },
+    ],
+    insights: [
+      "You exceed standard 6-month emergency fund guidelines by 98%, providing exceptional financial security",
+      "Dual-income household reduces simultaneous job loss risk, but high-income positions take 6-12 months to replace",
+      "Your cash position generates $5,000-$6,700 annually if held in high-yield savings at current 4-5% rates",
+      "With $2M+ in liquid investments and no mortgage, you have substantial backup resources beyond emergency cash",
+    ],
+    suggestedActions: [
+      "Maintain $100,000-$112,500 as emergency fund (9-10 months coverage) optimized for your dual-income, high-earning profile",
+      "Redeploy $20,000-$35,000 excess cash into retirement accounts or brokerage investments for better long-term returns",
+      "Ensure emergency cash is split between immediate access accounts and high-yield savings earning 4-5% APY",
+      "If credit balances carry interest, prioritize paying these down; if 0% promotional, maintain current approach",
+      "Review emergency fund annually or when employment circumstances change for either spouse",
+    ],
+  },
 ];
 
 const SWIPE_THRESHOLD = 50;
