@@ -18,6 +18,7 @@ function LoginFormContent() {
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [error, setError] = useState('');
   const [subscriptionContext, setSubscriptionContext] = useState<SubscriptionContext | null>(null);
+  const [subscriptionExpired, setSubscriptionExpired] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -160,10 +161,35 @@ function LoginFormContent() {
       const data = await res.json();
 
       if (res.ok && data.token) {
+        // Check subscription status before redirecting - show expiry message immediately if needed
+        const API_URL = process.env.NEXT_PUBLIC_API_URL;
+        const statusRes = await fetch(`${API_URL}/api/stripe/subscription-status`, {
+          headers: { 'Authorization': `Bearer ${data.token}` }
+        });
+
+        if (statusRes.status === 401) {
+          const errorData = await statusRes.json().catch(() => ({}));
+          const errorMessage = errorData.error || '';
+          if (errorMessage.toLowerCase().includes('subscription') && errorMessage.toLowerCase().includes('expired')) {
+            setSubscriptionExpired(true);
+            setError('');
+            return;
+          }
+          setError(errorMessage || 'Your session could not be verified.');
+          return;
+        }
+
+        if (statusRes.ok) {
+          const statusData = await statusRes.json();
+          // Only show subscription expired for canceled subscriptions, not inactive (e.g. admin-created accounts)
+          if (statusData.status === 'canceled' && statusData.accessLevel !== 'full') {
+            setSubscriptionExpired(true);
+            setError('');
+            return;
+          }
+        }
+
         localStorage.setItem('auth_token', data.token);
-        
-        // Always redirect to /app after successful login
-        // Users can access their profile from within the app
         router.push('/app');
       } else {
         setError(data.error || 'Login failed');
@@ -194,6 +220,34 @@ function LoginFormContent() {
           )}
         </div>
 
+        {/* Subscription Expired - shown immediately after login when subscription has expired */}
+        {subscriptionExpired ? (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-6 space-y-4">
+            <div className="flex items-start space-x-3">
+              <div className="text-amber-400 text-2xl">⚠️</div>
+              <div className="flex-1">
+                <h3 className="text-amber-400 font-medium mb-2">Subscription Expired</h3>
+                <p className="text-amber-200/90 text-sm mb-4">
+                  Your subscription has expired. Please renew to continue using Ask Linc.
+                </p>
+                <div className="flex flex-col gap-3">
+                  <a
+                    href={process.env.NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL_URL || '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors"
+                  >
+                    Manage Subscription
+                  </a>
+                  <p className="text-amber-200/90 text-sm">
+                    Or <Link href="/contact" className="text-amber-400 hover:text-amber-300 underline">Contact Us</Link> if you need support.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+        <>
         <form onSubmit={handleSubmit} className="space-y-6" suppressHydrationWarning>
           {error && (
             <div className="bg-red-500/10 border border-red-500/20 rounded-md p-3 text-red-400 text-sm">
@@ -286,6 +340,8 @@ function LoginFormContent() {
             Or try the demo version
           </Link>
         </div>
+        </>
+        )}
       </div>
     </div>
   );
