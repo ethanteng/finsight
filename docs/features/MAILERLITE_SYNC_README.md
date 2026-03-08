@@ -48,7 +48,7 @@ For each user, the following data is synchronized to MailerLite:
 - **groups**: Array containing the `MAILER_LITE_GROUP_ID` value
 
 ### Custom Fields
-- **active_user**: Boolean (1 or 0) indicating if user has an active subscription
+- **active_user**: Boolean (1 or 0) indicating if user logged in within the past 1 month
 - **current_tier**: String value (premium, standard, or starter)
 - **conversation_count**: Number of conversations the user has had
 - **user_created_at**: Date when the user account was created (YYYY-MM-DD format)
@@ -56,16 +56,12 @@ For each user, the following data is synchronized to MailerLite:
 
 ### Active User Logic
 
-The system determines if a user is active using a dual-check approach that **exactly matches the admin dashboard logic**:
+A user is considered **active** if they have logged in within the past 1 month (`lastLoginAt` >= 30 days ago).
 
-1. **Primary Check**: `user.subscriptionStatus === 'active'` (from User model)
-2. **Secondary Check**: Any subscription with `status === 'active'` (from Subscription model)
+- **active_user = 1**: User has `lastLoginAt` within the past 30 days
+- **active_user = 0**: User has never logged in, or last login was more than 30 days ago
 
-A user is considered active if **either** condition is true, ensuring maximum accuracy in identifying active users.
-
-**Important**: The system fetches ALL subscriptions (not just active ones) to avoid circular logic issues where active subscriptions would be filtered out before checking their status.
-
-**Edge Case Handling**: The system properly handles users who have `subscriptionStatus: 'active'` but no subscription records in the database (e.g., admin-created users or users with incomplete setup). In such cases, the user's default tier is used instead of attempting to access a non-existent subscription record.
+This reflects engagement/usage activity rather than subscription status.
 
 ## API Endpoint
 

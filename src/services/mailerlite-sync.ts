@@ -93,6 +93,9 @@ export class MailerLiteSyncService {
 
       console.log(`📊 Found ${users.length} users to sync`);
 
+      const oneMonthAgo = new Date();
+      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
       for (const user of users) {
         try {
           result.usersProcessed++;
@@ -120,12 +123,15 @@ export class MailerLiteSyncService {
           // Get conversation count
           const conversationCount = user.conversations.length;
           
+          // Active user = logged in within the past 1 month
+          const isActiveUser = user.lastLoginAt ? user.lastLoginAt >= oneMonthAgo : false;
+          
           // Prepare subscriber data
           const subscriber: MailerLiteSubscriber = {
             email: user.email,
             groups: [this.groupId],
             fields: {
-              active_user: hasActiveSubscription ? 1 : 0,
+              active_user: isActiveUser ? 1 : 0,
               current_tier: currentTier,
               conversation_count: conversationCount,
               user_created_at: this.formatDateForMailerLite(user.createdAt),
@@ -241,11 +247,16 @@ export class MailerLiteSyncService {
         : user.tier;
       const conversationCount = user.conversations.length;
 
+      // Active user = logged in within the past 1 month
+      const oneMonthAgo = new Date();
+      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+      const isActiveUser = user.lastLoginAt ? user.lastLoginAt >= oneMonthAgo : false;
+
       const subscriber: MailerLiteSubscriber = {
         email: user.email,
         groups: [this.groupId],
         fields: {
-          active_user: hasActiveSubscription ? 1 : 0,
+          active_user: isActiveUser ? 1 : 0,
           current_tier: currentTier,
           conversation_count: conversationCount,
           user_created_at: this.formatDateForMailerLite(user.createdAt),
