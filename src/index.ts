@@ -3968,8 +3968,7 @@ if (require.main === module) {
       name: 'market-news-refresh'
     });
     
-    console.log('Cron job scheduled: market context refresh every hour');
-    console.log('Cron job scheduled: market news context refresh every 4 hours');
+    console.log('Cron jobs scheduled: market context (hourly), market news context (every 4 hours)');
     
     // Set up cron job to sync users to MailerLite daily at 3 AM EST
     cron.schedule('0 3 * * *', async () => {
