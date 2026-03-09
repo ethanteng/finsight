@@ -462,12 +462,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
             </div>
           )}
           <div className="bg-gray-800 rounded-lg p-4 space-y-4">
-            {loading && !answer ? (
-              <div className="text-gray-400 text-center py-8">
-                <p className="mb-2">Generating response</p>
-                {progressMessage && <p className="text-sm">{progressMessage}</p>}
-              </div>
-            ) : structuredResponse ? (
+            {loading && !answer ? null : structuredResponse ? (
               <>
                 <div className="text-gray-200 leading-relaxed">
                   <MarkdownRenderer>{structuredResponse.summary}</MarkdownRenderer>
@@ -515,8 +510,8 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
             )}
           </div>
           
-          {/* Feedback Component */}
-          {conversationId && (
+          {/* Feedback Component - only show once answer has arrived */}
+          {conversationId && answer && !loading && (
             <Feedback
               conversationId={conversationId}
               isDemo={isDemo}

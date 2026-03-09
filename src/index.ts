@@ -1369,33 +1369,34 @@ app.get('/conversations', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
+    const userId = user.id;
+    if (!userId) {
+      console.error('Conversations: user.id is missing', { user });
+      return res.status(500).json({ error: 'Invalid user session' });
+    }
+
     // Get user's conversations from the database
     const conversations = await getPrismaClient().conversation.findMany({
-      where: { userId: user.id },
+      where: { userId },
       orderBy: { createdAt: 'desc' },
       take: 50, // Get last 50 conversations
     });
 
-    console.log(`Found ${conversations.length} conversations for user ${user.id}`);
-    console.log('Conversations:', conversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) })));
+    console.log(`Found ${conversations.length} conversations for user ${userId}`);
 
-    res.json({ 
+    res.json({
       conversations: conversations.map((conv: any) => ({
         id: conv.id,
         question: conv.question,
         answer: conv.answer,
-        timestamp: conv.createdAt.getTime()
+        timestamp: conv.createdAt instanceof Date ? conv.createdAt.getTime() : new Date(conv.createdAt).getTime()
       }))
     });
   } catch (err) {
-    // Capture error in Sentry
-    if (err instanceof Error) {
-      Sentry.captureException(err);
-      res.status(500).json({ error: err.message });
-    } else {
-      Sentry.captureMessage('Unknown error in conversations endpoint', 'error');
-      res.status(500).json({ error: 'Unknown error' });
-    }
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error('Conversations endpoint error:', message, err);
+    Sentry.captureException(err);
+    res.status(500).json({ error: message });
   }
 });
 

@@ -168,7 +168,6 @@ export default function AppPageClient() {
         
         if (res.ok) {
           const data = await res.json();
-          console.log('Backend response:', data);
           const history: PromptHistory[] = data.conversations.map((conv: { id: string; question: string; answer: string; timestamp: number }) => ({
             id: conv.id,
             question: conv.question,
@@ -183,7 +182,9 @@ export default function AppPageClient() {
           
           console.log(`Loaded ${history.length} conversations from backend`);
         } else {
-          console.error('Failed to load conversation history:', res.status);
+          const errData = await res.json().catch(() => ({}));
+          const errMsg = errData?.error || res.statusText;
+          console.error('Failed to load conversation history:', res.status, errMsg);
         }
       } catch (error) {
         console.error('Failed to load conversation history:', error);
@@ -234,7 +235,9 @@ export default function AppPageClient() {
           
           console.log(`Reloaded ${history.length} conversations from backend`);
         } else {
-          console.error('Failed to reload conversation history:', res.status);
+          const errData = await res.json().catch(() => ({}));
+          const errMsg = errData?.error || res.statusText;
+          console.error('Failed to reload conversation history:', res.status, errMsg);
         }
       } catch (error) {
         console.error('Failed to reload conversation history:', error);
