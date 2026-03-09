@@ -132,6 +132,7 @@ model Conversation {
   anonymizedAnswer   String?
   anonymizedQuestion String?
   userId             String?
+  showTheMathData    Json?
   user               User?      @relation(fields: [userId], references: [id])
   feedback           Feedback[]
 }
@@ -158,14 +159,15 @@ model DemoSession {
 }
 
 model DemoConversation {
-  id        String      @id @default(cuid())
-  question  String
-  answer    String
-  sessionId String
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-  session   DemoSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  feedback  Feedback[]
+  id               String      @id @default(cuid())
+  question         String
+  answer           String
+  sessionId        String
+  showTheMathData  Json?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  session          DemoSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  feedback         Feedback[]
 }
 
 model UserProfile {

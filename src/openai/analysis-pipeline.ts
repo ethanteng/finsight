@@ -15,13 +15,15 @@ import { UserTier } from '../data/types';
 import { analyzeQuestionNeeds } from './question-analysis';
 import { gatherContextSnapshot } from './context-service';
 import { toCanonicalSnapshot } from './canonical-snapshot';
-import { buildPromptInputFromSnapshot } from './financial-reasoning-prompt';
+import { buildPromptInputFromSnapshot, buildFinancialReasoningPrompt } from './financial-reasoning-prompt';
 import { askClaudeWithFinancialContext } from './claude-client';
 import { parseStructuredResponse, toDisplayText, AskLincResponse } from './structured-response';
 import { validateUserPrompt, getRejectionMessage } from '../security/prompt-validation';
 import { validateLLMResponse } from '../security/output-validation';
 import { logRejectedPrompt, logFlaggedOutput } from '../security/security-logger';
 import { PromptValidationError } from '../openai';
+import { fetchShowTheMathDBData } from './show-the-math-db-service';
+import type { ShowTheMathData, ShowTheMathClaudeCall, ShowTheMathGeminiValidation } from './show-the-math-types';
 
 export interface RunAskLincAnalysisOptions {
   question: string;
@@ -33,11 +35,14 @@ export interface RunAskLincAnalysisOptions {
   enableValidation?: boolean;
   /** Optional callback for progress updates (e.g. for SSE streaming) */
   onProgress?: (message: string) => void;
+  /** Optional callback for live Show the Math data (streams partial data as pipeline runs) */
+  onShowTheMathProgress?: (partial: Partial<ShowTheMathData>) => void;
 }
 
 export interface RunAskLincAnalysisResult {
   structuredResponse: AskLincResponse;
   displayText: string;
+  showTheMathData?: ShowTheMathData;
 }
 
 /**
@@ -52,7 +57,8 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     conversationHistory = [],
     demoProfile,
     enableValidation = process.env.ENABLE_RESPONSE_VALIDATION === 'true',
-    onProgress
+    onProgress,
+    onShowTheMathProgress
   } = options;
 
   const tier = typeof userTier === 'string' ? (userTier as UserTier) : userTier;
@@ -92,11 +98,22 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     conversationHistory.map(c => ({ question: c.question, answer: c.answer }))
   );
 
+  // Show the Math: fetch DB data and emit
+  const databaseData = await fetchShowTheMathDBData(userId, snapshot);
+  onShowTheMathProgress?.({ databaseData });
+
   // Step 3: LLM financial reasoning (Claude Sonnet)
+  const { systemPrompt, userMessage } = buildFinancialReasoningPrompt(promptInput);
   let rawResponse = await askClaudeWithFinancialContext(promptInput);
+
+  const claudeFirstCall: ShowTheMathClaudeCall = { systemPrompt, userMessage, rawResponse };
+  onShowTheMathProgress?.({ claudeFirstCall });
 
   // Step 4: Parse structured response
   let structuredResponse = parseStructuredResponse(rawResponse);
+
+  let geminiValidation: ShowTheMathGeminiValidation | undefined;
+  let claudeRetry: ShowTheMathClaudeCall | undefined;
 
   // Step 5: Optional validation with Gemini (if enabled)
   if (enableValidation) {
@@ -104,13 +121,31 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       onProgress?.('Sanity-checking with Gemini');
       const { validateWithGemini } = await import('./response-validator');
       const validationResult = await validateWithGemini(structuredResponse, { question, snapshot });
+      if (validationResult.promptSent != null && validationResult.rawResponse != null) {
+        geminiValidation = {
+          prompt: validationResult.promptSent,
+          rawResponse: validationResult.rawResponse,
+          parsedResult: {
+            valid: validationResult.valid,
+            issues: validationResult.issues
+          }
+        };
+        onShowTheMathProgress?.({ geminiValidation });
+      }
       if (!validationResult.valid && validationResult.issues?.length) {
         console.warn('Ask Linc: Gemini validation failed, regenerating with feedback:', validationResult.issues);
         const retryPromptInput = {
           ...promptInput,
           validationFeedback: validationResult.issues
         };
+        const retryPrompt = buildFinancialReasoningPrompt(retryPromptInput);
         rawResponse = await askClaudeWithFinancialContext(retryPromptInput);
+        claudeRetry = {
+          systemPrompt: retryPrompt.systemPrompt,
+          userMessage: retryPrompt.userMessage,
+          rawResponse
+        };
+        onShowTheMathProgress?.({ claudeRetry });
         structuredResponse = parseStructuredResponse(rawResponse);
       }
     } catch (err) {
@@ -131,8 +166,16 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     };
   }
 
+  const showTheMathData: ShowTheMathData = {
+    claudeFirstCall,
+    databaseData,
+    ...(geminiValidation && { geminiValidation }),
+    ...(claudeRetry && { claudeRetry })
+  };
+
   return {
     structuredResponse,
-    displayText
+    displayText,
+    showTheMathData
   };
 }

@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { CircleArrowUp } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { CircleArrowUp, Calculator } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import { useAnalytics } from './Analytics';
 import Feedback from './Feedback';
+import ShowTheMathModal, { ShowTheMathContent, type ShowTheMathData } from './ShowTheMathModal';
 
 /** Format key_number for display: % for percent keys, plain number for years, $ for dollar amounts */
 function formatKeyNumberValue(key: string, value: number | unknown): string {
@@ -47,7 +48,12 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     insights?: string[];
     suggested_actions?: string[];
   } | null>(null);
-  // ✅ Streaming disabled - removed streaming state variables
+  const [showTheMathData, setShowTheMathData] = useState<ShowTheMathData | null>(null);
+  const [liveShowTheMathData, setLiveShowTheMathData] = useState<Partial<ShowTheMathData>>({});
+  const [showTheMathModalOpen, setShowTheMathModalOpen] = useState(false);
+  const [loadingShowTheMath, setLoadingShowTheMath] = useState(false);
+  const [showTheMathError, setShowTheMathError] = useState<string | null>(null);
+  const [liveFeedExpanded, setLiveFeedExpanded] = useState(false);
   const { trackEvent } = useAnalytics();
 
   // Demo placeholder questions that rotate
@@ -130,11 +136,16 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     if (selectedPrompt) {
       setQuestion(selectedPrompt.question);
       setAnswer(selectedPrompt.answer);
-      setStructuredResponse(null); // Previous answers don't have structured data
+      setConversationId(selectedPrompt.id);
+      setStructuredResponse(null);
+      setShowTheMathData(null);
+      setLiveShowTheMathData({});
       setError('');
     } else {
       setAnswer('');
       setStructuredResponse(null);
+      setShowTheMathData(null);
+      setLiveShowTheMathData({});
       setError('');
     }
   }, [selectedPrompt]);
@@ -150,6 +161,8 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     setError('');
     setAnswer('');
     setStructuredResponse(null);
+    setShowTheMathData(null);
+    setLiveShowTheMathData({});
     
     // Track question submission
     trackEvent('question_asked', {
@@ -230,11 +243,17 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
               const data = JSON.parse(currentData);
               if (currentEvent === 'progress' && data.message) {
                 setProgressMessage(data.message);
+              } else if (currentEvent === 'showTheMathProgress') {
+                setLiveShowTheMathData((prev) => ({ ...prev, ...data }));
               } else if (currentEvent === 'result') {
                 if (data.answer) {
                   setAnswer(data.answer);
                   if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
                   if (data.conversationId) setConversationId(data.conversationId);
+                  if (data.showTheMathData) {
+                    setShowTheMathData(data.showTheMathData);
+                    setLiveShowTheMathData({});
+                  }
                   if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
                   trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier, is_demo: isDemo });
                 } else {
@@ -283,6 +302,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
           if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
           if (data.conversationId) setConversationId(data.conversationId);
           else if (isDemo) setConversationId(`demo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+          if (data.showTheMathData) setShowTheMathData(data.showTheMathData);
           if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
           trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier, is_demo: isDemo });
         } else {
@@ -305,7 +325,53 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       setProgressMessage(null);
     }
   };
-  // ✅ Streaming disabled - removed useEffect that was simulating streaming
+
+  const handleShowTheMathClick = useCallback(async () => {
+    if (showTheMathData) {
+      setShowTheMathModalOpen(true);
+      setShowTheMathError(null);
+      return;
+    }
+    if (!conversationId) return;
+    setShowTheMathModalOpen(true);
+    setLoadingShowTheMath(true);
+    setShowTheMathError(null);
+    try {
+      const headers: Record<string, string> = {};
+      if (!isDemo) {
+        const token = localStorage.getItem('auth_token');
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+      }
+      if (isDemo && propSessionId) headers['x-session-id'] = propSessionId;
+      const endpoint = isDemo
+        ? `/demo/conversations/${conversationId}/show-the-math`
+        : `/conversations/${conversationId}/show-the-math`;
+      const res = await fetch(`${API_URL}${endpoint}`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        setShowTheMathData(data);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setShowTheMathError(err.error || 'No pipeline data available for this conversation');
+      }
+    } catch (err) {
+      setShowTheMathError('Failed to load pipeline data');
+    } finally {
+      setLoadingShowTheMath(false);
+    }
+  }, [showTheMathData, conversationId, isDemo, propSessionId, API_URL]);
+
+  const hasShowTheMath = !!(showTheMathData || conversationId || (loading && Object.keys(liveShowTheMathData).length > 0));
+  const modalData: Partial<ShowTheMathData> | null = showTheMathData ?? (
+    Object.keys(liveShowTheMathData).length > 0
+      ? {
+          claudeFirstCall: liveShowTheMathData.claudeFirstCall,
+          databaseData: liveShowTheMathData.databaseData || {},
+          ...(liveShowTheMathData.geminiValidation && { geminiValidation: liveShowTheMathData.geminiValidation }),
+          ...(liveShowTheMathData.claudeRetry && { claudeRetry: liveShowTheMathData.claudeRetry })
+        }
+      : null
+  );
 
 
   return (
@@ -358,11 +424,50 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
         </form>
       </div>
 
-      {/* Results Area */}
-      {answer && (
+      {/* Results Area - show during loading for live feed, or when we have answer */}
+      {(answer || loading) && (
         <div className="bg-gray-700 rounded-lg p-6">
+          {/* Show the math button - top of response box */}
+          {hasShowTheMath && !loading && (
+            <div className="mb-4">
+              <button
+                type="button"
+                onClick={handleShowTheMathClick}
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-400 hover:text-blue-300 hover:bg-gray-600/50 rounded-lg transition-colors"
+              >
+                <Calculator className="w-4 h-4" />
+                Show the math
+              </button>
+            </div>
+          )}
+          {/* Live feed during loading */}
+          {loading && Object.keys(liveShowTheMathData).length > 0 && (
+            <div className="mb-4 border border-gray-600 rounded-lg overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setLiveFeedExpanded(!liveFeedExpanded)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-gray-800 hover:bg-gray-750 text-left text-sm font-medium text-gray-200"
+              >
+                Live transparency
+                <span className="text-gray-400">{liveFeedExpanded ? '−' : '+'}</span>
+              </button>
+              {liveFeedExpanded && modalData && (
+                <div className="p-4 bg-gray-900 border-t border-gray-700 max-h-64 overflow-y-auto">
+                  <ShowTheMathContent data={modalData} />
+                  <div className="mt-2 text-xs text-gray-500">
+                    Pipeline in progress. Data will update as each step completes.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           <div className="bg-gray-800 rounded-lg p-4 space-y-4">
-            {structuredResponse ? (
+            {loading && !answer ? (
+              <div className="text-gray-400 text-center py-8">
+                <p className="mb-2">Generating response</p>
+                {progressMessage && <p className="text-sm">{progressMessage}</p>}
+              </div>
+            ) : structuredResponse ? (
               <>
                 <div className="text-gray-200 leading-relaxed">
                   <MarkdownRenderer>{structuredResponse.summary}</MarkdownRenderer>
@@ -434,6 +539,14 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
           <p className="text-red-400 text-sm">{error}</p>
         </div>
       )}
+
+      <ShowTheMathModal
+        isOpen={showTheMathModalOpen}
+        onClose={() => setShowTheMathModalOpen(false)}
+        data={modalData}
+        loading={loadingShowTheMath}
+        error={showTheMathError}
+      />
     </div>
   );
 } 

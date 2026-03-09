@@ -17,6 +17,10 @@ const DEFAULT_MODEL = process.env.GEMINI_VALIDATION_MODEL || 'gemini-3-flash-pre
 export interface ValidationResult {
   valid: boolean;
   issues?: string[];
+  /** Full prompt sent to Gemini (for Show the Math) */
+  promptSent?: string;
+  /** Raw text response from Gemini (for Show the Math) */
+  rawResponse?: string;
 }
 
 let genAIClient: GoogleGenerativeAI | null = null;
@@ -173,11 +177,13 @@ Respond with only the JSON object, no other text.`;
       const parsed = JSON.parse(jsonMatch[0]);
       return {
         valid: parsed.valid === true,
-        issues: Array.isArray(parsed.issues) ? parsed.issues : undefined
+        issues: Array.isArray(parsed.issues) ? parsed.issues : undefined,
+        promptSent: prompt,
+        rawResponse: text
       };
     }
 
-    return { valid: true };
+    return { valid: true, promptSent: prompt, rawResponse: text };
   } catch (err) {
     console.warn('Gemini validation failed:', err);
     return { valid: true };

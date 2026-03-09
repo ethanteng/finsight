@@ -22,6 +22,13 @@ Complete documentation of platform features including:
 - Implementation details and configuration
 - API endpoints and usage examples
 
+### **features/SHOW_THE_MATH_TRANSPARENCY.md**
+Documentation for the Show the Math transparency feature:
+- Full LLM pipeline data exposure (Claude, Gemini)
+- Live feed during response generation
+- Database context (7 tables)
+- API endpoints and storage
+
 ### **RAG_SYSTEM.md**
 Comprehensive documentation of the Retrieval-Augmented Generation system including:
 - Architecture and components

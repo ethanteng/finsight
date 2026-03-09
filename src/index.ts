@@ -557,6 +557,12 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
         ? (message: string) => writeSSE(res, 'progress', { message })
         : undefined;
 
+      const onShowTheMathProgress = useStreaming
+        ? (partial: object) => writeSSE(res, 'showTheMathProgress', partial)
+        : undefined;
+
+      let showTheMathData: object | undefined;
+
       if (useAskLincPipeline) {
         try {
           const result = await runAskLincAnalysis({
@@ -567,10 +573,12 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
             conversationHistory,
             demoProfile: undefined,
             enableValidation: process.env.ENABLE_RESPONSE_VALIDATION === 'true',
-            onProgress
+            onProgress,
+            onShowTheMathProgress
           });
           aiResponse = result.displayText;
           structuredResponse = result.structuredResponse;
+          showTheMathData = result.showTheMathData;
         } catch (err) {
           if (err instanceof PromptValidationError) {
             throw err;
@@ -619,6 +627,7 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
                 question,
                 answer: displayResponse,
                 sessionId: demoSession.id,
+                ...(showTheMathData && { showTheMathData: showTheMathData as object })
               }
             });
             console.log('Demo conversation saved successfully:', conversation.id);
@@ -650,14 +659,16 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
           writeSSE(res, 'result', {
             answer: displayResponse,
             conversationId: null,
-            ...(structuredResponse && { structuredResponse })
+            ...(structuredResponse && { structuredResponse }),
+            ...(showTheMathData && { showTheMathData })
           });
           return res.end();
         }
         return res.json({ 
           answer: displayResponse,
           conversationId: null,
-          ...(structuredResponse && { structuredResponse })
+          ...(structuredResponse && { structuredResponse }),
+          ...(showTheMathData && { showTheMathData })
         });
       }
 
@@ -678,7 +689,8 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
               userId,
               question,
               answer: displayResponse,
-              createdAt: new Date()
+              createdAt: new Date(),
+              ...(showTheMathData && { showTheMathData: showTheMathData as object })
             }
           });
           console.log('Conversation saved for user:', userId);
@@ -693,14 +705,16 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
             writeSSE(res, 'result', {
               answer: displayResponse,
               conversationId: conversation.id,
-              ...(structuredResponse && { structuredResponse })
+              ...(structuredResponse && { structuredResponse }),
+              ...(showTheMathData && { showTheMathData })
             });
             return res.end();
           }
           return res.json({ 
             answer: displayResponse,
             conversationId: conversation.id,
-            ...(structuredResponse && { structuredResponse })
+            ...(structuredResponse && { structuredResponse }),
+            ...(showTheMathData && { showTheMathData })
           });
         } catch (error) {
           console.error('Error saving conversation:', error);
@@ -717,14 +731,16 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
         writeSSE(res, 'result', {
           answer: displayResponse,
           conversationId: null,
-          ...(structuredResponse && { structuredResponse })
+          ...(structuredResponse && { structuredResponse }),
+          ...(showTheMathData && { showTheMathData })
         });
         return res.end();
       }
       return res.json({ 
         answer: displayResponse,
         conversationId: null,
-        ...(structuredResponse && { structuredResponse })
+        ...(structuredResponse && { structuredResponse }),
+        ...(showTheMathData && { showTheMathData })
       });
     });
   } catch (error) {
@@ -1378,6 +1394,69 @@ app.get('/conversations', async (req: Request, res: Response) => {
       res.status(500).json({ error: err.message });
     } else {
       Sentry.captureMessage('Unknown error in conversations endpoint', 'error');
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+});
+
+// Get Show the Math data for a production conversation
+app.get('/conversations/:id/show-the-math', async (req: Request, res: Response) => {
+  try {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const conversation = await getPrismaClient().conversation.findUnique({
+      where: { id }
+    });
+    if (!conversation || conversation.userId !== user.id) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+    if (!conversation.showTheMathData) {
+      return res.status(404).json({ error: 'No pipeline data available for this conversation' });
+    }
+    res.json(conversation.showTheMathData);
+  } catch (err) {
+    if (err instanceof Error) {
+      Sentry.captureException(err);
+      res.status(500).json({ error: err.message });
+    } else {
+      Sentry.captureMessage('Unknown error in show-the-math endpoint', 'error');
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+});
+
+// Get Show the Math data for a demo conversation
+app.get('/demo/conversations/:id/show-the-math', async (req: Request, res: Response) => {
+  try {
+    const sessionId = req.headers['x-session-id'] as string;
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Session ID required' });
+    }
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const prisma = getPrismaClient();
+    const demoSession = await prisma.demoSession.findUnique({ where: { sessionId } });
+    if (!demoSession) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+    const conversation = await prisma.demoConversation.findFirst({
+      where: { id, sessionId: demoSession.id }
+    });
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+    if (!conversation.showTheMathData) {
+      return res.status(404).json({ error: 'No pipeline data available for this conversation' });
+    }
+    res.json(conversation.showTheMathData);
+  } catch (err) {
+    if (err instanceof Error) {
+      Sentry.captureException(err);
+      res.status(500).json({ error: err.message });
+    } else {
+      Sentry.captureMessage('Unknown error in demo show-the-math endpoint', 'error');
       res.status(500).json({ error: 'Unknown error' });
     }
   }
