@@ -112,6 +112,30 @@ const EXAMPLES = [
       "Review emergency fund annually or when employment circumstances change for either spouse",
     ],
   },
+  {
+    prompt: "How can I expect the war with Iran to affect my retirement plans?",
+    response: "The Iran conflict creates short-term volatility risks for your retirement portfolio due to your high 92.2% equity exposure, but your strong fundamentals—7-20 year timeline, $81K annual surplus, and $2M+ portfolio—position you to weather and recover from geopolitical shocks. Historical precedent shows war-related market corrections typically recover within 6-24 months, well within your retirement horizon. Key actions include tactical rebalancing to 80-85% equities, building a 6-12 month cash buffer, and maintaining your long-term plan while being opportunistic during market dips.",
+    keyNumbers: [
+      { label: "Current Equity Exposure Dollars", value: "$1,875,470" },
+      { label: "Potential 10 Percent Loss", value: "$187,547" },
+      { label: "Annual Surplus To Recover", value: "$81,000" },
+      { label: "Recovery Time Months 10pct", value: "28" },
+      { label: "Recommended Equity Allocation", value: "82.5%" },
+      { label: "Recommended Cash Buffer", value: "$105,000" },
+    ],
+    insights: [
+      "Your 92.2% equity allocation exposes you to $187K-$375K in potential war-related corrections, but your 7-20 year timeline allows full recovery based on historical precedent",
+      "War-driven inflation could increase from 2.4% to 3.5-4.5%, requiring $2,100+ additional annual drawdown, but your equity exposure provides inflation hedge through growth",
+      "Your $81K annual surplus provides exceptional resilience—you can recover a 10% portfolio loss in 2.3 years through continued contributions alone",
+      "Historical Middle East conflicts (Gulf War 1990, Iraq 2003) caused 3-7 month market disruptions with full recovery within 12-18 months, supporting your retirement timeline",
+    ],
+    suggestedActions: [
+      "Rebalance portfolio from 92.2% to 80-85% equity allocation within 30 days, moving 5-10% into TIPS and short-duration bonds to reduce volatility exposure",
+      "Establish 6-12 month expense buffer ($70K-$140K) in money market funds or short-term CDs to avoid forced selling during corrections",
+      "Prepare opportunistic buying strategy with your $6,750 monthly surplus to dollar-cost average into quality stocks if markets drop 10%+ during conflict escalation",
+      "Increase inflation hedges by adding 5-10% allocation to energy stocks, commodities, or commodity-focused ETFs that benefit from war-driven oil price increases",
+    ],
+  },
 ];
 
 const SWIPE_THRESHOLD = 50;
