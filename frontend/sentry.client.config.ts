@@ -15,6 +15,11 @@ Sentry.init({
     // User feedback
     Sentry.feedbackIntegration({
       colorScheme: "system",
+      buttonLabel: "Give Feedback",
+      submitButtonLabel: "Send",
+      formTitle: "Give Feedback",
+      messagePlaceholder: "What would you like to tell us?",
+      successMessageText: "Thank you for your feedback!"
     }),
   ],
 
