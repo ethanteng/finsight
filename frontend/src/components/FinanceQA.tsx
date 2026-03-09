@@ -5,7 +5,6 @@ import { CircleArrowUp } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import { useAnalytics } from './Analytics';
 import Feedback from './Feedback';
-import { ViewAIContext } from './debug/ViewAIContext';
 
 /** Format key_number for display: % for percent keys, plain number for years, $ for dollar amounts */
 function formatKeyNumberValue(key: string, value: number | unknown): string {
@@ -42,7 +41,6 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
-  const [showContextModal, setShowContextModal] = useState(false);
   const [structuredResponse, setStructuredResponse] = useState<{
     summary: string;
     key_numbers?: Record<string, number>;
@@ -314,17 +312,8 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     <div className="space-y-6">
       {/* Big Prompt Area */}
       <div className="bg-gray-700 rounded-lg p-6">
-        <div className="flex justify-between items-center mb-4">
+        <div className="mb-4">
           <h3 className="text-gray-300 text-sm font-medium">Ask Your Question</h3>
-          {!isDemo && process.env.NEXT_PUBLIC_PERSIST_GPT_CONTEXT === 'true' && (
-            <button
-              type="button"
-              onClick={() => setShowContextModal(true)}
-              className="text-xs text-gray-400 hover:text-gray-200 underline"
-            >
-              View AI Context
-            </button>
-          )}
         </div>
         <form id="finance-qa-form" onSubmit={askQuestion} className="space-y-4">
           <div>
@@ -445,12 +434,6 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
           <p className="text-red-400 text-sm">{error}</p>
         </div>
       )}
-      
-      {/* View AI Context Modal */}
-      <ViewAIContext 
-        isOpen={showContextModal} 
-        onClose={() => setShowContextModal(false)} 
-      />
     </div>
   );
 } 
