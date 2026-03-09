@@ -235,16 +235,21 @@ function normalizeResponse(obj: Record<string, unknown>): AskLincResponse {
 
 /**
  * Format a key_number value for display based on the key name.
- * - Keys containing "percent" (but not "years") → percentage, e.g. 2.35%
- * - Keys containing "years" → plain number, e.g. 30
- * - Default → dollar amount, e.g. $1,533,881
+ * - Keys containing "months" or "years" (time) → plain number, e.g. 28
+ * - Keys containing "loss", "surplus", "buffer", or "dollars" → dollar amount, e.g. $187,547
+ * - Keys containing "allocation" → percentage, e.g. 82.5%
+ * - Keys containing "percent" (but not "loss" - e.g. "10 percent loss" value is dollars) → percentage
+ * - Default → dollar amount
  */
 export function formatKeyNumberValue(key: string, value: number): string {
   const keyLower = key.toLowerCase();
-  if (keyLower.includes('years')) {
+  if (keyLower.includes('months') || keyLower.includes('years')) {
     return value.toLocaleString();
   }
-  if (keyLower.includes('percent')) {
+  if (keyLower.includes('loss') || keyLower.includes('surplus') || keyLower.includes('buffer') || keyLower.includes('dollars')) {
+    return value >= 1000 ? `$${value.toLocaleString()}` : `$${value}`;
+  }
+  if (keyLower.includes('allocation') || (keyLower.includes('percent') && !keyLower.includes('loss'))) {
     return `${value}%`;
   }
   return value >= 1000 ? `$${value.toLocaleString()}` : `$${value}`;

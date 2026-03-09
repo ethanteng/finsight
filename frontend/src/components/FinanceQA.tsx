@@ -7,12 +7,17 @@ import { useAnalytics } from './Analytics';
 import Feedback from './Feedback';
 import ShowTheMathModal, { ShowTheMathContent, type ShowTheMathData } from './ShowTheMathModal';
 
-/** Format key_number for display: % for percent keys, plain number for years, $ for dollar amounts */
+/** Format key_number for display: plain number for months/years, $ for dollar amounts, % for allocation/percent */
 function formatKeyNumberValue(key: string, value: number | unknown): string {
   if (typeof value !== 'number') return String(value);
   const keyLower = key.toLowerCase();
-  if (keyLower.includes('years')) return value.toLocaleString();
-  if (keyLower.includes('percent')) return `${value}%`;
+  if (keyLower.includes('months') || keyLower.includes('years')) return value.toLocaleString();
+  if (keyLower.includes('loss') || keyLower.includes('surplus') || keyLower.includes('buffer') || keyLower.includes('dollars')) {
+    return value >= 1000 ? `$${value.toLocaleString()}` : `$${value}`;
+  }
+  if (keyLower.includes('allocation') || (keyLower.includes('percent') && !keyLower.includes('loss'))) {
+    return `${value}%`;
+  }
   return value >= 1000 ? `$${value.toLocaleString()}` : `$${value}`;
 }
 
