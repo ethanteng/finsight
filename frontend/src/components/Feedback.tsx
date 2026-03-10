@@ -34,12 +34,14 @@ interface FeedbackProps {
 export default function Feedback({ conversationId, isDemo, onFeedbackSubmitted }: FeedbackProps) {
   const [rating, setRating] = useState<number | null>(null);
   const [submitted, setSubmitted] = useState(() => getSubmittedConversations().has(conversationId));
+  const [submittedThisSession, setSubmittedThisSession] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // Reset feedback state when conversationId changes; check if already submitted for new conversation
   useEffect(() => {
     setRating(null);
     setSubmitting(false);
+    setSubmittedThisSession(false);
     setSubmitted(getSubmittedConversations().has(conversationId));
   }, [conversationId]);
 
@@ -66,6 +68,7 @@ export default function Feedback({ conversationId, isDemo, onFeedbackSubmitted }
       if (response.ok) {
         markConversationFeedbackSubmitted(conversationId);
         setSubmitted(true);
+        setSubmittedThisSession(true);
         onFeedbackSubmitted?.(score);
       } else {
         console.error('Failed to submit feedback');
@@ -78,6 +81,17 @@ export default function Feedback({ conversationId, isDemo, onFeedbackSubmitted }
       setSubmitting(false);
     }
   };
+
+  // Show thank you only on initial submit; hide entirely when loaded from localStorage (e.g. after refresh)
+  if (submittedThisSession) {
+    return (
+      <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
+        <p className="text-green-500 text-sm text-center">
+          ✓ Thank you for your feedback!
+        </p>
+      </div>
+    );
+  }
 
   if (submitted) {
     return null;
