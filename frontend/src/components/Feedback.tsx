@@ -2,6 +2,29 @@
 
 import React, { useState, useEffect } from 'react';
 
+const FEEDBACK_STORAGE_KEY = 'finsight-feedback-submitted';
+
+function getSubmittedConversations(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const stored = localStorage.getItem(FEEDBACK_STORAGE_KEY);
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function markConversationFeedbackSubmitted(conversationId: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    const set = getSubmittedConversations();
+    set.add(conversationId);
+    localStorage.setItem(FEEDBACK_STORAGE_KEY, JSON.stringify([...set]));
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
 interface FeedbackProps {
   conversationId: string;
   isDemo: boolean;
@@ -10,14 +33,14 @@ interface FeedbackProps {
 
 export default function Feedback({ conversationId, isDemo, onFeedbackSubmitted }: FeedbackProps) {
   const [rating, setRating] = useState<number | null>(null);
-  const [submitted, setSubmitted] = useState(false);
+  const [submitted, setSubmitted] = useState(() => getSubmittedConversations().has(conversationId));
   const [submitting, setSubmitting] = useState(false);
 
-  // Reset feedback state when conversationId changes
+  // Reset feedback state when conversationId changes; check if already submitted for new conversation
   useEffect(() => {
     setRating(null);
-    setSubmitted(false);
     setSubmitting(false);
+    setSubmitted(getSubmittedConversations().has(conversationId));
   }, [conversationId]);
 
   const handleRatingClick = async (score: number) => {
@@ -41,6 +64,7 @@ export default function Feedback({ conversationId, isDemo, onFeedbackSubmitted }
       });
 
       if (response.ok) {
+        markConversationFeedbackSubmitted(conversationId);
         setSubmitted(true);
         onFeedbackSubmitted?.(score);
       } else {
@@ -56,13 +80,7 @@ export default function Feedback({ conversationId, isDemo, onFeedbackSubmitted }
   };
 
   if (submitted) {
-    return (
-      <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
-        <p className="text-green-500 text-sm text-center">
-          ✓ Thank you for your feedback!
-        </p>
-      </div>
-    );
+    return null;
   }
 
   return (
