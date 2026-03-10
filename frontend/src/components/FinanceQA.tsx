@@ -383,9 +383,6 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     <div className="space-y-6">
       {/* Big Prompt Area */}
       <div className="bg-gray-700 rounded-lg p-6">
-        <div className="mb-4">
-          <h3 className="text-gray-300 text-sm font-medium">Ask Your Question</h3>
-        </div>
         <form id="finance-qa-form" onSubmit={askQuestion} className="space-y-4">
           <div>
             <textarea
@@ -438,7 +435,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
               <button
                 type="button"
                 onClick={handleShowTheMathClick}
-                className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-400 hover:text-blue-300 hover:bg-gray-600/50 rounded-lg transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors shadow-sm hover:shadow-md"
               >
                 <Calculator className="w-4 h-4" />
                 Show the math

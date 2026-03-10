@@ -447,7 +447,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
                 e.stopPropagation();
                 handleAddAccounts();
               }}
-              className="text-blue-300 hover:text-blue-200 text-sm transition-colors underline decoration-blue-400/30 hover:decoration-blue-400/60"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors shadow-sm hover:shadow-md"
               title="Add more accounts"
             >
               Add More Accounts

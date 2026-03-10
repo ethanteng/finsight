@@ -314,7 +314,7 @@ export default function AppPageClient() {
       {hasMarketNewsAccess && subscriptionStatus?.tier && (
         <button
           onClick={() => setShowMarketNewsModal(true)}
-          className="md:hidden w-full bg-blue-900/80 hover:bg-blue-800/90 border-b border-blue-700 py-2 px-4 text-center text-blue-200 hover:text-white text-sm font-medium transition-colors"
+          className="md:hidden w-full bg-gradient-to-r from-blue-700 via-blue-600 to-blue-700 hover:from-blue-600 hover:via-blue-500 hover:to-blue-600 border-y border-blue-500/50 py-3 px-4 text-center text-white font-semibold text-sm transition-all shadow-lg shadow-blue-900/30"
           title="View current market news"
         >
           Read the latest market news
@@ -334,7 +334,7 @@ export default function AppPageClient() {
             {hasMarketNewsAccess && subscriptionStatus?.tier && (
               <button
                 onClick={() => setShowMarketNewsModal(true)}
-                className="text-blue-300 hover:text-blue-200 text-sm transition-colors"
+                className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-semibold text-sm rounded-lg transition-all shadow-md hover:shadow-lg border border-blue-500/30"
                 title="View current market news"
               >
                 Read the latest market news
