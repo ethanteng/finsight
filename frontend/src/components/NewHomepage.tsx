@@ -279,21 +279,14 @@ const NewHomepage = () => {
           <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/50 to-background z-10" />
           
           <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center">
-            {/* Pre-hero strip */}
-            <div className="text-center mb-6 w-full">
-              <p className="text-[0.9375rem] sm:text-[1.09375rem] text-foreground font-medium">
-              Built to help you make real financial decisions — not just track your budget.
-              </p>
-            </div>
-            
             <div className="text-center space-y-8 w-full max-w-4xl flex flex-col items-center">
               <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold leading-tight">
-                Stop tracking.{" "}
-                <span className="gradient-text">Start deciding.</span>
+                <span className="text-[1.2rem] md:text-[1.5rem] lg:text-[1.8rem] block mb-2">Skip the dashboards</span>
+                <span className="gradient-text text-[3.1640625rem] md:text-[5.2734375rem] lg:text-[6.328125rem]">Just ask Linc</span>
               </h1>
               
-              <p className="text-xl md:text-2xl text-muted-foreground max-w-4xl leading-relaxed">
-                Skip the dashboards. Just ask what you want to know.
+              <p className="text-[1rem] md:text-[1.2rem] text-muted-foreground max-w-4xl leading-relaxed">
+                Linc helps you make real financial decisions — not just track your budget.
               </p>
               
               <div className="pt-8 w-full max-w-2xl mx-auto">
@@ -328,7 +321,7 @@ const NewHomepage = () => {
                       router.push('/demo');
                     }}
                   >
-                    See It in Action
+                    See Linc in Action
                   </Button>
                   <p className="text-[0.7875rem]">Try our interactive demo with sample financial data.</p>
               </div>
