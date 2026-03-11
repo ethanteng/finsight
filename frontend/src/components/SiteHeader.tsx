@@ -1,13 +1,21 @@
 "use client";
 import { useState } from 'react';
-import { Brain, Menu, X } from 'lucide-react';
+import { Brain, Menu, X, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from './ui/button';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 
+const USE_CASE_LINKS = [
+  { href: '/use-cases/retirement', label: 'Retirement Planning' },
+  { href: '/use-cases/home-buying', label: 'Home Buying Decisions' },
+  { href: '/use-cases/portfolio-analysis', label: 'Investment Portfolio Analysis' },
+  { href: '/use-cases/financial-stress-testing', label: 'Financial Stress Testing' },
+];
+
 export default function SiteHeader() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState<string | null>(null);
+  const [isUseCasesOpen, setIsUseCasesOpen] = useState(false);
 
   const handleBuyClick = async (planId: string) => {
     pushBeginCheckout();
@@ -48,6 +56,31 @@ export default function SiteHeader() {
           </Link>
           <div className="hidden md:flex items-center space-x-8">
             <Link href="/features" className="text-muted-foreground hover:text-primary transition-colors">Product</Link>
+            <div
+              className="relative group"
+              onMouseEnter={() => setIsUseCasesOpen(true)}
+              onMouseLeave={() => setIsUseCasesOpen(false)}
+            >
+              <Link href="/use-cases" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5">
+                Use Cases
+                <ChevronDown className="h-4 w-4" />
+              </Link>
+              {isUseCasesOpen && (
+                <div className="absolute top-full left-0 pt-1">
+                  <div className="bg-background/95 backdrop-blur-lg border border-border/50 rounded-lg shadow-lg py-2 min-w-[200px]">
+                    {USE_CASE_LINKS.map((link) => (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        className="block px-4 py-2 text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
+                      >
+                        {link.label}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
             <Link href="/#pricing" className="text-muted-foreground hover:text-primary transition-colors">Pricing</Link>
             <a 
               href="https://blog.asklinc.com/" 
@@ -98,6 +131,22 @@ export default function SiteHeader() {
             >
               Product
             </Link>
+            <div className="py-2">
+              <span className="block py-1 text-sm font-medium text-foreground">Use Cases</span>
+              <Link href="/use-cases" className="block py-2 pl-4 text-muted-foreground hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>
+                Overview
+              </Link>
+              {USE_CASE_LINKS.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="block py-2 pl-4 text-muted-foreground hover:text-primary transition-colors"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
             <Link 
               href="/#pricing" 
               className="block py-3 text-muted-foreground hover:text-primary transition-colors"

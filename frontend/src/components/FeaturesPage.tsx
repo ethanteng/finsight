@@ -1,13 +1,21 @@
 "use client";
 import { Button } from './ui/button';
 import { pushBeginCheckout } from '@/lib/dataLayer';
-import { Brain, TrendingUp, MessageCircle, Lock, Users, Link2, Briefcase, Wallet, Banknote, BarChart3, Search, Home, Layers, Menu, X } from 'lucide-react';
+import { Brain, TrendingUp, MessageCircle, Lock, Users, Link2, Briefcase, Wallet, Banknote, BarChart3, Search, Home, Layers, Menu, X, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
+
+const USE_CASE_LINKS = [
+  { href: '/use-cases/retirement', label: 'Retirement Planning' },
+  { href: '/use-cases/home-buying', label: 'Home Buying Decisions' },
+  { href: '/use-cases/portfolio-analysis', label: 'Investment Portfolio Analysis' },
+  { href: '/use-cases/financial-stress-testing', label: 'Financial Stress Testing' },
+];
 
 const FeaturesPage = () => {
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isUseCasesOpen, setIsUseCasesOpen] = useState(false);
 
   const handleBuyClick = async (planId: string) => {
     pushBeginCheckout();
@@ -57,6 +65,31 @@ const FeaturesPage = () => {
             </Link>
             <div className="hidden md:flex items-center space-x-8">
               <Link href="/features" className="text-primary hover:text-primary/80 transition-colors">Product</Link>
+              <div
+                className="relative group"
+                onMouseEnter={() => setIsUseCasesOpen(true)}
+                onMouseLeave={() => setIsUseCasesOpen(false)}
+              >
+                <Link href="/use-cases" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5">
+                  Use Cases
+                  <ChevronDown className="h-4 w-4" />
+                </Link>
+                {isUseCasesOpen && (
+                  <div className="absolute top-full left-0 pt-1">
+                    <div className="bg-background/95 backdrop-blur-lg border border-border/50 rounded-lg shadow-lg py-2 min-w-[200px]">
+                      {USE_CASE_LINKS.map((link) => (
+                        <Link
+                          key={link.href}
+                          href={link.href}
+                          className="block px-4 py-2 text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
+                        >
+                          {link.label}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
               <button onClick={() => window.location.href = '/#pricing'} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
               <a 
                 href="https://blog.asklinc.com/" 
@@ -101,6 +134,13 @@ const FeaturesPage = () => {
           <div className="md:hidden absolute top-16 left-0 right-0 bg-background/95 backdrop-blur-lg border-b border-border/50 shadow-lg">
             <div className="px-4 py-4 space-y-1">
               <Link href="/features" className="block py-3 text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Product</Link>
+              <div className="py-2">
+                <span className="block py-1 text-sm font-medium text-foreground">Use Cases</span>
+                <Link href="/use-cases" className="block py-2 pl-4 text-muted-foreground hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Overview</Link>
+                {USE_CASE_LINKS.map((link) => (
+                  <Link key={link.href} href={link.href} className="block py-2 pl-4 text-muted-foreground hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>{link.label}</Link>
+                ))}
+              </div>
               <button onClick={() => { window.location.href = '/#pricing'; setIsMobileMenuOpen(false); }} className="block w-full text-left py-3 text-muted-foreground hover:text-primary transition-colors">Pricing</button>
               <a href="https://blog.asklinc.com/" target="_blank" rel="noopener noreferrer" className="block py-3 text-muted-foreground hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Blog</a>
               <div className="pt-4 space-y-2 border-t border-border/50">

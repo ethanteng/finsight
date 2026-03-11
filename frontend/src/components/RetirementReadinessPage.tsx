@@ -6,17 +6,41 @@ import MailerLiteForm from './MailerLiteForm';
 import MailerLiteScript from './MailerLiteScript';
 import AnimatedPrompt from './AnimatedPrompt';
 import BlogSubscription from './BlogSubscription';
-import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, BarChart3, MessageCircle, Sparkles, X, Target, XCircle, Menu } from 'lucide-react';
+import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, BarChart3, MessageCircle, Sparkles, X, Target, XCircle, Menu, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 
 const RETIREMENT_QUESTIONS = [
-  "Can I retire at 60?",
-  "Am I on track for retirement?",
-  "What's the best retirement income strategy for me?",
+  "Analyze my current portfolio and show me how likely I will be able to retire by 50, 55, 60, and 62. Explain in detail why a scenario(s) is or not likely.",
 ];
+
+const RETIREMENT_EXAMPLE = {
+  prompt: "Analyze my current portfolio and show me how likely I will be able to retire by 50, 55, 60, and 62. Explain in detail why a scenario(s) is or not likely.",
+  response: "Based on detailed analysis, retirement at age 50 is not feasible (shortfall of $991K), age 55 is marginally feasible (45-55% likelihood) but risky, age 60 is highly feasible (75-85% likelihood) with $1.7M surplus, and age 62 is very feasible (85-95% likelihood) with $3M surplus. The primary obstacle is your $444,299 debt, which must be eliminated for early retirement success. Target age 60 retirement as the optimal balance of earlier freedom and financial security.",
+  keyNumbers: [
+    { label: "Current Portfolio", value: "$2,190,695" },
+    { label: "Age 50 Shortfall", value: "-$991,738" },
+    { label: "Age 55 Surplus", value: "$184,774" },
+    { label: "Age 60 Surplus", value: "$1,701,240" },
+    { label: "Age 62 Surplus", value: "$3,022,870" },
+    { label: "Debt To Eliminate", value: "$444,299" },
+  ],
+  insights: [
+    "Your $81,000 annual surplus provides strong savings momentum, enabling portfolio growth from $2.2M today to $6.3M by age 60",
+    "The $444,299 debt reduces your feasible retirement age by approximately 5 years; eliminating it by age 53 makes age 55 retirement viable",
+    "Age 60 offers the best risk-reward balance with 37% surplus after meeting $140K spending needs, plus only 5-year healthcare gap before Medicare",
+    "Current 2.5% fixed income allocation is too aggressive for someone 12 years from retirement; increase to 25-30% to reduce sequence-of-returns risk",
+  ],
+  suggestedActions: [
+    "Immediately clarify the $444,299 debt type and interest rate, then create aggressive payoff plan targeting elimination by age 53 using annual surplus",
+    "Shift asset allocation from current 97.5% growth assets to 75/25 equity/fixed income split, then follow glide path to 60/40 by age 58",
+    "Build healthcare cost analysis for ages 60-65 and research ACA marketplace subsidies based on retirement income levels",
+    "Establish 2-year spending reserve ($280K) in stable assets by age 58 to protect against sequence-of-returns risk in early retirement years",
+    "Calculate Social Security claiming strategies comparing age 62 vs. 67 vs. 70 to optimize lifetime benefits given your strong portfolio position",
+  ],
+};
 
 const HOW_LINC_STEPS = [
   { title: "Connect your accounts", description: "Link your financial accounts securely via Plaid", icon: Target },
@@ -24,9 +48,17 @@ const HOW_LINC_STEPS = [
   { title: "Get actionable answers", description: "Ask follow-ups, change assumptions, explore scenarios", icon: Brain },
 ];
 
+const USE_CASE_LINKS = [
+  { href: '/use-cases/retirement', label: 'Retirement Planning' },
+  { href: '/use-cases/home-buying', label: 'Home Buying Decisions' },
+  { href: '/use-cases/portfolio-analysis', label: 'Investment Portfolio Analysis' },
+  { href: '/use-cases/financial-stress-testing', label: 'Financial Stress Testing' },
+];
+
 const RetirementReadinessPage = () => {
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isUseCasesOpen, setIsUseCasesOpen] = useState(false);
   const [howItWorksInView, setHowItWorksInView] = useState(false);
   const [revealedStepCount, setRevealedStepCount] = useState(0);
   const [highlightedStep, setHighlightedStep] = useState(0);
@@ -116,6 +148,31 @@ const RetirementReadinessPage = () => {
             </div>
             <div className="hidden md:flex items-center space-x-8">
               <Link href="/features" className="text-muted-foreground hover:text-primary transition-colors">Product</Link>
+              <div
+                className="relative group"
+                onMouseEnter={() => setIsUseCasesOpen(true)}
+                onMouseLeave={() => setIsUseCasesOpen(false)}
+              >
+                <Link href="/use-cases" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5">
+                  Use Cases
+                  <ChevronDown className="h-4 w-4" />
+                </Link>
+                {isUseCasesOpen && (
+                  <div className="absolute top-full left-0 pt-1">
+                    <div className="bg-background/95 backdrop-blur-lg border border-border/50 rounded-lg shadow-lg py-2 min-w-[200px]">
+                      {USE_CASE_LINKS.map((link) => (
+                        <Link
+                          key={link.href}
+                          href={link.href}
+                          className="block px-4 py-2 text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
+                        >
+                          {link.label}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
               <button onClick={() => scrollToSection('pricing')} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
               <a 
                 href="https://blog.asklinc.com/" 
@@ -168,6 +225,22 @@ const RetirementReadinessPage = () => {
               >
                 Product
               </Link>
+              <div className="py-2">
+                <span className="block py-1 text-sm font-medium text-foreground">Use Cases</span>
+                <Link href="/use-cases" className="block py-2 pl-4 text-muted-foreground hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>
+                  Overview
+                </Link>
+                {USE_CASE_LINKS.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="block py-2 pl-4 text-muted-foreground hover:text-primary transition-colors"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
               <button 
                 onClick={() => {
                   scrollToSection('pricing');
@@ -287,6 +360,61 @@ const RetirementReadinessPage = () => {
           </div>
         </section>
       </div>
+
+      {/* Real Example Section */}
+      <section className="py-20">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-2xl md:text-3xl font-bold">
+              A real example
+            </h2>
+            <p className="text-muted-foreground mt-2">
+              Here&apos;s what Linc returns when you ask about retirement by different ages.
+            </p>
+          </div>
+          <div className="space-y-6">
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Example Prompt</div>
+              <div className="bg-muted/50 rounded-lg p-4 border border-border/50 text-foreground leading-relaxed">
+                {RETIREMENT_EXAMPLE.prompt}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Real Response</div>
+              <div className="space-y-4">
+                <p className="text-foreground/90 leading-relaxed">{RETIREMENT_EXAMPLE.response}</p>
+                <div>
+                  <div className="text-sm font-semibold text-foreground mb-2">Key Numbers</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {RETIREMENT_EXAMPLE.keyNumbers.map((item, i) => (
+                      <div key={i} className="flex justify-between items-baseline gap-4 py-1.5 px-3 bg-muted/30 rounded text-sm">
+                        <span className="text-muted-foreground">{item.label}</span>
+                        <span className="font-medium text-foreground tabular-nums">{item.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-foreground mb-2">Insights</div>
+                  <ul className="list-disc list-inside space-y-1.5 text-foreground/90 text-sm leading-relaxed">
+                    {RETIREMENT_EXAMPLE.insights.map((insight, i) => (
+                      <li key={i}>{insight}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-foreground mb-2">Suggested Actions</div>
+                  <ul className="list-disc list-inside space-y-1.5 text-foreground/90 text-sm leading-relaxed">
+                    {RETIREMENT_EXAMPLE.suggestedActions.map((action, i) => (
+                      <li key={i}>{action}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* How Linc Works Section */}
       <section
