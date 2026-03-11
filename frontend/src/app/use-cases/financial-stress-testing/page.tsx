@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
-import UseCaseStubPage from '../../../components/UseCaseStubPage';
+import FinancialStressTestingUseCasePage from '../../../components/FinancialStressTestingUseCasePage';
+import { getPostsByTag } from '@/lib/ghost';
 
 export const metadata: Metadata = {
   title: 'Financial Stress Testing — Use Cases | Ask Linc',
-  description: 'Simulate market downturns and evaluate resilience.',
+  description: 'Stress test your portfolio, assess withdrawal sustainability, and model the impact of geopolitical events on your retirement plans.',
   alternates: {
     canonical: 'https://asklinc.com/use-cases/financial-stress-testing',
   },
@@ -13,11 +14,12 @@ export const metadata: Metadata = {
   },
 };
 
-export default function FinancialStressTestingUseCaseRoute() {
-  return (
-    <UseCaseStubPage
-      title="Financial Stress Testing"
-      description="Simulate market downturns and evaluate resilience."
-    />
-  );
+export const revalidate = 60;
+
+export default async function FinancialStressTestingUseCaseRoute() {
+  let moneyTrendsPosts = await getPostsByTag('money-trends', 6);
+  if (moneyTrendsPosts.length === 0) {
+    moneyTrendsPosts = await getPostsByTag('stress-testing', 6);
+  }
+  return <FinancialStressTestingUseCasePage moneyTrendsPosts={moneyTrendsPosts} />;
 }

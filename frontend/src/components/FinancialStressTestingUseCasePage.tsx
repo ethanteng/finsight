@@ -14,62 +14,8 @@ const USE_CASE_LINKS = [
   { href: "/use-cases/financial-stress-testing", label: "Financial Stress Testing" },
 ];
 
-const RETIREMENT_EXAMPLE = {
-  prompt: "Analyze my current portfolio and show me how likely I will be able to retire by 50, 55, 60, and 62. Explain in detail why a scenario(s) is or is not likely.",
-  response: "Based on detailed analysis, retirement at age 50 is not feasible (shortfall of $991K), age 55 is marginally feasible (45-55% likelihood) but risky, age 60 is highly feasible (75-85% likelihood) with $1.7M surplus, and age 62 is very feasible (85-95% likelihood) with $3M surplus. The primary obstacle is your $444,299 debt, which must be eliminated for early retirement success. Target age 60 retirement as the optimal balance of earlier freedom and financial security.",
-  keyNumbers: [
-    { label: "Current Portfolio", value: "$2,190,695" },
-    { label: "Age 50 Shortfall", value: "-$991,738" },
-    { label: "Age 55 Surplus", value: "$184,774" },
-    { label: "Age 60 Surplus", value: "$1,701,240" },
-    { label: "Age 62 Surplus", value: "$3,022,870" },
-    { label: "Debt To Eliminate", value: "$444,299" },
-  ],
-  insights: [
-    "Your $81,000 annual surplus provides strong savings momentum, enabling portfolio growth from $2.2M today to $6.3M by age 60",
-    "The $444,299 debt reduces your feasible retirement age by approximately 5 years; eliminating it by age 53 makes age 55 retirement viable",
-    "Age 60 offers the best risk-reward balance with 37% surplus after meeting $140K spending needs, plus only 5-year healthcare gap before Medicare",
-    "Current 2.5% fixed income allocation is too aggressive for someone 12 years from retirement; increase to 25-30% to reduce sequence-of-returns risk",
-  ],
-    suggestedActions: [
-      "Immediately clarify the $444,299 debt type and interest rate, then create aggressive payoff plan targeting elimination by age 53 using annual surplus",
-      "Shift asset allocation from current 97.5% growth assets to 75/25 equity/fixed income split, then follow glide path to 60/40 by age 58",
-      "Build healthcare cost analysis for ages 60-65 and research ACA marketplace subsidies based on retirement income levels",
-      "Establish 2-year spending reserve ($280K) in stable assets by age 58 to protect against sequence-of-returns risk in early retirement years",
-      "Calculate Social Security claiming strategies comparing age 62 vs. 67 vs. 70 to optimize lifetime benefits given your strong portfolio position",
-    ],
-};
-
-const RETIREMENT_EXAMPLE_2 = {
-  prompt: "Dive deeper into my investment and retirement portfolio. Assess how well balanced it is (or isn't) based on my target retirement age -- assume 62. Recommend any adjustments that would be beneficial.",
-  response: "Your retirement portfolio is extremely aggressive with 92.1% equity allocation—appropriate for someone decades from retirement, not 14 years away from age 62. While projected to reach $7.2M (exceeding your $3.5-4.5M needs), you face severe sequence-of-returns risk. A market crash near retirement could force significant delays. Immediate action needed: implement a glide path reducing equity to 70% now, then to 60% by age 62, while building a substantial bond allocation of 35%. Your strong $81K annual surplus can fund this transition entirely through new contributions over 3-4 years without selling equities.",
-  keyNumbers: [
-    { label: "Current Equity Allocation Pct", value: "92.1%" },
-    { label: "Recommended Equity Allocation Pct", value: "70%" },
-    { label: "Years To Target Retirement", value: "14" },
-    { label: "Projected Portfolio At 62", value: "$7,242,330" },
-    { label: "Minimum Portfolio Needed", value: "$3,500,000" },
-    { label: "Current Fixed Income Pct", value: "2.5%" },
-    { label: "Target Fixed Income Pct", value: "35%" },
-    { label: "Equity Overweight Percentage Points", value: "40.1%" },
-  ],
-  insights: [
-    "Portfolio is positioned 40 percentage points too aggressive for age 48 with 14-year retirement horizon—comparable risk profile to someone in their 20s",
-    "Strong surplus of $81K annually provides opportunity to rebalance entirely through new contributions without triggering capital gains",
-    "Projected $7.2M portfolio at age 62 provides 2x cushion above minimum needs, enabling flexible retirement timing or higher spending",
-    "Critical vulnerability: 30% market decline at age 60-61 could reduce portfolio below safe withdrawal thresholds for $180K drawdown target",
-  ],
-  suggestedActions: [
-    "Immediately reduce equity allocation from 92.1% to 70% by redirecting all new contributions to bonds and rebalancing retirement accounts tax-free",
-    "Establish 14-year glide path decreasing equity 2% annually, reaching 60% equity / 35% bonds / 5% cash by age 62",
-    "Build diversified fixed income allocation: 40% TIPS for inflation protection, 30% intermediate Treasuries for safety, 30% investment-grade corporates for yield",
-    "Create quarterly rebalancing schedule with annual equity reduction targets and stress-test portfolio against bear market scenarios at ages 60-62",
-    "Accelerate paydown of $444K credit liability using portion of monthly surplus to reduce interest costs and improve retirement cash flow",
-  ],
-};
-
-const RETIREMENT_EXAMPLE_3 = {
-  prompt: "Re-evaluate my entire portfolio. Stress test it and give me a probability assessment on how long I'll likely be able to sustain my revised monthly drawdown, given that I'm currently 77 years old. Be detailed about what's working well, and what could be improved.",
+const STRESS_TEST_EXAMPLE_1 = {
+  prompt: "Re-evaluate my entire portfolio. Stress test it and give me a probability assessment on how long I'll likely be able to sustain my revised monthly drawdown, given that I'm currently 77 years old.",
   response: "Your portfolio demonstrates exceptional strength and longevity. At age 77 with $1.53M in net worth and a conservative 2.90% withdrawal rate, your assets will sustain your $144,000 annual lifestyle for 40+ years even with zero growth. Stress tests confirm 100% probability of success for 20+ years. Your 19.2% cash allocation provides extraordinary stability with 8.2 years of coverage. Key opportunities: verify RMD compliance, consider modest reallocation from excess cash to inflation-protected securities, and conduct an annual fee review. Your financial position is extremely secure.",
   keyNumbers: [
     { label: "Net Worth", value: "$1,533,829" },
@@ -95,7 +41,7 @@ const RETIREMENT_EXAMPLE_3 = {
   ],
 };
 
-const RETIREMENT_EXAMPLE_4 = {
+const STRESS_TEST_EXAMPLE_2 = {
   prompt: "How can I expect the war with Iran to affect my retirement plans?",
   response: "The Iran conflict creates short-term volatility risks for your retirement portfolio due to your high 92.2% equity exposure, but your strong fundamentals—7-20 year timeline, $81K annual surplus, and $2M+ portfolio—position you to weather and recover from geopolitical shocks. Historical precedent shows war-related market corrections typically recover within 6-24 months, well within your retirement horizon. Key actions include tactical rebalancing to 80-85% equities, building a 6-12 month cash buffer, and maintaining your long-term plan while being opportunistic during market dips.",
   keyNumbers: [
@@ -120,11 +66,11 @@ const RETIREMENT_EXAMPLE_4 = {
   ],
 };
 
-interface RetirementUseCasePageProps {
-  retirementPosts?: GhostPost[];
+interface FinancialStressTestingUseCasePageProps {
+  moneyTrendsPosts?: GhostPost[];
 }
 
-export default function RetirementUseCasePage({ retirementPosts = [] }: RetirementUseCasePageProps) {
+export default function FinancialStressTestingUseCasePage({ moneyTrendsPosts = [] }: FinancialStressTestingUseCasePageProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUseCasesOpen, setIsUseCasesOpen] = useState(false);
   const [isLoading, setIsLoading] = useState<string | null>(null);
@@ -296,10 +242,10 @@ export default function RetirementUseCasePage({ retirementPosts = [] }: Retireme
           <div className="space-y-8">
             <div>
               <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight">
-                Retirement Planning
+                Financial Stress Testing
               </h1>
               <p className="text-lg text-muted-foreground mt-2">
-                See these real examples of how Ask Linc can help analyze your retirement readiness, withdrawal rates, and portfolio sustainability.
+                See these real examples of how Ask Linc can stress test your portfolio, assess withdrawal sustainability, and model the impact of geopolitical events on your retirement plans.
               </p>
             </div>
 
@@ -307,17 +253,17 @@ export default function RetirementUseCasePage({ retirementPosts = [] }: Retireme
               <div>
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Prompt</div>
                 <div className="bg-primary/5 rounded-xl p-5 border border-primary/10 text-foreground leading-relaxed">
-                  {RETIREMENT_EXAMPLE.prompt}
+                  {STRESS_TEST_EXAMPLE_1.prompt}
                 </div>
               </div>
               <div>
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Response</div>
                 <div className="bg-muted/30 rounded-xl p-6 border border-border/50 space-y-4">
-                  <p className="text-foreground/90 leading-relaxed">{RETIREMENT_EXAMPLE.response}</p>
+                  <p className="text-foreground/90 leading-relaxed">{STRESS_TEST_EXAMPLE_1.response}</p>
                   <div>
                     <div className="text-sm font-semibold text-foreground mb-2">Key Numbers</div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {RETIREMENT_EXAMPLE.keyNumbers.map((item, i) => (
+                      {STRESS_TEST_EXAMPLE_1.keyNumbers.map((item, i) => (
                         <div key={i} className="flex justify-between items-baseline gap-4 py-1.5 px-3 bg-background/60 rounded text-sm">
                           <span className="text-muted-foreground">{item.label}</span>
                           <span className="font-medium text-foreground tabular-nums">{item.value}</span>
@@ -328,7 +274,7 @@ export default function RetirementUseCasePage({ retirementPosts = [] }: Retireme
                   <div>
                     <div className="text-sm font-semibold text-foreground mb-2">Insights</div>
                     <ul className="list-disc list-inside space-y-1.5 text-foreground/90 text-sm leading-relaxed">
-                      {RETIREMENT_EXAMPLE.insights.map((insight, i) => (
+                      {STRESS_TEST_EXAMPLE_1.insights.map((insight, i) => (
                         <li key={i}>{insight}</li>
                       ))}
                     </ul>
@@ -336,7 +282,7 @@ export default function RetirementUseCasePage({ retirementPosts = [] }: Retireme
                   <div>
                     <div className="text-sm font-semibold text-foreground mb-2">Suggested Actions</div>
                     <ul className="list-disc list-inside space-y-1.5 text-foreground/90 text-sm leading-relaxed">
-                      {RETIREMENT_EXAMPLE.suggestedActions.map((action, i) => (
+                      {STRESS_TEST_EXAMPLE_1.suggestedActions.map((action, i) => (
                         <li key={i}>{action}</li>
                       ))}
                     </ul>
@@ -349,17 +295,17 @@ export default function RetirementUseCasePage({ retirementPosts = [] }: Retireme
               <div>
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Prompt</div>
                 <div className="bg-primary/5 rounded-xl p-5 border border-primary/10 text-foreground leading-relaxed">
-                  {RETIREMENT_EXAMPLE_2.prompt}
+                  {STRESS_TEST_EXAMPLE_2.prompt}
                 </div>
               </div>
               <div>
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Response</div>
                 <div className="bg-muted/30 rounded-xl p-6 border border-border/50 space-y-4">
-                  <p className="text-foreground/90 leading-relaxed">{RETIREMENT_EXAMPLE_2.response}</p>
+                  <p className="text-foreground/90 leading-relaxed">{STRESS_TEST_EXAMPLE_2.response}</p>
                   <div>
                     <div className="text-sm font-semibold text-foreground mb-2">Key Numbers</div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {RETIREMENT_EXAMPLE_2.keyNumbers.map((item, i) => (
+                      {STRESS_TEST_EXAMPLE_2.keyNumbers.map((item, i) => (
                         <div key={i} className="flex justify-between items-baseline gap-4 py-1.5 px-3 bg-background/60 rounded text-sm">
                           <span className="text-muted-foreground">{item.label}</span>
                           <span className="font-medium text-foreground tabular-nums">{item.value}</span>
@@ -370,7 +316,7 @@ export default function RetirementUseCasePage({ retirementPosts = [] }: Retireme
                   <div>
                     <div className="text-sm font-semibold text-foreground mb-2">Insights</div>
                     <ul className="list-disc list-inside space-y-1.5 text-foreground/90 text-sm leading-relaxed">
-                      {RETIREMENT_EXAMPLE_2.insights.map((insight, i) => (
+                      {STRESS_TEST_EXAMPLE_2.insights.map((insight, i) => (
                         <li key={i}>{insight}</li>
                       ))}
                     </ul>
@@ -378,91 +324,7 @@ export default function RetirementUseCasePage({ retirementPosts = [] }: Retireme
                   <div>
                     <div className="text-sm font-semibold text-foreground mb-2">Suggested Actions</div>
                     <ul className="list-disc list-inside space-y-1.5 text-foreground/90 text-sm leading-relaxed">
-                      {RETIREMENT_EXAMPLE_2.suggestedActions.map((action, i) => (
-                        <li key={i}>{action}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-6 pt-8">
-              <div>
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Prompt</div>
-                <div className="bg-primary/5 rounded-xl p-5 border border-primary/10 text-foreground leading-relaxed">
-                  {RETIREMENT_EXAMPLE_3.prompt}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Response</div>
-                <div className="bg-muted/30 rounded-xl p-6 border border-border/50 space-y-4">
-                  <p className="text-foreground/90 leading-relaxed">{RETIREMENT_EXAMPLE_3.response}</p>
-                  <div>
-                    <div className="text-sm font-semibold text-foreground mb-2">Key Numbers</div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {RETIREMENT_EXAMPLE_3.keyNumbers.map((item, i) => (
-                        <div key={i} className="flex justify-between items-baseline gap-4 py-1.5 px-3 bg-background/60 rounded text-sm">
-                          <span className="text-muted-foreground">{item.label}</span>
-                          <span className="font-medium text-foreground tabular-nums">{item.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-foreground mb-2">Insights</div>
-                    <ul className="list-disc list-inside space-y-1.5 text-foreground/90 text-sm leading-relaxed">
-                      {RETIREMENT_EXAMPLE_3.insights.map((insight, i) => (
-                        <li key={i}>{insight}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-foreground mb-2">Suggested Actions</div>
-                    <ul className="list-disc list-inside space-y-1.5 text-foreground/90 text-sm leading-relaxed">
-                      {RETIREMENT_EXAMPLE_3.suggestedActions.map((action, i) => (
-                        <li key={i}>{action}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-6 pt-8">
-              <div>
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Prompt</div>
-                <div className="bg-primary/5 rounded-xl p-5 border border-primary/10 text-foreground leading-relaxed">
-                  {RETIREMENT_EXAMPLE_4.prompt}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Response</div>
-                <div className="bg-muted/30 rounded-xl p-6 border border-border/50 space-y-4">
-                  <p className="text-foreground/90 leading-relaxed">{RETIREMENT_EXAMPLE_4.response}</p>
-                  <div>
-                    <div className="text-sm font-semibold text-foreground mb-2">Key Numbers</div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {RETIREMENT_EXAMPLE_4.keyNumbers.map((item, i) => (
-                        <div key={i} className="flex justify-between items-baseline gap-4 py-1.5 px-3 bg-background/60 rounded text-sm">
-                          <span className="text-muted-foreground">{item.label}</span>
-                          <span className="font-medium text-foreground tabular-nums">{item.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-foreground mb-2">Insights</div>
-                    <ul className="list-disc list-inside space-y-1.5 text-foreground/90 text-sm leading-relaxed">
-                      {RETIREMENT_EXAMPLE_4.insights.map((insight, i) => (
-                        <li key={i}>{insight}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div>
-                    <div className="text-sm font-semibold text-foreground mb-2">Suggested Actions</div>
-                    <ul className="list-disc list-inside space-y-1.5 text-foreground/90 text-sm leading-relaxed">
-                      {RETIREMENT_EXAMPLE_4.suggestedActions.map((action, i) => (
+                      {STRESS_TEST_EXAMPLE_2.suggestedActions.map((action, i) => (
                         <li key={i}>{action}</li>
                       ))}
                     </ul>
@@ -479,19 +341,19 @@ export default function RetirementUseCasePage({ retirementPosts = [] }: Retireme
                 disabled={isLoading === "premium"}
                 className="px-10 py-[1.875rem] text-[1.40625rem]"
               >
-                {isLoading === "premium" ? "Loading..." : "Check Your Retirement Plan"}
+                {isLoading === "premium" ? "Loading..." : "Stress Test Your Portfolio"}
               </Button>
               <p className="text-sm text-muted-foreground">
                 Securely connect your accounts. No spreadsheets required.
               </p>
             </div>
 
-            {/* Blog posts tagged with retirement */}
+            {/* Blog posts tagged with money-trends */}
             <div className="pt-12 border-t border-border/50">
               <h2 className="text-xl font-semibold mb-6">Related from the blog</h2>
-              {retirementPosts.length > 0 ? (
+              {moneyTrendsPosts.length > 0 ? (
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {retirementPosts.map((post) => {
+                  {moneyTrendsPosts.map((post) => {
                     const postUrl = `https://blog.asklinc.com/${post.slug || ''}`;
                     return (
                     <a
@@ -540,7 +402,7 @@ export default function RetirementUseCasePage({ retirementPosts = [] }: Retireme
                   <Link href="/blog" className="text-primary hover:underline">
                     blog
                   </Link>{" "}
-                  for retirement planning insights and financial analysis.
+                  for stress testing insights and money trends.
                 </p>
               )}
             </div>
