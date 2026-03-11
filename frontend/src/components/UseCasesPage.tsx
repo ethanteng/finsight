@@ -1,15 +1,15 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { Brain, Menu, X, ChevronDown } from "lucide-react";
+import { Brain, Menu, X, ChevronDown, PiggyBank, Home, BarChart3, Shield } from "lucide-react";
 import { Button } from "./ui/button";
 import { pushBeginCheckout } from "@/lib/dataLayer";
 
 const USE_CASES = [
-  { href: "/use-cases/retirement", label: "Retirement Planning", description: "See how Ask Linc analyzes retirement readiness, withdrawal rates, and portfolio sustainability." },
-  { href: "/use-cases/home-buying", label: "Home Buying Decisions", description: "Evaluate affordability, mortgage scenarios, and long-term impact." },
-  { href: "/use-cases/portfolio-analysis", label: "Investment Portfolio Analysis", description: "Analyze asset allocation, risk exposure, and diversification." },
-  { href: "/use-cases/financial-stress-testing", label: "Financial Stress Testing", description: "Simulate market downturns and evaluate resilience." },
+  { href: "/use-cases/retirement", label: "Retirement Planning", description: "See how Ask Linc analyzes retirement readiness, withdrawal rates, and portfolio sustainability.", icon: PiggyBank },
+  { href: "/use-cases/home-buying", label: "Home Buying Decisions", description: "Evaluate affordability, mortgage scenarios, and long-term impact.", icon: Home },
+  { href: "/use-cases/portfolio-analysis", label: "Investment Portfolio Analysis", description: "Analyze asset allocation, risk exposure, and diversification.", icon: BarChart3 },
+  { href: "/use-cases/financial-stress-testing", label: "Financial Stress Testing", description: "Simulate market downturns and evaluate resilience.", icon: Shield },
 ];
 
 export default function UseCasesPage() {
@@ -186,16 +186,26 @@ export default function UseCasesPage() {
               Explore how Ask Linc helps with your financial decisions across different scenarios.
             </p>
             <div className="grid sm:grid-cols-2 gap-4 pt-8">
-              {USE_CASES.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="block p-6 rounded-xl border border-border/50 bg-background/50 hover:border-primary/30 hover:bg-primary/5 transition-colors text-left"
-                >
-                  <h2 className="text-lg font-semibold">{link.label}</h2>
-                  <p className="text-sm text-muted-foreground mt-1">{link.description}</p>
-                </Link>
-              ))}
+              {USE_CASES.map((link) => {
+                const Icon = link.icon;
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="block p-6 rounded-xl border border-border/50 bg-background/50 hover:border-primary/30 hover:bg-primary/5 transition-colors text-left"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Icon className="h-6 w-6 text-primary" />
+                      </div>
+                      <div className="min-w-0">
+                        <h2 className="text-lg font-semibold">{link.label}</h2>
+                        <p className="text-sm text-muted-foreground mt-1">{link.description}</p>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           </div>
         </div>
