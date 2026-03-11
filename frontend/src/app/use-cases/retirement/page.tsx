@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import RetirementUseCasePage from '../../../components/RetirementUseCasePage';
+import { getPostsByTag } from '@/lib/ghost';
 
 export const metadata: Metadata = {
   title: 'Retirement Planning — Use Cases | Ask Linc',
@@ -13,6 +14,13 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RetirementUseCaseRoute() {
-  return <RetirementUseCasePage />;
+export const revalidate = 60;
+
+export default async function RetirementUseCaseRoute() {
+  // Try "retirement" first, then "retirement-planning" as fallback
+  let retirementPosts = await getPostsByTag('retirement', 6);
+  if (retirementPosts.length === 0) {
+    retirementPosts = await getPostsByTag('retirement-planning', 6);
+  }
+  return <RetirementUseCasePage retirementPosts={retirementPosts} />;
 }
