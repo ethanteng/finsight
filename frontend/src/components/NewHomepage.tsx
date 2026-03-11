@@ -286,7 +286,7 @@ const NewHomepage = () => {
               </h1>
               
               <p className="text-[1rem] md:text-[1.2rem] text-muted-foreground max-w-4xl leading-relaxed">
-                Linc helps you make real financial decisions — not just track your budget.
+                Linc helps you <strong>make real financial decisions</strong> — not just track your money.
               </p>
               
               <div className="pt-8 w-full max-w-2xl mx-auto">

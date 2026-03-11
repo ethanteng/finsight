@@ -333,17 +333,17 @@ export default function FinancialStressTestingUseCasePage({ moneyTrendsPosts = [
               </div>
             </div>
 
-            <div className="flex flex-col items-center pt-10 gap-2">
+            <div className="flex flex-col items-center pt-10 gap-2 w-full">
               <Button
                 variant="hero"
                 size="lg"
                 onClick={() => handleBuyClick("premium")}
                 disabled={isLoading === "premium"}
-                className="px-10 py-[1.875rem] text-[1.40625rem]"
+                className="w-fit max-w-full px-4 py-3 text-base sm:px-6 sm:py-4 sm:text-lg md:px-10 md:py-[1.875rem] md:text-[1.40625rem]"
               >
                 {isLoading === "premium" ? "Loading..." : "Stress Test Your Portfolio"}
               </Button>
-              <p className="text-sm text-muted-foreground">
+              <p className="w-full text-center text-sm text-muted-foreground">
                 Securely connect your accounts. No spreadsheets required.
               </p>
             </div>

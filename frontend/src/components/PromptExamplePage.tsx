@@ -1,11 +1,11 @@
 "use client";
+
 import { useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
-import { Brain, Menu, X, ChevronDown, ArrowRight } from "lucide-react";
+import { Brain, Menu, X, ChevronDown } from "lucide-react";
 import { Button } from "./ui/button";
 import { pushBeginCheckout } from "@/lib/dataLayer";
-import type { GhostPost } from "@/lib/ghost";
+import type { PromptExample } from "@/lib/promptExamples";
 
 const USE_CASE_LINKS = [
   { href: "/use-cases/retirement", label: "Retirement Planning" },
@@ -14,36 +14,21 @@ const USE_CASE_LINKS = [
   { href: "/use-cases/financial-stress-testing", label: "Financial Stress Testing" },
 ];
 
-const HOME_BUYING_EXAMPLE = {
-  prompt: "How much emergency funds should I have? Do I already have enough?",
-  response: "Your emergency fund of $133,937 provides nearly 12 months of expense coverage, which significantly exceeds the recommended 3-6 months for most households and even the 9-month recommendation for high-income dual-earner professionals. You are well-positioned and could consider redeploying $20,000-$35,000 of excess cash into investments or debt reduction while maintaining a robust 9-10 month emergency cushion of approximately $100,000-$112,500.",
-  keyNumbers: [
-    { label: "Current Cash", value: "$133,937" },
-    { label: "Months Covered", value: "11.9" },
-    { label: "Recommended Minimum", value: "$67,500" },
-    { label: "Optimal Emergency Fund", value: "$106,250" },
-    { label: "Excess Available", value: "$27,687" },
-  ],
-  insights: [
-    "You exceed standard 6-month emergency fund guidelines by 98%, providing exceptional financial security",
-    "Dual-income household reduces simultaneous job loss risk, but high-income positions take 6-12 months to replace",
-    "Your cash position generates $5,000-$6,700 annually if held in high-yield savings at current 4-5% rates",
-    "With $2M+ in liquid investments and no mortgage, you have substantial backup resources beyond emergency cash",
-  ],
-  suggestedActions: [
-    "Maintain $100,000-$112,500 as emergency fund (9-10 months coverage) optimized for your dual-income, high-earning profile",
-    "Redeploy $20,000-$35,000 excess cash into retirement accounts or brokerage investments for better long-term returns",
-    "Ensure emergency cash is split between immediate access accounts and high-yield savings earning 4-5% APY",
-    "If credit balances carry interest, prioritize paying these down; if 0% promotional, maintain current approach",
-    "Review emergency fund annually or when employment circumstances change for either spouse",
-  ],
-};
-
-interface HomeBuyingUseCasePageProps {
-  homeBuyingPosts?: GhostPost[];
+interface PromptExamplePageProps {
+  title: string;
+  description: string;
+  cta: string;
+  example: PromptExample;
+  useCaseHref: string;
 }
 
-export default function HomeBuyingUseCasePage({ homeBuyingPosts = [] }: HomeBuyingUseCasePageProps) {
+export default function PromptExamplePage({
+  title,
+  description,
+  cta,
+  example,
+  useCaseHref,
+}: PromptExamplePageProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUseCasesOpen, setIsUseCasesOpen] = useState(false);
   const [isLoading, setIsLoading] = useState<string | null>(null);
@@ -209,16 +194,16 @@ export default function HomeBuyingUseCasePage({ homeBuyingPosts = [] }: HomeBuyi
         <div className="absolute inset-0 z-0 opacity-20 bg-gradient-to-br from-primary/20 to-secondary/20" />
         <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/50 to-background z-10" />
         <div className="relative z-20 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <Link href="/use-cases" className="text-sm text-muted-foreground hover:text-primary transition-colors inline-block mb-8">
-            ← Use Cases
+          <Link href="/prompts" className="text-sm text-muted-foreground hover:text-primary transition-colors inline-block mb-8">
+            ← Prompts
           </Link>
           <div className="space-y-8">
             <div>
               <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight">
-                Home Buying Decisions
+                {title}
               </h1>
               <p className="text-lg text-muted-foreground mt-2">
-                See these real examples of how Ask Linc can help you prepare for a home purchase—from assessing your emergency fund readiness to evaluating affordability and mortgage impact.
+                {description}
               </p>
             </div>
 
@@ -226,17 +211,17 @@ export default function HomeBuyingUseCasePage({ homeBuyingPosts = [] }: HomeBuyi
               <div>
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Prompt</div>
                 <div className="bg-primary/5 rounded-xl p-5 border border-primary/10 text-foreground leading-relaxed">
-                  {HOME_BUYING_EXAMPLE.prompt}
+                  {example.prompt}
                 </div>
               </div>
               <div>
                 <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Response</div>
                 <div className="bg-muted/30 rounded-xl p-6 border border-border/50 space-y-4">
-                  <p className="text-foreground/90 leading-relaxed">{HOME_BUYING_EXAMPLE.response}</p>
+                  <p className="text-foreground/90 leading-relaxed">{example.response}</p>
                   <div>
                     <div className="text-sm font-semibold text-foreground mb-2">Key Numbers</div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {HOME_BUYING_EXAMPLE.keyNumbers.map((item, i) => (
+                      {example.keyNumbers.map((item, i) => (
                         <div key={i} className="flex justify-between items-baseline gap-4 py-1.5 px-3 bg-background/60 rounded text-sm">
                           <span className="text-muted-foreground">{item.label}</span>
                           <span className="font-medium text-foreground tabular-nums">{item.value}</span>
@@ -247,7 +232,7 @@ export default function HomeBuyingUseCasePage({ homeBuyingPosts = [] }: HomeBuyi
                   <div>
                     <div className="text-sm font-semibold text-foreground mb-2">Insights</div>
                     <ul className="list-disc list-inside space-y-1.5 text-foreground/90 text-sm leading-relaxed">
-                      {HOME_BUYING_EXAMPLE.insights.map((insight, i) => (
+                      {example.insights.map((insight, i) => (
                         <li key={i}>{insight}</li>
                       ))}
                     </ul>
@@ -255,7 +240,7 @@ export default function HomeBuyingUseCasePage({ homeBuyingPosts = [] }: HomeBuyi
                   <div>
                     <div className="text-sm font-semibold text-foreground mb-2">Suggested Actions</div>
                     <ul className="list-disc list-inside space-y-1.5 text-foreground/90 text-sm leading-relaxed">
-                      {HOME_BUYING_EXAMPLE.suggestedActions.map((action, i) => (
+                      {example.suggestedActions.map((action, i) => (
                         <li key={i}>{action}</li>
                       ))}
                     </ul>
@@ -272,70 +257,20 @@ export default function HomeBuyingUseCasePage({ homeBuyingPosts = [] }: HomeBuyi
                 disabled={isLoading === "premium"}
                 className="w-fit max-w-full px-4 py-3 text-base sm:px-6 sm:py-4 sm:text-lg md:px-10 md:py-[1.875rem] md:text-[1.40625rem]"
               >
-                {isLoading === "premium" ? "Loading..." : "Check Your Home Buying Readiness"}
+                {isLoading === "premium" ? "Loading..." : cta}
               </Button>
               <p className="w-full text-center text-sm text-muted-foreground">
                 Securely connect your accounts. No spreadsheets required.
               </p>
             </div>
 
-            {/* Blog posts tagged with home-buying */}
-            <div className="pt-12 border-t border-border/50">
-              <h2 className="text-xl font-semibold mb-6">Related from the blog</h2>
-              {homeBuyingPosts.length > 0 ? (
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {homeBuyingPosts.map((post) => {
-                    const postUrl = `https://blog.asklinc.com/${post.slug || ''}`;
-                    return (
-                    <a
-                      key={post.id}
-                      href={postUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group block rounded-xl overflow-hidden border border-border/50 bg-muted/10 hover:border-primary/20 hover:bg-muted/20 transition-all"
-                    >
-                      <div className="aspect-video relative bg-muted/30">
-                        {post.feature_image ? (
-                          <Image
-                            src={post.feature_image}
-                            alt={post.title || 'Blog post'}
-                            fill
-                            className="object-cover group-hover:scale-[1.02] transition-transform duration-300"
-                            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                          />
-                        ) : (
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <span className="text-4xl text-muted-foreground/50">📄</span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="p-4">
-                        <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-2">
-                          {post.title || 'Untitled'}
-                        </h3>
-                        {post.excerpt && (
-                          <p className="text-sm text-muted-foreground mt-1.5 line-clamp-2">
-                            {post.excerpt}
-                          </p>
-                        )}
-                        <span className="inline-flex items-center gap-1 text-sm text-primary mt-2 font-medium">
-                          Read more
-                          <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
-                        </span>
-                      </div>
-                    </a>
-                  );
-                  })}
-                </div>
-              ) : (
-                <p className="text-muted-foreground">
-                  Explore our{" "}
-                  <Link href="/blog" className="text-primary hover:underline">
-                    blog
-                  </Link>{" "}
-                  for home buying insights and affordability guidance.
-                </p>
-              )}
+            <div className="pt-8 border-t border-border/50">
+              <Link
+                href={useCaseHref}
+                className="text-sm text-muted-foreground hover:text-primary transition-colors"
+              >
+                View more examples →
+              </Link>
             </div>
           </div>
         </div>

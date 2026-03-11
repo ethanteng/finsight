@@ -207,6 +207,21 @@ export default function UseCasesPage() {
                 );
               })}
             </div>
+            <div className="flex flex-col items-center gap-2 pt-10">
+              <Button variant="hero" size="lg" asChild className="w-auto max-w-full px-4 py-3 text-base sm:px-6 sm:py-4 sm:text-lg md:px-10 md:py-[1.875rem] md:text-[1.40625rem]">
+                <Link href="/demo">See Linc in Action</Link>
+              </Button>
+              <p className="text-center text-sm text-muted-foreground">
+                Try our interactive demo with sample financial data.
+              </p>
+              <p className="text-center text-sm text-muted-foreground pt-4">
+                Or explore{" "}
+                <Link href="/prompts" className="text-primary hover:underline">
+                  example prompts
+                </Link>{" "}
+                with real responses and CTAs to get started.
+              </p>
+            </div>
           </div>
         </div>
       </section>
