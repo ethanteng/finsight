@@ -280,23 +280,26 @@ const NewHomepage = () => {
           
           <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center">
             <div className="text-center space-y-8 w-full max-w-4xl flex flex-col items-center">
-              <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold leading-tight">
-                <span className="text-[1.2rem] md:text-[1.5rem] lg:text-[1.8rem] block mb-2">Skip the dashboards</span>
-                <span className="gradient-text text-[3.1640625rem] md:text-[5.2734375rem] lg:text-[6.328125rem]">Just ask Linc</span>
+              <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold leading-tight mt-6">
+                <span className="text-[0.85rem] md:text-[1rem] lg:text-[1.2rem] font-normal text-muted-foreground block mb-2">Stop staring at dashboards.</span>
+                <span className="gradient-text text-[2.53125rem] md:text-[4.21875rem] lg:text-[5.0625rem]">Just ask Linc.</span>
               </h1>
               
-              <p className="text-[1rem] md:text-[1.2rem] text-muted-foreground max-w-4xl leading-relaxed">
-                Linc helps you <strong>make real financial decisions</strong> — not just track your money.
-              </p>
-              
-              <div className="pt-8 w-full max-w-2xl mx-auto">
+              <div className="space-y-3 w-full max-w-2xl mx-auto mt-[3.0rem]">
+                <p className="text-[1rem] md:text-[1.2rem] text-muted-foreground max-w-4xl leading-relaxed">
+                Connect your accounts & ask real questions about your finances.
+                </p>
                 <AnimatedPrompt
                 nestedInLink
                 getCurrentQuestionRef={getCurrentQuestionRef}
                 questions={[
-                  "What if we retire at 60 instead of 65?",
-                  "Can we afford this house without touching investments?",
-                  "If inflation stays high, are we actually okay?",
+                  "Are we actually on track to retire at 60?",
+                  "Can we afford this house without selling investments?",
+                  "How exposed is our portfolio if the market drops 30%?",
+                  "Should we pay off our mortgage early or keep investing?",
+                  "If inflation stays high, are we still okay?",
+                  "How long would our money last if we retired today?",
+                  "What’s the biggest risk in our portfolio right now?"
                 ]}
                 onClick={() => {
                   const question = getCurrentQuestionRef.current?.() || '';
@@ -308,7 +311,7 @@ const NewHomepage = () => {
               />
               </div>
               
-              <div className="flex flex-col items-center gap-3 pt-2 w-full">
+              <div className="flex flex-col items-center gap-3 w-full">
                   <Button 
                     variant="hero" 
                     size="xl" 
@@ -321,7 +324,7 @@ const NewHomepage = () => {
                       router.push('/demo');
                     }}
                   >
-                    See Linc in Action
+                    Ask your question
                   </Button>
                   <p className="text-[0.7875rem]">Try our interactive demo with sample financial data.</p>
               </div>
