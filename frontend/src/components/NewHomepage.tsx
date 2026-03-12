@@ -638,7 +638,7 @@ const NewHomepage = () => {
               <Brain className="h-6 w-6 text-primary" />
               <span className="text-lg font-bold gradient-text">Ask Linc</span>
             </div>
-            <div className="flex items-center space-x-6 text-sm text-muted-foreground">
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-4 gap-y-1 md:gap-x-6 text-xs md:text-sm text-muted-foreground">
               <Link 
                 href="/faq" 
                 className="hover:text-primary transition-colors"
