@@ -214,13 +214,6 @@ export default function UseCasesPage() {
               <p className="text-center text-sm text-muted-foreground">
                 Try our interactive demo with sample financial data.
               </p>
-              <p className="text-center text-sm text-muted-foreground pt-4">
-                Or explore{" "}
-                <Link href="/prompts" className="text-primary hover:underline">
-                  example prompts
-                </Link>{" "}
-                with real responses and CTAs to get started.
-              </p>
             </div>
           </div>
         </div>
