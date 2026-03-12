@@ -71,11 +71,11 @@ export default function PromptsIndexPage() {
         <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/50 to-background z-10" />
         <div className="relative z-20 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="space-y-8">
-            <div>
+            <div className="text-center">
               <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight">
                 Example Prompts
               </h1>
-              <p className="text-lg text-muted-foreground mt-2 max-w-2xl">
+              <p className="text-lg text-muted-foreground mt-2 max-w-2xl mx-auto">
                 See real prompt-and-response examples from each use case.
               </p>
             </div>
