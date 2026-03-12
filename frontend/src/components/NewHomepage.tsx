@@ -6,7 +6,7 @@ import MailerLiteForm from './MailerLiteForm';
 import MailerLiteScript from './MailerLiteScript';
 import AnimatedPrompt from './AnimatedPrompt';
 import BlogSubscription from './BlogSubscription';
-import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, BarChart3, MessageCircle, Sparkles, X, Target, Menu, ChevronDown } from 'lucide-react';
+import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, BarChart3, MessageCircle, Sparkles, X, Target, Menu, ChevronDown, CircleArrowUp } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -315,7 +315,7 @@ const NewHomepage = () => {
                   <Button 
                     variant="hero" 
                     size="xl" 
-                    className="group h-[4.235rem] px-[3.025rem] text-[1.36125rem]"
+                    className="group h-[4.235rem] px-[3.025rem] text-[1.36125rem] flex items-center gap-3"
                     onClick={() => {
                       const question = getCurrentQuestionRef.current?.() || '';
                       if (question) {
@@ -325,6 +325,7 @@ const NewHomepage = () => {
                     }}
                   >
                     Ask your question
+                    <CircleArrowUp className="!w-[1.6875rem] !h-[1.6875rem] shrink-0" />
                   </Button>
                   <p className="text-[0.7875rem]">Try our interactive demo with sample financial data.</p>
               </div>

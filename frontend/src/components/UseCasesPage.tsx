@@ -209,7 +209,7 @@ export default function UseCasesPage() {
             </div>
             <div className="flex flex-col items-center gap-2 pt-10">
               <Button variant="hero" size="lg" asChild className="w-auto max-w-full px-4 py-3 text-base sm:px-6 sm:py-4 sm:text-lg md:px-10 md:py-[1.875rem] md:text-[1.40625rem]">
-                <Link href="/demo">See Linc in Action</Link>
+                <Link href="/demo">Try the Demo</Link>
               </Button>
               <p className="text-center text-sm text-muted-foreground">
                 Try our interactive demo with sample financial data.
