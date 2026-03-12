@@ -176,6 +176,31 @@ export async function generateRollingSequences(
   
   console.log(`📊 Generating sequences from ${effectiveStartYear}-Q${effectiveStartQuarter + 1} onwards (ensuring all ETFs have data)`);
   console.log(`📊 Max start year: ${maxStartYear}, Horizon: ${snappedYears} years, Current year: ${currentYear}`);
+
+  // Fetch CPI once and pre-compute full MoM inflation series
+  let fullMoMInflation: number[] | null = null;
+  let cpiDates: string[] = [];
+  const cpiFullStartDate = new Date(
+    effectiveStartYear,
+    effectiveStartQuarter * 3 - 1,
+    1
+  ); // 1 month before earliest sequence start
+  const cpiFullEndDate = new Date();
+  try {
+    const cpiObservations = await fredProvider.getCPIObservations(cpiFullStartDate, cpiFullEndDate);
+    if (cpiObservations.length >= 2) {
+      fullMoMInflation = [];
+      cpiDates = cpiObservations.map(o => o.date);
+      for (let i = 0; i < cpiObservations.length - 1; i++) {
+        const c0 = cpiObservations[i].value;
+        const c1 = cpiObservations[i + 1].value;
+        fullMoMInflation.push((c1 - c0) / c0);
+      }
+      console.log(`✅ Pre-computed ${fullMoMInflation.length} MoM inflation rates from FRED CPI`);
+    }
+  } catch (err) {
+    console.warn('⚠️ FRED CPI fetch failed, using deterministic fallback (0.0026/mo):', err);
+  }
   
   for (let year = effectiveStartYear; year <= maxStartYear; year++) {
     // Start from effectiveStartQuarter if this is the first year, otherwise start from Q1
@@ -216,7 +241,13 @@ export async function generateRollingSequences(
           continue;
         }
         
-        const inflationRates = await fetchInflationRates(startDate, effectiveEndDate, fredProvider);
+        const inflationRates = sliceInflationRates(
+          startDate,
+          effectiveEndDate,
+          assetBasketReturns.usEquity.length,
+          fullMoMInflation,
+          cpiDates
+        );
         
         const sequenceId = `${year}-Q${quarter + 1}_to_${effectiveEndDate.getFullYear()}-Q${Math.floor(effectiveEndDate.getMonth() / 3) + 1}`;
         
@@ -429,32 +460,41 @@ function sliceAssetBasketReturns(
   };
 }
 
+/** Average CPI YoY since 1950 ≈ 3.2% annually ≈ 0.0026 monthly. Deterministic fallback when FRED unavailable. */
+const FALLBACK_MONTHLY_INFLATION = 0.0026;
+
 /**
- * Fetch inflation rates (monthly) for a date range from FRED
+ * Slice inflation rates from pre-computed full MoM series for a sequence's date range.
+ * When fullMoMInflation is null (FRED fetch failed), returns deterministic fallback (0.0026/mo).
  */
-async function fetchInflationRates(
+function sliceInflationRates(
   startDate: Date,
   endDate: Date,
-  fredProvider: FREDProvider
-): Promise<number[]> {
-  // FRED CPIAUCSL is monthly data
-  // We need to fetch historical CPI values and calculate month-over-month inflation
-  
-  // For now, use a simplified approach: fetch CPI data points
-  // In production, would need to fetch full historical series and calculate MoM inflation
-  
-  // Mock implementation for Phase 3 - will be enhanced with full FRED series fetch
-  const months = calculateMonthsBetween(startDate, endDate);
-  const inflationRates: number[] = [];
-  
-  // Generate mock monthly inflation rates (average ~0.2% per month = ~2.4% annually)
-  // In production, fetch actual CPI data and calculate: (CPI[t] - CPI[t-1]) / CPI[t-1]
-  for (let i = 0; i < months; i++) {
-    // Mock: random inflation between 0.1% and 0.3% per month
-    inflationRates.push((Math.random() * 0.002 + 0.001)); // 0.1% to 0.3%
+  expectedMonths: number,
+  fullMoMInflation: number[] | null,
+  cpiDates: string[]
+): number[] {
+  if (fullMoMInflation == null || cpiDates.length < 2) {
+    return new Array(expectedMonths).fill(FALLBACK_MONTHLY_INFLATION);
   }
-  
-  return inflationRates;
+  const startStr = startDate.toISOString().split('T')[0];
+  let startIdx = 0;
+  for (let i = 0; i < cpiDates.length - 1; i++) {
+    if (cpiDates[i] >= startStr) {
+      startIdx = i;
+      break;
+    }
+  }
+  // When sequence starts at or after the last CPI date, we have no CPI data for that period.
+  // The last historical rate is from a previous month, not applicable. Use fallback.
+  if (startStr >= cpiDates[cpiDates.length - 1]) {
+    return new Array(expectedMonths).fill(FALLBACK_MONTHLY_INFLATION);
+  }
+  const slice = fullMoMInflation.slice(startIdx, startIdx + expectedMonths);
+  if (slice.length < expectedMonths) {
+    return [...slice, ...new Array(expectedMonths - slice.length).fill(FALLBACK_MONTHLY_INFLATION)];
+  }
+  return slice;
 }
 
 /**

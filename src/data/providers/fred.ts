@@ -156,4 +156,74 @@ export class FREDProvider implements DataProvider {
       throw error;
     }
   }
+
+  /**
+   * Fetch CPIAUCSL observations for a date range.
+   * Used for retirement analytics inflation (month-over-month rates).
+   * Forward-fills missing values (FRED uses "." for missing) to preserve month alignment.
+   */
+  async getCPIObservations(
+    startDate: Date,
+    endDate: Date
+  ): Promise<Array<{ date: string; value: number }>> {
+    const startStr = startDate.toISOString().split('T')[0];
+    const endStr = endDate.toISOString().split('T')[0];
+    const cacheKey = `fred_CPIAUCSL_range_${startStr}_${endStr}`;
+    const cached = await cacheService.get<Array<{ date: string; value: number }>>(cacheKey);
+    if (cached) return cached;
+
+    // Test/mock mode: deterministic mock CPI (0.2% MoM growth)
+    if (this.apiKey === 'test_fred_key' || this.apiKey.startsWith('test_') || process.env.GITHUB_ACTIONS) {
+      const observations = this.generateMockCPIObservations(startDate, endDate);
+      await cacheService.set(cacheKey, observations, 24 * 60 * 60 * 1000);
+      return observations;
+    }
+
+    const url = `${this.baseUrl}?series_id=CPIAUCSL&api_key=${this.apiKey}&file_type=json&observation_start=${startStr}&observation_end=${endStr}&sort_order=asc`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`FRED API error: ${response.status}`);
+    }
+    const data = (await response.json()) as FREDResponse;
+    const raw = data.observations || [];
+
+    // Forward-fill missing values: never skip; CPI[i] = CPI[i-1] when value is "." or invalid
+    const observations: Array<{ date: string; value: number }> = [];
+    let lastValidValue: number | null = null;
+    for (const obs of raw) {
+      const parsed = parseFloat(obs.value);
+      const isMissing = Number.isNaN(parsed) || obs.value === '.';
+      const value = isMissing ? lastValidValue : parsed;
+      if (value != null) {
+        if (!isMissing) lastValidValue = value;
+        observations.push({ date: obs.date, value });
+      } else if (lastValidValue != null) {
+        observations.push({ date: obs.date, value: lastValidValue });
+      } else {
+        // First observation(s) missing: use 100 as default to avoid skipping
+        lastValidValue = 100;
+        observations.push({ date: obs.date, value: 100 });
+      }
+    }
+
+    await cacheService.set(cacheKey, observations, 24 * 60 * 60 * 1000);
+    return observations;
+  }
+
+  private generateMockCPIObservations(
+    startDate: Date,
+    endDate: Date
+  ): Array<{ date: string; value: number }> {
+    const observations: Array<{ date: string; value: number }> = [];
+    let cpi = 100;
+    const current = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+    const end = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+    while (current <= end) {
+      const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-01`;
+      observations.push({ date: dateStr, value: cpi });
+      cpi *= 1.002; // 0.2% MoM growth (deterministic)
+      current.setMonth(current.getMonth() + 1);
+    }
+    return observations;
+  }
 } 

@@ -37,6 +37,13 @@ Comprehensive documentation of the Retrieval-Augmented Generation system includi
 - Performance optimization
 - Testing and monitoring
 
+### **features/DETERMINISM_IN_ANALYTICS_AND_LLM_CONTEXT.md**
+Documentation of determinism in analytics and LLM context:
+- Retirement analysis methodology (rolling historical, not Monte Carlo)
+- Deterministic vs non-deterministic components
+- Data passed to Claude, Gemini, and OpenAI
+- Code references and recommendations
+
 ## 📖 **How to Use**
 
 - **For New Chats**: Start with `PROJECT_SUMMARY.md` for complete context
