@@ -193,7 +193,7 @@ export class FREDProvider implements DataProvider {
     for (const obs of raw) {
       const parsed = parseFloat(obs.value);
       const isMissing = Number.isNaN(parsed) || obs.value === '.';
-      const value = isMissing ? lastValidValue : parsed;
+      const value: number | null = isMissing ? lastValidValue : parsed;
       if (value != null) {
         if (!isMissing) lastValidValue = value;
         observations.push({ date: obs.date, value });
