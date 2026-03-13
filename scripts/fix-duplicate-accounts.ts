@@ -7,6 +7,11 @@
  * 2. Re-linking same institution (e.g. Betterment) after Plaid connection expiry
  *    - Creates new Plaid Item with different account_ids for same logical accounts
  *
+ * Deduplication uses stable identifiers only (no name-like fields):
+ * - persistentAccountId: Plaid's stable ID (TAN institutions; same across re-links)
+ * - mask: Last 4 digits of account number (institution + type + subtype + mask)
+ * - When neither is present, we cannot safely dedupe - skip
+ *
  * For each set of duplicates:
  * 1. Prefer keeping account from active token (via Plaid accountsGet)
  * 2. Fallback: keep most recently synced account
@@ -21,6 +26,39 @@ import { SummaryCacheService } from '../src/services/summary-cache-service';
 import { FinancialSummaryService } from '../src/services/financial-summary-service';
 
 const prisma = getPrismaClient();
+
+/**
+ * Build a name-independent key for deduplication grouping.
+ * Uses only stable identifiers - never account name (user can rename).
+ * Returns null when no stable identifier exists (cannot safely dedupe).
+ */
+function getDedupKey(account: {
+  plaidAccountId: string;
+  persistentAccountId: string | null;
+  mask: string | null;
+  type: string;
+  subtype: string | null;
+  institution: string | null;
+  userId: string | null;
+}): string | null {
+  const inst = (account.institution || '').trim();
+  const type = (account.type || '').trim();
+  const subtype = (account.subtype || '').trim();
+  const userId = account.userId || '';
+
+  // 1. persistentAccountId: Plaid's stable ID, same across re-links (TAN institutions)
+  if (account.persistentAccountId && account.persistentAccountId !== account.plaidAccountId) {
+    return `persistent:${account.persistentAccountId}|${userId}`;
+  }
+
+  // 2. mask: Last 4 digits - stable for same underlying account across re-links
+  if (account.mask) {
+    return `mask:${inst}|${type}|${subtype}|${account.mask}|${userId}`;
+  }
+
+  // No stable identifier - cannot safely dedupe
+  return null;
+}
 
 async function getPlaidAccountIdsFromActiveTokens(userId: string): Promise<Set<string>> {
   const validAccountIds = new Set<string>();
@@ -63,15 +101,33 @@ async function fixDuplicateAccounts() {
 
     console.log(`📊 Total Plaid accounts in database: ${plaidAccounts.length}`);
 
-    // Group by logical identity: name + type + subtype + institution + userId
+    // Group by name-independent key only (persistentAccountId or mask)
+    // Accounts with no stable identifier are skipped (cannot safely dedupe)
     const accountGroups = new Map<string, typeof plaidAccounts>();
+    let skippedNoKey = 0;
 
     for (const account of plaidAccounts) {
-      const key = `${account.name}|${account.type}|${account.subtype || ''}|${account.institution || ''}|${account.userId || ''}`;
+      const key = getDedupKey({
+        plaidAccountId: account.plaidAccountId,
+        persistentAccountId: account.persistentAccountId,
+        mask: account.mask,
+        type: account.type,
+        subtype: account.subtype,
+        institution: account.institution,
+        userId: account.userId,
+      });
+      if (!key) {
+        skippedNoKey++;
+        continue;
+      }
       if (!accountGroups.has(key)) {
         accountGroups.set(key, []);
       }
       accountGroups.get(key)!.push(account);
+    }
+
+    if (skippedNoKey > 0) {
+      console.log(`   ℹ️  ${skippedNoKey} account(s) have no persistentAccountId or mask - skipped`);
     }
 
     let totalDuplicatesRemoved = 0;
