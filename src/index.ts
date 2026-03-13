@@ -3670,8 +3670,13 @@ app.get('/api/financial-history', requireAuth, async (req: Request, res: Respons
 app.post('/api/refresh-summary', requireAuth, async (req: Request, res: Response) => {
   try {
     const { SummaryCacheService } = await import('./services/summary-cache-service');
+    const { FinancialSummaryService } = await import('./services/financial-summary-service');
+    const userId = req.user!.id;
     // Fast path: skip heavy categorization to avoid request timeouts
-    const payload = await SummaryCacheService.computeForUser(req.user!.id, { categorize: false });
+    const [payload] = await Promise.all([
+      SummaryCacheService.computeForUser(userId, { categorize: false }),
+      new FinancialSummaryService().refreshUserSummary(userId),
+    ]);
     res.json(payload);
   } catch (error) {
     console.error('❌ Failed to refresh financial summary:', error);
