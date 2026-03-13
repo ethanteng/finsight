@@ -409,6 +409,7 @@ export const setupPlaidRoutes = (app: any) => {
   console.log('🔧 App object:', typeof app);
   console.log('🔧 App methods:', Object.keys(app));
   // Create link token with SEAMLESS approach - minimal products + additional consent
+  // Supports update mode when accessTokenId provided (for ITEM_LOGIN_REQUIRED reconnect)
   app.post('/plaid/create_link_token', async (req: any, res: any) => {
     try {
       // Check if this is a demo request
@@ -423,11 +424,43 @@ export const setupPlaidRoutes = (app: any) => {
         res.json({ link_token: fakeLinkToken });
         return;
       }
+
+      const { accessTokenId } = req.body || {};
+
+      // UPDATE MODE: Reconnect existing Item (e.g. ITEM_LOGIN_REQUIRED) - preserves account_ids
+      // If the token is invalid (revoked, expired), Plaid will reject it - fall back to standard flow
+      if (accessTokenId && req.user?.id) {
+        const tokenRecord = await getPrismaClient().accessToken.findFirst({
+          where: { id: accessTokenId, userId: req.user.id }
+        });
+        if (tokenRecord?.token) {
+          try {
+            console.log('Creating link token for update mode (reconnect existing Item)');
+            const updateRequest = {
+              user: { client_user_id: req.user.id },
+              client_name: 'Ask Linc',
+              language: 'en',
+              country_codes: [CountryCode.Us],
+              webhook: process.env.PLAID_WEBHOOK_URL || undefined,
+              access_token: tokenRecord.token
+            };
+            const createTokenResponse = await plaidClient.linkTokenCreate(updateRequest);
+            res.json({ link_token: createTokenResponse.data.link_token });
+            return;
+          } catch (updateModeError: any) {
+            const errorCode = updateModeError?.response?.data?.error_code;
+            console.warn(
+              `Update mode link token failed (${errorCode || 'unknown'}): ${updateModeError?.message || updateModeError} - falling back to standard link flow`
+            );
+            // Fall through to standard create flow - user will re-link, orphan cleanup will migrate data
+          }
+        }
+      }
       
       // SEAMLESS APPROACH: Start with minimal products to maximize institution coverage
       // Use additional_consented_products to collect consent for everything we might need later
       const request = {
-        user: { client_user_id: 'user-id' },
+        user: { client_user_id: req.user?.id || 'user-id' },
         client_name: 'Ask Linc',
         language: 'en',
         country_codes: [CountryCode.Us],
@@ -622,31 +655,44 @@ export const setupPlaidRoutes = (app: any) => {
       console.log(`Item ID: ${item_id}`);
       
       // Store the access token and item_id in the database
-      // Check if we already have an access token for this itemId
+      // Only update tokens we're allowed to: current user's, or unassigned (userId: null).
+      // Never update another user's token - prevents ownership hijacking.
+      const existingTokenWhere: { itemId: string; userId?: string | null; OR?: Array<{ userId: string | null }> } = {
+        itemId: item_id
+      };
+      if (req.user?.id) {
+        existingTokenWhere.OR = [{ userId: req.user.id }, { userId: null }];
+      } else {
+        existingTokenWhere.userId = null;
+      }
       const existingToken = await getPrismaClient().accessToken.findFirst({
-        where: { itemId: item_id }
+        where: existingTokenWhere
       });
+
+      // Only include userId when authenticated - passing undefined would overwrite existing
+      // user association to NULL (optionalAuth allows unauthenticated requests)
+      const tokenData = {
+        token: access_token,
+        lastRefreshed: new Date(),
+        ...(req.user?.id && { userId: req.user.id }),
+        isActive: true,
+        lastError: null
+      };
 
       if (existingToken) {
         // Update the existing token with the new access token
         console.log(`Updating existing token for item ${item_id}`);
         await getPrismaClient().accessToken.update({
           where: { id: existingToken.id },
-          data: { 
-            token: access_token,
-            lastRefreshed: new Date(),
-            userId: req.user?.id // Associate with user if available
-          }
+          data: tokenData
         });
       } else {
         // Create a new access token
         console.log(`Creating new token for item ${item_id}`);
         await getPrismaClient().accessToken.create({
-          data: { 
-            token: access_token,
-            itemId: item_id,
-            lastRefreshed: new Date(),
-            userId: req.user?.id // Associate with user if available
+          data: {
+            ...tokenData,
+            itemId: item_id
           }
         });
       }
@@ -665,6 +711,134 @@ export const setupPlaidRoutes = (app: any) => {
         
         const accounts = accountsResponse.data.accounts;
         console.log(`Found ${accounts.length} accounts to analyze`);
+
+        // ORPHAN CLEANUP: When re-linking same institution (updating existing token), migrate transactions
+        // and remove old accounts from the expiring Item. Only run when updating - we need the old Item's
+        // account_ids to avoid including accounts from OTHER connections to the same institution.
+        if (req.user?.id && accounts.length > 0 && existingToken) {
+          try {
+            const itemResponse = await plaidClient.itemGet({ access_token: access_token });
+            const institutionId = itemResponse.data.item.institution_id;
+            if (institutionId) {
+              const institutionResponse = await plaidClient.institutionsGetById({
+                institution_id: institutionId,
+                country_codes: [CountryCode.Us]
+              });
+              const institutionName = institutionResponse.data.institution?.name;
+              if (institutionName) {
+                const newAccountIds = new Set(accounts.map((a: any) => a.account_id));
+                // Get old Item's account_ids - only migrate orphans from THIS connection, not other connections
+                let oldAccountIds: Set<string> | null = null;
+                try {
+                  const oldAccountsResponse = await plaidClient.accountsGet({
+                    access_token: existingToken.token
+                  });
+                  oldAccountIds = new Set(oldAccountsResponse.data.accounts.map((a: any) => a.account_id));
+                } catch {
+                  // Old token may be invalid (e.g. ITEM_LOGIN_REQUIRED) - skip cleanup to avoid wrong migration
+                  console.warn('   Cannot fetch old Item accounts (token may be invalid) - skipping orphan cleanup');
+                }
+                if (!oldAccountIds || oldAccountIds.size === 0) {
+                  // Skip - we can't safely identify which orphans belong to this Item
+                  oldAccountIds = null;
+                }
+                // Only include accounts from the old Item (plaidAccountId in oldAccountIds)
+                const orphanedAccounts = oldAccountIds
+                  ? await getPrismaClient().account.findMany({
+                      where: {
+                        userId: req.user.id,
+                        OR: [{ institution: institutionName }, { institution: null }],
+                        plaidAccountId: { in: Array.from(oldAccountIds) }
+                      },
+                      select: { id: true, plaidAccountId: true, name: true, type: true, subtype: true }
+                    })
+                  : [];
+                if (orphanedAccounts.length > 0) {
+                  // Upsert new accounts to DB so we have IDs for transaction migration.
+                  // Only update accounts we own or that are unassigned - never overwrite another user's account.
+                  const accountData = (account: any) => ({
+                    name: account.name,
+                    mask: account.mask,
+                    type: account.type,
+                    subtype: account.subtype,
+                    currentBalance: account.balances?.current,
+                    availableBalance: account.balances?.available,
+                    limit: account.balances?.limit,
+                    currency: account.balances?.iso_currency_code,
+                    institution: institutionName,
+                    userId: req.user.id,
+                    lastSynced: new Date()
+                  });
+                  for (const account of accounts) {
+                    const existing = await getPrismaClient().account.findUnique({
+                      where: { plaidAccountId: account.account_id },
+                      select: { id: true, userId: true }
+                    });
+                    if (existing) {
+                      if (existing.userId !== null && existing.userId !== req.user.id) {
+                        console.warn(`   Skipping account ${account.account_id} - belongs to another user`);
+                        continue;
+                      }
+                      await getPrismaClient().account.update({
+                        where: { id: existing.id },
+                        data: accountData(account)
+                      });
+                    } else {
+                      await getPrismaClient().account.create({
+                        data: {
+                          plaidAccountId: account.account_id,
+                          ...accountData(account)
+                        }
+                      });
+                    }
+                  }
+                  const newAccountRecords = await getPrismaClient().account.findMany({
+                    where: {
+                      userId: req.user.id,
+                      plaidAccountId: { in: Array.from(newAccountIds) }
+                    },
+                    select: { id: true, name: true, type: true, subtype: true }
+                  });
+                  // Build map keyed by name|type|subtype. When multiple new accounts share the same key,
+                  // mark as ambiguous - we cannot reliably match orphans to the correct account.
+                  const newAccountByKey = new Map<string, string>();
+                  const ambiguousKeys = new Set<string>();
+                  for (const a of newAccountRecords) {
+                    const key = `${(a.name || '').trim()}|${(a.type || '').trim()}|${(a.subtype || '').trim()}`;
+                    if (newAccountByKey.has(key)) {
+                      ambiguousKeys.add(key);
+                      newAccountByKey.delete(key);
+                    } else if (!ambiguousKeys.has(key)) {
+                      newAccountByKey.set(key, a.id);
+                    }
+                  }
+                  if (ambiguousKeys.size > 0) {
+                    console.warn(`   ${ambiguousKeys.size} account key(s) have duplicates - skipping migration for those to avoid wrong attribution`);
+                  }
+                  console.log(`Migrating transactions and removing ${orphanedAccounts.length} orphaned accounts from previous ${institutionName} link`);
+                  for (const orphan of orphanedAccounts) {
+                    const orphanKey = `${(orphan.name || '').trim()}|${(orphan.type || '').trim()}|${(orphan.subtype || '').trim()}`;
+                    const newAccountId = ambiguousKeys.has(orphanKey) ? undefined : newAccountByKey.get(orphanKey);
+                    if (newAccountId) {
+                      const migrated = await getPrismaClient().transaction.updateMany({
+                        where: { accountId: orphan.id },
+                        data: { accountId: newAccountId }
+                      });
+                      if (migrated.count > 0) {
+                        console.log(`   Migrated ${migrated.count} transactions from orphan ${orphan.name} to new account`);
+                      }
+                      await getPrismaClient().account.delete({ where: { id: orphan.id } });
+                    } else {
+                      console.warn(`   Skipping orphan ${orphan.name} (${orphan.type}/${orphan.subtype}) - no matching new account found, preserving to avoid transaction loss`);
+                    }
+                  }
+                }
+              }
+            }
+          } catch (cleanupErr: any) {
+            console.warn('Orphan cleanup failed (non-critical):', cleanupErr?.message);
+          }
+        }
         
         // Analyze each account and call appropriate endpoints
         for (const account of accounts) {

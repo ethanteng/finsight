@@ -40,13 +40,14 @@ interface PlaidLinkButtonProps {
   onExit?: () => void;
   isDemo?: boolean;
   forceReinitialize?: boolean; // New prop to force re-initialization
+  updateModeTokenId?: string; // When set, use Link update mode to reconnect existing Item (preserves account_ids)
 }
 
 export interface PlaidLinkButtonRef {
   createLinkToken: () => void;
 }
 
-const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ onSuccess, onExit, isDemo = false, forceReinitialize = false }, ref) => {
+const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ onSuccess, onExit, isDemo = false, forceReinitialize = false, updateModeTokenId }, ref) => {
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
   const { trackEvent, trackConversion } = useAnalytics();
@@ -169,7 +170,7 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
       const res = await fetch(`${API_URL}/plaid/create_link_token`, { 
         method: 'POST',
         headers,
-        body: JSON.stringify({ isDemo })
+        body: JSON.stringify({ isDemo, accessTokenId: updateModeTokenId || undefined })
       });
       
       console.log('Plaid Link token response status:', res.status);
@@ -199,7 +200,7 @@ const PlaidLinkButton = forwardRef<PlaidLinkButtonRef, PlaidLinkButtonProps>(({ 
       console.error('Plaid Link token creation network error:', error);
       setStatus('Network error. Please try again.');
     }
-  }, [isDemo, forceReinitialize]);
+  }, [isDemo, forceReinitialize, updateModeTokenId]);
 
   // Exchange public_token for access_token
   const handleSuccess: PlaidLinkOnSuccess = useCallback(async (publicToken, metadata) => {

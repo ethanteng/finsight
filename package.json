@@ -61,7 +61,8 @@
     "clean": "rm -rf node_modules dist build out .next .cache .parcel-cache coverage .nyc_output .eslintcache *.tsbuildinfo .babelcache storybook-static",
     "reset": "npm run clean && npm install",
     "rebuild": "npm run clean && npm install && npm run build",
-    "clean:all": "npm run clean && rm -rf prisma/migrations_backup"
+    "clean:all": "npm run clean && rm -rf prisma/migrations_backup",
+    "fix:duplicate-accounts": "npx ts-node scripts/fix-duplicate-accounts.ts"
   },
   "keywords": [],
   "author": "",

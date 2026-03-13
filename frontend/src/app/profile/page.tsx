@@ -1295,6 +1295,7 @@ export default function ProfilePage() {
                 }}
                 isDemo={isDemo}
                 forceReinitialize={forcePlaidReinitialize}
+                updateModeTokenId={tokenStatuses.find(t => t.lastError === 'ITEM_LOGIN_REQUIRED')?.id}
                 ref={plaidLinkButtonRef}
               />
               

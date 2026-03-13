@@ -275,10 +275,10 @@ export class FinancialDataService {
     const homeValue = homeValueResult.status === 'fulfilled' ? homeValueResult.value : null;
     const tokens = tokenHealth.status === 'fulfilled' ? tokenHealth.value : { plaid: [], snaptrade: { userId, status: TokenStatus.ERROR, error: 'Unknown', lastChecked: new Date() } };
 
-    if (!plaidData && persistedPlaidSnapshot?.data) {
+    if ((!plaidData || !plaidData.accounts?.length) && persistedPlaidSnapshot?.data) {
       usingPersistedPlaidData = true;
       plaidData = persistedPlaidSnapshot.data;
-      console.warn('FinancialDataService: Falling back to persisted Plaid data after live fetch failure');
+      console.warn('FinancialDataService: Falling back to persisted Plaid data after live fetch failure or empty accounts (e.g. all tokens inactive)');
     }
 
     // Merge data
@@ -999,6 +999,27 @@ export class FinancialDataService {
         ? Date.now() - lastSynced.getTime() <= maxAgeMinutes * 60 * 1000
         : false;
 
+      // Infer institution for records missing it - ensures consistent getLogicalKey() deduplication
+      // so persisted accounts match fresh API accounts with the same identity.
+      const institutionsInBatch = [...new Set(uniqueRecords.map(r => r.institution).filter(Boolean))] as string[];
+      const singleInstitution = institutionsInBatch.length === 1 ? institutionsInBatch[0] : null;
+      // When multiple institutions: infer per-account by matching name+type+subtype to records that have institution
+      const keyToInstitutions = new Map<string, Set<string>>();
+      for (const r of uniqueRecords) {
+        if (r.institution) {
+          const k = `${(r.name || '').trim()}|${(r.type || '').trim()}|${(r.subtype || '').trim()}`;
+          if (!keyToInstitutions.has(k)) keyToInstitutions.set(k, new Set());
+          keyToInstitutions.get(k)!.add(r.institution);
+        }
+      }
+      const inferInstitution = (record: (typeof uniqueRecords)[0]): string | undefined => {
+        if (record.institution) return record.institution;
+        if (singleInstitution) return singleInstitution;
+        const k = `${(record.name || '').trim()}|${(record.type || '').trim()}|${(record.subtype || '').trim()}`;
+        const insts = keyToInstitutions.get(k);
+        return insts?.size === 1 ? [...insts][0] : undefined;
+      };
+
       const accounts = uniqueRecords.map(record => ({
         account_id: record.plaidAccountId,
         id: record.plaidAccountId,
@@ -1012,13 +1033,20 @@ export class FinancialDataService {
           iso_currency_code: record.currency || 'USD',
           unofficial_currency_code: undefined
         },
-        institution: record.institution || undefined,
+        institution: inferInstitution(record),
         institution_id: undefined,
         institution_logo: undefined,
         institution_url: undefined,
         source: 'plaid',
         persisted: true,
-        persistentAccountId: record.persistentAccountId || record.plaidAccountId,
+        // Pass through persistentAccountId only when it's the real Plaid value (TAN institutions).
+        // When persistentAccountId === plaidAccountId it was likely our incorrect fallback - omit it
+        // so we use institution+name dedup and match fresh API data that has no persistent_account_id.
+        persistentAccountId:
+          record.persistentAccountId &&
+          record.persistentAccountId !== record.plaidAccountId
+            ? record.persistentAccountId
+            : undefined,
         snapshotTimestamp: (record.lastSynced || record.updatedAt)?.toISOString?.(),
         lastSyncedAt: record.lastSynced?.toISOString?.()
       }));
@@ -1160,7 +1188,7 @@ export class FinancialDataService {
 
     try {
       const accessTokens = await prisma.accessToken.findMany({
-        where: { userId }
+        where: { userId, isActive: true }
       });
 
       if (accessTokens.length === 0) {
@@ -1318,7 +1346,14 @@ export class FinancialDataService {
               institution_url: institution.data.institution.url || undefined,
               source: 'plaid',
               plaidAccountId: plaidAccountId, // ✅ Always set for Plaid accounts
-              persistentAccountId: plaidAccountId, // Alias for backward compatibility
+              // Pass through persistentAccountId only when it differs from plaidAccountId (matches persisted logic).
+              // When Plaid returns persistent_account_id === account_id, both fresh and persisted must use
+              // institution+name dedup so getLogicalKey produces the same key for both.
+              persistentAccountId:
+                (account as any).persistent_account_id &&
+                (account as any).persistent_account_id !== plaidAccountId
+                  ? (account as any).persistent_account_id
+                  : undefined,
               snapshotTimestamp: itemLastUpdated,
               lastSyncedAt: itemLastUpdated
             });
@@ -2172,10 +2207,10 @@ export class FinancialDataService {
       ...(manualAccountsData?.accounts || [])
     ];
 
-    // ✅ SINGLE DEDUPLICATION POINT: Use account_id as primary unique identifier for ALL accounts
-    // For Plaid accounts: account_id equals plaidAccountId
-    // For SnapTrade accounts: account_id equals snaptrade-{id}
-    // This ensures consistent deduplication across all account sources
+    // ✅ DEDUPLICATION: Use logical identity to detect same account across re-links
+    // - Primary: persistent_account_id (Plaid TAN institutions - Chase, PNC, US Bank)
+    // - Fallback for Plaid: institution_id + name + type + subtype (per Plaid duplicate detection guidance)
+    // - SnapTrade/Manual: account_id (already unique per source)
 
     const accountMap = new Map<string, any>();
 
@@ -2205,12 +2240,32 @@ export class FinancialDataService {
       return Number.isNaN(parsed) ? null : parsed;
     };
 
+    const getLogicalKey = (account: any): string => {
+      // Only use persistentAccountId when it's the actual Plaid persistent_account_id (TAN institutions).
+      // Do NOT use plaidAccountId as fallback - it changes on re-link and breaks deduplication.
+      const persistentId = (account as any).persistentAccountId;
+      if (persistentId && account.source === 'plaid') {
+        return `persistent:${persistentId}`;
+      }
+      const name = (account.name || '').trim();
+      const type = (account.type || '').trim();
+      const subtype = (account.subtype || '').trim();
+      // Use institution (name) when institution_id is missing - persisted accounts have institution but not institution_id
+      const institutionKey = (account as any).institution || (account as any).institution_id || '';
+      if (account.source === 'plaid') {
+        // Always use plaid: prefix for Plaid accounts - never use account_id (changes on re-link).
+        // When institution is missing, use empty prefix so name+type+subtype can still dedupe within batch.
+        return `plaid:${institutionKey}|${name}|${type}|${subtype}`;
+      }
+      const accountId = account.account_id ||
+                       (account as any).plaidAccountId ||
+                       (account as any).persistentAccountId;
+      return accountId ? `id:${accountId}` : '';
+    };
+
     for (const account of rawAccounts) {
-      // ✅ Primary unique identifier: account_id (works for both Plaid and SnapTrade)
-      // Fallback: plaidAccountId (Plaid) or persistentAccountId (SnapTrade)
-      // Do NOT use account.id as fallback - it may be a database ID, not a unique account identifier
-      const accountId = account.account_id || 
-                       (account as any).plaidAccountId || 
+      const accountId = account.account_id ||
+                       (account as any).plaidAccountId ||
                        (account as any).persistentAccountId;
 
       if (!accountId) {
@@ -2218,10 +2273,15 @@ export class FinancialDataService {
         continue;
       }
 
-      const existing = accountMap.get(accountId);
+      const logicalKey = getLogicalKey(account);
+      if (!logicalKey) {
+        console.warn(`⚠️ Account without logical key: ${account.name} (${account.type}/${account.subtype}), skipping`);
+        continue;
+      }
+
+      const existing = accountMap.get(logicalKey);
       if (!existing) {
-        // New account - add it
-        accountMap.set(accountId, account);
+        accountMap.set(logicalKey, account);
         continue;
       }
 
@@ -2229,18 +2289,14 @@ export class FinancialDataService {
       // If both are persisted or both are not persisted, keep the most recent based on timestamp
       const existingIsPersisted = existing.persisted === true;
       const candidateIsPersisted = account.persisted === true;
-      
+
       let shouldReplace = false;
-      
-      // ✅ Prioritize persisted accounts (from database) to preserve custom names
+
       if (existingIsPersisted && !candidateIsPersisted) {
-        // Existing is from database, candidate is from API - keep existing (has custom name)
         shouldReplace = false;
       } else if (!existingIsPersisted && candidateIsPersisted) {
-        // Candidate is from database, existing is from API - use candidate (has custom name)
         shouldReplace = true;
       } else {
-        // Both from same source - keep the most recent based on timestamp
         const existingTimestamp = parseSnapshotTimestamp(existing);
         const candidateTimestamp = parseSnapshotTimestamp(account);
 
@@ -2249,7 +2305,6 @@ export class FinancialDataService {
         } else if (existingTimestamp !== null && candidateTimestamp === null) {
           shouldReplace = false;
         } else if (candidateTimestamp === null && existingTimestamp === null) {
-          // Both missing timestamps - prefer the one with higher balance (more recent data)
           const existingBalance = existing.balance?.current ?? existing.balance?.available ?? 0;
           const candidateBalance = account.balance?.current ?? account.balance?.available ?? 0;
           shouldReplace = candidateBalance >= existingBalance;
@@ -2257,7 +2312,7 @@ export class FinancialDataService {
       }
 
       if (shouldReplace) {
-        accountMap.set(accountId, account);
+        accountMap.set(logicalKey, account);
       }
     }
 
