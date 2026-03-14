@@ -118,7 +118,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   // Step 5: Optional validation with Gemini (if enabled)
   if (enableValidation) {
     try {
-      onProgress?.('Sanity-checking with Gemini');
+      onProgress?.('Sanity checking with Gemini');
       const { validateWithGemini } = await import('./response-validator');
       const validationResult = await validateWithGemini(structuredResponse, { question, snapshot });
       if (validationResult.promptSent != null && validationResult.rawResponse != null) {

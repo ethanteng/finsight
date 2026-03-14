@@ -488,13 +488,6 @@ export default function FinancesPageClient() {
             <h1 className="text-2xl font-bold text-white">My Finances HQ</h1>
           </div>
           <div className="flex items-center space-x-3">
-            <button
-              onClick={refreshSummary}
-              disabled={refreshingSummary}
-              className="text-sm px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {refreshingSummary ? 'Refreshing...' : 'Refresh totals'}
-            </button>
             <a 
               href="/app" 
               className="text-gray-300 hover:text-white text-sm transition-colors"
@@ -593,20 +586,29 @@ export default function FinancesPageClient() {
             <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-white">Financial Metrics Over Time</h3>
-                <select
-                  value={chartTimeRange}
-                  onChange={(e) => {
-                    const value = e.target.value as '1M' | '3M' | '6M' | '1Y' | 'All';
-                    setChartTimeRange(value);
-                  }}
-                  className="bg-gray-700 text-white px-3 py-1 rounded text-sm border border-gray-600 focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="1M">1 Month</option>
-                  <option value="3M">3 Months</option>
-                  <option value="6M">6 Months</option>
-                  <option value="1Y">1 Year</option>
-                  <option value="All">All Time</option>
-                </select>
+                <div className="flex items-center gap-3">
+                  <select
+                    value={chartTimeRange}
+                    onChange={(e) => {
+                      const value = e.target.value as '1M' | '3M' | '6M' | '1Y' | 'All';
+                      setChartTimeRange(value);
+                    }}
+                    className="bg-gray-700 text-white px-3 py-1 rounded text-sm border border-gray-600 focus:border-blue-500 focus:outline-none"
+                  >
+                    <option value="1M">1 Month</option>
+                    <option value="3M">3 Months</option>
+                    <option value="6M">6 Months</option>
+                    <option value="1Y">1 Year</option>
+                    <option value="All">All Time</option>
+                  </select>
+                  <button
+                    onClick={refreshSummary}
+                    disabled={refreshingSummary}
+                    className="text-sm px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {refreshingSummary ? 'Refreshing...' : 'Refresh totals'}
+                  </button>
+                </div>
               </div>
               <FinancialMetricsChart 
                 data={chartData}
