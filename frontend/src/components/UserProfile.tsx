@@ -41,7 +41,7 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
   const [isSavingValue, setIsSavingValue] = useState(false);
   const [valueError, setValueError] = useState<string | null>(null);
   
-  const API_URL = process.env.NEXT_PUBLIC_API_URL;
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
   const loadProfile = useCallback(async () => {
     setLoading(true);
@@ -310,10 +310,14 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
   const handleResetValue = async () => {
     setIsSavingValue(true);
     setValueError(null);
+    setHomeSuccess('');
 
     try {
       const token = localStorage.getItem('auth_token');
-      
+      if (!token) {
+        throw new Error('Please log in to update your home value');
+      }
+
       const response = await fetch(`${API_URL}/profile/home/value`, {
         method: 'DELETE',
         headers: {
@@ -322,12 +326,21 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
         }
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to reset home value');
+      let data: { homeData?: HomeData; error?: string };
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error('Invalid response from server');
       }
 
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to reset home value');
+      }
+
+      if (!data.homeData) {
+        throw new Error('Invalid response from server');
+      }
+
       setHomeData(data.homeData);
       setIsEditingValue(false);
       setHomeSuccess('Home value reset to estimate!');
@@ -700,9 +713,9 @@ Note: This profile reflects our financial situation as of August 2025.`;
                 {homeSuccess}
               </div>
             )}
-            {homeError && (
+            {(homeError || valueError) && (
               <div className="mt-3 p-3 bg-red-900/20 border border-red-700 rounded-lg text-red-300 text-sm">
-                {homeError}
+                {homeError || valueError}
               </div>
             )}
           </div>

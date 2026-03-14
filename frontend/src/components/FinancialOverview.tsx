@@ -123,7 +123,34 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
               lastUpdated: computedAt,
             } as unknown as FinancialSummaryData);
             setInvestmentData({ portfolio });
-            if (finOverview?.homeValue && finOverview.homeValue > 0) {
+            // Always fetch home data from /profile/home for authenticated users to get the correct
+            // value range (valueLow/valueHigh) that matches /finances. The snapshot only has
+            // homeValue (single number) - using ±10% for range was incorrect and caused mismatch.
+            let profileHomeData: { address: string; value: number; valueLow: number; valueHigh: number; lastUpdated: string } | null = null;
+            if (!isDemo) {
+              try {
+                const homeRes = await fetch(`${API_URL}/profile/home`, { headers });
+                if (homeRes.ok) {
+                  const homeDataResponse = await homeRes.json();
+                  if (homeDataResponse.hasHome && homeDataResponse.homeData?.value) {
+                    const hd = homeDataResponse.homeData;
+                    profileHomeData = {
+                      address: hd.address || '',
+                      value: hd.value,
+                      valueLow: hd.valueLow ?? hd.value * 0.9,
+                      valueHigh: hd.valueHigh ?? hd.value * 1.1,
+                      lastUpdated: hd.lastUpdated || computedAt
+                    };
+                  }
+                }
+              } catch (homeError) {
+                console.log('Error loading home data from /profile/home:', homeError);
+              }
+            }
+            if (profileHomeData) {
+              setHomeData(profileHomeData);
+            } else if (finOverview?.homeValue && finOverview.homeValue > 0) {
+              // Fallback: snapshot has homeValue but no profile data (e.g. demo mode or edge case)
               setHomeData({
                 address: '',
                 value: finOverview.homeValue,
@@ -132,28 +159,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
                 lastUpdated: computedAt
               });
             } else {
-              // Fallback: Try to load home data from profile endpoint if snapshot doesn't have it
               setHomeData(null);
-              if (!isDemo) {
-                try {
-                  const homeRes = await fetch(`${API_URL}/profile/home`, { headers });
-                  if (homeRes.ok) {
-                    const homeDataResponse = await homeRes.json();
-                    if (homeDataResponse.hasHome && homeDataResponse.homeData?.value) {
-                      setHomeData({
-                        address: homeDataResponse.homeData.address || '',
-                        value: homeDataResponse.homeData.value,
-                        valueLow: homeDataResponse.homeData.valueLow || homeDataResponse.homeData.value * 0.9,
-                        valueHigh: homeDataResponse.homeData.valueHigh || homeDataResponse.homeData.value * 1.1,
-                        lastUpdated: homeDataResponse.homeData.lastUpdated || computedAt
-                      });
-                      console.log(`🏠 Loaded home value from /profile/home endpoint: $${homeDataResponse.homeData.value}`);
-                    }
-                  }
-                } catch (homeError) {
-                  console.log('Error loading home data from /profile/home:', homeError);
-                }
-              }
             }
           } else {
             setFinancialSummary(null);
