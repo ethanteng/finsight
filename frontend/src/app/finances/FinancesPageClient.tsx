@@ -144,6 +144,7 @@ export default function FinancesPageClient() {
   const [historicalDataLoading, setHistoricalDataLoading] = useState(true);
   const [chartTimeRange, setChartTimeRange] = useState<'1M' | '3M' | '6M' | '1Y' | 'All'>('All');
   const [manualAccounts, setManualAccounts] = useState<ManualAccount[]>([]);
+  const [refreshingSummary, setRefreshingSummary] = useState(false);
   const router = useRouter();
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -377,6 +378,36 @@ export default function FinancesPageClient() {
     }
   }, [API_URL]);
 
+  const refreshSummary = useCallback(async () => {
+    try {
+      setRefreshingSummary(true);
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        console.warn('No auth token found, skipping refresh');
+        return;
+      }
+      headers['Authorization'] = `Bearer ${token}`;
+      const url = `${API_URL}/api/refresh-summary`;
+      console.log('🔄 Refresh totals →', url, '(same API base as /api/summaries)');
+      const res = await fetch(url, { method: 'POST', headers });
+      if (res.ok) {
+        const data = await res.json();
+        console.log('✅ Summary refreshed:', data);
+        window.location.reload();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        console.error('Failed to refresh summary:', res.status, err);
+      }
+    } catch (error) {
+      console.error('Error refreshing summary:', error);
+    } finally {
+      setRefreshingSummary(false);
+    }
+  }, [API_URL]);
+
   const handleLogout = () => {
     localStorage.removeItem('auth_token');
     router.push('/login');
@@ -457,6 +488,13 @@ export default function FinancesPageClient() {
             <h1 className="text-2xl font-bold text-white">My Finances HQ</h1>
           </div>
           <div className="flex items-center space-x-3">
+            <button
+              onClick={refreshSummary}
+              disabled={refreshingSummary}
+              className="text-sm px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {refreshingSummary ? 'Refreshing...' : 'Refresh totals'}
+            </button>
             <a 
               href="/app" 
               className="text-gray-300 hover:text-white text-sm transition-colors"

@@ -3683,9 +3683,12 @@ app.get('/api/financial-history', requireAuth, async (req: Request, res: Respons
 // Optional admin/per-user endpoint to recompute snapshot on demand
 app.post('/api/refresh-summary', requireAuth, async (req: Request, res: Response) => {
   try {
+    const userId = req.user!.id;
+    // Invalidate financial-data cache so we fetch fresh data (avoids stale totals after dedupe/cache fixes)
+    const { cacheService } = await import('./data/cache');
+    await cacheService.invalidate(`financial-data:${userId}`);
     const { SummaryCacheService } = await import('./services/summary-cache-service');
     const { FinancialSummaryService } = await import('./services/financial-summary-service');
-    const userId = req.user!.id;
     // Fast path: skip heavy categorization to avoid request timeouts
     const [payload] = await Promise.all([
       SummaryCacheService.computeForUser(userId, { categorize: false }),
