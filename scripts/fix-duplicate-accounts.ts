@@ -9,8 +9,8 @@
  *
  * Deduplication uses stable identifiers only (no name-like fields):
  * - persistentAccountId: Plaid's stable ID (TAN institutions; same across re-links)
- * - mask: Last 4 digits of account number (institution + type + subtype + mask)
- * - When neither is present, we cannot safely dedupe - skip
+ * - institution + type + subtype + currentBalance: Matches re-linked accounts where
+ *   the old record has no mask but the new one does (both share same balance)
  *
  * For each set of duplicates:
  * 1. Prefer keeping account from active token (via Plaid accountsGet)
@@ -35,7 +35,7 @@ const prisma = getPrismaClient();
 function getDedupKey(account: {
   plaidAccountId: string;
   persistentAccountId: string | null;
-  mask: string | null;
+  currentBalance: number | null;
   type: string;
   subtype: string | null;
   institution: string | null;
@@ -51,9 +51,12 @@ function getDedupKey(account: {
     return `persistent:${account.persistentAccountId}|${userId}`;
   }
 
-  // 2. mask: Last 4 digits - stable for same underlying account across re-links
-  if (account.mask) {
-    return `mask:${inst}|${type}|${subtype}|${account.mask}|${userId}`;
+  // 2. institution + type + subtype + currentBalance: Matches accounts that share
+  //    the same balance (e.g. re-linked account where old record has no mask,
+  //    new one has mask - both have same balance so they group together)
+  if (account.currentBalance != null && !Number.isNaN(account.currentBalance)) {
+    const balance = Math.round(account.currentBalance * 100) / 100;
+    return `balance:${inst}|${type}|${subtype}|${balance}|${userId}`;
   }
 
   // No stable identifier - cannot safely dedupe
@@ -110,7 +113,7 @@ async function fixDuplicateAccounts() {
       const key = getDedupKey({
         plaidAccountId: account.plaidAccountId,
         persistentAccountId: account.persistentAccountId,
-        mask: account.mask,
+        currentBalance: account.currentBalance,
         type: account.type,
         subtype: account.subtype,
         institution: account.institution,
@@ -127,7 +130,7 @@ async function fixDuplicateAccounts() {
     }
 
     if (skippedNoKey > 0) {
-      console.log(`   ℹ️  ${skippedNoKey} account(s) have no persistentAccountId or mask - skipped`);
+      console.log(`   ℹ️  ${skippedNoKey} account(s) have no persistentAccountId or currentBalance - skipped`);
     }
 
     let totalDuplicatesRemoved = 0;
