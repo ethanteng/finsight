@@ -2113,88 +2113,87 @@ export class FinancialDataService {
 
   /**
    * Fetch home value
+   * Uses ProfileManager.getOriginalProfile() to support encrypted profiles - critical for
+   * users with manual override (HOME_VALUE_MANUAL) stored in encrypted profile data.
    */
   private async fetchHomeValue(userId: string): Promise<HomeData | null> {
     try {
-      // Check if home data exists in user profile
-      const userProfile = await prisma.userProfile.findUnique({
-        where: { userId },
-        select: { profileText: true }
-      });
+      let profileData: string;
 
-      if (!userProfile || !userProfile.profileText) {
+      // Use ProfileManager to get decrypted profile (handles encrypted_profile_data)
+      // Direct prisma.userProfile.profileText fails when profile is encrypted - profileText is empty
+      try {
+        const { ProfileManager } = await import('../profile/manager');
+        const profileManager = new ProfileManager();
+        profileData = await profileManager.getOriginalProfile(userId);
+      } catch (profileError) {
+        console.warn('fetchHomeValue: ProfileManager unavailable, falling back to profileText:', profileError);
+        const userProfile = await prisma.userProfile.findUnique({
+          where: { userId },
+          select: { profileText: true }
+        });
+        profileData = userProfile?.profileText || '';
+      }
+
+      if (!profileData?.trim()) {
         return null;
       }
 
-      // Parse home value from profile data
-      const profileData = userProfile.profileText;
-      const addressMatch = profileData.match(/HOME_ADDRESS:\s*(.+)/);
-      
-      // Return home data even if value is 0 or missing (address is still useful)
-      if (!addressMatch) {
+      const parsed = this.parseHomeDataFromProfileText(profileData);
+      if (!parsed?.address) {
         return null;
       }
 
-      const address = addressMatch[1].trim();
-      
-      // Check for manual override first (takes precedence over RentCast estimate)
-      // Regex handles numbers with optional decimals, and also handles commas (though they shouldn't be in stored values)
-      const manualValueMatch = profileData.match(/HOME_VALUE_MANUAL:\s*([\d,]+(?:\.\d+)?)/);
-      let value: number | null = null;
-      let isManualOverride = false;
-      
-      if (manualValueMatch) {
-        // Remove commas if present (shouldn't happen, but handle it)
-        const cleanedValue = manualValueMatch[1].replace(/,/g, '');
-        const manualValue = parseFloat(cleanedValue);
-        if (manualValue > 0) {
-          value = manualValue;
-          isManualOverride = true;
-          console.log(`🏠 Found manual home value override: $${value.toLocaleString()}`);
-        }
-      }
-      
-      // If no manual override, check for RentCast estimate
-      if (value == null) {
-        const valueMatch = profileData.match(/HOME_VALUE:\s*([\d,]+(?:\.\d+)?)/);
-        if (valueMatch) {
-          const cleanedValue = valueMatch[1].replace(/,/g, '');
-          const parsedValue = parseFloat(cleanedValue);
-          if (parsedValue > 0) {
-            value = parsedValue;
-            console.log(`🏠 Found RentCast home value estimate: $${value.toLocaleString()}`);
-          }
-        }
-      }
-      
-      const valueLowMatch = profileData.match(/HOME_VALUE_LOW:\s*([\d,]+(?:\.\d+)?)/);
-      const valueHighMatch = profileData.match(/HOME_VALUE_HIGH:\s*([\d,]+(?:\.\d+)?)/);
-      const lastUpdatedMatch = profileData.match(/HOME_VALUE_LAST_UPDATED:\s*(.+)/);
-      
-      const valueLow = valueLowMatch ? parseFloat(valueLowMatch[1].replace(/,/g, '')) : (value != null && value > 0 ? value * 0.9 : 0);
-      const valueHigh = valueHighMatch ? parseFloat(valueHighMatch[1].replace(/,/g, '')) : (value != null && value > 0 ? value * 1.1 : 0);
+      const value = parsed.value ?? 0;
+      const valueLow = parsed.valueLow ?? (value > 0 ? value * 0.9 : 0);
+      const valueHigh = parsed.valueHigh ?? (value > 0 ? value * 1.1 : 0);
+      const valueMid = value > 0 ? value : 0;
 
-      // Ensure valueMid is set correctly - prioritize manual override, then RentCast estimate
-      // This is critical for net worth calculations
-      const finalValueMid = value != null && value > 0 ? value : 0;
-      
-      if (finalValueMid > 0) {
-        console.log(`🏠 Home value extracted - valueMid: $${finalValueMid.toLocaleString()}, isManual: ${isManualOverride}`);
+      if (valueMid > 0) {
+        console.log(`🏠 Home value extracted - valueMid: $${valueMid.toLocaleString()}, isManual: ${parsed.isManualOverride}`);
       } else {
-        console.warn(`⚠️ Home value is 0 or null despite having address: ${address}`);
+        console.warn(`⚠️ Home value is 0 or null despite having address: ${parsed.address}`);
       }
 
       return {
-        address,
+        address: parsed.address,
         valueLow: valueLow > 0 ? valueLow : 0,
-        valueMid: finalValueMid,
+        valueMid,
         valueHigh: valueHigh > 0 ? valueHigh : 0,
-        lastUpdated: lastUpdatedMatch ? lastUpdatedMatch[1].trim() : new Date().toISOString()
+        lastUpdated: parsed.lastUpdated?.toISOString() ?? new Date().toISOString()
       };
     } catch (error: any) {
       console.error('Error fetching home value:', error);
       return null;
     }
+  }
+
+  /** Parse HOME_ADDRESS, HOME_VALUE_MANUAL, HOME_VALUE, etc. from profile text */
+  private parseHomeDataFromProfileText(profileData: string): { address: string | null; value: number | null; valueLow: number | null; valueHigh: number | null; lastUpdated: Date | null; isManualOverride: boolean } | null {
+    const addressMatch = profileData.match(/HOME_ADDRESS:\s*(.+?)(?:\n|$)/);
+    if (!addressMatch) return null;
+    const manualMatch = profileData.match(/HOME_VALUE_MANUAL:\s*([\d,]+(?:\.\d+)?)/);
+    let value: number | null = manualMatch ? parseFloat(manualMatch[1].replace(/,/g, '')) : null;
+    if (value == null) {
+      const valueMatch = profileData.match(/HOME_VALUE:\s*([\d,]+(?:\.\d+)?)/);
+      value = valueMatch ? parseFloat(valueMatch[1].replace(/,/g, '')) : null;
+    }
+    const valueLowMatch = profileData.match(/HOME_VALUE_LOW:\s*([\d,]+(?:\.\d+)?)/);
+    const valueHighMatch = profileData.match(/HOME_VALUE_HIGH:\s*([\d,]+(?:\.\d+)?)/);
+    const lastMatch = profileData.match(/HOME_VALUE_LAST_UPDATED:\s*(.+?)(?:\n|$)/);
+    let lastUpdated: Date | null = null;
+    if (lastMatch) {
+      const d = new Date(lastMatch[1].trim());
+      if (!isNaN(d.getTime())) lastUpdated = d;
+    }
+    return {
+      address: addressMatch[1].trim(),
+      value: value && value > 0 ? value : null,
+      valueLow: valueLowMatch ? parseFloat(valueLowMatch[1].replace(/,/g, '')) : null,
+      valueHigh: valueHighMatch ? parseFloat(valueHighMatch[1].replace(/,/g, '')) : null,
+      lastUpdated,
+      isManualOverride: !!manualMatch
+    };
   }
 
   /**
