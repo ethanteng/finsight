@@ -63,13 +63,13 @@ function getDedupKey(account: {
   return null;
 }
 
-/** Balance tolerance for fuzzy matching (0.1%) - catches re-linked accounts with slightly different snapshots */
-const BALANCE_TOLERANCE_PCT = 0.001;
+/** Balance tolerance for fuzzy matching (0.5%) - catches re-linked accounts with slightly different snapshots */
+const BALANCE_TOLERANCE_PCT = 0.005;
 
 type PlaidAccountWithBasics = { id: string; plaidAccountId: string; name: string; institution: string | null; type: string; subtype: string | null; currentBalance: number | null; userId: string | null };
 
 /**
- * Group accounts that may be duplicates (same institution+type+subtype, balance within 0.1%).
+ * Group accounts that may be duplicates (same institution+type+subtype, balance within 0.5%).
  * Used as second pass when exact balance match misses renamed duplicates.
  */
 function findFuzzyDuplicateGroups<T extends PlaidAccountWithBasics>(plaidAccounts: T[]): T[][] {
