@@ -3475,9 +3475,23 @@ app.get('/profile/tokens', requireAuth, async (req: Request, res: Response) => {
               }
             });
             
-            // If accounts don't exist, sync them
-            if (accountsCount === 0 && accountsResponse.data.accounts.length > 0) {
+            // If accounts don't exist, check for duplicate-token scenario before syncing.
+            // When user re-links same institution, old token gets new account_ids. Dedupe script
+            // removes those as duplicates. If we blindly re-create here, we'd re-add them.
+            const institutionForToken = institutionName?.trim() || '';
+            const userHasInstitutionAccounts = institutionForToken ? await prisma.account.count({
+              where: {
+                userId: token.userId || req.user!.id,
+                institution: { equals: institutionForToken, mode: 'insensitive' },
+                NOT: { plaidAccountId: { startsWith: 'manual-' } }
+              }
+            }) > 0 : false;
+            
+            // If accounts don't exist, sync them (unless user already has accounts from this institution - duplicate token)
+            if (accountsCount === 0 && accountsResponse.data.accounts.length > 0 && !userHasInstitutionAccounts) {
               console.log(`Token ${token.id.substring(0, 8)}... is valid but has ${accountsResponse.data.accounts.length} accounts not in database - syncing accounts`);
+            } else if (accountsCount === 0 && userHasInstitutionAccounts) {
+              console.log(`Token ${token.id.substring(0, 8)}... has 0 accounts in DB but user already has ${institutionForToken} accounts - skipping sync (likely duplicate token from re-link)`);
               
               // Sync accounts to database
               for (const account of accountsResponse.data.accounts) {

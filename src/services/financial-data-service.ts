@@ -940,6 +940,11 @@ export class FinancialDataService {
         if (record.plaidAccountId.startsWith('snaptrade-')) {
           return false;
         }
+        // Exclude manual accounts - they come from ManualAccount table via fetchManualAccounts.
+        // If Account table has legacy manual records, including them would duplicate with fetchManualAccounts.
+        if (record.plaidAccountId.startsWith('manual-')) {
+          return false;
+        }
         return true;
       });
 

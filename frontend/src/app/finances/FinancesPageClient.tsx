@@ -423,7 +423,15 @@ export default function FinancesPageClient() {
   }
 
   // Use fresh accounts if available, otherwise fall back to snapshot accounts
-  const accounts = freshAccounts.length > 0 ? freshAccounts : (snapshot.accounts || []);
+  // Dedupe by account_id to avoid showing same account twice (e.g. manual account in both Account table and ManualAccount)
+  const rawAccounts = freshAccounts.length > 0 ? freshAccounts : (snapshot.accounts || []);
+  const accountIdSet = new Set<string>();
+  const accounts = rawAccounts.filter((acc) => {
+    const id = (acc as Account).account_id || (acc as Account).id;
+    if (!id || accountIdSet.has(id)) return false;
+    accountIdSet.add(id);
+    return true;
+  });
   const groupedAccounts = groupAccounts(accounts, snapTradeAccounts);
   
   // Helper to find account by ID (regular function, not a hook)
