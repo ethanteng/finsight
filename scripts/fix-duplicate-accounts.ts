@@ -63,6 +63,48 @@ function getDedupKey(account: {
   return null;
 }
 
+/** Balance tolerance for fuzzy matching (0.1%) - catches re-linked accounts with slightly different snapshots */
+const BALANCE_TOLERANCE_PCT = 0.001;
+
+/**
+ * Group accounts that may be duplicates (same institution+type+subtype, balance within 0.1%).
+ * Used as second pass when exact balance match misses renamed duplicates.
+ */
+function findFuzzyDuplicateGroups(
+  plaidAccounts: Array<{ id: string; plaidAccountId: string; name: string; institution: string | null; type: string; subtype: string | null; currentBalance: number | null; userId: string | null }>
+): Array<typeof plaidAccounts> {
+  const groups: Array<typeof plaidAccounts> = [];
+  const used = new Set<string>();
+
+  for (const account of plaidAccounts) {
+    if (used.has(account.id)) continue;
+    const inst = (account.institution || '').trim();
+    const type = (account.type || '').trim();
+    const subtype = (account.subtype || '').trim();
+    const userId = account.userId || '';
+    const balance = account.currentBalance ?? 0;
+
+    const matches = plaidAccounts.filter((other) => {
+      if (other.id === account.id || used.has(other.id)) return false;
+      if ((other.institution || '').trim() !== inst) return false;
+      if ((other.type || '').trim() !== type) return false;
+      if ((other.subtype || '').trim() !== subtype) return false;
+      if ((other.userId || '') !== userId) return false;
+      const otherBalance = other.currentBalance ?? 0;
+      const maxBal = Math.max(Math.abs(balance), Math.abs(otherBalance), 1);
+      const diff = Math.abs(balance - otherBalance);
+      return diff / maxBal <= BALANCE_TOLERANCE_PCT;
+    });
+
+    if (matches.length > 0) {
+      const group = [account, ...matches];
+      group.forEach((a) => used.add(a.id));
+      groups.push(group);
+    }
+  }
+  return groups;
+}
+
 async function getPlaidAccountIdsFromActiveTokens(userId: string): Promise<Set<string>> {
   const validAccountIds = new Set<string>();
   const activeTokens = await prisma.accessToken.findMany({
@@ -131,6 +173,21 @@ async function fixDuplicateAccounts() {
 
     if (skippedNoKey > 0) {
       console.log(`   ℹ️  ${skippedNoKey} account(s) have no persistentAccountId or currentBalance - skipped`);
+    }
+
+    // Second pass: find fuzzy duplicates (same institution+type+subtype, balance within 0.1%)
+    // Catches re-linked accounts where user renamed one - exact balance match fails due to different snapshots
+    const alreadyInDuplicateGroup = new Set<string>();
+    for (const [, accounts] of accountGroups) {
+      if (accounts.length > 1) accounts.forEach((a) => alreadyInDuplicateGroup.add(a.id));
+    }
+    const ungrouped = plaidAccounts.filter((a) => !alreadyInDuplicateGroup.has(a.id));
+    const fuzzyGroups = findFuzzyDuplicateGroups(ungrouped);
+    for (const group of fuzzyGroups) {
+      accountGroups.set(`fuzzy:${group[0].id}`, group);
+    }
+    if (fuzzyGroups.length > 0) {
+      console.log(`   ℹ️  Found ${fuzzyGroups.length} additional fuzzy duplicate group(s) (renamed accounts with similar balance)`);
     }
 
     let totalDuplicatesRemoved = 0;

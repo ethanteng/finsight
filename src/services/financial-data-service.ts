@@ -1336,6 +1336,7 @@ export class FinancialDataService {
               account_id: plaidAccountId,
               id: plaidAccountId, // Alias for compatibility
               name: accountName, // ✅ Use custom name from database if available
+              plaidOriginalName: account.name, // ✅ For deduplication: use original Plaid name (custom renames break name-based dedup)
               type: account.type,
               subtype: account.subtype,
               balance: {
@@ -2245,6 +2246,16 @@ export class FinancialDataService {
       return Number.isNaN(parsed) ? null : parsed;
     };
 
+    // Strip common user-added suffixes for dedup (e.g. " - Joint Taxable", " - Taxable")
+    // so renamed duplicates still match when loading from persisted data (no plaidOriginalName)
+    const normalizeNameForDedup = (n: string): string => {
+      let s = (n || '').trim();
+      for (const suffix of [' - Joint Taxable', ' - Taxable', ' - Joint', ' - Joint taxable', ' - taxable']) {
+        if (s.endsWith(suffix)) s = s.slice(0, -suffix.length).trim();
+      }
+      return s;
+    };
+
     const getLogicalKey = (account: any): string => {
       // Only use persistentAccountId when it's the actual Plaid persistent_account_id (TAN institutions).
       // Do NOT use plaidAccountId as fallback - it changes on re-link and breaks deduplication.
@@ -2252,7 +2263,11 @@ export class FinancialDataService {
       if (persistentId && account.source === 'plaid') {
         return `persistent:${persistentId}`;
       }
-      const name = (account.name || '').trim();
+      // Use plaidOriginalName for deduplication when available - custom renames break name-based dedup
+      // (e.g. user renames "Account A" to "Account A - Joint" and we'd otherwise treat as different)
+      // Fallback: normalize name to strip common suffixes for persisted data
+      const rawName = (account as any).plaidOriginalName || account.name || '';
+      const name = (account as any).plaidOriginalName ? rawName.trim() : normalizeNameForDedup(rawName);
       const type = (account.type || '').trim();
       const subtype = (account.subtype || '').trim();
       // Use institution (name) when institution_id is missing - persisted accounts have institution but not institution_id
