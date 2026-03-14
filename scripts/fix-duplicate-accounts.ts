@@ -66,14 +66,14 @@ function getDedupKey(account: {
 /** Balance tolerance for fuzzy matching (0.1%) - catches re-linked accounts with slightly different snapshots */
 const BALANCE_TOLERANCE_PCT = 0.001;
 
+type PlaidAccountWithBasics = { id: string; plaidAccountId: string; name: string; institution: string | null; type: string; subtype: string | null; currentBalance: number | null; userId: string | null };
+
 /**
  * Group accounts that may be duplicates (same institution+type+subtype, balance within 0.1%).
  * Used as second pass when exact balance match misses renamed duplicates.
  */
-function findFuzzyDuplicateGroups(
-  plaidAccounts: Array<{ id: string; plaidAccountId: string; name: string; institution: string | null; type: string; subtype: string | null; currentBalance: number | null; userId: string | null }>
-): Array<typeof plaidAccounts> {
-  const groups: Array<typeof plaidAccounts> = [];
+function findFuzzyDuplicateGroups<T extends PlaidAccountWithBasics>(plaidAccounts: T[]): T[][] {
+  const groups: T[][] = [];
   const used = new Set<string>();
 
   for (const account of plaidAccounts) {
