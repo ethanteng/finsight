@@ -271,7 +271,8 @@ export class SummaryCacheService {
       const st = a.subtype;
       if (t === 'investment' || ['401k','ira','roth','brokerage','hsa','529','pension','annuity'].includes(st)) return sum;
       if (t === 'depository' || ['checking','savings','cd','money market','prepaid'].includes(st)) {
-        const b = a.balance?.available ?? a.balance?.current ?? 0;
+        // Use current (total balance) first to match FinancialSummaryService - available can be lower due to holds
+        const b = a.balance?.current ?? a.balance?.available ?? 0;
         return sum + Math.max(0, b);
       }
       // credit/loan and others are handled in debt
