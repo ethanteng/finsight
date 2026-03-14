@@ -2352,7 +2352,21 @@ export class FinancialDataService {
       // SnapTrade balances are already in account objects
     };
 
-    // Merge holdings with deduplication by holding ID
+    // Build account_id → logicalKey map so we can deduplicate holdings from duplicate accounts
+    // (same institution re-linked = different account_ids but same logical account = same holdings)
+    const accountIdToLogicalKey = new Map<string, string>();
+    for (const account of rawAccounts) {
+      const accountId = account.account_id || (account as any).plaidAccountId || (account as any).persistentAccountId;
+      if (accountId) {
+        const logicalKey = getLogicalKey(account);
+        if (logicalKey) {
+          accountIdToLogicalKey.set(accountId, logicalKey);
+        }
+      }
+    }
+
+    // Merge holdings with deduplication by LOGICAL account + security + quantity
+    // (not raw account_id - duplicate tokens produce same holdings with different account_ids)
     const rawHoldings = [
       ...(plaidData?.holdings || []),
       ...(snapTradeData?.holdings || [])
@@ -2363,12 +2377,13 @@ export class FinancialDataService {
     const holdingMap = new Map<string, any>();
     let duplicatesSkipped = 0;
     for (const holding of rawHoldings) {
-      const holdingId = holding.id || `${holding.account_id}_${holding.security_id}_${holding.quantity}`;
-      if (!holdingMap.has(holdingId)) {
-        holdingMap.set(holdingId, holding);
+      const logicalKey = accountIdToLogicalKey.get(holding.account_id) ?? `id:${holding.account_id}`;
+      const holdingLogicalId = `${logicalKey}|${holding.security_id}|${holding.quantity}`;
+      if (!holdingMap.has(holdingLogicalId)) {
+        holdingMap.set(holdingLogicalId, holding);
       } else {
         duplicatesSkipped++;
-        console.log(`⚠️ Skipping duplicate holding: ${holdingId} (${holding.security_name || holding.security_id})`);
+        console.log(`⚠️ Skipping duplicate holding (same logical account): ${holdingLogicalId} (${holding.security_name || holding.security_id})`);
       }
     }
     const holdings = Array.from(holdingMap.values());
