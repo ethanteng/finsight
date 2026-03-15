@@ -61,6 +61,8 @@ export default function ManualAccountList({ accounts, onRefresh, isDemo = false 
         return 'Investment';
       case 'debt':
         return 'Debt';
+      case 'mortgage':
+        return 'Mortgage';
       default:
         return type;
     }
@@ -74,6 +76,8 @@ export default function ManualAccountList({ accounts, onRefresh, isDemo = false 
         return 'text-blue-400';
       case 'debt':
         return 'text-red-400';
+      case 'mortgage':
+        return 'text-amber-400';
       default:
         return 'text-gray-400';
     }

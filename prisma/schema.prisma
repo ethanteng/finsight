@@ -453,7 +453,7 @@ model FinancialSummaryHistory {
   @@map("financial_summary_history")
 }
 
-/// Manually added accounts by users (cash, investment, or debt)
+/// Manually added accounts by users (cash, investment, debt, or mortgage)
 model ManualAccount {
   id        String   @id @default(cuid())
   userId    String

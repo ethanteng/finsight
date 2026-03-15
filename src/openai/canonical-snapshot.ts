@@ -30,6 +30,14 @@ const CASH_TYPES = ['depository'];
 const CASH_SUBTYPES = ['checking', 'savings', 'cd', 'money market', 'prepaid'];
 const MORTGAGE_SUBTYPES = ['mortgage', 'home equity'];
 
+/** Extract numeric balance from account (handles both { current, available } and raw number) */
+function getAccountBalance(acc: any): number {
+  const b = acc?.balance;
+  if (typeof b === 'number' && !Number.isNaN(b)) return b;
+  if (b && typeof b === 'object') return b.current ?? b.available ?? 0;
+  return 0;
+}
+
 /**
  * Parse monthly amount from income/expense analysis strings.
  * Format: "Average Monthly Income: $5,000.00" or "Average Monthly Expenses: $3,000.00 (Manual Override)"
@@ -62,7 +70,7 @@ export function toCanonicalSnapshot(snapshot: FinancialContextSnapshot): Canonic
     for (const acc of snapshot.accounts) {
       const subtype = (acc.subtype || acc.type || '').toLowerCase();
       const type = (acc.type || '').toLowerCase();
-      const balance = acc.balance ?? 0;
+      const balance = getAccountBalance(acc);
 
       if (CASH_TYPES.includes(type) || CASH_SUBTYPES.includes(subtype)) {
         derivedCash += Math.max(0, balance);
@@ -94,7 +102,7 @@ export function toCanonicalSnapshot(snapshot: FinancialContextSnapshot): Canonic
   if (snapshot.accounts && snapshot.accounts.length > 0) {
     for (const acc of snapshot.accounts) {
       const subtype = (acc.subtype || acc.type || '').toLowerCase();
-      const balance = Math.abs(acc.balance ?? 0);
+      const balance = Math.abs(getAccountBalance(acc));
       if (balance <= 0) continue;
 
       if (MORTGAGE_SUBTYPES.some(m => subtype.includes(m))) {

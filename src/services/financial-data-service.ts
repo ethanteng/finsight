@@ -1602,6 +1602,10 @@ export class FinancialDataService {
         } else if (manualAccount.type === 'investment') {
           accountType = 'investment';
           accountSubtype = 'brokerage';
+        } else if (manualAccount.type === 'mortgage') {
+          // Mortgage: loan type with mortgage subtype for liabilities.mortgage in snapshot
+          accountType = 'loan';
+          accountSubtype = 'mortgage';
         } else if (manualAccount.type === 'debt') {
           // For debt, use 'credit' type, but amount should be positive (debt owed)
           accountType = 'credit';
@@ -1613,8 +1617,8 @@ export class FinancialDataService {
         }
 
         const accountId = `manual-${manualAccount.id}`;
-        const balance = manualAccount.type === 'debt' 
-          ? Math.abs(manualAccount.amount) // Debt should be positive for calculations
+        const balance = (manualAccount.type === 'debt' || manualAccount.type === 'mortgage')
+          ? Math.abs(manualAccount.amount) // Debt/mortgage should be positive for calculations
           : manualAccount.amount;
 
         accounts.push({

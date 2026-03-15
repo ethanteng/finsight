@@ -12,7 +12,7 @@ interface ManualAccountFormProps {
 export default function ManualAccountForm({ account, onSuccess, onCancel, isDemo = false }: ManualAccountFormProps) {
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
-  const [type, setType] = useState<'cash' | 'investment' | 'debt'>('cash');
+  const [type, setType] = useState<'cash' | 'investment' | 'debt' | 'mortgage'>('cash');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -136,7 +136,7 @@ export default function ManualAccountForm({ account, onSuccess, onCancel, isDemo
             placeholder="0.00"
             pattern="[0-9,]*\.?[0-9]*"
           />
-          {type === 'debt' && (
+          {(type === 'debt' || type === 'mortgage') && (
             <p className="mt-1 text-xs text-gray-400">
               Enter the amount owed (will be treated as positive debt)
             </p>
@@ -150,13 +150,14 @@ export default function ManualAccountForm({ account, onSuccess, onCancel, isDemo
           <select
             id="type"
             value={type}
-            onChange={(e) => setType(e.target.value as 'cash' | 'investment' | 'debt')}
+            onChange={(e) => setType(e.target.value as 'cash' | 'investment' | 'debt' | 'mortgage')}
             required
             className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="cash">Cash</option>
             <option value="investment">Investment</option>
             <option value="debt">Debt</option>
+            <option value="mortgage">Mortgage</option>
           </select>
         </div>
 

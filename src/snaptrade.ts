@@ -312,7 +312,10 @@ export class SnapTradeService {
               } else {
                 // Determine account type based on account name patterns
                 const accountName = (account.name || '').toLowerCase();
-                if (accountName.includes('brokerage')) {
+                if (accountName.includes('mortgage')) {
+                  accountType = 'loan';
+                  accountSubtype = 'mortgage';
+                } else if (accountName.includes('brokerage')) {
                   accountType = 'brokerage';
                 } else if (accountName.includes('treasury')) {
                   accountType = 'treasury';
@@ -330,7 +333,7 @@ export class SnapTradeService {
                 }
               }
               
-              // Add subtype if available
+              // Add subtype if available (API may provide it for mortgage/loan accounts)
               if (account.subtype) {
                 accountSubtype = account.subtype;
               }

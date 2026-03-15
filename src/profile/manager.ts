@@ -393,13 +393,15 @@ HOME_VALUE_MANUAL: ${nlValue}`;
         
         // Re-add the structured home data (RentCast + manual override when set)
         if (existingHomeData.address) {
-          const rentCastVal = existingHomeData.rentCastValue ?? existingHomeData.value ?? 0;
+          const rentCastVal = existingHomeData.rentCastValue ?? 0;
+          const valueLow = existingHomeData.valueLow ?? (rentCastVal > 0 ? Math.round(rentCastVal * 0.9) : 0);
+          const valueHigh = existingHomeData.valueHigh ?? (rentCastVal > 0 ? Math.round(rentCastVal * 1.1) : 0);
           let homeDataSection = `
 
 HOME_ADDRESS: ${existingHomeData.address}
 HOME_VALUE: ${rentCastVal}
-HOME_VALUE_LOW: ${existingHomeData.valueLow ?? rentCastVal ?? 0}
-HOME_VALUE_HIGH: ${existingHomeData.valueHigh ?? rentCastVal ?? 0}
+HOME_VALUE_LOW: ${valueLow}
+HOME_VALUE_HIGH: ${valueHigh}
 HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Date().toISOString()}`;
           if (existingHomeData.manualValue != null && existingHomeData.manualValue > 0) {
             homeDataSection += `\nHOME_VALUE_MANUAL: ${existingHomeData.manualValue}`;

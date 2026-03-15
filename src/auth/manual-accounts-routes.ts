@@ -20,8 +20,8 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
       return res.status(400).json({ error: 'Amount must be a valid number' });
     }
 
-    if (!['cash', 'investment', 'debt'].includes(type)) {
-      return res.status(400).json({ error: 'Type must be cash, investment, or debt' });
+    if (!['cash', 'investment', 'debt', 'mortgage'].includes(type)) {
+      return res.status(400).json({ error: 'Type must be cash, investment, debt, or mortgage' });
     }
 
     const manualAccount = await prisma.manualAccount.create({
@@ -119,8 +119,8 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
       updateData.amount = amount;
     }
     if (type !== undefined) {
-      if (!['cash', 'investment', 'debt'].includes(type)) {
-        return res.status(400).json({ error: 'Type must be cash, investment, or debt' });
+      if (!['cash', 'investment', 'debt', 'mortgage'].includes(type)) {
+        return res.status(400).json({ error: 'Type must be cash, investment, debt, or mortgage' });
       }
       updateData.type = type;
     }
