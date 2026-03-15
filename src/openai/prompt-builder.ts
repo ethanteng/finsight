@@ -400,7 +400,8 @@ function formatRetirementAnalysis(analysis: FinancialContextSnapshot['retirement
     `IMPORTANT: When referencing portfolio value or net worth, use the values from the Financial Overview section above. The withdrawal rate below is calculated based on the portfolio value used in the retirement analysis.\n\n` +
     `Current Withdrawal Rate: ${(analysis.metrics.withdrawalRate * 100).toFixed(2)}% of portfolio value\n` +
     `Years of Expenses Covered: ${analysis.metrics.yearsOfExpenses.toFixed(1)} years\n` +
-    `Equity Allocation: ${analysis.metrics.equityAllocation.toFixed(1)}%\n\n` +
+    `Equity Allocation (stocks vs bonds, includes stock ETFs/mutual funds): ${analysis.metrics.equityAllocation.toFixed(1)}%\n` +
+    `Note: This differs from Asset Allocation "equity" which is individual stocks only. Use this retirement metric for sequence-of-returns risk.\n\n` +
     `Historical Withdrawal Rate Percentiles (empirically derived from portfolio simulations over historical market sequences):\n` +
     `  - 10th percentile (worst 10%): ${(analysis.metrics.historicalWithdrawalRates.p10 * 100).toFixed(2)}%\n` +
     `  - 25th percentile: ${(analysis.metrics.historicalWithdrawalRates.p25 * 100).toFixed(2)}%\n` +

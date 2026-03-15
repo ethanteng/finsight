@@ -116,15 +116,22 @@ export async function analyzePortfolio(
         internationalValue += holdingValue;
       }
     } else if (assetType.includes('bond') || assetType.includes('fixed income') ||
-               (!assetType && (securityName.includes('bond') || securityName.includes('fixed income')))) {
+               (securityName.includes('bond') || securityName.includes('fixed income'))) {
       fixedIncomeValue += holdingValue;
     } else if (assetType.includes('cash') || assetType.includes('money market') ||
                (!assetType && (securityName.includes('cash') || securityName.includes('money market')))) {
       cashValue += holdingValue;
     } else {
-      // Default classification based on common patterns
-      // If unknown, assume equity
-      equityValue += holdingValue;
+      // Default classification: when assetType is generic (e.g. "etf", "mutual fund")
+      // or unknown, check security name for bond hints before assuming equity.
+      // Fixes misclassification where bond ETFs defaulted to equity (e.g. 91.9% vs actual ~30%).
+      if (securityName.includes('bond') || securityName.includes('fixed income') ||
+          securityName.includes('treasury') || securityName.includes('tips') ||
+          securityName.includes('aggregate') || securityName.includes('corporate bond')) {
+        fixedIncomeValue += holdingValue;
+      } else {
+        equityValue += holdingValue;
+      }
     }
 
     // Expense ratio from FMP metadata (if available)

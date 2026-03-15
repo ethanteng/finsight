@@ -217,12 +217,15 @@ export class FMPProvider {
    * Parse regular profile response (new /stable/profile endpoint)
    */
   private parseProfile(data: FMPProfileResponse, ticker: string): SecurityMetadata {
-    // Determine asset class from sector/industry or infer from ETF status
+    // Determine asset class from sector/industry/name or infer from ETF status
     let assetClass: string | undefined;
     const sector = data.sector?.toLowerCase() || '';
     const industry = data.industry?.toLowerCase() || '';
+    const name = (data.companyName || data.name || '').toLowerCase();
     
-    if (sector.includes('bond') || industry.includes('bond') || industry.includes('fixed income')) {
+    if (sector.includes('bond') || industry.includes('bond') || industry.includes('fixed income') ||
+        name.includes('bond') || name.includes('fixed income') || name.includes('treasury') ||
+        name.includes('tips') || name.includes('aggregate') || name.includes('corporate bond')) {
       assetClass = 'Fixed Income';
     } else if (sector.includes('equity') || industry.includes('equity') || data.isEtf) {
       assetClass = 'Equity';
@@ -260,7 +263,10 @@ export class FMPProvider {
     let assetClass: string | undefined;
     let geographicFocus: string | undefined;
     
-    if (tickerUpper.includes('BOND') || tickerUpper.includes('AGG') || tickerUpper.includes('BND')) {
+    // Common bond ETF ticker patterns (when FMP API fails)
+    const bondTickerPatterns = ['BOND', 'AGG', 'BND', 'BNDX', 'JCPB', 'JPST', 'STIP', 'VWOB', 'EMB',
+      'IUSB', 'MUB', 'EAGG', 'SUSC', 'TIP', 'TLT', 'IEF', 'SHY', 'LQD', 'HYG', 'VCIT', 'VCSH'];
+    if (bondTickerPatterns.some(p => tickerUpper.includes(p))) {
       assetClass = 'Fixed Income';
     } else {
       assetClass = 'Equity';
