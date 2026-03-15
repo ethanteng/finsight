@@ -349,7 +349,7 @@ function formatRetirementAnalysis(analysis: FinancialContextSnapshot['retirement
     '- Reference the Portfolio Characteristics (Growth Potential, Drawdown Resistance, Withdrawal Fragility, Inflation Protection)\n' +
     '- Discuss the Tradeoffs (both upside and downside)\n' +
     '- Use the Primary Observation as the foundation for your response\n' +
-    '- Reference the Portfolio Metrics (withdrawal rate, years of expenses, historical withdrawal rate percentiles)\n' +
+    '- Reference the Portfolio Metrics (withdrawal rate, years of expenses, estimated withdrawal rate percentiles)\n' +
     '- Discuss the Stress Test Results (survival rate, depletion percentiles)\n' +
     '- Reference Historical Implications when relevant\n' +
     '- Incorporate the analysis findings into your response naturally, not as a separate section\n\n' +
@@ -401,13 +401,13 @@ function formatRetirementAnalysis(analysis: FinancialContextSnapshot['retirement
     `Current Withdrawal Rate: ${(analysis.metrics.withdrawalRate * 100).toFixed(2)}% of portfolio value\n` +
     `Years of Expenses Covered: ${analysis.metrics.yearsOfExpenses.toFixed(1)} years\n` +
     `Equity Allocation: ${analysis.metrics.equityAllocation.toFixed(1)}%\n\n` +
-    `Historical Sustainable Withdrawal Rates (based on ${analysis.stressTest.totalSequences} historical sequences):\n` +
+    `Estimated Withdrawal Rate Percentiles (heuristic from survival patterns, not full per-sequence simulation):\n` +
     `  - 10th percentile (worst 10%): ${(analysis.metrics.historicalWithdrawalRates.p10 * 100).toFixed(2)}%\n` +
     `  - 25th percentile: ${(analysis.metrics.historicalWithdrawalRates.p25 * 100).toFixed(2)}%\n` +
     `  - 50th percentile (median): ${(analysis.metrics.historicalWithdrawalRates.p50 * 100).toFixed(2)}%\n` +
     `  - 75th percentile: ${(analysis.metrics.historicalWithdrawalRates.p75 * 100).toFixed(2)}%\n` +
     `  - 90th percentile (best 10%): ${(analysis.metrics.historicalWithdrawalRates.p90 * 100).toFixed(2)}%\n\n` +
-    `Compare the user's withdrawal rate (${(analysis.metrics.withdrawalRate * 100).toFixed(2)}%) to these historical percentiles when answering feasibility questions.`
+    `Compare the user's withdrawal rate (${(analysis.metrics.withdrawalRate * 100).toFixed(2)}%) to these estimated percentiles when answering feasibility questions.`
   );
 
   sections.push('## Stress Test Results (CRITICAL FOR FEASIBILITY ASSESSMENT)');

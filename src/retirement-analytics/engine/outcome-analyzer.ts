@@ -151,15 +151,18 @@ export function findWorstSequences(
     };
   });
 
+  // For depletion: exclude survived sequences (Infinity) - only report sequences that actually depleted
+  const filteredTuples =
+    metric === 'yearsUntilDepletion'
+      ? tuples.filter((t) => t.value !== Infinity)
+      : tuples;
+
   // Sort by metric value (worst first)
   // For depletion: lower is worse (depleted sooner)
   // For drawdown: higher is worse (larger drawdown)
   // For recovery: higher is worse (longer recovery)
-  tuples.sort((a, b) => {
+  filteredTuples.sort((a, b) => {
     if (metric === 'yearsUntilDepletion') {
-      // Lower depletion year is worse (but null = didn't deplete = best)
-      if (a.value === Infinity) return 1; // nulls go to end
-      if (b.value === Infinity) return -1;
       return a.value - b.value;
     } else {
       // Higher is worse for drawdown and recovery
@@ -169,8 +172,8 @@ export function findWorstSequences(
     }
   });
 
-  return tuples.map(t => ({
+  return filteredTuples.map((t) => ({
     sequenceId: t.sequenceId,
-    value: t.value === Infinity || t.value === -Infinity ? 0 : t.value
+    value: t.value === -Infinity ? 0 : t.value
   }));
 }

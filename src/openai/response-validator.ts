@@ -98,7 +98,7 @@ function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnapshot): 
   if (ra?.stressTest) {
     const st = ra.stressTest;
     parts.push(
-      `Stress test (Monte Carlo): totalSequences=${st.totalSequences}, survivalRate=${(st.survivalRate * 100).toFixed(1)}%`
+      `Stress test (historical sequences): totalSequences=${st.totalSequences}, survivalRate=${(st.survivalRate * 100).toFixed(1)}%`
     );
     if (st.depletionPercentiles) {
       const dp = st.depletionPercentiles;
@@ -110,7 +110,9 @@ function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnapshot): 
       if (dp.p90 != null) pParts.push(`p90=${dp.p90}y`);
       if (pParts.length) parts.push(`Depletion percentiles (years until depletion): ${pParts.join(', ')}`);
     }
-    if (st.worstSequences?.byDepletion?.length) {
+    if (st.survivalRate >= 1) {
+      parts.push(`Worst depletion sequences: N/A (all sequences survived)`);
+    } else if (st.worstSequences?.byDepletion?.length) {
       const top = st.worstSequences.byDepletion.slice(0, 3).map((s) => `${s.sequenceId}:${s.yearsUntilDepletion}y`).join(', ');
       parts.push(`Worst depletion sequences (sample): ${top}`);
     }
@@ -123,7 +125,7 @@ function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnapshot): 
     if (m.historicalWithdrawalRates) {
       const hwr = m.historicalWithdrawalRates;
       parts.push(
-        `Historical withdrawal rates (percentiles): p10=${(hwr.p10 * 100).toFixed(2)}%, p25=${(hwr.p25 * 100).toFixed(2)}%, p50=${(hwr.p50 * 100).toFixed(2)}%, p75=${(hwr.p75 * 100).toFixed(2)}%, p90=${(hwr.p90 * 100).toFixed(2)}%`
+        `Estimated withdrawal rates (heuristic percentiles): p10=${(hwr.p10 * 100).toFixed(2)}%, p25=${(hwr.p25 * 100).toFixed(2)}%, p50=${(hwr.p50 * 100).toFixed(2)}%, p75=${(hwr.p75 * 100).toFixed(2)}%, p90=${(hwr.p90 * 100).toFixed(2)}%`
       );
     }
   }
