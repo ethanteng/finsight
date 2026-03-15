@@ -134,8 +134,14 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       }
       if (!validationResult.valid && validationResult.issues?.length) {
         console.warn('Ask Linc: Gemini validation failed, regenerating with feedback:', validationResult.issues);
+        // Rebuild prompt input with full Financial Context (same as initial pass) + validation feedback
         const retryPromptInput = {
-          ...promptInput,
+          ...buildPromptInputFromSnapshot(
+            question,
+            snapshot,
+            canonicalSnapshot,
+            conversationHistory.map(c => ({ question: c.question, answer: c.answer }))
+          ),
           validationFeedback: validationResult.issues
         };
         const retryPrompt = buildFinancialReasoningPrompt(retryPromptInput);

@@ -630,3 +630,105 @@ function buildTierDetails(snapshot: FinancialContextSnapshot): string {
   return pieces.join('\n\n');
 }
 
+/**
+ * Build the full Financial Context for LLM prompts (Ask Linc, etc.).
+ * This is the canonical financial data — the same richness passed to Gemini for validation.
+ * Use this data as the source of truth; it supersedes any numbers mentioned in conversation history.
+ */
+export function buildFinancialContextForPrompt(snapshot: FinancialContextSnapshot): string {
+  const sections: string[] = [];
+
+  // Financial Overview
+  if (snapshot.financialSummary?.financialOverview) {
+    const overview = snapshot.financialSummary.financialOverview;
+    let homeValueLine = '';
+    if (overview.homeValue !== null && overview.homeValue !== undefined) {
+      if (overview.homeValue > 0) {
+        homeValueLine = `\nHome Value: $${overview.homeValue.toFixed(2)}`;
+      } else {
+        homeValueLine = '\nHome Value: Not estimated yet (user owns a home)';
+      }
+    }
+    sections.push(
+      `# Financial Overview\n` +
+        `CRITICAL: These are the AUTHORITATIVE financial values. Use these exact values when discussing net worth, portfolio value, or total investments. Do NOT recalculate from holdings, accounts, or retirement portfolio snapshots - these values already include all accounts (including manual investment accounts) and are the source of truth.\n\n` +
+        `Net Worth: $${overview.netWorth.toFixed(2)}\n` +
+        `Total Cash: $${overview.totalCash.toFixed(2)}\n` +
+        `Total Investments: $${overview.totalInvestments.toFixed(2)}\n` +
+        `Total Debt: $${overview.totalDebt.toFixed(2)}${homeValueLine}`
+    );
+  }
+
+  if (snapshot.incomeAnalysis) {
+    sections.push(`# Income Analysis (authoritative)\n${snapshot.incomeAnalysis}`);
+  }
+
+  if (snapshot.expenseAnalysis) {
+    sections.push(`# Expense Analysis (authoritative)\n${snapshot.expenseAnalysis}`);
+  }
+
+  if (snapshot.homeValueSummary) {
+    sections.push(`# Home Value\n${snapshot.homeValueSummary}`);
+  }
+
+  sections.push(`# Accounts\n${formatAccountSummary(snapshot.accounts)}`);
+  sections.push(`# Recent Transactions\n${formatTransactionSummary(snapshot.bankingTransactions)}`);
+
+  // Investment summary
+  let investmentSummary = '';
+  if (snapshot.financialSummary?.investmentPortfolio) {
+    const portfolio = snapshot.financialSummary.investmentPortfolio;
+    investmentSummary =
+      `Total Portfolio Value: $${portfolio.totalValue.toFixed(2)}\n` +
+      `Holdings: ${portfolio.holdingsCount}\n` +
+      `Securities: ${portfolio.securityCount}\n` +
+      `Asset Allocation:\n` +
+      portfolio.assetAllocation.map((aa) => `- ${aa.type}: $${aa.value.toFixed(2)} (${aa.percentage.toFixed(1)}%)`).join('\n');
+
+    if (snapshot.investments?.holdings && snapshot.investments.holdings.length > 0) {
+      const holdingsDetails = snapshot.investments.holdings
+        .map((holding) => {
+          const ticker = holding.ticker_symbol || '';
+          const name = holding.security_name || holding.ticker_symbol || 'Unknown Security';
+          const quantity = holding.quantity || 0;
+          const costBasis = holding.cost_basis || 0;
+          const currentValue = holding.institution_value || 0;
+          const securityType = holding.security_type || 'Unknown';
+          const gainLoss = currentValue - costBasis;
+          const gainLossPercent = costBasis > 0 ? ((gainLoss / costBasis) * 100).toFixed(2) : '0.00';
+          const tickerPart = ticker ? `${ticker} (` : '';
+          const tickerClose = ticker ? ')' : '';
+          return `- ${tickerPart}${name}${tickerClose} [${securityType}]: Quantity ${quantity.toFixed(4)}, Cost Basis $${costBasis.toFixed(2)}, Current Value $${currentValue.toFixed(2)} (${gainLoss >= 0 ? '+' : ''}$${gainLoss.toFixed(2)}, ${gainLossPercent}%)`;
+        })
+        .join('\n');
+      investmentSummary += `\n\nDetailed Holdings:\n${holdingsDetails}`;
+    }
+  } else if (snapshot.investments) {
+    investmentSummary = formatInvestmentSummary(snapshot.investments);
+  }
+
+  if (investmentSummary) {
+    sections.push(`# Investments\n${investmentSummary}`);
+  }
+
+  if (snapshot.retirementAnalysis) {
+    sections.push(formatRetirementAnalysis(snapshot.retirementAnalysis));
+  }
+
+  if (snapshot.retirementAnalysisNeedsInfo) {
+    sections.push(formatRetirementAnalysisInfoRequest(snapshot.retirementAnalysisNeedsInfo));
+  }
+
+  if (snapshot.retirementPortfolioSnapshot) {
+    sections.push(formatRetirementPortfolioSnapshot(snapshot.retirementPortfolioSnapshot));
+  }
+
+  if (snapshot.retirementSecurityMetadata && Object.keys(snapshot.retirementSecurityMetadata).length > 0) {
+    sections.push(formatRetirementSecurityMetadata(snapshot.retirementSecurityMetadata));
+  }
+
+  sections.push(buildTierDetails(snapshot));
+
+  return sections.join('\n\n').trim();
+}
+

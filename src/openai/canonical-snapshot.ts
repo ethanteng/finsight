@@ -21,8 +21,12 @@ export interface CanonicalFinancialSnapshot {
   income: number;
   expenses: number;
   age: number | null;
-  retirement_goal_age: number | null;
+  /** Target retirement age; defaults to 65 when not specified in profile. */
+  retirement_goal_age: number;
 }
+
+/** Standard default when user has not specified a retirement goal age (e.g. in profile). */
+const DEFAULT_RETIREMENT_GOAL_AGE = 65;
 
 const RETIREMENT_SUBTYPES = ['401k', 'ira', 'roth', 'roth ira', 'traditional ira', 'pension', 'annuity', 'hsa', '529'];
 const BROKERAGE_SUBTYPES = ['brokerage'];
@@ -131,7 +135,8 @@ export function toCanonicalSnapshot(snapshot: FinancialContextSnapshot): Canonic
 
   // Age from profile
   const age = extractAgeFromProfile(profile);
-  const retirement_goal_age = extractRetirementAgeFromProfile(profile);
+  const extractedRetirementAge = extractRetirementAgeFromProfile(profile);
+  const retirement_goal_age = extractedRetirementAge ?? DEFAULT_RETIREMENT_GOAL_AGE;
 
   return {
     assets: { cash, brokerage, retirement },

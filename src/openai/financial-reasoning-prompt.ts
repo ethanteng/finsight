@@ -5,16 +5,19 @@
  * Sections: DATA EXTRACTION, CALCULATION PLAN, CALCULATIONS, INTERPRETATION, GUIDANCE
  */
 
-import { CanonicalFinancialSnapshot, formatCanonicalSnapshotForPrompt } from './canonical-snapshot';
+import { CanonicalFinancialSnapshot } from './canonical-snapshot';
+import { buildFinancialContextForPrompt } from './prompt-builder';
 import { FinancialContextSnapshot } from './types';
 
 export interface FinancialReasoningPromptInput {
   question: string;
-  canonicalSnapshot: CanonicalFinancialSnapshot;
+  /** Full financial context (canonical data). Supersedes any data from conversation history. */
+  financialContext: string;
   userProfile: string;
   marketSummary: string;
   ragKnowledge: string;
-  conversationHistory?: Array< { question: string; answer: string }>;
+  /** For context only — what the user has been asking about. NOT canonical data; financial context supersedes. */
+  conversationHistory?: Array<{ question: string; answer: string }>;
   /** When present, instructs Claude to fix these validation issues from a previous response. */
   validationFeedback?: string[];
 }
@@ -26,7 +29,7 @@ You are helping analyze a user's financial situation.
 Follow this reasoning structure in your response:
 
 SECTION 1 — DATA EXTRACTION
-Identify the relevant financial values from the snapshot or profile.
+Identify the relevant financial values from the Financial Context or User Profile.
 
 SECTION 2 — CALCULATION PLAN
 Explain what financial rules or formulas should be applied.
@@ -42,7 +45,7 @@ SECTION 5 — GUIDANCE
 Provide clear and practical financial insights.
 
 Rules:
-- Do not invent financial data that is not present.
+- Do not invent financial data that is not present in the Financial Context.
 - Clearly state assumptions.
 - Show formulas when performing calculations.
 - Be conservative with estimates.
@@ -66,7 +69,7 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
   systemPrompt: string;
   userMessage: string;
 } {
-  const { question, canonicalSnapshot, userProfile, marketSummary, ragKnowledge, conversationHistory, validationFeedback } = input;
+  const { question, financialContext, userProfile, marketSummary, ragKnowledge, conversationHistory, validationFeedback } = input;
 
   const contextParts: string[] = [];
 
@@ -76,7 +79,7 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
       'Your previous response had the following issues. Correct them in your new response:',
       ...validationFeedback.map((issue) => `- ${issue}`),
       '',
-      'Use ONLY the financial data provided below. Do not invent numbers or cite analyses not present in the snapshot.',
+      'Use ONLY the financial data provided below. Do not invent numbers or cite analyses not present in the Financial Context.',
       ''
     );
   }
@@ -85,8 +88,10 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
     '## User Question',
     question,
     '',
-    '## Financial Snapshot (canonical)',
-    formatCanonicalSnapshotForPrompt(canonicalSnapshot),
+    '## Financial Context (CANONICAL — use this as the source of truth)',
+    'The data below is authoritative. It supersedes any numbers or figures mentioned in Recent Conversation History. Always use values from this section for calculations and analysis.',
+    '',
+    financialContext || '(No financial data available)',
     '',
     '## User Profile',
     userProfile || '(No profile available)',
@@ -99,7 +104,12 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
   );
 
   if (conversationHistory && conversationHistory.length > 0) {
-    contextParts.push('', '## Recent Conversation History');
+    contextParts.push(
+      '',
+      '## Recent Conversation History (context only — NOT canonical data)',
+      'Use this only to understand what the user has been asking about. Do NOT use numbers or figures from prior answers as canonical data. The Financial Context above is the source of truth.',
+      ''
+    );
     for (const entry of conversationHistory.slice(-4)) {
       contextParts.push(`Q: ${entry.question}`, `A: ${entry.answer}`, '');
     }
@@ -119,12 +129,12 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
 export function buildPromptInputFromSnapshot(
   question: string,
   snapshot: FinancialContextSnapshot,
-  canonicalSnapshot: CanonicalFinancialSnapshot,
+  _canonicalSnapshot: CanonicalFinancialSnapshot,
   conversationHistory?: Array<{ question: string; answer: string }>
 ): FinancialReasoningPromptInput {
   return {
     question,
-    canonicalSnapshot,
+    financialContext: buildFinancialContextForPrompt(snapshot),
     userProfile: snapshot.userProfile || '',
     marketSummary: snapshot.marketContext || '',
     ragKnowledge: snapshot.searchContext || '',
