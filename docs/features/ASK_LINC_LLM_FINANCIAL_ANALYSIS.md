@@ -80,6 +80,7 @@ The pipeline uses these existing systems as inputs:
 | User profile | `ProfileManager` | Goals, risk tolerance, retirement plans, inferred context |
 | Market summary | FRED, Alpha Vantage, Search | Interest rates, inflation, market trends |
 | RAG | `dataOrchestrator.getSearchContext` | Retirement rules, tax guidelines, mortgage rules, financial concepts |
+| Retirement analysis | `analyzeRetirementPortfolio` | Portfolio stress test, historical withdrawal rate percentiles |
 
 ---
 
@@ -219,8 +220,34 @@ The architecture supports replacing LLM calculations with **deterministic financ
 
 ---
 
+## Retirement Analysis Context
+
+When the user asks retirement-related questions, the pipeline fetches or creates a **retirement portfolio analysis** and injects it into the LLM context. This includes:
+
+- **Portfolio characteristics** — Growth potential, drawdown resistance, withdrawal fragility, inflation protection
+- **Historical withdrawal rate percentiles** — p10, p25, p50, p75, p90 derived from simulations over historical market sequences
+- **Stress test results** — Survival rate, depletion percentiles, worst-case sequences
+
+### Withdrawal Rate Percentile Semantics
+
+The percentiles are **empirically grounded** (not heuristic). They represent the distribution of sustainable withdrawal rates across historical market environments:
+
+| Percentile | Meaning |
+|------------|---------|
+| **p10** | Conservative low rate—sustainable in 90% of historical sequences (worst 10% of environments) |
+| **p25** | Rate sustainable in 75% of sequences (poor markets) |
+| **p50** | Median historical sustainable withdrawal rate |
+| **p75** | Rate sustainable in 25% of sequences (strong markets) |
+| **p90** | Aggressive high rate—sustainable in only 10% of sequences (best environments) |
+
+The LLM is instructed to compare the user's withdrawal rate to these percentiles when answering feasibility questions. See [Historical Withdrawal Rate Solver](HISTORICAL_WITHDRAWAL_RATE_SOLVER.md) for algorithm details.
+
+---
+
 ## Related Documentation
 
+- [Historical Withdrawal Rate Solver](HISTORICAL_WITHDRAWAL_RATE_SOLVER.md) — Algorithm and percentile semantics
+- [Retirement Analytics Integration](../RETIREMENT_ANALYTICS_INTEGRATION.md) — How retirement analysis is triggered and stored
 - [RAG System](RAG_SYSTEM.md) — RAG retrieval used by the pipeline
 - [GPT Prompt Construction](GPT_PROMPT_CONSTRUCTION.md) — Legacy OpenAI prompt structure
 - [AI Performance Monitoring](../monitoring/AI_PERFORMANCE_MONITORING.md) — Monitoring and observability

@@ -2,6 +2,7 @@
 // Phase 5: Outcome & Characteristics Analysis
 
 import { PortfolioOutcome, StressTestResult, HistoricalSequence } from '../types';
+import type { WithdrawalDistribution } from './withdrawal-rate-solver';
 
 /**
  * Analyze outcomes across all sequences and produce stress test results
@@ -9,7 +10,8 @@ import { PortfolioOutcome, StressTestResult, HistoricalSequence } from '../types
 export function analyzeOutcomes(
   outcomes: PortfolioOutcome[],
   sequences: HistoricalSequence[],
-  totalSequences: number
+  totalSequences: number,
+  historicalWithdrawalRates: WithdrawalDistribution
 ): StressTestResult {
   if (outcomes.length === 0) {
     return {
@@ -21,7 +23,7 @@ export function analyzeOutcomes(
         byDrawdown: [],
         byRecovery: []
       },
-      historicalWithdrawalRates: { p10: 0, p25: 0, p50: 0, p75: 0, p90: 0 }
+      historicalWithdrawalRates
     };
   }
 
@@ -52,23 +54,6 @@ export function analyzeOutcomes(
     sequenceId: w.sequenceId,
     timeToRecovery: w.value
   }));
-
-  // Calculate historical withdrawal rates
-  // Simplified heuristic based on survival patterns
-  // Full implementation would require running simulations with varying withdrawal rates
-  // to find maximum sustainable rate per sequence (binary search)
-  
-  // Heuristic: estimate sustainable withdrawal rates based on survival rate
-  // Higher survival rate suggests higher sustainable withdrawal rates
-  // This is a placeholder - full implementation requires iterative simulation per sequence
-  const baseRate = 0.04; // 4% baseline assumption
-  const historicalWithdrawalRates = {
-    p10: Math.max(0.01, baseRate * 0.7 * Math.sqrt(survivalRateValue)),
-    p25: Math.max(0.02, baseRate * 0.85 * Math.sqrt(survivalRateValue)),
-    p50: Math.max(0.03, baseRate * Math.sqrt(survivalRateValue)),
-    p75: Math.max(0.04, baseRate * 1.15 * Math.sqrt(survivalRateValue)),
-    p90: Math.max(0.05, baseRate * 1.3 * Math.sqrt(survivalRateValue))
-  };
 
   return {
     totalSequences,

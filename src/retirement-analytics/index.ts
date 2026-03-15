@@ -7,6 +7,7 @@ import { mapPortfolioToAssetBasket, populateAssumptions } from './engine/portfol
 import { DataProviderFactory } from './data/data-provider-factory';
 import { FREDProvider } from '../data/providers/fred';
 import { generateRollingSequences, snapToHorizonBucket } from './engine/stress-tester';
+import { computeHistoricalWithdrawalRates } from './engine/withdrawal-rate-solver';
 import { simulateWithdrawals } from './engine/withdrawal-simulator';
 import { analyzeOutcomes } from './engine/outcome-analyzer';
 import { assessPortfolioCharacteristics } from './engine/characteristics-assessor';
@@ -102,7 +103,14 @@ export async function analyzeRetirementPortfolio(
     50 // minHistoryYears
   );
 
-  // Phase 4: Simulate withdrawals for each sequence
+  // Phase 3b: Compute historical withdrawal rate distribution (before user scenario)
+  const historicalWithdrawalRates = computeHistoricalWithdrawalRates(
+    sequences,
+    portfolioMapping,
+    totalValue
+  );
+
+  // Phase 4: Simulate withdrawals for user scenario
   const outcomes = sequences.map(sequence => 
     simulateWithdrawals(
       portfolioMapping,
@@ -118,7 +126,12 @@ export async function analyzeRetirementPortfolio(
   });
 
   // Phase 5: Analyze outcomes and assess characteristics
-  const stressTestResults = analyzeOutcomes(outcomes, sequences, sequences.length);
+  const stressTestResults = analyzeOutcomes(
+    outcomes,
+    sequences,
+    sequences.length,
+    historicalWithdrawalRates
+  );
   const assessment = assessPortfolioCharacteristics(
     outcomes,
     stressTestResults,

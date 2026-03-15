@@ -401,7 +401,7 @@ function formatRetirementAnalysis(analysis: FinancialContextSnapshot['retirement
     `Current Withdrawal Rate: ${(analysis.metrics.withdrawalRate * 100).toFixed(2)}% of portfolio value\n` +
     `Years of Expenses Covered: ${analysis.metrics.yearsOfExpenses.toFixed(1)} years\n` +
     `Equity Allocation: ${analysis.metrics.equityAllocation.toFixed(1)}%\n\n` +
-    `Estimated Withdrawal Rate Percentiles (heuristic from survival patterns, not full per-sequence simulation):\n` +
+    `Historical Withdrawal Rate Percentiles (empirically derived from portfolio simulations over historical market sequences):\n` +
     `  - 10th percentile (worst 10%): ${(analysis.metrics.historicalWithdrawalRates.p10 * 100).toFixed(2)}%\n` +
     `  - 25th percentile: ${(analysis.metrics.historicalWithdrawalRates.p25 * 100).toFixed(2)}%\n` +
     `  - 50th percentile (median): ${(analysis.metrics.historicalWithdrawalRates.p50 * 100).toFixed(2)}%\n` +
