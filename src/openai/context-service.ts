@@ -1683,10 +1683,14 @@ async function loadUserProfile(params: {
     // ✅ Use original profile (no anonymization)
     const originalProfile = await profileManager.getOriginalProfile(userId);
     
-    // ✅ CRITICAL: Deduplicate "LIABILITIES INFORMATION" sections in profile text
-    // GPT may have added this section multiple times during profile enhancement
+    // ✅ CRITICAL: Normalize and deduplicate profile sections before passing to Claude
+    // - Home data: use latest RentCast + latest manual override; rebuild section to eliminate duplicates
+    // - Fallback: extract home value from natural language if user specified in prompt
+    // - LIABILITIES INFORMATION: GPT may add this section multiple times during profile enhancement
     if (originalProfile) {
-      return deduplicateLiabilitySections(originalProfile);
+      const normalized = profileManager.normalizeProfileHomeDataSection(originalProfile);
+      const deduped = profileManager.deduplicateHomeValueManual(normalized);
+      return deduplicateLiabilitySections(deduped);
     }
     
     return originalProfile;

@@ -58,7 +58,7 @@ export class ProfileExtractor {
     - Combine new information with existing information intelligently
     - Make the profile more detailed and useful over time
     - If the user mentions owning a home with an address, include the full address in the profile
-    - CRITICAL: If you see structured data fields like HOME_ADDRESS, HOME_VALUE, HOME_VALUE_LOW, HOME_VALUE_HIGH, or HOME_VALUE_LAST_UPDATED, you MUST preserve them exactly as they appear at the end of the profile. These are system fields that must not be removed or modified.
+    - CRITICAL: If you see structured data fields like HOME_ADDRESS, HOME_VALUE, HOME_VALUE_LOW, HOME_VALUE_HIGH, HOME_VALUE_LAST_UPDATED, or HOME_VALUE_MANUAL, you MUST preserve them exactly as they appear at the end of the profile. These are system fields that must not be removed or modified. If HOME_VALUE_MANUAL exists, preserve only ONE instance (the most recent value).
     
     If no new information is found, return the existing profile unchanged.
     `;

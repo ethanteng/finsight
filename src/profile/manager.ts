@@ -140,8 +140,123 @@ export class ProfileManager {
   // Method to get anonymized profile for AI services
   // ✅ NOTE: Now returns original profile (no anonymization)
   async getAnonymizedProfile(userId: string): Promise<string> {
-    // Return original profile (no anonymization)
-    return await this.getOriginalProfile(userId);
+    const profile = await this.getOriginalProfile(userId);
+    return this.deduplicateHomeValueManual(profile);
+  }
+
+  /**
+   * Remove duplicate HOME_VALUE_MANUAL entries from profile text.
+   * When the LLM or merge logic produces multiple HOME_VALUE_MANUAL lines, keep only the last one
+   * (the most recent user-specified value).
+   * Public for use by loadUserProfile and other consumers of profile-for-AI.
+   */
+  deduplicateHomeValueManual(profileText: string): string {
+    const matches = [...profileText.matchAll(/HOME_VALUE_MANUAL:\s*([\d,]+(?:\.\d+)?)\n?/g)];
+    if (matches.length <= 1) return profileText;
+    const lastValue = matches[matches.length - 1][1];
+    let updated = profileText.replace(/HOME_VALUE_MANUAL:\s*[\d,]+(?:\.\d+)?\n?/g, '');
+    if (updated.includes('HOME_VALUE_LAST_UPDATED:')) {
+      updated = updated.replace(
+        /(HOME_VALUE_LAST_UPDATED:[^\n]+)(\n|$)/,
+        `$1\nHOME_VALUE_MANUAL: ${lastValue}\n`
+      );
+    } else if (updated.includes('HOME_VALUE_HIGH:')) {
+      updated = updated.replace(
+        /(HOME_VALUE_HIGH:[^\n]+)(\n|$)/,
+        `$1\nHOME_VALUE_MANUAL: ${lastValue}\n`
+      );
+    } else if (updated.includes('HOME_VALUE:')) {
+      updated = updated.replace(
+        /(HOME_VALUE:[^\n]+)(\n|$)/,
+        `$1\nHOME_VALUE_MANUAL: ${lastValue}\n`
+      );
+    } else if (updated.includes('HOME_ADDRESS:')) {
+      updated = updated.replace(
+        /(HOME_ADDRESS:[^\n]+)(\n|$)/,
+        `$1\nHOME_VALUE_MANUAL: ${lastValue}\n`
+      );
+    } else {
+      updated = updated.trimEnd() + (updated.endsWith('\n') ? '' : '\n') + `HOME_VALUE_MANUAL: ${lastValue}\n`;
+    }
+    return updated;
+  }
+
+  /**
+   * Normalize the home data section in profile text to ensure it uses:
+   * - Latest RentCast data (HOME_VALUE, LOW, HIGH, LAST_UPDATED)
+   * - Latest user manual override (HOME_VALUE_MANUAL) if set
+   * - Natural language fallback when no structured data exists
+   * Rebuilds the structured section from extracted data to eliminate duplicates and stale values.
+   */
+  normalizeProfileHomeDataSection(profileText: string): string {
+    const homeData = this.extractHomeData(profileText);
+
+    // If we have address, rebuild the section with canonical values
+    if (homeData.address) {
+      const rentCastValue = homeData.rentCastValue ?? 0;
+      // LOW/HIGH are RentCast confidence bounds - derive from rentCastValue only, not manual override
+      const valueLow = homeData.valueLow ?? (rentCastValue > 0 ? Math.round(rentCastValue * 0.9) : 0);
+      const valueHigh = homeData.valueHigh ?? (rentCastValue > 0 ? Math.round(rentCastValue * 1.1) : 0);
+      const lastUpdated = homeData.lastUpdated?.toISOString() || new Date().toISOString();
+
+      let section = `
+
+HOME_ADDRESS: ${homeData.address}
+HOME_VALUE: ${rentCastValue}
+HOME_VALUE_LOW: ${valueLow}
+HOME_VALUE_HIGH: ${valueHigh}
+HOME_VALUE_LAST_UPDATED: ${lastUpdated}`;
+      if (homeData.manualValue != null && homeData.manualValue > 0) {
+        section += `\nHOME_VALUE_MANUAL: ${homeData.manualValue}`;
+      }
+
+      // Match each field with optional trailing newline (?:\n|$) so fields at end-of-string are removed
+      const withoutSection = profileText.replace(
+        /HOME_ADDRESS:.*?(?:\n|$)|HOME_VALUE:.*?(?:\n|$)|HOME_VALUE_LOW:.*?(?:\n|$)|HOME_VALUE_HIGH:.*?(?:\n|$)|HOME_VALUE_LAST_UPDATED:.*?(?:\n|$)|HOME_VALUE_MANUAL:.*?(?:\n|$)/g,
+        ''
+      ).trim();
+
+      return withoutSection + section;
+    }
+
+    // No address - try natural language fallback for value when user mentioned home value in prompt
+    const nlValue = this.extractHomeValueFromNaturalLanguage(profileText);
+    if (nlValue != null && nlValue > 0) {
+      const section = `
+
+HOME_ADDRESS: Not specified
+HOME_VALUE: ${nlValue}
+HOME_VALUE_LOW: ${Math.round(nlValue * 0.9)}
+HOME_VALUE_HIGH: ${Math.round(nlValue * 1.1)}
+HOME_VALUE_LAST_UPDATED: ${new Date().toISOString()}
+HOME_VALUE_MANUAL: ${nlValue}`;
+      return profileText.trimEnd() + section;
+    }
+
+    return profileText;
+  }
+
+  /**
+   * Try to extract home value from natural language in profile (e.g. "my home is worth $1.2M", "estimated value of $1,535,000").
+   * Used as fallback when no structured home data exists.
+   */
+  private extractHomeValueFromNaturalLanguage(profileText: string): number | null {
+    const homeValuePatterns = [
+      /(?:home|house|property)\s*(?:is\s+)?(?:worth|valued?\s+at|estimated?\s+at|valued?)\s*\$?([\d,]+(?:\.[\d]+)?)\s*(?:million|M|k|K)?/i,
+      /(?:worth|valued?|estimated?)\s*(?:at\s+)?\$?([\d,]+(?:\.[\d]+)?)\s*(?:million|M|k|K)?\s*(?:for\s+)?(?:my|our|the)\s+(?:home|house|property)/i,
+      /(?:manually\s+)?(?:estimated?\s+)?(?:value\s+of|worth)\s*\$?([\d,]+(?:\.[\d]+)?)\s*(?:million|M|k|K)?/i,
+      /\$([\d,]+(?:\.[\d]+)?)\s*(?:million|M|k|K)?\s*(?:for\s+)?(?:my|our|the)\s+(?:home|house|property)/i,
+    ];
+    for (const re of homeValuePatterns) {
+      const m = profileText.match(re);
+      if (m) {
+        let num = parseFloat(m[1].replace(/,/g, ''));
+        if (/\b(million|M)\b/i.test(m[0])) num *= 1_000_000;
+        else if (/\b(k|K)\b/i.test(m[0])) num *= 1_000;
+        if (num > 0 && num < 1e9) return num;
+      }
+    }
+    return null;
   }
 
   async updateProfile(userId: string, newProfileText: string): Promise<void> {
@@ -270,22 +385,25 @@ export class ProfileManager {
       if (existingHomeData.address && !updatedHomeData.address) {
         console.log('💾 Preserving structured home data that was added during extraction');
         
-        // Remove any existing home data markers (shouldn't be any, but just in case)
+        // Remove any existing home data markers including HOME_VALUE_MANUAL; use (?:\n|$) so fields at end-of-string are removed
         finalProfile = finalProfile.replace(
-          /HOME_ADDRESS:.*?\n|HOME_VALUE:.*?\n|HOME_VALUE_LOW:.*?\n|HOME_VALUE_HIGH:.*?\n|HOME_VALUE_LAST_UPDATED:.*?\n/g,
+          /HOME_ADDRESS:.*?(?:\n|$)|HOME_VALUE:.*?(?:\n|$)|HOME_VALUE_LOW:.*?(?:\n|$)|HOME_VALUE_HIGH:.*?(?:\n|$)|HOME_VALUE_LAST_UPDATED:.*?(?:\n|$)|HOME_VALUE_MANUAL:.*?(?:\n|$)/g,
           ''
         ).trim();
         
-        // Re-add the structured home data (even if value is 0 - address is still useful)
+        // Re-add the structured home data (RentCast + manual override when set)
         if (existingHomeData.address) {
-          const homeDataSection = `
+          const rentCastVal = existingHomeData.rentCastValue ?? existingHomeData.value ?? 0;
+          let homeDataSection = `
 
 HOME_ADDRESS: ${existingHomeData.address}
-HOME_VALUE: ${existingHomeData.value ?? 0}
-HOME_VALUE_LOW: ${existingHomeData.valueLow ?? existingHomeData.value ?? 0}
-HOME_VALUE_HIGH: ${existingHomeData.valueHigh ?? existingHomeData.value ?? 0}
+HOME_VALUE: ${rentCastVal}
+HOME_VALUE_LOW: ${existingHomeData.valueLow ?? rentCastVal ?? 0}
+HOME_VALUE_HIGH: ${existingHomeData.valueHigh ?? rentCastVal ?? 0}
 HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Date().toISOString()}`;
-          
+          if (existingHomeData.manualValue != null && existingHomeData.manualValue > 0) {
+            homeDataSection += `\nHOME_VALUE_MANUAL: ${existingHomeData.manualValue}`;
+          }
           finalProfile = finalProfile + homeDataSection;
         }
       }
@@ -364,12 +482,15 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
   }
 
   /**
-   * Extract home data from profile text
-   * Returns structured home data if found in profile
+   * Extract home data from profile text.
+   * Uses LAST occurrence for each field when duplicates exist (most recent wins).
+   * Returns rentCastValue and manualValue separately so both can be included in the profile.
    */
   extractHomeData(profileText: string): {
     address: string | null;
     value: number | null;
+    rentCastValue: number | null;
+    manualValue: number | null;
     valueLow: number | null;
     valueHigh: number | null;
     lastUpdated: Date | null;
@@ -378,74 +499,66 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
     const result = {
       address: null as string | null,
       value: null as number | null,
+      rentCastValue: null as number | null,
+      manualValue: null as number | null,
       valueLow: null as number | null,
       valueHigh: null as number | null,
       lastUpdated: null as Date | null,
       isManualOverride: false
     };
 
-    // Extract home address
-    const addressMatch = profileText.match(/HOME_ADDRESS:\s*(.+?)(?:\n|$)/);
-    if (addressMatch) {
-      result.address = addressMatch[1].trim();
+    // Extract home address (use last occurrence)
+    const addressMatches = [...profileText.matchAll(/HOME_ADDRESS:\s*(.+?)(?:\n|$)/g)];
+    if (addressMatches.length > 0) {
+      result.address = addressMatches[addressMatches.length - 1][1].trim();
     }
 
-    // Extract manual override value first (takes precedence over RentCast estimate)
-    // Regex handles numbers with optional decimals, and also handles commas (though they shouldn't be in stored values)
-    const manualValueMatch = profileText.match(/HOME_VALUE_MANUAL:\s*([\d,]+(?:\.\d+)?)/);
+    // Extract manual override - use LAST as most recent
+    const manualValueMatches = [...profileText.matchAll(/HOME_VALUE_MANUAL:\s*([\d,]+(?:\.\d+)?)/g)];
+    const manualValueMatch = manualValueMatches.length > 0 ? manualValueMatches[manualValueMatches.length - 1] : null;
     if (manualValueMatch) {
-      // Remove commas if present (shouldn't happen, but handle it)
       const cleanedValue = manualValueMatch[1].replace(/,/g, '');
       const manualValue = parseFloat(cleanedValue);
       if (manualValue > 0) {
+        result.manualValue = manualValue;
         result.value = manualValue;
         result.isManualOverride = true;
       }
     }
 
-    // Extract home value (RentCast estimate) - only use if no manual override
-    if (!result.isManualOverride) {
-      const valueMatch = profileText.match(/HOME_VALUE:\s*([\d,]+(?:\.\d+)?)/);
-      if (valueMatch) {
-        const cleanedValue = valueMatch[1].replace(/,/g, '');
-        const parsedValue = parseFloat(cleanedValue);
-        if (parsedValue > 0) {
-          result.value = parsedValue;
-        }
+    // Extract RentCast value - always parse for section inclusion; use LAST occurrence
+    const rentCastMatches = [...profileText.matchAll(/HOME_VALUE:\s*([\d,]+(?:\.\d+)?)/g)];
+    const rentCastMatch = rentCastMatches.length > 0 ? rentCastMatches[rentCastMatches.length - 1] : null;
+    if (rentCastMatch) {
+      const cleanedValue = rentCastMatch[1].replace(/,/g, '');
+      const parsedValue = parseFloat(cleanedValue);
+      if (parsedValue > 0) {
+        result.rentCastValue = parsedValue;
+        if (!result.isManualOverride) result.value = parsedValue;
       }
     }
 
-    // Extract home value low (supports both integers and decimals, handles commas)
-    const valueLowMatch = profileText.match(/HOME_VALUE_LOW:\s*([\d,]+(?:\.\d+)?)/);
-    if (valueLowMatch) {
-      const cleanedValue = valueLowMatch[1].replace(/,/g, '');
-      result.valueLow = parseFloat(cleanedValue);
+    // Extract home value low/high - use LAST occurrence for each
+    const valueLowMatches = [...profileText.matchAll(/HOME_VALUE_LOW:\s*([\d,]+(?:\.\d+)?)/g)];
+    if (valueLowMatches.length > 0) {
+      result.valueLow = parseFloat(valueLowMatches[valueLowMatches.length - 1][1].replace(/,/g, ''));
+    }
+    const valueHighMatches = [...profileText.matchAll(/HOME_VALUE_HIGH:\s*([\d,]+(?:\.\d+)?)/g)];
+    if (valueHighMatches.length > 0) {
+      result.valueHigh = parseFloat(valueHighMatches[valueHighMatches.length - 1][1].replace(/,/g, ''));
     }
 
-    // Extract home value high (supports both integers and decimals, handles commas)
-    const valueHighMatch = profileText.match(/HOME_VALUE_HIGH:\s*([\d,]+(?:\.\d+)?)/);
-    if (valueHighMatch) {
-      const cleanedValue = valueHighMatch[1].replace(/,/g, '');
-      result.valueHigh = parseFloat(cleanedValue);
-    }
-
-    // Extract last updated timestamp
-    const lastUpdatedMatch = profileText.match(/HOME_VALUE_LAST_UPDATED:\s*(.+?)(?:\n|$)/);
-    if (lastUpdatedMatch) {
+    // Extract last updated - use LAST occurrence (most recent RentCast fetch)
+    const lastUpdatedMatches = [...profileText.matchAll(/HOME_VALUE_LAST_UPDATED:\s*(.+?)(?:\n|$)/g)];
+    if (lastUpdatedMatches.length > 0) {
       try {
-        const dateStr = lastUpdatedMatch[1].trim();
-        // Skip if the value is "Not specified" or empty
+        const dateStr = lastUpdatedMatches[lastUpdatedMatches.length - 1][1].trim();
         if (dateStr && dateStr.toLowerCase() !== 'not specified' && dateStr !== '') {
           const parsedDate = new Date(dateStr);
-          // Only set if the date is valid
-          if (!isNaN(parsedDate.getTime())) {
-            result.lastUpdated = parsedDate;
-          } else {
-            console.warn(`Invalid date format for HOME_VALUE_LAST_UPDATED: "${dateStr}"`);
-          }
+          if (!isNaN(parsedDate.getTime())) result.lastUpdated = parsedDate;
         }
-      } catch (error) {
-        console.error('Failed to parse HOME_VALUE_LAST_UPDATED:', error);
+      } catch {
+        // ignore
       }
     }
 
@@ -481,13 +594,15 @@ HOME_VALUE_LAST_UPDATED: ${existingHomeData.lastUpdated?.toISOString() || new Da
       // Get current profile
       const currentProfile = await this.getOriginalProfile(userId);
       
-      // Preserve manual override if it exists
-      const manualOverrideMatch = currentProfile.match(/HOME_VALUE_MANUAL:\s*(\d+(?:\.\d+)?)/);
-      const manualOverride = manualOverrideMatch ? manualOverrideMatch[0] : null;
+      // Preserve manual override if it exists (use last occurrence when duplicates exist)
+      const manualOverrideMatches = [...currentProfile.matchAll(/HOME_VALUE_MANUAL:\s*(\d+(?:\.\d+)?)/g)];
+      const manualOverride = manualOverrideMatches.length > 0
+        ? manualOverrideMatches[manualOverrideMatches.length - 1][0]
+        : null;
       
-      // Remove any existing home data (but preserve manual override)
+      // Remove any existing home data (but preserve manual override); use (?:\n|$) so fields at end-of-string are removed
       let updatedProfile = currentProfile.replace(
-        /HOME_ADDRESS:.*?\n|HOME_VALUE:.*?\n|HOME_VALUE_LOW:.*?\n|HOME_VALUE_HIGH:.*?\n|HOME_VALUE_LAST_UPDATED:.*?\n/g,
+        /HOME_ADDRESS:.*?(?:\n|$)|HOME_VALUE:.*?(?:\n|$)|HOME_VALUE_LOW:.*?(?:\n|$)|HOME_VALUE_HIGH:.*?(?:\n|$)|HOME_VALUE_LAST_UPDATED:.*?(?:\n|$)/g,
         ''
       ).trim();
 
@@ -551,9 +666,9 @@ HOME_VALUE_LAST_UPDATED: ${new Date().toISOString()}`;
       throw new Error('No home address found. Please add a home address first.');
     }
 
-    // Remove existing manual override if present
+    // Remove existing manual override if present; use (?:\n|$) so last line without newline is removed
     let updatedProfile = currentProfile.replace(
-      /HOME_VALUE_MANUAL:.*?\n/g,
+      /HOME_VALUE_MANUAL:.*?(?:\n|$)/g,
       ''
     );
 
@@ -644,9 +759,9 @@ HOME_VALUE_LAST_UPDATED: ${new Date().toISOString()}`;
   }> {
     const currentProfile = await this.getOriginalProfile(userId);
     
-    // Remove manual override
+    // Remove manual override; use (?:\n|$) so last line without newline is removed
     let updatedProfile = currentProfile.replace(
-      /HOME_VALUE_MANUAL:.*?\n/g,
+      /HOME_VALUE_MANUAL:.*?(?:\n|$)/g,
       ''
     );
 
@@ -672,9 +787,9 @@ HOME_VALUE_LAST_UPDATED: ${new Date().toISOString()}`;
   async removeHomeData(userId: string): Promise<void> {
     const currentProfile = await this.getOriginalProfile(userId);
     
-    // Remove home data (including manual override)
+    // Remove home data (including manual override); use (?:\n|$) so fields at end-of-string are removed
     const updatedProfile = currentProfile.replace(
-      /HOME_ADDRESS:.*?\n|HOME_VALUE:.*?\n|HOME_VALUE_LOW:.*?\n|HOME_VALUE_HIGH:.*?\n|HOME_VALUE_MANUAL:.*?\n|HOME_VALUE_LAST_UPDATED:.*?\n/g,
+      /HOME_ADDRESS:.*?(?:\n|$)|HOME_VALUE:.*?(?:\n|$)|HOME_VALUE_LOW:.*?(?:\n|$)|HOME_VALUE_HIGH:.*?(?:\n|$)|HOME_VALUE_MANUAL:.*?(?:\n|$)|HOME_VALUE_LAST_UPDATED:.*?(?:\n|$)/g,
       ''
     ).trim();
 

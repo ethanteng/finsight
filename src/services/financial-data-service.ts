@@ -2168,29 +2168,34 @@ export class FinancialDataService {
     }
   }
 
-  /** Parse HOME_ADDRESS, HOME_VALUE_MANUAL, HOME_VALUE, etc. from profile text */
+  /** Parse HOME_ADDRESS, HOME_VALUE_MANUAL, HOME_VALUE, etc. from profile text.
+   * Uses LAST occurrence for each field when duplicates exist (latest RentCast, latest manual override). */
   private parseHomeDataFromProfileText(profileData: string): { address: string | null; value: number | null; valueLow: number | null; valueHigh: number | null; lastUpdated: Date | null; isManualOverride: boolean } | null {
-    const addressMatch = profileData.match(/HOME_ADDRESS:\s*(.+?)(?:\n|$)/);
-    if (!addressMatch) return null;
-    const manualMatch = profileData.match(/HOME_VALUE_MANUAL:\s*([\d,]+(?:\.\d+)?)/);
+    const addressMatches = [...profileData.matchAll(/HOME_ADDRESS:\s*(.+?)(?:\n|$)/g)];
+    if (addressMatches.length === 0) return null;
+    const address = addressMatches[addressMatches.length - 1][1].trim();
+
+    const manualMatches = [...profileData.matchAll(/HOME_VALUE_MANUAL:\s*([\d,]+(?:\.\d+)?)/g)];
+    const manualMatch = manualMatches.length > 0 ? manualMatches[manualMatches.length - 1] : null;
     let value: number | null = manualMatch ? parseFloat(manualMatch[1].replace(/,/g, '')) : null;
     if (value == null) {
-      const valueMatch = profileData.match(/HOME_VALUE:\s*([\d,]+(?:\.\d+)?)/);
-      value = valueMatch ? parseFloat(valueMatch[1].replace(/,/g, '')) : null;
+      const rentCastMatches = [...profileData.matchAll(/HOME_VALUE:\s*([\d,]+(?:\.\d+)?)/g)];
+      const rentCastMatch = rentCastMatches.length > 0 ? rentCastMatches[rentCastMatches.length - 1] : null;
+      value = rentCastMatch ? parseFloat(rentCastMatch[1].replace(/,/g, '')) : null;
     }
-    const valueLowMatch = profileData.match(/HOME_VALUE_LOW:\s*([\d,]+(?:\.\d+)?)/);
-    const valueHighMatch = profileData.match(/HOME_VALUE_HIGH:\s*([\d,]+(?:\.\d+)?)/);
-    const lastMatch = profileData.match(/HOME_VALUE_LAST_UPDATED:\s*(.+?)(?:\n|$)/);
+    const valueLowMatches = [...profileData.matchAll(/HOME_VALUE_LOW:\s*([\d,]+(?:\.\d+)?)/g)];
+    const valueHighMatches = [...profileData.matchAll(/HOME_VALUE_HIGH:\s*([\d,]+(?:\.\d+)?)/g)];
+    const lastMatches = [...profileData.matchAll(/HOME_VALUE_LAST_UPDATED:\s*(.+?)(?:\n|$)/g)];
     let lastUpdated: Date | null = null;
-    if (lastMatch) {
-      const d = new Date(lastMatch[1].trim());
+    if (lastMatches.length > 0) {
+      const d = new Date(lastMatches[lastMatches.length - 1][1].trim());
       if (!isNaN(d.getTime())) lastUpdated = d;
     }
     return {
-      address: addressMatch[1].trim(),
+      address,
       value: value && value > 0 ? value : null,
-      valueLow: valueLowMatch ? parseFloat(valueLowMatch[1].replace(/,/g, '')) : null,
-      valueHigh: valueHighMatch ? parseFloat(valueHighMatch[1].replace(/,/g, '')) : null,
+      valueLow: valueLowMatches.length > 0 ? parseFloat(valueLowMatches[valueLowMatches.length - 1][1].replace(/,/g, '')) : null,
+      valueHigh: valueHighMatches.length > 0 ? parseFloat(valueHighMatches[valueHighMatches.length - 1][1].replace(/,/g, '')) : null,
       lastUpdated,
       isManualOverride: !!manualMatch
     };
