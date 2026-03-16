@@ -41,10 +41,10 @@ export interface PortfolioCompositionMetrics {
 
 export interface TimelineMetrics {
   yearsToRetirement: number; // or negative if retired
-  withdrawalYears: number; // snapped to nearest supported bucket: 10, 20, or 30 years
-  withdrawalYearsOriginal: number; // original user input before snapping
+  withdrawalYears: number; // exact horizon (lifeExpectancy - withdrawalStartAge)
+  withdrawalYearsOriginal: number; // same as withdrawalYears (no bucketing)
   withdrawalMonths: number; // withdrawalYears * 12, for simulation granularity
-  timelineBucket: '10' | '20' | '30'; // supported horizon bucket used for analysis
+  timelineBucket: string; // string representation of withdrawal years (e.g. '27')
 }
 
 export interface HistoricalPerformanceMetrics {
@@ -207,8 +207,8 @@ export interface RetirementAnalysisOutput {
     tradeoffs: PortfolioTradeoffs;
     primaryObservation: string; // Descriptive, not prescriptive (e.g., "historically fragile given withdrawal timing")
     confidence: 'high' | 'medium' | 'low'; // Must respect confidence ceiling rules
-    timelineBucket: '10' | '20' | '30';
-    timelineBucketNote: string; // Explanation if original input was snapped
+    timelineBucket: string;
+    timelineBucketNote: string;
   };
   
   metrics: {
@@ -314,6 +314,6 @@ export interface InternalHeuristics {
 // ============================================================================
 
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
-export type TimelineBucket = '10' | '20' | '30';
+export type TimelineBucket = string; // e.g. '10', '20', '27' (exact years)
 export type CharacteristicLevel = 'high' | 'moderate' | 'low';
 export type MappingMethod = 'direct' | 'inferred' | 'proxy';

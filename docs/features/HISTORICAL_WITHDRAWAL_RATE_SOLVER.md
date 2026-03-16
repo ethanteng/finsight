@@ -82,7 +82,9 @@ A `Map<number, number>` survival cache (key: `Math.round(rate * 100000)`) is sha
 | File | Purpose |
 |------|---------|
 | `src/retirement-analytics/engine/withdrawal-rate-solver.ts` | `computeHistoricalWithdrawalRates`, `evaluateSurvival`, `findWithdrawalForSurvival` |
-| `src/retirement-analytics/engine/withdrawal-simulator.ts` | `simulateWithdrawals` (used by solver) |
+| `src/retirement-analytics/engine/withdrawal-simulator.ts` | `simulateWithdrawals` — **same logic** as main stress test (inflation-adjusted, annual rebalancing) |
+
+The solver does **not** use a simplified simulation model; it calls `simulateWithdrawals` directly.
 | `src/retirement-analytics/index.ts` | Orchestrates solver call before user scenario |
 
 ---
@@ -106,5 +108,6 @@ Sequences are horizon-specific: `generateRollingSequences(withdrawalYears, ...)`
 
 ## Related Documentation
 
+- [Stress Test Approach](STRESS_TEST_APPROACH.md) — Full documentation of sequence generation, simulation, and outcome analysis
 - [Retirement Analytics Integration](../RETIREMENT_ANALYTICS_INTEGRATION.md) — How retirement analysis integrates with Ask Linc
 - [Ask Linc LLM Financial Analysis](ASK_LINC_LLM_FINANCIAL_ANALYSIS.md) — How withdrawal percentiles are used in LLM context

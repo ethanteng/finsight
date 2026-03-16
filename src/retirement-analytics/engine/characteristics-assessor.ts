@@ -11,7 +11,7 @@ export function assessPortfolioCharacteristics(
   outcomes: PortfolioOutcome[],
   stressTestResults: StressTestResult,
   equityAllocation: number,
-  horizonBucket: '10' | '20' | '30'
+  horizonBucket: string
 ): PortfolioAssessment {
   const characteristics: PortfolioCharacteristics = {
     growthPotential: assessGrowthPotential(outcomes, equityAllocation, horizonBucket),
@@ -37,7 +37,7 @@ export function assessPortfolioCharacteristics(
 export function assessGrowthPotential(
   outcomes: PortfolioOutcome[],
   equityAllocation: number,
-  horizonBucket: '10' | '20' | '30'
+  horizonBucket: string
 ): 'high' | 'moderate' | 'low' {
   if (outcomes.length === 0) return 'moderate';
 
@@ -67,7 +67,7 @@ export function assessGrowthPotential(
 export function assessDrawdownResistance(
   outcomes: PortfolioOutcome[],
   equityAllocation: number,
-  horizonBucket: '10' | '20' | '30'
+  horizonBucket: string
 ): 'high' | 'moderate' | 'low' {
   if (outcomes.length === 0) return 'moderate';
 
@@ -97,7 +97,7 @@ export function assessWithdrawalFragility(
   outcomes: PortfolioOutcome[],
   stressTestResults: StressTestResult,
   equityAllocation: number,
-  horizonBucket: '10' | '20' | '30'
+  horizonBucket: string
 ): 'high' | 'moderate' | 'low' {
   // Use survival rate as primary indicator
   // Lower survival rate = higher fragility
@@ -117,7 +117,7 @@ export function assessWithdrawalFragility(
 export function assessInflationProtection(
   outcomes: PortfolioOutcome[],
   equityAllocation: number,
-  horizonBucket: '10' | '20' | '30'
+  horizonBucket: string
 ): 'high' | 'moderate' | 'low' {
   if (outcomes.length === 0) return 'moderate';
 

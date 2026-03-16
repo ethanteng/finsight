@@ -84,13 +84,10 @@ export async function analyzeRetirementPortfolio(
   const portfolioMapping = await mapPortfolioToAssetBasket(input.holdings, input.securities, totalValue, dataProviderFactory, tickerToMetadata);
   const assumptions = populateAssumptions(portfolioMapping, input.holdings, input.securities);
 
-  // Calculate timeline metrics
-  const withdrawalYearsOriginal = input.lifeExpectancy - input.withdrawalStartAge;
-  const timelineBucket = snapToHorizonBucket(withdrawalYearsOriginal);
-  const withdrawalYears = parseInt(timelineBucket);
-  const timelineBucketNote = withdrawalYearsOriginal !== withdrawalYears
-    ? `Analysis uses ${timelineBucket}-year horizon bucket for computational efficiency. Your actual horizon of ${withdrawalYearsOriginal} years was rounded to the nearest supported period.`
-    : '';
+  // Calculate timeline metrics (exact horizon, no bucketing)
+  const withdrawalYears = input.lifeExpectancy - input.withdrawalStartAge;
+  const timelineBucket = snapToHorizonBucket(withdrawalYears);
+  const timelineBucketNote = '';
 
   const fredApiKey = process.env.FRED_API_KEY || 'test_fred_key';
   const fredProvider = new FREDProvider(fredApiKey);
@@ -169,7 +166,7 @@ export async function analyzeRetirementPortfolio(
   const timelineMetrics = {
     yearsToRetirement: input.retirementAge ? input.retirementAge - input.currentAge : -1,
     withdrawalYears,
-    withdrawalYearsOriginal,
+    withdrawalYearsOriginal: withdrawalYears,
     withdrawalMonths: withdrawalYears * 12,
     timelineBucket
   };

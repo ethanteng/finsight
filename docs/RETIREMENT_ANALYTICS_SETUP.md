@@ -345,6 +345,11 @@ Clear cache by restarting the server (in-memory cache) or manually deleting cach
 - Subsequent runs: ~5-10 seconds (using cache)
 - With real API keys: May be slower due to rate limits
 
+## Related Documentation
+
+- [Stress Test Approach](features/STRESS_TEST_APPROACH.md) — How the stress test works (sequences, simulation, outcomes)
+- [Historical Withdrawal Rate Solver](features/HISTORICAL_WITHDRAWAL_RATE_SOLVER.md) — How withdrawal rate percentiles are computed
+
 ## Support
 
 If you encounter issues:

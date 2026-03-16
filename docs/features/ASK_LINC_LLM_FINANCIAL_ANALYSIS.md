@@ -228,6 +228,18 @@ When the user asks retirement-related questions, the pipeline fetches or creates
 - **Historical withdrawal rate percentiles** — p10, p25, p50, p75, p90 derived from simulations over historical market sequences
 - **Stress test results** — Survival rate, depletion percentiles, worst-case sequences
 
+### Stress Test Data and Methodology
+
+The stress test engine is **fully offline and deterministic**. It uses:
+
+- **Data source** — Local datasets (Shiller `ie_data.xls`, Kenneth French `F-F_Research_Data_Factors.csv`) transformed into `data/historical_market_returns.csv` at build time. No ETF proxies or external API calls. International equity uses US equity as proxy (diversification not modeled).
+- **Coverage** — 50+ years of market history (1970 → present) with monthly start windows.
+- **Withdrawals** — Inflation-adjusted (constant real spending); withdrawals grow with CPI each month.
+- **Portfolio** — Four sleeves (US equity, international equity, bonds, cash) with annual rebalancing to target weights.
+- **Sequences** — Full-horizon only; no truncated sequences. Exact withdrawal horizon (no 10/20/30 bucketing).
+
+See [Stress Test Approach](STRESS_TEST_APPROACH.md) for full documentation.
+
 ### Withdrawal Rate Percentile Semantics
 
 The percentiles are **empirically grounded** (not heuristic). They represent the distribution of sustainable withdrawal rates across historical market environments:
@@ -246,6 +258,7 @@ The LLM is instructed to compare the user's withdrawal rate to these percentiles
 
 ## Related Documentation
 
+- [Stress Test Approach](STRESS_TEST_APPROACH.md) — Sequence generation, simulation, and data sources
 - [Historical Withdrawal Rate Solver](HISTORICAL_WITHDRAWAL_RATE_SOLVER.md) — Algorithm and percentile semantics
 - [Retirement Analytics Integration](../RETIREMENT_ANALYTICS_INTEGRATION.md) — How retirement analysis is triggered and stored
 - [RAG System](RAG_SYSTEM.md) — RAG retrieval used by the pipeline

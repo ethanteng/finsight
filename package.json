@@ -62,7 +62,8 @@
     "reset": "npm run clean && npm install",
     "rebuild": "npm run clean && npm install && npm run build",
     "clean:all": "npm run clean && rm -rf prisma/migrations_backup",
-    "fix:duplicate-accounts": "npx ts-node scripts/fix-duplicate-accounts.ts"
+    "fix:duplicate-accounts": "npx ts-node scripts/fix-duplicate-accounts.ts",
+    "build:market-dataset": "npx ts-node scripts/build-market-dataset.ts"
   },
   "keywords": [],
   "author": "",
@@ -84,7 +85,6 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "patch-package": "^8.0.0",
     "@anthropic-ai/sdk": "^0.32.1",
     "@google/generative-ai": "^0.21.0",
     "@polygon.io/client-js": "^8.0.0",
@@ -106,13 +106,15 @@
     "node-cron": "^4.2.1",
     "nodemailer": "^7.0.11",
     "openai": "^5.10.2",
+    "patch-package": "^8.0.0",
     "plaid": "^37.0.0",
     "prisma": "^6.12.0",
     "react-plaid-link": "^4.0.1",
     "resend": "^4.8.0",
     "snaptrade-typescript-sdk": "^9.0.145",
     "stripe": "^18.4.0",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "xlsx": "^0.18.5"
   },
   "overrides": {
     "axios": "^1.13.5",
