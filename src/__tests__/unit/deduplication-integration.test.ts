@@ -91,6 +91,44 @@ describe('Deduplication Integration', () => {
     });
   });
 
+  it('should deduplicate re-linked same account (e.g. Betterment IRA connected twice)', () => {
+    // Same account from two Plaid connections - same name, same balance, different account_ids
+    const plaidAccounts = [
+      {
+        account_id: 'JmKkKyzmdDf3zYaBrJqRtKX9ZpXQk7cXJggBD',
+        id: 'JmKkKyzmdDf3zYaBrJqRtKX9ZpXQk7cXJggBD',
+        name: 'Retirement - Traditional IRA',
+        type: 'investment',
+        subtype: 'ira',
+        balance: { current: 577940.96, iso_currency_code: 'USD' },
+        source: 'plaid',
+        plaidAccountId: 'JmKkKyzmdDf3zYaBrJqRtKX9ZpXQk7cXJggBD',
+        institution: 'Betterment',
+        plaidOriginalName: 'Retirement - Traditional IRA',
+        snapshotTimestamp: '2026-03-14T01:11:00Z'
+      },
+      {
+        account_id: '5aK74vOALwu6Evv4zAOVuEg8XBOMRQsNRraZM',
+        id: '5aK74vOALwu6Evv4zAOVuEg8XBOMRQsNRraZM',
+        name: 'Retirement - Traditional IRA',
+        type: 'investment',
+        subtype: 'ira',
+        balance: { current: 577940.96, iso_currency_code: 'USD' },
+        source: 'plaid',
+        plaidAccountId: '5aK74vOALwu6Evv4zAOVuEg8XBOMRQsNRraZM',
+        institution: 'Betterment',
+        plaidOriginalName: 'Retirement - Traditional IRA',
+        snapshotTimestamp: '2026-03-14T19:49:19Z'
+      }
+    ];
+
+    const plaidData = { accounts: plaidAccounts, balances: {}, holdings: [], securities: [], transactions: [] };
+    const merged = (financialDataService as any).mergeFinancialData(plaidData, null, null);
+
+    expect(merged.accounts).toHaveLength(1);
+    expect(merged.accounts[0].balance.current).toBe(577940.96);
+  });
+
   it('should NOT deduplicate different accounts with same institution+type+subtype (e.g. two CDs)', () => {
     // Regression: "Popular Direct CD 8/7/2026" and "Popular Direct CD 8/8/2027" were incorrectly
     // collapsed when Plaid/institution returned same or similar names for both

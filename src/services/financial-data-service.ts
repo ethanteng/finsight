@@ -2264,30 +2264,34 @@ export class FinancialDataService {
       return s;
     };
 
-    const getLogicalKey = (account: any): string => {
+    // Balance tolerance for "same account re-linked" heuristic (0.5% - matches fix-duplicate-accounts.ts)
+    const BALANCE_TOLERANCE_PCT = 0.005;
+
+    const getLogicalKey = (account: any, includeAccountId = false): string => {
       const accountId = account.account_id ||
                        (account as any).plaidAccountId ||
                        (account as any).persistentAccountId;
-      // Only use persistentAccountId when it's the actual Plaid persistent_account_id (TAN institutions).
-      // Do NOT use plaidAccountId as fallback - it changes on re-link and breaks deduplication.
       const persistentId = (account as any).persistentAccountId;
       if (persistentId && account.source === 'plaid') {
         return `persistent:${persistentId}`;
       }
-      // For Plaid accounts without persistentAccountId: include account_id in the key.
-      // This prevents incorrectly merging different accounts (e.g. two CDs from same bank with same/similar
-      // names like "Popular Direct CD 8/7/2026" vs "Popular Direct CD 8/8/2027" - some institutions return
-      // generic names that would otherwise collide). Trade-off: re-linked same account may show as duplicate
-      // until cleanup; that's acceptable vs losing distinct accounts.
       if (account.source === 'plaid' && accountId) {
         const rawName = (account as any).plaidOriginalName || account.name || '';
         const name = (account as any).plaidOriginalName ? rawName.trim() : normalizeNameForDedup(rawName);
         const type = (account.type || '').trim();
         const subtype = (account.subtype || '').trim();
         const institutionKey = (account as any).institution || (account as any).institution_id || '';
-        return `plaid:${institutionKey}|${name}|${type}|${subtype}|${accountId}`;
+        const base = `plaid:${institutionKey}|${name}|${type}|${subtype}`;
+        return includeAccountId ? `${base}|${accountId}` : base;
       }
       return accountId ? `id:${accountId}` : '';
+    };
+
+    const balancesWithinTolerance = (a: any, b: any): boolean => {
+      const balA = a.balance?.current ?? a.balance?.available ?? 0;
+      const balB = b.balance?.current ?? b.balance?.available ?? 0;
+      const maxBal = Math.max(Math.abs(balA), Math.abs(balB), 1);
+      return Math.abs(balA - balB) / maxBal <= BALANCE_TOLERANCE_PCT;
     };
 
     for (const account of rawAccounts) {
@@ -2300,47 +2304,85 @@ export class FinancialDataService {
         continue;
       }
 
-      const logicalKey = getLogicalKey(account);
-      if (!logicalKey) {
+      const baseKey = getLogicalKey(account, false);
+      if (!baseKey) {
         console.warn(`⚠️ Account without logical key: ${account.name} (${account.type}/${account.subtype}), skipping`);
         continue;
       }
 
-      const existing = accountMap.get(logicalKey);
+      const existing = accountMap.get(baseKey);
       if (!existing) {
-        accountMap.set(logicalKey, account);
+        accountMap.set(baseKey, account);
         continue;
       }
 
-      // Duplicate found - prioritize accounts from database (persisted) to preserve custom names
-      // If both are persisted or both are not persisted, keep the most recent based on timestamp
-      const existingIsPersisted = existing.persisted === true;
-      const candidateIsPersisted = account.persisted === true;
+      const existingAccountId = existing.account_id || (existing as any).plaidAccountId || (existing as any).persistentAccountId;
+      const isSameAccountId = existingAccountId === accountId;
 
-      let shouldReplace = false;
-
-      if (existingIsPersisted && !candidateIsPersisted) {
-        shouldReplace = false;
-      } else if (!existingIsPersisted && candidateIsPersisted) {
-        shouldReplace = true;
-      } else {
-        const existingTimestamp = parseSnapshotTimestamp(existing);
-        const candidateTimestamp = parseSnapshotTimestamp(account);
-
-        if (candidateTimestamp !== null && (existingTimestamp === null || candidateTimestamp > existingTimestamp)) {
-          shouldReplace = true;
-        } else if (existingTimestamp !== null && candidateTimestamp === null) {
+      if (isSameAccountId) {
+        // Same account_id in batch - true duplicate, replace by timestamp/persisted
+        const existingIsPersisted = existing.persisted === true;
+        const candidateIsPersisted = account.persisted === true;
+        let shouldReplace = false;
+        if (existingIsPersisted && !candidateIsPersisted) {
           shouldReplace = false;
-        } else if (candidateTimestamp === null && existingTimestamp === null) {
-          const existingBalance = existing.balance?.current ?? existing.balance?.available ?? 0;
-          const candidateBalance = account.balance?.current ?? account.balance?.available ?? 0;
-          shouldReplace = candidateBalance >= existingBalance;
+        } else if (!existingIsPersisted && candidateIsPersisted) {
+          shouldReplace = true;
+        } else {
+          const existingTimestamp = parseSnapshotTimestamp(existing);
+          const candidateTimestamp = parseSnapshotTimestamp(account);
+          if (candidateTimestamp !== null && (existingTimestamp === null || candidateTimestamp > existingTimestamp)) {
+            shouldReplace = true;
+          } else if (existingTimestamp !== null && candidateTimestamp === null) {
+            shouldReplace = false;
+          } else if (candidateTimestamp === null && existingTimestamp === null) {
+            const existingBalance = existing.balance?.current ?? existing.balance?.available ?? 0;
+            const candidateBalance = account.balance?.current ?? account.balance?.available ?? 0;
+            shouldReplace = candidateBalance >= existingBalance;
+          }
         }
+        if (shouldReplace) {
+          accountMap.set(baseKey, account);
+        }
+        continue;
       }
 
-      if (shouldReplace) {
-        accountMap.set(logicalKey, account);
+      // Different account_ids - could be re-linked same account OR different accounts (e.g. two CDs)
+      // Heuristic: same balance within tolerance → same account re-linked → dedupe
+      //            different balances → different accounts → keep both (use account_id in key)
+      if (balancesWithinTolerance(existing, account)) {
+        // Same account re-linked (e.g. Betterment IRA connected twice)
+        const existingIsPersisted = existing.persisted === true;
+        const candidateIsPersisted = account.persisted === true;
+        let shouldReplace = false;
+        if (existingIsPersisted && !candidateIsPersisted) {
+          shouldReplace = false;
+        } else if (!existingIsPersisted && candidateIsPersisted) {
+          shouldReplace = true;
+        } else {
+          const existingTimestamp = parseSnapshotTimestamp(existing);
+          const candidateTimestamp = parseSnapshotTimestamp(account);
+          if (candidateTimestamp !== null && (existingTimestamp === null || candidateTimestamp > existingTimestamp)) {
+            shouldReplace = true;
+          } else if (existingTimestamp !== null && candidateTimestamp === null) {
+            shouldReplace = false;
+          } else if (candidateTimestamp === null && existingTimestamp === null) {
+            const existingBalance = existing.balance?.current ?? existing.balance?.available ?? 0;
+            const candidateBalance = account.balance?.current ?? account.balance?.available ?? 0;
+            shouldReplace = candidateBalance >= existingBalance;
+          }
+        }
+        if (shouldReplace) {
+          accountMap.set(baseKey, account);
+        }
+        continue;
       }
+
+      // Different accounts (e.g. Popular Direct CD 8/7/2026 vs 8/8/2027) - keep both
+      // Re-key existing with account_id so it stays; add candidate with its account_id
+      accountMap.delete(baseKey);
+      accountMap.set(getLogicalKey(existing, true), existing);
+      accountMap.set(getLogicalKey(account, true), account);
     }
 
     const finalAccounts = Array.from(accountMap.values());
