@@ -19,7 +19,7 @@ const nextConfig: NextConfig = {
               "img-src 'self' data: https: blob: https://logo.clearbit.com",
               "font-src 'self' data: https://fonts.gstatic.com",
               "connect-src 'self' http://localhost:3000 http://localhost:3001 https://*.sentry.io https://www.google-analytics.com https://www.google.com https://www.googletagmanager.com https://plausible.io https://*.asklinc.com wss://*.asklinc.com https://*.onrender.com https://production.plaid.com https://cdn.plaid.com https://*.contentsquare.net https://*.ghost.io https://blog.asklinc.com https://images.ghost.io https://static.ghost.org",
-              "frame-src 'self' https://*.plaid.com https://cdn.plaid.com https://www.googletagmanager.com",
+              "frame-src 'self' https://*.plaid.com https://cdn.plaid.com https://www.googletagmanager.com https://app.snaptrade.com https://*.snaptrade.com",
               "worker-src 'self' blob:",
               "object-src 'none'",
               "base-uri 'self'",
