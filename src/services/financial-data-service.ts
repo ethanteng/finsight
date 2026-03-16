@@ -2265,29 +2265,28 @@ export class FinancialDataService {
     };
 
     const getLogicalKey = (account: any): string => {
+      const accountId = account.account_id ||
+                       (account as any).plaidAccountId ||
+                       (account as any).persistentAccountId;
       // Only use persistentAccountId when it's the actual Plaid persistent_account_id (TAN institutions).
       // Do NOT use plaidAccountId as fallback - it changes on re-link and breaks deduplication.
       const persistentId = (account as any).persistentAccountId;
       if (persistentId && account.source === 'plaid') {
         return `persistent:${persistentId}`;
       }
-      // Use plaidOriginalName for deduplication when available - custom renames break name-based dedup
-      // (e.g. user renames "Account A" to "Account A - Joint" and we'd otherwise treat as different)
-      // Fallback: normalize name to strip common suffixes for persisted data
-      const rawName = (account as any).plaidOriginalName || account.name || '';
-      const name = (account as any).plaidOriginalName ? rawName.trim() : normalizeNameForDedup(rawName);
-      const type = (account.type || '').trim();
-      const subtype = (account.subtype || '').trim();
-      // Use institution (name) when institution_id is missing - persisted accounts have institution but not institution_id
-      const institutionKey = (account as any).institution || (account as any).institution_id || '';
-      if (account.source === 'plaid') {
-        // Always use plaid: prefix for Plaid accounts - never use account_id (changes on re-link).
-        // When institution is missing, use empty prefix so name+type+subtype can still dedupe within batch.
-        return `plaid:${institutionKey}|${name}|${type}|${subtype}`;
+      // For Plaid accounts without persistentAccountId: include account_id in the key.
+      // This prevents incorrectly merging different accounts (e.g. two CDs from same bank with same/similar
+      // names like "Popular Direct CD 8/7/2026" vs "Popular Direct CD 8/8/2027" - some institutions return
+      // generic names that would otherwise collide). Trade-off: re-linked same account may show as duplicate
+      // until cleanup; that's acceptable vs losing distinct accounts.
+      if (account.source === 'plaid' && accountId) {
+        const rawName = (account as any).plaidOriginalName || account.name || '';
+        const name = (account as any).plaidOriginalName ? rawName.trim() : normalizeNameForDedup(rawName);
+        const type = (account.type || '').trim();
+        const subtype = (account.subtype || '').trim();
+        const institutionKey = (account as any).institution || (account as any).institution_id || '';
+        return `plaid:${institutionKey}|${name}|${type}|${subtype}|${accountId}`;
       }
-      const accountId = account.account_id ||
-                       (account as any).plaidAccountId ||
-                       (account as any).persistentAccountId;
       return accountId ? `id:${accountId}` : '';
     };
 

@@ -91,6 +91,50 @@ describe('Deduplication Integration', () => {
     });
   });
 
+  it('should NOT deduplicate different accounts with same institution+type+subtype (e.g. two CDs)', () => {
+    // Regression: "Popular Direct CD 8/7/2026" and "Popular Direct CD 8/8/2027" were incorrectly
+    // collapsed when Plaid/institution returned same or similar names for both
+    const plaidAccounts = [
+      {
+        account_id: 'pwnJObQNp5uvKN6kaqjBT7480a5ozOIL1prKAd',
+        id: 'pwnJObQNp5uvKN6kaqjBT7480a5ozOIL1prKAd',
+        name: 'Popular Direct CD 8/7/2026',
+        type: 'depository',
+        subtype: 'cd',
+        balance: { current: 78914.49, iso_currency_code: 'USD' },
+        source: 'plaid',
+        plaidAccountId: 'pwnJObQNp5uvKN6kaqjBT7480a5ozOIL1prKAd',
+        institution: 'Popular Direct - Personal',
+        plaidOriginalName: 'Popular Direct CD',
+        snapshotTimestamp: '2026-03-15T11:12:00Z'
+      },
+      {
+        account_id: 'XY4AbpKqadteBwk9PRXQt1MP4wvzDqHjwYQJzp',
+        id: 'XY4AbpKqadteBwk9PRXQt1MP4wvzDqHjwYQJzp',
+        name: 'Popular Direct CD 8/8/2027',
+        type: 'depository',
+        subtype: 'cd',
+        balance: { current: 107115.7, iso_currency_code: 'USD' },
+        source: 'plaid',
+        plaidAccountId: 'XY4AbpKqadteBwk9PRXQt1MP4wvzDqHjwYQJzp',
+        institution: 'Popular Direct - Personal',
+        plaidOriginalName: 'Popular Direct CD',
+        snapshotTimestamp: '2026-03-15T11:12:00Z'
+      }
+    ];
+
+    const plaidData = { accounts: plaidAccounts, balances: {}, holdings: [], securities: [], transactions: [] };
+    const merged = (financialDataService as any).mergeFinancialData(plaidData, null, null);
+
+    expect(merged.accounts).toHaveLength(2);
+    const cd2026 = merged.accounts.find((a: any) => a.account_id === 'pwnJObQNp5uvKN6kaqjBT7480a5ozOIL1prKAd');
+    const cd2027 = merged.accounts.find((a: any) => a.account_id === 'XY4AbpKqadteBwk9PRXQt1MP4wvzDqHjwYQJzp');
+    expect(cd2026).toBeDefined();
+    expect(cd2027).toBeDefined();
+    expect(cd2026.balance.current).toBe(78914.49);
+    expect(cd2027.balance.current).toBe(107115.7);
+  });
+
   it('should handle accounts without timestamps correctly', () => {
     const accounts = [
       {
