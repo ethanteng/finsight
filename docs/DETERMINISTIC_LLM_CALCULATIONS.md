@@ -190,6 +190,11 @@ Per month (end-of-period: returns first, then withdrawal):
   3. monthlyWithdrawal *= 1 + monthlyInflation  (inflationRates[] are monthly: CPI_t/CPI_(t-1) - 1, not annual)
   4. portfolioValue = max(0, portfolioValue - monthlyWithdrawal)  (clamp at zero; sequence marked depleted)
 
+Between-rebalance months (proportional scaling after withdrawal):
+  scale = portfolioValue / (portfolioValue + monthlyWithdrawal)
+  usEquity *= scale; intlEquity *= scale; bonds *= scale; cash *= scale
+  (Keeps sleeve sub-totals consistent with portfolio total between annual rebalances.)
+
 Annual rebalance (every 12 months):
   usEquity = portfolioValue * usEquityWeight
   intlEquity = portfolioValue * internationalEquityWeight
@@ -203,6 +208,7 @@ Annual rebalance (every 12 months):
 nominalReturn = (finalValue - initialValue) / initialValue
 cumulativeInflation = Π(1 + inflationRates[i])
 realReturn = (1 + nominalReturn) / cumulativeInflation - 1
+years = (portfolioValues.length - 1) / 12  (portfolioValues includes initial value at index 0, so length - 1 = months simulated)
 annualizedRealReturn = (1 + realReturn)^(1/years) - 1
 ```
 

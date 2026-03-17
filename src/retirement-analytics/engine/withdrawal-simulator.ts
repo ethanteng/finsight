@@ -139,7 +139,7 @@ export function calculateRealReturn(
 
   const realReturn = (1 + nominalReturn) / cumulativeInflation - 1;
 
-  const years = portfolioValues.length / 12;
+  const years = (portfolioValues.length - 1) / 12;
   if (years <= 0) return 0;
 
   return Math.pow(1 + realReturn, 1 / years) - 1;

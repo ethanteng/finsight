@@ -280,9 +280,9 @@ export class SummaryCacheService {
       }
       // liabilityValue = Math.abs(balance) for all — APIs use inconsistent sign conventions
       if (t === 'credit') {
-        totalDebt += Math.abs(a.balance?.current ?? 0);
+        totalDebt += Math.abs(a.balance?.current ?? a.balance?.available ?? 0);
       } else if (t === 'loan' || ['mortgage','student','personal','auto','home equity'].includes(st)) {
-        totalDebt += Math.abs(a.balance?.current ?? 0);
+        totalDebt += Math.abs(a.balance?.current ?? a.balance?.available ?? 0);
       }
     }
     // Extract homeValue: prioritize valueMid (manual override or RentCast estimate), then fall back to valueHigh or valueLow
