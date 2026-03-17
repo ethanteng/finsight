@@ -19,8 +19,10 @@ export type WithdrawalDistribution = {
 // ============================================================================
 // Constants
 // ============================================================================
-
-const MIN_WITHDRAWAL = 0.02; // 2% - historical rates typically 2–7%
+// Solver bounds (2%–8%) are intentionally bounded for typical retirement horizons,
+// not mathematically derived. Safe withdrawal can fall below 2% in severe scenarios;
+// rates above 8% may be sustainable for very short retirements.
+const MIN_WITHDRAWAL = 0.02; // 2%
 const MAX_WITHDRAWAL = 0.08; // 8%
 const TOLERANCE = 0.0001;
 const MAX_ITERATIONS = 15;

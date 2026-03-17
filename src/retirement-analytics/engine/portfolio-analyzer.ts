@@ -146,25 +146,29 @@ export async function analyzePortfolio(
   }
 
   // Calculate concentration risk (HHI) across top 10 holdings
+  // Guard: totalValue > 0 to avoid NaN (defense-in-depth; totalValue === 0 returns early above)
   const sortedHoldings = [...holdings]
     .sort((a, b) => (b.institution_value || 0) - (a.institution_value || 0))
     .slice(0, 10);
   
-  const concentrationRisk = sortedHoldings.reduce((hhi, holding) => {
-    const weight = (holding.institution_value || 0) / totalValue;
-    return hhi + (weight * weight);
-  }, 0);
+  const concentrationRisk = totalValue > 0
+    ? sortedHoldings.reduce((hhi, holding) => {
+        const weight = (holding.institution_value || 0) / totalValue;
+        return hhi + (weight * weight);
+      }, 0)
+    : 0;
 
   // Calculate weighted expense ratio
   const expenseRatioWeighted = totalExpenseRatioWeight > 0 
     ? totalExpenseRatio / totalExpenseRatioWeight 
     : 0;
 
+  // Guard against division by zero (defense-in-depth; totalValue === 0 already returns early above)
   return {
-    equityAllocation: (equityValue / totalValue) * 100,
-    fixedIncomeAllocation: (fixedIncomeValue / totalValue) * 100,
-    cashAllocation: (cashValue / totalValue) * 100,
-    internationalAllocation: (internationalValue / totalValue) * 100,
+    equityAllocation: totalValue > 0 ? (equityValue / totalValue) * 100 : 0,
+    fixedIncomeAllocation: totalValue > 0 ? (fixedIncomeValue / totalValue) * 100 : 0,
+    cashAllocation: totalValue > 0 ? (cashValue / totalValue) * 100 : 0,
+    internationalAllocation: totalValue > 0 ? (internationalValue / totalValue) * 100 : 0,
     concentrationRisk,
     expenseRatioWeighted
   };

@@ -12,6 +12,9 @@
 //
 // INFLATION: sequence.inflationRates[] are MONTHLY (CPI_t/CPI_(t-1) - 1).
 // Source: build-market-dataset.ts from Shiller ie_data.xls. Do NOT treat as annual.
+//
+// DEPLETION: portfolioValue clamped at zero (max(0, value - withdrawal)). Prevents
+// rebalancing or compounding negative assets; sequence is marked depleted and returns.
 
 import { PortfolioMapping, HistoricalSequence, PortfolioOutcome } from '../types';
 
@@ -60,7 +63,7 @@ export function simulateWithdrawals(
     // inflationRates[] are monthly (CPI_t/CPI_(t-1) - 1 from build-market-dataset). Not annual.
     const monthlyInflation = sequence.inflationRates[month] ?? 0;
     monthlyWithdrawal *= 1 + monthlyInflation;
-    portfolioValue -= monthlyWithdrawal;
+    portfolioValue = Math.max(0, portfolioValue - monthlyWithdrawal);
 
     if (portfolioValue <= 0) {
       return {

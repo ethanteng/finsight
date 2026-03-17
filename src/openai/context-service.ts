@@ -1513,8 +1513,8 @@ function buildIncomeAnalysis(transactions: Transaction[], override?: number | nu
   );
   const totalIncome = monthEntries.reduce((sum, [, value]) => sum + value, 0);
 
-  // Use months in date span (earliest to latest), not just months with transactions.
-  // This avoids overstating average when some months have zero income (e.g. Jan $5k, Feb $0, Mar $5k).
+  // Calendar months between min and max (inclusive). Jan 31 → Feb 1 = 2 months, not 0.
+  // Avoids day-based span (1 day → 0 months → ∞ average).
   const dateSpanMonths = (() => {
     if (incomeTransactions.length === 0) return 0;
     const timestamps = incomeTransactions.map(t => new Date(t.date).getTime());
@@ -1586,8 +1586,7 @@ function buildExpenseAnalysis(transactions: Transaction[], override?: number | n
   );
   const totalExpense = monthEntries.reduce((sum, [, value]) => sum + value, 0);
 
-  // Use months in date span (earliest to latest), not just months with transactions.
-  // This avoids overstating average when some months have zero expenses.
+  // Calendar months between min and max (inclusive). Jan 31 → Feb 1 = 2 months, not 0.
   const dateSpanMonths = (() => {
     if (expenseTransactions.length === 0) return 0;
     const timestamps = expenseTransactions.map(t => new Date(t.date).getTime());

@@ -25,8 +25,8 @@ All three receive data derived from the same underlying deterministic calculatio
 
 ```
 totalCash = Σ Math.max(0, balance)  (for accounts: type=depository OR subtype in [checking, savings, money market, prepaid])
-totalDebt = Σ |balance| or balance  (for credit/loan/mortgage/auto/student)
-          + Σ |balance|  (for overdraft: cash accounts with balance < 0)
+liabilityValue = Math.abs(balance)  (for all liabilities — APIs use inconsistent sign conventions)
+totalDebt = Σ liabilityValue  (credit, loan, mortgage, auto, student, overdraft)
 totalInvestments = investments.portfolio.totalValue  (from analyzePortfolio)
 homeValue = valueMid ?? valueHigh ?? valueLow  (first non-null, > 0)
 netWorth = totalCash + totalInvestments + (homeValue ?? 0) - totalDebt
@@ -62,7 +62,8 @@ portfolioValue = Σ holding.institution_value  (for all holdings)
 
 ```
 assetAllocation[assetType] = Σ holding.institution_value  (grouped by security.type or holding.security_type)
-allocationPercentages[type] = { type, value, percentage: (value / portfolioValue) * 100 }
+percentage = portfolioValue > 0 ? (value / portfolioValue) * 100 : 0  (guard against NaN when portfolioValue = 0)
+allocationPercentages[type] = { type, value, percentage }
 ```
 
 ### Holdings Gain/Loss (in prompt formatting)
@@ -88,10 +89,10 @@ gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0
 - **Formula:**
   ```
   totalIncome = Σ amount  (for all income transactions)
-  dateSpanMonths = (maxDate - minDate) in months  (earliest to latest income transaction)
+  dateSpanMonths = (maxYear - minYear) * 12 + (maxMonth - minMonth) + 1  (calendar months, inclusive)
   averageMonthlyIncome = totalIncome / dateSpanMonths
   ```
-- **Note:** Uses **months in date span**, not months with transactions. E.g. Jan $5k, Feb $0, Mar $5k → 3 months → $3,333/mo (not $5k from 2 months).
+- **Note:** Uses **calendar months** (min to max inclusive), not day difference. E.g. Jan 31 → Feb 1 = 2 months (avoids 1-day span → 0 months → ∞ average). Jan $5k, Feb $0, Mar $5k → 3 months → $3,333/mo.
 
 ### Expenses
 
@@ -100,7 +101,7 @@ gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0
   ```
   amount = Math.abs(transaction.amount)
   totalExpense = Σ amount  (for all expense transactions)
-  dateSpanMonths = (maxDate - minDate) in months  (earliest to latest expense transaction)
+  dateSpanMonths = (maxYear - minYear) * 12 + (maxMonth - minMonth) + 1  (calendar months, inclusive)
   averageMonthlyExpense = totalExpense / dateSpanMonths
   ```
 
@@ -127,10 +128,11 @@ retirement = overview.totalInvestments ?? derivedRetirement  (subtype includes 4
 ### Liabilities
 
 ```
-mortgage = Σ |balance|  (subtype includes mortgage, home equity)
-credit = Σ |balance|  (type=credit)
-loan[subtype] = Σ |balance|  (type=loan or subtype in [student, personal, auto])
-overdraft = Σ |balance|  (cash accounts with balance < 0) — consistent with FinancialSummaryService
+liabilityValue = Math.abs(balance)  (for all liability accounts)
+mortgage = Σ liabilityValue  (subtype includes mortgage, home equity)
+credit = Σ liabilityValue  (type=credit)
+loan[subtype] = Σ liabilityValue  (type=loan or subtype in [student, personal, auto])
+overdraft = Σ liabilityValue  (cash accounts with balance < 0) — consistent with FinancialSummaryService
 ```
 
 ### Income / Expenses
@@ -160,11 +162,12 @@ expenses = (averageMonthlyExpense ?? 0) * 12
 
 ```
 totalValue = Σ holding.institution_value
-equityAllocation = (equityValue / totalValue) * 100
-fixedIncomeAllocation = (fixedIncomeValue / totalValue) * 100
-cashAllocation = (cashValue / totalValue) * 100
-internationalAllocation = (internationalValue / totalValue) * 100
-concentrationRisk (HHI) = Σ (weight²)  for top 10 holdings, where weight = holdingValue / totalValue
+// Guard: totalValue > 0 to avoid NaN
+equityAllocation = totalValue > 0 ? (equityValue / totalValue) * 100 : 0
+fixedIncomeAllocation = totalValue > 0 ? (fixedIncomeValue / totalValue) * 100 : 0
+cashAllocation = totalValue > 0 ? (cashValue / totalValue) * 100 : 0
+internationalAllocation = totalValue > 0 ? (internationalValue / totalValue) * 100 : 0
+concentrationRisk (HHI) = totalValue > 0 ? Σ (weight²) : 0  for top 10 holdings, weight = holdingValue / totalValue
 expenseRatioWeighted = Σ(expenseRatio * weight) / Σ(weight)  for holdings with expense ratio
 ```
 
@@ -185,7 +188,7 @@ Per month (end-of-period: returns first, then withdrawal):
   1. usEquity *= 1 + usRet; intlEquity *= 1 + intlRet; bonds *= 1 + bondRet; cash *= 1 + cashRet
   2. portfolioValue = usEquity + intlEquity + bonds + cash
   3. monthlyWithdrawal *= 1 + monthlyInflation  (inflationRates[] are monthly: CPI_t/CPI_(t-1) - 1, not annual)
-  4. portfolioValue -= monthlyWithdrawal
+  4. portfolioValue = max(0, portfolioValue - monthlyWithdrawal)  (clamp at zero; sequence marked depleted)
 
 Annual rebalance (every 12 months):
   usEquity = portfolioValue * usEquityWeight
@@ -213,6 +216,8 @@ Binary search over withdrawal rate (2%–8%) to find rates where:
 - p50: 50% survive
 - p75: 25% survive
 - p90: 10% survive
+
+**Note:** The 2%–8% solver range is intentionally bounded for typical retirement horizons, not mathematically derived. Safe withdrawal could fall below 2% in severe scenarios (e.g. long horizons, poor sequences); rates above 8% may be sustainable for very short retirements.
 
 ### Stress Test Results (Phase 5)
 
@@ -261,7 +266,7 @@ Uses the same logic as `FinancialSummaryService` for consistency:
 
 ```
 totalCash = Σ Math.max(0, balance)  (depository, checking, savings, cd, money market, prepaid; exclude investment)
-totalDebt = credit: Math.abs(balance); loan/mortgage/student/personal/auto/home equity: Math.max(0, balance)
+totalDebt = Σ Math.abs(balance)  (credit, loan, mortgage, overdraft — liabilityValue = Math.abs for all)
 totalInvestments = portfolio.totalValue
 homeValue = valueMid ?? valueHigh ?? valueLow
 netWorth = totalCash + totalInvestments + (homeValue ?? 0) - totalDebt
@@ -275,8 +280,10 @@ netWorth = totalCash + totalInvestments + (homeValue ?? 0) - totalDebt
 **File:** `src/openai/prompt-builder.ts`
 
 ```
-expenseRatioDisplay = expenseRatio >= 0.01 ? expenseRatio : expenseRatio * 100
-  (if value >= 0.01 assume already percentage; else convert decimal to %)
+// Most financial datasets store as decimals (0.0075 = 0.75%). Heuristic (data-model dependent):
+expenseRatioDisplay = value < 1 ? value * 100 : value
+  (if value < 1 → decimal format → multiply by 100; else → already percent)
+// Handles 0.065 = 6.5% (decimal). Edge case: 0.65 could mean 0.65% or 65% — depends on source.
 ```
 
 ---

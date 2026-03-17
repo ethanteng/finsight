@@ -101,15 +101,15 @@ export class FinancialSummaryService {
       }
       
       // Debt accounts: credit, loan, mortgage (check first to avoid double counting)
+      // liabilityValue = Math.abs(balance) for all — APIs use inconsistent sign conventions
+      // (e.g. credit card -1200 vs loan +1200 both mean $1200 owed)
       if (accountType === 'credit' || 
           accountType === 'loan' ||
           accountSubtype === 'credit card' ||
           accountSubtype === 'mortgage' ||
           accountSubtype === 'auto' ||
           accountSubtype === 'student') {
-        // For credit cards, positive balance = debt owed
-        // For loans, balance represents outstanding debt
-        totalDebt += balance > 0 ? balance : Math.abs(balance);
+        totalDebt += Math.abs(balance);
       } else if (accountType === 'depository' || 
           accountSubtype === 'checking' || 
           accountSubtype === 'savings' || 
