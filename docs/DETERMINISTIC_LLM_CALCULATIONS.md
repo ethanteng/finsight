@@ -233,6 +233,8 @@ withdrawalRate = annualWithdrawalAmount / totalValue
 yearsOfExpenses = totalValue / annualWithdrawalAmount
 ```
 
+**Note on yearsOfExpenses:** Naive ratio only. Ignores market returns, inflation, and sequence-of-returns risk. Do NOT interpret as portfolio longevity. For feasibility, use stress test survival rate and depletion percentiles.
+
 ---
 
 ## 7. Data Quality (Retirement)
@@ -296,8 +298,8 @@ amountDisplay = amount >= 0 ? `$${amount.toFixed(2)}` : `-$${Math.abs(amount).to
 **File:** `src/retirement-analytics/engine/outcome-analyzer.ts`
 
 ```
-getPercentile(p) = sortedValues[Math.floor((p/100) * numericValues.length)]
-  (clamped to last index)
+index = (p/100) * (n-1); interpolate between sortedValues[floor(index)] and sortedValues[ceil(index)]
+(matches Excel PERCENTILE.INC / R type 6)
 ```
 
 ---

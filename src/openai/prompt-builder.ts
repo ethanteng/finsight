@@ -372,7 +372,8 @@ function formatRetirementAnalysis(analysis: FinancialContextSnapshot['retirement
     '11. If dataQuality.metadataConfidence === "low", state: "Some security classifications were inferred and may be inaccurate."\n' +
     '12. If dataQuality.portfolioMappingConfidence === "low" or "medium", state: "Portfolio mapped to historical asset classes using proxies. Some holdings may not perfectly match historical indices."\n' +
     '13. If dataQuality.assumptions.length > 0, explicitly state: "Analysis assumptions: [list assumptions from dataQuality.assumptions]"\n' +
-    '14. If survival rate is in lower tercile relative to portfolios with similar equity allocations and horizon, describe as "historically fragile given withdrawal timing" rather than "too risky."'
+    '14. If survival rate is in lower tercile relative to portfolios with similar equity allocations and horizon, describe as "historically fragile given withdrawal timing" rather than "too risky."\n' +
+    '15. Years of expenses is a naive ratio (portfolio ÷ withdrawal). Do NOT interpret it as longevity. For feasibility, use stress test survival rate and depletion percentiles.'
   );
 
   sections.push('## Portfolio Characteristics');
@@ -399,7 +400,7 @@ function formatRetirementAnalysis(analysis: FinancialContextSnapshot['retirement
   sections.push(
     `IMPORTANT: When referencing portfolio value or net worth, use the values from the Financial Overview section above. The withdrawal rate below is calculated based on the portfolio value used in the retirement analysis.\n\n` +
     `Current Withdrawal Rate: ${(analysis.metrics.withdrawalRate * 100).toFixed(2)}% of portfolio value\n` +
-    `Years of Expenses Covered: ${analysis.metrics.yearsOfExpenses.toFixed(1)} years\n` +
+    `Years of Expenses (naive ratio; use stress test depletion percentiles for longevity): ${analysis.metrics.yearsOfExpenses.toFixed(1)} years\n` +
     `Equity Allocation (stocks vs bonds, includes stock ETFs/mutual funds): ${analysis.metrics.equityAllocation.toFixed(1)}%\n` +
     `Note: This differs from Asset Allocation "equity" which is individual stocks only. Use this retirement metric for sequence-of-returns risk.\n\n` +
     `Historical Withdrawal Rate Percentiles (empirically derived from portfolio simulations over historical market sequences):\n` +

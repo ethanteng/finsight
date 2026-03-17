@@ -56,7 +56,7 @@ export interface HistoricalPerformanceMetrics {
 
 export interface WithdrawalSustainabilityMetrics {
   withdrawalRate: number; // annualWithdrawalAmount / portfolioValue (descriptive, not prescriptive)
-  yearsOfExpenses: number; // portfolioValue / annualWithdrawalAmount
+  yearsOfExpenses: number; // naive ratio: portfolioValue / annualWithdrawalAmount. Ignores returns, inflation, sequence risk. Not a longevity estimate.
   historicalWithdrawalRates: {
     p10: number;
     p25: number;
