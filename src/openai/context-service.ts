@@ -391,8 +391,10 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     }
   }
 
-  const incomeAnalysis = buildIncomeAnalysis(sortedTransactions, monthlyIncomeOverride);
-  const expenseAnalysis = buildExpenseAnalysis(sortedTransactions, monthlyExpenseOverride);
+  const incomeResult = buildIncomeAnalysis(sortedTransactions, monthlyIncomeOverride);
+  const expenseResult = buildExpenseAnalysis(sortedTransactions, monthlyExpenseOverride);
+  const incomeAnalysis = incomeResult?.text;
+  const expenseAnalysis = expenseResult?.text;
   
   // ✅ Pass deduplicated accounts and sorted transactions to loadUserProfile
   // The profile enhancer needs the actual account data, not anonymized tokens
@@ -568,6 +570,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     tierContext,
     incomeAnalysis,
     expenseAnalysis,
+    averageMonthlyIncome: incomeResult?.averageMonthly ?? null,
+    averageMonthlyExpense: expenseResult?.averageMonthly ?? null,
     searchContext,
     marketContext,
     userProfile,
@@ -1458,15 +1462,23 @@ async function maybeFetchMarketContext(
   }
 }
 
-function buildIncomeAnalysis(transactions: Transaction[], override?: number | null): string | undefined {
+export interface IncomeExpenseAnalysisResult {
+  text: string;
+  averageMonthly: number;
+}
+
+function buildIncomeAnalysis(transactions: Transaction[], override?: number | null): IncomeExpenseAnalysisResult | undefined {
   // If override is provided (not null/undefined), use it
   if (override !== null && override !== undefined) {
-    return [
-      `Average Monthly Income: $${override.toFixed(2)} (Manual Override)`,
-      `Income Transactions Analyzed: N/A (using manual override)`,
-      `Months Covered: N/A (using manual override)`,
-      `Top Sources: N/A (using manual override)`
-    ].join('\n');
+    return {
+      text: [
+        `Average Monthly Income: $${override.toFixed(2)} (Manual Override)`,
+        `Income Transactions Analyzed: N/A (using manual override)`,
+        `Months Covered: N/A (using manual override)`,
+        `Top Sources: N/A (using manual override)`
+      ].join('\n'),
+      averageMonthly: override
+    };
   }
 
   if (transactions.length === 0) {
@@ -1500,8 +1512,17 @@ function buildIncomeAnalysis(transactions: Transaction[], override?: number | nu
     a.localeCompare(b)
   );
   const totalIncome = monthEntries.reduce((sum, [, value]) => sum + value, 0);
-  const averageMonthlyIncome =
-    monthEntries.length > 0 ? totalIncome / monthEntries.length : 0;
+
+  // Use months in date span (earliest to latest), not just months with transactions.
+  // This avoids overstating average when some months have zero income (e.g. Jan $5k, Feb $0, Mar $5k).
+  const dateSpanMonths = (() => {
+    if (incomeTransactions.length === 0) return 0;
+    const timestamps = incomeTransactions.map(t => new Date(t.date).getTime());
+    const minDate = new Date(Math.min(...timestamps));
+    const maxDate = new Date(Math.max(...timestamps));
+    return (maxDate.getFullYear() - minDate.getFullYear()) * 12 + (maxDate.getMonth() - minDate.getMonth()) + 1;
+  })();
+  const averageMonthlyIncome = dateSpanMonths > 0 ? totalIncome / dateSpanMonths : 0;
 
   const topSources = Array.from(sourceTotals.entries())
     .sort(([, a], [, b]) => b - a)
@@ -1509,23 +1530,29 @@ function buildIncomeAnalysis(transactions: Transaction[], override?: number | nu
     .map(([label, value]) => `${label}: $${value.toFixed(2)}`)
     .join(', ');
 
-  return [
-    `Average Monthly Income: $${averageMonthlyIncome.toFixed(2)}`,
-    `Income Transactions Analyzed: ${incomeTransactions.length}`,
-    `Months Covered: ${monthEntries.length}`,
-    `Top Sources: ${topSources || 'Not available'}`
-  ].join('\n');
+  return {
+    text: [
+      `Average Monthly Income: $${averageMonthlyIncome.toFixed(2)}`,
+      `Income Transactions Analyzed: ${incomeTransactions.length}`,
+      `Months Covered: ${dateSpanMonths} (span from earliest to latest income transaction)`,
+      `Top Sources: ${topSources || 'Not available'}`
+    ].join('\n'),
+    averageMonthly: averageMonthlyIncome
+  };
 }
 
-function buildExpenseAnalysis(transactions: Transaction[], override?: number | null): string | undefined {
+function buildExpenseAnalysis(transactions: Transaction[], override?: number | null): IncomeExpenseAnalysisResult | undefined {
   // If override is provided (not null/undefined), use it
   if (override !== null && override !== undefined) {
-    return [
-      `Average Monthly Expenses: $${override.toFixed(2)} (Manual Override)`,
-      `Expense Transactions Analyzed: N/A (using manual override)`,
-      `Months Covered: N/A (using manual override)`,
-      `Top Categories: N/A (using manual override)`
-    ].join('\n');
+    return {
+      text: [
+        `Average Monthly Expenses: $${override.toFixed(2)} (Manual Override)`,
+        `Expense Transactions Analyzed: N/A (using manual override)`,
+        `Months Covered: N/A (using manual override)`,
+        `Top Categories: N/A (using manual override)`
+      ].join('\n'),
+      averageMonthly: override
+    };
   }
 
   if (transactions.length === 0) {
@@ -1558,8 +1585,17 @@ function buildExpenseAnalysis(transactions: Transaction[], override?: number | n
     a.localeCompare(b)
   );
   const totalExpense = monthEntries.reduce((sum, [, value]) => sum + value, 0);
-  const averageMonthlyExpense =
-    monthEntries.length > 0 ? totalExpense / monthEntries.length : 0;
+
+  // Use months in date span (earliest to latest), not just months with transactions.
+  // This avoids overstating average when some months have zero expenses.
+  const dateSpanMonths = (() => {
+    if (expenseTransactions.length === 0) return 0;
+    const timestamps = expenseTransactions.map(t => new Date(t.date).getTime());
+    const minDate = new Date(Math.min(...timestamps));
+    const maxDate = new Date(Math.max(...timestamps));
+    return (maxDate.getFullYear() - minDate.getFullYear()) * 12 + (maxDate.getMonth() - minDate.getMonth()) + 1;
+  })();
+  const averageMonthlyExpense = dateSpanMonths > 0 ? totalExpense / dateSpanMonths : 0;
 
   const topCategories = Array.from(categoryTotals.entries())
     .sort(([, a], [, b]) => b - a)
@@ -1567,12 +1603,15 @@ function buildExpenseAnalysis(transactions: Transaction[], override?: number | n
     .map(([label, value]) => `${label}: $${value.toFixed(2)}`)
     .join(', ');
 
-  return [
-    `Average Monthly Expenses: $${averageMonthlyExpense.toFixed(2)}`,
-    `Expense Transactions Analyzed: ${expenseTransactions.length}`,
-    `Months Covered: ${monthEntries.length}`,
-    `Top Categories: ${topCategories || 'Not available'}`
-  ].join('\n');
+  return {
+    text: [
+      `Average Monthly Expenses: $${averageMonthlyExpense.toFixed(2)}`,
+      `Expense Transactions Analyzed: ${expenseTransactions.length}`,
+      `Months Covered: ${dateSpanMonths} (span from earliest to latest expense transaction)`,
+      `Top Categories: ${topCategories || 'Not available'}`
+    ].join('\n'),
+    averageMonthly: averageMonthlyExpense
+  };
 }
 
 async function loadUserProfile(params: {

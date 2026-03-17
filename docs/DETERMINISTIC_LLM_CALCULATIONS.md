@@ -88,8 +88,10 @@ gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0
 - **Formula:**
   ```
   totalIncome = Σ amount  (for all income transactions)
-  averageMonthlyIncome = totalIncome / numberOfMonths
+  dateSpanMonths = (maxDate - minDate) in months  (earliest to latest income transaction)
+  averageMonthlyIncome = totalIncome / dateSpanMonths
   ```
+- **Note:** Uses **months in date span**, not months with transactions. E.g. Jan $5k, Feb $0, Mar $5k → 3 months → $3,333/mo (not $5k from 2 months).
 
 ### Expenses
 
@@ -98,7 +100,8 @@ gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0
   ```
   amount = Math.abs(transaction.amount)
   totalExpense = Σ amount  (for all expense transactions)
-  averageMonthlyExpense = totalExpense / numberOfMonths
+  dateSpanMonths = (maxDate - minDate) in months  (earliest to latest expense transaction)
+  averageMonthlyExpense = totalExpense / dateSpanMonths
   ```
 
 ### Manual Override
@@ -132,11 +135,11 @@ overdraft = Σ |balance|  (cash accounts with balance < 0) — consistent with F
 
 ### Income / Expenses
 
+**Uses structured numeric data** — never parses strings. Values come from `snapshot.averageMonthlyIncome` and `snapshot.averageMonthlyExpense`, populated by `buildIncomeAnalysis`/`buildExpenseAnalysis` in context-service.
+
 ```
-monthlyIncome = parseMonthlyAmount(incomeAnalysis)  // Regex: /\$\s*([\d,]+(?:\.\d{2})?)/
-monthlyExpense = parseMonthlyAmount(expenseAnalysis)
-income = monthlyIncome * 12
-expenses = monthlyExpense * 12
+income = (averageMonthlyIncome ?? 0) * 12
+expenses = (averageMonthlyExpense ?? 0) * 12
 ```
 
 ### Age / Retirement Goal

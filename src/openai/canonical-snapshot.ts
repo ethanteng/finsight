@@ -43,18 +43,6 @@ function getAccountBalance(acc: any): number {
 }
 
 /**
- * Parse monthly amount from income/expense analysis strings.
- * Format: "Average Monthly Income: $5,000.00" or "Average Monthly Expenses: $3,000.00 (Manual Override)"
- */
-function parseMonthlyAmount(text: string | undefined): number | null {
-  if (!text) return null;
-  const match = text.match(/\$\s*([\d,]+(?:\.\d{2})?)/);
-  if (!match) return null;
-  const value = parseFloat(match[1].replace(/,/g, ''));
-  return Number.isNaN(value) ? null : value;
-}
-
-/**
  * Transform FinancialContextSnapshot to canonical format for LLM financial reasoning.
  */
 export function toCanonicalSnapshot(snapshot: FinancialContextSnapshot): CanonicalFinancialSnapshot {
@@ -136,9 +124,9 @@ export function toCanonicalSnapshot(snapshot: FinancialContextSnapshot): Canonic
 
   const finalLiabilities: CanonicalFinancialSnapshot['liabilities'] = { ...liabilities, mortgage };
 
-  // Income and expenses from analysis strings
-  const monthlyIncome = parseMonthlyAmount(snapshot.incomeAnalysis);
-  const monthlyExpense = parseMonthlyAmount(snapshot.expenseAnalysis);
+  // Income and expenses from structured numeric data (never parse strings)
+  const monthlyIncome = snapshot.averageMonthlyIncome ?? null;
+  const monthlyExpense = snapshot.averageMonthlyExpense ?? null;
   const income = monthlyIncome != null ? monthlyIncome * 12 : 0;
   const expenses = monthlyExpense != null ? monthlyExpense * 12 : 0;
 

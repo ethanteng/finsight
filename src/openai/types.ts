@@ -47,6 +47,9 @@ export interface FinancialContextSnapshot {
   tierContext: TierAwareContext;
   incomeAnalysis?: string;
   expenseAnalysis?: string;
+  /** Structured numeric values — use these instead of parsing incomeAnalysis/expenseAnalysis strings */
+  averageMonthlyIncome?: number | null;
+  averageMonthlyExpense?: number | null;
   searchContext?: string;
   marketContext?: string;
   userProfile?: string;
