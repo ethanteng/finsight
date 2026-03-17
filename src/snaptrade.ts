@@ -278,21 +278,23 @@ export class SnapTradeService {
             const accountId = account.id;
             
             if (accountId && !accounts.has(accountId)) {
-              // Calculate total value from positions and cash
-              let totalValue = 0;
+              // Calculate true account value: sum of non-cash-equivalent positions + cash balance.
+              // Positions with cash_equivalent=true (e.g. money-market funds) are already
+              // counted in balance.cash, so including both would double-count them.
+              // Note: total_value is deprecated by SnapTrade and documented as potentially
+              // double-counting cash-equivalent assets, so we don't use it.
+              const positions: any[] = Array.isArray(accountHolding.positions) ? accountHolding.positions : [];
+              const nonCashEquivPositionsSum = positions
+                .filter((p: any) => !p.cash_equivalent)
+                .reduce((sum: number, p: any) => sum + (p.price || 0) * (p.units || 0), 0);
+              const cashSum = Array.isArray(account.balances)
+                ? account.balances.reduce((sum: number, b: any) => sum + (b.cash || 0), 0)
+                : 0;
+              let totalValue = nonCashEquivPositionsSum + cashSum;
 
-              // Check total_value from the account holding (root level)
-              // This value already includes all positions AND cash/short-term holdings,
-              // so we must NOT add balance.cash on top (that would double-count it).
-              if (accountHolding.total_value && accountHolding.total_value.value) {
+              // Fallback: if we have no positions data at all, use total_value
+              if (totalValue === 0 && accountHolding.total_value?.value) {
                 totalValue = accountHolding.total_value.value;
-              } else if (account.balances && Array.isArray(account.balances)) {
-                // Only fall back to cash balance sum when total_value is unavailable
-                account.balances.forEach((balance: any) => {
-                  if (balance.cash) {
-                    totalValue += balance.cash;
-                  }
-                });
               }
               
               // Debug logging

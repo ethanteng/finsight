@@ -1791,16 +1791,25 @@ export class FinancialDataService {
           
           if (holdingsResult.success && holdingsResult.data) {
             console.log(`📊 SnapTrade: Received ${holdingsResult.data.length} account holdings from API`);
-            // ✅ Build a map to update account balances with total_value from holdings
+            // Build a map of account balances: non-cash-equivalent positions + cash balance.
+            // Using the same logic as snaptrade.ts to avoid double-counting cash_equivalent
+            // positions (money-market funds reported as both a position and in balance.cash).
             const accountBalanceMap = new Map<string, number>();
-            
+
             let totalPositionsProcessed = 0;
             for (const accountHolding of holdingsResult.data) {
-              // ✅ Store total_value for this account if available
               const accountId = `snaptrade-${accountHolding.account?.id}`;
-              const totalValue = accountHolding.total_value?.value || 0;
-              if (totalValue > 0) {
-                accountBalanceMap.set(accountId, totalValue);
+              const holdingPositions: any[] = Array.isArray(accountHolding.positions) ? accountHolding.positions : [];
+              const holdingBalances: any[] = Array.isArray(accountHolding.balances) ? accountHolding.balances : [];
+              const nonCashEquivSum = holdingPositions
+                .filter((p: any) => !p.cash_equivalent)
+                .reduce((sum: number, p: any) => sum + (p.price || 0) * (p.units || 0), 0);
+              const cashBalanceSum = holdingBalances.reduce((sum: number, b: any) => sum + (b.cash || 0), 0);
+              const trueAccountValue = nonCashEquivSum + cashBalanceSum
+                || accountHolding.total_value?.value  // fallback if no positions/balances
+                || 0;
+              if (trueAccountValue > 0) {
+                accountBalanceMap.set(accountId, trueAccountValue);
               }
               
               // Process positions
@@ -1895,64 +1904,59 @@ export class FinancialDataService {
                 }
               }
 
-              // Process cash balances — only add a synthetic Cash holding if the cash is
-              // genuinely uninvested and NOT already embedded inside a position's NAV.
-              // Some brokers (e.g. Fidelity mutual-fund accounts) report balance.cash equal to
-              // the money-market/short-term sleeve already included in the fund's NAV, so
-              // adding it as a separate holding would double-count it.
-              //
-              // Detection: if positionsSum + cashBalance would exceed total_value by >5%,
-              // the cash is already inside a position (no broker account can have positions +
-              // cash sum to more than the account total). In that case, skip the cash holding.
-              // This approach is robust to price-timing differences and avoids suppressing
-              // real cash in large accounts (e.g. $8k cash in a $500k account adds up cleanly).
+              // Process cash balances — only add genuinely uninvested cash as a holding.
+              // SnapTrade's Position type has a `cash_equivalent` field that is true for
+              // positions such as money-market funds that are ALSO counted in balance.cash
+              // (see SnapTrade SDK: "If the position is a cash equivalent (usually a money
+              // market fund) that is also counted in account cash balance and buying power").
+              // Subtracting those position values from balance.cash gives the true uninvested
+              // cash so we avoid double-counting them.
               if (accountHolding.balances && Array.isArray(accountHolding.balances)) {
                 const cashBalance = accountHolding.balances.find((b: any) => b.currency?.code === 'USD' && b.cash > 0);
-                const accountTotalValue = accountHolding.total_value?.value || 0;
-                const positionsSum = (accountHolding.positions || []).reduce(
-                  (sum: number, p: any) => sum + (p.price || 0) * (p.units || 0), 0
-                );
-                // Cash is embedded in a position if adding it would blow past total_value by >5%.
-                // Normal case: positionsSum + cash ≈ total_value (cash is separate, add it).
-                // Fidelity case: positionsSum + cash >> total_value (cash is inside fund NAV, skip).
-                const cashIsInsidePositions =
-                  accountTotalValue > 0 &&
-                  cashBalance !== undefined &&
-                  (positionsSum + cashBalance.cash) > accountTotalValue * 1.05;
-                if (cashBalance && !cashIsInsidePositions) {
-                  const cashHolding = {
-                    id: `snaptrade-${accountHolding.account?.id}-cash`,
-                    account_id: `snaptrade-${accountHolding.account?.id}`,
-                    security_id: 'cash',
-                    institution_value: cashBalance.cash,
-                    institution_price: 1,
-                    institution_price_as_of: new Date().toISOString(),
-                    cost_basis: cashBalance.cash,
-                    quantity: cashBalance.cash,
-                    iso_currency_code: 'USD',
-                    security_name: 'Cash',
-                    security_type: 'Cash',
-                    ticker_symbol: 'CASH',
-                    snapTradeData: {
-                      account_name: accountHolding.account?.name,
-                      account_number: accountHolding.account?.number
-                    }
-                  };
+                if (cashBalance) {
+                  // Sum the market value of positions already counted in balance.cash
+                  const cashEquivalentInPositions = (accountHolding.positions || [])
+                    .filter((p: any) => p.cash_equivalent === true)
+                    .reduce((sum: number, p: any) => sum + (p.price || 0) * (p.units || 0), 0);
 
-                  holdings.push(cashHolding);
+                  // True uninvested cash = reported cash minus what's already in positions
+                  const uninvestedCash = Math.max(0, cashBalance.cash - cashEquivalentInPositions);
 
-                  // Add cash security if not already added
-                  const cashSecurityExists = securities.some(s => s.security_id === 'cash');
-                  if (!cashSecurityExists) {
-                    securities.push({
+                  if (uninvestedCash > 1) {  // > $1 threshold to avoid floating-point noise
+                    const cashHolding = {
+                      id: `snaptrade-${accountHolding.account?.id}-cash`,
+                      account_id: `snaptrade-${accountHolding.account?.id}`,
                       security_id: 'cash',
-                      name: 'Cash',
-                      type: 'Cash',
-                      ticker_symbol: 'CASH',
+                      institution_value: uninvestedCash,
+                      institution_price: 1,
+                      institution_price_as_of: new Date().toISOString(),
+                      cost_basis: uninvestedCash,
+                      quantity: uninvestedCash,
                       iso_currency_code: 'USD',
-                      close_price: 1,
-                      close_price_as_of: new Date().toISOString()
-                    });
+                      security_name: 'Cash',
+                      security_type: 'Cash',
+                      ticker_symbol: 'CASH',
+                      snapTradeData: {
+                        account_name: accountHolding.account?.name,
+                        account_number: accountHolding.account?.number
+                      }
+                    };
+
+                    holdings.push(cashHolding);
+
+                    // Add cash security if not already added
+                    const cashSecurityExists = securities.some(s => s.security_id === 'cash');
+                    if (!cashSecurityExists) {
+                      securities.push({
+                        security_id: 'cash',
+                        name: 'Cash',
+                        type: 'Cash',
+                        ticker_symbol: 'CASH',
+                        iso_currency_code: 'USD',
+                        close_price: 1,
+                        close_price_as_of: new Date().toISOString()
+                      });
+                    }
                   }
                 }
               }
