@@ -266,27 +266,24 @@ export class SummaryCacheService {
     const totalInvestments = portfolio?.totalValue || 0;
     // ✅ Calculate totalCash including manual cash accounts
     // Manual cash accounts are mapped to type='depository', subtype='checking' so they're included here
-    const totalCash = (data?.accounts || []).reduce((sum: number, a: any) => {
+    let totalCash = 0;
+    let totalDebt = 0;
+    for (const a of data?.accounts || []) {
       const t = a.type;
       const st = a.subtype;
-      if (t === 'investment' || ['401k','ira','roth','brokerage','hsa','529','pension','annuity'].includes(st)) return sum;
+      if (t === 'investment' || ['401k','ira','roth','brokerage','hsa','529','pension','annuity'].includes(st)) continue;
       if (t === 'depository' || ['checking','savings','cd','money market','prepaid'].includes(st)) {
-        // Use current (total balance) first to match FinancialSummaryService - available can be lower due to holds
         const b = a.balance?.current ?? a.balance?.available ?? 0;
-        return sum + Math.max(0, b);
+        totalCash += Math.max(0, b);
+        if (b < 0) totalDebt += Math.abs(b); // overdraft
+        continue;
       }
-      // credit/loan and others are handled in debt
-      return sum;
-    }, 0);
-    const totalDebt = (data?.accounts || []).reduce((sum: number, a: any) => {
-      const t = a.type;
-      const st = a.subtype;
-      if (t === 'credit') return sum + Math.abs(a.balance?.current ?? 0);
-      if (t === 'loan' || ['mortgage','student','personal','auto','home equity'].includes(st)) {
-        return sum + Math.max(0, a.balance?.current ?? 0);
+      if (t === 'credit') {
+        totalDebt += Math.abs(a.balance?.current ?? 0);
+      } else if (t === 'loan' || ['mortgage','student','personal','auto','home equity'].includes(st)) {
+        totalDebt += Math.max(0, a.balance?.current ?? 0);
       }
-      return sum;
-    }, 0);
+    }
     // Extract homeValue: prioritize valueMid (manual override or RentCast estimate), then fall back to valueHigh or valueLow
     // Use explicit null checks to handle 0 values correctly (0 is a valid home value, though unlikely)
     const homeValue = data?.homeValue?.valueMid != null && data.homeValue.valueMid > 0

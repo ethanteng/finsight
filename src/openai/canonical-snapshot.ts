@@ -99,21 +99,30 @@ export function toCanonicalSnapshot(snapshot: FinancialContextSnapshot): Canonic
     }
   }
 
-  // Liabilities: derive mortgage from accounts if available
+  // Liabilities: derive mortgage, overdraft, credit, loans from accounts if available
   let mortgage = 0;
   const liabilities: Record<string, number> = {};
 
   if (snapshot.accounts && snapshot.accounts.length > 0) {
     for (const acc of snapshot.accounts) {
       const subtype = (acc.subtype || acc.type || '').toLowerCase();
-      const balance = Math.abs(getAccountBalance(acc));
+      const type = (acc.type || '').toLowerCase();
+      const rawBalance = getAccountBalance(acc);
+
+      // Cash accounts with negative balance (overdraft) — consistent with FinancialSummaryService
+      if ((CASH_TYPES.includes(type) || CASH_SUBTYPES.includes(subtype)) && rawBalance < 0) {
+        liabilities['overdraft'] = (liabilities['overdraft'] || 0) + Math.abs(rawBalance);
+        continue;
+      }
+
+      const balance = Math.abs(rawBalance);
       if (balance <= 0) continue;
 
       if (MORTGAGE_SUBTYPES.some(m => subtype.includes(m))) {
         mortgage += balance;
-      } else if (acc.type === 'credit') {
+      } else if (type === 'credit') {
         liabilities['credit'] = (liabilities['credit'] || 0) + balance;
-      } else if (acc.type === 'loan' || ['student', 'personal', 'auto'].some(s => subtype.includes(s))) {
+      } else if (type === 'loan' || ['student', 'personal', 'auto'].some(s => subtype.includes(s))) {
         const key = subtype || 'loan';
         liabilities[key] = (liabilities[key] || 0) + balance;
       }

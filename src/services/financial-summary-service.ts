@@ -116,7 +116,10 @@ export class FinancialSummaryService {
           accountSubtype === 'money market' ||
           accountSubtype === 'prepaid') {
         // Cash accounts: checking, savings, money market, prepaid
-        totalCash += balance;
+        // Use Math.max(0, balance) for consistency with canonical snapshot and SummaryCacheService.
+        // Overdraft (negative balance) is treated as debt to preserve net worth correctness.
+        totalCash += Math.max(0, balance);
+        if (balance < 0) totalDebt += Math.abs(balance);
       }
     }
     
