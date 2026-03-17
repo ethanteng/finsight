@@ -280,14 +280,14 @@ export class SnapTradeService {
             if (accountId && !accounts.has(accountId)) {
               // Calculate total value from positions and cash
               let totalValue = 0;
-              
+
               // Check total_value from the account holding (root level)
+              // This value already includes all positions AND cash/short-term holdings,
+              // so we must NOT add balance.cash on top (that would double-count it).
               if (accountHolding.total_value && accountHolding.total_value.value) {
                 totalValue = accountHolding.total_value.value;
-              }
-              
-              // Also check balances array for cash
-              if (account.balances && Array.isArray(account.balances)) {
+              } else if (account.balances && Array.isArray(account.balances)) {
+                // Only fall back to cash balance sum when total_value is unavailable
                 account.balances.forEach((balance: any) => {
                   if (balance.cash) {
                     totalValue += balance.cash;

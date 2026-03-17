@@ -1895,10 +1895,31 @@ export class FinancialDataService {
                 }
               }
 
-              // Process cash balances
+              // Process cash balances — only add a synthetic Cash holding if the cash is
+              // genuinely uninvested and NOT already embedded inside a position's NAV.
+              // Some brokers (e.g. Fidelity mutual-fund accounts) report balance.cash equal to
+              // the money-market/short-term sleeve already included in the fund's NAV, so
+              // adding it as a separate holding would double-count it.
+              //
+              // Detection: if positionsSum + cashBalance would exceed total_value by >5%,
+              // the cash is already inside a position (no broker account can have positions +
+              // cash sum to more than the account total). In that case, skip the cash holding.
+              // This approach is robust to price-timing differences and avoids suppressing
+              // real cash in large accounts (e.g. $8k cash in a $500k account adds up cleanly).
               if (accountHolding.balances && Array.isArray(accountHolding.balances)) {
                 const cashBalance = accountHolding.balances.find((b: any) => b.currency?.code === 'USD' && b.cash > 0);
-                if (cashBalance) {
+                const accountTotalValue = accountHolding.total_value?.value || 0;
+                const positionsSum = (accountHolding.positions || []).reduce(
+                  (sum: number, p: any) => sum + (p.price || 0) * (p.units || 0), 0
+                );
+                // Cash is embedded in a position if adding it would blow past total_value by >5%.
+                // Normal case: positionsSum + cash ≈ total_value (cash is separate, add it).
+                // Fidelity case: positionsSum + cash >> total_value (cash is inside fund NAV, skip).
+                const cashIsInsidePositions =
+                  accountTotalValue > 0 &&
+                  cashBalance !== undefined &&
+                  (positionsSum + cashBalance.cash) > accountTotalValue * 1.05;
+                if (cashBalance && !cashIsInsidePositions) {
                   const cashHolding = {
                     id: `snaptrade-${accountHolding.account?.id}-cash`,
                     account_id: `snaptrade-${accountHolding.account?.id}`,
