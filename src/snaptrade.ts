@@ -287,8 +287,8 @@ export class SnapTradeService {
               const nonCashEquivPositionsSum = positions
                 .filter((p: any) => !p.cash_equivalent)
                 .reduce((sum: number, p: any) => sum + (p.price || 0) * (p.units || 0), 0);
-              const cashSum = Array.isArray(account.balances)
-                ? account.balances.reduce((sum: number, b: any) => sum + (b.cash || 0), 0)
+              const cashSum = Array.isArray(accountHolding.balances)
+                ? accountHolding.balances.reduce((sum: number, b: any) => sum + (b.cash || 0), 0)
                 : 0;
               let totalValue = nonCashEquivPositionsSum + cashSum;
 
