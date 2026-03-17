@@ -172,6 +172,8 @@ expenseRatioWeighted = Σ(expenseRatio * weight) / Σ(weight)  for holdings with
 
 **File:** `engine/withdrawal-simulator.ts`
 
+**Withdrawal timing:** End-of-period. Each month: (1) apply returns, (2) subtract withdrawal. This differs from Trinity-style / Bengen 4% rule studies, which typically use beginning-of-period withdrawals (withdraw first, then earn returns). End-of-period is slightly more favorable; survival rates may be marginally higher than in Trinity-style literature.
+
 ```
 Initial allocation:
   usEquity = initialPortfolioValue * usEquityWeight
@@ -179,14 +181,11 @@ Initial allocation:
   bonds = initialPortfolioValue * nominalBondsWeight
   cash = initialPortfolioValue * cashWeight
 
-Per month:
-  usEquity *= 1 + usRet
-  intlEquity *= 1 + intlRet
-  bonds *= 1 + bondRet
-  cash *= 1 + cashRet
-  portfolioValue = usEquity + intlEquity + bonds + cash
-  monthlyWithdrawal *= 1 + inflationRate
-  portfolioValue -= monthlyWithdrawal
+Per month (end-of-period: returns first, then withdrawal):
+  1. usEquity *= 1 + usRet; intlEquity *= 1 + intlRet; bonds *= 1 + bondRet; cash *= 1 + cashRet
+  2. portfolioValue = usEquity + intlEquity + bonds + cash
+  3. monthlyWithdrawal *= 1 + monthlyInflation  (inflationRates[] are monthly: CPI_t/CPI_(t-1) - 1, not annual)
+  4. portfolioValue -= monthlyWithdrawal
 
 Annual rebalance (every 12 months):
   usEquity = portfolioValue * usEquityWeight
@@ -222,7 +221,9 @@ Binary search over withdrawal rate (2%–8%) to find rates where:
 ```
 survivalRate = count(outcomes.withdrawalSustainability) / outcomes.length
 depletionPercentiles = percentile(depletionYears, [10, 25, 50, 75, 90])
-  where percentile(p) = sortedValues[floor((p/100) * length)]
+  where percentile(p) uses linear interpolation: index = (p/100) * (n-1)
+  then interpolate between sortedValues[floor(index)] and sortedValues[ceil(index)]
+  (matches Excel PERCENTILE.INC / R type 6)
 ```
 
 ### Retirement Metrics (sent to LLM)

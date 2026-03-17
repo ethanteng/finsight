@@ -87,9 +87,16 @@ export function calculatePercentiles(
     return { p10: null, p25: null, p50: null, p75: null, p90: null };
   }
 
+  // Linear interpolation: index = (p/100) * (n-1). Matches Excel PERCENTILE.INC / R type 6.
   const getPercentile = (percentile: number): number => {
-    const index = Math.floor((percentile / 100) * numericValues.length);
-    return numericValues[Math.min(index, numericValues.length - 1)];
+    const n = numericValues.length;
+    if (n === 1) return numericValues[0];
+    const index = (percentile / 100) * (n - 1);
+    const lower = Math.floor(index);
+    const upper = Math.ceil(index);
+    if (lower === upper) return numericValues[lower];
+    const frac = index - lower;
+    return numericValues[lower] + frac * (numericValues[upper] - numericValues[lower]);
   };
 
   return {

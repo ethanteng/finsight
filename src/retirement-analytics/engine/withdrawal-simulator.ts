@@ -2,6 +2,16 @@
 // Phase 4: Withdrawal Simulation
 //
 // Simulates inflation-adjusted withdrawals with annual portfolio rebalancing.
+//
+// WITHDRAWAL TIMING: End-of-period withdrawals.
+// Order each month: (1) apply returns to portfolio, (2) subtract withdrawal.
+// This differs from Trinity-style / Bengen 4% rule, which typically assumes
+// beginning-of-period withdrawals (withdraw first, then earn returns).
+// End-of-period is slightly more favorable to the retiree; survival rates
+// may be marginally higher than Trinity-style studies.
+//
+// INFLATION: sequence.inflationRates[] are MONTHLY (CPI_t/CPI_(t-1) - 1).
+// Source: build-market-dataset.ts from Shiller ie_data.xls. Do NOT treat as annual.
 
 import { PortfolioMapping, HistoricalSequence, PortfolioOutcome } from '../types';
 
@@ -9,6 +19,9 @@ import { PortfolioMapping, HistoricalSequence, PortfolioOutcome } from '../types
  * Simulate inflation-adjusted withdrawals across a historical sequence.
  * Withdrawals grow with CPI each month (constant real spending).
  * Portfolio is rebalanced to target weights annually.
+ *
+ * Withdrawal timing: End-of-period (returns applied first, then withdrawal).
+ * See module comment for comparison to Trinity-style beginning-of-period.
  */
 export function simulateWithdrawals(
   portfolioMapping: PortfolioMapping,
@@ -44,8 +57,9 @@ export function simulateWithdrawals(
 
     let portfolioValue = usEquity + intlEquity + bonds + cash;
 
-    const inflationRate = sequence.inflationRates[month] ?? 0;
-    monthlyWithdrawal *= 1 + inflationRate;
+    // inflationRates[] are monthly (CPI_t/CPI_(t-1) - 1 from build-market-dataset). Not annual.
+    const monthlyInflation = sequence.inflationRates[month] ?? 0;
+    monthlyWithdrawal *= 1 + monthlyInflation;
     portfolioValue -= monthlyWithdrawal;
 
     if (portfolioValue <= 0) {
