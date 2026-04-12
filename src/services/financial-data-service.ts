@@ -1317,21 +1317,44 @@ export class FinancialDataService {
 
           // Get institution data for these accounts
           const item = await plaidClient.itemGet({ access_token: tokenRecord.token });
-          const institution = await plaidClient.institutionsGetById({
-            institution_id: item.data.item.institution_id!,
-            country_codes: ['US' as CountryCode]
-          });
           const itemData = item.data.item as Record<string, any>;
           const itemLastUpdated = itemData?.last_updated_datetime || requestTimestamp;
+
+          // institution_id can be null for some Plaid items (e.g. OAuth institutions, certain
+          // brokerage connections). Guard the lookup so a missing institution_id does not cause
+          // institutionsGetById to throw and silently skip ALL accounts for this token.
+          let institutionName: string | undefined;
+          let institutionId: string | undefined;
+          let institutionLogo: string | undefined;
+          let institutionUrl: string | undefined;
+          const rawInstitutionId = item.data.item.institution_id;
+          if (rawInstitutionId) {
+            try {
+              const institutionResponse = await plaidClient.institutionsGetById({
+                institution_id: rawInstitutionId,
+                country_codes: ['US' as CountryCode]
+              });
+              const inst = institutionResponse.data.institution;
+              institutionName = inst?.name ?? undefined;
+              institutionId = inst?.institution_id ?? undefined;
+              institutionLogo = inst?.logo ?? undefined;
+              institutionUrl = inst?.url ?? undefined;
+            } catch (instError: any) {
+              console.warn(`⚠️ Plaid: Could not fetch institution data for institution_id=${rawInstitutionId}:`, instError?.response?.data?.error_code || instError?.message);
+              // Continue without institution metadata — accounts are still valid
+            }
+          } else {
+            console.warn(`⚠️ Plaid: institution_id is null for token ${tokenRecord.id.substring(0, 8)}... — accounts will be added without institution name`);
+          }
 
           for (const account of accountsResponse.data.accounts) {
             // ✅ CRITICAL: Always set plaidAccountId from account.account_id for Plaid accounts
             // This ensures consistent account identity across the system
             const plaidAccountId = account.account_id;
-            
+
             // Use custom name from database if available, otherwise use name from Plaid API
             const accountName = customNamesMap.get(plaidAccountId) || account.name;
-            
+
             accounts.push({
               account_id: plaidAccountId,
               id: plaidAccountId, // Alias for compatibility
@@ -1346,10 +1369,10 @@ export class FinancialDataService {
                 iso_currency_code: account.balances.iso_currency_code || 'USD',
                 unofficial_currency_code: account.balances.unofficial_currency_code
               },
-              institution: institution.data.institution.name,
-              institution_id: institution.data.institution.institution_id,
-              institution_logo: institution.data.institution.logo || undefined,
-              institution_url: institution.data.institution.url || undefined,
+              institution: institutionName,
+              institution_id: institutionId,
+              institution_logo: institutionLogo,
+              institution_url: institutionUrl,
               source: 'plaid',
               plaidAccountId: plaidAccountId, // ✅ Always set for Plaid accounts
               // Pass through persistentAccountId only when it differs from plaidAccountId (matches persisted logic).
