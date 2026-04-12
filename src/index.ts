@@ -4033,6 +4033,60 @@ if (require.main === module) {
   });
 }
 
+// Admin: Recompute FinancialSummarySnapshot + summary service for a user (fixes stale Ask Linc context after SnapTrade, etc.)
+app.post('/admin/refresh-user-snapshot/:userId', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = asString(req.params.userId);
+
+    if (!userId) {
+      return res.status(400).json({ error: 'Missing userId' });
+    }
+
+    const { getPrismaClient } = await import('./prisma-client');
+    const prisma = getPrismaClient();
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    console.log('Admin: Refreshing financial snapshot for user:', userId, user.email);
+
+    const { cacheService } = await import('./data/cache');
+    await cacheService.invalidate(`financial-data:${userId}`);
+
+    const { SummaryCacheService } = await import('./services/summary-cache-service');
+    const { FinancialSummaryService } = await import('./services/financial-summary-service');
+
+    const [payload] = await Promise.all([
+      SummaryCacheService.computeForUser(userId, { categorize: false }),
+      new FinancialSummaryService().refreshUserSummary(userId),
+    ]);
+
+    res.json({
+      success: true,
+      userId: user.id,
+      email: user.email,
+      computedAt: payload?.computedAt,
+      accountCount: Array.isArray(payload?.accounts) ? payload.accounts.length : 0,
+    });
+  } catch (error) {
+    console.error('Admin: Failed to refresh user financial snapshot:', error);
+
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+      res.status(500).json({ error: error.message });
+    } else {
+      Sentry.captureMessage('Unknown error in admin refresh-user-snapshot endpoint', 'error');
+      res.status(500).json({ error: 'Failed to refresh financial snapshot' });
+    }
+  }
+});
+
 // Admin: Revoke user access (prevent login)
 app.put('/admin/revoke-user-access/:userId', adminAuth, async (req: Request, res: Response) => {
   try {

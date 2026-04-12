@@ -121,6 +121,12 @@ export default function AdminPage() {
   const [revokingAccess, setRevokingAccess] = useState<string | null>(null);
   const [deletingAccount, setDeletingAccount] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [refreshingUserSnapshot, setRefreshingUserSnapshot] = useState<string | null>(null);
+  const [snapshotRefreshNotice, setSnapshotRefreshNotice] = useState<{
+    userId: string;
+    ok: boolean;
+    message: string;
+  } | null>(null);
   
   // Market news state
   const [marketNewsContexts, setMarketNewsContexts] = useState<Record<string, MarketNewsContext>>({});
@@ -554,6 +560,43 @@ export default function AdminPage() {
       console.error('Error deleting user account:', err);
     } finally {
       setDeletingAccount(null);
+    }
+  };
+
+  const refreshUserAskLincSnapshot = async (userId: string) => {
+    setRefreshingUserSnapshot(userId);
+    setSnapshotRefreshNotice(null);
+    try {
+      const response = await fetch(`${API_URL}/admin/refresh-user-snapshot/${userId}`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        const n = typeof data.accountCount === 'number' ? data.accountCount : '—';
+        setSnapshotRefreshNotice({
+          userId,
+          ok: true,
+          message: `Snapshot rebuilt (${n} accounts in cache).`,
+        });
+      } else if (response.status === 401 || response.status === 403) {
+        setError('Authentication required for admin access');
+      } else {
+        setSnapshotRefreshNotice({
+          userId,
+          ok: false,
+          message: typeof data.error === 'string' ? data.error : 'Refresh failed',
+        });
+      }
+    } catch (err) {
+      console.error('Error refreshing user snapshot:', err);
+      setSnapshotRefreshNotice({
+        userId,
+        ok: false,
+        message: 'Network error',
+      });
+    } finally {
+      setRefreshingUserSnapshot(null);
     }
   };
 
@@ -1424,6 +1467,28 @@ export default function AdminPage() {
                       )}
                     </div>
                     
+                    {/* Ask Linc: rebuild cached financial snapshot (Plaid + SnapTrade) */}
+                    <div className="flex flex-col items-end gap-1">
+                      <button
+                        type="button"
+                        onClick={() => refreshUserAskLincSnapshot(user.id)}
+                        disabled={refreshingUserSnapshot === user.id}
+                        className="px-3 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                        title="Recompute FinancialSummarySnapshot and finances summary so Ask Linc matches linked accounts (e.g. after SnapTrade)."
+                      >
+                        {refreshingUserSnapshot === user.id ? 'Rebuilding…' : 'Rebuild Ask Linc cache'}
+                      </button>
+                      {snapshotRefreshNotice?.userId === user.id && (
+                        <div
+                          className={`text-xs max-w-[220px] text-right ${
+                            snapshotRefreshNotice.ok ? 'text-green-400' : 'text-red-400'
+                          }`}
+                        >
+                          {snapshotRefreshNotice.message}
+                        </div>
+                      )}
+                    </div>
+
                     {/* Access Management */}
                     <div className="flex items-center space-x-2">
                       {user.isActive ? (

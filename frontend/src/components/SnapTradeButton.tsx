@@ -53,8 +53,24 @@ export default function SnapTradeButton({ onAccountsUpdated, isDemo = false, sna
       financialServiceCoordinator.unregisterService(SERVICE_NAMES.SNAPTRADE);
       setIsModalOpen(false);
       setRedirectLink(null);
-      // Refresh connected accounts
-      checkConnectedAccounts();
+      // Recompute cached snapshot for Ask Linc (live SnapTrade APIs already power the UI)
+      void (async () => {
+        await checkConnectedAccounts();
+        try {
+          const token = localStorage.getItem('auth_token');
+          if (token && API_URL) {
+            const res = await fetch(`${API_URL}/api/refresh-summary`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) {
+              console.warn('POST /api/refresh-summary after SnapTrade connect failed:', res.status);
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to refresh financial snapshot for Ask Linc after SnapTrade connect', e);
+        }
+      })();
     },
     handleError: (error) => {
       console.error('SnapTrade connection error via window message:', error);
