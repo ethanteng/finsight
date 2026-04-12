@@ -855,30 +855,26 @@ export class StripeService {
   }
 
   /**
-   * Get the current tier from Stripe based on the subscription's price
+   * Get the current tier from Stripe based on the subscription's price.
+   * Uses getTierFromPriceId() which correctly handles single-tier pricing
+   * (where all tiers share one price ID and map to 'premium').
    */
   private async getCurrentTierFromStripe(subscriptionId: string): Promise<string> {
     try {
       const stripeSubscription = await stripe.client.subscriptions.retrieve(subscriptionId);
-      
+
       const currentPrice = stripeSubscription.items.data[0]?.price?.id;
-      
-      // Use environment-aware price ID mapping
-      const { getSubscriptionPlans } = await import('../types/stripe');
-      const plans = getSubscriptionPlans();
-      
-      // Find tier by price ID
-      for (const [tier, plan] of Object.entries(plans)) {
-        if (plan.stripePriceId === currentPrice) {
-          return tier;
-        }
-      }
-      
-      // Fallback to starter if no match found
-      return 'starter';
+
+      // Use getTierFromPriceId for consistent single-tier pricing logic.
+      // The old loop approach incorrectly returned 'starter' because all tiers
+      // share the same price ID and iteration order is not guaranteed to be premium-first.
+      const { getTierFromPriceId } = await import('../config/stripe');
+      const tier = getTierFromPriceId(currentPrice);
+
+      return tier || 'premium'; // Default to premium, not starter
     } catch (error) {
       console.error('Error getting current tier from Stripe:', error);
-      return 'starter'; // fallback
+      return 'premium'; // fallback to premium, not starter
     }
   }
 
