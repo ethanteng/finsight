@@ -211,7 +211,7 @@ function downloadAsText(data: Partial<ShowTheMathData>) {
   a.download = `show-the-math-${new Date().toISOString().slice(0, 10)}.txt`;
   document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a);
+  a.remove();
   URL.revokeObjectURL(url);
 }
 
