@@ -28,10 +28,9 @@ export default function MailerLiteScript() {
     document.head.appendChild(script);
     
     return () => {
-      // Cleanup
-      if (script.parentNode) {
-        script.parentNode.removeChild(script);
-      }
+      // Cleanup: use remove() which is a no-op if already detached, avoiding
+      // "Cannot read properties of null (reading 'removeChild')" errors
+      script.remove();
     };
   }, []);
 
