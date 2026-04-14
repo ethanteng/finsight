@@ -805,6 +805,14 @@ app.post('/feedback', async (req: Request, res: Response) => {
     let feedback;
     
     if (isDemo) {
+      // Verify the demo conversation exists before creating feedback to avoid
+      // foreign key constraint violations (feedback_demoConversationId_fkey)
+      const demoConversation = await prisma.demoConversation.findUnique({
+        where: { id: conversationId }
+      });
+      if (!demoConversation) {
+        return res.status(400).json({ error: 'Demo conversation not found' });
+      }
       // Save feedback for demo conversation
       feedback = await prisma.feedback.create({
         data: {
