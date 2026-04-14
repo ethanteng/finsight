@@ -713,7 +713,7 @@ async function fetchSecurityMetadataForPortfolio(portfolioSnapshot: { holdings: 
       }
     }
     
-    // Fetch metadata for all tickers in a single batch query (avoids N+1 SELECTs)
+    // Single batch query avoids N+1 SELECTs on security_metadata
     const batchResult = await dbCache.getSecurityMetadataBatch(Array.from(tickers));
     for (const [ticker, metadata] of batchResult) {
       metadataMap[ticker] = metadata;

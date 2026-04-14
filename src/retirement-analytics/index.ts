@@ -54,7 +54,6 @@ export async function analyzeRetirementPortfolio(
 
     if (uniqueTickers.size > 0) {
       console.log(`📊 FMP: Fetching metadata once for ${uniqueTickers.size} unique tickers: ${Array.from(uniqueTickers).slice(0, 10).join(', ')}${uniqueTickers.size > 10 ? '...' : ''}`);
-      
       // Use batch fetch to avoid N+1 queries on security_metadata
       const batchResult = await dataProviderFactory.getSecurityMetadataBatch(Array.from(uniqueTickers));
       for (const [ticker, metadata] of batchResult) {

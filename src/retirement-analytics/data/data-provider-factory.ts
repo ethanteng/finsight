@@ -100,7 +100,10 @@ export class DataProviderFactory {
     await Promise.all(
       uncached.map(async (ticker) => {
         try {
-          const metadata = await this.fmpProvider.getSecurityMetadata(ticker);
+          const metadata = await this.fmpProvider.getSecurityMetadata(ticker, {
+            persistToDatabase: false,
+            skipDatabaseLookup: true
+          });
           result.set(ticker, metadata);
           fetched.push({ ticker, metadata, provider: metadata.provider });
         } catch (error) {

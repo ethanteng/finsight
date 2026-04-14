@@ -60,7 +60,6 @@ export async function analyzePortfolio(
 
     if (uniqueTickers.size > 0) {
       console.log(`📊 FMP: Fetching metadata for ${uniqueTickers.size} unique tickers (fallback mode)`);
-      
       // Use batch fetch to avoid N+1 queries on security_metadata
       const batchResult = await dataProviderFactory.getSecurityMetadataBatch(Array.from(uniqueTickers));
       for (const [ticker, metadata] of batchResult) {
