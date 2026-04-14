@@ -61,21 +61,10 @@ export async function analyzePortfolio(
     if (uniqueTickers.size > 0) {
       console.log(`📊 FMP: Fetching metadata for ${uniqueTickers.size} unique tickers (fallback mode)`);
       
-      const metadataPromises = Array.from(uniqueTickers).map(async (ticker) => {
-        try {
-          const metadata = await dataProviderFactory.getSecurityMetadata(ticker);
-          return { ticker, metadata };
-        } catch (error) {
-          console.warn(`⚠️ Failed to fetch FMP metadata for ${ticker}:`, error);
-          return { ticker, metadata: null };
-        }
-      });
-
-      const metadataResults = await Promise.all(metadataPromises);
-      for (const { ticker, metadata } of metadataResults) {
-        if (metadata) {
-          tickerToMetadata.set(ticker, metadata);
-        }
+      // Use batch fetch to avoid N+1 queries on security_metadata
+      const batchResult = await dataProviderFactory.getSecurityMetadataBatch(Array.from(uniqueTickers));
+      for (const [ticker, metadata] of batchResult) {
+        tickerToMetadata.set(ticker, metadata);
       }
     }
   }
