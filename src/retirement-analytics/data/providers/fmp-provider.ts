@@ -47,8 +47,17 @@ export class FMPProvider {
   /**
    * Fetch security metadata from FMP API
    * Returns asset class, expense ratio, geographic focus, etc.
+   *
+   * @param options.persistToDatabase - When false, skips DB writes (caller persists, e.g. batch upsert).
+   * @param options.skipDatabaseLookup - When true, skips the DB cache read (caller already loaded batch).
    */
-  async getSecurityMetadata(ticker: string): Promise<SecurityMetadata> {
+  async getSecurityMetadata(
+    ticker: string,
+    options?: { persistToDatabase?: boolean; skipDatabaseLookup?: boolean }
+  ): Promise<SecurityMetadata> {
+    const persistToDatabase = options?.persistToDatabase !== false;
+    const skipDatabaseLookup = options?.skipDatabaseLookup === true;
+
     const cacheKey = `fmp_metadata_${ticker}`;
     const isTestKey = this.apiKey === 'test_fmp_key' || this.apiKey.startsWith('test_') || process.env.GITHUB_ACTIONS;
     
@@ -64,17 +73,19 @@ export class FMPProvider {
       }
     }
 
-    // Check database cache (persistent across restarts)
-    const dbCached = await dbCache.getSecurityMetadata(ticker);
-    if (dbCached) {
-      // If we have a real API key and cached data is inferred, try API anyway to get better data
-      if (!isTestKey && dbCached.provider === 'inferred') {
-        console.log(`🔄 FMP: Database cache for ${ticker} is inferred, will try API with real key`);
-      } else {
-        console.log(`💾 FMP: Using database cache for ${ticker}`);
-        // Also populate in-memory cache for faster subsequent access
-        await cacheService.set(cacheKey, dbCached, 7 * 24 * 60 * 60 * 1000);
-        return dbCached;
+    if (!skipDatabaseLookup) {
+      // Check database cache (persistent across restarts)
+      const dbCached = await dbCache.getSecurityMetadata(ticker);
+      if (dbCached) {
+        // If we have a real API key and cached data is inferred, try API anyway to get better data
+        if (!isTestKey && dbCached.provider === 'inferred') {
+          console.log(`🔄 FMP: Database cache for ${ticker} is inferred, will try API with real key`);
+        } else {
+          console.log(`💾 FMP: Using database cache for ${ticker}`);
+          // Also populate in-memory cache for faster subsequent access
+          await cacheService.set(cacheKey, dbCached, 7 * 24 * 60 * 60 * 1000);
+          return dbCached;
+        }
       }
     }
 
@@ -83,7 +94,7 @@ export class FMPProvider {
       console.log(`⚠️ FMP Provider: Using inferred metadata for ${ticker} (test key or CI environment detected)`);
       const mockMetadata = this.generateMockMetadata(ticker);
       // Still save mock metadata to database for consistency (but only in non-CI environments)
-      if (!process.env.GITHUB_ACTIONS) {
+      if (persistToDatabase && !process.env.GITHUB_ACTIONS) {
         await dbCache.saveSecurityMetadata(ticker, mockMetadata, 'inferred').catch(() => {
           // Ignore errors saving mock metadata
         });
@@ -106,11 +117,12 @@ export class FMPProvider {
             console.log(`✅ FMP: Successfully fetched ETF metadata for ${ticker}`);
             // Cache in memory
             await cacheService.set(cacheKey, metadata, 7 * 24 * 60 * 60 * 1000); // 7 days
-            // Also persist to database
-            console.log(`💾 FMP: Saving to database cache for ${ticker}`);
-            await dbCache.saveSecurityMetadata(ticker, metadata, 'fmp').catch((err) => {
-              console.error(`⚠️ Failed to save metadata to database for ${ticker}:`, err);
-            });
+            if (persistToDatabase) {
+              console.log(`💾 FMP: Saving to database cache for ${ticker}`);
+              await dbCache.saveSecurityMetadata(ticker, metadata, 'fmp').catch((err) => {
+                console.error(`⚠️ Failed to save metadata to database for ${ticker}:`, err);
+              });
+            }
             return metadata;
           } else {
             console.log(`⚠️ FMP: ETF info returned empty data for ${ticker}`);
@@ -146,11 +158,12 @@ export class FMPProvider {
       
       // Cache in memory for 7 days (metadata changes rarely)
       await cacheService.set(cacheKey, metadata, 7 * 24 * 60 * 60 * 1000);
-      // Also persist to database
-      console.log(`💾 FMP: Saving to database cache for ${ticker}`);
-      await dbCache.saveSecurityMetadata(ticker, metadata, 'fmp').catch((err) => {
-        console.error(`⚠️ Failed to save metadata to database for ${ticker}:`, err);
-      });
+      if (persistToDatabase) {
+        console.log(`💾 FMP: Saving to database cache for ${ticker}`);
+        await dbCache.saveSecurityMetadata(ticker, metadata, 'fmp').catch((err) => {
+          console.error(`⚠️ Failed to save metadata to database for ${ticker}:`, err);
+        });
+      }
       
       return metadata;
     } catch (error) {
@@ -159,10 +172,11 @@ export class FMPProvider {
       console.log(`🔄 FMP: Falling back to inferred metadata for ${ticker}`);
       // Return inferred metadata instead of throwing
       const inferredMetadata = this.inferMetadata(ticker);
-      // Cache inferred metadata in database too (so we don't keep trying API)
-      await dbCache.saveSecurityMetadata(ticker, inferredMetadata, 'inferred').catch(() => {
-        // Ignore errors saving inferred metadata
-      });
+      if (persistToDatabase) {
+        await dbCache.saveSecurityMetadata(ticker, inferredMetadata, 'inferred').catch(() => {
+          // Ignore errors saving inferred metadata
+        });
+      }
       return inferredMetadata;
     }
   }

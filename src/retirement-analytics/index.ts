@@ -54,27 +54,12 @@ export async function analyzeRetirementPortfolio(
 
     if (uniqueTickers.size > 0) {
       console.log(`📊 FMP: Fetching metadata once for ${uniqueTickers.size} unique tickers: ${Array.from(uniqueTickers).slice(0, 10).join(', ')}${uniqueTickers.size > 10 ? '...' : ''}`);
-      
-      // Fetch metadata for all tickers in parallel (only once)
-      const metadataPromises = Array.from(uniqueTickers).map(async (ticker) => {
-        try {
-          const metadata = await dataProviderFactory.getSecurityMetadata(ticker);
-          return { ticker, metadata };
-        } catch (error) {
-          console.warn(`⚠️ Failed to fetch FMP metadata for ${ticker}:`, error);
-          return { ticker, metadata: null };
-        }
-      });
-
-      const metadataResults = await Promise.all(metadataPromises);
-      let fetchedCount = 0;
-      for (const { ticker, metadata } of metadataResults) {
-        if (metadata) {
-          tickerToMetadata.set(ticker, metadata);
-          fetchedCount++;
-        }
+      // Use batch fetch to avoid N+1 queries on security_metadata
+      const batchResult = await dataProviderFactory.getSecurityMetadataBatch(Array.from(uniqueTickers));
+      for (const [ticker, metadata] of batchResult) {
+        tickerToMetadata.set(ticker, metadata);
       }
-      console.log(`✅ FMP: Successfully fetched metadata for ${fetchedCount}/${uniqueTickers.size} tickers (will be shared across functions)`);
+      console.log(`✅ FMP: Successfully fetched metadata for ${batchResult.size}/${uniqueTickers.size} tickers (batch, shared across functions)`);
     }
   }
 

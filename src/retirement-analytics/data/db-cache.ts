@@ -377,6 +377,79 @@ export class DatabaseCache {
       // Don't throw - cache failures shouldn't break the analysis
     }
   }
+
+  /**
+   * Fetch security metadata for multiple tickers in a single query (avoids N+1 SELECTs).
+   * Returns a Map keyed by ticker symbol.
+   */
+  async getSecurityMetadataBatch(tickers: string[]): Promise<Map<string, SecurityMetadata>> {
+    const result = new Map<string, SecurityMetadata>();
+    if (tickers.length === 0) return result;
+    try {
+      const records = await this.prisma.securityMetadata.findMany({
+        where: { tickerSymbol: { in: tickers } }
+      });
+      for (const record of records) {
+        result.set(record.tickerSymbol, {
+          tickerSymbol: record.tickerSymbol,
+          securityName: record.securityName,
+          assetClass: record.assetClass || undefined,
+          fundCategory: record.fundCategory || undefined,
+          expenseRatio: record.expenseRatio || undefined,
+          geographicFocus: record.geographicFocus || undefined,
+          isETF: record.isETF,
+          provider: record.provider as 'fmp' | 'inferred',
+          lastUpdated: record.lastUpdated
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching security metadata batch from database:', error);
+    }
+    return result;
+  }
+
+  /**
+   * Save security metadata for multiple tickers in a single transaction (avoids N+1 INSERTs).
+   */
+  async saveSecurityMetadataBatch(
+    records: Array<{ ticker: string; metadata: SecurityMetadata; provider?: string }>
+  ): Promise<void> {
+    if (records.length === 0) return;
+    try {
+      const now = new Date();
+      await this.prisma.$transaction(
+        records.map(({ ticker, metadata, provider = 'fmp' }) =>
+          this.prisma.securityMetadata.upsert({
+            where: { tickerSymbol: ticker },
+            update: {
+              securityName: metadata.securityName,
+              assetClass: metadata.assetClass || null,
+              fundCategory: metadata.fundCategory || null,
+              expenseRatio: metadata.expenseRatio || null,
+              geographicFocus: metadata.geographicFocus || null,
+              isETF: metadata.isETF,
+              provider,
+              lastUpdated: now
+            },
+            create: {
+              tickerSymbol: ticker,
+              securityName: metadata.securityName,
+              assetClass: metadata.assetClass || null,
+              fundCategory: metadata.fundCategory || null,
+              expenseRatio: metadata.expenseRatio || null,
+              geographicFocus: metadata.geographicFocus || null,
+              isETF: metadata.isETF,
+              provider,
+              lastUpdated: now
+            }
+          })
+        )
+      );
+    } catch (error) {
+      console.error('Error saving security metadata batch to database:', error);
+      // Don't throw - cache failures shouldn't break the analysis
+    }
+  }
 }
 
 export const dbCache = new DatabaseCache();

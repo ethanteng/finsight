@@ -713,22 +713,10 @@ async function fetchSecurityMetadataForPortfolio(portfolioSnapshot: { holdings: 
       }
     }
     
-    // Fetch metadata for each ticker in parallel
-    const metadataPromises = Array.from(tickers).map(async (ticker) => {
-      try {
-        const metadata = await dbCache.getSecurityMetadata(ticker);
-        return { ticker, metadata };
-      } catch (error) {
-        console.warn(`⚠️ Failed to fetch security metadata for ${ticker}:`, error);
-        return { ticker, metadata: null };
-      }
-    });
-    
-    const metadataResults = await Promise.all(metadataPromises);
-    for (const { ticker, metadata } of metadataResults) {
-      if (metadata) {
-        metadataMap[ticker] = metadata;
-      }
+    // Single batch query avoids N+1 SELECTs on security_metadata
+    const batchResult = await dbCache.getSecurityMetadataBatch(Array.from(tickers));
+    for (const [ticker, metadata] of batchResult) {
+      metadataMap[ticker] = metadata;
     }
     
     return metadataMap;
