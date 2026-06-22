@@ -7,6 +7,7 @@
 
 import { FinancialContextSnapshot } from './types';
 import { extractAgeFromProfile, extractRetirementAgeFromProfile } from '../retirement-analytics/profile-age-extractor';
+import { classifyAccount } from '../services/account-classifier';
 
 export interface CanonicalFinancialSnapshot {
   assets: {
@@ -28,20 +29,6 @@ export interface CanonicalFinancialSnapshot {
 /** Standard default when user has not specified a retirement goal age (e.g. in profile). */
 const DEFAULT_RETIREMENT_GOAL_AGE = 65;
 
-const RETIREMENT_SUBTYPES = ['401k', 'ira', 'roth', 'roth ira', 'traditional ira', 'pension', 'annuity', 'hsa', '529'];
-const BROKERAGE_SUBTYPES = ['brokerage'];
-const CASH_TYPES = ['depository'];
-const CASH_SUBTYPES = ['checking', 'savings', 'cd', 'money market', 'prepaid'];
-const MORTGAGE_SUBTYPES = ['mortgage', 'home equity'];
-
-/** Extract numeric balance from account (handles both { current, available } and raw number) */
-function getAccountBalance(acc: any): number {
-  const b = acc?.balance;
-  if (typeof b === 'number' && !Number.isNaN(b)) return b;
-  if (b && typeof b === 'object') return b.current ?? b.available ?? 0;
-  return 0;
-}
-
 /**
  * Transform FinancialContextSnapshot to canonical format for LLM financial reasoning.
  */
@@ -60,19 +47,14 @@ export function toCanonicalSnapshot(snapshot: FinancialContextSnapshot): Canonic
     let derivedRetirement = 0;
 
     for (const acc of snapshot.accounts) {
-      const subtype = (acc.subtype || acc.type || '').toLowerCase();
-      const type = (acc.type || '').toLowerCase();
-      const balance = getAccountBalance(acc);
-
-      if (CASH_TYPES.includes(type) || CASH_SUBTYPES.includes(subtype)) {
-        derivedCash += Math.max(0, balance);
-      } else if (BROKERAGE_SUBTYPES.includes(subtype)) {
-        derivedBrokerage += Math.max(0, balance);
-      } else if (RETIREMENT_SUBTYPES.some(r => subtype.includes(r))) {
-        derivedRetirement += Math.max(0, balance);
-      } else if (type === 'investment') {
-        // Investment without specific subtype - treat as brokerage by default
-        derivedBrokerage += Math.max(0, balance);
+      const classified = classifyAccount(acc);
+      const balance = Math.max(0, classified.balance);
+      if (classified.category === 'cash') {
+        derivedCash += balance;
+      } else if (classified.category === 'brokerage') {
+        derivedBrokerage += balance;
+      } else if (classified.category === 'retirement') {
+        derivedRetirement += balance;
       }
     }
 
@@ -93,25 +75,24 @@ export function toCanonicalSnapshot(snapshot: FinancialContextSnapshot): Canonic
 
   if (snapshot.accounts && snapshot.accounts.length > 0) {
     for (const acc of snapshot.accounts) {
-      const subtype = (acc.subtype || acc.type || '').toLowerCase();
-      const type = (acc.type || '').toLowerCase();
-      const rawBalance = getAccountBalance(acc);
+      const classified = classifyAccount(acc);
 
-      // Cash accounts with negative balance (overdraft) — consistent with FinancialSummaryService
-      if ((CASH_TYPES.includes(type) || CASH_SUBTYPES.includes(subtype)) && rawBalance < 0) {
-        liabilities['overdraft'] = (liabilities['overdraft'] || 0) + Math.abs(rawBalance);
+      // Cash accounts with negative balance (overdraft) — consistent across summary builders
+      if (classified.isCash && classified.balance < 0) {
+        liabilities['overdraft'] = (liabilities['overdraft'] || 0) + Math.abs(classified.balance);
         continue;
       }
 
-      const balance = Math.abs(rawBalance);
+      if (!classified.isDebt) continue;
+      const balance = Math.abs(classified.balance);
       if (balance <= 0) continue;
 
-      if (MORTGAGE_SUBTYPES.some(m => subtype.includes(m))) {
+      if (classified.category === 'mortgage') {
         mortgage += balance;
-      } else if (type === 'credit') {
+      } else if (classified.category === 'credit') {
         liabilities['credit'] = (liabilities['credit'] || 0) + balance;
-      } else if (type === 'loan' || ['student', 'personal', 'auto'].some(s => subtype.includes(s))) {
-        const key = subtype || 'loan';
+      } else {
+        const key = classified.liabilityKey || 'loan';
         liabilities[key] = (liabilities[key] || 0) + balance;
       }
     }

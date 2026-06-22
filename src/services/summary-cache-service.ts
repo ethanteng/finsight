@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { plaidClient } from '../plaid';
 import { BalanceService } from './balance-service';
 import { FinancialDataService } from './financial-data-service';
+import { classifyAccount } from './account-classifier';
 
 // Lazy Prisma to avoid multiple instances during different runtimes
 let prisma: PrismaClient | null = null;
@@ -264,25 +265,21 @@ export class SummaryCacheService {
     // The portfolio is calculated by analyzePortfolio() which includes manual investment accounts
     const portfolio = data?.investments?.portfolio;
     const totalInvestments = portfolio?.totalValue || 0;
-    // ✅ Calculate totalCash including manual cash accounts
-    // Manual cash accounts are mapped to type='depository', subtype='checking' so they're included here
+    // ✅ Calculate totalCash including manual cash accounts via the shared classifier
+    // (single source of truth). Manual cash accounts are mapped to type='depository'.
     let totalCash = 0;
     let totalDebt = 0;
     for (const a of data?.accounts || []) {
-      const t = a.type;
-      const st = a.subtype;
-      if (t === 'investment' || ['401k','ira','roth','brokerage','hsa','529','pension','annuity'].includes(st)) continue;
-      if (t === 'depository' || ['checking','savings','cd','money market','prepaid'].includes(st)) {
-        const b = a.balance?.current ?? a.balance?.available ?? 0;
+      const classified = classifyAccount(a);
+      const b = classified.balance;
+      // Investment accounts are counted via portfolio.totalValue, not their balance.
+      if (classified.isInvestment) continue;
+      if (classified.isDebt) {
+        // liabilityValue = Math.abs(balance) — APIs use inconsistent sign conventions
+        totalDebt += Math.abs(b);
+      } else if (classified.isCash) {
         totalCash += Math.max(0, b);
         if (b < 0) totalDebt += Math.abs(b); // overdraft
-        continue;
-      }
-      // liabilityValue = Math.abs(balance) for all — APIs use inconsistent sign conventions
-      if (t === 'credit') {
-        totalDebt += Math.abs(a.balance?.current ?? a.balance?.available ?? 0);
-      } else if (t === 'loan' || ['mortgage','student','personal','auto','home equity'].includes(st)) {
-        totalDebt += Math.abs(a.balance?.current ?? a.balance?.available ?? 0);
       }
     }
     // Extract homeValue: prioritize valueMid (manual override or RentCast estimate), then fall back to valueHigh or valueLow
