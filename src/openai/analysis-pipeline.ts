@@ -16,7 +16,7 @@ import { analyzeQuestionNeeds } from './question-analysis';
 import { gatherContextSnapshot } from './context-service';
 import { toCanonicalSnapshot } from './canonical-snapshot';
 import { buildPromptInputFromSnapshot, buildFinancialReasoningPrompt } from './financial-reasoning-prompt';
-import { askClaudeWithFinancialContext } from './claude-client';
+import { askClaude } from './claude-client';
 import { parseStructuredResponse, toDisplayText, AskLincResponse } from './structured-response';
 import { validateUserPrompt, getRejectionMessage } from '../security/prompt-validation';
 import { validateLLMResponse } from '../security/output-validation';
@@ -98,14 +98,19 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     conversationHistory.map(c => ({ question: c.question, answer: c.answer }))
   );
 
-  // Show the Math: fetch DB data and emit
-  const databaseData = await fetchShowTheMathDBData(userId, snapshot);
+  // Show the Math: the DB fetch is independent of the Claude call, so run them
+  // concurrently and let the (fast) DB read hide under the (slow) LLM latency.
+  const databaseDataPromise = fetchShowTheMathDBData(userId, snapshot);
+
+  // Step 3: LLM financial reasoning (Claude Sonnet). Build the prompt once and
+  // pass it through (avoids rebuilding the large reasoning prompt inside the client).
+  const { systemPrompt, userMessage } = buildFinancialReasoningPrompt(promptInput);
+  const claudePromise = askClaude(systemPrompt, userMessage);
+
+  const databaseData = await databaseDataPromise;
   onShowTheMathProgress?.({ databaseData });
 
-  // Step 3: LLM financial reasoning (Claude Sonnet)
-  const { systemPrompt, userMessage } = buildFinancialReasoningPrompt(promptInput);
-  let rawResponse = await askClaudeWithFinancialContext(promptInput);
-
+  let rawResponse = await claudePromise;
   const claudeFirstCall: ShowTheMathClaudeCall = { systemPrompt, userMessage, rawResponse };
   onShowTheMathProgress?.({ claudeFirstCall });
 
@@ -145,7 +150,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
           validationFeedback: validationResult.issues
         };
         const retryPrompt = buildFinancialReasoningPrompt(retryPromptInput);
-        rawResponse = await askClaudeWithFinancialContext(retryPromptInput);
+        rawResponse = await askClaude(retryPrompt.systemPrompt, retryPrompt.userMessage);
         claudeRetry = {
           systemPrompt: retryPrompt.systemPrompt,
           userMessage: retryPrompt.userMessage,
