@@ -47,6 +47,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
+  const [streamingAnswer, setStreamingAnswer] = useState('');
   const [structuredResponse, setStructuredResponse] = useState<{
     summary: string;
     key_numbers?: Record<string, number>;
@@ -148,6 +149,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       setError('');
     } else {
       setAnswer('');
+      setStreamingAnswer('');
       setStructuredResponse(null);
       setShowTheMathData(null);
       setLiveShowTheMathData({});
@@ -165,6 +167,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     setProgressMessage(null);
     setError('');
     setAnswer('');
+    setStreamingAnswer('');
     setStructuredResponse(null);
     setShowTheMathData(null);
     setLiveShowTheMathData({});
@@ -248,11 +251,17 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
               const data = JSON.parse(currentData);
               if (currentEvent === 'progress' && data.message) {
                 setProgressMessage(data.message);
+              } else if (currentEvent === 'answerDelta' && typeof data.delta === 'string') {
+                setStreamingAnswer((prev) => prev + data.delta);
+              } else if (currentEvent === 'answerReset') {
+                // Validation triggered a regeneration; discard the streamed first pass.
+                setStreamingAnswer('');
               } else if (currentEvent === 'showTheMathProgress') {
                 setLiveShowTheMathData((prev) => ({ ...prev, ...data }));
               } else if (currentEvent === 'result') {
                 if (data.answer) {
                   setAnswer(data.answer);
+                  setStreamingAnswer('');
                   if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
                   if (data.conversationId) setConversationId(data.conversationId);
                   if (data.showTheMathData) {
@@ -464,7 +473,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
             </div>
           )}
           <div className="bg-gray-800 rounded-lg p-4 space-y-4">
-            {loading && !answer ? null : structuredResponse ? (
+            {structuredResponse ? (
               <>
                 <div className="text-gray-200 leading-relaxed">
                   <MarkdownRenderer>{structuredResponse.summary}</MarkdownRenderer>
@@ -505,7 +514,12 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
                   </div>
                 )}
               </>
-            ) : (
+            ) : streamingAnswer ? (
+              <div className="text-gray-200 leading-relaxed">
+                <MarkdownRenderer>{streamingAnswer}</MarkdownRenderer>
+                <span className="inline-block w-2 h-4 ml-0.5 align-middle bg-gray-400 animate-pulse" aria-hidden="true" />
+              </div>
+            ) : loading && !answer ? null : (
               <div className="text-gray-200 leading-relaxed">
                 <MarkdownRenderer>{answer}</MarkdownRenderer>
               </div>

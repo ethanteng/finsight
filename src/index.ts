@@ -561,6 +561,14 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
         ? (partial: object) => writeSSE(res, 'showTheMathProgress', partial)
         : undefined;
 
+      const onAnswerDelta = useStreaming
+        ? (delta: string) => writeSSE(res, 'answerDelta', { delta })
+        : undefined;
+
+      const onAnswerReset = useStreaming
+        ? () => writeSSE(res, 'answerReset', {})
+        : undefined;
+
       let showTheMathData: object | undefined;
 
       if (useAskLincPipeline) {
@@ -574,7 +582,9 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
             demoProfile: undefined,
             enableValidation: process.env.ENABLE_RESPONSE_VALIDATION === 'true',
             onProgress,
-            onShowTheMathProgress
+            onShowTheMathProgress,
+            onAnswerDelta,
+            onAnswerReset
           });
           aiResponse = result.displayText;
           structuredResponse = result.structuredResponse;

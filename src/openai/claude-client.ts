@@ -53,6 +53,41 @@ export async function askClaude(
 }
 
 /**
+ * Call Claude Sonnet with a pre-built prompt and stream text deltas via `onText`.
+ * Resolves with the complete text once the stream finishes. Streaming failures in
+ * `onText` are swallowed so UI streaming can never break the underlying call.
+ */
+export async function askClaudeStream(
+  systemPrompt: string,
+  userMessage: string,
+  onText: (delta: string) => void,
+  options: AskClaudeOptions = {}
+): Promise<string> {
+  const client = getClient();
+  const model = options.model || DEFAULT_MODEL;
+  const maxTokens = options.maxTokens ?? 8192;
+
+  const stream = client.messages.stream({
+    model,
+    max_tokens: maxTokens,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userMessage }]
+  });
+
+  stream.on('text', (textDelta: string) => {
+    try {
+      onText(textDelta);
+    } catch {
+      /* never let UI streaming break the model call */
+    }
+  });
+
+  const finalMessage = await stream.finalMessage();
+  const textBlock = finalMessage.content.find((block): block is { type: 'text'; text: string } => block.type === 'text');
+  return textBlock?.text ?? '';
+}
+
+/**
  * Call Claude Sonnet with financial reasoning context.
  * Returns the raw text response from the model.
  */
