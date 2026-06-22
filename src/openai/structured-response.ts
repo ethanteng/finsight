@@ -13,6 +13,62 @@ export interface AskLincResponse {
 }
 
 /**
+ * Extract the (possibly incomplete) decoded value of the top-level "summary"
+ * field from a partial JSON string as it streams in. Returns the decoded prefix
+ * of the summary so far, or '' if the summary string hasn't started yet.
+ *
+ * Used to progressively surface the human-readable answer over SSE while the
+ * model is still producing the full structured JSON response. It tolerates
+ * unterminated strings and incomplete escape sequences at the truncation point.
+ */
+export function extractPartialSummary(raw: string): string {
+  if (!raw) return '';
+  const keyIdx = raw.indexOf('"summary"');
+  if (keyIdx === -1) return '';
+
+  let i = raw.indexOf(':', keyIdx + '"summary"'.length);
+  if (i === -1) return '';
+  i++;
+  while (i < raw.length && /\s/.test(raw[i])) i++;
+  if (i >= raw.length || raw[i] !== '"') return '';
+  i++; // past opening quote
+
+  let out = '';
+  while (i < raw.length) {
+    const ch = raw[i];
+    if (ch === '\\') {
+      if (i + 1 >= raw.length) break; // incomplete escape — stop here
+      const next = raw[i + 1];
+      switch (next) {
+        case 'n': out += '\n'; break;
+        case 't': out += '\t'; break;
+        case 'r': out += '\r'; break;
+        case '"': out += '"'; break;
+        case '\\': out += '\\'; break;
+        case '/': out += '/'; break;
+        case 'b': out += '\b'; break;
+        case 'f': out += '\f'; break;
+        case 'u': {
+          if (i + 6 > raw.length) { i = raw.length; break; } // incomplete \uXXXX
+          const code = parseInt(raw.slice(i + 2, i + 6), 16);
+          if (!Number.isNaN(code)) out += String.fromCharCode(code);
+          i += 4;
+          break;
+        }
+        default: out += next; break;
+      }
+      i += 2;
+    } else if (ch === '"') {
+      break; // closing quote — summary complete
+    } else {
+      out += ch;
+      i += 1;
+    }
+  }
+  return out;
+}
+
+/**
  * Parse LLM output to extract structured JSON response.
  * Handles: raw JSON, JSON in markdown code block, malformed/truncated JSON, duplicate keys.
  */
