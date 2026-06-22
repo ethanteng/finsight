@@ -28,14 +28,15 @@ export interface AskClaudeOptions {
 }
 
 /**
- * Call Claude Sonnet with financial reasoning context.
- * Returns the raw text response from the model.
+ * Call Claude Sonnet with a pre-built prompt (system + user message).
+ * Lets callers that already built the prompt (e.g. for Show the Math) avoid
+ * rebuilding the large reasoning prompt a second time.
  */
-export async function askClaudeWithFinancialContext(
-  input: FinancialReasoningPromptInput,
+export async function askClaude(
+  systemPrompt: string,
+  userMessage: string,
   options: AskClaudeOptions = {}
 ): Promise<string> {
-  const { systemPrompt, userMessage } = buildFinancialReasoningPrompt(input);
   const client = getClient();
   const model = options.model || DEFAULT_MODEL;
   const maxTokens = options.maxTokens ?? 8192;
@@ -49,4 +50,16 @@ export async function askClaudeWithFinancialContext(
 
   const textBlock = response.content.find((block): block is { type: 'text'; text: string } => block.type === 'text');
   return textBlock?.text ?? '';
+}
+
+/**
+ * Call Claude Sonnet with financial reasoning context.
+ * Returns the raw text response from the model.
+ */
+export async function askClaudeWithFinancialContext(
+  input: FinancialReasoningPromptInput,
+  options: AskClaudeOptions = {}
+): Promise<string> {
+  const { systemPrompt, userMessage } = buildFinancialReasoningPrompt(input);
+  return askClaude(systemPrompt, userMessage, options);
 }

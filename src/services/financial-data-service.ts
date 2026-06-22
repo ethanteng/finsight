@@ -7,6 +7,7 @@ import { TransactionNormalizationService } from './transaction-normalization-ser
 import { TransactionCategorizationService, CategorizationDetail, TransactionType } from './transaction-categorization-service';
 import { persistTransactionsToDb, persistSnapTradeActivitiesToDb } from '../data/persistence';
 import { cacheService } from '../data/cache';
+import { classifyAccount } from './account-classifier';
 
 const prisma = new PrismaClient();
 
@@ -2568,9 +2569,9 @@ export class FinancialDataService {
     if (accounts) {
       const manualInvestmentAccounts = accounts.filter(acc => {
         const accountAny = acc as any;
-        return accountAny.source === 'manual' && 
-               (acc.type === 'investment' || 
-                ['401k', 'ira', 'roth', 'brokerage', 'hsa', '529', 'pension', 'annuity'].includes(acc.subtype?.toLowerCase() || ''));
+        // Use the shared classifier so "investment account" means the same thing
+        // here as in the summary/snapshot/canonical builders.
+        return accountAny.source === 'manual' && classifyAccount(acc).isInvestment;
       });
       
       const manualInvestmentValue = manualInvestmentAccounts.reduce((sum, acc) => {

@@ -350,64 +350,66 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     MAX_PROMPT_TRANSACTIONS
   );
 
-  const tierContext = await dataOrchestrator.buildTierAwareContext(
-    tier,
-    deduplicatedAccounts,
-    sortedTransactions.slice(0, MAX_PROMPT_TRANSACTIONS),
-    isDemo
-  );
-
   const effectiveQuestionNeeds = alwaysIncludeMarketAndRAG
     ? { ...questionNeeds, needsMarketContext: true, needsSearchContext: true }
     : questionNeeds;
-  onProgress?.('Searching financial knowledge base');
-  const searchContext = await maybeFetchSearchContext(question, effectiveQuestionNeeds, tier, isDemo);
-  onProgress?.('Fetching market context');
-  const marketContext = await maybeFetchMarketContext(effectiveQuestionNeeds, tier, isDemo);
 
-  // Fetch user overrides for monthly income/expenses
-  let monthlyIncomeOverride: number | null | undefined = undefined;
-  let monthlyExpenseOverride: number | null | undefined = undefined;
-  
-  if (userId && !isDemo) {
+  // Fetch user overrides for monthly income/expenses (isolated so a failure
+  // doesn't reject the whole parallel batch — preserves prior behavior).
+  const fetchUserOverrides = async (): Promise<{
+    monthlyIncomeOverride?: number | null;
+    monthlyExpenseOverride?: number | null;
+  }> => {
+    if (!userId || isDemo) return {};
     try {
       const { getPrismaClient } = await import('../prisma-client');
       const prisma = getPrismaClient();
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: {
-          monthlyIncomeOverride: true,
-          monthlyExpenseOverride: true
-        }
+        select: { monthlyIncomeOverride: true, monthlyExpenseOverride: true }
       });
-      
-      if (user) {
-        monthlyIncomeOverride = user.monthlyIncomeOverride;
-        monthlyExpenseOverride = user.monthlyExpenseOverride;
-      }
+      return user
+        ? { monthlyIncomeOverride: user.monthlyIncomeOverride, monthlyExpenseOverride: user.monthlyExpenseOverride }
+        : {};
     } catch (error) {
       console.error('Failed to fetch user overrides:', error);
-      // Continue without overrides if fetch fails
+      return {};
     }
-  }
+  };
+
+  // These operations are independent of one another — run them concurrently
+  // instead of serially to cut the time spent gathering context before the LLM call.
+  onProgress?.('Searching financial knowledge base');
+  onProgress?.('Fetching market context');
+  console.log(`📊 gatherContextSnapshot: Passing ${deduplicatedAccounts.length} deduplicated accounts to loadUserProfile`);
+  onProgress?.('Preparing your profile');
+
+  const [tierContext, searchContext, marketContext, userOverrides, userProfile] = await Promise.all([
+    dataOrchestrator.buildTierAwareContext(
+      tier,
+      deduplicatedAccounts,
+      sortedTransactions.slice(0, MAX_PROMPT_TRANSACTIONS),
+      isDemo
+    ),
+    maybeFetchSearchContext(question, effectiveQuestionNeeds, tier, isDemo),
+    maybeFetchMarketContext(effectiveQuestionNeeds, tier, isDemo),
+    fetchUserOverrides(),
+    loadUserProfile({
+      userId,
+      isDemo,
+      demoProfile,
+      accounts: deduplicatedAccounts,
+      transactions: sortedTransactions
+    })
+  ]);
+
+  const monthlyIncomeOverride = userOverrides.monthlyIncomeOverride;
+  const monthlyExpenseOverride = userOverrides.monthlyExpenseOverride;
 
   const incomeResult = buildIncomeAnalysis(sortedTransactions, monthlyIncomeOverride);
   const expenseResult = buildExpenseAnalysis(sortedTransactions, monthlyExpenseOverride);
   const incomeAnalysis = incomeResult?.text;
   const expenseAnalysis = expenseResult?.text;
-  
-  // ✅ Pass deduplicated accounts and sorted transactions to loadUserProfile
-  // The profile enhancer needs the actual account data, not anonymized tokens
-  console.log(`📊 gatherContextSnapshot: Passing ${deduplicatedAccounts.length} deduplicated accounts to loadUserProfile`);
-  onProgress?.('Preparing your profile');
-
-  const userProfile = await loadUserProfile({
-    userId,
-    isDemo,
-    demoProfile,
-    accounts: deduplicatedAccounts,
-    transactions: sortedTransactions
-  });
 
   // Fetch or create retirement analysis if question is retirement-related
   let retirementAnalysis: FinancialContextSnapshot['retirementAnalysis'] | undefined;

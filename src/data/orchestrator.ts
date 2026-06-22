@@ -426,7 +426,14 @@ export class DataOrchestrator {
       source.category === 'economic' && source.provider === 'fred'
     );
 
-    if (hasEconomicSources) {
+    // Check if live market data is available
+    const hasLiveDataSources = availableSources.some(source => 
+      source.category === 'external' && source.provider === 'alpha-vantage'
+    );
+
+    // FRED and Alpha Vantage are independent upstreams — fetch them concurrently.
+    const fetchEconomicIndicators = async () => {
+      if (!hasEconomicSources) return;
       console.log('DataOrchestrator: Fetching economic indicators...');
       try {
         context.economicIndicators = await this.fredProvider.getEconomicIndicators();
@@ -434,14 +441,10 @@ export class DataOrchestrator {
       } catch (error) {
         console.error('DataOrchestrator: Error fetching economic indicators:', error);
       }
-    }
+    };
 
-    // Check if live market data is available
-    const hasLiveDataSources = availableSources.some(source => 
-      source.category === 'external' && source.provider === 'alpha-vantage'
-    );
-
-    if (hasLiveDataSources) {
+    const fetchLiveMarketData = async () => {
+      if (!hasLiveDataSources) return;
       console.log('DataOrchestrator: Fetching live market data...');
       try {
         const liveMarketData = await this.alphaVantageProvider.getLiveMarketData(tier);
@@ -452,7 +455,9 @@ export class DataOrchestrator {
       } catch (error) {
         console.error('DataOrchestrator: Error fetching live market data:', error);
       }
-    }
+    };
+
+    await Promise.all([fetchEconomicIndicators(), fetchLiveMarketData()]);
 
     return context;
   }

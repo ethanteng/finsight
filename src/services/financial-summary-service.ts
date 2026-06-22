@@ -1,5 +1,6 @@
 import { getPrismaClient } from '../prisma-client';
 import { FinancialDataService, UnifiedFinancialData, Account, HomeData } from './financial-data-service';
+import { classifyAccount } from './account-classifier';
 
 const prisma = getPrismaClient();
 
@@ -86,37 +87,24 @@ export class FinancialSummaryService {
         continue; // Skip duplicate
       }
       seenAccountIds.add(uniqueId);
-      
-      const balance = account.balance?.current ?? account.balance?.available ?? 0;
-      const accountType = account.type?.toLowerCase() || '';
-      const accountSubtype = account.subtype?.toLowerCase() || '';
-      
-      // ✅ IMPORTANT: Exclude investment accounts from cash/debt calculations
-      // Investment accounts are counted separately via holdings (for accounts with holdings)
-      // and via account balance (for manual investment accounts without holdings)
-      if (accountType === 'investment') {
-        // Investment accounts should not be counted as cash or debt
-        // Their value is already included in totalInvestments via holdings or account balance
+
+      // Classify via the shared account classifier (single source of truth).
+      const classified = classifyAccount(account);
+      const balance = classified.balance;
+
+      // ✅ IMPORTANT: Exclude investment accounts from cash/debt calculations.
+      // Their value is already included in totalInvestments via holdings (or, for
+      // manual investment accounts, via analyzePortfolio adding the balance).
+      if (classified.isInvestment) {
         continue;
       }
-      
-      // Debt accounts: credit, loan, mortgage (check first to avoid double counting)
-      // liabilityValue = Math.abs(balance) for all — APIs use inconsistent sign conventions
-      // (e.g. credit card -1200 vs loan +1200 both mean $1200 owed)
-      if (accountType === 'credit' || 
-          accountType === 'loan' ||
-          accountSubtype === 'credit card' ||
-          accountSubtype === 'mortgage' ||
-          accountSubtype === 'auto' ||
-          accountSubtype === 'student') {
+
+      if (classified.isDebt) {
+        // liabilityValue = Math.abs(balance) — APIs use inconsistent sign conventions
+        // (e.g. credit card -1200 vs loan +1200 both mean $1200 owed)
         totalDebt += Math.abs(balance);
-      } else if (accountType === 'depository' || 
-          accountSubtype === 'checking' || 
-          accountSubtype === 'savings' || 
-          accountSubtype === 'money market' ||
-          accountSubtype === 'prepaid') {
-        // Cash accounts: checking, savings, money market, prepaid
-        // Use Math.max(0, balance) for consistency with canonical snapshot and SummaryCacheService.
+      } else if (classified.isCash) {
+        // Use Math.max(0, balance) for consistency across all summary builders.
         // Overdraft (negative balance) is treated as debt to preserve net worth correctness.
         totalCash += Math.max(0, balance);
         if (balance < 0) totalDebt += Math.abs(balance);
