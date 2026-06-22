@@ -10,11 +10,11 @@
 export function extractAgeFromProfile(profileText: string): number | null {
   if (!profileText) return null;
 
+  // Prefer explicit current-age phrasing; avoid "retire at age 68" matching as current age.
   const agePatterns = [
-    /(?:age|aged|i'?m|i am)\s+(\d+)(?:\s*(?:years?\s*old|y\.?o\.?))?/i,
-    /(\d+)\s*(?:years?\s*old|y\.?o\.?)/i,
-    /at\s+age\s+(\d+)/i,
-    /(\d+)-year-old/i
+    /(?:i'?m|i am)\s+(\d{2,3})\b/i,
+    /(?:^|\s)(\d{2,3})\s*(?:years?\s*old|y\.?o\.?)/i,
+    /(\d{2,3})-year-old/i,
   ];
 
   for (const pattern of agePatterns) {

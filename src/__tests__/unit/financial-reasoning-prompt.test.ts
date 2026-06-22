@@ -1,0 +1,89 @@
+import { buildFinancialReasoningPrompt, FinancialReasoningPromptInput } from '../../openai/financial-reasoning-prompt';
+
+const baseInput: FinancialReasoningPromptInput = {
+  question: 'How much do I spend each month?',
+  financialContext: '# Financial Overview\nNet Worth: $250,000.00',
+  userProfile: 'Age 40, married.',
+  marketSummary: 'Markets were flat.',
+  ragKnowledge: 'Some retrieved knowledge.'
+};
+
+describe('buildFinancialReasoningPrompt – system prompt safeguards', () => {
+  const { systemPrompt } = buildFinancialReasoningPrompt(baseInput);
+
+  it('instructs the model not to invent data', () => {
+    expect(systemPrompt).toMatch(/Do not invent financial data/i);
+  });
+
+  it('instructs the model to treat amounts as USD', () => {
+    expect(systemPrompt).toMatch(/USD/);
+  });
+
+  it('instructs the model to use authoritative totals and not recompute them', () => {
+    expect(systemPrompt).toMatch(/AUTHORITATIVE VALUES/);
+    expect(systemPrompt).toMatch(/Do NOT recompute/i);
+  });
+
+  it('includes the (EXPENSE)/(FEE) transaction filtering rule', () => {
+    expect(systemPrompt).toMatch(/EXPENSE CALCULATIONS/);
+    expect(systemPrompt).toContain('(EXPENSE)');
+    expect(systemPrompt).toContain('(FEE)');
+    expect(systemPrompt).toContain('(TRANSFER_IN)');
+    expect(systemPrompt).toContain('(INCOME)');
+  });
+
+  it('requires whole-number percentages and raw numbers in key_numbers', () => {
+    expect(systemPrompt).toMatch(/whole-number form/i);
+    expect(systemPrompt).toMatch(/no "\$", "%", or commas/);
+  });
+});
+
+describe('buildFinancialReasoningPrompt – user message assembly', () => {
+  it('marks the financial context as canonical and source of truth', () => {
+    const { userMessage } = buildFinancialReasoningPrompt(baseInput);
+    expect(userMessage).toContain('## User Question');
+    expect(userMessage).toContain('How much do I spend each month?');
+    expect(userMessage).toContain('CANONICAL');
+    expect(userMessage).toContain('# Financial Overview');
+    expect(userMessage).toContain('## User Profile');
+    expect(userMessage).toContain('## Daily Market Summary');
+    expect(userMessage).toContain('## Retrieved Financial Knowledge');
+  });
+
+  it('uses placeholders when context pieces are missing', () => {
+    const { userMessage } = buildFinancialReasoningPrompt({
+      ...baseInput,
+      financialContext: '',
+      userProfile: '',
+      marketSummary: '',
+      ragKnowledge: ''
+    });
+    expect(userMessage).toContain('(No financial data available)');
+    expect(userMessage).toContain('(No profile available)');
+    expect(userMessage).toContain('(No market summary available)');
+    expect(userMessage).toContain('(No additional knowledge retrieved)');
+  });
+
+  it('prepends validation feedback when provided', () => {
+    const { userMessage } = buildFinancialReasoningPrompt({
+      ...baseInput,
+      validationFeedback: ['Withdrawal rate was miscalculated', 'Net worth invented']
+    });
+    expect(userMessage).toContain('## Validation Feedback — Must Fix');
+    expect(userMessage).toContain('- Withdrawal rate was miscalculated');
+    expect(userMessage).toContain('- Net worth invented');
+  });
+
+  it('includes only the last 4 conversation history entries, labeled non-canonical', () => {
+    const history = Array.from({ length: 6 }, (_, i) => ({
+      question: `Q${i}`,
+      answer: `A${i}`
+    }));
+    const { userMessage } = buildFinancialReasoningPrompt({ ...baseInput, conversationHistory: history });
+    expect(userMessage).toContain('NOT canonical data');
+    // Oldest two should be dropped (only last 4 kept)
+    expect(userMessage).not.toContain('Q0');
+    expect(userMessage).not.toContain('Q1');
+    expect(userMessage).toContain('Q5');
+  });
+});

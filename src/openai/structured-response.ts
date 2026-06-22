@@ -233,25 +233,37 @@ function normalizeResponse(obj: Record<string, unknown>): AskLincResponse {
   };
 }
 
+/** Format a numeric value as a USD amount, preserving sign (e.g. -$5,000.00, $187,547.25). */
+function formatDollars(value: number): string {
+  const sign = value < 0 ? '-' : '';
+  return `${sign}$${Math.abs(value).toLocaleString()}`;
+}
+
 /**
  * Format a key_number value for display based on the key name.
- * - Keys containing "months" or "years" (time) → plain number, e.g. 28
- * - Keys containing "loss", "surplus", "buffer", or "dollars" → dollar amount, e.g. $187,547
- * - Keys containing "allocation", "rate", or "percent" (but not "loss") → percentage, e.g. 4.15%
- * - Default → dollar amount
+ *
+ * Precedence (most specific → least specific):
+ * 1. Percentage keys ("percent", "rate", "allocation") → percentage, e.g. 4.15%.
+ *    Checked FIRST so keys like "unrealized_loss_percent" or "loss_rate" render as
+ *    percentages rather than dollars.
+ * 2. Time keys ("months", "years") → plain number, e.g. 28.
+ * 3. Dollar keys ("loss", "surplus", "buffer", "dollars") → dollar amount, e.g. $187,547.
+ * 4. Default → dollar amount.
+ *
+ * Note: percentage values are rendered as-is (no fraction→percent scaling). Claude is
+ * instructed to emit percentages in whole-number form (e.g. 4.15 for 4.15%); see
+ * REASONING_SYSTEM_PROMPT in financial-reasoning-prompt.ts.
  */
 export function formatKeyNumberValue(key: string, value: number): string {
   const keyLower = key.toLowerCase();
+  if (keyLower.includes('percent') || keyLower.includes('rate') || keyLower.includes('allocation')) {
+    return `${value}%`;
+  }
   if (keyLower.includes('months') || keyLower.includes('years')) {
     return value.toLocaleString();
   }
-  if (keyLower.includes('loss') || keyLower.includes('surplus') || keyLower.includes('buffer') || keyLower.includes('dollars')) {
-    return value >= 1000 ? `$${value.toLocaleString()}` : `$${value}`;
-  }
-  if (keyLower.includes('allocation') || keyLower.includes('rate') || (keyLower.includes('percent') && !keyLower.includes('loss'))) {
-    return `${value}%`;
-  }
-  return value >= 1000 ? `$${value.toLocaleString()}` : `$${value}`;
+  // Remaining keys (including "loss", "surplus", "buffer", "dollars") are dollar amounts.
+  return formatDollars(value);
 }
 
 /**

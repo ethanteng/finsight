@@ -38,12 +38,10 @@ export function parseRetirementQuestion(question: string): RetirementQuestionPar
     return { hasRetirementIntent: false };
   }
 
-  // Extract age patterns
-  // "I'm 48" or "I am 48" or "age 48" or "48 years old"
+  // Extract current age — avoid bare "age N" (matches "retire at age 68" as current age).
   const agePatterns = [
-    /(?:i'?m|i am|age|aged)\s+(\d+)(?:\s*(?:years?\s*old|y\.?o\.?))?/i,
-    /(\d+)\s*(?:years?\s*old|y\.?o\.?)/i,
-    /at\s+age\s+(\d+)/i
+    /(?:i'?m|i am)\s+(\d{2,3})\b/i,
+    /(\d{2,3})\s*(?:years?\s*old|y\.?o\.?)/i,
   ];
   
   let currentAge: number | undefined;
@@ -74,18 +72,27 @@ export function parseRetirementQuestion(question: string): RetirementQuestionPar
 
   // Extract withdrawal amount patterns
   // "$100,000 per year" or "$100k annually" or "withdraw 100000" or "100000 annual withdrawal"
+  const amountPattern = String.raw`\$?(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+\.\d+)`;
   const withdrawalPatterns = [
-    /\$?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*(?:k|thousand|million)?\s*(?:per\s+year|annually|annual\s+withdrawal|withdrawal)/i,
-    /withdraw(?:al)?\s+(?:of\s+)?\$?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*(?:k|thousand|million)?/i,
-    /annual\s+withdrawal\s+(?:of\s+)?\$?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*(?:k|thousand|million)?/i
+    new RegExp(`${amountPattern}\\s*(?:k|thousand|million)?\\s*(?:per\\s+year|annually|annual\\s+withdrawal|withdrawal)`, 'i'),
+    new RegExp(`withdraw(?:al)?\\s+(?:of\\s+)?${amountPattern}\\s*(?:k|thousand|million)?`, 'i'),
+    new RegExp(`annual\\s+withdrawal\\s+(?:of\\s+)?${amountPattern}\\s*(?:k|thousand|million)?`, 'i'),
   ];
+
+  function parseWithdrawalMultiplier(matchedText: string): number {
+    const t = matchedText.toLowerCase();
+    if (/\bmillion\b/.test(t)) return 1_000_000;
+    // "100k" — \b does not sit between digit and "k", so match digit+k explicitly
+    if (/(?:\d\s*)k\b/.test(t) || /\bthousand\b/.test(t)) return 1_000;
+    return 1;
+  }
   
   let annualWithdrawalAmount: number | undefined;
   for (const pattern of withdrawalPatterns) {
     const match = qLower.match(pattern);
     if (match) {
       const amount = match[1].replace(/,/g, '');
-      const multiplier = qLower.includes('million') ? 1000000 : (qLower.includes('k') || qLower.includes('thousand') ? 1000 : 1);
+      const multiplier = parseWithdrawalMultiplier(match[0]);
       annualWithdrawalAmount = parseFloat(amount) * multiplier;
       break;
     }
