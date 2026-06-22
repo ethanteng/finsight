@@ -16,8 +16,8 @@ import { analyzeQuestionNeeds } from './question-analysis';
 import { gatherContextSnapshot } from './context-service';
 import { toCanonicalSnapshot } from './canonical-snapshot';
 import { buildPromptInputFromSnapshot, buildFinancialReasoningPrompt } from './financial-reasoning-prompt';
-import { askClaude } from './claude-client';
-import { parseStructuredResponse, toDisplayText, AskLincResponse } from './structured-response';
+import { askClaude, askClaudeStream } from './claude-client';
+import { parseStructuredResponse, toDisplayText, extractPartialSummary, AskLincResponse } from './structured-response';
 import { validateUserPrompt, getRejectionMessage } from '../security/prompt-validation';
 import { validateLLMResponse } from '../security/output-validation';
 import { logRejectedPrompt, logFlaggedOutput } from '../security/security-logger';
@@ -37,6 +37,29 @@ export interface RunAskLincAnalysisOptions {
   onProgress?: (message: string) => void;
   /** Optional callback for live Show the Math data (streams partial data as pipeline runs) */
   onShowTheMathProgress?: (partial: Partial<ShowTheMathData>) => void;
+  /** Optional callback for incremental answer text (the summary field) as Claude streams it. */
+  onAnswerDelta?: (delta: string) => void;
+  /** Optional callback signalling the streamed answer so far should be discarded (e.g. before a validation retry). */
+  onAnswerReset?: () => void;
+}
+
+/**
+ * Build an `onText` handler that decodes the streaming JSON and emits only the
+ * incremental "summary" text via onAnswerDelta. Returns a no-op when no delta
+ * sink is provided (non-streaming callers).
+ */
+function makeAnswerStreamer(onAnswerDelta?: (delta: string) => void): (delta: string) => void {
+  if (!onAnswerDelta) return () => {};
+  let raw = '';
+  let emitted = 0;
+  return (delta: string) => {
+    raw += delta;
+    const partial = extractPartialSummary(raw);
+    if (partial.length > emitted) {
+      onAnswerDelta(partial.slice(emitted));
+      emitted = partial.length;
+    }
+  };
 }
 
 export interface RunAskLincAnalysisResult {
@@ -58,7 +81,9 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     demoProfile,
     enableValidation = process.env.ENABLE_RESPONSE_VALIDATION === 'true',
     onProgress,
-    onShowTheMathProgress
+    onShowTheMathProgress,
+    onAnswerDelta,
+    onAnswerReset
   } = options;
 
   const tier = typeof userTier === 'string' ? (userTier as UserTier) : userTier;
@@ -104,8 +129,11 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
 
   // Step 3: LLM financial reasoning (Claude Sonnet). Build the prompt once and
   // pass it through (avoids rebuilding the large reasoning prompt inside the client).
+  // When a delta sink is provided, stream the answer's summary text as it arrives.
   const { systemPrompt, userMessage } = buildFinancialReasoningPrompt(promptInput);
-  const claudePromise = askClaude(systemPrompt, userMessage);
+  const claudePromise = onAnswerDelta
+    ? askClaudeStream(systemPrompt, userMessage, makeAnswerStreamer(onAnswerDelta))
+    : askClaude(systemPrompt, userMessage);
 
   const databaseData = await databaseDataPromise;
   onShowTheMathProgress?.({ databaseData });
@@ -150,7 +178,11 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
           validationFeedback: validationResult.issues
         };
         const retryPrompt = buildFinancialReasoningPrompt(retryPromptInput);
-        rawResponse = await askClaude(retryPrompt.systemPrompt, retryPrompt.userMessage);
+        // Discard the streamed first-pass answer before streaming the regenerated one.
+        onAnswerReset?.();
+        rawResponse = onAnswerDelta
+          ? await askClaudeStream(retryPrompt.systemPrompt, retryPrompt.userMessage, makeAnswerStreamer(onAnswerDelta))
+          : await askClaude(retryPrompt.systemPrompt, retryPrompt.userMessage);
         claudeRetry = {
           systemPrompt: retryPrompt.systemPrompt,
           userMessage: retryPrompt.userMessage,
