@@ -97,8 +97,11 @@ function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnapshot): 
   }
   if (ra?.stressTest) {
     const st = ra.stressTest;
+    const survivalPct = typeof st.survivalRate === 'number' && Number.isFinite(st.survivalRate)
+      ? `${(st.survivalRate * 100).toFixed(1)}%`
+      : 'N/A';
     parts.push(
-      `Stress test (historical sequences): totalSequences=${st.totalSequences}, survivalRate=${(st.survivalRate * 100).toFixed(1)}%`
+      `Stress test (historical sequences): totalSequences=${st.totalSequences}, survivalRate=${survivalPct}`
     );
     if (st.depletionPercentiles) {
       const dp = st.depletionPercentiles;
@@ -119,13 +122,15 @@ function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnapshot): 
   }
   if (ra?.metrics) {
     const m = ra.metrics;
+    const pct = (v: unknown, digits = 2) => (typeof v === 'number' && Number.isFinite(v) ? `${(v * 100).toFixed(digits)}%` : 'N/A');
+    const num = (v: unknown, digits = 1) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(digits) : 'N/A');
     parts.push(
-      `Retirement metrics: withdrawalRate=${(m.withdrawalRate * 100).toFixed(2)}%, yearsOfExpenses=${m.yearsOfExpenses.toFixed(1)}, equityAllocation=${m.equityAllocation.toFixed(1)}%`
+      `Retirement metrics: withdrawalRate=${pct(m.withdrawalRate)}, yearsOfExpenses=${num(m.yearsOfExpenses)}, equityAllocation=${typeof m.equityAllocation === 'number' && Number.isFinite(m.equityAllocation) ? m.equityAllocation.toFixed(1) + '%' : 'N/A'}`
     );
     if (m.historicalWithdrawalRates) {
       const hwr = m.historicalWithdrawalRates;
       parts.push(
-        `Estimated withdrawal rates (heuristic percentiles): p10=${(hwr.p10 * 100).toFixed(2)}%, p25=${(hwr.p25 * 100).toFixed(2)}%, p50=${(hwr.p50 * 100).toFixed(2)}%, p75=${(hwr.p75 * 100).toFixed(2)}%, p90=${(hwr.p90 * 100).toFixed(2)}%`
+        `Estimated withdrawal rates (heuristic percentiles): p10=${pct(hwr.p10)}, p25=${pct(hwr.p25)}, p50=${pct(hwr.p50)}, p75=${pct(hwr.p75)}, p90=${pct(hwr.p90)}`
       );
     }
   }
