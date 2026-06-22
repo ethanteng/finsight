@@ -55,6 +55,16 @@ Respond with a JSON object:
 Be strict but fair. Only flag real problems.`;
 
 /**
+ * Format a rate stored as a decimal fraction for Gemini validation context.
+ * Retirement metrics use 0.1538 = 15.38%, 0.08 = 8%. Values already above 1
+ * remain fractions (e.g. 1.5 = 150% annual withdrawal / portfolio).
+ */
+export function formatMetricPercent(value: unknown, digits = 2): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'N/A';
+  return `${(value * 100).toFixed(digits)}%`;
+}
+
+/**
  * Build a compact summary of the financial snapshot for validation.
  * Gives Gemini enough context to know what data was available to Claude.
  */
@@ -97,9 +107,7 @@ function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnapshot): 
   }
   if (ra?.stressTest) {
     const st = ra.stressTest;
-    const survivalPct = typeof st.survivalRate === 'number' && Number.isFinite(st.survivalRate)
-      ? `${(st.survivalRate * 100).toFixed(1)}%`
-      : 'N/A';
+    const survivalPct = formatMetricPercent(st.survivalRate, 1);
     parts.push(
       `Stress test (historical sequences): totalSequences=${st.totalSequences}, survivalRate=${survivalPct}`
     );
@@ -122,15 +130,14 @@ function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnapshot): 
   }
   if (ra?.metrics) {
     const m = ra.metrics;
-    const pct = (v: unknown, digits = 2) => (typeof v === 'number' && Number.isFinite(v) ? `${(v * 100).toFixed(digits)}%` : 'N/A');
     const num = (v: unknown, digits = 1) => (typeof v === 'number' && Number.isFinite(v) ? v.toFixed(digits) : 'N/A');
     parts.push(
-      `Retirement metrics: withdrawalRate=${pct(m.withdrawalRate)}, yearsOfExpenses=${num(m.yearsOfExpenses)}, equityAllocation=${typeof m.equityAllocation === 'number' && Number.isFinite(m.equityAllocation) ? m.equityAllocation.toFixed(1) + '%' : 'N/A'}`
+      `Retirement metrics: withdrawalRate=${formatMetricPercent(m.withdrawalRate)}, yearsOfExpenses=${num(m.yearsOfExpenses)}, equityAllocation=${typeof m.equityAllocation === 'number' && Number.isFinite(m.equityAllocation) ? m.equityAllocation.toFixed(1) + '%' : 'N/A'}`
     );
     if (m.historicalWithdrawalRates) {
       const hwr = m.historicalWithdrawalRates;
       parts.push(
-        `Estimated withdrawal rates (heuristic percentiles): p10=${pct(hwr.p10)}, p25=${pct(hwr.p25)}, p50=${pct(hwr.p50)}, p75=${pct(hwr.p75)}, p90=${pct(hwr.p90)}`
+        `Estimated withdrawal rates (heuristic percentiles): p10=${formatMetricPercent(hwr.p10)}, p25=${formatMetricPercent(hwr.p25)}, p50=${formatMetricPercent(hwr.p50)}, p75=${formatMetricPercent(hwr.p75)}, p90=${formatMetricPercent(hwr.p90)}`
       );
     }
   }
