@@ -3865,12 +3865,14 @@ app.get('/admin/ai/response-tone', adminAuth, async (req: Request, res: Response
       where: { id: AI_PROMPT_CONFIG_ID },
     });
 
-    const responseTone = config?.responseTone?.trim() ? config.responseTone : DEFAULT_RESPONSE_TONE;
+    const storedTone = config?.responseTone?.trim() ?? '';
+    const responseTone = storedTone || DEFAULT_RESPONSE_TONE;
+    const isDefault = storedTone.length === 0 || storedTone === DEFAULT_RESPONSE_TONE;
 
     res.json({
       responseTone,
       defaultResponseTone: DEFAULT_RESPONSE_TONE,
-      isDefault: !config,
+      isDefault,
       lastEditedBy: config?.lastEditedBy || null,
       updatedAt: config?.updatedAt || null,
     });
