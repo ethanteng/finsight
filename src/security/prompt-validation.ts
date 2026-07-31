@@ -188,13 +188,13 @@ export function validateUserPrompt(
 export function getRejectionMessage(reason?: string): string {
   switch (reason) {
     case 'off_topic':
-      return "I'm Linc, your financial analyst. I can only help with money and investment questions. Try asking about your accounts, spending, investments, or financial goals.";
+      return "I'm Linc, and I stick to money stuff — things like your accounts, spending, investments, and financial goals. Ask me about any of those and I'm happy to help!";
     case 'instruction_override':
     case 'secrets_request':
     case 'access_request':
     case 'jailbreak':
     case 'system_prompt_extraction':
     default:
-      return 'Your request violates system safety policies.';
+      return "Sorry, I can't help with that one — but I'm here whenever you have a financial question.";
   }
 }

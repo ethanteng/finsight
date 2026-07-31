@@ -103,7 +103,7 @@ interface MarketNewsContext {
 }
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'demo' | 'production' | 'users' | 'market-news'>('demo');
+  const [activeTab, setActiveTab] = useState<'demo' | 'production' | 'users' | 'market-news' | 'ai-tone'>('demo');
   
   // Demo data state
   const [demoConversations, setDemoConversations] = useState<DemoConversation[]>([]);
@@ -139,6 +139,19 @@ export default function AdminPage() {
   const [refreshingAllContexts, setRefreshingAllContexts] = useState(false);
   const [deletingSession, setDeletingSession] = useState<string | null>(null);
   const [showDeleteSessionConfirm, setShowDeleteSessionConfirm] = useState<string | null>(null);
+
+  // AI response tone state
+  const [responseTone, setResponseTone] = useState<string>('');
+  const [defaultResponseTone, setDefaultResponseTone] = useState<string>('');
+  const [toneMeta, setToneMeta] = useState<{ isDefault: boolean; lastEditedBy: string | null; updatedAt: string | null }>({
+    isDefault: true,
+    lastEditedBy: null,
+    updatedAt: null,
+  });
+  const [editingTone, setEditingTone] = useState(false);
+  const [editingToneText, setEditingToneText] = useState<string>('');
+  const [savingTone, setSavingTone] = useState(false);
+  const [toneNotice, setToneNotice] = useState<{ ok: boolean; message: string } | null>(null);
   
   const [loading, setLoading] = useState(true);
   const [refreshingAll, setRefreshingAll] = useState(false);
@@ -382,6 +395,75 @@ export default function AdminPage() {
     }
   }, [API_URL]);
 
+  const loadResponseTone = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_URL}/admin/ai/response-tone`, {
+        headers: getAuthHeaders()
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setResponseTone(data.responseTone || '');
+        setDefaultResponseTone(data.defaultResponseTone || '');
+        setToneMeta({
+          isDefault: !!data.isDefault,
+          lastEditedBy: data.lastEditedBy ?? null,
+          updatedAt: data.updatedAt ?? null,
+        });
+      } else if (response.status === 401 || response.status === 403) {
+        setError('Authentication required for admin access');
+      }
+    } catch (err) {
+      console.error('Response tone load error:', err);
+    }
+  }, [API_URL]);
+
+  const editResponseTone = () => {
+    setEditingToneText(responseTone);
+    setEditingTone(true);
+    setToneNotice(null);
+  };
+
+  const cancelEditTone = () => {
+    setEditingTone(false);
+    setEditingToneText('');
+  };
+
+  const resetToneToDefault = () => {
+    setEditingToneText(defaultResponseTone);
+  };
+
+  const saveResponseTone = async () => {
+    if (!editingToneText.trim()) {
+      setToneNotice({ ok: false, message: 'Tone guidance cannot be empty.' });
+      return;
+    }
+    setSavingTone(true);
+    setToneNotice(null);
+    try {
+      const response = await fetch(`${API_URL}/admin/ai/response-tone`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ responseTone: editingToneText })
+      });
+      if (response.ok) {
+        setEditingTone(false);
+        setEditingToneText('');
+        setToneNotice({ ok: true, message: 'Response tone updated. New chats will use it right away.' });
+        await loadResponseTone();
+      } else if (response.status === 401 || response.status === 403) {
+        setToneNotice({ ok: false, message: 'Authentication required for admin access.' });
+      } else {
+        const data = await response.json().catch(() => ({}));
+        setToneNotice({ ok: false, message: data.error || 'Failed to update response tone.' });
+      }
+    } catch (err) {
+      console.error('Response tone save error:', err);
+      setToneNotice({ ok: false, message: 'Failed to update response tone.' });
+    } finally {
+      setSavingTone(false);
+    }
+  };
+
   const loadAdminData = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -391,7 +473,8 @@ export default function AdminPage() {
         loadDemoData(),
         loadProductionData(),
         loadUsersForManagement(),
-        loadMarketNewsContexts()
+        loadMarketNewsContexts(),
+        loadResponseTone()
       ]);
     } catch (err) {
       setError('Failed to load admin data');
@@ -399,7 +482,7 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [loadDemoData, loadProductionData, loadUsersForManagement, loadMarketNewsContexts]);
+  }, [loadDemoData, loadProductionData, loadUsersForManagement, loadMarketNewsContexts, loadResponseTone]);
 
   const refreshAllData = async () => {
     setRefreshingAll(true);
@@ -411,7 +494,8 @@ export default function AdminPage() {
         loadDemoData(),
         loadProductionData(),
         loadUsersForManagement(),
-        loadMarketNewsContexts()
+        loadMarketNewsContexts(),
+        loadResponseTone()
       ]);
       console.log('All admin data refresh completed');
     } catch (err) {
@@ -1565,6 +1649,101 @@ export default function AdminPage() {
     );
   };
 
+  const renderAiToneTab = () => {
+    const isCustomized = !toneMeta.isDefault;
+
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h2 className="text-xl font-semibold text-white">AI Response Tone</h2>
+          {!editingTone && (
+            <button
+              onClick={editResponseTone}
+              className="px-3 py-1 rounded text-sm bg-yellow-600 text-white hover:bg-yellow-700"
+            >
+              Edit
+            </button>
+          )}
+        </div>
+
+        <p className="text-sm text-gray-400">
+          This guidance controls the voice of every user-facing AI answer. It is injected into the
+          system prompt for both the OpenAI and Claude pipelines. Write it as a list of short
+          bullet points. Keep it professional and accurate — adjust how formal, friendly, or
+          concise the assistant sounds. Changes apply to new chats immediately.
+        </p>
+
+        {toneNotice && (
+          <div
+            className={`px-4 py-3 rounded text-sm ${
+              toneNotice.ok
+                ? 'bg-green-900 border border-green-700 text-green-100'
+                : 'bg-red-900 border border-red-700 text-red-100'
+            }`}
+          >
+            {toneNotice.message}
+          </div>
+        )}
+
+        <div className="bg-gray-800 rounded-lg p-6">
+          {editingTone ? (
+            <div>
+              <textarea
+                value={editingToneText}
+                onChange={(e) => setEditingToneText(e.target.value)}
+                className="w-full h-72 p-3 bg-gray-700 text-white rounded border border-gray-600 focus:border-blue-500 focus:outline-none font-mono text-sm"
+                placeholder="Enter tone & voice guidance as bullet points..."
+              />
+              <div className="mt-3 flex space-x-2">
+                <button
+                  onClick={saveResponseTone}
+                  disabled={savingTone}
+                  className={`px-4 py-2 rounded text-white ${
+                    savingTone ? 'bg-gray-600 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'
+                  }`}
+                >
+                  {savingTone ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  onClick={resetToneToDefault}
+                  disabled={savingTone}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  Reset to Default
+                </button>
+                <button
+                  onClick={cancelEditTone}
+                  disabled={savingTone}
+                  className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="text-sm text-gray-400 mb-3">
+                Status:{' '}
+                <span className={isCustomized ? 'text-yellow-400' : 'text-gray-300'}>
+                  {isCustomized ? 'Custom' : 'Default'}
+                </span>
+                {toneMeta.lastEditedBy && (
+                  <span className="ml-4">Last edited by: {toneMeta.lastEditedBy}</span>
+                )}
+                {toneMeta.updatedAt && (
+                  <span className="ml-4">Updated: {formatDate(toneMeta.updatedAt)}</span>
+                )}
+              </div>
+              <pre className="text-gray-300 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto bg-gray-700 p-4 rounded font-mono">
+                {responseTone || 'No tone configured.'}
+              </pre>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const renderMarketNewsTab = () => {
     const tiers = ['starter', 'standard', 'premium'];
     
@@ -1785,6 +1964,16 @@ export default function AdminPage() {
           >
             Market News
           </button>
+          <button
+            onClick={() => setActiveTab('ai-tone')}
+            className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
+              activeTab === 'ai-tone'
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-300 hover:text-white hover:bg-gray-700'
+            }`}
+          >
+            AI Tone
+          </button>
         </div>
 
         {/* Tab Content */}
@@ -1792,6 +1981,7 @@ export default function AdminPage() {
         {activeTab === 'production' && renderProductionTab()}
         {activeTab === 'users' && renderUsersTab()}
         {activeTab === 'market-news' && renderMarketNewsTab()}
+        {activeTab === 'ai-tone' && renderAiToneTab()}
         </div>
       </div>
     </>

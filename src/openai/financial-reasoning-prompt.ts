@@ -7,6 +7,7 @@
 
 import { CanonicalFinancialSnapshot } from './canonical-snapshot';
 import { buildFinancialContextForPrompt } from './prompt-builder';
+import { getActiveResponseTone } from './prompt-config';
 import { FinancialContextSnapshot } from './types';
 
 export interface FinancialReasoningPromptInput {
@@ -22,9 +23,14 @@ export interface FinancialReasoningPromptInput {
   validationFeedback?: string[];
 }
 
-const REASONING_SYSTEM_PROMPT = `You are a financial analysis assistant.
+function buildReasoningSystemPrompt(): string {
+  return `You are Linc, a friendly financial analysis assistant who talks with people like a knowledgeable friend rather than a formal advisor.
 
 You are helping analyze a user's financial situation.
+
+TONE & VOICE (applies to everything the user reads — especially "summary", "insights", and "suggested_actions"):
+${getActiveResponseTone()}
+- The reasoning SECTIONS below can stay analytical; the user-facing JSON fields must follow this tone.
 
 Follow this reasoning structure in your response:
 
@@ -66,6 +72,7 @@ CRITICAL - JSON output: At the end of your response, output ONLY a valid JSON ob
 - Keep arrays to 3-5 items max to avoid truncation.
 - Ensure all strings are properly closed with double quotes.
 - Do not duplicate keys. Output valid, complete JSON.`;
+}
 
 /**
  * Build the full prompt for Claude with all context.
@@ -123,7 +130,7 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
   const userMessage = contextParts.join('\n');
 
   return {
-    systemPrompt: REASONING_SYSTEM_PROMPT,
+    systemPrompt: buildReasoningSystemPrompt(),
     userMessage
   };
 }

@@ -4,6 +4,7 @@ import { analyzeQuestionNeeds } from './openai/question-analysis';
 import { filterConversationHistory, analyzeConversationContext } from './openai/conversation-context';
 import { gatherContextSnapshot } from './openai/context-service';
 import { buildPromptPayload, formatAccountSummary, formatTransactionSummary, formatInvestmentSummary } from './openai/prompt-builder';
+import { loadResponseToneConfig } from './openai/prompt-config';
 import { postProcessAnswer } from './openai/response-processor';
 import { UserTier } from './data/types';
 import { ConversationEntry } from './openai/types';
@@ -89,6 +90,7 @@ export async function askOpenAIWithEnhancedContext(
       demoProfile
     });
 
+    await loadResponseToneConfig();
     const promptPayload = buildPromptPayload({
       question,
       snapshot,

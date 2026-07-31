@@ -16,6 +16,7 @@ import { analyzeQuestionNeeds } from './question-analysis';
 import { gatherContextSnapshot } from './context-service';
 import { toCanonicalSnapshot } from './canonical-snapshot';
 import { buildPromptInputFromSnapshot, buildFinancialReasoningPrompt } from './financial-reasoning-prompt';
+import { loadResponseToneConfig } from './prompt-config';
 import { askClaude, askClaudeStream } from './claude-client';
 import { parseStructuredResponse, toDisplayText, extractPartialSummary, AskLincResponse } from './structured-response';
 import { validateUserPrompt, getRejectionMessage } from '../security/prompt-validation';
@@ -115,6 +116,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
 
   // Step 2: Build canonical snapshot and prompt input
   onProgress?.('Submitting to Claude for analysis');
+  await loadResponseToneConfig();
   const canonicalSnapshot = toCanonicalSnapshot(snapshot);
   const promptInput = buildPromptInputFromSnapshot(
     question,

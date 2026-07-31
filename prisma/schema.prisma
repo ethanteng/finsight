@@ -230,6 +230,16 @@ model EmailVerificationCode {
   @@map("email_verification_codes")
 }
 
+model AiPromptConfig {
+  id           String   @id
+  responseTone String
+  lastEditedBy String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("ai_prompt_config")
+}
+
 model MarketNewsContext {
   id             String              @id @default(cuid())
   contextText    String
