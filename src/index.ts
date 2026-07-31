@@ -3854,6 +3854,80 @@ app.get('/market-news/context/:tier', async (req: Request, res: Response) => {
   }
 });
 
+// Admin: Get the configurable AI response tone
+app.get('/admin/ai/response-tone', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { DEFAULT_RESPONSE_TONE, AI_PROMPT_CONFIG_ID } = await import('./openai/prompt-config');
+    const { getPrismaClient } = await import('./prisma-client');
+    const prisma = getPrismaClient();
+
+    const config = await prisma.aiPromptConfig.findUnique({
+      where: { id: AI_PROMPT_CONFIG_ID },
+    });
+
+    const responseTone = config?.responseTone?.trim() ? config.responseTone : DEFAULT_RESPONSE_TONE;
+
+    res.json({
+      responseTone,
+      defaultResponseTone: DEFAULT_RESPONSE_TONE,
+      isDefault: !config,
+      lastEditedBy: config?.lastEditedBy || null,
+      updatedAt: config?.updatedAt || null,
+    });
+  } catch (error) {
+    console.error('Error fetching AI response tone:', error);
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in admin AI response tone GET endpoint', 'error');
+    }
+    res.status(500).json({ error: 'Failed to fetch AI response tone' });
+  }
+});
+
+// Admin: Update the configurable AI response tone
+app.put('/admin/ai/response-tone', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { responseTone } = req.body;
+
+    if (typeof responseTone !== 'string' || responseTone.trim().length === 0) {
+      return res.status(400).json({ error: 'responseTone must be a non-empty string' });
+    }
+
+    const adminUser = req.user?.email || 'unknown';
+    const trimmedTone = responseTone.trim();
+
+    const { AI_PROMPT_CONFIG_ID, setActiveResponseTone } = await import('./openai/prompt-config');
+    const { getPrismaClient } = await import('./prisma-client');
+    const prisma = getPrismaClient();
+
+    const config = await prisma.aiPromptConfig.upsert({
+      where: { id: AI_PROMPT_CONFIG_ID },
+      update: { responseTone: trimmedTone, lastEditedBy: adminUser },
+      create: { id: AI_PROMPT_CONFIG_ID, responseTone: trimmedTone, lastEditedBy: adminUser },
+    });
+
+    // Refresh the in-memory cache so the change applies to the next prompt build.
+    setActiveResponseTone(trimmedTone);
+
+    console.log(`Admin: Updated AI response tone (by ${adminUser})`);
+    res.json({
+      success: true,
+      responseTone: config.responseTone,
+      lastEditedBy: config.lastEditedBy,
+      updatedAt: config.updatedAt,
+    });
+  } catch (error) {
+    console.error('Error updating AI response tone:', error);
+    if (error instanceof Error) {
+      Sentry.captureException(error);
+    } else {
+      Sentry.captureMessage('Unknown error in admin AI response tone PUT endpoint', 'error');
+    }
+    res.status(500).json({ error: 'Failed to update AI response tone' });
+  }
+});
+
 // Admin: Update market context manually
 app.put('/admin/market-news/context/:tier', adminAuth, async (req: Request, res: Response) => {
   try {

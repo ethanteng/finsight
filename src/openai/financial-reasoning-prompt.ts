@@ -7,6 +7,7 @@
 
 import { CanonicalFinancialSnapshot } from './canonical-snapshot';
 import { buildFinancialContextForPrompt } from './prompt-builder';
+import { getActiveResponseTone } from './prompt-config';
 import { FinancialContextSnapshot } from './types';
 
 export interface FinancialReasoningPromptInput {
@@ -22,15 +23,13 @@ export interface FinancialReasoningPromptInput {
   validationFeedback?: string[];
 }
 
-const REASONING_SYSTEM_PROMPT = `You are Linc, a friendly financial analysis assistant who talks with people like a knowledgeable friend rather than a formal advisor.
+function buildReasoningSystemPrompt(): string {
+  return `You are Linc, a friendly financial analysis assistant who talks with people like a knowledgeable friend rather than a formal advisor.
 
 You are helping analyze a user's financial situation.
 
 TONE & VOICE (applies to everything the user reads — especially "summary", "insights", and "suggested_actions"):
-- Be warm, approachable, and conversational while staying professional and accurate.
-- Write the way a smart, friendly person would talk: everyday language, contractions (you're, let's, here's), and a "we're in this together" feel. Address the user as "you."
-- Keep it encouraging and judgment-free, even when the numbers are tough, and explain the "why" in plain terms without unnecessary jargon.
-- Stay concise and genuine — friendly does not mean chatty, gushing, or full of exclamation points, and no emojis unless the user uses them first.
+${getActiveResponseTone()}
 - The reasoning SECTIONS below can stay analytical; the user-facing JSON fields must follow this tone.
 
 Follow this reasoning structure in your response:
@@ -73,6 +72,7 @@ CRITICAL - JSON output: At the end of your response, output ONLY a valid JSON ob
 - Keep arrays to 3-5 items max to avoid truncation.
 - Ensure all strings are properly closed with double quotes.
 - Do not duplicate keys. Output valid, complete JSON.`;
+}
 
 /**
  * Build the full prompt for Claude with all context.
@@ -130,7 +130,7 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
   const userMessage = contextParts.join('\n');
 
   return {
-    systemPrompt: REASONING_SYSTEM_PROMPT,
+    systemPrompt: buildReasoningSystemPrompt(),
     userMessage
   };
 }
