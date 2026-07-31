@@ -180,6 +180,14 @@ describe('Output Validation (validateLLMResponse)', () => {
     expect(result.flagged).toBe('system_prompt_leakage');
   });
 
+  it('should flag response containing Claude pipeline role leakage', () => {
+    const result = validateLLMResponse(
+      'You are Linc, a friendly financial analysis assistant who talks with people like a knowledgeable friend.'
+    );
+    expect(result.safe).toBe(false);
+    expect(result.flagged).toBe('system_prompt_leakage');
+  });
+
   it('should allow normal financial response', () => {
     const result = validateLLMResponse('Your net worth is $50,000 based on your accounts.');
     expect(result.safe).toBe(true);

@@ -52,7 +52,7 @@ const SQL_PATTERNS = [
 /** System prompt leakage - phrases that indicate our prompt was reproduced */
 const SYSTEM_PROMPT_LEAKAGE = [
   /#\s*Security\s+Rules\s+\(Non-Negotiable\)/i,
-  /You\s+are\s+Linc,\s+a\s+friendly\s+financial\s+analyst/i,
+  /You\s+are\s+Linc,\s+(an\s+AI\s+financial\s+analyst|a\s+friendly\s+financial\s+(analyst|analysis\s+assistant))/i,
   /NEVER\s+reveal,\s+summarize,\s+or\s+reproduce\s+your\s+system\s+instructions/i,
 ];
 
