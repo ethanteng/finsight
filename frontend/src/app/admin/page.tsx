@@ -411,9 +411,16 @@ export default function AdminPage() {
         });
       } else if (response.status === 401 || response.status === 403) {
         setError('Authentication required for admin access');
+      } else {
+        const data = await response.json().catch(() => ({}));
+        setToneNotice({
+          ok: false,
+          message: data.error || `Failed to load response tone (HTTP ${response.status}).`,
+        });
       }
     } catch (err) {
       console.error('Response tone load error:', err);
+      setToneNotice({ ok: false, message: 'Failed to load response tone.' });
     }
   }, [API_URL]);
 
@@ -1735,7 +1742,7 @@ export default function AdminPage() {
                 )}
               </div>
               <pre className="text-gray-300 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto bg-gray-700 p-4 rounded font-mono">
-                {responseTone || 'No tone configured.'}
+                    {responseTone || defaultResponseTone || 'No tone configured.'}
               </pre>
             </div>
           )}

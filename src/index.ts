@@ -3926,7 +3926,16 @@ app.put('/admin/ai/response-tone', adminAuth, async (req: Request, res: Response
     } else {
       Sentry.captureMessage('Unknown error in admin AI response tone PUT endpoint', 'error');
     }
-    res.status(500).json({ error: 'Failed to update AI response tone' });
+    const errMsg = error instanceof Error ? error.message : '';
+    const missingTable =
+      errMsg.includes('ai_prompt_config') ||
+      errMsg.includes('does not exist') ||
+      (typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === 'P2021');
+    res.status(500).json({
+      error: missingTable
+        ? 'Database migration missing (ai_prompt_config table). Run prisma migrate deploy on production, then retry.'
+        : 'Failed to update AI response tone',
+    });
   }
 });
 
