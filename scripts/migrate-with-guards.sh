@@ -11,17 +11,28 @@ echo "🔎 Generating Prisma client"
 npx prisma generate
 
 # 2) Check for pending migrations
+# NOTE: Prisma 6 removed `migrate status --json`. Parse the text output instead.
 echo "🔎 Checking for pending migrations..."
-PENDING_MIGRATIONS=$(npx prisma migrate status --json | jq -r '.migrations[] | select(.applied == false) | .migration_name' 2>/dev/null || echo "")
+MIGRATE_STATUS=$(npx prisma migrate status 2>&1) || {
+  echo "❌ prisma migrate status failed:"
+  echo "$MIGRATE_STATUS"
+  exit 1
+}
 
-if [ -z "$PENDING_MIGRATIONS" ]; then
-    echo "✅ No pending migrations found"
-    echo "🔒 Production database schema is up to date"
-    exit 0
+echo "$MIGRATE_STATUS"
+
+if echo "$MIGRATE_STATUS" | grep -q "Database schema is up to date"; then
+  echo "✅ No pending migrations found"
+  echo "🔒 Production database schema is up to date"
+  exit 0
 fi
 
-echo "📋 Pending migrations:"
-echo "$PENDING_MIGRATIONS"
+if ! echo "$MIGRATE_STATUS" | grep -q "have not yet been applied"; then
+  echo "❌ Unexpected prisma migrate status output; aborting instead of guessing"
+  exit 1
+fi
+
+echo "📋 Pending migrations detected — will apply via migrate deploy"
 
 # 3) Safety: set conservative lock/statement timeouts for this session
 echo "⏱️  Setting timeouts"
