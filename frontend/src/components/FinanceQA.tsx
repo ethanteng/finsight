@@ -15,7 +15,12 @@ function formatKeyNumberValue(key: string, value: number | unknown): string {
   if (keyLower.includes('loss') || keyLower.includes('surplus') || keyLower.includes('buffer') || keyLower.includes('dollars')) {
     return value >= 1000 ? `$${value.toLocaleString()}` : `$${value}`;
   }
-  if (keyLower.includes('allocation') || keyLower.includes('rate') || (keyLower.includes('percent') && !keyLower.includes('loss'))) {
+  if (
+    keyLower.includes('allocation') ||
+    keyLower.includes('rate') ||
+    keyLower.includes('pct') ||
+    (keyLower.includes('percent') && !keyLower.includes('loss'))
+  ) {
     return `${value}%`;
   }
   return value >= 1000 ? `$${value.toLocaleString()}` : `$${value}`;

@@ -299,7 +299,7 @@ function formatDollars(value: number): string {
  * Format a key_number value for display based on the key name.
  *
  * Precedence (most specific → least specific):
- * 1. Percentage keys ("percent", "rate", "allocation") → percentage, e.g. 4.15%.
+ * 1. Percentage keys ("percent", "pct", "rate", "allocation") → percentage, e.g. 4.15%.
  *    Checked FIRST so keys like "unrealized_loss_percent" or "loss_rate" render as
  *    percentages rather than dollars.
  * 2. Time keys ("months", "years") → plain number, e.g. 28.
@@ -312,7 +312,12 @@ function formatDollars(value: number): string {
  */
 export function formatKeyNumberValue(key: string, value: number): string {
   const keyLower = key.toLowerCase();
-  if (keyLower.includes('percent') || keyLower.includes('rate') || keyLower.includes('allocation')) {
+  if (
+    keyLower.includes('percent') ||
+    keyLower.includes('pct') ||
+    keyLower.includes('rate') ||
+    keyLower.includes('allocation')
+  ) {
     return `${value}%`;
   }
   if (keyLower.includes('months') || keyLower.includes('years')) {

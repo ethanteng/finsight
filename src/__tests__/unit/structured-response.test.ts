@@ -62,10 +62,12 @@ describe('parseStructuredResponse', () => {
 });
 
 describe('formatKeyNumberValue', () => {
-  it('formats percent / rate / allocation keys as percentages', () => {
+  it('formats percent / pct / rate / allocation keys as percentages', () => {
     expect(formatKeyNumberValue('withdrawal_rate', 4.15)).toBe('4.15%');
     expect(formatKeyNumberValue('equity_allocation', 72.5)).toBe('72.5%');
     expect(formatKeyNumberValue('effective_tax_percent', 18)).toBe('18%');
+    expect(formatKeyNumberValue('current_fixed_income_pct', 4.7)).toBe('4.7%');
+    expect(formatKeyNumberValue('target_total_fixed_income_pct', 10)).toBe('10%');
   });
 
   it('renders percentage keys that also contain "loss" as percentages (regression)', () => {
