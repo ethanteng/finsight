@@ -289,36 +289,51 @@ function normalizeResponse(obj: Record<string, unknown>): AskLincResponse {
   };
 }
 
-/** Format a numeric value as a USD amount, preserving sign (e.g. -$5,000.00, $187,547.25). */
+function isPercentageKey(keyLower: string): boolean {
+  return (
+    keyLower.includes('percent') ||
+    keyLower.includes('pct') ||
+    keyLower.includes('rate') ||
+    keyLower.includes('allocation') ||
+    keyLower.includes('apy')
+  );
+}
+
+/**
+ * Normalize percentage values that were emitted 100x too large (e.g. 2000 → 20 for 20%).
+ */
+function normalizePercentageValue(value: number): number {
+  if (Math.abs(value) > 100) {
+    return value / 100;
+  }
+  return value;
+}
+
+/** Format a numeric value as a USD amount rounded to the nearest dollar. */
 function formatDollars(value: number): string {
-  const sign = value < 0 ? '-' : '';
-  return `${sign}$${Math.abs(value).toLocaleString()}`;
+  const rounded = Math.round(value);
+  const sign = rounded < 0 ? '-' : '';
+  return `${sign}$${Math.abs(rounded).toLocaleString()}`;
 }
 
 /**
  * Format a key_number value for display based on the key name.
  *
  * Precedence (most specific → least specific):
- * 1. Percentage keys ("percent", "pct", "rate", "allocation") → percentage, e.g. 4.15%.
+ * 1. Percentage keys ("percent", "pct", "rate", "allocation", "apy") → percentage, e.g. 4.15%.
  *    Checked FIRST so keys like "unrealized_loss_percent" or "loss_rate" render as
  *    percentages rather than dollars.
  * 2. Time keys ("months", "years") → plain number, e.g. 28.
  * 3. Dollar keys ("loss", "surplus", "buffer", "dollars") → dollar amount, e.g. $187,547.
  * 4. Default → dollar amount.
  *
- * Note: percentage values are rendered as-is (no fraction→percent scaling). Claude is
- * instructed to emit percentages in whole-number form (e.g. 4.15 for 4.15%); see
- * REASONING_SYSTEM_PROMPT in financial-reasoning-prompt.ts.
+ * Percentages are expected in whole-number form (e.g. 4.15 for 4.15%); values above 100 are
+ * treated as 100x inflated and scaled down before display.
  */
 export function formatKeyNumberValue(key: string, value: number): string {
   const keyLower = key.toLowerCase();
-  if (
-    keyLower.includes('percent') ||
-    keyLower.includes('pct') ||
-    keyLower.includes('rate') ||
-    keyLower.includes('allocation')
-  ) {
-    return `${value}%`;
+  if (isPercentageKey(keyLower)) {
+    return `${normalizePercentageValue(value)}%`;
   }
   if (keyLower.includes('months') || keyLower.includes('years')) {
     return value.toLocaleString();

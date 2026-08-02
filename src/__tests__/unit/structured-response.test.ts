@@ -62,12 +62,22 @@ describe('parseStructuredResponse', () => {
 });
 
 describe('formatKeyNumberValue', () => {
-  it('formats percent / pct / rate / allocation keys as percentages', () => {
+  it('formats percent / pct / rate / allocation / apy keys as percentages', () => {
     expect(formatKeyNumberValue('withdrawal_rate', 4.15)).toBe('4.15%');
     expect(formatKeyNumberValue('equity_allocation', 72.5)).toBe('72.5%');
     expect(formatKeyNumberValue('effective_tax_percent', 18)).toBe('18%');
     expect(formatKeyNumberValue('current_fixed_income_pct', 4.7)).toBe('4.7%');
     expect(formatKeyNumberValue('target_total_fixed_income_pct', 10)).toBe('10%');
+    expect(formatKeyNumberValue('popular_direct_cd_effective_apy', 4.32)).toBe('4.32%');
+    expect(formatKeyNumberValue('cfg_money_market_effective_apy', 3.68)).toBe('3.68%');
+    expect(formatKeyNumberValue('best_market_rate_apy', 4.26)).toBe('4.26%');
+  });
+
+  it('scales down percentage values emitted 100x too large', () => {
+    expect(formatKeyNumberValue('vtip_allocation', 2000)).toBe('20%');
+    expect(formatKeyNumberValue('mortgage_fund_allocation', 2000)).toBe('20%');
+    expect(formatKeyNumberValue('retirement_fund_allocation', 1500)).toBe('15%');
+    expect(formatKeyNumberValue('treasury_allocation', 500)).toBe('5%');
   });
 
   it('renders percentage keys that also contain "loss" as percentages (regression)', () => {
@@ -81,10 +91,13 @@ describe('formatKeyNumberValue', () => {
     expect(formatKeyNumberValue('months_of_runway', 36)).toBe('36');
   });
 
-  it('formats dollar keys (incl. loss/surplus/buffer) as currency', () => {
+  it('formats dollar keys (incl. loss/surplus/buffer) as currency rounded to whole dollars', () => {
     expect(formatKeyNumberValue('unrealized_loss', 5000)).toBe('$5,000');
     expect(formatKeyNumberValue('monthly_surplus', 1500)).toBe('$1,500');
     expect(formatKeyNumberValue('net_worth', 250000)).toBe('$250,000');
+    expect(formatKeyNumberValue('cfg_balance', 53618.72)).toBe('$53,619');
+    expect(formatKeyNumberValue('mortgage_payoff_fund_balance', 4352.34)).toBe('$4,352');
+    expect(formatKeyNumberValue('total_cash_position', 257803.45)).toBe('$257,803');
   });
 
   it('renders negative dollar amounts with the sign before the dollar sign', () => {
