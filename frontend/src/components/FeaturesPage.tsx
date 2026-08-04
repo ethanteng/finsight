@@ -92,7 +92,7 @@ const FeaturesPage = () => {
               </div>
               <button onClick={() => window.location.href = '/#pricing'} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
               <a 
-                href="https://blog.asklinc.com/" 
+                href="/blog" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-primary transition-colors"
@@ -142,7 +142,7 @@ const FeaturesPage = () => {
                 ))}
               </div>
               <button onClick={() => { window.location.href = '/#pricing'; setIsMobileMenuOpen(false); }} className="block w-full text-left py-3 text-muted-foreground hover:text-primary transition-colors">Pricing</button>
-              <a href="https://blog.asklinc.com/" target="_blank" rel="noopener noreferrer" className="block py-3 text-muted-foreground hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Blog</a>
+              <a href="/blog" target="_blank" rel="noopener noreferrer" className="block py-3 text-muted-foreground hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Blog</a>
               <div className="pt-4 space-y-2 border-t border-border/50">
                 <Button variant="hero" size="sm" className="w-full" onClick={() => { handleBuyClick('premium'); setIsMobileMenuOpen(false); }} disabled={isLoading === 'premium'}>{isLoading === 'premium' ? 'Loading...' : 'Get started'}</Button>
                 <Button variant="outline" size="sm" className="w-full" onClick={() => { window.location.href = '/login'; setIsMobileMenuOpen(false); }}>Login</Button>

@@ -82,14 +82,9 @@ export default function SiteHeader() {
               )}
             </div>
             <Link href="/#pricing" className="text-muted-foreground hover:text-primary transition-colors">Pricing</Link>
-            <a 
-              href="https://blog.asklinc.com/" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-primary transition-colors"
-            >
+            <Link href="/blog" className="text-muted-foreground hover:text-primary transition-colors">
               Blog
-            </a>
+            </Link>
             <Button 
               variant="hero" 
               size="sm"
@@ -154,15 +149,13 @@ export default function SiteHeader() {
             >
               Pricing
             </Link>
-            <a 
-              href="https://blog.asklinc.com/" 
-              target="_blank" 
-              rel="noopener noreferrer"
+            <Link 
+              href="/blog" 
               className="block py-3 text-muted-foreground hover:text-primary transition-colors"
               onClick={() => setIsMobileMenuOpen(false)}
             >
               Blog
-            </a>
+            </Link>
             <div className="pt-4 space-y-2 border-t border-border/50">
               <Button 
                 variant="hero" 

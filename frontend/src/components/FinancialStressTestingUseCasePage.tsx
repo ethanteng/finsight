@@ -153,7 +153,7 @@ export default function FinancialStressTestingUseCasePage({ moneyTrendsPosts = [
                 Pricing
               </Link>
               <a
-                href="https://blog.asklinc.com/"
+                href="/blog"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-primary transition-colors"
@@ -210,7 +210,7 @@ export default function FinancialStressTestingUseCasePage({ moneyTrendsPosts = [
                 Pricing
               </Link>
               <a
-                href="https://blog.asklinc.com/"
+                href="/blog"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block py-3 text-muted-foreground hover:text-primary transition-colors"
@@ -354,7 +354,7 @@ export default function FinancialStressTestingUseCasePage({ moneyTrendsPosts = [
               {moneyTrendsPosts.length > 0 ? (
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {moneyTrendsPosts.map((post) => {
-                    const postUrl = `https://blog.asklinc.com/${post.slug || ''}`;
+                    const postUrl = `/blog/${post.slug || ''}`;
                     return (
                     <a
                       key={post.id}

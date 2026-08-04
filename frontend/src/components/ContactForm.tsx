@@ -129,7 +129,7 @@ export default function ContactForm() {
               </div>
               <Link href="/#pricing" className="text-muted-foreground hover:text-primary transition-colors">Pricing</Link>
               <a 
-                href="https://blog.asklinc.com/" 
+                href="/blog" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-primary transition-colors"
@@ -201,7 +201,7 @@ export default function ContactForm() {
                 Pricing
               </Link>
               <a 
-                href="https://blog.asklinc.com/" 
+                href="/blog" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="block py-3 text-muted-foreground hover:text-primary transition-colors"

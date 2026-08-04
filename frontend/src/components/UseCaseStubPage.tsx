@@ -100,7 +100,7 @@ export default function UseCaseStubPage({ title, description }: UseCaseStubPageP
                 Pricing
               </Link>
               <a
-                href="https://blog.asklinc.com/"
+                href="/blog"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-primary transition-colors"
@@ -157,7 +157,7 @@ export default function UseCaseStubPage({ title, description }: UseCaseStubPageP
                 Pricing
               </Link>
               <a
-                href="https://blog.asklinc.com/"
+                href="/blog"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block py-3 text-muted-foreground hover:text-primary transition-colors"

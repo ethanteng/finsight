@@ -175,7 +175,7 @@ const RetirementReadinessPage = () => {
               </div>
               <button onClick={() => scrollToSection('pricing')} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
               <a 
-                href="https://blog.asklinc.com/" 
+                href="/blog" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-primary transition-colors"
@@ -251,7 +251,7 @@ const RetirementReadinessPage = () => {
                 Pricing
               </button>
               <a 
-                href="https://blog.asklinc.com/" 
+                href="/blog" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="block py-3 text-muted-foreground hover:text-primary transition-colors"

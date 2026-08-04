@@ -47,7 +47,7 @@ export default function PromptsIndexPage() {
                 Pricing
               </Link>
               <a
-                href="https://blog.asklinc.com/"
+                href="/blog"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-primary transition-colors"
