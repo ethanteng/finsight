@@ -11,6 +11,7 @@ import {
 } from '../types/stripe';
 import { getPrismaClient } from '../prisma-client';
 import { sendWelcomeEmail, sendTierChangeEmail, sendCancellationEmail } from './stripe-email';
+import { analytics } from '../analytics/heycatch';
 
 export class StripeService {
   /**
@@ -221,6 +222,13 @@ export class StripeService {
       // Don't fail the webhook if email fails
     }
 
+    await analytics.setIdentity(user.id, { email: user.email, plan: tier });
+    await analytics.trackEvent(
+      'subscription_started',
+      { plan: tier },
+      { userId: user.id },
+    );
+
     console.log(`Subscription ${subscriptionId} activated for user ${user.id}`);
   }
 
@@ -391,6 +399,28 @@ export class StripeService {
       } else {
         console.log(`Skipping tier change email - no tier change detected`);
       }
+
+      if (wasJustCancelled) {
+        await analytics.setIdentity(subscriptionRecord.user.id, {
+          email: subscriptionRecord.user.email,
+          plan: finalTier,
+        });
+        await analytics.trackEvent(
+          'subscription_cancelled',
+          { plan: finalTier },
+          { userId: subscriptionRecord.user.id },
+        );
+      } else if (originalTier !== finalTier) {
+        await analytics.setIdentity(subscriptionRecord.user.id, {
+          email: subscriptionRecord.user.email,
+          plan: finalTier,
+        });
+        await analytics.trackEvent(
+          'subscription_updated',
+          { plan: finalTier, previous_plan: originalTier },
+          { userId: subscriptionRecord.user.id },
+        );
+      }
     }
 
     console.log(`Subscription ${subscriptionId} updated successfully`);
@@ -447,6 +477,16 @@ export class StripeService {
           console.error(`Failed to send cancellation email to ${subscriptionRecord.user.email}:`, emailError);
           // Don't fail the webhook if email fails
         }
+
+        await analytics.setIdentity(subscriptionRecord.user.id, {
+          email: subscriptionRecord.user.email,
+          plan: oldTier,
+        });
+        await analytics.trackEvent(
+          'subscription_cancelled',
+          { plan: oldTier },
+          { userId: subscriptionRecord.user.id },
+        );
       }
     }
 
@@ -527,6 +567,17 @@ export class StripeService {
             subscriptionStatus: 'active',
           }
         });
+
+        const plan = subscriptionRecord.tier || subscriptionRecord.user.tier || 'unknown';
+        await analytics.setIdentity(subscriptionRecord.user.id, {
+          email: subscriptionRecord.user.email,
+          plan,
+        });
+        await analytics.trackEvent(
+          'payment_succeeded',
+          { plan },
+          { userId: subscriptionRecord.user.id },
+        );
       }
     }
   }

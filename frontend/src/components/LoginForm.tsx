@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, Suspense } from 'react';
 import { pushBeginCheckout } from '@/lib/dataLayer';
+import { identifyUser } from '@/lib/heycatch';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
@@ -190,6 +191,9 @@ function LoginFormContent() {
         }
 
         localStorage.setItem('auth_token', data.token);
+        if (data.user) {
+          identifyUser(data.user);
+        }
         router.push('/app');
       } else {
         setError(data.error || 'Login failed');

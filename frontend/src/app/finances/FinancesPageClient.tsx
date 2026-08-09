@@ -9,6 +9,7 @@ import FinancialMetricsChart, { HistoricalSnapshot } from '../../components/fina
 import IncomeExpenseOverrides from '../../components/finances/IncomeExpenseOverrides';
 import { groupAccounts } from '../../components/finances/AccountGrouping';
 import type { ManualAccount } from '../../types/manual-account';
+import { resetUserIdentity } from '../../lib/heycatch';
 
 const ManualAccountList = lazy(() => import('../../components/ManualAccountList'));
 
@@ -410,6 +411,7 @@ export default function FinancesPageClient() {
 
   const handleLogout = () => {
     localStorage.removeItem('auth_token');
+    resetUserIdentity();
     router.push('/login');
   };
 

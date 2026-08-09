@@ -8,6 +8,7 @@ import SnapTradeButton from '../../components/SnapTradeButton';
 import ManualAccountList from '../../components/ManualAccountList';
 import PageMeta from '../../components/PageMeta';
 import type { ManualAccount } from '../../types/manual-account';
+import { resetUserIdentity } from '../../lib/heycatch';
 
 // (removed) local InvestmentHolding type - no longer used after snapshot refactor
 
@@ -1200,6 +1201,7 @@ export default function ProfilePage() {
       if (plaidResponse.ok && snapTradeResponse.ok) {
         setDeleteMessage('All your data (Plaid and SnapTrade) has been successfully deleted.');
         localStorage.removeItem('auth_token');
+        resetUserIdentity();
         // Redirect to home page after successful deletion
         setTimeout(() => {
           window.location.href = '/';
@@ -1261,6 +1263,7 @@ export default function ProfilePage() {
                     // Reset Plaid Link initialization flag when logging out
                     resetPlaidLinkInitialization();
                     localStorage.removeItem('auth_token');
+                    resetUserIdentity();
                     window.location.href = '/login';
                   }}
                   className="text-gray-300 hover:text-white text-sm transition-colors"
