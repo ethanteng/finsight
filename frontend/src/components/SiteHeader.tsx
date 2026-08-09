@@ -81,7 +81,7 @@ export default function SiteHeader() {
                 </div>
               )}
             </div>
-            <Link href="/#pricing" className="text-muted-foreground hover:text-primary transition-colors">Pricing</Link>
+            <Link href="/pricing" className="text-muted-foreground hover:text-primary transition-colors">Pricing</Link>
             <Link href="/blog" className="text-muted-foreground hover:text-primary transition-colors">
               Blog
             </Link>
@@ -143,7 +143,7 @@ export default function SiteHeader() {
               ))}
             </div>
             <Link 
-              href="/#pricing" 
+              href="/pricing" 
               className="block py-3 text-muted-foreground hover:text-primary transition-colors"
               onClick={() => setIsMobileMenuOpen(false)}
             >

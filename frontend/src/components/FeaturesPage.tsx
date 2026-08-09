@@ -4,6 +4,7 @@ import { pushBeginCheckout } from '@/lib/dataLayer';
 import { Brain, TrendingUp, MessageCircle, Lock, Users, Link2, Briefcase, Wallet, Banknote, BarChart3, Search, Home, Layers, Menu, X, ChevronDown } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
+import RealMathCallout from './RealMathCallout';
 
 const USE_CASE_LINKS = [
   { href: '/use-cases/retirement', label: 'Retirement Planning' },
@@ -90,7 +91,7 @@ const FeaturesPage = () => {
                   </div>
                 )}
               </div>
-              <button onClick={() => window.location.href = '/#pricing'} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
+              <Link href="/pricing" className="text-muted-foreground hover:text-primary transition-colors">Pricing</Link>
               <a 
                 href="/blog" 
                 target="_blank" 
@@ -141,7 +142,7 @@ const FeaturesPage = () => {
                   <Link key={link.href} href={link.href} className="block py-2 pl-4 text-muted-foreground hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>{link.label}</Link>
                 ))}
               </div>
-              <button onClick={() => { window.location.href = '/#pricing'; setIsMobileMenuOpen(false); }} className="block w-full text-left py-3 text-muted-foreground hover:text-primary transition-colors">Pricing</button>
+              <Link href="/pricing" className="block py-3 text-muted-foreground hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Pricing</Link>
               <a href="/blog" target="_blank" rel="noopener noreferrer" className="block py-3 text-muted-foreground hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Blog</a>
               <div className="pt-4 space-y-2 border-t border-border/50">
                 <Button variant="hero" size="sm" className="w-full" onClick={() => { handleBuyClick('premium'); setIsMobileMenuOpen(false); }} disabled={isLoading === 'premium'}>{isLoading === 'premium' ? 'Loading...' : 'Get started'}</Button>
@@ -492,6 +493,8 @@ const FeaturesPage = () => {
         </section>
       </div>
 
+      <RealMathCallout />
+
       {/* CTA Section */}
       <section className="py-12 sm:py-16 md:py-24 relative overflow-hidden bg-[hsl(217,32%,6%)]">
         <div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-secondary/15 to-primary/20 pointer-events-none" />
@@ -511,6 +514,9 @@ const FeaturesPage = () => {
             <p className="text-[1.0625rem] font-medium text-white">
               <span className="text-primary">$9/month</span>. Cancel anytime.
             </p>
+            <Link href="/demo" className="text-sm text-slate-300 hover:text-primary transition-colors">
+              See a real answer free, no card
+            </Link>
           </div>
         </div>
       </section>

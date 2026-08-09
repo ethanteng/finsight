@@ -1,4 +1,6 @@
 import NewHomepage from '../components/NewHomepage';
+import StructuredData from '../components/StructuredData';
+import { buildFaqPageSchema, PRODUCT_OFFER_SCHEMA } from '../data/faq';
 import type { Metadata } from 'next';
 
 // Dynamic metadata generation based on query parameters
@@ -6,10 +8,10 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
   const params = await searchParams;
   const ref = params.ref;
   
-  let description = 'Ask Linc is the AI that reasons about your finances using your real data, goals, and live market conditions. Get decisions-ready answers, not just charts.';
+  let description = 'Ask Linc is the AI financial reasoning assistant for households planning retirement — decisions-ready answers from your real data and live markets, not charts.';
   
   if (ref === 'blog.asklinc.com') {
-    description = 'Welcome blog readers! Ask Linc is the AI that reasons about your finances using your real data, goals, and live market conditions. Get decisions-ready answers, not just charts.';
+    description = 'Welcome blog readers! Ask Linc is the AI financial reasoning assistant for households planning retirement — decisions-ready answers, not charts.';
   }
   
   return {
@@ -55,5 +57,11 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
 }
 
 export default function Home() {
-  return <NewHomepage />;
+  return (
+    <>
+      <StructuredData data={PRODUCT_OFFER_SCHEMA} />
+      <StructuredData data={buildFaqPageSchema()} />
+      <NewHomepage />
+    </>
+  );
 }

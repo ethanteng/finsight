@@ -6,6 +6,12 @@ import MailerLiteForm from './MailerLiteForm';
 import MailerLiteScript from './MailerLiteScript';
 import AnimatedPrompt from './AnimatedPrompt';
 import BlogSubscription from './BlogSubscription';
+import HeroExampleAnswer from './HeroExampleAnswer';
+import RealMathCallout from './RealMathCallout';
+import FounderBlock from './FounderBlock';
+import TestimonialWall from './TestimonialWall';
+import ThirdPartySignals from './ThirdPartySignals';
+import AdoptionStatStub from './AdoptionStatStub';
 import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, BarChart3, MessageCircle, Sparkles, X, Target, Menu, ChevronDown, CircleArrowUp } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
@@ -43,11 +49,6 @@ const NewHomepage = () => {
   const getCurrentQuestionRef = useRef<(() => string) | null>(null);
   const howItWorksRef = useRef<HTMLElement | null>(null);
 
-  const scrollToSection = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({
-      behavior: 'smooth'
-    });
-  };
 
   // How Linc Works: detect when section is in view
   useEffect(() => {
@@ -156,15 +157,13 @@ const NewHomepage = () => {
                   </div>
                 )}
               </div>
-              <button onClick={() => scrollToSection('pricing')} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
-              <a 
-                href="/blog" 
-                target="_blank" 
-                rel="noopener noreferrer"
+              <Link href="/pricing" className="text-muted-foreground hover:text-primary transition-colors">Pricing</Link>
+              <Link
+                href="/blog"
                 className="text-muted-foreground hover:text-primary transition-colors"
               >
                 Blog
-              </a>
+              </Link>
               <Button 
                 variant="hero" 
                 size="sm"
@@ -224,24 +223,20 @@ const NewHomepage = () => {
                   </Link>
                 ))}
               </div>
-              <button 
-                onClick={() => {
-                  scrollToSection('pricing');
-                  setIsMobileMenuOpen(false);
-                }} 
-                className="block w-full text-left py-3 text-muted-foreground hover:text-primary transition-colors"
+              <Link
+                href="/pricing"
+                className="block py-3 text-muted-foreground hover:text-primary transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
               >
                 Pricing
-              </button>
-              <a 
-                href="/blog" 
-                target="_blank" 
-                rel="noopener noreferrer"
+              </Link>
+              <Link
+                href="/blog"
                 className="block py-3 text-muted-foreground hover:text-primary transition-colors"
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 Blog
-              </a>
+              </Link>
               <div className="pt-4 space-y-2 border-t border-border/50">
                 <Button 
                   variant="hero" 
@@ -284,10 +279,15 @@ const NewHomepage = () => {
                 <span className="text-[0.85rem] md:text-[1rem] lg:text-[1.2rem] font-normal text-muted-foreground block mb-2">Stop staring at dashboards.</span>
                 <span className="gradient-text text-[2.53125rem] md:text-[4.21875rem] lg:text-[5.0625rem]">Just ask Linc.</span>
               </h1>
+
+              <p className="text-[1rem] md:text-[1.2rem] text-muted-foreground max-w-3xl leading-relaxed">
+                The AI financial reasoning assistant for households planning retirement — decisions-ready answers, not charts.
+              </p>
               
-              <div className="space-y-3 w-full max-w-2xl mx-auto mt-[3.0rem]">
-                <p className="text-[1rem] md:text-[1.2rem] text-muted-foreground max-w-4xl leading-relaxed">
-                Connect your accounts & ask real questions about your finances.
+              <div className="space-y-4 w-full max-w-2xl mx-auto mt-4">
+                <HeroExampleAnswer />
+                <p className="text-sm text-muted-foreground">
+                  Or ask your own question on sample data:
                 </p>
                 <AnimatedPrompt
                 nestedInLink
@@ -317,17 +317,17 @@ const NewHomepage = () => {
                     size="xl" 
                     className="group h-[4.235rem] px-[3.025rem] text-[1.36125rem] flex items-center gap-3"
                     onClick={() => {
-                      const question = getCurrentQuestionRef.current?.() || '';
+                      const question = getCurrentQuestionRef.current?.() || 'Can we retire at 60 if rates stay higher for longer?';
                       if (question) {
                         sessionStorage.setItem('demo_initial_question', question);
                       }
                       router.push('/demo');
                     }}
                   >
-                    Ask your question
+                    See a real answer free
                     <CircleArrowUp className="!w-[1.6875rem] !h-[1.6875rem] shrink-0" />
                   </Button>
-                  <p className="text-[0.7875rem]">Try our interactive demo with sample financial data.</p>
+                  <p className="text-[0.7875rem]">No card. Interactive demo with sample financial data.</p>
               </div>
             </div>
       </div>
@@ -423,6 +423,7 @@ const NewHomepage = () => {
               </div>
             </div>
           </div>
+          <AdoptionStatStub />
         </div>
       </section>
 
@@ -475,6 +476,12 @@ const NewHomepage = () => {
         </div>
       </section>
 
+      <RealMathCallout />
+
+      <TestimonialWall />
+
+      <ThirdPartySignals />
+
       {/* Pricing Section */}
       <section id="pricing" className="py-16 bg-[hsl(217,32%,6%)]">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -492,8 +499,8 @@ const NewHomepage = () => {
                   <span className="text-5xl font-bold gradient-text">$9</span>
                   <span className="text-muted-foreground text-xl">/ month</span>
                 </div>
-                <p className="text-muted-foreground text-lg">
-                  Full access to Ask Linc's financial reasoning platform.
+                <p className="text-muted-foreground text-base max-w-md mx-auto">
+                  $9/month flat — vs the 1-2% of your wealth a human advisor charges every year.
                 </p>
               </div>
               
@@ -533,11 +540,18 @@ const NewHomepage = () => {
                 <p className="text-center text-xs text-muted-foreground mt-3">
                   Cancel anytime.
                 </p>
+                <p className="text-center text-sm mt-2">
+                  <Link href="/demo" className="text-primary hover:underline font-medium">
+                    See a real answer free, no card
+                  </Link>
+                </p>
               </div>
             </CardContent>
           </Card>
         </div>
       </section>
+
+      <FounderBlock />
 
       {/* Privacy Section */}
       <section id="security" className="py-16 bg-muted/30">
@@ -608,6 +622,9 @@ const NewHomepage = () => {
                 {isLoading === 'premium' ? 'Creating...' : 'Get started'}
               </Button>
               <p className="text-[1.00625rem] text-primary font-medium">$9/month. Cancel anytime.</p>
+              <Link href="/demo" className="text-sm text-slate-300 hover:text-primary transition-colors">
+                See a real answer free, no card
+              </Link>
             </div>
           </div>
         </div>
@@ -641,6 +658,18 @@ const NewHomepage = () => {
             </div>
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-4 gap-y-1 md:gap-x-6 text-xs md:text-sm text-muted-foreground">
               <Link 
+                href="/pricing" 
+                className="hover:text-primary transition-colors"
+              >
+                Pricing
+              </Link>
+              <Link 
+                href="/about" 
+                className="hover:text-primary transition-colors"
+              >
+                About
+              </Link>
+              <Link 
                 href="/faq" 
                 className="hover:text-primary transition-colors"
               >
@@ -651,6 +680,24 @@ const NewHomepage = () => {
                 className="hover:text-primary transition-colors"
               >
                 How We Protect Your Data
+              </Link>
+              <Link 
+                href="/vs/origin" 
+                className="hover:text-primary transition-colors"
+              >
+                vs Origin
+              </Link>
+              <Link 
+                href="/vs/portfoliopilot" 
+                className="hover:text-primary transition-colors"
+              >
+                vs PortfolioPilot
+              </Link>
+              <Link 
+                href="/vs/monarch" 
+                className="hover:text-primary transition-colors"
+              >
+                vs Monarch
               </Link>
               <a 
                 href="/privacy" 
@@ -675,7 +722,11 @@ const NewHomepage = () => {
           <div className="mt-8 pt-8 border-t border-border">
             <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
               <p className="text-sm text-muted-foreground">
-                &copy; {new Date().getFullYear()} Ask Linc. Your AI financial analyst. Built with privacy in mind.
+                &copy; {new Date().getFullYear()} Ask Linc. Built by{' '}
+                <Link href="/about" className="hover:text-primary transition-colors">
+                  Ethan Teng
+                </Link>
+                . Your AI financial analyst — with privacy in mind.
               </p>
               <div className="flex items-center space-x-4">
                 <a 

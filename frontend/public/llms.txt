@@ -1,0 +1,40 @@
+# Ask Linc
+
+> The AI financial reasoning assistant for households planning retirement — decisions-ready answers, not charts.
+
+Ask Linc connects to your financial accounts and answers real questions about retirement, home buying, portfolio risk, and what-if scenarios. Answers use your data, live market conditions, and deterministic calculations you can inspect ("Show the math").
+
+## Pricing
+
+- $9/month flat — vs the 1-2% of your wealth a human advisor charges every year
+- Cancel anytime
+- See a real answer free in the interactive demo (sample data, no card): https://asklinc.com/demo
+
+## Who it's for
+
+Households planning retirement and major money decisions who are tired of dashboards. Not for day traders or spreadsheet hobbyists.
+
+## Key pages
+
+- Homepage: https://asklinc.com/
+- Product / features: https://asklinc.com/features
+- Pricing: https://asklinc.com/pricing
+- FAQ: https://asklinc.com/faq
+- Interactive demo: https://asklinc.com/demo
+- Use cases: https://asklinc.com/use-cases
+- About / founder: https://asklinc.com/about
+- How we protect your data: https://asklinc.com/how-we-protect-your-data
+- Show the math (transparency): https://asklinc.com/blog/show-the-math-how-ask-linc-makes-ai-financial-analysis-transparent
+
+## Comparisons
+
+- Ask Linc vs Origin: https://asklinc.com/vs/origin
+- Ask Linc vs PortfolioPilot: https://asklinc.com/vs/portfoliopilot
+- Ask Linc vs Monarch: https://asklinc.com/vs/monarch
+
+## Contact
+
+- https://asklinc.com/contact
+- Substack: https://asklinc.substack.com/
+- LinkedIn (company): https://www.linkedin.com/company/ask-linc/
+- Founder: Ethan Teng — https://www.linkedin.com/in/ethanteng

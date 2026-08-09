@@ -107,7 +107,7 @@ export default function PromptExamplePage({
                   </div>
                 )}
               </div>
-              <Link href="/#pricing" className="text-muted-foreground hover:text-primary transition-colors">
+              <Link href="/pricing" className="text-muted-foreground hover:text-primary transition-colors">
                 Pricing
               </Link>
               <a
@@ -164,7 +164,7 @@ export default function PromptExamplePage({
                   </Link>
                 ))}
               </div>
-              <Link href="/#pricing" className="block py-3 text-muted-foreground hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>
+              <Link href="/pricing" className="block py-3 text-muted-foreground hover:text-primary transition-colors" onClick={() => setIsMobileMenuOpen(false)}>
                 Pricing
               </Link>
               <a

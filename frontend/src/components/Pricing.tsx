@@ -60,8 +60,8 @@ export const Pricing = () => {
                 <span className="text-5xl font-bold text-navy">$9</span>
                 <span className="text-muted-foreground text-xl">/ month</span>
               </div>
-              <p className="text-muted-foreground text-lg">
-                Full access to Ask Linc's financial reasoning platform.
+              <p className="text-muted-foreground text-base max-w-md mx-auto">
+                $9/month flat — vs the 1-2% of your wealth a human advisor charges every year.
               </p>
             </div>
             

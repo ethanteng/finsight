@@ -28,9 +28,16 @@ const STATIC_ROUTES: StaticRoute[] = [
 
   // Core marketing
   { path: '/features', changeFrequency: 'monthly', priority: 0.9 },
+  { path: '/pricing', changeFrequency: 'monthly', priority: 0.9 },
+  { path: '/about', changeFrequency: 'monthly', priority: 0.7 },
   { path: '/demo', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/faq', changeFrequency: 'monthly', priority: 0.7 },
   { path: '/contact', changeFrequency: 'yearly', priority: 0.4 },
+
+  // Competitor comparisons
+  { path: '/vs/origin', changeFrequency: 'monthly', priority: 0.8 },
+  { path: '/vs/portfoliopilot', changeFrequency: 'monthly', priority: 0.8 },
+  { path: '/vs/monarch', changeFrequency: 'monthly', priority: 0.8 },
 
   // Top-of-funnel content hubs
   { path: '/use-cases', changeFrequency: 'monthly', priority: 0.9 },
