@@ -44,7 +44,8 @@ router.get('/verify', async (req: Request, res: Response) => {
         id: true,
         email: true,
         tier: true,
-        isActive: true
+        isActive: true,
+        createdAt: true
       }
     });
 
@@ -63,7 +64,8 @@ router.get('/verify', async (req: Request, res: Response) => {
       user: {
         id: user.id,
         email: user.email,
-        tier: user.tier
+        tier: user.tier,
+        createdAt: user.createdAt
       }
     });
   } catch (error) {
@@ -229,7 +231,8 @@ router.post('/register', async (req: Request, res: Response) => {
       user: {
         id: user.id,
         email: user.email,
-        tier: user.tier
+        tier: user.tier,
+        createdAt: user.createdAt
       },
       token
     });
@@ -294,7 +297,8 @@ router.post('/login', async (req: Request, res: Response) => {
       user: {
         id: user.id,
         email: user.email,
-        tier: user.tier
+        tier: user.tier,
+        createdAt: user.createdAt
       },
       token
     });

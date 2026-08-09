@@ -87,6 +87,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
     "@google/generative-ai": "^0.21.0",
+    "@heycatch/sdk": "^0.7.0",
     "@polygon.io/client-js": "^8.0.0",
     "@prisma/client": "^6.12.0",
     "@sentry/node": "^10.5.0",

@@ -6,6 +6,7 @@ import TierBanner from '../../components/TierBanner';
 import FinancialOverview from '../../components/FinancialOverview';
 import MarketNewsModal from '../../components/MarketNewsModal';
 import { resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
+import { identifyUser, resetUserIdentity } from '../../lib/heycatch';
 
 interface PromptHistory {
   id: string;
@@ -125,6 +126,7 @@ export default function AppPageClient() {
           const data = await res.json();
           setIsAuthenticated(true);
           setUserEmail(data.user.email);
+          identifyUser(data.user);
           setIsLoading(false);
           
           // Check subscription status after authentication
@@ -132,11 +134,13 @@ export default function AppPageClient() {
         } else {
           // Token invalid, redirect to login
           localStorage.removeItem('auth_token');
+          resetUserIdentity();
           router.push('/login');
         }
       } catch (error) {
         console.error('Auth check failed:', error);
         localStorage.removeItem('auth_token');
+        resetUserIdentity();
         router.push('/login');
       }
     };
@@ -284,6 +288,7 @@ export default function AppPageClient() {
     // Reset Plaid Link initialization flag when logging out
     resetPlaidLinkInitialization();
     localStorage.removeItem('auth_token');
+    resetUserIdentity();
     router.push('/login');
   };
 

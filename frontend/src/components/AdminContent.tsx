@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { resetUserIdentity } from '@/lib/heycatch';
 
 interface DemoSession {
   sessionId: string;
@@ -116,6 +117,7 @@ export default function AdminContent() {
 
   const handleLogout = () => {
     localStorage.removeItem('auth_token');
+    resetUserIdentity();
     router.push('/login');
   };
 

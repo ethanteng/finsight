@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, Suspense } from 'react';
+import { identifyUser } from '@/lib/heycatch';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
@@ -81,7 +82,10 @@ function RegisterFormContent() {
 
       if (res.ok && data.token) {
         localStorage.setItem('auth_token', data.token);
-        
+        if (data.user) {
+          identifyUser(data.user);
+        }
+
         // Always go through email verification for security
         // The subscription context will be preserved in the URL for after verification
         if (subscriptionContext) {
