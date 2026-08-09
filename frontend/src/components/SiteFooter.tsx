@@ -11,12 +11,27 @@ export default function SiteFooter() {
             <Brain className="h-6 w-6 text-primary" />
             <span className="text-lg font-bold gradient-text">Ask Linc</span>
           </Link>
-          <div className="flex items-center space-x-6 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-4 gap-y-2 text-sm text-muted-foreground">
+            <Link href="/pricing" className="hover:text-primary transition-colors">
+              Pricing
+            </Link>
+            <Link href="/about" className="hover:text-primary transition-colors">
+              About
+            </Link>
             <Link href="/faq" className="hover:text-primary transition-colors">
               FAQ
             </Link>
             <Link href="/how-we-protect-your-data" className="hover:text-primary transition-colors">
               How We Protect Your Data
+            </Link>
+            <Link href="/vs/origin" className="hover:text-primary transition-colors">
+              vs Origin
+            </Link>
+            <Link href="/vs/portfoliopilot" className="hover:text-primary transition-colors">
+              vs PortfolioPilot
+            </Link>
+            <Link href="/vs/monarch" className="hover:text-primary transition-colors">
+              vs Monarch
             </Link>
             <Link href="/privacy" className="hover:text-primary transition-colors">
               Privacy Policy
@@ -32,7 +47,11 @@ export default function SiteFooter() {
         <div className="mt-8 pt-8 border-t border-border">
           <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
             <p className="text-sm text-muted-foreground">
-              &copy; {new Date().getFullYear()} Ask Linc. Your AI financial analyst. Built with privacy in mind.
+              &copy; {new Date().getFullYear()} Ask Linc. Built by{' '}
+              <Link href="/about" className="hover:text-primary transition-colors">
+                Ethan Teng
+              </Link>
+              . Your AI financial analyst — with privacy in mind.
             </p>
             <div className="flex items-center space-x-4">
               <a 

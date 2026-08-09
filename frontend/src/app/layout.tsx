@@ -15,8 +15,15 @@ const organizationSchema = {
   "description": "AI-powered financial reasoning platform that helps users understand and optimize their financial health using real data, goals, and live market conditions.",
   "sameAs": [
     "https://bsky.app/profile/asklinc.com",
-    "https://asklinc.substack.com/"
+    "https://asklinc.substack.com/",
+    "https://www.linkedin.com/company/ask-linc/",
+    "https://www.linkedin.com/in/ethanteng"
   ],
+  "founder": {
+    "@type": "Person",
+    "name": "Ethan Teng",
+    "url": "https://www.linkedin.com/in/ethanteng"
+  },
   "contactPoint": {
     "@type": "ContactPoint",
     "contactType": "Customer Service",

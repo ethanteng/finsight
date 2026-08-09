@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import FaqContent from '../../components/FaqContent';
+import StructuredData from '../../components/StructuredData';
+import { buildFaqPageSchema } from '../../data/faq';
 
 export const metadata: Metadata = {
   title: 'FAQ | Frequently Asked Questions | Ask Linc',
@@ -22,5 +24,10 @@ export const metadata: Metadata = {
 };
 
 export default function FaqPage() {
-  return <FaqContent />;
+  return (
+    <>
+      <StructuredData data={buildFaqPageSchema()} />
+      <FaqContent />
+    </>
+  );
 }

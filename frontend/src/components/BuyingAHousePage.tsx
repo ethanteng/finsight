@@ -143,7 +143,7 @@ const BuyingAHousePage = () => {
                   </div>
                 )}
               </div>
-              <button onClick={() => scrollToSection('pricing')} className="text-muted-foreground hover:text-primary transition-colors">Pricing</button>
+              <Link href="/pricing" className="text-muted-foreground hover:text-primary transition-colors">Pricing</Link>
               <a 
                 href="/blog" 
                 target="_blank" 
@@ -211,15 +211,13 @@ const BuyingAHousePage = () => {
                   </Link>
                 ))}
               </div>
-              <button 
-                onClick={() => {
-                  scrollToSection('pricing');
-                  setIsMobileMenuOpen(false);
-                }} 
-                className="block w-full text-left py-3 text-muted-foreground hover:text-primary transition-colors"
+              <Link
+                href="/pricing"
+                className="block py-3 text-muted-foreground hover:text-primary transition-colors"
+                onClick={() => setIsMobileMenuOpen(false)}
               >
                 Pricing
-              </button>
+              </Link>
               <a 
                 href="/blog" 
                 target="_blank" 

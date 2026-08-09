@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import Typewriter from 'typewriter-effect';
 
 const QUESTIONS = [
@@ -30,18 +30,9 @@ interface AnimatedPromptProps {
 
 const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef, questions: customQuestions, largerText = false, onClick }: AnimatedPromptProps) => {
   const questions = customQuestions ?? QUESTIONS;
-  const [isVisible, setIsVisible] = useState(false);
   const typewriterRef = useRef<{ state: { elements: { wrapper: HTMLElement } } } | null>(null);
 
-  useEffect(() => {
-    // Delay the animation to start after the page loads
-    const timer = setTimeout(() => setIsVisible(true), 1000);
-    return () => clearTimeout(timer);
-  }, []);
-
-
   // Expose getter for current question text - resolves partial (mid-typing) text to full question
-  // Must be before any early return to satisfy Rules of Hooks
   useEffect(() => {
     if (getCurrentQuestionRef) {
       getCurrentQuestionRef.current = () => {
@@ -55,13 +46,7 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef, questions
       };
       return () => { getCurrentQuestionRef.current = null; };
     }
-  }, [getCurrentQuestionRef, isVisible, questions]);
-
-  if (!isVisible) {
-    return (
-      <div className="w-full h-20 bg-gray-700 rounded-lg animate-pulse"></div>
-    );
-  }
+  }, [getCurrentQuestionRef, questions]);
 
   const className = "block w-full bg-gray-700 rounded-lg p-4 border border-gray-600 hover:bg-gray-600 hover:border-gray-500 transition-all duration-200 cursor-pointer group";
   const textSizeClass = largerText ? "text-[1.35rem]" : "text-lg";
