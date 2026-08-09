@@ -9,9 +9,6 @@ import BlogSubscription from './BlogSubscription';
 import HeroExampleAnswer from './HeroExampleAnswer';
 import RealMathCallout from './RealMathCallout';
 import FounderBlock from './FounderBlock';
-import TestimonialWall from './TestimonialWall';
-import ThirdPartySignals from './ThirdPartySignals';
-import AdoptionStatStub from './AdoptionStatStub';
 import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, BarChart3, MessageCircle, Sparkles, X, Target, Menu, ChevronDown, CircleArrowUp } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
@@ -423,7 +420,6 @@ const NewHomepage = () => {
               </div>
             </div>
           </div>
-          <AdoptionStatStub />
         </div>
       </section>
 
@@ -477,10 +473,6 @@ const NewHomepage = () => {
       </section>
 
       <RealMathCallout />
-
-      <TestimonialWall />
-
-      <ThirdPartySignals />
 
       {/* Pricing Section */}
       <section id="pricing" className="py-16 bg-[hsl(217,32%,6%)]">
