@@ -12,11 +12,3 @@ export function PricingValueBadge() {
     </div>
   );
 }
-
-export function PricingTrialCallout() {
-  return (
-    <p className="text-center text-xs text-muted-foreground">
-      First 7 days free when you connect your accounts — cancel anytime, full refund
-    </p>
-  );
-}

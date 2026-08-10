@@ -12,7 +12,7 @@ export const FAQ_ITEMS: FaqItem[] = [
   {
     question: "Is there a free plan or trial?",
     answer:
-      "First 7 days free when you connect your accounts — cancel anytime, full refund. You can also see a real answer free in the interactive demo with sample data, no credit card needed. After that, Ask Linc is $9/month for full access with your own accounts.",
+      "You can see a real answer free in the interactive demo with sample data — no credit card needed. Ask Linc itself is $9/month for full access with your own accounts. We've found it works best when people use it with real questions from day one.",
   },
   {
     question: "I don't want to give AI companies all my financial data...",
