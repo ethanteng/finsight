@@ -531,8 +531,8 @@ const NewHomepage = () => {
                   <span className="text-muted-foreground text-xl">/ month</span>
                 </div>
                 <PricingValueBadge />
-                <p className="text-muted-foreground text-base max-w-md mx-auto">
-                  $9/month flat — vs the 1-2% of your wealth a human advisor charges every year.
+                <p className="text-muted-foreground text-sm whitespace-nowrap mx-auto">
+                  Compared to the 1-2% of your wealth a human advisor charges every year.
                 </p>
               </div>
               
