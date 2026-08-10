@@ -76,8 +76,7 @@ export default function AboutPageContent() {
                 — and private.
               </p>
               <p className="text-muted-foreground leading-relaxed">
-                Operated by Ethan Teng Consulting LLC. $9/month flat. Cancel
-                anytime.
+                $9/month flat. Cancel anytime.
               </p>
             </div>
 

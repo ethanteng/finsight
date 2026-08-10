@@ -13,7 +13,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 import { USE_CASE_LINKS, COMPARE_LINKS } from '@/lib/site-nav';
-import { PricingValueBadge, PricingTrialCallout } from './PricingOfferCallouts';
+import { PricingValueBadge } from './PricingOfferCallouts';
 
 const HOW_LINC_STEPS = [
   { title: "Connect once", description: "Link your financial accounts securely via Plaid", icon: Target },
@@ -531,8 +531,8 @@ const NewHomepage = () => {
                   <span className="text-muted-foreground text-xl">/ month</span>
                 </div>
                 <PricingValueBadge />
-                <p className="text-muted-foreground text-base max-w-md mx-auto">
-                  $9/month flat — vs the 1-2% of your wealth a human advisor charges every year.
+                <p className="text-muted-foreground text-sm whitespace-nowrap mx-auto">
+                  Compared to the 1-2% of your wealth a human advisor charges every year.
                 </p>
               </div>
               
@@ -569,7 +569,9 @@ const NewHomepage = () => {
                 >
                   {isLoading === 'premium' ? 'Creating...' : 'Get started'}
                 </Button>
-                <PricingTrialCallout />
+                <p className="text-center text-xs text-muted-foreground mt-3">
+                  Cancel anytime.
+                </p>
                 <p className="text-center text-sm mt-2">
                   <Link href="/demo" className="text-primary hover:underline font-medium">
                     See a real answer free, no credit card needed
@@ -651,8 +653,7 @@ const NewHomepage = () => {
               >
                 {isLoading === 'premium' ? 'Creating...' : 'Get started'}
               </Button>
-              <PricingTrialCallout />
-              <p className="text-[1.00625rem] text-primary font-medium">$9/month.</p>
+              <p className="text-[1.00625rem] text-primary font-medium">$9/month. Cancel anytime.</p>
               <Link href="/demo" className="text-sm text-slate-300 hover:text-primary transition-colors">
                 See a real answer free, no credit card needed
               </Link>
