@@ -324,7 +324,7 @@ const NewHomepage = () => {
                     See a real answer free
                     <CircleArrowUp className="!w-[1.6875rem] !h-[1.6875rem] shrink-0" />
                   </Button>
-                  <p className="text-[0.7875rem]">No card. Interactive demo with sample financial data.</p>
+                  <p className="text-[0.7875rem]">No credit card needed. Interactive demo with sample financial data.</p>
               </div>
             </div>
       </div>
@@ -534,7 +534,7 @@ const NewHomepage = () => {
                 </p>
                 <p className="text-center text-sm mt-2">
                   <Link href="/demo" className="text-primary hover:underline font-medium">
-                    See a real answer free, no card
+                    See a real answer free, no credit card needed
                   </Link>
                 </p>
               </div>
@@ -615,7 +615,7 @@ const NewHomepage = () => {
               </Button>
               <p className="text-[1.00625rem] text-primary font-medium">$9/month. Cancel anytime.</p>
               <Link href="/demo" className="text-sm text-slate-300 hover:text-primary transition-colors">
-                See a real answer free, no card
+                See a real answer free, no credit card needed
               </Link>
             </div>
           </div>
@@ -714,11 +714,7 @@ const NewHomepage = () => {
           <div className="mt-8 pt-8 border-t border-border">
             <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
               <p className="text-sm text-muted-foreground">
-                &copy; {new Date().getFullYear()} Ask Linc. Built by{' '}
-                <Link href="/about" className="hover:text-primary transition-colors">
-                  Ethan Teng
-                </Link>
-                . Your AI financial analyst — with privacy in mind.
+                &copy; {new Date().getFullYear()} Ask Linc. Your AI financial analyst — with privacy in mind.
               </p>
               <div className="flex items-center space-x-4">
                 <a 

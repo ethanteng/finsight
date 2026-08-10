@@ -23,7 +23,7 @@ export default function ComparisonPageContent({ page }: { page: ComparisonPage }
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
                 <Button variant="hero" size="lg" asChild>
-                  <Link href="/demo">See a real answer free, no card</Link>
+                  <Link href="/demo">See a real answer free, no credit card needed</Link>
                 </Button>
                 <Button variant="outline" size="lg" asChild>
                   <Link href="/pricing">$9/month pricing</Link>

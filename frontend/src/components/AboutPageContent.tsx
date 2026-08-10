@@ -37,12 +37,12 @@ export default function AboutPageContent() {
                   <p className="text-muted-foreground">Founder</p>
                 </div>
                 <p className="text-muted-foreground leading-relaxed">
-                  After leaving my last W-2 growth role, I pasted my own bank
-                  statements into ChatGPT — and immediately regretted it.
-                  General-purpose AI improvises money math. I built Ask Linc so
-                  households planning retirement get decisions-ready answers from
-                  their real accounts, live market data, and calculations you can
-                  inspect — not another dashboard, and not a black box.
+                  After getting laid off, I pasted my own bank statements into
+                  ChatGPT — and immediately regretted it. General-purpose AI fails
+                  at money math. I built Ask Linc so households planning retirement
+                  get decision-ready answers from their real accounts, live market
+                  data, and calculations you can inspect — not another dashboard,
+                  and not a black box.
                 </p>
                 <div className="flex flex-wrap gap-4 text-sm">
                   <a
