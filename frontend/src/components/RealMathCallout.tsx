@@ -29,7 +29,7 @@ export default function RealMathCallout() {
                 href="/blog/show-the-math-how-ask-linc-makes-ai-financial-analysis-transparent"
                 className="inline-flex text-primary font-medium hover:underline"
               >
-                How Show the math works →
+                How Show the Math works →
               </Link>
             </div>
           </div>
