@@ -9,6 +9,7 @@ import SiteHeader from './SiteHeader';
 import SiteFooter from './SiteFooter';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 import { FAQ_ITEMS } from '@/data/faq';
+import { PricingValueBadge, PricingTrialCallout } from './PricingOfferCallouts';
 
 export default function PricingPageContent() {
   const [isLoading, setIsLoading] = useState(false);
@@ -54,8 +55,8 @@ export default function PricingPageContent() {
                 One plan. <span className="gradient-text">Full access.</span>
               </h1>
               <p className="text-slate-300">
-                See a real answer free in the demo — no credit card needed. Then $9/month when
-                you connect your own accounts.
+                First 7 days free when you connect your accounts — cancel anytime, full refund.
+                Or see a real answer free in the demo with sample data — no credit card needed.
               </p>
             </div>
 
@@ -67,6 +68,7 @@ export default function PricingPageContent() {
                     <span className="text-5xl font-bold gradient-text">$9</span>
                     <span className="text-muted-foreground text-xl">/ month</span>
                   </div>
+                  <PricingValueBadge />
                   <p className="text-muted-foreground text-base max-w-md mx-auto">
                     $9/month flat — vs the 1-2% of your wealth a human advisor
                     charges every year.
@@ -99,9 +101,7 @@ export default function PricingPageContent() {
                   >
                     {isLoading ? 'Creating...' : 'Get started'}
                   </Button>
-                  <p className="text-center text-xs text-muted-foreground">
-                    Cancel anytime.
-                  </p>
+                  <PricingTrialCallout />
                   <p className="text-center text-sm">
                     <Link href="/demo" className="text-primary hover:underline font-medium">
                       See a real answer free, no credit card needed

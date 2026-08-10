@@ -70,7 +70,7 @@ export const STRIPE_CONFIG = {
   
   // Subscription settings
   subscriptionSettings: {
-    trialPeriodDays: undefined, // No trial for now
+    trialPeriodDays: 7,
     prorationBehavior: 'create_prorations' as const,
     paymentSettings: {
       paymentMethodTypes: ['card'],

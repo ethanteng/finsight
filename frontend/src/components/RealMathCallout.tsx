@@ -22,6 +22,9 @@ export default function RealMathCallout() {
                 by the model. Numbers are shown, live sources are cited, and you
                 can open &ldquo;Show the math&rdquo; on any answer to inspect the work.
               </p>
+              <p className="text-foreground/90 font-medium">
+                A real recommendation — not another chart.
+              </p>
               <Link
                 href="/blog/show-the-math-how-ask-linc-makes-ai-financial-analysis-transparent"
                 className="inline-flex text-primary font-medium hover:underline"

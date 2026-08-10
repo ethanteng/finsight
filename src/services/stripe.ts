@@ -75,7 +75,10 @@ export class StripeService {
           metadata: {
             tier: tier,
             source: 'web_checkout'
-          }
+          },
+          ...(STRIPE_CONFIG.subscriptionSettings.trialPeriodDays && {
+            trial_period_days: STRIPE_CONFIG.subscriptionSettings.trialPeriodDays,
+          }),
         },
         billing_address_collection: 'required',
         allow_promotion_codes: true,
