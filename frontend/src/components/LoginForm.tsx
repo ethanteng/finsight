@@ -4,6 +4,7 @@ import { pushBeginCheckout } from '@/lib/dataLayer';
 import { identifyUser } from '@/lib/heycatch';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import SiteFooter from './SiteFooter';
 
 interface SubscriptionContext {
   subscription: string;
@@ -206,7 +207,8 @@ function LoginFormContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+      <div className="flex-1 flex items-center justify-center">
       <div className="max-w-md w-full space-y-8 p-8">
         <div className="text-center">
           <h1 className="text-3xl font-bold">Welcome Back</h1>
@@ -347,6 +349,8 @@ function LoginFormContent() {
         </>
         )}
       </div>
+      </div>
+      <SiteFooter />
     </div>
   );
 }

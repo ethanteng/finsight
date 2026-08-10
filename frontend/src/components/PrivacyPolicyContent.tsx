@@ -2,6 +2,7 @@
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Shield, Eye, Lock, Database, FileText, MessageCircle, Brain } from 'lucide-react';
+import SiteFooter from './SiteFooter';
 
 export default function PrivacyPolicyContent() {
   return (
@@ -215,6 +216,7 @@ export default function PrivacyPolicyContent() {
           </div>
         </div>
       </div>
+      <SiteFooter />
     </div>
   );
 }

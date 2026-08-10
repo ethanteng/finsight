@@ -14,6 +14,7 @@ import { useRouter } from 'next/navigation';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 import { USE_CASE_LINKS, COMPARE_LINKS } from '@/lib/site-nav';
 import { PricingValueBadge } from './PricingOfferCallouts';
+import SiteFooter from './SiteFooter';
 
 const HOW_LINC_STEPS = [
   { title: "Connect once", description: "Link your financial accounts securely via Plaid", icon: Target },
@@ -306,18 +307,15 @@ const NewHomepage = () => {
             <div className="text-center space-y-8 w-full max-w-4xl flex flex-col items-center">
               <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold leading-tight mt-6">
                 <span className="gradient-text text-[2.53125rem] md:text-[4.21875rem] lg:text-[5.0625rem] block">
-                  The AI that reasons about your money.
-                </span>
-                <span className="text-[1.5rem] md:text-[2.5rem] lg:text-[3rem] font-bold text-foreground block mt-2">
-                  Just ask Linc.
+                  Ask Linc
                 </span>
               </h1>
 
-              <p className="text-[1rem] md:text-[1.2rem] text-muted-foreground max-w-3xl leading-relaxed">
-                The AI financial reasoning assistant for households planning retirement — decisions-ready answers, not charts.
+              <p className="text-xl md:text-2xl lg:text-[1.75rem] text-foreground max-w-3xl leading-snug font-semibold tracking-tight">
+                The AI financial assistant for households planning for retirement.
               </p>
               <p className="text-[1rem] md:text-[1.1rem] text-foreground/90 max-w-3xl font-medium">
-                A real recommendation — not another chart.
+                Get real recommendations — not another chart.
               </p>
               
               <div className="space-y-4 w-full max-w-2xl mx-auto mt-4">
@@ -531,7 +529,7 @@ const NewHomepage = () => {
                   <span className="text-muted-foreground text-xl">/ month</span>
                 </div>
                 <PricingValueBadge />
-                <p className="text-muted-foreground text-sm whitespace-nowrap mx-auto">
+                <p className="text-muted-foreground text-sm mx-auto max-w-xs sm:max-w-sm text-balance">
                   Compared to the 1-2% of your wealth a human advisor charges every year.
                 </p>
               </div>
@@ -679,146 +677,7 @@ const NewHomepage = () => {
           </div>
         </div>
       </section> */}
-
-      {/* Footer */}
-      <footer className="bg-muted/50 py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-            <div className="flex items-center space-x-2">
-              <Brain className="h-6 w-6 text-primary" />
-              <span className="text-lg font-bold gradient-text">Ask Linc</span>
-            </div>
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-4 gap-y-1 md:gap-x-6 text-xs md:text-sm text-muted-foreground">
-              <Link 
-                href="/pricing" 
-                className="hover:text-primary transition-colors"
-              >
-                Pricing
-              </Link>
-              <Link 
-                href="/about" 
-                className="hover:text-primary transition-colors"
-              >
-                About
-              </Link>
-              <Link 
-                href="/faq" 
-                className="hover:text-primary transition-colors"
-              >
-                FAQ
-              </Link>
-              <Link 
-                href="/how-we-protect-your-data" 
-                className="hover:text-primary transition-colors"
-              >
-                How We Protect Your Data
-              </Link>
-              <Link 
-                href="/vs/origin" 
-                className="hover:text-primary transition-colors"
-              >
-                vs Origin
-              </Link>
-              <Link 
-                href="/vs/portfoliopilot" 
-                className="hover:text-primary transition-colors"
-              >
-                vs PortfolioPilot
-              </Link>
-              <Link 
-                href="/vs/monarch" 
-                className="hover:text-primary transition-colors"
-              >
-                vs Monarch
-              </Link>
-              <a 
-                href="/privacy" 
-                className="hover:text-primary transition-colors"
-              >
-                Privacy Policy
-              </a>
-              <a 
-                href="/terms" 
-                className="hover:text-primary transition-colors"
-              >
-                Terms of Service
-              </a>
-              <a 
-                href="/contact" 
-                className="hover:text-primary transition-colors"
-              >
-                Contact
-              </a>
-            </div>
-          </div>
-          <div className="mt-8 pt-8 border-t border-border">
-            <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-              <p className="text-sm text-muted-foreground">
-                &copy; {new Date().getFullYear()} Ask Linc. Your AI financial analyst — with privacy in mind.
-              </p>
-              <div className="flex items-center space-x-4">
-                <a 
-                  href="https://bsky.app/profile/asklinc.com" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-primary transition-colors"
-                >
-                  <img 
-                    src="/logos/bluesky.jpeg" 
-                    alt="Bluesky" 
-                    className="w-4 h-4"
-                    onError={(e) => {
-                      // Fallback to colored square if logo fails to load
-                      e.currentTarget.style.display = 'none';
-                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                    }}
-                  />
-                  <div className="w-4 h-4 bg-blue-500 rounded hidden"></div>
-                  <span>Bluesky</span>
-                </a>
-                <a 
-                  href="https://asklinc.substack.com/" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-primary transition-colors"
-                >
-                  <img 
-                    src="/logos/substack.png" 
-                    alt="Substack" 
-                    className="w-4 h-4"
-                    onError={(e) => {
-                      // Fallback to colored square if logo fails to load
-                      e.currentTarget.style.display = 'none';
-                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                    }}
-                  />
-                  <div className="w-4 h-4 bg-orange-500 rounded hidden"></div>
-                  <span>Substack</span>
-                </a>
-                <a 
-                  href="https://www.linkedin.com/company/ask-linc/" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-primary transition-colors"
-                >
-                  <img 
-                    src="/logos/linkedin.png" 
-                    alt="LinkedIn" 
-                    className="w-4 h-4"
-                    onError={(e) => {
-                      // Fallback to colored square if logo fails to load
-                      e.currentTarget.style.display = 'none';
-                      e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                    }}
-                  />
-                  <div className="w-4 h-4 bg-[#0A66C2] rounded hidden"></div>
-                  <span>LinkedIn</span>
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
 
     </div>
   );

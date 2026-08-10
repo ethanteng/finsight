@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import SiteFooter from '@/components/SiteFooter';
 
 export const metadata: Metadata = {
   title: 'Financial Insights & Market Analysis | Ask Linc Blog',
@@ -49,6 +50,7 @@ export default function BlogLayout({
   return (
     <div className="min-h-screen bg-gray-50">
       {children}
+      <SiteFooter />
     </div>
   );
 }

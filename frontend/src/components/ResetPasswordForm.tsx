@@ -2,6 +2,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import SiteFooter from './SiteFooter';
 
 function ResetPasswordFormContent() {
   const [password, setPassword] = useState('');
@@ -67,7 +68,8 @@ function ResetPasswordFormContent() {
 
   if (!token) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+      <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+      <div className="flex-1 flex items-center justify-center">
         <div className="max-w-md w-full space-y-8 p-8">
           <div className="text-center">
             <h1 className="text-3xl font-bold">Invalid Reset Link</h1>
@@ -90,11 +92,14 @@ function ResetPasswordFormContent() {
           </div>
         </div>
       </div>
+      <SiteFooter />
+    </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+      <div className="flex-1 flex items-center justify-center">
       <div className="max-w-md w-full space-y-8 p-8">
         <div className="text-center">
           <h1 className="text-3xl font-bold">Reset Password</h1>
@@ -160,6 +165,8 @@ function ResetPasswordFormContent() {
           </Link>
         </div>
       </div>
+      </div>
+      <SiteFooter />
     </div>
   );
 }
@@ -167,7 +174,8 @@ function ResetPasswordFormContent() {
 export default function ResetPasswordForm() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+      <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+      <div className="flex-1 flex items-center justify-center">
         <div className="max-w-md w-full space-y-8 p-8">
           <div className="text-center">
             <h1 className="text-3xl font-bold">Loading...</h1>
@@ -175,6 +183,8 @@ export default function ResetPasswordForm() {
           </div>
         </div>
       </div>
+      <SiteFooter />
+    </div>
     }>
       <ResetPasswordFormContent />
     </Suspense>

@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import FinanceQA from '../../components/FinanceQA';
+import SiteFooter from '../../components/SiteFooter';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 
 interface PromptHistory {
@@ -295,6 +296,7 @@ export default function DemoPageClient() {
           </div>
         </div>
       </div>
+      <SiteFooter />
     </div>
   );
 }

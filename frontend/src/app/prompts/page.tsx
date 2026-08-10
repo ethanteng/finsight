@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Brain, PiggyBank, Home, BarChart3, Shield, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import SiteFooter from "@/components/SiteFooter";
 import { PROMPT_PAGES } from "@/lib/promptExamples";
 
 export const metadata: Metadata = {
@@ -119,6 +120,7 @@ export default function PromptsIndexPage() {
           </div>
         </div>
       </section>
+      <SiteFooter />
     </div>
   );
 }

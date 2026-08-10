@@ -69,7 +69,7 @@ export default function PricingPageContent() {
                     <span className="text-muted-foreground text-xl">/ month</span>
                   </div>
                   <PricingValueBadge />
-                  <p className="text-muted-foreground text-sm whitespace-nowrap mx-auto">
+                  <p className="text-muted-foreground text-sm mx-auto max-w-xs sm:max-w-sm text-balance">
                     Compared to the 1-2% of your wealth a human advisor charges every year.
                   </p>
                 </div>
