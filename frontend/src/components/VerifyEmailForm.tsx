@@ -2,6 +2,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import SiteFooter from './SiteFooter';
 
 interface SubscriptionContext {
   subscription: string;
@@ -145,7 +146,8 @@ function VerifyEmailFormContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+      <div className="flex-1 flex items-center justify-center">
       <div className="max-w-md w-full space-y-8 p-8">
         <div className="text-center">
           <h1 className="text-3xl font-bold">Verify Your Email</h1>
@@ -229,6 +231,8 @@ function VerifyEmailFormContent() {
           </Link>
         </div>
       </div>
+      </div>
+      <SiteFooter />
     </div>
   );
 }

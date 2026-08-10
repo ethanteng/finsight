@@ -11,7 +11,7 @@ export default function SiteFooter() {
             <Brain className="h-6 w-6 text-primary" />
             <span className="text-lg font-bold gradient-text">Ask Linc</span>
           </Link>
-          <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-4 gap-y-2 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-4 gap-y-1 md:gap-x-6 text-xs md:text-sm text-muted-foreground">
             <Link href="/pricing" className="hover:text-primary transition-colors">
               Pricing
             </Link>
@@ -50,15 +50,15 @@ export default function SiteFooter() {
               &copy; {new Date().getFullYear()} Ask Linc. Your AI financial analyst — with privacy in mind.
             </p>
             <div className="flex items-center space-x-4">
-              <a 
-                href="https://bsky.app/profile/asklinc.com" 
-                target="_blank" 
+              <a
+                href="https://bsky.app/profile/asklinc.com"
+                target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-primary transition-colors"
               >
-                <img 
-                  src="/logos/bluesky.jpeg" 
-                  alt="Bluesky" 
+                <img
+                  src="/logos/bluesky.jpeg"
+                  alt="Bluesky"
                   className="w-4 h-4"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
@@ -68,15 +68,15 @@ export default function SiteFooter() {
                 <div className="w-4 h-4 bg-blue-500 rounded hidden"></div>
                 <span>Bluesky</span>
               </a>
-              <a 
-                href="https://asklinc.substack.com/" 
-                target="_blank" 
+              <a
+                href="https://asklinc.substack.com/"
+                target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-primary transition-colors"
               >
-                <img 
-                  src="/logos/substack.png" 
-                  alt="Substack" 
+                <img
+                  src="/logos/substack.png"
+                  alt="Substack"
                   className="w-4 h-4"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
@@ -86,15 +86,15 @@ export default function SiteFooter() {
                 <div className="w-4 h-4 bg-orange-500 rounded hidden"></div>
                 <span>Substack</span>
               </a>
-              <a 
-                href="https://www.linkedin.com/company/ask-linc/" 
-                target="_blank" 
+              <a
+                href="https://www.linkedin.com/company/ask-linc/"
+                target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center space-x-2 text-sm text-muted-foreground hover:text-primary transition-colors"
               >
-                <img 
-                  src="/logos/linkedin.png" 
-                  alt="LinkedIn" 
+                <img
+                  src="/logos/linkedin.png"
+                  alt="LinkedIn"
                   className="w-4 h-4"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';

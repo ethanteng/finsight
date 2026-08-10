@@ -2,6 +2,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import SiteFooter from './SiteFooter';
 
 // TypeScript declaration for Google Ads dataLayer
 declare global {
@@ -106,7 +107,8 @@ function PaymentSuccessContentInner() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="flex-1 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
         <div className="sm:mx-auto sm:w-full sm:max-w-md">
           <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
             <div className="text-center">
@@ -129,12 +131,15 @@ function PaymentSuccessContentInner() {
           </div>
         </div>
       </div>
+      <SiteFooter />
+    </div>
     );
   }
 
   if (redirectUrl) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="flex-1 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
         <div className="sm:mx-auto sm:w-full sm:max-w-md">
           <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
             <div className="text-center">
@@ -159,11 +164,14 @@ function PaymentSuccessContentInner() {
           </div>
         </div>
       </div>
+      <SiteFooter />
+    </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="flex-1 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
           <div className="text-center">
@@ -182,6 +190,8 @@ function PaymentSuccessContentInner() {
           </div>
         </div>
       </div>
+      </div>
+      <SiteFooter />
     </div>
   );
 }
@@ -189,7 +199,8 @@ function PaymentSuccessContentInner() {
 export default function PaymentSuccessContent() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="flex-1 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
         <div className="sm:mx-auto sm:w-full sm:max-w-md">
           <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
             <div className="text-center">
@@ -209,6 +220,8 @@ export default function PaymentSuccessContent() {
           </div>
         </div>
       </div>
+      <SiteFooter />
+    </div>
     }>
       <PaymentSuccessContentInner />
     </Suspense>

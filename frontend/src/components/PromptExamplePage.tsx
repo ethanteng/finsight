@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Brain, Menu, X, ChevronDown } from "lucide-react";
 import { Button } from "./ui/button";
 import { pushBeginCheckout } from "@/lib/dataLayer";
+import SiteFooter from "./SiteFooter";
 import type { PromptExample } from "@/lib/promptExamples";
 
 const USE_CASE_LINKS = [
@@ -275,6 +276,7 @@ export default function PromptExamplePage({
           </div>
         </div>
       </section>
+      <SiteFooter />
     </div>
   );
 }

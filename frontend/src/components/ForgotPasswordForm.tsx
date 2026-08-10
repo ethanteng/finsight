@@ -1,6 +1,7 @@
 "use client";
 import { useState } from 'react';
 import Link from 'next/link';
+import SiteFooter from './SiteFooter';
 
 export default function ForgotPasswordForm() {
   const [email, setEmail] = useState('');
@@ -39,7 +40,8 @@ export default function ForgotPasswordForm() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
+      <div className="flex-1 flex items-center justify-center">
       <div className="max-w-md w-full space-y-8 p-8">
         <div className="text-center">
           <h1 className="text-3xl font-bold">Forgot Password</h1>
@@ -98,6 +100,8 @@ export default function ForgotPasswordForm() {
           </Link>
         </div>
       </div>
+      </div>
+      <SiteFooter />
     </div>
   );
 }
