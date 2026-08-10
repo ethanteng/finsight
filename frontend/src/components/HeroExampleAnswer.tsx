@@ -6,9 +6,26 @@ import Link from "next/link";
  * Static product "after-state" for the homepage hero — a real reasoning answer
  * with numbers and a recommendation, not a loading skeleton.
  */
+const HERO_ANSWER_ALT =
+  "Ask Linc answering 'Can we retire at 60?' with a projected $6.3M portfolio, 75-85% success odds and a recommendation.";
+
 export default function HeroExampleAnswer() {
   return (
-    <div className="w-full max-w-2xl mx-auto text-left rounded-xl border border-border/60 bg-slate-900/95 shadow-xl overflow-hidden">
+    <figure className="w-full max-w-2xl mx-auto">
+      {/* Static fallback for crawlers and screen readers — live widget below */}
+      <img
+        src="/hero-example-answer.svg"
+        alt={HERO_ANSWER_ALT}
+        width={672}
+        height={420}
+        className="sr-only"
+        loading="eager"
+      />
+      <div
+        className="text-left rounded-xl border border-border/60 bg-slate-900/95 shadow-xl overflow-hidden"
+        role="img"
+        aria-label={HERO_ANSWER_ALT}
+      >
       <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 bg-slate-950/60">
         <span className="w-2 h-2 rounded-full bg-green-500" aria-hidden="true" />
         <span className="text-sm text-slate-400">Ask Linc</span>
@@ -72,6 +89,8 @@ export default function HeroExampleAnswer() {
           </Link>
         </div>
       </div>
-    </div>
+      </div>
+      <figcaption className="sr-only">{HERO_ANSWER_ALT}</figcaption>
+    </figure>
   );
 }

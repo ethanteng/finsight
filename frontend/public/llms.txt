@@ -6,8 +6,8 @@ Ask Linc connects to your financial accounts and answers real questions about re
 
 ## Pricing
 
-- $9/month flat — vs the 1-2% of your wealth a human advisor charges every year
-- Cancel anytime
+- $9/month flat — ~98% cheaper than a 1% advisor fee ($108/yr vs ~$5,000/yr on a $500K portfolio)
+- First 7 days free when you connect your accounts — cancel anytime, full refund
 - See a real answer free in the interactive demo (sample data, no credit card needed): https://asklinc.com/demo
 
 ## Who it's for

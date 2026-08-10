@@ -1,8 +1,6 @@
 "use client";
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
-import { Badge } from './ui/badge';
-import MailerLiteForm from './MailerLiteForm';
 import MailerLiteScript from './MailerLiteScript';
 import AnimatedPrompt from './AnimatedPrompt';
 import BlogSubscription from './BlogSubscription';
@@ -14,6 +12,8 @@ import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { pushBeginCheckout } from '@/lib/dataLayer';
+import { USE_CASE_LINKS, COMPARE_LINKS } from '@/lib/site-nav';
+import { PricingValueBadge, PricingTrialCallout } from './PricingOfferCallouts';
 
 const HOW_LINC_STEPS = [
   { title: "Connect once", description: "Link your financial accounts securely via Plaid", icon: Target },
@@ -27,17 +27,11 @@ const INSTITUTIONS = [
   'Morgan Stanley', 'Goldman Sachs',
 ];
 
-const USE_CASE_LINKS = [
-  { href: '/use-cases/retirement', label: 'Retirement Planning' },
-  { href: '/use-cases/home-buying', label: 'Home Buying Decisions' },
-  { href: '/use-cases/portfolio-analysis', label: 'Investment Portfolio Analysis' },
-  { href: '/use-cases/financial-stress-testing', label: 'Financial Stress Testing' },
-];
-
 const NewHomepage = () => {
   const [isLoading, setIsLoading] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUseCasesOpen, setIsUseCasesOpen] = useState(false);
+  const [isCompareOpen, setIsCompareOpen] = useState(false);
   const [howItWorksInView, setHowItWorksInView] = useState(false);
   const [revealedStepCount, setRevealedStepCount] = useState(0);
   const [highlightedStep, setHighlightedStep] = useState(0);
@@ -154,6 +148,31 @@ const NewHomepage = () => {
                   </div>
                 )}
               </div>
+              <div
+                className="relative group"
+                onMouseEnter={() => setIsCompareOpen(true)}
+                onMouseLeave={() => setIsCompareOpen(false)}
+              >
+                <span className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5 cursor-default">
+                  Compare
+                  <ChevronDown className="h-4 w-4" />
+                </span>
+                {isCompareOpen && (
+                  <div className="absolute top-full left-0 pt-1">
+                    <div className="bg-background/95 backdrop-blur-lg border border-border/50 rounded-lg shadow-lg py-2 min-w-[200px]">
+                      {COMPARE_LINKS.map((link) => (
+                        <Link
+                          key={link.href}
+                          href={link.href}
+                          className="block px-4 py-2 text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
+                        >
+                          {link.label}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
               <Link href="/pricing" className="text-muted-foreground hover:text-primary transition-colors">Pricing</Link>
               <Link
                 href="/blog"
@@ -220,6 +239,19 @@ const NewHomepage = () => {
                   </Link>
                 ))}
               </div>
+              <div className="py-2">
+                <span className="block py-1 text-sm font-medium text-foreground">Compare</span>
+                {COMPARE_LINKS.map((link) => (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className="block py-2 pl-4 text-muted-foreground hover:text-primary transition-colors"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </div>
               <Link
                 href="/pricing"
                 className="block py-3 text-muted-foreground hover:text-primary transition-colors"
@@ -273,12 +305,19 @@ const NewHomepage = () => {
           <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center">
             <div className="text-center space-y-8 w-full max-w-4xl flex flex-col items-center">
               <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold leading-tight mt-6">
-                <span className="text-[0.85rem] md:text-[1rem] lg:text-[1.2rem] font-normal text-muted-foreground block mb-2">Stop staring at dashboards.</span>
-                <span className="gradient-text text-[2.53125rem] md:text-[4.21875rem] lg:text-[5.0625rem]">Just ask Linc.</span>
+                <span className="gradient-text text-[2.53125rem] md:text-[4.21875rem] lg:text-[5.0625rem] block">
+                  The AI that reasons about your money.
+                </span>
+                <span className="text-[1.5rem] md:text-[2.5rem] lg:text-[3rem] font-bold text-foreground block mt-2">
+                  Just ask Linc.
+                </span>
               </h1>
 
               <p className="text-[1rem] md:text-[1.2rem] text-muted-foreground max-w-3xl leading-relaxed">
                 The AI financial reasoning assistant for households planning retirement — decisions-ready answers, not charts.
+              </p>
+              <p className="text-[1rem] md:text-[1.1rem] text-foreground/90 max-w-3xl font-medium">
+                A real recommendation — not another chart.
               </p>
               
               <div className="space-y-4 w-full max-w-2xl mx-auto mt-4">
@@ -491,6 +530,7 @@ const NewHomepage = () => {
                   <span className="text-5xl font-bold gradient-text">$9</span>
                   <span className="text-muted-foreground text-xl">/ month</span>
                 </div>
+                <PricingValueBadge />
                 <p className="text-muted-foreground text-base max-w-md mx-auto">
                   $9/month flat — vs the 1-2% of your wealth a human advisor charges every year.
                 </p>
@@ -529,9 +569,7 @@ const NewHomepage = () => {
                 >
                   {isLoading === 'premium' ? 'Creating...' : 'Get started'}
                 </Button>
-                <p className="text-center text-xs text-muted-foreground mt-3">
-                  Cancel anytime.
-                </p>
+                <PricingTrialCallout />
                 <p className="text-center text-sm mt-2">
                   <Link href="/demo" className="text-primary hover:underline font-medium">
                     See a real answer free, no credit card needed
@@ -613,7 +651,8 @@ const NewHomepage = () => {
               >
                 {isLoading === 'premium' ? 'Creating...' : 'Get started'}
               </Button>
-              <p className="text-[1.00625rem] text-primary font-medium">$9/month. Cancel anytime.</p>
+              <PricingTrialCallout />
+              <p className="text-[1.00625rem] text-primary font-medium">$9/month.</p>
               <Link href="/demo" className="text-sm text-slate-300 hover:text-primary transition-colors">
                 See a real answer free, no credit card needed
               </Link>

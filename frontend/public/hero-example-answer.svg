@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="672" height="420" viewBox="0 0 672 420" role="img" aria-label="Ask Linc answering Can we retire at 60 with a projected $6.3M portfolio, 75-85% success odds and a recommendation.">
+  <rect width="672" height="420" rx="12" fill="#0f172a"/>
+  <rect x="0" y="0" width="672" height="44" fill="#020617"/>
+  <circle cx="24" cy="22" r="4" fill="#22c55e"/>
+  <text x="40" y="27" fill="#94a3b8" font-family="system-ui,sans-serif" font-size="14">Ask Linc</text>
+  <text x="560" y="27" fill="#64748b" font-family="system-ui,sans-serif" font-size="12">Sample answer</text>
+  <text x="24" y="76" fill="#e2e8f0" font-family="system-ui,sans-serif" font-size="16" font-weight="600">Can we retire at 60 if rates stay higher for longer?</text>
+  <text x="24" y="108" fill="#cbd5e1" font-family="system-ui,sans-serif" font-size="14">Projected portfolio at 60: $6.3M vs $4.6M needed.</text>
+  <text x="24" y="132" fill="#cbd5e1" font-family="system-ui,sans-serif" font-size="14">Success odds: 75-85%. Recommendation: target age 60.</text>
+  <rect x="24" y="156" width="140" height="52" rx="8" fill="#ffffff10"/>
+  <text x="36" y="178" fill="#64748b" font-family="system-ui,sans-serif" font-size="10">SUCCESS ODDS</text>
+  <text x="36" y="198" fill="#fff" font-family="system-ui,sans-serif" font-size="14" font-weight="600">75-85%</text>
+  <rect x="24" y="224" width="624" height="64" rx="8" fill="#22c55e20" stroke="#22c55e50"/>
+  <text x="36" y="248" fill="#4ade80" font-family="system-ui,sans-serif" font-size="12" font-weight="600">Recommendation</text>
+  <text x="36" y="270" fill="#e2e8f0" font-family="system-ui,sans-serif" font-size="13">Target 60 as the base case. Pay down debt before age 53.</text>
+</svg>
