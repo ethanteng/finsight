@@ -416,7 +416,7 @@ const NewHomepage = () => {
               {
                 icon: Brain,
                 title: "One connected financial model",
-                description: "Cash, investments, debt, home value, and goals flow into a single line of reasoning — not separate dashboards.",
+                description: "An answer about your mortgage already accounts for your retirement date, your tax situation, and how much risk you can carry.",
               },
               {
                 icon: TrendingUp,
@@ -577,7 +577,7 @@ const NewHomepage = () => {
               <ul className="space-y-4 mb-8 mx-auto max-w-md">
                 <li className="flex items-start space-x-3">
                   <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                  <span className="text-sm">Answers grounded in your complete financial picture</span>
+                  <span className="text-sm">Answers grounded in your real accounts and live market data</span>
                 </li>
                 <li className="flex items-start space-x-3">
                   <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
@@ -685,9 +685,8 @@ const NewHomepage = () => {
             Ask the questions your dashboards can&rsquo;t answer
           </h2>
           <p className="text-lg text-slate-300 max-w-2xl mx-auto">
-            Linc brings your accounts, debt, property, goals, and live market
-            conditions together into one picture — so you can think a hard
-            decision all the way through before you make it.
+            Bring everything together, change the assumptions, and follow the
+            reasoning all the way through — before you commit.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <div className="flex flex-col items-center gap-2">
