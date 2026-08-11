@@ -25,14 +25,23 @@ export default function FounderBlock() {
                 <p className="text-lg font-semibold">Ethan Teng</p>
                 <p className="text-sm text-muted-foreground">Founder, Ask Linc</p>
               </div>
-              <p className="text-muted-foreground leading-relaxed">
-                After getting laid off, I pasted my own bank statements into
-                ChatGPT — and immediately regretted it. General-purpose AI fails
-                at money math. I built Ask Linc so households planning retirement
-                get decision-ready answers from their real accounts, live market
-                data, and calculations you can inspect — not another dashboard,
-                and not a black box.
-              </p>
+              <div className="space-y-4 text-muted-foreground leading-relaxed">
+                <p>
+                  After getting laid off, I pasted my bank statements into
+                  ChatGPT to answer tough money questions—and immediately
+                  regretted it.
+                </p>
+                <p>
+                  The answers sounded convincing, but financial decisions need
+                  more than convincing. They need your real financial picture,
+                  reliable calculations, current market data, and numbers you
+                  can inspect.
+                </p>
+                <p>
+                  So I built Ask Linc: a way to get decision-ready answers from
+                  your actual finances.
+                </p>
+              </div>
               <div className="flex flex-wrap gap-4 text-sm">
                 <a
                   href="https://www.linkedin.com/in/ethanteng"

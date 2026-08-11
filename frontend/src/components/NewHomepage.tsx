@@ -18,8 +18,8 @@ import SiteFooter from './SiteFooter';
 
 const HOW_LINC_STEPS = [
   { title: "Connect once", description: "Link your financial accounts securely via Plaid", icon: Target },
-  { title: "Ask anything", description: "No setup or navigation required", icon: MessageCircle },
-  { title: "Keep asking", description: "Ask follow-ups, change assumptions, stress-test scenarios", icon: Brain },
+  { title: "Ask the hard questions", description: "The real ones — retirement, housing, debt, risk. No setup or navigation required", icon: MessageCircle },
+  { title: "Explore what happens next", description: "Ask follow-ups, change your assumptions, and run the scenario again until the decision is clear", icon: Brain },
 ];
 
 const INSTITUTIONS = [
@@ -305,17 +305,18 @@ const NewHomepage = () => {
           
           <div className="relative z-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center">
             <div className="text-center space-y-8 w-full max-w-4xl flex flex-col items-center">
-              <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold leading-tight mt-6">
-                <span className="gradient-text text-[2.53125rem] md:text-[4.21875rem] lg:text-[5.0625rem] block">
-                  Ask Linc
-                </span>
-              </h1>
+              <div className="space-y-3 mt-6">
+                <p className="text-xs md:text-sm font-semibold uppercase tracking-[0.2em] text-primary">
+                  Your AI financial analyst
+                </p>
+                <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold leading-tight">
+                  <span className="block">Stop staring at dashboards.</span>
+                  <span className="gradient-text block mt-2">Just ask Linc.</span>
+                </h1>
+              </div>
 
-              <p className="text-xl md:text-2xl lg:text-[1.75rem] text-foreground max-w-3xl leading-snug font-semibold tracking-tight">
-                The AI financial assistant for households planning for retirement.
-              </p>
-              <p className="text-[1rem] md:text-[1.1rem] text-foreground/90 max-w-3xl font-medium">
-                Get real recommendations — not another chart.
+              <p className="text-xl md:text-2xl lg:text-[1.75rem] text-foreground/90 max-w-3xl leading-snug font-normal tracking-tight">
+                Ask the hard questions about your money—with answers grounded in your complete financial picture.
               </p>
               
               <div className="space-y-4 w-full max-w-2xl mx-auto mt-4">
@@ -367,6 +368,94 @@ const NewHomepage = () => {
       </div>
     </section>
   </div>
+
+      {/* Problem Statement Section */}
+      <section className="py-20">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-8">
+          <h2 className="text-3xl md:text-4xl font-bold">
+            The questions that matter most are{' '}
+            <span className="gradient-text">hard to answer alone</span>
+          </h2>
+          <div className="grid sm:grid-cols-3 gap-4">
+            {[
+              "Can I retire early?",
+              "Can I afford this house without sacrificing my other goals?",
+              "Should I pay off debt or keep investing?",
+            ].map((question) => (
+              <Card key={question} className="glass-card h-full">
+                <CardContent className="p-5 h-full flex items-center justify-center">
+                  <p className="text-base text-foreground/90 leading-snug">
+                    &ldquo;{question}&rdquo;
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <p className="text-lg md:text-xl text-muted-foreground leading-relaxed">
+            The answer depends on your income, spending, investments, debt,
+            taxes, goals, risk, timing, and what happens next. Ask Linc reasons
+            across your complete financial picture.
+          </p>
+        </div>
+      </section>
+
+      {/* Value Differentiators Section */}
+      <section className="py-20 bg-muted/30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center space-y-4 mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold">
+              One financial model. <span className="gradient-text">One line of reasoning.</span>
+            </h2>
+            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+              Your cash, investments, debt, property, goals, and current market
+              conditions are analyzed together—not as separate dashboards.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            {[
+              {
+                icon: Brain,
+                title: "One connected financial model",
+                description: "Cash, investments, debt, home value, and goals flow into a single line of reasoning — not separate dashboards.",
+              },
+              {
+                icon: TrendingUp,
+                title: "Real-time market intelligence",
+                description: "Live interest rates, inflation, market conditions, and economic data are baked into every answer.",
+              },
+              {
+                icon: Zap,
+                title: "Run what-if scenarios",
+                description: "Retire earlier or later, buy the house, pay off debt or keep investing, change your savings rate, ride out a downturn — change an assumption and see what it does to everything else.",
+              },
+            ].map((item, index) => {
+              const isHighlighted = highlightedValueBox === index;
+              return (
+                <Card
+                  key={index}
+                  className={`glass-card hover:shadow-xl transition-all duration-500 ease-out group ${
+                    isHighlighted
+                      ? "ring-2 ring-primary/50 shadow-xl shadow-primary/10 scale-[1.02]"
+                      : ""
+                  }`}
+                >
+                  <CardContent className="p-8 space-y-4">
+                    <div className="h-12 w-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                      <item.icon className="h-6 w-6 text-primary" />
+                    </div>
+                    <h3 className={`text-2xl font-bold transition-colors duration-300 ${isHighlighted ? "text-primary" : ""}`}>
+                      {item.title}
+                    </h3>
+                    <p className="text-muted-foreground leading-relaxed">
+                      {item.description}
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      </section>
 
       {/* How Linc Works Section */}
       <section
@@ -460,55 +549,6 @@ const NewHomepage = () => {
         </div>
       </section>
 
-      {/* Value Differentiators Section */}
-      <section className="py-20 bg-muted/30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              {
-                icon: Brain,
-                title: "One connected financial model",
-                description: "Cash, investments, debt, home value, and goals flow into a single line of reasoning — not separate dashboards.",
-              },
-              {
-                icon: TrendingUp,
-                title: "Real-time market intelligence",
-                description: "Live interest rates, inflation, market conditions, and economic data are baked into every answer.",
-              },
-              {
-                icon: Zap,
-                title: "Run what-if scenarios",
-                description: "Model early retirement, home purchases, inflation spikes, or rate changes — before you decide.",
-              },
-            ].map((item, index) => {
-              const isHighlighted = highlightedValueBox === index;
-              return (
-                <Card
-                  key={index}
-                  className={`glass-card hover:shadow-xl transition-all duration-500 ease-out group ${
-                    isHighlighted
-                      ? "ring-2 ring-primary/50 shadow-xl shadow-primary/10 scale-[1.02]"
-                      : ""
-                  }`}
-                >
-                  <CardContent className="p-8 space-y-4">
-                    <div className="h-12 w-12 bg-primary/10 rounded-lg flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                      <item.icon className="h-6 w-6 text-primary" />
-                    </div>
-                    <h3 className={`text-2xl font-bold transition-colors duration-300 ${isHighlighted ? "text-primary" : ""}`}>
-                      {item.title}
-                    </h3>
-                    <p className="text-muted-foreground leading-relaxed">
-                      {item.description}
-                    </p>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
       <RealMathCallout />
 
       {/* Pricing Section */}
@@ -537,11 +577,11 @@ const NewHomepage = () => {
               <ul className="space-y-4 mb-8 mx-auto max-w-md">
                 <li className="flex items-start space-x-3">
                   <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                  <span className="text-sm">Unlimited questions about your money</span>
+                  <span className="text-sm">Answers grounded in your complete financial picture</span>
                 </li>
                 <li className="flex items-start space-x-3">
                   <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                  <span className="text-sm">Unlimited number of connected accounts</span>
+                  <span className="text-sm">What-if scenarios and follow-up questions</span>
                 </li>
                 <li className="flex items-start space-x-3">
                   <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
@@ -550,6 +590,10 @@ const NewHomepage = () => {
                 <li className="flex items-start space-x-3">
                   <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
                   <span className="text-sm">Retirement & risk analysis</span>
+                </li>
+                <li className="flex items-start space-x-3">
+                  <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <span className="text-sm">Unlimited questions and unlimited connected accounts</span>
                 </li>
                 <li className="flex items-start space-x-3">
                   <CheckCircle className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
@@ -638,8 +682,13 @@ const NewHomepage = () => {
         <div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-secondary/15 to-primary/20 pointer-events-none" />
         <div className="relative max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8 space-y-8">
           <h2 className="text-3xl md:text-4xl font-bold text-white">
-            Start understanding your money
+            Ask the questions your dashboards can&rsquo;t answer
           </h2>
+          <p className="text-lg text-slate-300 max-w-2xl mx-auto">
+            Linc brings your accounts, debt, property, goals, and live market
+            conditions together into one picture — so you can think a hard
+            decision all the way through before you make it.
+          </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <div className="flex flex-col items-center gap-2">
               <Button 
