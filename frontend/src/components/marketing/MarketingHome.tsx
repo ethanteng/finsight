@@ -38,7 +38,6 @@ export default function Home() {
             <a className="button button-primary" href="https://asklinc.com/demo">
               Ask Linc free <span aria-hidden="true">→</span>
             </a>
-            <a className="text-link" href="#answer">See a real answer <span aria-hidden="true">↓</span></a>
           </div>
           <p className="microcopy">No credit card · Sample data included · $9/month when you&apos;re ready</p>
         </div>
@@ -48,13 +47,13 @@ export default function Home() {
             <span>LIVE</span>
             10Y Treasury&nbsp; 4.18%
           </div>
-          <div className="context-chip context-chip-b">
-            <span>LINKED</span>
-            8 accounts
-          </div>
           <article className="answer-card" aria-label="Example Ask Linc answer">
             <div className="answer-topbar">
               <div className="mini-brand"><span className="brand-mark small">L</span> Ask Linc</div>
+              <div className="context-chip context-chip-inline context-chip-b">
+                <span>LINKED</span>
+                8 accounts
+              </div>
               <span className="sample-label">SAMPLE ANSWER</span>
             </div>
             <div className="question-row">
@@ -147,7 +146,7 @@ export default function Home() {
               <span><i>03</i> Compare the tradeoffs</span>
               <span className="active"><i>04</i> Make a recommendation</span>
             </div>
-            <div className="reason-output">A decision, not another dashboard <span>→</span></div>
+            <a className="reason-output" href="#scenarios">A decision, not another dashboard <span>→</span></a>
           </article>
         </div>
       </section>
@@ -183,18 +182,6 @@ export default function Home() {
             </div>
             <p className="scenario-note"><span>✓</span>{activeScenario.note}</p>
           </div>
-        </div>
-      </section>
-
-      <section className="section shell steps-section">
-        <div className="steps-intro">
-          <p className="section-kicker">HOW IT WORKS</p>
-          <h2>From scattered accounts to a clear decision.</h2>
-        </div>
-        <div className="steps-grid">
-          <article><span className="step-num">01</span><div className="step-icon">⌁</div><h3>Connect once</h3><p>Link your accounts securely through Plaid. Read-only, always.</p></article>
-          <article><span className="step-num">02</span><div className="step-icon">?</div><h3>Ask what matters</h3><p>Retirement, housing, debt, risk—the questions that don&apos;t fit a dashboard.</p></article>
-          <article><span className="step-num">03</span><div className="step-icon">↳</div><h3>Follow the reasoning</h3><p>Change assumptions, inspect the math, and keep asking until it&apos;s clear.</p></article>
         </div>
       </section>
 
