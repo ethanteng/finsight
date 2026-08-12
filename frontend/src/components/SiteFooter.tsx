@@ -2,11 +2,11 @@
 import { Brain } from 'lucide-react';
 import Link from 'next/link';
 
-export default function SiteFooter() {
+export default function SiteFooter({ variant = 'default' }: { variant?: 'default' | 'auth' }) {
   return (
-    <footer className="bg-muted/50 py-12">
+    <footer className={variant === 'auth' ? 'border-t border-[#123c2f]/10 bg-[#ebe6da] py-10 text-[#123c2f]' : 'bg-muted/50 py-12'}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-5">
           <Link href="/" className="flex items-center space-x-2 hover:opacity-90 transition-opacity">
             <Brain className="h-6 w-6 text-primary" />
             <span className="text-lg font-bold gradient-text">Ask Linc</span>
