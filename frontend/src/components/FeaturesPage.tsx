@@ -413,9 +413,6 @@ const FeaturesPage = () => {
             <p className="text-[1.0625rem] font-medium text-white">
               <span className="text-primary">$9/month</span>. Cancel anytime.
             </p>
-            <Link href="/demo" className="text-sm text-slate-300 hover:text-primary transition-colors">
-              See a real answer free, no credit card needed
-            </Link>
           </div>
         </div>
       </section>

@@ -341,14 +341,16 @@ export default function ContactForm() {
                   Thanks for your feedback!
                 </h3>
                 <p className="text-muted-foreground">
-                  We'll reply as soon as we can. In the meantime, feel free to explore our demo or check out our latest updates.
+                  We&apos;ll reply as soon as we can. In the meantime, check out our latest updates.
                 </p>
                 <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
-                  <Link href="/demo">
-                    <Button variant="outline">
-                      Try the Demo
-                    </Button>
-                  </Link>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleBuyClick('premium')}
+                    disabled={isLoading === 'premium'}
+                  >
+                    {isLoading === 'premium' ? 'Loading...' : 'Get started'}
+                  </Button>
                   <Link href="/">
                     <Button variant="outline">
                       Back to Home

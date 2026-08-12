@@ -1,13 +1,49 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import SiteHeader from "./SiteHeader";
 import SiteFooter from "./SiteFooter";
 import { Button } from "./ui/button";
 import type { ComparisonPage } from "@/lib/comparisons";
 import { COMPARISONS } from "@/lib/comparisons";
+import { pushBeginCheckout } from "@/lib/dataLayer";
 
 export default function ComparisonPageContent({ page }: { page: ComparisonPage }) {
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleBuyClick = async () => {
+    pushBeginCheckout();
+    setIsLoading(true);
+
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+      const response = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tier: "premium",
+          successUrl: `${window.location.origin}/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=premium`,
+          cancelUrl: `${window.location.origin}/`,
+        }),
+      });
+
+      if (response.ok) {
+        const { url } = await response.json();
+        window.location.href = url;
+        return;
+      }
+
+      const err = await response.json();
+      alert(err.error || "Failed to create checkout session. Please try again.");
+    } catch (error) {
+      console.error("Error creating checkout session:", error);
+      alert("An error occurred. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
@@ -22,8 +58,8 @@ export default function ComparisonPageContent({ page }: { page: ComparisonPage }
                 {page.summary}
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-                <Button variant="hero" size="lg" asChild>
-                  <Link href="/demo">See a real answer free, no credit card needed</Link>
+                <Button variant="hero" size="lg" onClick={handleBuyClick} disabled={isLoading}>
+                  {isLoading ? "Loading..." : "Get started"}
                 </Button>
                 <Button variant="outline" size="lg" asChild>
                   <Link href="/pricing">$9/month pricing</Link>

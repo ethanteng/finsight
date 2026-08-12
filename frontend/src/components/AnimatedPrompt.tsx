@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Typewriter from 'typewriter-effect';
+import { pushBeginCheckout } from '@/lib/dataLayer';
 
 const QUESTIONS = [
   "What part of my retirement plan breaks first if interest rates stay high longer than expected?",
@@ -31,6 +32,41 @@ interface AnimatedPromptProps {
 const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef, questions: customQuestions, largerText = false, onClick }: AnimatedPromptProps) => {
   const questions = customQuestions ?? QUESTIONS;
   const typewriterRef = useRef<{ state: { elements: { wrapper: HTMLElement } } } | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleCheckout = async () => {
+    pushBeginCheckout();
+    setIsLoading(true);
+
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      const response = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tier: 'premium',
+          successUrl: `${window.location.origin}/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=premium`,
+          cancelUrl: `${window.location.origin}/`,
+        }),
+      });
+
+      if (response.ok) {
+        const { url } = await response.json();
+        window.location.href = url;
+        return;
+      }
+
+      const err = await response.json();
+      alert(err.error || 'Failed to create checkout session. Please try again.');
+    } catch (error) {
+      console.error('Error creating checkout session:', error);
+      alert('An error occurred. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleClick = onClick ?? handleCheckout;
 
   // Expose getter for current question text - resolves partial (mid-typing) text to full question
   useEffect(() => {
@@ -79,7 +115,20 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef, questions
       </div>
     </div>
   ) : (
-    <a href="/demo" className={className}>
+    <div
+      className={className}
+      role="button"
+      tabIndex={0}
+      onClick={isLoading ? undefined : handleClick}
+      onKeyDown={(e) => {
+        if (isLoading) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleClick();
+        }
+      }}
+      aria-disabled={isLoading}
+    >
       <div className="flex items-center space-x-2 mb-2">
         <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
         <span className="text-sm text-gray-400 group-hover:text-gray-300 transition-colors">Ask Linc</span>
@@ -98,7 +147,7 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef, questions
           }}
         />
       </div>
-    </a>
+    </div>
   );
 };
 

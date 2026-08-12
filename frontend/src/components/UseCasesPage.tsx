@@ -1,9 +1,11 @@
 "use client";
 import Link from "next/link";
+import { useState } from "react";
 import { PiggyBank, Home, BarChart3, Shield } from "lucide-react";
 import { Button } from "./ui/button";
 import SiteFooter from "./SiteFooter";
 import SiteHeader from "./SiteHeader";
+import { pushBeginCheckout } from "@/lib/dataLayer";
 
 const USE_CASES = [
   { href: "/use-cases/retirement", label: "Retirement Planning", description: "See how Ask Linc analyzes retirement readiness, withdrawal rates, and portfolio sustainability.", icon: PiggyBank },
@@ -13,6 +15,40 @@ const USE_CASES = [
 ];
 
 export default function UseCasesPage() {
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleBuyClick = async () => {
+    pushBeginCheckout();
+    setIsLoading(true);
+
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+      const response = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tier: "premium",
+          successUrl: `${window.location.origin}/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=premium`,
+          cancelUrl: `${window.location.origin}/`,
+        }),
+      });
+
+      if (response.ok) {
+        const { url } = await response.json();
+        window.location.href = url;
+        return;
+      }
+
+      const err = await response.json();
+      alert(err.error || "Failed to create checkout session. Please try again.");
+    } catch (error) {
+      console.error("Error creating checkout session:", error);
+      alert("An error occurred. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
@@ -52,11 +88,17 @@ export default function UseCasesPage() {
               })}
             </div>
             <div className="flex flex-col items-center gap-2 pt-10">
-              <Button variant="hero" size="lg" asChild className="w-auto max-w-full px-4 py-3 text-base sm:px-6 sm:py-4 sm:text-lg md:px-10 md:py-[1.875rem] md:text-[1.40625rem]">
-                <Link href="/demo">Try the Demo</Link>
+              <Button
+                variant="hero"
+                size="lg"
+                className="w-auto max-w-full px-4 py-3 text-base sm:px-6 sm:py-4 sm:text-lg md:px-10 md:py-[1.875rem] md:text-[1.40625rem]"
+                onClick={handleBuyClick}
+                disabled={isLoading}
+              >
+                {isLoading ? "Loading..." : "Get started"}
               </Button>
               <p className="text-center text-sm text-muted-foreground">
-                Try our interactive demo with sample financial data.
+                $9/month. Cancel anytime.
               </p>
             </div>
           </div>

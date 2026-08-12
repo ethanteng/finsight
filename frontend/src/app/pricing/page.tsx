@@ -6,7 +6,7 @@ import { buildFaqPageSchema, PRODUCT_OFFER_SCHEMA } from '../../data/faq';
 export const metadata: Metadata = {
   title: 'Pricing | Ask Linc — $9/month AI Financial Reasoning',
   description:
-    '$9/month flat for full access to Ask Linc — vs the 1-2% of your wealth a human advisor charges every year. Cancel anytime. See a real answer free in the demo.',
+    '$9/month flat for full access to Ask Linc — vs the 1-2% of your wealth a human advisor charges every year. Cancel anytime.',
   keywords: [
     'Ask Linc pricing',
     'AI financial advisor cost',

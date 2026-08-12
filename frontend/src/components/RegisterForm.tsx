@@ -4,6 +4,7 @@ import { identifyUser } from '@/lib/heycatch';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import SiteFooter from './SiteFooter';
+import { pushBeginCheckout } from '@/lib/dataLayer';
 
 interface SubscriptionContext {
   subscription: string;
@@ -16,6 +17,7 @@ function RegisterFormContent() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [error, setError] = useState('');
   const [subscriptionContext, setSubscriptionContext] = useState<SubscriptionContext | null>(null);
   const router = useRouter();
@@ -40,6 +42,38 @@ function RegisterFormContent() {
       });
     }
   }, [searchParams]);
+
+  const handleBuyClick = async () => {
+    pushBeginCheckout();
+    setIsCheckoutLoading(true);
+
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      const response = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tier: 'premium',
+          successUrl: `${window.location.origin}/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=premium`,
+          cancelUrl: `${window.location.origin}/`,
+        }),
+      });
+
+      if (response.ok) {
+        const { url } = await response.json();
+        window.location.href = url;
+        return;
+      }
+
+      const err = await response.json();
+      alert(err.error || 'Failed to create checkout session. Please try again.');
+    } catch (err) {
+      console.error(err);
+      alert('An error occurred. Please try again.');
+    } finally {
+      setIsCheckoutLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -197,9 +231,14 @@ function RegisterFormContent() {
         </div>
 
         <div className="text-center">
-          <Link href="/demo" className="text-gray-400 hover:text-white text-sm">
-            Or try the demo version
-          </Link>
+          <button
+            type="button"
+            onClick={handleBuyClick}
+            disabled={isCheckoutLoading}
+            className="text-gray-400 hover:text-white text-sm disabled:opacity-50"
+          >
+            {isCheckoutLoading ? 'Loading...' : 'Get started'}
+          </button>
         </div>
       </div>
       </div>

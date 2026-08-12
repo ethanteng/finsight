@@ -55,8 +55,7 @@ export default function PricingPageContent() {
                 One plan. <span className="gradient-text">Full access.</span>
               </h1>
               <p className="text-slate-300">
-                See a real answer free in the demo — no credit card needed. Then $9/month when
-                you connect your own accounts.
+                $9/month for full access with your own accounts. Cancel anytime.
               </p>
             </div>
 
@@ -102,11 +101,6 @@ export default function PricingPageContent() {
                   </Button>
                   <p className="text-center text-xs text-muted-foreground">
                     Cancel anytime.
-                  </p>
-                  <p className="text-center text-sm">
-                    <Link href="/demo" className="text-primary hover:underline font-medium">
-                      See a real answer free, no credit card needed
-                    </Link>
                   </p>
                 </div>
               </CardContent>

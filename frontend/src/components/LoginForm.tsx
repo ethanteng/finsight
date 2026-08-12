@@ -215,7 +215,7 @@ function LoginFormContent() {
             <span className="grid h-9 w-9 place-items-center rounded-full bg-[#123c2f] text-[#c9f46b]"><Brain size={20} /></span>
             <span className="text-xl">Ask Linc</span>
           </Link>
-          <Link href="/demo" className="hidden items-center gap-2 text-sm font-semibold text-[#34594e] hover:text-[#123c2f] sm:inline-flex">Explore the demo <ArrowRight size={16} /></Link>
+          <button type="button" onClick={() => handleBuyClick('premium')} disabled={isCheckoutLoading} className="hidden items-center gap-2 text-sm font-semibold text-[#34594e] hover:text-[#123c2f] sm:inline-flex disabled:opacity-50">{isCheckoutLoading ? 'Loading...' : 'Get started'}</button>
         </div>
       </header>
 
@@ -268,7 +268,7 @@ function LoginFormContent() {
 
                   <div className="mt-7 border-t border-[#123c2f]/10 pt-6 text-center">
                     <p className="text-sm text-[#607b72]">New to Ask Linc? <button onClick={() => handleBuyClick('premium')} disabled={isCheckoutLoading} className="font-semibold text-[#123c2f] underline decoration-[#9bc444] decoration-2 underline-offset-4 disabled:opacity-50">{isCheckoutLoading ? 'Opening checkout…' : 'Get started'}</button></p>
-                    <Link href="/demo" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#175cce] hover:underline sm:hidden">Explore the demo <ArrowRight size={15} /></Link>
+                    <button type="button" onClick={() => handleBuyClick('premium')} disabled={isCheckoutLoading} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#175cce] hover:underline sm:hidden disabled:opacity-50">{isCheckoutLoading ? 'Loading...' : 'Get started'}</button>
                   </div>
                   <div className="mt-8 flex items-center justify-center gap-2 text-xs text-[#71857f]"><ShieldCheck size={16} />Encrypted access. Your financial data stays protected.</div>
                 </>

@@ -12,7 +12,7 @@ type RouteProps = { params: Promise<{ slug: string[] }> };
 
 const faqs = [
   ["Is this another budgeting app?", "No. Budgeting apps organize what already happened. Ask Linc helps you reason about what to do next by combining your accounts, goals, and current market conditions."],
-  ["Can I try it before connecting my accounts?", "Yes. The interactive demo uses realistic sample data and does not require a credit card. Full access with your own accounts is $9 per month."],
+  ["Can I try it before connecting my accounts?", "Ask Linc is $9/month for full access with your own accounts. Cancel anytime."],
   ["How do I know the AI isn’t confidently wrong?", "The numbers are produced by deterministic calculations, not improvised by the language model. Every answer can expose its inputs, assumptions, calculations, and sources."],
   ["Does Ask Linc give financial advice?", "Ask Linc provides informational analysis and decision support. It does not manage your money and is not a replacement for individualized investment, tax, or legal advice."],
   ["What account data can Linc access?", "Only the read-only financial data needed to answer your questions. Bank credentials are handled by connection providers and are never stored by Ask Linc."],
@@ -126,7 +126,7 @@ function FeaturesPage() {
   return (
     <StandardPage className="features-page">
       <section className="subhero shell split-subhero">
-        <div><p className="section-kicker">FINANCIAL REASONING, BUILT TO BE CHECKED</p><h1>From a hard question to a <em>defensible decision.</em></h1><p className="subhero-copy">Ask Linc connects the facts of your financial life, brings in the market context that matters, and makes the recommendation—and the work behind it—easy to inspect.</p><div className="hero-actions"><a className="button button-primary" href="https://asklinc.com/demo">See a real answer <span>→</span></a><a className="text-link" href="#system">Explore the system ↓</a></div></div>
+        <div><p className="section-kicker">FINANCIAL REASONING, BUILT TO BE CHECKED</p><h1>From a hard question to a <em>defensible decision.</em></h1><p className="subhero-copy">Ask Linc connects the facts of your financial life, brings in the market context that matters, and makes the recommendation—and the work behind it—easy to inspect.</p><div className="hero-actions"><MarketingGetStartedButton className="button button-primary" /><a className="text-link" href="#system">Explore the system ↓</a></div></div>
         <DecisionMiniature />
       </section>
       <section className="page-section shell" id="system">
@@ -185,7 +185,7 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
   const item = useCases[useCase];
   return (
     <StandardPage className={`use-case-page ${item.tone}`}>
-      <section className="subhero shell use-case-hero"><div><Link href="/use-cases" className="back-link">← All use cases</Link><p className="section-kicker">{item.number} / {item.label}</p><h1>{item.title}</h1><p className="subhero-copy">Ask the real question. Linc pulls together the accounts, assumptions, and current conditions that determine the answer.</p><a className="button button-primary" href="https://asklinc.com/demo">Try it with sample data →</a></div><article className="use-case-answer"><div className="miniature-top"><span className="brand-mark small">L</span><b>SAMPLE DECISION</b><span>LIVE CONTEXT</span></div><p>{item.question}</p><div className="use-case-verdict"><small>THE SHORT ANSWER</small><h2>{item.answer}</h2><span>{item.summary}</span></div><div className="use-case-metrics">{item.metrics.map(([label,value])=><span key={label}><small>{label}</small><b>{value}</b></span>)}</div><div className="use-case-check">∑ &nbsp;Every input, assumption, and calculation is inspectable.</div></article></section>
+      <section className="subhero shell use-case-hero"><div><Link href="/use-cases" className="back-link">← All use cases</Link><p className="section-kicker">{item.number} / {item.label}</p><h1>{item.title}</h1><p className="subhero-copy">Ask the real question. Linc pulls together the accounts, assumptions, and current conditions that determine the answer.</p><MarketingGetStartedButton className="button button-primary" /></div><article className="use-case-answer"><div className="miniature-top"><span className="brand-mark small">L</span><b>SAMPLE DECISION</b><span>LIVE CONTEXT</span></div><p>{item.question}</p><div className="use-case-verdict"><small>THE SHORT ANSWER</small><h2>{item.answer}</h2><span>{item.summary}</span></div><div className="use-case-metrics">{item.metrics.map(([label,value])=><span key={label}><small>{label}</small><b>{value}</b></span>)}</div><div className="use-case-check">∑ &nbsp;Every input, assumption, and calculation is inspectable.</div></article></section>
       <section className="decision-levers shell"><div className="editorial-heading"><p className="section-kicker">WHAT MOVES THE ANSWER</p><h2>Change the assumption. See the consequence.</h2></div><div className="lever-grid">{item.levers.map(([title,copy],index)=><article key={title}><span>0{index+1}</span><h3>{title}</h3><p>{copy}</p></article>)}</div></section>
       <section className="case-context dark-band"><div className="shell case-context-inner"><div><p className="section-kicker light">CONTEXT LINC BRINGS IN</p><h2>No exports. No tab juggling.</h2></div><RotatingContextChips items={item.context} /></div></section>
       <section className="other-cases shell"><span>EXPLORE ANOTHER DECISION</span>{Object.values(useCases).filter((candidate)=>candidate.slug!==item.slug).map((candidate)=><Link href={`/use-cases/${candidate.slug}`} key={candidate.slug}>{candidate.label}<b>→</b></Link>)}</section>
@@ -197,13 +197,13 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
 function PricingPage() {
   return (
     <StandardPage className="pricing-page">
-      <section className="subhero centered-subhero shell"><p className="section-kicker">SIMPLE PRICING</p><h1>One plan. <em>Full access.</em></h1><p className="subhero-copy">See a real answer free with sample data. Connect your own accounts when you’re ready.</p></section>
+      <section className="subhero centered-subhero shell"><p className="section-kicker">SIMPLE PRICING</p><h1>One plan. <em>Full access.</em></h1><p className="subhero-copy">$9/month for unlimited questions, connected accounts, and market-aware analysis. Cancel anytime.</p></section>
       <section className="pricing-stage shell">
         <div className="price-argument"><p className="section-kicker">PAY FOR THE PRODUCT—NOT A PERCENTAGE OF YOUR WEALTH</p><h2>A serious tool at a deliberately small price.</h2><p>No asset minimum. No annual contract. No sales call.</p><div className="cost-comparison"><span><small>ASK LINC</small><b>$108</b><i>per year</i></span><span className="versus">VS</span><span><small>1% OF A $2M PORTFOLIO</small><b>$20,000</b><i>per year · illustrative</i></span></div></div>
         <article className="sub-price-card"><div className="price-card-top"><span>ASK LINC</span><b>EVERYTHING INCLUDED</b></div><div className="price"><sup>$</sup>9<span>/month</span></div><p>Cancel anytime.</p><ul><li>Unlimited questions and follow-ups</li><li>Unlimited connected accounts</li><li>What-if scenarios</li><li>Market-aware financial reasoning</li><li>Retirement and risk analysis</li><li>Show the math on every answer</li><li>Privacy-first architecture</li></ul><MarketingGetStartedButton className="button button-primary price-button" /></article>
       </section>
       <section className="page-section shell compact-faq"><div><p className="section-kicker">PRICING QUESTIONS</p><h2>No tiers to decode.</h2></div><div>{faqs.slice(0,4).map(([q,a])=><details key={q}><summary>{q}<span>+</span></summary><p>{a}</p></details>)}</div></section>
-      <PageCta title="Try the answer before you buy the tool." />
+      <PageCta title="Bring your hardest money question to Linc." />
     </StandardPage>
   );
 }
@@ -250,7 +250,7 @@ function ComparisonPage({ product }: { product: keyof typeof comparisonData }) {
 
   return (
     <StandardPage className="comparison-page">
-      <section className="subhero shell comparison-hero"><div><p className="section-kicker">{design.eyebrow}</p><h1>Ask Linc <em>vs {page.competitorName}</em></h1><p className="subhero-copy">{page.summary}</p><div className="hero-actions"><a className="button button-primary" href="https://asklinc.com/demo">See a real answer →</a><Link className="text-link" href="/pricing">View $9 pricing</Link></div></div><div className="versus-mark"><span className="brand-mark">L</span><b>VS</b><span>{page.competitorName.slice(0,2).toUpperCase()}</span></div></section>
+      <section className="subhero shell comparison-hero"><div><p className="section-kicker">{design.eyebrow}</p><h1>Ask Linc <em>vs {page.competitorName}</em></h1><p className="subhero-copy">{page.summary}</p><div className="hero-actions"><MarketingGetStartedButton className="button button-primary" /><Link className="text-link" href="/pricing">View $9 pricing</Link></div></div><div className="versus-mark"><span className="brand-mark">L</span><b>VS</b><span>{page.competitorName.slice(0,2).toUpperCase()}</span></div></section>
       <section className="comparison-strip"><div className="shell"><span>ASK LINC</span><i>Different tools for different jobs</i><span>{page.competitorName.toUpperCase()}</span></div></section>
       <section className="page-section shell comparison-section"><div className="editorial-heading"><p className="section-kicker">THE SHORT VERSION</p><h2>Start with the job you need done.</h2></div><div className="comparison-table" role="table"><div className="comparison-row comparison-head" role="row"><span>DIMENSION</span><b>ASK LINC</b><b>{page.competitorName.toUpperCase()}</b></div>{page.rows.map(({ dimension, askLinc, competitor })=><div className="comparison-row" role="row" key={dimension}><span>{dimension}</span><b>{askLinc}</b><b>{competitor}</b></div>)}</div></section>
       <section className="fit-section"><div className="shell"><p className="section-kicker">OUR HONEST TAKE</p><h2>{design.fit}</h2><p>Ask Linc is not trying to replace every financial product. It is purpose-built for decision support with transparent math.</p></div></section>
@@ -365,7 +365,7 @@ export function MarketingArticlePage({ post, processedHtml }: { post: GhostPost;
         <aside><span>ASK LINC BLOG</span><Link href="/features">See how Linc works</Link><Link href="/use-cases">Explore use cases</Link></aside>
         <article className="marketing-article-body ghost-content" dangerouslySetInnerHTML={{ __html: processedHtml }} />
       </section>
-      <section className="next-reading shell"><span>KEEP EXPLORING</span><h2>Bring the question back to your own numbers.</h2><Link href="/demo">Try Ask Linc →</Link></section>
+      <section className="next-reading shell"><span>KEEP EXPLORING</span><h2>Bring the question back to your own numbers.</h2><MarketingGetStartedButton className="button button-primary" /></section>
       <PageCta title="See what transparent financial reasoning feels like." />
     </StandardPage>
   );

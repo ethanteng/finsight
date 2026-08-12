@@ -9,7 +9,6 @@ import BlogSubscription from './BlogSubscription';
 import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, BarChart3, MessageCircle, Sparkles, X, Target, XCircle, Menu, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 import SiteFooter from './SiteFooter';
 
@@ -33,7 +32,6 @@ const BuyingAHousePage = () => {
   const [howItWorksInView, setHowItWorksInView] = useState(false);
   const [revealedStepCount, setRevealedStepCount] = useState(0);
   const [highlightedStep, setHighlightedStep] = useState(0);
-  const router = useRouter();
   const getCurrentQuestionRef = useRef<(() => string) | null>(null);
   const howItWorksRef = useRef<HTMLElement | null>(null);
 
@@ -262,21 +260,11 @@ const BuyingAHousePage = () => {
       <div
         role="button"
         tabIndex={0}
-        onClick={() => {
-          const question = getCurrentQuestionRef.current?.() || '';
-          if (question) {
-            sessionStorage.setItem('demo_initial_question', question);
-          }
-          router.push('/demo');
-        }}
+        onClick={() => handleBuyClick('premium')}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            const question = getCurrentQuestionRef.current?.() || '';
-            if (question) {
-              sessionStorage.setItem('demo_initial_question', question);
-            }
-            router.push('/demo');
+            handleBuyClick('premium');
           }
         }}
         className="block cursor-pointer group/hero"
@@ -324,9 +312,9 @@ const BuyingAHousePage = () => {
                     size="xl" 
                     className="group h-[4.235rem] px-[3.025rem] text-[1.36125rem] pointer-events-none"
                   >
-                    See the answer
+                    Get started
                   </Button>
-                  <p className="text-[0.7875rem]">No signup required</p>
+                  <p className="text-[0.7875rem]">$9/month. Cancel anytime.</p>
                 </div>
               </div>
             </div>

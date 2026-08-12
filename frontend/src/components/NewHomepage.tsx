@@ -7,10 +7,9 @@ import BlogSubscription from './BlogSubscription';
 import HeroExampleAnswer from './HeroExampleAnswer';
 import RealMathCallout from './RealMathCallout';
 import FounderBlock from './FounderBlock';
-import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, BarChart3, MessageCircle, Sparkles, X, Target, Menu, ChevronDown, CircleArrowUp } from 'lucide-react';
+import { Brain, Shield, Zap, TrendingUp, CheckCircle, Users, Lock, Eye, BarChart3, MessageCircle, Sparkles, X, Target, Menu, ChevronDown } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 import { USE_CASE_LINKS, COMPARE_LINKS } from '@/lib/site-nav';
 import { PricingValueBadge } from './PricingOfferCallouts';
@@ -37,7 +36,6 @@ const NewHomepage = () => {
   const [revealedStepCount, setRevealedStepCount] = useState(0);
   const [highlightedStep, setHighlightedStep] = useState(0);
   const [highlightedValueBox, setHighlightedValueBox] = useState(0);
-  const router = useRouter();
   const getCurrentQuestionRef = useRef<(() => string) | null>(null);
   const howItWorksRef = useRef<HTMLElement | null>(null);
 
@@ -322,7 +320,7 @@ const NewHomepage = () => {
               <div className="space-y-4 w-full max-w-2xl mx-auto mt-4">
                 <HeroExampleAnswer />
                 <p className="text-sm text-muted-foreground">
-                  Or ask your own question on sample data:
+                  Or ask your own question:
                 </p>
                 <AnimatedPrompt
                 nestedInLink
@@ -336,13 +334,7 @@ const NewHomepage = () => {
                   "How long would our money last if we retired today?",
                   "What’s the biggest risk in our portfolio right now?"
                 ]}
-                onClick={() => {
-                  const question = getCurrentQuestionRef.current?.() || '';
-                  if (question) {
-                    sessionStorage.setItem('demo_initial_question', question);
-                  }
-                  router.push('/demo');
-                }}
+                onClick={() => handleBuyClick('premium')}
               />
               </div>
               
@@ -351,18 +343,12 @@ const NewHomepage = () => {
                     variant="hero" 
                     size="xl" 
                     className="group h-[4.235rem] px-[3.025rem] text-[1.36125rem] flex items-center gap-3"
-                    onClick={() => {
-                      const question = getCurrentQuestionRef.current?.() || 'Can we retire at 60 if rates stay higher for longer?';
-                      if (question) {
-                        sessionStorage.setItem('demo_initial_question', question);
-                      }
-                      router.push('/demo');
-                    }}
+                    onClick={() => handleBuyClick('premium')}
+                    disabled={isLoading === 'premium'}
                   >
-                    See a real answer free
-                    <CircleArrowUp className="!w-[1.6875rem] !h-[1.6875rem] shrink-0" />
+                    {isLoading === 'premium' ? 'Loading...' : 'Get started'}
                   </Button>
-                  <p className="text-[0.7875rem]">No credit card needed. Interactive demo with sample financial data.</p>
+                  <p className="text-[0.7875rem]">$9/month. Cancel anytime.</p>
               </div>
             </div>
       </div>
@@ -614,11 +600,6 @@ const NewHomepage = () => {
                 <p className="text-center text-xs text-muted-foreground mt-3">
                   Cancel anytime.
                 </p>
-                <p className="text-center text-sm mt-2">
-                  <Link href="/demo" className="text-primary hover:underline font-medium">
-                    See a real answer free, no credit card needed
-                  </Link>
-                </p>
               </div>
             </CardContent>
           </Card>
@@ -700,9 +681,6 @@ const NewHomepage = () => {
                 {isLoading === 'premium' ? 'Creating...' : 'Get started'}
               </Button>
               <p className="text-[1.00625rem] text-primary font-medium">$9/month. Cancel anytime.</p>
-              <Link href="/demo" className="text-sm text-slate-300 hover:text-primary transition-colors">
-                See a real answer free, no credit card needed
-              </Link>
             </div>
           </div>
         </div>

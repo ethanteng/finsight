@@ -1,6 +1,7 @@
 "use client";
 
-import Link from "next/link";
+import { useState } from "react";
+import { pushBeginCheckout } from "@/lib/dataLayer";
 
 /**
  * Static product "after-state" for the homepage hero — a real reasoning answer
@@ -10,6 +11,40 @@ const HERO_ANSWER_ALT =
   "Ask Linc answering 'Can we retire at 60?' with a projected $6.3M portfolio, 75-85% success odds and a recommendation.";
 
 export default function HeroExampleAnswer() {
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleGetStarted = async () => {
+    pushBeginCheckout();
+    setIsLoading(true);
+
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+      const response = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tier: "premium",
+          successUrl: `${window.location.origin}/payment-success?session_id={CHECKOUT_SESSION_ID}&tier=premium`,
+          cancelUrl: `${window.location.origin}/`,
+        }),
+      });
+
+      if (response.ok) {
+        const { url } = await response.json();
+        window.location.href = url;
+        return;
+      }
+
+      const err = await response.json();
+      alert(err.error || "Failed to create checkout session. Please try again.");
+    } catch (error) {
+      console.error("Error creating checkout session:", error);
+      alert("An error occurred. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <figure className="w-full max-w-2xl mx-auto">
       {/* Static fallback for crawlers and screen readers — live widget below */}
@@ -81,12 +116,14 @@ export default function HeroExampleAnswer() {
           <p className="text-xs text-slate-500">
             Numbers from sample household data · live rates cited in full answers
           </p>
-          <Link
-            href="/demo"
-            className="text-xs font-medium text-primary hover:underline"
+          <button
+            type="button"
+            onClick={handleGetStarted}
+            disabled={isLoading}
+            className="text-xs font-medium text-primary hover:underline disabled:opacity-50"
           >
-            See a real answer free →
-          </Link>
+            {isLoading ? "Loading..." : "Get started"}
+          </button>
         </div>
       </div>
       </div>

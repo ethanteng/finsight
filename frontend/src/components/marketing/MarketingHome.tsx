@@ -37,11 +37,9 @@ export default function Home() {
             Get a clear recommendation grounded in your real finances and today&apos;s market.
           </p>
           <div className="hero-actions">
-            <a className="button button-primary" href="https://asklinc.com/demo">
-              Ask Linc free <span aria-hidden="true">→</span>
-            </a>
+            <MarketingGetStartedButton className="button button-primary" />
           </div>
-          <p className="microcopy">No credit card · Sample data included · $9/month when you&apos;re ready</p>
+          <p className="microcopy">$9/month. Cancel anytime.</p>
         </div>
 
         <div className="answer-wrap" id="answer">
