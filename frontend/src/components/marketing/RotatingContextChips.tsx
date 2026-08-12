@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 type RotatingContextChipsProps = {
-  items: string[];
+  items: readonly string[];
   intervalMs?: number;
 };
 
