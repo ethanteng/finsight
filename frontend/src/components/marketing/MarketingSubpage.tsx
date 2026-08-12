@@ -1,4 +1,5 @@
 import { PageCta, SiteFooter, SiteHeader } from "./SiteShell";
+import Image from "next/image";
 import Link from "next/link";
 import { FeatureScenario } from "./FeatureScenario";
 import { MarketingContactForm } from "./MarketingContactForm";
@@ -211,7 +212,7 @@ function AboutPage() {
   return (
     <StandardPage className="about-page">
       <section className="subhero shell about-hero"><div><p className="section-kicker">WHY ASK LINC EXISTS</p><h1>Financial answers should be more than <em>convincing.</em></h1></div><p className="about-lede">They should understand your whole picture, use reliable calculations, reflect the world as it is today, and let you inspect the numbers before you act.</p></section>
-      <section className="founder-origin shell"><div className="founder-portrait"><span>ET</span><div><b>Ethan Teng</b><small>FOUNDER · ASK LINC</small></div></div><div className="origin-copy"><p className="section-kicker">THE ORIGIN</p><h2>It started with a layoff—and a bad idea.</h2><p className="lead-paragraph">After getting laid off, I pasted my own bank statements into ChatGPT to answer some tough money questions—and immediately regretted it.</p><p>The responses were polished, but the process was wrong. A general chatbot didn’t have a trustworthy model of my finances. It could blur facts with assumptions, make fragile calculations sound certain, and give me no clean way to inspect the work.</p><p>So I built Ask Linc: a way to get decision-ready answers from your actual finances, with current market context and calculations you can verify.</p><div className="signature-line"><span>ET</span><div><b>Ethan Teng</b><small>Builder, user, and first skeptic</small></div></div></div></section>
+      <section className="founder-origin shell"><div className="founder-portrait"><span className="founder-portrait-photo"><Image src="/images/ethan-teng-cartoon.webp" alt="Cartoon portrait of Ethan Teng" fill sizes="150px" priority /></span><div><b>Ethan Teng</b><small>FOUNDER · ASK LINC</small></div></div><div className="origin-copy"><p className="section-kicker">THE ORIGIN</p><h2>It started with a layoff—and a bad idea.</h2><p className="lead-paragraph">After getting laid off, I pasted my own bank statements into ChatGPT to answer some tough money questions—and immediately regretted it.</p><p>The responses were polished, but the process was wrong. A general chatbot didn’t have a trustworthy model of my finances. It could blur facts with assumptions, make fragile calculations sound certain, and give me no clean way to inspect the work.</p><p>So I built Ask Linc: a way to get decision-ready answers from your actual finances, with current market context and calculations you can verify.</p><div className="signature-line"><span><Image src="/images/ethan-teng-cartoon.webp" alt="" fill sizes="41px" /></span><div><b>Ethan Teng</b><small>Builder, user, and first skeptic</small></div></div></div></section>
       <section className="page-section values-band"><div className="shell"><div className="editorial-heading"><p className="section-kicker">WHAT WE BELIEVE</p><h2>Trust is a product decision.</h2></div><div className="belief-grid"><article><span>01</span><h3>Answers over dashboards</h3><p>Your finances are not improved by another screen of charts. The product should help you decide.</p></article><article><span>02</span><h3>Math should be boring</h3><p>Important calculations should be fixed, reproducible, and inspectable—not generated on the fly.</p></article><article><span>03</span><h3>Privacy is architecture</h3><p>Protecting identity and minimizing context should happen before data reaches a model.</p></article><article><span>04</span><h3>Clarity beats certainty</h3><p>A good answer shows ranges, risks, and assumptions instead of pretending the future is knowable.</p></article></div></div></section>
       <PageCta title="Make the next hard question easier to answer." />
     </StandardPage>
@@ -321,7 +322,7 @@ export function MarketingBlogPage({ ghostPosts }: { ghostPosts: GhostPost[] }) {
               <span className="post-category">{postCategory(featured)}</span>
               <h2>{featured.title}</h2>
               <p>{featured.excerpt}</p>
-              <div className="post-meta"><span>ET</span><p><b>{featured.authors?.[0]?.name || "Ethan Teng"}</b><small>{formatPostDate(featured.published_at)} · {featured.reading_time || 5} min read</small></p></div>
+              <div className="post-meta"><span><Image src="/images/ethan-teng-cartoon.webp" alt="" fill sizes="38px" /></span><p><b>{featured.authors?.[0]?.name || "Ethan Teng"}</b><small>{formatPostDate(featured.published_at)} · {featured.reading_time || 5} min read</small></p></div>
               <Link className="text-link" href={`/blog/${featured.slug}`}>Read the analysis →</Link>
             </div>
           </section>
@@ -357,7 +358,7 @@ export function MarketingArticlePage({ post, processedHtml }: { post: GhostPost;
         <span className="post-category">{postCategory(post)}</span>
         <h1>{post.title}</h1>
         {post.excerpt && <p>{post.excerpt}</p>}
-        <div className="article-byline"><span>ET</span><p><b>{author}</b><small>Published {formatPostDate(post.published_at)} · {post.reading_time || 5} min read</small></p></div>
+        <div className="article-byline"><span><Image src="/images/ethan-teng-cartoon.webp" alt="" fill sizes="38px" /></span><p><b>{author}</b><small>Published {formatPostDate(post.published_at)} · {post.reading_time || 5} min read</small></p></div>
       </section>
       <div className="article-art post-art blue"><span>ASK LINC / FIELD NOTE</span><b>{postCategory(post)}</b><i>∑</i></div>
       <section className="article-layout shell marketing-article-layout">

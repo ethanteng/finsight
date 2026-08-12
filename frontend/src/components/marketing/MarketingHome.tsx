@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
@@ -58,7 +59,9 @@ export default function Home() {
               <span className="sample-label">SAMPLE ANSWER</span>
             </div>
             <div className="question-row">
-              <span className="avatar">ET</span>
+              <span className="avatar">
+                <Image src="/images/ethan-teng-cartoon.webp" alt="Ethan Teng" fill sizes="27px" />
+              </span>
               <p>Can we retire at 60 if rates stay higher for longer?</p>
             </div>
             <div className="answer-body">
@@ -214,7 +217,9 @@ export default function Home() {
           <span className="quote-mark">“</span>
           <blockquote>The answers sounded convincing. But financial decisions need more than convincing.</blockquote>
           <div className="founder-signature">
-            <div className="founder-avatar">ET</div>
+            <div className="founder-avatar">
+              <Image src="/images/ethan-teng-cartoon.webp" alt="" fill sizes="42px" />
+            </div>
             <div><b>Ethan Teng</b><span>Founder, Ask Linc</span></div>
           </div>
         </div>
