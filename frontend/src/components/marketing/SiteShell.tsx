@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 
 export function SiteHeader() {
   return (
@@ -16,9 +17,7 @@ export function SiteHeader() {
         </div>
         <div className="nav-actions">
           <Link className="nav-sign-in" href="/login">Sign in</Link>
-          <a className="button button-small button-dark" href="https://asklinc.com/demo">
-            Ask Linc free <span aria-hidden="true">→</span>
-          </a>
+          <MarketingGetStartedButton />
         </div>
       </nav>
     </header>
@@ -35,7 +34,7 @@ export function SiteFooter() {
             <span>Ask Linc</span>
           </Link>
           <p>Decision-ready answers grounded in your real finances, current context, and calculations you can inspect.</p>
-          <a className="footer-demo" href="https://asklinc.com/demo">Try the demo →</a>
+          <MarketingGetStartedButton className="footer-demo" />
         </div>
         <div className="footer-column">
           <b>PRODUCT</b>
@@ -71,8 +70,7 @@ export function PageCta({ title = "Bring Ask Linc your hardest money question." 
       <div className="page-cta-inner shell">
         <p className="section-kicker light">SEE THE ANSWER FOR YOURSELF</p>
         <h2>{title}</h2>
-        <a className="button button-primary" href="https://asklinc.com/demo">Ask Linc free <span aria-hidden="true">→</span></a>
-        <small>Sample data included · No credit card required</small>
+        <MarketingGetStartedButton className="button button-primary" />
       </div>
     </section>
   );

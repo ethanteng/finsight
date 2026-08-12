@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { SiteFooter, SiteHeader } from "./SiteShell";
+import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 
 const scenarios = [
   "Can we retire at 60?",
@@ -248,8 +249,7 @@ export default function Home() {
               <li>Market-aware analysis</li>
               <li>Inspectable calculations</li>
             </ul>
-            <a className="button button-primary price-button" href="https://asklinc.com/demo">Start with sample data <span>→</span></a>
-            <small>No credit card needed for the demo.</small>
+            <MarketingGetStartedButton className="button button-primary price-button" />
           </article>
         </div>
       </section>
@@ -258,8 +258,7 @@ export default function Home() {
         <div className="shell final-cta-inner">
           <p className="section-kicker light">YOUR NEXT DECISION STARTS HERE</p>
           <h2>Ask the question your dashboard can&apos;t answer.</h2>
-          <a className="button button-primary" href="https://asklinc.com/demo">Ask Linc free <span>→</span></a>
-          <p>Sample data included · No credit card</p>
+          <MarketingGetStartedButton className="button button-primary" />
         </div>
       </section>
 
