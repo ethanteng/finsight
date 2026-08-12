@@ -23,6 +23,43 @@ const localStorageMock = {
 };
 global.localStorage = localStorageMock as Storage;
 
+function mockFinancialOverviewFetch({
+  accounts,
+  financialOverview = {},
+  investmentPortfolio = {
+    totalValue: 0,
+    holdingCount: 0,
+    securityCount: 0,
+    assetAllocation: [],
+  },
+  summaryOk = true,
+}: {
+  accounts: unknown[];
+  financialOverview?: Record<string, unknown>;
+  investmentPortfolio?: Record<string, unknown>;
+  summaryOk?: boolean;
+}) {
+  (global.fetch as jest.Mock).mockImplementation((url: string) => {
+    if (url.includes('/api/summaries')) {
+      if (!summaryOk) {
+        return Promise.resolve({ ok: false, status: 404, json: async () => ({}) });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          financialOverview,
+          investmentPortfolio,
+          computedAt: new Date().toISOString(),
+        }),
+      });
+    }
+    if (url.includes('/plaid/all-accounts')) {
+      return Promise.resolve({ ok: true, json: async () => ({ accounts }) });
+    }
+    return Promise.resolve({ ok: false, status: 404, json: async () => ({ error: 'Not found' }) });
+  });
+}
+
 describe('FinancialOverview', () => {
   beforeEach(() => {
     (global.fetch as jest.Mock).mockClear();
@@ -99,35 +136,22 @@ describe('FinancialOverview', () => {
       },
     ];
 
-    const mockInvestmentData = {
-      portfolio: {
+    mockFinancialOverviewFetch({
+      accounts: mockAccounts,
+      financialOverview: {
+        netWorth: 103000,
+        totalCash: 5000,
+        totalInvestments: 100000,
+        totalDebt: 2000,
+        homeValue: null,
+      },
+      investmentPortfolio: {
         totalValue: 100000,
         assetAllocation: [],
         holdingCount: 25,
         securityCount: 15,
       },
-    };
-
-    // Mock fetch responses BEFORE rendering
-    (global.fetch as jest.Mock)
-      .mockImplementation((url) => {
-        if (url.includes('/plaid/all-accounts')) {
-          return Promise.resolve({
-            ok: true,
-            json: async () => ({ accounts: mockAccounts }),
-          });
-        } else if (url.includes('/plaid/investments')) {
-          return Promise.resolve({
-            ok: true,
-            json: async () => mockInvestmentData,
-          });
-        }
-        return Promise.resolve({
-          ok: false,
-          status: 404,
-          json: async () => ({ error: 'Not found' }),
-        });
-      });
+    });
 
     render(<FinancialOverview isDemo={true} />);
 
@@ -160,25 +184,21 @@ describe('FinancialOverview', () => {
       },
     ];
 
-    const mockDemoInvestmentData = {
-      portfolio: {
+    mockFinancialOverviewFetch({
+      accounts: mockDemoAccounts,
+      financialOverview: {
+        totalCash: 0,
+        totalDebt: 0,
+        totalInvestments: 0,
+        homeValue: null,
+      },
+      investmentPortfolio: {
         totalValue: 50000,
         assetAllocation: [],
         holdingCount: 10,
         securityCount: 8,
       },
-    };
-
-    // Mock fetch responses for demo mode BEFORE rendering
-    (global.fetch as jest.Mock)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ accounts: mockDemoAccounts }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockDemoInvestmentData,
-      });
+    });
 
     render(<FinancialOverview isDemo={true} />);
 
@@ -235,16 +255,21 @@ describe('FinancialOverview', () => {
       },
     ];
 
-    // Mock fetch responses BEFORE rendering
-    (global.fetch as jest.Mock)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ accounts: mockAccounts }),
-      })
-      .mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-      });
+    mockFinancialOverviewFetch({
+      accounts: mockAccounts,
+      financialOverview: {
+        totalCash: 0,
+        totalDebt: 0,
+        totalInvestments: 0,
+        homeValue: null,
+      },
+      investmentPortfolio: {
+        totalValue: 75000,
+        assetAllocation: [],
+        holdingCount: 0,
+        securityCount: 0,
+      },
+    });
 
     render(<FinancialOverview isDemo={true} />);
 
@@ -270,25 +295,21 @@ describe('FinancialOverview', () => {
       },
     ];
 
-    const mockInvestmentData = {
-      portfolio: {
-        totalValue: 75000, // Higher than account balance
+    mockFinancialOverviewFetch({
+      accounts: mockAccounts,
+      financialOverview: {
+        totalCash: 0,
+        totalDebt: 0,
+        totalInvestments: 0,
+        homeValue: null,
+      },
+      investmentPortfolio: {
+        totalValue: 75000,
         assetAllocation: [],
         holdingCount: 20,
         securityCount: 12,
       },
-    };
-
-    // Mock fetch responses BEFORE rendering
-    (global.fetch as jest.Mock)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ accounts: mockAccounts }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockInvestmentData,
-      });
+    });
 
     render(<FinancialOverview isDemo={true} />);
 

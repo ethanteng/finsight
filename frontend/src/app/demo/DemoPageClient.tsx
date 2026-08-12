@@ -174,7 +174,7 @@ export default function DemoPageClient() {
             <div className="p-4">
               <h2 className="text-lg font-semibold mb-4">Prompt History</h2>
               {promptHistory.length === 0 ? (
-                <p className="text-gray-400 text-sm">No prompts yet. Start asking questions!</p>
+                <p className="text-sm text-white/65">No prompts yet. Start asking questions!</p>
               ) : (
                 <div className="space-y-2">
                   {promptHistory.map((prompt) => (
@@ -183,14 +183,14 @@ export default function DemoPageClient() {
                       onClick={() => handleHistorySelect(prompt)}
                       className={`p-3 rounded-lg cursor-pointer transition-colors ${
                         selectedPrompt?.id === prompt.id
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+                          ? 'bg-[#c9f46b] text-[#123c2f] shadow-sm'
+                          : 'bg-white/8 text-white/85 hover:bg-white/14'
                       }`}
                     >
                       <div className="text-sm font-medium mb-1">
                         {truncateText(prompt.question)}
                       </div>
-                      <div className="text-xs text-gray-400">
+                      <div className={`text-xs ${selectedPrompt?.id === prompt.id ? 'text-[#315a3e]' : 'text-white/55'}`}>
                         {formatTimestamp(prompt.timestamp)}
                       </div>
                     </div>

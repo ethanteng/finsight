@@ -433,7 +433,7 @@ export default function FinancesPageClient() {
           <p className="text-[#8b3027] mb-4">{error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+            className="rounded-full bg-[#123c2f] px-5 py-2.5 font-semibold text-white transition hover:bg-[#1a5140] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#123c2f] focus-visible:ring-offset-2"
           >
             Retry
           </button>
@@ -807,4 +807,3 @@ export default function FinancesPageClient() {
     </div>
   );
 }
-

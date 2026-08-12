@@ -85,8 +85,8 @@ export default function Feedback({ conversationId, isDemo, onFeedbackSubmitted }
   // Show thank you only on initial submit; hide entirely when loaded from localStorage (e.g. after refresh)
   if (submittedThisSession) {
     return (
-      <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">
-        <p className="text-green-500 text-sm text-center">
+      <div role="status" className="mt-4 rounded-2xl border border-[#6f8f42]/25 bg-[#eef6da] p-3">
+        <p className="text-center text-sm font-medium text-[#315a3e]">
           ✓ Thank you for your feedback!
         </p>
       </div>
@@ -98,34 +98,42 @@ export default function Feedback({ conversationId, isDemo, onFeedbackSubmitted }
   }
 
   return (
-    <div className="mt-4 p-4 bg-gray-800/50 border border-gray-700 rounded-lg">
-      <p className="text-gray-300 text-sm mb-3 text-center">
+    <fieldset className="mt-4 rounded-2xl border border-[#123c2f]/15 bg-[#fffaf0] p-4 sm:p-5">
+      <legend className="w-full px-2 text-center text-sm font-semibold text-[#123c2f]">
         How helpful was this response?
-      </p>
-      <div className="flex justify-center space-x-2">
+      </legend>
+      <div className="mt-3 flex justify-center gap-2">
         {[1, 2, 3, 4, 5].map((score) => (
-          <button
+          <label
             key={score}
-            onClick={() => handleRatingClick(score)}
-            disabled={submitting}
             className={`
-              w-10 h-10 rounded-lg border-2 transition-all duration-200 flex items-center justify-center text-sm font-medium
+              flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-2 text-sm font-semibold transition-all duration-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#123c2f] has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-[#fffaf0]
               ${rating === score
-                ? 'border-blue-500 bg-blue-500 text-white'
-                : 'border-gray-600 text-gray-400 hover:border-gray-500 hover:text-gray-300'
+                ? 'border-[#123c2f] bg-[#c9f46b] text-[#123c2f] shadow-sm'
+                : 'border-[#527166] bg-[#fffdf7] text-[#123c2f] hover:border-[#123c2f] hover:bg-[#eef6da]'
               }
-              ${submitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+              ${submitting ? 'pointer-events-none opacity-50' : ''}
             `}
             title={`${score === 1 ? 'Not helpful at all' : score === 5 ? 'Extremely helpful' : `${score}/5`}`}
           >
+            <input
+              type="radio"
+              name={`feedback-rating-${conversationId}`}
+              value={score}
+              checked={rating === score}
+              onChange={() => handleRatingClick(score)}
+              disabled={submitting}
+              className="sr-only"
+              aria-label={`${score} out of 5${score === 1 ? ', not helpful at all' : score === 5 ? ', extremely helpful' : ''}`}
+            />
             {score}
-          </button>
+          </label>
         ))}
       </div>
-      <div className="flex justify-between text-xs text-gray-500 mt-2">
+      <div className="mt-2 flex justify-between text-xs font-medium text-[#526e65]">
         <span>Not helpful at all</span>
         <span>Extremely helpful</span>
       </div>
-    </div>
+    </fieldset>
   );
 }
