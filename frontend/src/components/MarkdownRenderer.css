@@ -193,3 +193,28 @@
 .prose > * + * {
   margin-top: 0.75rem;
 }
+
+/* The decision workspace is a light surface. Keep this scoped so legacy dark
+   markdown consumers retain their existing palette. */
+.decision-answer .markdown-renderer,
+.decision-answer .prose,
+.decision-answer .prose p,
+.decision-answer .prose li {
+  color: #29483f;
+}
+
+.decision-answer .prose h1,
+.decision-answer .prose h2,
+.decision-answer .prose h3,
+.decision-answer .prose h4,
+.decision-answer .prose h5,
+.decision-answer .prose h6,
+.decision-answer .prose strong {
+  color: #123c2f;
+}
+
+.decision-answer .prose blockquote {
+  background: #eef1e8;
+  border-left-color: #7cb342;
+  color: #48675e;
+}

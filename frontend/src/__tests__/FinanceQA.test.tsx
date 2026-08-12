@@ -28,7 +28,9 @@ describe('FinanceQA decision workspace', () => {
 
   it('leads with a saved answer and exposes progressive detail views', async () => {
     render(<FinanceQA selectedPrompt={{ id: 'conversation-1', question: 'Can I retire?', answer: 'You are on track with the current assumptions.', timestamp: Date.now() }} />);
-    expect(screen.getByText('You are on track with the current assumptions.')).toBeInTheDocument();
+    const answer = screen.getByText('You are on track with the current assumptions.');
+    expect(answer).toBeInTheDocument();
+    expect(answer.closest('.decision-answer')).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'answer' })).toHaveAttribute('aria-selected', 'true');
     fireEvent.click(screen.getByRole('tab', { name: 'sources' }));
     expect(screen.getByRole('tab', { name: 'sources' })).toHaveAttribute('aria-selected', 'true');

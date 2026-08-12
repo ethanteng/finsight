@@ -417,7 +417,7 @@ export default function FinancesPageClient() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+      <div className="min-h-screen bg-[#f5f1e8] text-[#123c2f] flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
           <p>Loading your financial data...</p>
@@ -428,9 +428,9 @@ export default function FinancesPageClient() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+      <div className="min-h-screen bg-[#f5f1e8] text-[#123c2f] flex items-center justify-center">
         <div className="text-center">
-          <p className="text-red-400 mb-4">{error}</p>
+          <p className="text-[#8b3027] mb-4">{error}</p>
           <button
             onClick={() => window.location.reload()}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
@@ -444,10 +444,10 @@ export default function FinancesPageClient() {
 
   if (!snapshot) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+      <div className="min-h-screen bg-[#f5f1e8] text-[#123c2f] flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-400 mb-4">No financial data available</p>
-          <a href="/profile" className="text-blue-400 hover:text-blue-300">
+          <p className="text-[#607b72] mb-4">No financial data available</p>
+          <a href="/profile" className="text-[#175cce] hover:underline">
             Connect your accounts
           </a>
         </div>
@@ -482,29 +482,29 @@ export default function FinancesPageClient() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="auth-legacy-surface min-h-screen">
       {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 p-4">
-        <div className="flex items-center justify-between">
+      <div className="sticky top-0 z-30 border-b border-[#123c2f]/10 bg-[#f5f1e8]/95 px-4 py-4 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div className="flex items-center space-x-3">
-            <h1 className="text-2xl font-bold text-white">My Finances HQ</h1>
+            <div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#477064]">Financial overview</p><h1 className="text-2xl font-semibold tracking-tight text-[#123c2f]">Your finances</h1></div>
           </div>
           <div className="flex items-center space-x-3">
             <a 
               href="/app" 
-              className="text-gray-300 hover:text-white text-sm transition-colors"
+              className="text-sm font-semibold text-[#34594e] hover:text-[#123c2f]"
             >
               Back to App
             </a>
             <a 
               href="/profile" 
-              className="text-gray-300 hover:text-white text-sm transition-colors"
+              className="text-sm font-semibold text-[#34594e] hover:text-[#123c2f]"
             >
               Profile
             </a>
             <button 
               onClick={handleLogout}
-              className="text-gray-300 hover:text-white text-sm transition-colors"
+              className="text-sm font-semibold text-[#34594e] hover:text-[#123c2f]"
             >
               Logout
             </button>
@@ -512,7 +512,8 @@ export default function FinancesPageClient() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
+      <main className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
+        <div className="mb-8"><p className="max-w-2xl text-[#607b72]">A connected view of your net worth, trends, accounts, and the assumptions Ask Linc uses.</p></div>
         {/* Net Worth Card */}
         {/* Use snapshot.homeValue first (backend-calculated), then fall back to homeData.value for display */}
         <NetWorthCard 
@@ -785,7 +786,8 @@ export default function FinancesPageClient() {
             </div>
           )}
         </div>
-      </div>
+      </main>
+
 
       {/* Account Detail Modal */}
       {selectedAccount && selectedAccountId && snapshot && (

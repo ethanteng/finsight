@@ -1,5 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { Brain, Menu, Sparkles, UserRound, X } from 'lucide-react';
 import FinanceQA from '../../components/FinanceQA';
 import SiteFooter from '../../components/SiteFooter';
 import { pushBeginCheckout } from '@/lib/dataLayer';
@@ -148,58 +150,27 @@ export default function DemoPageClient() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen bg-[#f5f1e8] text-[#17372e]">
       {/* Demo notice */}
-      <div className="bg-amber-900/80 border-b border-amber-700/50 px-4 py-2 text-center text-sm text-amber-100">
+      <div className="border-b border-[#9d6a16]/20 bg-[#fff3ce] px-4 py-2 text-center text-sm text-[#76510f]">
         This is a fully functional demo using fictional accounts. Nothing here is tied to a real person.
       </div>
       {/* Header */}
-      <div className="bg-gray-800 border-b border-gray-700 p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <h1 className="text-2xl font-bold text-white">Ask Linc</h1>
-          </div>
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={() => handleBuyClick('premium')}
-              disabled={isCheckoutLoading}
-              className={`relative bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 hover:scale-105 shadow-lg shadow-green-500/40 hover:shadow-xl hover:shadow-green-500/50 ${!isCheckoutLoading ? 'animate-pulse-glow' : ''}`}
-            >
-              {isCheckoutLoading ? (
-                'Loading...'
-              ) : (
-                <>
-                  <span className="inline-block animate-sparkle mr-1.5">✨</span>
-                  Get Started
-                </>
-              )}
-            </button>
-            <a 
-              href="/contact" 
-              className="hidden md:inline text-blue-300 hover:text-blue-200 text-sm transition-colors font-medium"
-            >
-              Give Feedback
-            </a>
-            <a 
-              href="/profile?demo=true" 
-              className="hidden md:inline text-gray-300 hover:text-white text-sm transition-colors"
-            >
-              Profile
-            </a>
-            <button
-              onClick={() => setShowSidebar(!showSidebar)}
-              className="hidden lg:flex items-center bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm"
-            >
-              {showSidebar ? 'Hide' : 'Show'} History
-            </button>
+      <header className="sticky top-0 z-30 border-b border-[#123c2f]/10 bg-[#f5f1e8]/95 px-4 py-4 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
+          <Link href="/" className="flex items-center gap-2 font-semibold text-[#123c2f]"><span className="grid h-9 w-9 place-items-center rounded-full bg-[#123c2f] text-[#c9f46b]"><Brain size={19} /></span>Ask Linc <span className="rounded-full bg-[#fff3ce] px-2 py-1 text-[10px] uppercase tracking-wider text-[#76510f]">Demo</span></Link>
+          <div className="flex items-center gap-2">
+            <button onClick={() => handleBuyClick('premium')} disabled={isCheckoutLoading} className="hidden rounded-full bg-[#c9f46b] px-5 py-2.5 text-sm font-semibold text-[#123c2f] transition hover:bg-[#b9e55e] sm:inline-flex">{isCheckoutLoading ? 'Opening…' : <><Sparkles className="mr-2" size={16} />Get started</>}</button>
+            <Link href="/profile?demo=true" className="rounded-full border border-[#123c2f]/15 p-2.5 text-[#123c2f]" aria-label="View demo profile"><UserRound size={18} /></Link>
+            <button onClick={() => setShowSidebar(!showSidebar)} className="rounded-full border border-[#123c2f]/15 p-2.5 lg:hidden" aria-label="Toggle decision history">{showSidebar ? <X size={18} /> : <Menu size={18} />}</button>
           </div>
         </div>
-      </div>
+      </header>
 
-      <div className="flex h-[calc(100vh-116px)]">
+      <div className="mx-auto flex min-h-[calc(100vh-7.5rem)] max-w-7xl">
         {/* Sidebar - Hidden on mobile, visible on desktop */}
         {showSidebar && (
-          <div className="w-80 bg-gray-800 border-r border-gray-700 overflow-y-auto hidden lg:block">
+          <div className={`${showSidebar ? 'block' : 'hidden'} w-72 shrink-0 overflow-y-auto border-r border-[#123c2f]/10 bg-[#123c2f] text-white lg:block`}>
             <div className="p-4">
               <h2 className="text-lg font-semibold mb-4">Prompt History</h2>
               {promptHistory.length === 0 ? (
@@ -231,8 +202,8 @@ export default function DemoPageClient() {
         )}
 
         {/* Main Content */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="max-w-4xl mx-auto p-4 md:p-6">
+        <div className="min-w-0 flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-5xl p-4 md:p-8">
             {/* Demo Info Banner - hidden by default on all platforms */}
             <div className="hidden bg-blue-900 border border-blue-700 rounded-lg p-4 mb-6">
               <div className="flex items-center space-x-2 mb-2">
@@ -283,7 +254,7 @@ export default function DemoPageClient() {
             </div>
 
             {/* Q&A Interface */}
-            <div className="bg-gray-800 rounded-lg p-4 md:p-6">
+            <div>
               <FinanceQA 
                 onNewAnswer={addToHistory}
                 selectedPrompt={selectedPrompt}
@@ -296,7 +267,7 @@ export default function DemoPageClient() {
           </div>
         </div>
       </div>
-      <SiteFooter />
+      <SiteFooter variant="auth" />
     </div>
   );
 }
