@@ -1,4 +1,4 @@
-import NewHomepage from '../components/NewHomepage';
+import MarketingHome from '../components/marketing/MarketingHome';
 import StructuredData from '../components/StructuredData';
 import { buildFaqPageSchema, PRODUCT_OFFER_SCHEMA } from '../data/faq';
 import type { Metadata } from 'next';
@@ -61,7 +61,7 @@ export default function Home() {
     <>
       <StructuredData data={PRODUCT_OFFER_SCHEMA} />
       <StructuredData data={buildFaqPageSchema()} />
-      <NewHomepage />
+      <MarketingHome />
     </>
   );
 }

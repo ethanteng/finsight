@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import ComparisonPageContent from '../../../components/ComparisonPageContent';
+import MarketingSubpage from '../../../components/marketing/MarketingSubpage';
 import StructuredData from '../../../components/StructuredData';
 import { COMPARISONS, getComparison } from '../../../lib/comparisons';
 
@@ -55,7 +55,7 @@ export default async function VsPage({ params }: Props) {
   return (
     <>
       <StructuredData data={faqSchema} />
-      <ComparisonPageContent page={page} />
+      <MarketingSubpage params={Promise.resolve({ slug: ['vs', slug] })} />
     </>
   );
 }

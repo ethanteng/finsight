@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import UseCasesPage from '../../components/UseCasesPage';
+import MarketingSubpage from '../../components/marketing/MarketingSubpage';
 
 export const metadata: Metadata = {
   title: 'Use Cases — Ask Linc Financial Reasoning',
@@ -43,5 +43,5 @@ export const metadata: Metadata = {
 };
 
 export default function UseCasesRoute() {
-  return <UseCasesPage />;
+  return <MarketingSubpage params={Promise.resolve({ slug: ['use-cases'] })} />;
 }

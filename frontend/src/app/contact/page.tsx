@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import ContactForm from '../../components/ContactForm';
+import MarketingSubpage from '../../components/marketing/MarketingSubpage';
 
 export const metadata: Metadata = {
   title: 'Get Help & Support | Ask Linc Customer Service',
@@ -36,5 +36,5 @@ export const metadata: Metadata = {
 };
 
 export default function ContactPage() {
-  return <ContactForm />;
+  return <MarketingSubpage params={Promise.resolve({ slug: ['contact'] })} />;
 }

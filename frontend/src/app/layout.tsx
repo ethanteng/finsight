@@ -1,5 +1,6 @@
 import { Inter } from 'next/font/google'
 import './globals.css'
+import '../components/marketing/marketing.css'
 import StructuredData from '../components/StructuredData'
 import HeyCatchRouteGuard from '../components/HeyCatchRouteGuard'
 import type { Metadata } from 'next'

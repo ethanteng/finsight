@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import PricingPageContent from '../../components/PricingPageContent';
+import MarketingSubpage from '../../components/marketing/MarketingSubpage';
 import StructuredData from '../../components/StructuredData';
 import { buildFaqPageSchema, PRODUCT_OFFER_SCHEMA } from '../../data/faq';
 
@@ -35,7 +35,7 @@ export default function PricingPage() {
     <>
       <StructuredData data={PRODUCT_OFFER_SCHEMA} />
       <StructuredData data={buildFaqPageSchema()} />
-      <PricingPageContent />
+      <MarketingSubpage params={Promise.resolve({ slug: ['pricing'] })} />
     </>
   );
 }

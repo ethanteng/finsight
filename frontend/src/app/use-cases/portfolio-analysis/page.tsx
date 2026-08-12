@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
-import PortfolioAnalysisUseCasePage from '../../../components/PortfolioAnalysisUseCasePage';
-import { getPostsByTag } from '@/lib/ghost';
+import MarketingSubpage from '../../../components/marketing/MarketingSubpage';
 
 export const metadata: Metadata = {
   title: 'Investment Portfolio Analysis — Use Cases | Ask Linc',
@@ -14,12 +13,6 @@ export const metadata: Metadata = {
   },
 };
 
-export const revalidate = 60;
-
-export default async function PortfolioAnalysisUseCaseRoute() {
-  let moneyTrendsPosts = await getPostsByTag('money-trends', 6);
-  if (moneyTrendsPosts.length === 0) {
-    moneyTrendsPosts = await getPostsByTag('portfolio', 6);
-  }
-  return <PortfolioAnalysisUseCasePage moneyTrendsPosts={moneyTrendsPosts} />;
+export default function PortfolioAnalysisUseCaseRoute() {
+  return <MarketingSubpage params={Promise.resolve({ slug: ['use-cases', 'portfolio-analysis'] })} />;
 }

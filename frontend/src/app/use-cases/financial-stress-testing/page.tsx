@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
-import FinancialStressTestingUseCasePage from '../../../components/FinancialStressTestingUseCasePage';
-import { getPostsByTag } from '@/lib/ghost';
+import MarketingSubpage from '../../../components/marketing/MarketingSubpage';
 
 export const metadata: Metadata = {
   title: 'Financial Stress Testing — Use Cases | Ask Linc',
@@ -14,12 +13,6 @@ export const metadata: Metadata = {
   },
 };
 
-export const revalidate = 60;
-
-export default async function FinancialStressTestingUseCaseRoute() {
-  let moneyTrendsPosts = await getPostsByTag('money-trends', 6);
-  if (moneyTrendsPosts.length === 0) {
-    moneyTrendsPosts = await getPostsByTag('stress-testing', 6);
-  }
-  return <FinancialStressTestingUseCasePage moneyTrendsPosts={moneyTrendsPosts} />;
+export default function FinancialStressTestingUseCaseRoute() {
+  return <MarketingSubpage params={Promise.resolve({ slug: ['use-cases', 'financial-stress-testing'] })} />;
 }
