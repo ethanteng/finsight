@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import PrivacyContent from '../../components/PrivacyContent';
+import MarketingSubpage from '../../components/marketing/MarketingSubpage';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy | How Ask Linc Protects Your Financial Data',
@@ -22,5 +22,5 @@ export const metadata: Metadata = {
 };
 
 export default function PrivacyPage() {
-  return <PrivacyContent />;
-} 
+  return <MarketingSubpage params={Promise.resolve({ slug: ['privacy'] })} />;
+}
