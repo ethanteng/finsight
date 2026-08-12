@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { CircleArrowUp, Calculator } from 'lucide-react';
+import { ArrowUp, Calculator, CheckCircle2, Database, FileText, LoaderCircle, MessageSquarePlus, Sparkles } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import { useAnalytics } from './Analytics';
 import Feedback from './Feedback';
@@ -46,7 +46,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   const [showTheMathModalOpen, setShowTheMathModalOpen] = useState(false);
   const [loadingShowTheMath, setLoadingShowTheMath] = useState(false);
   const [showTheMathError, setShowTheMathError] = useState<string | null>(null);
-  const [liveFeedExpanded, setLiveFeedExpanded] = useState(false);
+  const [activeView, setActiveView] = useState<'answer' | 'math' | 'sources'>('answer');
   const { trackEvent } = useAnalytics();
 
   // Demo placeholder questions that rotate
@@ -134,6 +134,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       setShowTheMathData(null);
       setLiveShowTheMathData({});
       setError('');
+      setActiveView('answer');
     } else {
       setAnswer('');
       setStreamingAnswer('');
@@ -158,6 +159,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     setStructuredResponse(null);
     setShowTheMathData(null);
     setLiveShowTheMathData({});
+    setActiveView('answer');
     
     // Track question submission
     trackEvent('question_asked', {
@@ -355,14 +357,13 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
         const err = await res.json().catch(() => ({}));
         setShowTheMathError(err.error || 'No pipeline data available for this conversation');
       }
-    } catch (err) {
+    } catch (_err) {
       setShowTheMathError('Failed to load pipeline data');
     } finally {
       setLoadingShowTheMath(false);
     }
   }, [showTheMathData, conversationId, isDemo, propSessionId, API_URL]);
 
-  const hasShowTheMath = !!(showTheMathData || conversationId || (loading && Object.keys(liveShowTheMathData).length > 0));
   const modalData: Partial<ShowTheMathData> | null = showTheMathData ?? (
     Object.keys(liveShowTheMathData).length > 0
       ? {
@@ -375,176 +376,76 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   );
 
 
+  const sourceEntries = Object.entries(modalData?.databaseData || {}).filter(([, value]) => value != null);
+  const hasResult = Boolean(answer || streamingAnswer || loading);
+
   return (
-    <div className="space-y-6">
-      {/* Big Prompt Area */}
-      <div className="bg-gray-700 rounded-lg p-6">
-        <form id="finance-qa-form" onSubmit={askQuestion} className="space-y-4">
-          <div>
-            <textarea
-              id="finance-question"
-              value={question}
-              onChange={e => setQuestion(e.target.value)}
-              className="w-full h-32 p-4 bg-gray-600 border border-gray-500 rounded-lg text-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-400"
-              disabled={loading}
-              placeholder={isDemo 
-                ? demoPlaceholders[placeholderIndex]
-                : userPlaceholders[placeholderIndex]
-              }
-            />
-          </div>
-          <button
-            type="submit"
+    <section className="overflow-hidden rounded-[24px] border border-[#17372e]/10 bg-[#fffdf7] shadow-[0_20px_60px_rgba(18,60,47,0.08)]" aria-label="Decision analysis">
+      <div className="border-b border-[#17372e]/10 px-5 py-5 sm:px-8 sm:py-7">
+        <div className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[#477064]"><Sparkles size={14} />Ask Linc</div>
+        <form id="finance-qa-form" onSubmit={askQuestion}>
+          <label htmlFor="finance-question" className="sr-only">Your financial question</label>
+          <textarea
+            id="finance-question"
+            value={question}
+            onChange={event => setQuestion(event.target.value)}
+            className="min-h-24 w-full resize-none bg-transparent text-xl font-medium leading-8 text-[#123c2f] outline-none placeholder:text-[#82968f] sm:text-2xl"
             disabled={loading}
-            className="w-full flex items-center justify-between bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
-          >
-            {loading ? (
-              <span className="flex flex-col items-center justify-center w-full gap-1">
-                <span className="flex items-center">
-                  <span>Generating response</span>
-                  <span className="ml-1 flex">
-                    <span className="animate-bounce" style={{ animationDelay: '0ms' }}>.</span>
-                    <span className="animate-bounce" style={{ animationDelay: '150ms' }}>.</span>
-                    <span className="animate-bounce" style={{ animationDelay: '300ms' }}>.</span>
-                  </span>
-                </span>
-                {progressMessage && (
-                  <span className="text-sm font-normal text-gray-400">{progressMessage}</span>
-                )}
-              </span>
-            ) : (
-              <>
-                <span className="flex-1 text-center">Ask anything</span>
-                <CircleArrowUp className="w-5 h-5 shrink-0" />
-              </>
-            )}
-          </button>
+            placeholder={isDemo ? demoPlaceholders[placeholderIndex] : userPlaceholders[placeholderIndex]}
+          />
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-[#17372e]/10 pt-4">
+            <p className="text-xs text-[#607b72]">Uses connected accounts, calculations, and current context when available.</p>
+            <button type="submit" disabled={loading} className="inline-flex min-w-36 items-center justify-center gap-2 rounded-full bg-[#123c2f] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#1a5140] disabled:cursor-not-allowed disabled:opacity-60">
+              {loading ? <><LoaderCircle className="animate-spin" size={17} />Analyzing</> : <>{hasResult ? 'Ask follow-up' : 'Analyze decision'}<ArrowUp size={17} /></>}
+            </button>
+          </div>
         </form>
       </div>
 
-      {/* Results Area - show during loading for live feed, or when we have answer */}
-      {(answer || loading) && (
-        <div className="bg-gray-700 rounded-lg p-6">
-          {/* Show the math button - top of response box */}
-          {hasShowTheMath && !loading && (
-            <div className="mb-4">
-              <button
-                type="button"
-                onClick={handleShowTheMathClick}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors shadow-sm hover:shadow-md"
-              >
-                <Calculator className="w-4 h-4" />
-                Show the math
-              </button>
-            </div>
-          )}
-          {/* Live feed during loading */}
-          {loading && Object.keys(liveShowTheMathData).length > 0 && (
-            <div className="mb-4 border border-gray-600 rounded-lg overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setLiveFeedExpanded(!liveFeedExpanded)}
-                className="w-full flex items-center justify-between px-4 py-3 bg-gray-800 hover:bg-gray-750 text-left text-sm font-medium text-gray-200"
-              >
-                Live transparency
-                <span className="text-gray-400">{liveFeedExpanded ? '−' : '+'}</span>
-              </button>
-              {liveFeedExpanded && modalData && (
-                <div className="p-4 bg-gray-900 border-t border-gray-700 max-h-64 overflow-y-auto">
-                  <ShowTheMathContent data={modalData} />
-                  <div className="mt-2 text-xs text-gray-500">
-                    Pipeline in progress. Data will update as each step completes.
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          <div className="bg-gray-800 rounded-lg p-4 space-y-4">
-            {structuredResponse ? (
-              <>
-                <div className="text-gray-200 leading-relaxed">
-                  <MarkdownRenderer>{structuredResponse.summary}</MarkdownRenderer>
-                </div>
-                {structuredResponse.key_numbers && Object.keys(structuredResponse.key_numbers).length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {Object.entries(structuredResponse.key_numbers).map(([key, value]) => (
-                      <span
-                        key={key}
-                        className="inline-flex items-center px-3 py-1 rounded-md bg-gray-700 text-gray-300 text-sm"
-                      >
-                        <span className="text-gray-400 mr-1">{key.replace(/_/g, ' ')}:</span>
-                        <span className="font-medium">
-                          {formatKeyNumberValue(key, value)}
-                        </span>
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {structuredResponse.insights && structuredResponse.insights.length > 0 && (
-                  <div>
-                    <h4 className="text-gray-400 text-sm font-medium mb-2">Insights</h4>
-                    <ul className="list-disc list-inside text-gray-300 space-y-1">
-                      {structuredResponse.insights.map((insight, i) => (
-                        <li key={i}>{insight}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {structuredResponse.suggested_actions && structuredResponse.suggested_actions.length > 0 && (
-                  <div>
-                    <h4 className="text-gray-400 text-sm font-medium mb-2">Suggested Actions</h4>
-                    <ul className="list-disc list-inside text-gray-300 space-y-1">
-                      {structuredResponse.suggested_actions.map((action, i) => (
-                        <li key={i}>{action}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </>
-            ) : streamingAnswer ? (
-              <div className="text-gray-200 leading-relaxed">
-                <MarkdownRenderer>{streamingAnswer}</MarkdownRenderer>
-                <span className="inline-block w-2 h-4 ml-0.5 align-middle bg-gray-400 animate-pulse" aria-hidden="true" />
-              </div>
-            ) : loading && !answer ? null : (
-              <div className="text-gray-200 leading-relaxed">
-                <MarkdownRenderer>{answer}</MarkdownRenderer>
-              </div>
-            )}
-          </div>
-          
-          {/* Feedback Component - only show once answer has arrived */}
-          {conversationId && answer && !loading && (
-            <Feedback
-              conversationId={conversationId}
-              isDemo={isDemo}
-              onFeedbackSubmitted={(score) => {
-                console.log('Feedback submitted:', score);
-                // Track feedback submission
-                trackEvent('feedback_submitted', {
-                  score,
-                  is_demo: isDemo,
-                  user_tier: userTier
-                });
-              }}
-            />
-          )}
+      {!hasResult && !error && (
+        <div className="grid min-h-80 place-items-center px-6 py-12 text-center">
+          <div className="max-w-md"><div className="mx-auto mb-5 grid h-12 w-12 place-items-center rounded-full bg-[#dff4b2] text-[#123c2f]"><MessageSquarePlus /></div><h2 className="text-xl font-semibold text-[#123c2f]">Start with the decision in front of you</h2><p className="mt-2 text-sm leading-6 text-[#607b72]">Ask a specific question. Linc will lead with an answer, then keep the assumptions, calculations, and evidence close by.</p></div>
         </div>
       )}
 
       {error && (
-        <div className="bg-red-900/20 border border-red-500/50 rounded-lg p-4">
-          <p className="text-red-400 text-sm">{error}</p>
+        <div role="alert" className="m-5 rounded-2xl border border-[#b84a3d]/25 bg-[#fff2ed] p-5 sm:m-8"><h2 className="font-semibold text-[#8b3027]">We couldn’t complete this analysis</h2><p className="mt-1 text-sm text-[#8b3027]/80">{error}</p><p className="mt-3 text-xs text-[#8b3027]/70">Your question is still here. Check your connection and try again.</p></div>
+      )}
+
+      {hasResult && (
+        <div>
+          <div className="flex overflow-x-auto border-b border-[#17372e]/10 px-5 sm:px-8" role="tablist" aria-label="Decision details">
+            {(['answer', 'math', 'sources'] as const).map(view => (
+              <button key={view} type="button" role="tab" aria-selected={activeView === view} onClick={() => { setActiveView(view); if (view !== 'answer' && !showTheMathData && conversationId && !loading) handleShowTheMathClick(); }} className={`border-b-2 px-4 py-4 text-sm font-semibold capitalize transition ${activeView === view ? 'border-[#123c2f] text-[#123c2f]' : 'border-transparent text-[#71857f] hover:text-[#123c2f]'}`}>{view}</button>
+            ))}
+          </div>
+
+          <div className="p-5 sm:p-8">
+            {activeView === 'answer' && (
+              <div className="space-y-7">
+                <div className="flex items-center gap-2 text-sm font-semibold text-[#477064]">{loading ? <LoaderCircle className="animate-spin" size={17} /> : <CheckCircle2 size={17} />} {loading ? (progressMessage || 'Building your answer') : 'Current answer'}</div>
+                {structuredResponse?.key_numbers && Object.keys(structuredResponse.key_numbers).length > 0 && (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Key numbers">{Object.entries(structuredResponse.key_numbers).map(([key, value]) => <div key={key} className="rounded-2xl bg-[#eef1e8] p-4"><div className="text-xs font-semibold uppercase tracking-wider text-[#607b72]">{key.replace(/_/g, ' ')}</div><div className="mt-2 text-2xl font-semibold tracking-tight text-[#123c2f]">{formatKeyNumberValue(key, value)}</div></div>)}</div>
+                )}
+                <div className="decision-answer prose prose-slate max-w-none text-[#29483f] prose-headings:text-[#123c2f] prose-a:text-[#175cce]">{structuredResponse ? <MarkdownRenderer>{structuredResponse.summary}</MarkdownRenderer> : streamingAnswer ? <><MarkdownRenderer>{streamingAnswer}</MarkdownRenderer><span className="inline-block h-4 w-1.5 animate-pulse bg-[#123c2f]" /></> : answer ? <MarkdownRenderer>{answer}</MarkdownRenderer> : <div className="space-y-3" aria-label="Answer loading"><div className="h-4 w-11/12 animate-pulse rounded bg-[#dfe5db]" /><div className="h-4 w-4/5 animate-pulse rounded bg-[#dfe5db]" /><div className="h-4 w-2/3 animate-pulse rounded bg-[#dfe5db]" /></div>}</div>
+                {structuredResponse?.insights && structuredResponse.insights.length > 0 && <section className="rounded-2xl border border-[#17372e]/10 p-5"><h3 className="mb-3 font-semibold text-[#123c2f]">Key assumptions and decision factors</h3><ul className="space-y-3 text-sm leading-6 text-[#48675e]">{structuredResponse.insights.map((insight, index) => <li key={index} className="flex gap-3"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#7cb342]" />{insight}</li>)}</ul></section>}
+                {structuredResponse?.suggested_actions && structuredResponse.suggested_actions.length > 0 && <section><h3 className="mb-3 font-semibold text-[#123c2f]">Ways to move forward</h3><div className="grid gap-3 sm:grid-cols-2">{structuredResponse.suggested_actions.map((action, index) => <div key={index} className="rounded-2xl bg-[#e9f0fb] p-4 text-sm leading-6 text-[#254b75]">{action}</div>)}</div><p className="mt-3 text-xs text-[#71857f]">Interactive scenario comparison is not yet available in the current product API.</p></section>}
+                {conversationId && answer && !loading && <Feedback conversationId={conversationId} isDemo={isDemo} onFeedbackSubmitted={(score) => trackEvent('feedback_submitted', { score, is_demo: isDemo, user_tier: userTier })} />}
+              </div>
+            )}
+
+            {activeView === 'math' && (
+              <div className="space-y-5"><div><h2 className="flex items-center gap-2 text-lg font-semibold text-[#123c2f]"><Calculator size={19} />Calculations and pipeline</h2><p className="mt-1 text-sm text-[#607b72]">Inspect the context, intermediate work, and validation behind this answer.</p></div>{loadingShowTheMath ? <div className="flex items-center gap-2 py-10 text-sm text-[#607b72]"><LoaderCircle className="animate-spin" size={18} />Loading calculation details…</div> : showTheMathError ? <div role="alert" className="rounded-2xl bg-[#fff2ed] p-4 text-sm text-[#8b3027]">{showTheMathError}</div> : modalData ? <ShowTheMathContent data={modalData} /> : <p className="rounded-2xl bg-[#eef1e8] p-5 text-sm text-[#607b72]">Calculation details will appear when the analysis is complete.</p>}</div>
+            )}
+
+            {activeView === 'sources' && (
+              <div><h2 className="flex items-center gap-2 text-lg font-semibold text-[#123c2f]"><Database size={19} />Supporting evidence</h2><p className="mt-1 text-sm text-[#607b72]">These are the real data groups recorded with this answer.</p>{loadingShowTheMath ? <div className="flex items-center gap-2 py-10 text-sm text-[#607b72]"><LoaderCircle className="animate-spin" size={18} />Loading sources…</div> : sourceEntries.length > 0 ? <ul className="mt-6 grid gap-3 sm:grid-cols-2">{sourceEntries.map(([key, value]) => <li key={key} className="rounded-2xl border border-[#17372e]/10 p-4"><div className="flex items-start gap-3"><FileText className="mt-0.5 text-[#175cce]" size={18} /><div><div className="font-semibold capitalize text-[#123c2f]">{key.replace(/_/g, ' ')}</div><div className="mt-1 text-xs text-[#71857f]">{Array.isArray(value) ? `${value.length} recorded item${value.length === 1 ? '' : 's'}` : 'Recorded analysis context'}</div></div></div></li>)}</ul> : <div className="mt-6 rounded-2xl bg-[#eef1e8] p-5 text-sm leading-6 text-[#607b72]">No supporting source bundle is available for this conversation. The answer remains visible, but its underlying evidence cannot be inspected.</div>}</div>
+            )}
+          </div>
         </div>
       )}
 
-      <ShowTheMathModal
-        isOpen={showTheMathModalOpen}
-        onClose={() => setShowTheMathModalOpen(false)}
-        data={modalData}
-        loading={loadingShowTheMath}
-        error={showTheMathError}
-      />
-    </div>
+      <ShowTheMathModal isOpen={showTheMathModalOpen} onClose={() => setShowTheMathModalOpen(false)} data={modalData} loading={loadingShowTheMath} error={showTheMathError} />
+    </section>
   );
-} 
+}
