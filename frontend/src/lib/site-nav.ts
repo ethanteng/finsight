@@ -1,3 +1,10 @@
+export const PRIMARY_NAV_LINKS = [
+  { href: '/features', label: 'Features' },
+  { href: '/use-cases', label: 'Use Cases' },
+  { href: '/pricing', label: 'Pricing' },
+  { href: '/about', label: 'About' },
+];
+
 export const USE_CASE_LINKS = [
   { href: '/use-cases/retirement', label: 'Retirement Planning' },
   { href: '/use-cases/home-buying', label: 'Home Buying Decisions' },

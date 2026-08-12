@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MarketingContactForm } from "@/components/marketing/MarketingContactForm";
 import { SiteHeader } from "@/components/marketing/SiteShell";
@@ -12,13 +12,36 @@ describe("marketing review fixes", () => {
     jest.restoreAllMocks();
   });
 
-  it("keeps a sign-in link in the marketing header outside the hidden navigation links", () => {
+  it("keeps the desktop sign-in link outside the primary navigation links", () => {
     render(<SiteHeader />);
 
     const signInLink = screen.getByRole("link", { name: "Sign in" });
     expect(signInLink).toHaveAttribute("href", "/login");
     expect(signInLink.closest(".nav-actions")).not.toBeNull();
     expect(signInLink.closest(".nav-links")).toBeNull();
+  });
+
+  it("opens an accessible mobile menu with the primary subpages", async () => {
+    const user = userEvent.setup();
+    render(<SiteHeader />);
+
+    const menuButton = screen.getByRole("button", { name: "Open menu" });
+    expect(menuButton).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(menuButton);
+
+    expect(screen.getByRole("button", { name: "Close menu" })).toHaveAttribute("aria-expanded", "true");
+    const mobileMenu = screen.getByLabelText("Mobile navigation");
+    expect(within(mobileMenu).getByRole("link", { name: "Features" })).toHaveAttribute("href", "/features");
+    expect(within(mobileMenu).getByRole("link", { name: "Use Cases" })).toHaveAttribute("href", "/use-cases");
+    expect(within(mobileMenu).getByRole("link", { name: "Pricing" })).toHaveAttribute("href", "/pricing");
+    expect(within(mobileMenu).getByRole("link", { name: "About" })).toHaveAttribute("href", "/about");
+    expect(within(mobileMenu).getByRole("link", { name: "Sign in to Ask Linc" })).toHaveAttribute("href", "/login");
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.getByRole("button", { name: "Open menu" })).toHaveFocus();
+    expect(screen.queryByRole("link", { name: "Sign in to Ask Linc" })).not.toBeInTheDocument();
   });
 
   it("submits the redesigned contact form through the existing API", async () => {

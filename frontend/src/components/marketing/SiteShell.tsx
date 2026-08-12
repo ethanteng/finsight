@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { PRIMARY_NAV_LINKS } from "@/lib/site-nav";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
+import { MarketingMobileMenu } from "./MarketingMobileMenu";
 
 export function SiteHeader() {
   return (
@@ -10,14 +12,14 @@ export function SiteHeader() {
           <span>Ask Linc</span>
         </Link>
         <div className="nav-links">
-          <Link href="/features">Features</Link>
-          <Link href="/use-cases">Use Cases</Link>
-          <Link href="/pricing">Pricing</Link>
-          <Link href="/about">About</Link>
+          {PRIMARY_NAV_LINKS.map((item) => (
+            <Link href={item.href} key={item.href}>{item.label}</Link>
+          ))}
         </div>
         <div className="nav-actions">
           <Link className="nav-sign-in" href="/login">Sign in</Link>
           <MarketingGetStartedButton />
+          <MarketingMobileMenu />
         </div>
       </nav>
     </header>
