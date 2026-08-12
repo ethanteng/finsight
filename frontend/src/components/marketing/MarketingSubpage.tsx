@@ -1,6 +1,7 @@
 import { PageCta, SiteFooter, SiteHeader } from "./SiteShell";
 import Link from "next/link";
 import { FeatureScenario } from "./FeatureScenario";
+import { MarketingContactForm } from "./MarketingContactForm";
 import type { GhostPost } from "@/lib/ghost";
 
 type RouteProps = { params: Promise<{ slug: string[] }> };
@@ -302,7 +303,7 @@ function LegalPage({ type }: { type: "privacy" | "terms" }) {
 
 function ContactPage() {
   return (
-    <StandardPage className="contact-page"><section className="contact-stage shell"><div><p className="section-kicker">CONTACT ASK LINC</p><h1>A real person reads <em>every message.</em></h1><p>Questions, feedback, privacy requests, or something not working? Send a note directly to the founder.</p><a href="mailto:hello@asklinc.com" className="contact-email">hello@asklinc.com <span>↗</span></a><div className="response-note"><span className="pulse"/><p><b>Typical response</b><small>Within one business day</small></p></div></div><form className="contact-form" action="mailto:hello@asklinc.com"><div className="field-row"><label>FIRST NAME<input name="firstName" placeholder="Ethan" /></label><label>EMAIL<input name="email" type="email" placeholder="you@example.com" /></label></div><label>WHAT CAN WE HELP WITH?<select name="topic" defaultValue="Product question"><option>Product question</option><option>Privacy or data request</option><option>Technical support</option><option>Press or partnership</option><option>Something else</option></select></label><label>MESSAGE<textarea name="message" rows={7} placeholder="Tell us what’s on your mind…" /></label><button className="button button-primary" type="submit">Send message →</button><small>By sending this form, you agree that Ask Linc may reply to your email.</small></form></section><section className="contact-links shell"><Link href="/faq"><span>01</span><b>Common questions</b><i>Read the FAQ →</i></Link><Link href="/how-we-protect-your-data"><span>02</span><b>Privacy &amp; security</b><i>See how data is protected →</i></Link><Link href="/pricing"><span>03</span><b>Pricing</b><i>One plan, full access →</i></Link></section></StandardPage>
+    <StandardPage className="contact-page"><section className="contact-stage shell"><div><p className="section-kicker">CONTACT ASK LINC</p><h1>A real person reads <em>every message.</em></h1><p>Questions, feedback, privacy requests, or something not working? Send a note directly to the founder.</p><a href="mailto:hello@asklinc.com" className="contact-email">hello@asklinc.com <span>↗</span></a><div className="response-note"><span className="pulse"/><p><b>Typical response</b><small>Within one business day</small></p></div></div><MarketingContactForm /></section><section className="contact-links shell"><Link href="/faq"><span>01</span><b>Common questions</b><i>Read the FAQ →</i></Link><Link href="/how-we-protect-your-data"><span>02</span><b>Privacy &amp; security</b><i>See how data is protected →</i></Link><Link href="/pricing"><span>03</span><b>Pricing</b><i>One plan, full access →</i></Link></section></StandardPage>
   );
 }
 

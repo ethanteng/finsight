@@ -14,9 +14,12 @@ export function SiteHeader() {
           <Link href="/pricing">Pricing</Link>
           <Link href="/about">About</Link>
         </div>
-        <a className="button button-small button-dark" href="https://asklinc.com/demo">
-          Ask Linc free <span aria-hidden="true">→</span>
-        </a>
+        <div className="nav-actions">
+          <Link className="nav-sign-in" href="/login">Sign in</Link>
+          <a className="button button-small button-dark" href="https://asklinc.com/demo">
+            Ask Linc free <span aria-hidden="true">→</span>
+          </a>
+        </div>
       </nav>
     </header>
   );
