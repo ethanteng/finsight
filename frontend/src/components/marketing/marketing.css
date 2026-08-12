@@ -246,7 +246,7 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 /* Shared marketing-site system */
 .site-header { border-bottom: 1px solid rgba(16,35,25,.16); }
 .site-header .nav { border-bottom: 0; }
-.expanded-footer { grid-template-columns: 1.5fr repeat(3,.7fr); padding-bottom: 44px; }
+.expanded-footer { grid-template-columns: 1.5fr repeat(4,.65fr); padding-bottom: 44px; }
 .footer-brand p { max-width: 270px; line-height: 1.55; }
 .footer-column { display: flex; flex-direction: column; gap: 12px; font-size: 11px; }
 .footer-column b { margin-bottom: 7px; color: #6f8177; font-size: 8px; letter-spacing: .16em; }
@@ -416,6 +416,7 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 .comparison-strip { background: var(--ink); color: white; }.comparison-strip .shell { display: grid; grid-template-columns: 1fr 1fr 1fr; padding-block: 20px; text-align: center; font-size: 9px; font-weight: 850; letter-spacing: .13em; }.comparison-strip i { color: #90a298; font-style: normal; font-weight: 400; letter-spacing: 0; }
 .comparison-table { border: 1px solid #aeb9ad; border-radius: 20px; overflow: hidden; }.comparison-row { display: grid; grid-template-columns: .55fr 1fr 1fr; }.comparison-row > * { padding: 24px 26px; border-right: 1px solid #c5cdc2; border-bottom: 1px solid #c5cdc2; }.comparison-row > *:last-child { border-right: 0; }.comparison-row:last-child > * { border-bottom: 0; }.comparison-row span { color: #657168; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }.comparison-row b { font-size: 13px; line-height: 1.5; }.comparison-row b:nth-child(2) { background: rgba(217,255,111,.26); }.comparison-head > * { background: var(--ink) !important; color: white !important; font-size: 8px !important; letter-spacing: .14em; }
 .fit-section { padding-block: 110px; background: #dfeade; }.fit-section h2 { max-width: 990px; font-size: 53px; }.fit-section p:last-child { max-width: 700px; color: #5d6c62; font-size: 15px; line-height: 1.65; }.other-comparisons { display: flex; align-items: center; gap: 16px; padding-block: 45px; }.other-comparisons > span { margin-right: auto; color: #607267; font-size: 8px; font-weight: 850; letter-spacing: .14em; }.other-comparisons a { display: flex; min-width: 220px; justify-content: space-between; padding: 17px 20px; border: 1px solid #b5c0b4; border-radius: 999px; font-size: 11px; font-weight: 700; }.other-comparisons b { color: #4e725d; }
+.comparison-faq { border-top: 0; }
 
 /* Legal */
 .legal-hero { padding-block: 100px 65px; border-bottom: 1px solid #b7c1b5; }.legal-hero h1 { margin-bottom: 40px; }.legal-hero > div { display: flex; gap: 10px; }.legal-hero > div span { padding: 8px 12px; border: 1px solid #b8c2b6; border-radius: 999px; color: #66736b; font-size: 9px; }

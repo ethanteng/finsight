@@ -5,6 +5,7 @@ import { MarketingContactForm } from "./MarketingContactForm";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { RotatingContextChips } from "./RotatingContextChips";
 import type { GhostPost } from "@/lib/ghost";
+import { getComparison } from "@/lib/comparisons";
 
 type RouteProps = { params: Promise<{ slug: string[] }> };
 
@@ -30,40 +31,16 @@ const securitySections = [
 
 const comparisonData = {
   origin: {
-    name: "Origin",
     eyebrow: "BROAD MONEY APP VS FOCUSED DECISION ENGINE",
-    intro: "Origin brings tracking, planning, and AI Q&A into one broad money app. Ask Linc is narrower on purpose: inspectable financial reasoning for the decisions that don’t fit a dashboard.",
     fit: "Choose Ask Linc when your real question is ‘what should we do?’ Choose Origin when breadth and everyday money management are the primary job.",
-    rows: [
-      ["Core job", "Reason through household decisions", "Manage a broad financial life"],
-      ["Experience", "Questions, scenarios, recommendations", "Tracking, planning, and AI Q&A"],
-      ["Math transparency", "Inputs and calculations are inspectable", "Review current product details"],
-      ["Pricing approach", "$9/month flat", "See Origin for current plans"],
-    ],
   },
   portfoliopilot: {
-    name: "PortfolioPilot",
     eyebrow: "HOUSEHOLD DECISIONS VS PORTFOLIO ANALYTICS",
-    intro: "PortfolioPilot is built for portfolio analysis and stress testing. Ask Linc reasons across the whole household—cash, debt, property, retirement, goals, and the market—in plain English.",
     fit: "Choose Ask Linc for connected household questions. Choose PortfolioPilot when deep portfolio analytics are the center of the job.",
-    rows: [
-      ["Core job", "Household financial reasoning", "Portfolio analysis and stress testing"],
-      ["Scope", "Accounts, debt, housing, goals, retirement", "Investments and portfolio scenarios"],
-      ["Interaction", "Conversational decisions and follow-ups", "Analytics-led portfolio tools"],
-      ["Pricing approach", "$9/month flat", "See PortfolioPilot for current plans"],
-    ],
   },
   monarch: {
-    name: "Monarch",
     eyebrow: "DECISION SUPPORT VS MONEY TRACKING",
-    intro: "Monarch is excellent at organizing budgets, transactions, and net worth. Ask Linc starts where tracking stops: deciding what your full financial picture means for what comes next.",
     fit: "Keep Monarch if shared budgeting and tracking are the main job. Choose Ask Linc when the pain is turning all that information into a decision.",
-    rows: [
-      ["Core job", "Answer ‘what should we do?’", "Show ‘where did the money go?’"],
-      ["Strength", "Retirement, housing, debt, and risk", "Budgets, categories, and net worth"],
-      ["Output", "Recommendation with inspectable math", "Organized dashboards and trends"],
-      ["Can they coexist?", "Yes—use Linc for big decisions", "Yes—use Monarch for tracking"],
-    ],
   },
 } as const;
 
@@ -266,14 +243,18 @@ function SecurityPage() {
 }
 
 function ComparisonPage({ product }: { product: keyof typeof comparisonData }) {
-  const data = comparisonData[product];
+  const design = comparisonData[product];
+  const page = getComparison(product);
+  if (!page) return null;
+
   return (
     <StandardPage className="comparison-page">
-      <section className="subhero shell comparison-hero"><div><p className="section-kicker">{data.eyebrow}</p><h1>Ask Linc <em>vs {data.name}</em></h1><p className="subhero-copy">{data.intro}</p><div className="hero-actions"><a className="button button-primary" href="https://asklinc.com/demo">See a real answer →</a><Link className="text-link" href="/pricing">View $9 pricing</Link></div></div><div className="versus-mark"><span className="brand-mark">L</span><b>VS</b><span>{data.name.slice(0,2).toUpperCase()}</span></div></section>
-      <section className="comparison-strip"><div className="shell"><span>ASK LINC</span><i>Different tools for different jobs</i><span>{data.name.toUpperCase()}</span></div></section>
-      <section className="page-section shell comparison-section"><div className="editorial-heading"><p className="section-kicker">THE SHORT VERSION</p><h2>Start with the job you need done.</h2></div><div className="comparison-table" role="table"><div className="comparison-row comparison-head" role="row"><span>DIMENSION</span><b>ASK LINC</b><b>{data.name.toUpperCase()}</b></div>{data.rows.map(([dimension,linc,other])=><div className="comparison-row" role="row" key={dimension}><span>{dimension}</span><b>{linc}</b><b>{other}</b></div>)}</div></section>
-      <section className="fit-section"><div className="shell"><p className="section-kicker">OUR HONEST TAKE</p><h2>{data.fit}</h2><p>Ask Linc is not trying to replace every financial product. It is purpose-built for decision support with transparent math.</p></div></section>
-      <section className="other-comparisons shell"><span>COMPARE ASK LINC WITH</span>{Object.entries(comparisonData).filter(([key])=>key!==product).map(([key,value])=><Link href={`/vs/${key}`} key={key}>{value.name} <b>→</b></Link>)}</section>
+      <section className="subhero shell comparison-hero"><div><p className="section-kicker">{design.eyebrow}</p><h1>Ask Linc <em>vs {page.competitorName}</em></h1><p className="subhero-copy">{page.summary}</p><div className="hero-actions"><a className="button button-primary" href="https://asklinc.com/demo">See a real answer →</a><Link className="text-link" href="/pricing">View $9 pricing</Link></div></div><div className="versus-mark"><span className="brand-mark">L</span><b>VS</b><span>{page.competitorName.slice(0,2).toUpperCase()}</span></div></section>
+      <section className="comparison-strip"><div className="shell"><span>ASK LINC</span><i>Different tools for different jobs</i><span>{page.competitorName.toUpperCase()}</span></div></section>
+      <section className="page-section shell comparison-section"><div className="editorial-heading"><p className="section-kicker">THE SHORT VERSION</p><h2>Start with the job you need done.</h2></div><div className="comparison-table" role="table"><div className="comparison-row comparison-head" role="row"><span>DIMENSION</span><b>ASK LINC</b><b>{page.competitorName.toUpperCase()}</b></div>{page.rows.map(({ dimension, askLinc, competitor })=><div className="comparison-row" role="row" key={dimension}><span>{dimension}</span><b>{askLinc}</b><b>{competitor}</b></div>)}</div></section>
+      <section className="fit-section"><div className="shell"><p className="section-kicker">OUR HONEST TAKE</p><h2>{design.fit}</h2><p>Ask Linc is not trying to replace every financial product. It is purpose-built for decision support with transparent math.</p></div></section>
+      <section className="page-section shell compact-faq comparison-faq"><div><p className="section-kicker">BEFORE YOU CHOOSE</p><h2>The questions people actually ask.</h2></div><div>{page.faqs.map((faq)=><details key={faq.question}><summary>{faq.question}<span>+</span></summary><p>{faq.answer}</p></details>)}</div></section>
+      <section className="other-comparisons shell"><span>COMPARE ASK LINC WITH</span>{Object.keys(comparisonData).filter((key)=>key!==product).map((key)=>{ const other = getComparison(key); return other ? <Link href={`/vs/${key}`} key={key}>{other.competitorName} <b>→</b></Link> : null; })}</section>
       <PageCta title="See which experience answers your question." />
     </StandardPage>
   );
