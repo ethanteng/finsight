@@ -4,6 +4,7 @@ import { pushBeginCheckout } from '@/lib/dataLayer';
 import { identifyUser } from '@/lib/heycatch';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { ArrowRight, Brain, Check, CircleAlert, LoaderCircle, LockKeyhole, ShieldCheck } from 'lucide-react';
 import SiteFooter from './SiteFooter';
 
 interface SubscriptionContext {
@@ -207,150 +208,76 @@ function LoginFormContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
-      <div className="flex-1 flex items-center justify-center">
-      <div className="max-w-md w-full space-y-8 p-8">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold">Welcome Back</h1>
-          <p className="text-gray-400 mt-2">Sign in to your Ask Linc account</p>
-          
-          {subscriptionContext && (
-            <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-md">
-              <p className="text-green-400 text-sm">
-                🎉 Your subscription is ready!
-              </p>
-              <p className="text-green-400 text-xs mt-1">
-                Sign in to access your subscription.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* Subscription Expired - shown immediately after login when subscription has expired */}
-        {subscriptionExpired ? (
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-6 space-y-4">
-            <div className="flex items-start space-x-3">
-              <div className="text-amber-400 text-2xl">⚠️</div>
-              <div className="flex-1">
-                <h3 className="text-amber-400 font-medium mb-2">Subscription Expired</h3>
-                <p className="text-amber-200/90 text-sm mb-4">
-                  Your subscription has expired. Please renew to continue using Ask Linc.
-                </p>
-                <div className="flex flex-col gap-3">
-                  <a
-                    href={process.env.NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL_URL || '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors"
-                  >
-                    Manage Subscription
-                  </a>
-                  <p className="text-amber-200/90 text-sm">
-                    Or <Link href="/contact" className="text-amber-400 hover:text-amber-300 underline">Contact Us</Link> if you need support.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : (
-        <>
-        <form onSubmit={handleSubmit} className="space-y-6" suppressHydrationWarning>
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-md p-3 text-red-400 text-sm">
-              {error}
-            </div>
-          )}
-          
-          {/* Payment Issues Help Section - Only show for payment-related errors */}
-          {error && isPaymentRelatedError(error) && (
-            <div className="bg-blue-500/10 border border-blue-500/20 rounded-md p-4">
-              <div className="flex items-start space-x-3">
-                <div className="text-blue-400 text-lg">💳</div>
-                <div className="flex-1">
-                  <h3 className="text-blue-400 font-medium text-sm mb-2">Having payment issues?</h3>
-                  <p className="text-blue-300 text-xs mb-3">
-                    If you're locked out due to payment problems, you can resolve them directly with Stripe.
-                  </p>
-                  <a
-                    href={process.env.NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL_URL || '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-colors"
-                  >
-                    Resolve Payment Issues →
-                  </a>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div suppressHydrationWarning>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-              placeholder="Enter your email"
-            />
-          </div>
-
-          <div suppressHydrationWarning>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-              placeholder="Enter your password"
-            />
-            <div className="text-right mt-2">
-              <Link href="/forgot-password" className="text-primary hover:text-primary/80 text-sm">
-                Forgot password?
-              </Link>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-primary hover:bg-primary/90 disabled:opacity-50 text-white font-medium py-2 px-4 rounded-md transition-colors"
-          >
-            {isLoading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </form>
-
-        <div className="text-center">
-          <p className="text-gray-400 text-sm">
-            Don't have an account?{' '}
-            <button
-              onClick={() => handleBuyClick('premium')}
-              disabled={isCheckoutLoading}
-              className="text-primary hover:text-primary/80 disabled:opacity-50"
-            >
-              {isCheckoutLoading ? 'Loading...' : 'Get started'}
-            </button>
-          </p>
-        </div>
-
-        <div className="text-center">
-          <Link href="/demo" className="text-gray-400 hover:text-white text-sm">
-            Or try the demo version
+    <div className="flex min-h-screen flex-col bg-[#f5f1e8] text-[#123c2f]">
+      <header className="border-b border-[#123c2f]/10 bg-[#f5f1e8]">
+        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-5 sm:px-8">
+          <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-tight" aria-label="Ask Linc home">
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-[#123c2f] text-[#c9f46b]"><Brain size={20} /></span>
+            <span className="text-xl">Ask Linc</span>
           </Link>
+          <Link href="/demo" className="hidden items-center gap-2 text-sm font-semibold text-[#34594e] hover:text-[#123c2f] sm:inline-flex">Explore the demo <ArrowRight size={16} /></Link>
         </div>
-        </>
-        )}
-      </div>
-      </div>
-      <SiteFooter />
+      </header>
+
+      <main className="flex-1">
+        <div className="mx-auto grid min-h-[calc(100vh-5rem)] max-w-7xl lg:grid-cols-[minmax(0,1.05fr)_minmax(420px,.95fr)]">
+          <section className="relative hidden overflow-hidden bg-[#123c2f] px-12 py-16 text-[#f8f4e9] lg:flex lg:flex-col lg:justify-between" aria-labelledby="login-value-heading">
+            <div className="absolute -right-28 -top-28 h-80 w-80 rounded-full border border-[#c9f46b]/20" />
+            <div className="absolute -right-10 top-10 h-80 w-80 rounded-full border border-[#c9f46b]/10" />
+            <div className="relative max-w-xl">
+              <p className="mb-6 text-xs font-bold uppercase tracking-[0.2em] text-[#c9f46b]">Your financial decision workspace</p>
+              <h1 id="login-value-heading" className="text-5xl font-semibold leading-[1.04] tracking-[-0.045em]">Pick up where your last decision left off.</h1>
+              <p className="mt-6 max-w-lg text-lg leading-8 text-white/65">Your accounts, assumptions, calculations, and prior questions stay connected—so every answer starts with context.</p>
+            </div>
+            <ul className="relative space-y-5 text-sm text-white/80" aria-label="Workspace benefits">
+              {['Decision-ready answers grounded in your data', 'Calculations and supporting evidence one click away', 'Private, protected access to your financial context'].map(item => <li key={item} className="flex items-center gap-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[#c9f46b]/15 text-[#c9f46b]"><Check size={15} /></span>{item}</li>)}
+            </ul>
+          </section>
+
+          <section className="flex items-center justify-center px-5 py-12 sm:px-10 lg:px-16" aria-labelledby="login-heading">
+            <div className="w-full max-w-md">
+              <div className="mb-9">
+                <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#477064]">Secure sign in</p>
+                <h1 id="login-heading" className="text-4xl font-semibold tracking-[-0.04em] text-[#123c2f]">Welcome back.</h1>
+                <p className="mt-3 text-base leading-7 text-[#607b72]">Continue working through the decisions that matter to you.</p>
+                {subscriptionContext && <div className="mt-5 flex gap-3 rounded-2xl border border-[#719632]/25 bg-[#eaf5d5] p-4 text-sm text-[#34551c]" role="status"><Check className="mt-0.5 shrink-0" size={18} /><div><strong className="block">Your subscription is ready.</strong><span className="mt-1 block text-[#4d6a35]">Sign in to open your workspace.</span></div></div>}
+              </div>
+
+              {subscriptionExpired ? (
+                <div className="rounded-3xl border border-[#d49c3b]/30 bg-[#fff8e8] p-6">
+                  <div className="flex gap-3"><CircleAlert className="mt-0.5 shrink-0 text-[#a96d0f]" /><div><h2 className="font-semibold text-[#764c0d]">Subscription expired</h2><p className="mt-2 text-sm leading-6 text-[#765c32]">Renew your subscription to continue using your Ask Linc workspace.</p></div></div>
+                  <a href={process.env.NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL_URL || '#'} target="_blank" rel="noopener noreferrer" className="mt-6 inline-flex w-full items-center justify-center rounded-full bg-[#123c2f] px-5 py-3 text-sm font-semibold text-white hover:bg-[#1a5140]">Manage subscription</a>
+                  <p className="mt-4 text-center text-sm text-[#765c32]">Need help? <Link href="/contact" className="font-semibold underline">Contact us</Link>.</p>
+                </div>
+              ) : (
+                <>
+                  <form onSubmit={handleSubmit} className="space-y-5" suppressHydrationWarning>
+                    {error && <div role="alert" className="flex gap-3 rounded-2xl border border-[#b84a3d]/25 bg-[#fff2ed] p-4 text-sm leading-6 text-[#8b3027]"><CircleAlert className="mt-0.5 shrink-0" size={18} /><span>{error}</span></div>}
+                    {error && isPaymentRelatedError(error) && <div className="rounded-2xl border border-[#175cce]/20 bg-[#eaf2ff] p-4 text-sm text-[#254b75]"><strong className="block">Having payment issues?</strong><p className="mt-1 leading-6">Resolve billing securely through Stripe.</p><a href={process.env.NEXT_PUBLIC_STRIPE_CUSTOMER_PORTAL_URL || '#'} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex font-semibold text-[#175cce] hover:underline">Resolve payment issues <ArrowRight className="ml-1" size={16} /></a></div>}
+
+                    <div suppressHydrationWarning>
+                      <label htmlFor="email" className="mb-2 block text-sm font-semibold text-[#29483f]">Email address</label>
+                      <input id="email" type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} required className="h-13 w-full rounded-xl border border-[#123c2f]/20 bg-[#fffdf7] px-4 py-3 text-[#123c2f] shadow-sm outline-none placeholder:text-[#8a9b95] focus:border-[#123c2f] focus:ring-4 focus:ring-[#123c2f]/10" placeholder="you@example.com" />
+                    </div>
+                    <div suppressHydrationWarning>
+                      <div className="mb-2 flex items-center justify-between"><label htmlFor="password" className="text-sm font-semibold text-[#29483f]">Password</label><Link href="/forgot-password" className="text-sm font-semibold text-[#175cce] hover:underline">Forgot password?</Link></div>
+                      <div className="relative"><LockKeyhole className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#71857f]" size={18} /><input id="password" type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} required className="h-13 w-full rounded-xl border border-[#123c2f]/20 bg-[#fffdf7] py-3 pl-11 pr-4 text-[#123c2f] shadow-sm outline-none placeholder:text-[#8a9b95] focus:border-[#123c2f] focus:ring-4 focus:ring-[#123c2f]/10" placeholder="Enter your password" /></div>
+                    </div>
+                    <button type="submit" disabled={isLoading} className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#123c2f] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(18,60,47,.16)] transition hover:bg-[#1a5140] disabled:cursor-not-allowed disabled:opacity-60">{isLoading ? <><LoaderCircle className="animate-spin" size={17} />Signing in…</> : <>Sign in to your workspace <ArrowRight size={17} /></>}</button>
+                  </form>
+
+                  <div className="mt-7 border-t border-[#123c2f]/10 pt-6 text-center">
+                    <p className="text-sm text-[#607b72]">New to Ask Linc? <button onClick={() => handleBuyClick('premium')} disabled={isCheckoutLoading} className="font-semibold text-[#123c2f] underline decoration-[#9bc444] decoration-2 underline-offset-4 disabled:opacity-50">{isCheckoutLoading ? 'Opening checkout…' : 'Get started'}</button></p>
+                    <Link href="/demo" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#175cce] hover:underline sm:hidden">Explore the demo <ArrowRight size={15} /></Link>
+                  </div>
+                  <div className="mt-8 flex items-center justify-center gap-2 text-xs text-[#71857f]"><ShieldCheck size={16} />Encrypted access. Your financial data stays protected.</div>
+                </>
+              )}
+            </div>
+          </section>
+        </div>
+      </main>
+      <SiteFooter variant="auth" />
     </div>
   );
 }

@@ -216,6 +216,30 @@
   overflow: hidden;
 }
 
+/* Authenticated legacy surfaces share the new app palette while their data
+   components are incrementally migrated. Scoping prevents marketing leakage. */
+.auth-legacy-surface { background: #f5f1e8; color: #17372e; }
+.auth-legacy-surface .bg-gray-900 { background-color: #f5f1e8; }
+.auth-legacy-surface .bg-gray-800 { background-color: #fffdf7; }
+.auth-legacy-surface .bg-gray-700 { background-color: #eef1e8; }
+.auth-legacy-surface .bg-gray-600 { background-color: #e2e8df; }
+.auth-legacy-surface .border-gray-700,
+.auth-legacy-surface .border-gray-600 { border-color: rgb(18 60 47 / .14); }
+.auth-legacy-surface .text-white,
+.auth-legacy-surface .text-gray-100,
+.auth-legacy-surface .text-gray-200 { color: #123c2f; }
+.auth-legacy-surface .text-gray-300,
+.auth-legacy-surface .text-gray-400,
+.auth-legacy-surface .text-gray-500 { color: #607b72; }
+.auth-legacy-surface input,
+.auth-legacy-surface textarea,
+.auth-legacy-surface select { color: #123c2f; }
+.auth-legacy-surface .auth-page-card {
+  border: 1px solid rgb(18 60 47 / .11);
+  border-radius: 1.25rem;
+  box-shadow: 0 18px 45px rgb(18 60 47 / .06);
+}
+
 /* Ghost.io formatting enhancements */
 .ghost-content {
   /* Preserve Ghost's original spacing and layout */

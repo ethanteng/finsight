@@ -373,7 +373,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
 
   if (loading) {
     return (
-      <div className="bg-gray-800 border border-gray-700 rounded-lg p-4 mb-6">
+      <div className="rounded-[22px] border border-[#123c2f]/10 bg-[#fffdf7] p-5 shadow-[0_16px_40px_rgba(18,60,47,.06)]">
         <div className="animate-pulse">
           <div className="h-4 bg-gray-700 rounded w-1/3 mb-3"></div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -389,7 +389,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
   if (!hasAccounts && !isDemo) {
     return (
       <div 
-        className="bg-blue-900 border-2 border-blue-700 rounded-lg p-4 mb-6 cursor-pointer hover:bg-blue-800 hover:border-blue-500 hover:shadow-lg hover:shadow-blue-900/50 transition-all duration-200"
+        className="rounded-[22px] border border-[#175cce]/20 bg-[#eaf2ff] p-5 cursor-pointer transition hover:border-[#175cce]/40"
         onClick={handleOverviewClick}
         title="Click to view full financial dashboard"
         role="button"
@@ -428,7 +428,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
   return (
     <>
       <div 
-        className="bg-blue-900 border-2 border-blue-700 rounded-lg p-3 mb-4 cursor-pointer hover:bg-blue-800 hover:border-blue-500 hover:shadow-lg hover:shadow-blue-900/50 transition-all duration-200"
+        className="overflow-hidden rounded-[22px] border border-[#175cce]/20 bg-[#173e9a] p-4 text-white shadow-[0_18px_40px_rgba(23,62,154,.18)] cursor-pointer transition hover:-translate-y-0.5"
         onClick={handleOverviewClick}
         title="Click to view full financial dashboard"
         role="button"
@@ -443,7 +443,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center space-x-2">
             <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-            <h3 className="text-base font-semibold text-blue-100">Your Financial Overview</h3>
+            <h3 className="text-base font-semibold text-white">Your Financial Overview</h3>
           </div>
           
           {/* Add More Accounts link - only show when user has accounts */}
@@ -462,7 +462,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
         </div>
       
       {/* Net Worth - Featured Card */}
-      <div className="bg-gradient-to-br from-blue-700 to-blue-800 rounded-lg p-4 mb-3 border border-blue-600">
+      <div className="rounded-2xl border border-white/15 bg-gradient-to-br from-[#2864e8] to-[#2047b4] p-4 mb-3">
         <div className="text-blue-300 text-xs font-medium mb-1">Net Worth</div>
         <div className="text-white font-bold text-2xl">
           {formatCurrency(netWorth)}
@@ -493,31 +493,31 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
       
       {/* Financial Metrics Row - collapsible on mobile */}
       <div className={`${!mobileExpanded ? 'hidden' : ''} md:block`}>
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
-        <div className="bg-blue-800 rounded p-2.5">
-          <div className="text-blue-300 text-xs mb-1">Total Cash</div>
-          <div className="text-white font-medium text-base">
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <div className="min-w-0 rounded-xl bg-white/10 p-3">
+          <div className="text-blue-100/70 text-[11px] leading-4 mb-1">Total Cash</div>
+          <div className="break-words text-white font-semibold text-sm sm:text-base">
             {formatCurrency(totalCash)}
           </div>
         </div>
         
-        <div className="bg-blue-800 rounded p-2.5">
-          <div className="text-blue-300 text-xs mb-1">Total Debt</div>
-          <div className="text-white font-medium text-base">
+        <div className="min-w-0 rounded-xl bg-white/10 p-3">
+          <div className="text-blue-100/70 text-[11px] leading-4 mb-1">Total Debt</div>
+          <div className="break-words text-white font-semibold text-sm sm:text-base">
             {formatCurrency(totalDebt)}
           </div>
         </div>
         
-        <div className="bg-blue-800 rounded p-2.5">
-          <div className="text-blue-300 text-xs mb-1">Total Investments</div>
-          <div className="text-white font-medium text-base">
+        <div className="min-w-0 rounded-xl bg-white/10 p-3">
+          <div className="text-blue-100/70 text-[11px] leading-4 mb-1">Total Investments</div>
+          <div className="break-words text-white font-semibold text-sm sm:text-base">
             {formatCurrency(totalInvestments)}
           </div>
         </div>
 
-        <div className="bg-blue-800 rounded p-2.5">
-          <div className="text-blue-300 text-xs mb-1">Home Value</div>
-          <div className="text-white font-medium text-base">
+        <div className="min-w-0 rounded-xl bg-white/10 p-3">
+          <div className="text-blue-100/70 text-[11px] leading-4 mb-1">Home Value</div>
+          <div className="break-words text-white font-semibold text-sm sm:text-base">
             {totalHomeValue > 0 ? formatCurrency(totalHomeValue) : '$0'}
           </div>
           {homeData && (
@@ -530,21 +530,21 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
 
       {/* Account Statistics Row */}
       {hasAccounts && (
-        <div className="grid grid-cols-3 md:grid-cols-3 gap-2">
-          <div className="bg-blue-800 rounded p-2.5">
-            <div className="text-blue-300 text-xs mb-1">Accounts</div>
-            <div className="text-white font-medium text-base">{totalAccountCount}</div>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="min-w-0 rounded-xl bg-white/10 p-3">
+            <div className="text-blue-100/70 text-[11px] leading-4 mb-1">Accounts</div>
+            <div className="break-words text-white font-semibold text-sm sm:text-base">{totalAccountCount}</div>
           </div>
           
           {investmentData?.portfolio && (
             <>
-              <div className="bg-blue-800 rounded p-2.5">
-                <div className="text-blue-300 text-xs mb-1">Holdings</div>
-                <div className="text-white font-medium text-base">{investmentData.portfolio.holdingCount}</div>
+              <div className="min-w-0 rounded-xl bg-white/10 p-3">
+                <div className="text-blue-100/70 text-[11px] leading-4 mb-1">Holdings</div>
+                <div className="break-words text-white font-semibold text-sm sm:text-base">{investmentData.portfolio.holdingCount}</div>
               </div>
-              <div className="bg-blue-800 rounded p-2.5">
-                <div className="text-blue-300 text-xs mb-1">Securities</div>
-                <div className="text-white font-medium text-base">{investmentData.portfolio.securityCount}</div>
+              <div className="min-w-0 rounded-xl bg-white/10 p-3">
+                <div className="text-blue-100/70 text-[11px] leading-4 mb-1">Securities</div>
+                <div className="break-words text-white font-semibold text-sm sm:text-base">{investmentData.portfolio.securityCount}</div>
               </div>
             </>
           )}
@@ -553,7 +553,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
           {uncategorizedAccounts > 0 && (
             <div className="bg-yellow-800 rounded p-2.5">
               <div className="text-yellow-300 text-xs mb-1">Uncategorized</div>
-              <div className="text-white font-medium text-base">{uncategorizedAccounts}</div>
+              <div className="break-words text-white font-semibold text-sm sm:text-base">{uncategorizedAccounts}</div>
             </div>
           )}
         </div>
