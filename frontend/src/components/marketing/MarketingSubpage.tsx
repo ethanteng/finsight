@@ -299,7 +299,7 @@ function formatPostDate(value?: string | null) {
 }
 
 function postCategory(post: GhostPost) {
-  return post.tags?.[0]?.name?.toUpperCase() || "ASK LINC JOURNAL";
+  return post.tags?.[0]?.name?.toUpperCase() || "ASK LINC BLOG";
 }
 
 export function MarketingBlogPage({ ghostPosts }: { ghostPosts: GhostPost[] }) {
@@ -309,7 +309,7 @@ export function MarketingBlogPage({ ghostPosts }: { ghostPosts: GhostPost[] }) {
   return (
     <StandardPage className="blog-page">
       <section className="blog-hero shell">
-        <div><p className="section-kicker">THE ASK LINC JOURNAL</p><h1>Better thinking about <em>money and machines.</em></h1></div>
+        <div><p className="section-kicker">THE ASK LINC BLOG</p><h1>Better thinking about <em>money and machines.</em></h1></div>
         <p>Field notes on intelligent finance, retirement decisions, product transparency, and the systems that make AI worth trusting.</p>
       </section>
       {featured ? (
@@ -341,7 +341,7 @@ export function MarketingBlogPage({ ghostPosts }: { ghostPosts: GhostPost[] }) {
           </section>
         </>
       ) : (
-        <section className="not-found shell"><span>JOURNAL</span><h2>New field notes are on the way.</h2></section>
+        <section className="not-found shell"><span>BLOG</span><h2>New field notes are on the way.</h2></section>
       )}
       <PageCta title="Turn the reading into a real decision." />
     </StandardPage>
@@ -354,7 +354,7 @@ export function MarketingArticlePage({ post, processedHtml }: { post: GhostPost;
   return (
     <StandardPage className="article-page">
       <section className="article-head shell">
-        <Link href="/blog" className="back-link">← Back to the journal</Link>
+        <Link href="/blog" className="back-link">← Back to the blog</Link>
         <span className="post-category">{postCategory(post)}</span>
         <h1>{post.title}</h1>
         {post.excerpt && <p>{post.excerpt}</p>}
@@ -362,7 +362,7 @@ export function MarketingArticlePage({ post, processedHtml }: { post: GhostPost;
       </section>
       <div className="article-art post-art blue"><span>ASK LINC / FIELD NOTE</span><b>{postCategory(post)}</b><i>∑</i></div>
       <section className="article-layout shell marketing-article-layout">
-        <aside><span>ASK LINC JOURNAL</span><Link href="/features">See how Linc works</Link><Link href="/use-cases">Explore use cases</Link></aside>
+        <aside><span>ASK LINC BLOG</span><Link href="/features">See how Linc works</Link><Link href="/use-cases">Explore use cases</Link></aside>
         <article className="marketing-article-body ghost-content" dangerouslySetInnerHTML={{ __html: processedHtml }} />
       </section>
       <section className="next-reading shell"><span>KEEP EXPLORING</span><h2>Bring the question back to your own numbers.</h2><Link href="/demo">Try Ask Linc →</Link></section>

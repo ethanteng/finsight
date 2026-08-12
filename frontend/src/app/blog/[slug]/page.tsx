@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!post?.title) return { title: 'Blog Post | Ask Linc', alternates: { canonical: `https://asklinc.com/blog/${slug}` } };
 
   const postUrl = `https://asklinc.com/blog/${slug}`;
-  const description = post.excerpt || `Read ${post.title} on Ask Linc's financial journal.`;
+  const description = post.excerpt || `Read ${post.title} on Ask Linc's financial blog.`;
   return {
     title: `${post.title} | Ask Linc`,
     description,
