@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronRight, Landmark, LogOut, Menu, MessageSquareText, Newspaper, Plus, Settings, WalletCards, X } from 'lucide-react';
+import { BarChart3, ChevronRight, Landmark, LogOut, Menu, MessageSquareText, Newspaper, Plus, Settings, WalletCards, X } from 'lucide-react';
 import FinanceQA from '../../components/FinanceQA';
 import FinancialOverview from '../../components/FinancialOverview';
 import MarketNewsModal from '../../components/MarketNewsModal';
@@ -134,6 +134,7 @@ export default function AppPageClient() {
           <button onClick={() => { setSelectedPrompt(null); setMobileNavOpen(false); }} className="flex w-full items-center gap-3 rounded-xl bg-[#c9f46b] px-4 py-3 font-semibold text-[#123c2f]"><Plus size={18} />New decision</button>
           <Link href="/app" className="mt-4 flex items-center gap-3 rounded-xl bg-white/10 px-4 py-3 font-medium"><MessageSquareText size={18} />Decisions</Link>
           <Link href="/finances" className="flex items-center gap-3 rounded-xl px-4 py-3 text-white/70 hover:bg-white/10 hover:text-white"><WalletCards size={18} />Finances</Link>
+          <Link href="/transactions" className="flex items-center gap-3 rounded-xl px-4 py-3 text-white/70 hover:bg-white/10 hover:text-white"><BarChart3 size={18} />Transactions</Link>
           <Link href="/profile" className="flex items-center gap-3 rounded-xl px-4 py-3 text-white/70 hover:bg-white/10 hover:text-white"><Settings size={18} />Accounts & profile</Link>
           {hasMarketNewsAccess && <button onClick={() => setShowMarketNewsModal(true)} className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-white/70 hover:bg-white/10 hover:text-white"><Newspaper size={18} />Market context</button>}
         </nav>

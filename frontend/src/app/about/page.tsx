@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import AboutPageContent from '../../components/AboutPageContent';
+import MarketingSubpage from '../../components/marketing/MarketingSubpage';
 
 export const metadata: Metadata = {
   title: 'About | Ask Linc — Founded by Ethan Teng',
@@ -23,5 +23,5 @@ export const metadata: Metadata = {
 };
 
 export default function AboutPage() {
-  return <AboutPageContent />;
+  return <MarketingSubpage params={Promise.resolve({ slug: ['about'] })} />;
 }

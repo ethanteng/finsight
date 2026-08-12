@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import FaqContent from '../../components/FaqContent';
+import MarketingSubpage from '../../components/marketing/MarketingSubpage';
 import StructuredData from '../../components/StructuredData';
 import { buildFaqPageSchema } from '../../data/faq';
 
@@ -27,7 +27,7 @@ export default function FaqPage() {
   return (
     <>
       <StructuredData data={buildFaqPageSchema()} />
-      <FaqContent />
+      <MarketingSubpage params={Promise.resolve({ slug: ['faq'] })} />
     </>
   );
 }

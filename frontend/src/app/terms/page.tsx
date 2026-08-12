@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import TermsContent from '../../components/TermsContent';
+import MarketingSubpage from '../../components/marketing/MarketingSubpage';
 
 export const metadata: Metadata = {
   title: 'User Agreement & Terms | Ask Linc Platform Rules',
@@ -22,5 +22,5 @@ export const metadata: Metadata = {
 };
 
 export default function TermsPage() {
-  return <TermsContent />;
-} 
+  return <MarketingSubpage params={Promise.resolve({ slug: ['terms'] })} />;
+}

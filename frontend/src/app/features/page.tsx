@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import FeaturesPage from '../../components/FeaturesPage';
+import MarketingSubpage from '../../components/marketing/MarketingSubpage';
 
 export const metadata: Metadata = {
   title: 'Features — Ask Linc Financial Reasoning',
@@ -43,5 +43,5 @@ export const metadata: Metadata = {
 };
 
 export default function FeaturesPageRoute() {
-  return <FeaturesPage />;
+  return <MarketingSubpage params={Promise.resolve({ slug: ['features'] })} />;
 }

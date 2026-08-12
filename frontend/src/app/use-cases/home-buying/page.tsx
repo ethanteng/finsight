@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
-import HomeBuyingUseCasePage from '../../../components/HomeBuyingUseCasePage';
-import { getPostsByTag } from '@/lib/ghost';
+import MarketingSubpage from '../../../components/marketing/MarketingSubpage';
 
 export const metadata: Metadata = {
   title: 'Home Buying Decisions — Use Cases | Ask Linc',
@@ -14,12 +13,6 @@ export const metadata: Metadata = {
   },
 };
 
-export const revalidate = 60;
-
-export default async function HomeBuyingUseCaseRoute() {
-  let homeBuyingPosts = await getPostsByTag('home-buying', 6);
-  if (homeBuyingPosts.length === 0) {
-    homeBuyingPosts = await getPostsByTag('mortgage', 6);
-  }
-  return <HomeBuyingUseCasePage homeBuyingPosts={homeBuyingPosts} />;
+export default function HomeBuyingUseCaseRoute() {
+  return <MarketingSubpage params={Promise.resolve({ slug: ['use-cases', 'home-buying'] })} />;
 }
