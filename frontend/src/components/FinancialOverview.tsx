@@ -453,7 +453,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
                 e.stopPropagation();
                 handleAddAccounts();
               }}
-              className="rounded-full border border-[#123c2f]/20 bg-transparent px-4 py-2 text-sm font-semibold text-[#123c2f] transition-colors hover:bg-[#eef1e8]"
+              className="rounded-full border border-[#123c2f]/20 bg-transparent px-4 py-2 text-sm font-semibold text-[#123c2f] transition-colors hover:bg-[#eef1e8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#123c2f] focus-visible:ring-offset-2"
               title="Add more accounts"
             >
               Add More Accounts
@@ -475,8 +475,9 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
           e.stopPropagation();
           setMobileExpanded(!mobileExpanded);
         }}
-        className="mb-2 flex w-full items-center justify-center gap-1.5 py-2 text-sm font-medium text-[#48675e] transition-colors hover:text-[#123c2f] md:hidden"
+        className="mb-2 flex w-full items-center justify-center gap-1.5 py-2 text-sm font-medium text-[#48675e] transition-colors hover:text-[#123c2f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#123c2f] focus-visible:ring-offset-2 md:hidden"
         aria-expanded={mobileExpanded}
+        type="button"
       >
         {mobileExpanded ? (
           <>

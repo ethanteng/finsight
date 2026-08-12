@@ -102,28 +102,32 @@ export default function Feedback({ conversationId, isDemo, onFeedbackSubmitted }
       <legend className="w-full px-2 text-center text-sm font-semibold text-[#123c2f]">
         How helpful was this response?
       </legend>
-      <div className="mt-3 flex justify-center gap-2" role="radiogroup" aria-label="Response helpfulness from 1 to 5">
+      <div className="mt-3 flex justify-center gap-2">
         {[1, 2, 3, 4, 5].map((score) => (
-          <button
+          <label
             key={score}
-            onClick={() => handleRatingClick(score)}
-            disabled={submitting}
-            type="button"
-            role="radio"
-            aria-checked={rating === score}
-            aria-label={`${score} out of 5${score === 1 ? ', not helpful at all' : score === 5 ? ', extremely helpful' : ''}`}
             className={`
-              flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#123c2f] focus-visible:ring-offset-2 focus-visible:ring-offset-[#fffaf0]
+              flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-2 text-sm font-semibold transition-all duration-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#123c2f] has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-[#fffaf0]
               ${rating === score
                 ? 'border-[#123c2f] bg-[#c9f46b] text-[#123c2f] shadow-sm'
                 : 'border-[#527166] bg-[#fffdf7] text-[#123c2f] hover:border-[#123c2f] hover:bg-[#eef6da]'
               }
-              ${submitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+              ${submitting ? 'pointer-events-none opacity-50' : ''}
             `}
             title={`${score === 1 ? 'Not helpful at all' : score === 5 ? 'Extremely helpful' : `${score}/5`}`}
           >
+            <input
+              type="radio"
+              name={`feedback-rating-${conversationId}`}
+              value={score}
+              checked={rating === score}
+              onChange={() => handleRatingClick(score)}
+              disabled={submitting}
+              className="sr-only"
+              aria-label={`${score} out of 5${score === 1 ? ', not helpful at all' : score === 5 ? ', extremely helpful' : ''}`}
+            />
             {score}
-          </button>
+          </label>
         ))}
       </div>
       <div className="mt-2 flex justify-between text-xs font-medium text-[#526e65]">
