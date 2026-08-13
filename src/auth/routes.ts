@@ -126,6 +126,7 @@ router.post('/register', async (req: Request, res: Response) => {
 
     // If coming from Stripe checkout, create Stripe customer and link subscription
     if (stripeSessionIdToUse) {
+      let linkedStripeSubscription = false;
       try {
         // First, find the Stripe session to get the subscription ID
         const session = await stripe.client.checkout.sessions.retrieve(stripeSessionIdToUse, {
@@ -199,6 +200,7 @@ router.post('/register', async (req: Request, res: Response) => {
               }
             });
 
+            linkedStripeSubscription = true;
             console.log(`Linked user ${user.email} to Stripe customer ${customer.id} and subscription ${subscription.id}`);
             
             // Send welcome email for new Stripe users (regardless of webhook status)
@@ -214,6 +216,13 @@ router.post('/register', async (req: Request, res: Response) => {
       } catch (subscriptionError) {
         console.error('Error linking user to subscription:', subscriptionError);
         // Don't fail registration if subscription linking fails
+      }
+
+      if (!linkedStripeSubscription) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { subscriptionStatus: 'incomplete' }
+        });
       }
     }
 
