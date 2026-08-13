@@ -2357,6 +2357,9 @@ app.get('/sync/status', async (req: Request, res: Response) => {
               return {
                 ...user,
                 subscriptionStatus: subscriptionStatus.status,
+                trialExpiresAt: subscriptionStatus.status === 'trialing'
+                  ? subscriptionStatus.expiresAt || null
+                  : null,
                 accessLevel: subscriptionStatus.accessLevel,
                 upgradeRequired: subscriptionStatus.upgradeRequired,
                 subscriptionMessage: subscriptionStatus.message
@@ -2366,6 +2369,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
               return {
                 ...user,
                 subscriptionStatus: 'unknown',
+                trialExpiresAt: null,
                 accessLevel: 'unknown',
                 upgradeRequired: false,
                 subscriptionMessage: 'Error fetching subscription status'

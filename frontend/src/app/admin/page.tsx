@@ -87,6 +87,7 @@ interface ProductionConversation {
           lastLoginAt?: string;
           isActive: boolean;
           subscriptionStatus: string;
+          trialExpiresAt?: string | null;
           accessLevel: 'full' | 'none';
           upgradeRequired: boolean;
           subscriptionMessage: string;
@@ -1448,10 +1449,14 @@ export default function AdminPage() {
         {/* User Status Summary */}
         <section className="admin-panel p-5 sm:p-6">
           <h3 className="mb-4 text-lg font-semibold text-[#102319]">User status summary</h3>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
             <div className="admin-stat-cell">
-              <div className="text-2xl font-semibold text-[#397052]">{usersForManagement?.filter(u => u.accessLevel === 'full' && ['active', 'trialing'].includes(u.subscriptionStatus)).length || 0}</div>
-              <div className="mt-1 text-xs font-medium text-[#66736b]">Active or trialing</div>
+              <div className="text-2xl font-semibold text-[#397052]">{usersForManagement?.filter(u => u.accessLevel === 'full' && u.subscriptionStatus === 'active').length || 0}</div>
+              <div className="mt-1 text-xs font-medium text-[#66736b]">Active subscriptions</div>
+            </div>
+            <div className="admin-stat-cell">
+              <div className="text-2xl font-semibold text-[#397052]">{usersForManagement?.filter(u => u.accessLevel === 'full' && u.subscriptionStatus === 'trialing').length || 0}</div>
+              <div className="mt-1 text-xs font-medium text-[#66736b]">Active trials</div>
             </div>
             <div className="admin-stat-cell">
               <div className="text-2xl font-semibold text-[#397052]">{usersForManagement?.filter(u => u.accessLevel === 'full' && !['active', 'trialing'].includes(u.subscriptionStatus)).length || 0}</div>
@@ -1540,6 +1545,11 @@ export default function AdminPage() {
                       Subscription: {user.subscriptionStatus} • Access: {user.accessLevel}
                       {user.upgradeRequired && <span className="text-yellow-400"> • Upgrade Required</span>}
                     </div>
+                    {user.subscriptionStatus === 'trialing' && (
+                      <div className="mb-2 text-xs font-medium text-[#397052]">
+                        Trial ends: {user.trialExpiresAt ? formatDate(user.trialExpiresAt) : 'Date unavailable'}
+                      </div>
+                    )}
                     {user.subscriptionMessage && (
                       <div className="mt-3 rounded-lg border border-[#102319]/8 bg-[#fffdf5] px-3 py-2 text-xs leading-5 text-[#5e6b63]">
                         {user.subscriptionMessage}

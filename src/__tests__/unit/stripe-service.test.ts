@@ -420,13 +420,15 @@ describe('StripeService', () => {
     });
 
     it('should grant full access while a subscription is trialing', async () => {
+      const trialEnd = new Date('2026-09-12T12:00:00.000Z');
       mockPrisma.user.findUnique.mockResolvedValue({
         id: 'user123',
         tier: 'premium',
         subscriptionStatus: 'trialing',
         subscriptions: [{
           id: 'sub123',
-          status: 'trialing'
+          status: 'trialing',
+          currentPeriodEnd: trialEnd
         }]
       });
 
@@ -435,6 +437,7 @@ describe('StripeService', () => {
       expect(result).toEqual({
         tier: 'premium',
         status: 'trialing',
+        expiresAt: trialEnd,
         accessLevel: 'full',
         upgradeRequired: false,
         message: 'premium trial is active'

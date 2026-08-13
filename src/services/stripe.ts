@@ -830,9 +830,13 @@ export class StripeService {
       
       // Get the actual subscription status from the subscription record if it exists
       let actualSubscriptionStatus = subscriptionStatus;
+      let expiresAt: Date | undefined;
       if (user.subscriptions.length > 0) {
         const latestSubscription = user.subscriptions[0];
         actualSubscriptionStatus = latestSubscription.status;
+        if (actualSubscriptionStatus === 'trialing') {
+          expiresAt = latestSubscription.currentPeriodEnd;
+        }
         console.log(`  - Actual subscription status from record: ${actualSubscriptionStatus}`);
       }
 
@@ -892,9 +896,10 @@ export class StripeService {
       console.log(`    - message: ${message}`);
       console.log(`    - actualStatus: ${actualSubscriptionStatus}`);
 
-              return {
+      return {
           tier: currentTier,
           status: actualSubscriptionStatus, // Use the actual status from subscription record
+          ...(expiresAt && { expiresAt }),
           accessLevel,
           upgradeRequired,
           message
