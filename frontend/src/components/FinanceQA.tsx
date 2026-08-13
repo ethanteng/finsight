@@ -1,11 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { ArrowUp, Calculator, CheckCircle2, Database, FileText, LoaderCircle, MessageSquarePlus, Sparkles } from 'lucide-react';
+import { ArrowUp, Calculator, CheckCircle2, Database, Download, FileText, LoaderCircle, MessageSquarePlus, Sparkles } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import { useAnalytics } from './Analytics';
 import Feedback from './Feedback';
-import ShowTheMathModal, { ShowTheMathContent, type ShowTheMathData } from './ShowTheMathModal';
+import { ShowTheMathContent, DatabaseSourceSection, downloadShowTheMathAsText, type ShowTheMathData } from './ShowTheMathModal';
 import { formatKeyNumberValue } from '@/lib/formatKeyNumber';
 
 interface PromptHistory {
@@ -43,10 +43,10 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   } | null>(null);
   const [showTheMathData, setShowTheMathData] = useState<ShowTheMathData | null>(null);
   const [liveShowTheMathData, setLiveShowTheMathData] = useState<Partial<ShowTheMathData>>({});
-  const [showTheMathModalOpen, setShowTheMathModalOpen] = useState(false);
   const [loadingShowTheMath, setLoadingShowTheMath] = useState(false);
   const [showTheMathError, setShowTheMathError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'answer' | 'math' | 'sources'>('answer');
+  const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(null);
   const { trackEvent } = useAnalytics();
 
   // Demo placeholder questions that rotate
@@ -135,6 +135,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       setLiveShowTheMathData({});
       setError('');
       setActiveView('answer');
+      setSelectedSourceKey(null);
     } else {
       setAnswer('');
       setStreamingAnswer('');
@@ -160,6 +161,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     setShowTheMathData(null);
     setLiveShowTheMathData({});
     setActiveView('answer');
+    setSelectedSourceKey(null);
     
     // Track question submission
     trackEvent('question_asked', {
@@ -329,14 +331,9 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     }
   };
 
-  const handleShowTheMathClick = useCallback(async () => {
-    if (showTheMathData) {
-      setShowTheMathModalOpen(true);
-      setShowTheMathError(null);
-      return;
-    }
+  const loadShowTheMathData = useCallback(async () => {
+    if (showTheMathData || loadingShowTheMath) return;
     if (!conversationId) return;
-    setShowTheMathModalOpen(true);
     setLoadingShowTheMath(true);
     setShowTheMathError(null);
     try {
@@ -362,9 +359,9 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     } finally {
       setLoadingShowTheMath(false);
     }
-  }, [showTheMathData, conversationId, isDemo, propSessionId, API_URL]);
+  }, [showTheMathData, loadingShowTheMath, conversationId, isDemo, propSessionId, API_URL]);
 
-  const modalData: Partial<ShowTheMathData> | null = showTheMathData ?? (
+  const showTheMathViewData: Partial<ShowTheMathData> | null = showTheMathData ?? (
     Object.keys(liveShowTheMathData).length > 0
       ? {
           claudeFirstCall: liveShowTheMathData.claudeFirstCall,
@@ -376,8 +373,12 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   );
 
 
-  const sourceEntries = Object.entries(modalData?.databaseData || {}).filter(([, value]) => value != null);
+  const sourceEntries = Object.entries(showTheMathViewData?.databaseData || {}).filter(([, value]) => value != null);
+  const selectedSourceEntry = selectedSourceKey
+    ? sourceEntries.find(([key]) => key === selectedSourceKey) ?? null
+    : null;
   const hasResult = Boolean(answer || streamingAnswer || loading);
+  const canDownloadMath = !loadingShowTheMath && !showTheMathError && showTheMathViewData && Object.keys(showTheMathViewData).length > 0;
 
   return (
     <section className="overflow-hidden rounded-[24px] border border-[#102319]/10 bg-[#fffdf5] shadow-[0_20px_60px_rgba(18,60,47,0.08)]" aria-label="Decision analysis">
@@ -416,7 +417,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
         <div>
           <div className="flex overflow-x-auto border-b border-[#102319]/10 px-5 sm:px-8" role="tablist" aria-label="Decision details">
             {(['answer', 'math', 'sources'] as const).map(view => (
-              <button key={view} type="button" role="tab" aria-selected={activeView === view} onClick={() => { setActiveView(view); if (view !== 'answer' && !showTheMathData && conversationId && !loading) handleShowTheMathClick(); }} className={`border-b-2 px-4 py-4 text-sm font-semibold capitalize transition ${activeView === view ? 'border-[#102319] text-[#102319]' : 'border-transparent text-[#66736b] hover:text-[#102319]'}`}>{view}</button>
+              <button key={view} type="button" role="tab" aria-selected={activeView === view} onClick={() => { setActiveView(view); if (view !== 'sources') setSelectedSourceKey(null); if (view !== 'answer' && conversationId && !loading) loadShowTheMathData(); }} className={`border-b-2 px-4 py-4 text-sm font-semibold capitalize transition ${activeView === view ? 'border-[#102319] text-[#102319]' : 'border-transparent text-[#66736b] hover:text-[#102319]'}`}>{view}</button>
             ))}
           </div>
 
@@ -435,7 +436,34 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
             )}
 
             {activeView === 'math' && (
-              <div className="space-y-5"><div><h2 className="flex items-center gap-2 text-lg font-semibold text-[#102319]"><Calculator size={19} />Calculations and pipeline</h2><p className="mt-1 text-sm text-[#5e6b63]">Inspect the context, intermediate work, and validation behind this answer.</p></div>{loadingShowTheMath ? <div className="flex items-center gap-2 py-10 text-sm text-[#5e6b63]"><LoaderCircle className="animate-spin" size={18} />Loading calculation details…</div> : showTheMathError ? <div role="alert" className="rounded-2xl bg-[#fff2ed] p-4 text-sm text-[#8b3027]">{showTheMathError}</div> : modalData ? <ShowTheMathContent data={modalData} /> : <p className="rounded-2xl bg-[#f3f2e9] p-5 text-sm text-[#5e6b63]">Calculation details will appear when the analysis is complete.</p>}</div>
+              <div className="space-y-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="flex items-center gap-2 text-lg font-semibold text-[#102319]"><Calculator size={19} />Calculations and pipeline</h2>
+                    <p className="mt-1 text-sm text-[#5e6b63]">Inspect the context, intermediate work, and validation behind this answer.</p>
+                  </div>
+                  {canDownloadMath && (
+                    <button
+                      type="button"
+                      onClick={() => downloadShowTheMathAsText(showTheMathViewData!)}
+                      className="inline-flex items-center gap-2 rounded-full border border-[#102319]/15 px-3.5 py-2 text-sm font-semibold text-[#486657] transition hover:bg-[#f3f2e9] hover:text-[#102319]"
+                      aria-label="Download calculation details as text file"
+                    >
+                      <Download size={16} />
+                      Download
+                    </button>
+                  )}
+                </div>
+                {loadingShowTheMath ? (
+                  <div className="flex items-center gap-2 py-10 text-sm text-[#5e6b63]"><LoaderCircle className="animate-spin" size={18} />Loading calculation details…</div>
+                ) : showTheMathError ? (
+                  <div role="alert" className="rounded-2xl bg-[#fff2ed] p-4 text-sm text-[#8b3027]">{showTheMathError}</div>
+                ) : showTheMathViewData ? (
+                  <ShowTheMathContent data={showTheMathViewData} />
+                ) : (
+                  <p className="rounded-2xl bg-[#f3f2e9] p-5 text-sm text-[#5e6b63]">Calculation details will appear when the analysis is complete.</p>
+                )}
+              </div>
             )}
 
             {activeView === 'sources' && (
@@ -446,20 +474,44 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
                 {loadingShowTheMath ? (
                   <div className="flex items-center gap-2 py-10 text-sm text-[#5e6b63]"><LoaderCircle className="animate-spin" size={18} />Loading sources…</div>
                 ) : sourceEntries.length > 0 ? (
-                  <ul className="mt-6 grid gap-3 sm:grid-cols-2">
-                    {sourceEntries.map(([key, value], index) => (
-                      <li key={key} className="group rounded-2xl border border-[#102319]/12 bg-[#f9f8f0] p-5 transition hover:border-[#49725a]/45">
-                        <div className="flex items-start gap-4">
-                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#e0eadf] text-[#397052]"><FileText size={17} /></span>
-                          <div className="min-w-0">
-                            <div className="mb-1 text-[9px] font-extrabold uppercase tracking-[.14em] text-[#7a857e]">Source {String(index + 1).padStart(2, '0')}</div>
-                            <div className="font-semibold capitalize text-[#102319]">{key.replace(/_/g, ' ')}</div>
-                            <div className="mt-1 text-xs text-[#66736b]">{Array.isArray(value) ? `${value.length} recorded item${value.length === 1 ? '' : 's'}` : 'Recorded analysis context'}</div>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="mt-6 space-y-6">
+                    <ul className="grid gap-3 sm:grid-cols-2">
+                      {sourceEntries.map(([key, value], index) => {
+                        const isSelected = selectedSourceKey === key;
+                        return (
+                          <li key={key}>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedSourceKey(isSelected ? null : key)}
+                              aria-expanded={isSelected}
+                              className={`group w-full rounded-2xl border p-5 text-left transition ${
+                                isSelected
+                                  ? 'border-[#397052] bg-[#eef4ea] shadow-[0_10px_30px_rgba(16,35,25,0.08)]'
+                                  : 'border-[#102319]/12 bg-[#f9f8f0] hover:border-[#49725a]/45'
+                              }`}
+                            >
+                              <div className="flex items-start gap-4">
+                                <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${isSelected ? 'bg-[#d9e8d4] text-[#28543a]' : 'bg-[#e0eadf] text-[#397052]'}`}><FileText size={17} /></span>
+                                <div className="min-w-0">
+                                  <div className="mb-1 text-[9px] font-extrabold uppercase tracking-[.14em] text-[#7a857e]">Source {String(index + 1).padStart(2, '0')}</div>
+                                  <div className="font-semibold capitalize text-[#102319]">{key.replace(/_/g, ' ')}</div>
+                                  <div className="mt-1 text-xs text-[#66736b]">{Array.isArray(value) ? `${value.length} recorded item${value.length === 1 ? '' : 's'}` : 'Recorded analysis context'}</div>
+                                  <div className="mt-3 text-xs font-semibold text-[#397052]">{isSelected ? 'Hide source data' : 'View source data'}</div>
+                                </div>
+                              </div>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {selectedSourceEntry && (
+                      <DatabaseSourceSection
+                        sourceKey={selectedSourceEntry[0]}
+                        value={selectedSourceEntry[1]}
+                        defaultOpen
+                      />
+                    )}
+                  </div>
                 ) : (
                   <div className="mt-6 rounded-2xl border border-[#102319]/10 bg-[#f3f2e9] p-5 text-sm leading-6 text-[#5e6b63]">No supporting source bundle is available for this conversation. The answer remains visible, but its underlying evidence cannot be inspected.</div>
                 )}
@@ -469,7 +521,6 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
         </div>
       )}
 
-      <ShowTheMathModal isOpen={showTheMathModalOpen} onClose={() => setShowTheMathModalOpen(false)} data={modalData} loading={loadingShowTheMath} error={showTheMathError} />
     </section>
   );
 }

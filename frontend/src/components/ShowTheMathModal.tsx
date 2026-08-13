@@ -77,6 +77,25 @@ function TruncatablePre({ text, maxLength = 2000 }: { text: string; maxLength?: 
   );
 }
 
+export function DatabaseSourceSection({
+  sourceKey,
+  value,
+  defaultOpen = false,
+}: {
+  sourceKey: string;
+  value: unknown;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <CollapsibleSection title={sourceKey.replace(/_/g, ' ')} defaultOpen={defaultOpen}>
+      <TruncatablePre
+        text={typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+        maxLength={3000}
+      />
+    </CollapsibleSection>
+  );
+}
+
 export function ShowTheMathContent({ data }: { data: Partial<ShowTheMathData> | null }) {
   if (!data) return null;
   return (
@@ -142,12 +161,7 @@ export function ShowTheMathContent({ data }: { data: Partial<ShowTheMathData> | 
         <CollapsibleSection title="Database data">
           <div className="space-y-4">
             {Object.entries(data.databaseData).map(([key, value]) => (
-              <CollapsibleSection key={key} title={key.replace(/_/g, ' ')}>
-                <TruncatablePre
-                  text={typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
-                  maxLength={3000}
-                />
-              </CollapsibleSection>
+              <DatabaseSourceSection key={key} sourceKey={key} value={value} />
             ))}
           </div>
         </CollapsibleSection>
@@ -202,7 +216,7 @@ function formatDataAsText(data: Partial<ShowTheMathData>): string {
   return sections.join('');
 }
 
-function downloadAsText(data: Partial<ShowTheMathData>) {
+export function downloadShowTheMathAsText(data: Partial<ShowTheMathData>) {
   const text = formatDataAsText(data);
   const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -241,7 +255,7 @@ export default function ShowTheMathModal({ isOpen, onClose, data, loading, error
             {canDownload && (
               <button
                 type="button"
-                onClick={() => downloadAsText(data!)}
+                onClick={() => downloadShowTheMathAsText(data!)}
                 className="inline-flex items-center gap-2 rounded-full border border-[#102319]/15 px-3.5 py-2 text-sm font-semibold text-[#486657] transition hover:bg-[#f3f2e9] hover:text-[#102319]"
                 aria-label="Download as text file"
               >
