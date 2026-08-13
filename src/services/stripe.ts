@@ -13,6 +13,10 @@ import { getPrismaClient } from '../prisma-client';
 import { sendWelcomeEmail, sendTierChangeEmail, sendCancellationEmail } from './stripe-email';
 import { analytics } from '../analytics/heycatch';
 
+function isUniqueConstraintError(error: unknown): error is { code: string } {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
+}
+
 export class StripeService {
   /**
    * Generate success URL for checkout session
@@ -191,38 +195,39 @@ export class StripeService {
       ? new Date(subscription.current_period_end * 1000)
       : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // Default to 30 days from now
 
-    // Stripe can retry or replay this event. Continue syncing subscription and
-    // user state, but only run one-time side effects for the first delivery.
-    const existingSubscription = await prisma.subscription.findUnique({
-      where: { stripeSubscriptionId: subscriptionId },
-      select: { id: true }
-    });
-    const isNewSubscription = !existingSubscription;
+    const subscriptionData = {
+      userId: user.id,
+      stripeCustomerId: customerId,
+      tier,
+      status: subscription.status,
+      currentPeriodStart,
+      currentPeriodEnd,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end,
+    };
 
-    // The registration callback and this webhook can race. Upsert makes either
-    // delivery order safe and preserves the Stripe subscription as the source of truth.
-    await prisma.subscription.upsert({
-      where: { stripeSubscriptionId: subscriptionId },
-      update: {
-        userId: user.id,
-        stripeCustomerId: customerId,
-        tier: tier,
-        status: subscription.status,
-        currentPeriodStart: currentPeriodStart,
-        currentPeriodEnd: currentPeriodEnd,
-        cancelAtPeriodEnd: subscription.cancel_at_period_end,
-      },
-      create: {
-        userId: user.id,
-        stripeCustomerId: customerId,
-        stripeSubscriptionId: subscriptionId,
-        tier: tier,
-        status: subscription.status,
-        currentPeriodStart: currentPeriodStart,
-        currentPeriodEnd: currentPeriodEnd,
-        cancelAtPeriodEnd: subscription.cancel_at_period_end,
+    // Claim first delivery with an atomic insert. A separate read followed by
+    // upsert lets concurrent Stripe deliveries both run one-time side effects.
+    let isNewSubscription = false;
+    try {
+      await prisma.subscription.create({
+        data: {
+          ...subscriptionData,
+          stripeSubscriptionId: subscriptionId,
+        }
+      });
+      isNewSubscription = true;
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) {
+        throw error;
       }
-    });
+
+      // Registration or another delivery created the record first. Continue
+      // syncing current Stripe state, but do not repeat welcome/analytics.
+      await prisma.subscription.update({
+        where: { stripeSubscriptionId: subscriptionId },
+        data: subscriptionData
+      });
+    }
 
     // Update user subscription status
     await prisma.user.update({

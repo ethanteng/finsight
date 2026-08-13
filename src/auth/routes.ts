@@ -176,14 +176,9 @@ router.post('/register', async (req: Request, res: Response) => {
             });
             const isNewSubscription = !existingSubscription;
 
-            await prisma.user.update({
-              where: { id: user.id },
-              data: {
-                stripeCustomerId: customer.id,
-                subscriptionStatus
-              }
-            });
-
+            // Persist the subscription before exposing the Stripe customer ID.
+            // The webhook cannot find this user until the record it would update
+            // already exists, preventing both paths from claiming first delivery.
             await prisma.subscription.upsert({
               where: { stripeSubscriptionId: subscription.id },
               update: {
@@ -204,6 +199,14 @@ router.post('/register', async (req: Request, res: Response) => {
                 currentPeriodStart,
                 currentPeriodEnd,
                 cancelAtPeriodEnd: subscription.cancel_at_period_end || false
+              }
+            });
+
+            await prisma.user.update({
+              where: { id: user.id },
+              data: {
+                stripeCustomerId: customer.id,
+                subscriptionStatus
               }
             });
 

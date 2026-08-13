@@ -201,8 +201,7 @@ describe('StripeService', () => {
       };
       
       mockPrisma.user.findFirst.mockResolvedValue(mockUser);
-      mockPrisma.subscription.findUnique.mockResolvedValue(null);
-      mockPrisma.subscription.upsert.mockResolvedValue({ id: 'sub_123' });
+      mockPrisma.subscription.create.mockResolvedValue({ id: 'sub_123' });
       mockPrisma.user.update.mockResolvedValue({ id: 'user_123' });
 
       const eventData = {
@@ -222,7 +221,7 @@ describe('StripeService', () => {
       expect(mockPrisma.user.findFirst).toHaveBeenCalledWith({
         where: { stripeCustomerId: 'cus_test_123' }
       });
-      expect(mockPrisma.subscription.upsert).toHaveBeenCalled();
+      expect(mockPrisma.subscription.create).toHaveBeenCalled();
       expect(mockPrisma.user.update).toHaveBeenCalled();
       expect(sendWelcomeEmail).toHaveBeenCalledWith('test@example.com', 'standard');
       expect(analytics.trackEvent).toHaveBeenCalledWith(
@@ -240,8 +239,8 @@ describe('StripeService', () => {
         id: 'user_123',
         email: 'test@example.com'
       });
-      mockPrisma.subscription.findUnique.mockResolvedValue({ id: 'sub_123' });
-      mockPrisma.subscription.upsert.mockResolvedValue({ id: 'sub_123' });
+      mockPrisma.subscription.create.mockRejectedValue({ code: 'P2002' });
+      mockPrisma.subscription.update.mockResolvedValue({ id: 'sub_123' });
       mockPrisma.user.update.mockResolvedValue({ id: 'user_123' });
 
       await stripeService.processWebhookEvent('customer.subscription.created', {
@@ -256,7 +255,13 @@ describe('StripeService', () => {
         }
       });
 
-      expect(mockPrisma.subscription.upsert).toHaveBeenCalled();
+      expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
+        where: { stripeSubscriptionId: 'sub_test_123' },
+        data: expect.objectContaining({
+          userId: 'user_123',
+          status: 'trialing'
+        })
+      });
       expect(mockPrisma.user.update).toHaveBeenCalled();
       expect(sendWelcomeEmail).not.toHaveBeenCalled();
       expect(analytics.setIdentity).not.toHaveBeenCalled();
