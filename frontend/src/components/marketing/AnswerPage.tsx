@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { AnswerPageData, RetirementScenario, WithdrawalScenario } from "@/lib/answer-pages";
+import type { AnswerPageData, RetirementMilestone, RetirementScenario, WithdrawalScenario } from "@/lib/answer-pages";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { SiteFooter, SiteHeader } from "./SiteShell";
 
@@ -18,13 +18,21 @@ export function AnswerBreadcrumbs({ items }: { items: AnswerPageData["breadcrumb
   );
 }
 
-export function WithdrawalScenarioTable({ caption, scenarios }: { caption: string; scenarios: WithdrawalScenario[] }) {
+export function WithdrawalScenarioTable({
+  caption,
+  scenarios,
+  columns = ["Initial rate", "Per year", "Per month", "How to read it"],
+}: {
+  caption: string;
+  scenarios: WithdrawalScenario[];
+  columns?: [string, string, string, string];
+}) {
   return (
     <div className="answer-table-wrap">
       <table className="answer-table">
         <caption>{caption}</caption>
         <thead>
-          <tr><th scope="col">Initial rate</th><th scope="col">Per year</th><th scope="col">Per month</th><th scope="col">How to read it</th></tr>
+          <tr>{columns.map((column) => <th scope="col" key={column}>{column}</th>)}</tr>
         </thead>
         <tbody>
           {scenarios.map((scenario) => (
@@ -38,6 +46,23 @@ export function WithdrawalScenarioTable({ caption, scenarios }: { caption: strin
         </tbody>
       </table>
     </div>
+  );
+}
+
+export function RetirementTimeline({ ariaLabel, items }: { ariaLabel: string; items: RetirementMilestone[] }) {
+  return (
+    <ol className="answer-timeline" aria-label={ariaLabel}>
+      {items.map((item) => (
+        <li key={item.age}>
+          <div><span>AGE</span><strong>{item.age}</strong></div>
+          <article>
+            <small>{item.label}</small>
+            <h3>{item.title}</h3>
+            <p>{item.body}</p>
+          </article>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -101,6 +126,26 @@ function RelatedAnswerCard({ item }: { item: AnswerPageData["relatedAnswers"][nu
 }
 
 export default function AnswerPage({ page }: { page: AnswerPageData }) {
+  const exampleSection = page.exampleSection ?? {
+    tocLabel: "A simple example",
+    kicker: "PUT INCOME SOURCES TOGETHER",
+    heading: "Subtract the income your portfolio does not need to provide.",
+    intro: "Retirement spending can be funded by several sources. The portfolio only needs to cover the gap between the income you want and reliable income from Social Security, pensions, or other sources.",
+  };
+  const factorsSection = page.factorsSection ?? {
+    kicker: "THE BALANCE IS ONLY ONE INPUT",
+    heading: "Six things that can change the answer.",
+  };
+  const checklistSection = page.checklistSection ?? {
+    kicker: "TURN THE RULE OF THUMB INTO A PLAN",
+    heading: "Test the years, not just the first withdrawal.",
+    intro: "A useful retirement model follows cash flow over time and makes uncertainty visible. It should show which assumption moved the answer and what you could change.",
+  };
+  const methodology = page.methodology ?? [
+    "This page uses simple, deterministic arithmetic to illustrate first-year withdrawals. It does not assume a guaranteed return or label any withdrawal rate “safe.” Dollar examples are nominal, before fees, and before tax unless stated otherwise.",
+    "Official rules and benefit amounts can change. Confirm current information with the linked agencies and consider a qualified professional for tax, legal, or investment advice.",
+  ];
+
   return (
     <main className="marketing-site answer-page">
       <SiteHeader />
@@ -118,7 +163,7 @@ export default function AnswerPage({ page }: { page: AnswerPageData }) {
           <div><span className="brand-mark small" aria-hidden="true">L</span><b>THE SHORT ANSWER</b><span>ILLUSTRATIVE</span></div>
           <h2>{page.directAnswer}</h2>
           <p>{page.directAnswerDetail}</p>
-          <a href="#portfolio-support">See the numbers <span aria-hidden="true">↓</span></a>
+          <a href="#portfolio-support">{page.withdrawalSection.linkLabel ?? "See the numbers"} <span aria-hidden="true">↓</span></a>
         </article>
       </header>
 
@@ -134,7 +179,7 @@ export default function AnswerPage({ page }: { page: AnswerPageData }) {
         <aside className="answer-toc" aria-label="On this page">
           <b>ON THIS PAGE</b>
           <a href="#portfolio-support">{page.withdrawalSection.tocLabel}</a>
-          <a href="#simple-example">A simple example</a>
+          <a href="#simple-example">{exampleSection.tocLabel}</a>
           <a href="#what-changes-the-answer">What changes the answer</a>
           <a href="#test-your-plan">How to test your plan</a>
           <a href="#related-questions">Related questions</a>
@@ -143,25 +188,26 @@ export default function AnswerPage({ page }: { page: AnswerPageData }) {
 
         <article className="answer-content">
           <section id="portfolio-support">
-            <p className="section-kicker">START WITH THE RANGE</p>
+            <p className="section-kicker">{page.withdrawalSection.kicker ?? "START WITH THE RANGE"}</p>
             <h2>{page.withdrawalSection.heading}</h2>
-            <p className="answer-lede">The first useful calculation is simple: multiply the portfolio by a starting withdrawal rate. This shows what the investments would provide in year one before taxes. It does not predict how markets will behave or promise that a given rate will last for life.</p>
-            <WithdrawalScenarioTable caption={page.withdrawalSection.tableCaption} scenarios={page.withdrawalScenarios} />
+            <p className="answer-lede">{page.withdrawalSection.lede ?? "The first useful calculation is simple: multiply the portfolio by a starting withdrawal rate. This shows what the investments would provide in year one before taxes. It does not predict how markets will behave or promise that a given rate will last for life."}</p>
+            {page.timeline && <RetirementTimeline ariaLabel={page.timeline.ariaLabel} items={page.timeline.items} />}
+            <WithdrawalScenarioTable caption={page.withdrawalSection.tableCaption} scenarios={page.withdrawalScenarios} columns={page.withdrawalSection.tableColumns} />
             <div className="answer-note"><b>{page.withdrawalSection.noteTitle}</b><p>{page.withdrawalSection.noteBody}</p></div>
           </section>
 
           <section id="simple-example">
-            <p className="section-kicker">PUT INCOME SOURCES TOGETHER</p>
-            <h2>Subtract the income your portfolio does not need to provide.</h2>
-            <p>Retirement spending can be funded by several sources. The portfolio only needs to cover the gap between the income you want and reliable income from Social Security, pensions, or other sources.</p>
+            <p className="section-kicker">{exampleSection.kicker}</p>
+            <h2>{exampleSection.heading}</h2>
+            <p>{exampleSection.intro}</p>
             <CalculationDisplay example={page.example} />
             <RetirementScenarioTable caption={page.scenarioTableCaption} scenarios={page.retirementScenarios} />
             <p className="table-footnote">{page.scenarioTableFootnote}</p>
           </section>
 
           <section id="what-changes-the-answer">
-            <p className="section-kicker">THE BALANCE IS ONLY ONE INPUT</p>
-            <h2>Six things that can change the answer.</h2>
+            <p className="section-kicker">{factorsSection.kicker}</p>
+            <h2>{factorsSection.heading}</h2>
             <div className="answer-factor-grid">
               {page.factors.map((factor) => (
                 <article key={factor.number}><span>{factor.number}</span><h3>{factor.title}</h3><p>{factor.body}</p></article>
@@ -171,9 +217,9 @@ export default function AnswerPage({ page }: { page: AnswerPageData }) {
 
           <section id="test-your-plan" className="answer-checklist-section">
             <div>
-              <p className="section-kicker light">TURN THE RULE OF THUMB INTO A PLAN</p>
-              <h2>Test the years, not just the first withdrawal.</h2>
-              <p>A useful retirement model follows cash flow over time and makes uncertainty visible. It should show which assumption moved the answer and what you could change.</p>
+              <p className="section-kicker light">{checklistSection.kicker}</p>
+              <h2>{checklistSection.heading}</h2>
+              <p>{checklistSection.intro}</p>
             </div>
             <ol>
               {page.checkpoints.map((checkpoint, index) => <li key={checkpoint}><span>{String(index + 1).padStart(2, "0")}</span>{checkpoint}</li>)}
@@ -211,8 +257,7 @@ export default function AnswerPage({ page }: { page: AnswerPageData }) {
           <div>
             <p className="section-kicker light">SOURCES + METHODOLOGY</p>
             <h2>Built to show its assumptions.</h2>
-            <p>This page uses simple, deterministic arithmetic to illustrate first-year withdrawals. It does not assume a guaranteed return or label any withdrawal rate “safe.” Dollar examples are nominal, before fees, and before tax unless stated otherwise.</p>
-            <p>Official rules and benefit amounts can change. Confirm current information with the linked agencies and consider a qualified professional for tax, legal, or investment advice.</p>
+            {methodology.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
           </div>
           <ol>
             {page.sources.map((source, index) => (

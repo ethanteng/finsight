@@ -24,6 +24,7 @@ Households planning retirement and major money decisions who are tired of dashbo
 - Use cases: https://asklinc.com/use-cases
 - Retirement answer — Can I retire with $1 million?: https://asklinc.com/can-i-retire-with-1-million
 - Retirement answer — Can I retire with $2 million?: https://asklinc.com/can-i-retire-with-2-million
+- Retirement answer — Can I retire at 55?: https://asklinc.com/can-i-retire-at-55
 - About / founder: https://asklinc.com/about
 - How we protect your data: https://asklinc.com/how-we-protect-your-data
 - Show the math (transparency): https://asklinc.com/blog/show-the-math-how-ask-linc-makes-ai-financial-analysis-transparent

@@ -541,6 +541,17 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
 .answer-content h3 { font-family: var(--font-display); letter-spacing: -.035em; }
 .answer-content > section > p:not(.section-kicker),.answer-calculation-body > p { max-width: 790px; color: #526159; font-size: 16px; line-height: 1.75; }
 .answer-content .answer-lede { color: var(--ink) !important; font-family: Georgia,serif; font-size: 20px !important; line-height: 1.72 !important; }
+.answer-timeline { position: relative; margin: 44px 0; padding: 0; border: 1px solid #adb9ac; border-radius: 20px; background: rgba(255,255,255,.38); list-style: none; }
+.answer-timeline::before { position: absolute; top: 44px; bottom: 44px; left: 60px; width: 1px; background: #aebbae; content: ""; }
+.answer-timeline li { position: relative; display: grid; grid-template-columns: 120px 1fr; min-height: 150px; border-bottom: 1px solid #cbd3c8; }
+.answer-timeline li:last-child { border-bottom: 0; }
+.answer-timeline li > div { position: relative; z-index: 1; display: flex; width: 70px; height: 70px; align-self: center; justify-self: center; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #6f8d78; border-radius: 50%; background: var(--cream); color: #35654b; box-shadow: 3px 3px 0 #d1dbcf; }
+.answer-timeline li > div span { font-size: 7px; font-weight: 850; letter-spacing: .14em; }
+.answer-timeline li > div strong { margin-top: 2px; font-family: var(--font-display); font-size: 22px; letter-spacing: -.04em; }
+.answer-timeline article { align-self: center; padding: 25px 30px 25px 10px; }
+.answer-timeline article small { color: #4d735c; font-size: 8px; font-weight: 850; letter-spacing: .13em; text-transform: uppercase; }
+.answer-timeline article h3 { margin: 8px 0 7px; font-size: 22px; }
+.answer-timeline article p { margin: 0; color: #59675e; font-size: 12px; line-height: 1.65; }
 .answer-table-wrap { margin: 42px 0 26px; overflow-x: auto; border: 1px solid #adb9ac; border-radius: 18px; background: var(--cream); box-shadow: 6px 6px 0 #d1dbcf; }
 .answer-table { width: 100%; min-width: 720px; border-collapse: collapse; font-size: 12px; }
 .answer-table caption { padding: 17px 20px; border-bottom: 1px solid #c9d1c6; background: #e4ecdf; color: #426653; font-size: 8px; font-weight: 850; letter-spacing: .13em; text-align: left; text-transform: uppercase; }
@@ -647,6 +658,7 @@ footer { padding-block: 55px 28px; background: #0a1912; color: white; }.footer-i
   .answer-layout { padding-block: 65px 80px; }.answer-toc { grid-template-columns: 1fr 1fr; padding: 17px; }.answer-toc a { min-height: 48px; }
   .answer-content > section { padding-bottom: 75px; }.answer-content > section + section:not(.answer-checklist-section):not(.answer-product-bridge) { padding-top: 75px; }
   .answer-content .answer-lede { font-size: 18px !important; }.answer-table-wrap { margin-inline: -9px; border-radius: 13px; box-shadow: 4px 4px 0 #d1dbcf; }.answer-table th,.answer-table td { padding: 14px; }
+  .answer-timeline { margin-inline: -9px; }.answer-timeline::before { left: 42px; }.answer-timeline li { grid-template-columns: 84px 1fr; min-height: 165px; }.answer-timeline li > div { width: 60px; height: 60px; }.answer-timeline article { padding: 22px 18px 22px 5px; }.answer-timeline article h3 { font-size: 20px; }
   .answer-note { grid-template-columns: 1fr; gap: 10px; padding: 22px; }.answer-calculation { box-shadow: 5px 5px 0 var(--ink); }.answer-calculation-body { padding: 22px; }.answer-calculation-body h3 { font-size: 25px; }
   .answer-factor-grid { grid-template-columns: 1fr; }.answer-factor-grid article { min-height: 245px; }.answer-factor-grid h3 { margin-top: 48px; }
   .answer-checklist-section { margin-bottom: 75px; padding: 30px 24px !important; border-radius: 18px; }.answer-checklist-section h2 { font-size: 33px; }.answer-product-bridge { margin-bottom: 75px; padding: 30px 24px !important; box-shadow: 5px 5px 0 #c4d48f; }.answer-product-bridge h2 { font-size: 31px; }
