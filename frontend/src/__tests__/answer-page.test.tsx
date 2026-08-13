@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import AnswerPage from "@/components/marketing/AnswerPage";
-import { buildAnswerPageSchemas, canIRetireAt55, canIRetireWithOneMillion, canIRetireWithTwoMillion } from "@/lib/answer-pages";
+import { buildAnswerPageSchemas, canIRetireAt55, canIRetireAt60, canIRetireWithOneMillion, canIRetireWithTwoMillion } from "@/lib/answer-pages";
 
 describe("evergreen answer page", () => {
   it("renders a structured retirement answer with reusable scenarios and sources", () => {
@@ -138,6 +138,40 @@ describe("evergreen answer page", () => {
     expect(schemas.article).toMatchObject({
       url: "https://asklinc.com/can-i-retire-at-55",
       headline: "Can I retire at 55?",
+    });
+  });
+
+  it("renders the age-60 benefit bridge and cross-links", () => {
+    render(<AnswerPage page={canIRetireAt60} />);
+
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Can I retire at 60?Plan the five years before Medicare—and every year after.",
+    );
+    const timeline = screen.getByRole("list", {
+      name: "Retirement planning milestones from age 60",
+    });
+    expect(within(timeline).getByText("60")).toBeInTheDocument();
+    expect(within(timeline).getByText("Earliest claiming age")).toBeInTheDocument();
+    expect(within(timeline).getByText("Delayed credits stop")).toBeInTheDocument();
+
+    const phaseTable = screen.getByRole("table", {
+      name: "Illustrative income phases for a $1.5 million starting portfolio",
+    });
+    expect(within(phaseTable).getByRole("row", { name: /Age 60–61 \$70,000 \$0 \$70,000 4\.7%/i })).toBeInTheDocument();
+    expect(within(phaseTable).getByRole("row", { name: /Age 62\+ with \$30K benefit \$70,000 \$30,000 \$40,000 2\.7%/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Receiving benefits before full retirement age/i })).toHaveAttribute(
+      "href",
+      "https://www.ssa.gov/benefits/retirement/planner/applying2.html",
+    );
+    expect(screen.getByRole("link", { name: "Retire at 60" })).toHaveAttribute(
+      "href",
+      "/can-i-retire-at-60",
+    );
+
+    const schemas = buildAnswerPageSchemas(canIRetireAt60);
+    expect(schemas.article).toMatchObject({
+      url: "https://asklinc.com/can-i-retire-at-60",
+      headline: "Can I retire at 60?",
     });
   });
 });

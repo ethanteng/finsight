@@ -61,6 +61,7 @@ const STATIC_ROUTES: StaticRoute[] = [
 
   // Evergreen answer pages (top-level routes, separate from Ghost)
   { path: '/can-i-retire-at-55', changeFrequency: 'monthly', priority: 0.9 },
+  { path: '/can-i-retire-at-60', changeFrequency: 'monthly', priority: 0.9 },
   { path: '/can-i-retire-with-1-million', changeFrequency: 'monthly', priority: 0.9 },
   { path: '/can-i-retire-with-2-million', changeFrequency: 'monthly', priority: 0.9 },
 
