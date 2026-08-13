@@ -44,6 +44,7 @@ export function SiteFooter() {
           <Link href="/use-cases">Use Cases</Link>
           <Link href="/pricing">Pricing</Link>
           <Link href="/faq">FAQ</Link>
+          <Link href="/can-i-retire-with-2-million">Retirement Answers</Link>
         </div>
         <div className="footer-column">
           <b>COMPARE</b>
