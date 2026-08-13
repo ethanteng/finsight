@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Brain, Menu, Sparkles, UserRound, X } from 'lucide-react';
+import { Menu, Sparkles, UserRound, X } from 'lucide-react';
 import FinanceQA from '../../components/FinanceQA';
 import SiteFooter from '../../components/SiteFooter';
 import { pushBeginCheckout } from '@/lib/dataLayer';
@@ -158,7 +158,7 @@ export default function DemoPageClient() {
       {/* Header */}
       <header className="sticky top-0 z-30 border-b border-[#123c2f]/10 bg-[#f5f1e8]/95 px-4 py-4 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
-          <Link href="/" className="flex items-center gap-2 font-semibold text-[#123c2f]"><span className="grid h-9 w-9 place-items-center rounded-full bg-[#123c2f] text-[#c9f46b]"><Brain size={19} /></span>Ask Linc <span className="rounded-full bg-[#fff3ce] px-2 py-1 text-[10px] uppercase tracking-wider text-[#76510f]">Demo</span></Link>
+          <Link href="/" className="flex items-center gap-2 font-semibold text-[#123c2f]"><span className="grid h-9 w-9 place-items-center rounded-[10px_10px_10px_3px] bg-[#123c2f] text-[#c9f46b]">L</span>Ask Linc <span className="rounded-full bg-[#fff3ce] px-2 py-1 text-[10px] uppercase tracking-wider text-[#76510f]">Demo</span></Link>
           <div className="flex items-center gap-2">
             <button onClick={() => handleBuyClick('premium')} disabled={isCheckoutLoading} className="hidden rounded-full bg-[#c9f46b] px-5 py-2.5 text-sm font-semibold text-[#123c2f] transition hover:bg-[#b9e55e] sm:inline-flex">{isCheckoutLoading ? 'Opening…' : <><Sparkles className="mr-2" size={16} />Get started</>}</button>
             <Link href="/profile?demo=true" className="rounded-full border border-[#123c2f]/15 p-2.5 text-[#123c2f]" aria-label="View demo profile"><UserRound size={18} /></Link>

@@ -2,15 +2,15 @@ import type { Metadata } from 'next';
 import MarketingSubpage from '../../components/marketing/MarketingSubpage';
 
 export const metadata: Metadata = {
-  title: 'Use Cases — Ask Linc Financial Reasoning',
-  description: 'Explore how Ask Linc helps with retirement planning, home buying, portfolio analysis, and market impact analysis.',
-  keywords: ['financial use cases', 'retirement planning', 'home buying', 'portfolio analysis', 'market impact'],
+  title: 'Plan a Home, Family, Career, and Retirement — Ask Linc',
+  description: 'See how Ask Linc helps people plan home buying, parental leave and childcare, investments, financial stress, and retirement.',
+  keywords: ['financial planning', 'retirement planning', 'home buying', 'parental leave planning', 'childcare costs', 'portfolio analysis'],
   alternates: {
     canonical: 'https://asklinc.com/use-cases',
   },
   openGraph: {
-    title: 'Use Cases — Ask Linc Financial Reasoning',
-    description: 'Explore how Ask Linc helps with retirement planning, home buying, portfolio analysis, and market impact analysis.',
+    title: 'Plan a Home, Family, Career, and Retirement — Ask Linc',
+    description: 'See how Ask Linc helps people plan home buying, parental leave and childcare, investments, financial stress, and retirement.',
     type: 'website',
     url: 'https://asklinc.com/use-cases',
     siteName: 'Ask Linc',
@@ -19,14 +19,14 @@ export const metadata: Metadata = {
         url: 'https://asklinc.com/og-image.jpg',
         width: 1200,
         height: 630,
-        alt: 'Ask Linc Use Cases - Financial Reasoning Platform',
+        alt: 'Ask Linc planning use cases for big life decisions',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Use Cases — Ask Linc Financial Reasoning',
-    description: 'Explore how Ask Linc helps with retirement planning, home buying, portfolio analysis, and market impact analysis.',
+    title: 'Plan a Home, Family, Career, and Retirement — Ask Linc',
+    description: 'See how Ask Linc helps people plan home buying, parental leave and childcare, investments, financial stress, and retirement.',
     images: ['https://asklinc.com/og-image.jpg'],
   },
   robots: {

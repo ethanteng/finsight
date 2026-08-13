@@ -14,7 +14,7 @@ const organizationSchema = {
   "name": "Ask Linc",
   "url": "https://asklinc.com",
   "logo": "https://asklinc.com/logo.png",
-  "description": "AI-powered financial reasoning platform that helps users understand and optimize their financial health using real data, goals, and live market conditions.",
+  "description": "Ask Linc helps people plan big financial decisions such as buying a home, growing a family, changing careers, and retirement using their real accounts.",
   "sameAs": [
     "https://bsky.app/profile/asklinc.com",
     "https://asklinc.substack.com/",
@@ -39,15 +39,7 @@ const websiteSchema = {
   "@type": "WebSite",
   "name": "Ask Linc",
   "url": "https://asklinc.com",
-  "description": "AI Financial Reasoning Platform - Get decisions-ready answers about your finances using your real data, goals, and live market conditions.",
-  "potentialAction": {
-    "@type": "SearchAction",
-    "target": {
-      "@type": "EntryPoint",
-      "urlTemplate": "https://asklinc.com/search?q={search_term_string}"
-    },
-    "query-input": "required name=search_term_string"
-  }
+  "description": "Plan a home purchase, a growing family, a career change, and retirement using your real accounts and calculations you can inspect."
 };
 
 export const metadata: Metadata = {

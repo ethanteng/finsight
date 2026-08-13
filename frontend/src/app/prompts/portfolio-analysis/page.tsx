@@ -5,9 +5,9 @@ import { PROMPT_PAGES } from "@/lib/promptExamples";
 const config = PROMPT_PAGES.find((p) => p.slug === "portfolio-analysis")!;
 
 export const metadata: Metadata = {
-  title: "Portfolio Analysis — Example Prompt | Ask Linc",
+  title: "Are Our Investments Taking Too Much Risk? | Ask Linc",
   description:
-    "See a real example of how Ask Linc assesses portfolio balance and asset allocation. Get your own personalized analysis.",
+    "See an illustrative example that connects investment risk to a household retirement goal.",
   alternates: {
     canonical: "https://asklinc.com/prompts/portfolio-analysis",
   },

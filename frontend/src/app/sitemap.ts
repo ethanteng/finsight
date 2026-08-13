@@ -35,6 +35,7 @@ const STATIC_ROUTES: StaticRoute[] = [
   { path: '/contact', changeFrequency: 'yearly', priority: 0.4 },
 
   // Competitor comparisons
+  { path: '/vs', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/vs/origin', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/vs/portfoliopilot', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/vs/monarch', changeFrequency: 'monthly', priority: 0.8 },
@@ -44,6 +45,7 @@ const STATIC_ROUTES: StaticRoute[] = [
   { path: '/use-cases/retirement', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/use-cases/portfolio-analysis', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/use-cases/home-buying', changeFrequency: 'monthly', priority: 0.8 },
+  { path: '/use-cases/family-planning', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/use-cases/financial-stress-testing', changeFrequency: 'monthly', priority: 0.8 },
 
   { path: '/prompts', changeFrequency: 'monthly', priority: 0.8 },

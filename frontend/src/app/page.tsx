@@ -8,21 +8,21 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
   const params = await searchParams;
   const ref = params.ref;
   
-  let description = 'Ask Linc is the AI financial reasoning assistant for households planning retirement — decisions-ready answers from your real data and live markets, not charts.';
+  let description = 'Ask Linc helps you plan big financial decisions—buying a home, growing a family, changing careers, and retirement—using your real accounts and calculations you can inspect.';
   
   if (ref === 'blog.asklinc.com') {
-    description = 'Welcome blog readers! Ask Linc is the AI financial reasoning assistant for households planning retirement — decisions-ready answers, not charts.';
+    description = 'Ask Linc helps you plan a home purchase, a growing family, a career change, and retirement using your real accounts and calculations you can inspect.';
   }
   
   return {
-    title: 'Ask Linc — AI Financial Reasoning Platform',
+    title: 'Ask Linc — Plan Big Financial Decisions With Your Real Numbers',
     description: description,
-    keywords: ['AI financial advisor', 'personal finance AI', 'financial planning', 'money management', 'investment advice', 'financial analysis', 'AI financial assistant'],
+    keywords: ['financial planning', 'home affordability planning', 'family financial planning', 'retirement planning', 'career change planning', 'personal finance AI'],
     alternates: {
       canonical: 'https://asklinc.com',
     },
     openGraph: {
-      title: 'Ask Linc — AI Financial Reasoning Platform',
+      title: 'Ask Linc — Plan Big Financial Decisions With Your Real Numbers',
       description: description,
       type: 'website',
       url: 'https://asklinc.com',
@@ -32,13 +32,13 @@ export async function generateMetadata({ searchParams }: { searchParams: Promise
           url: 'https://asklinc.com/og-image.jpg',
           width: 1200,
           height: 630,
-          alt: 'Ask Linc - AI Financial Reasoning Platform',
+          alt: 'Ask Linc financial planning for big life decisions',
         },
       ],
     },
     twitter: {
       card: 'summary_large_image',
-      title: 'Ask Linc — AI Financial Reasoning Platform',
+      title: 'Ask Linc — Plan Big Financial Decisions With Your Real Numbers',
       description: description,
       images: ['https://asklinc.com/og-image.jpg'],
     },

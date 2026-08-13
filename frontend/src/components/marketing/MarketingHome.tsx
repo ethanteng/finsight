@@ -7,16 +7,16 @@ import { SiteFooter, SiteHeader } from "./SiteShell";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 
 const scenarios = [
-  "Can we retire at 60?",
-  "Pay off the mortgage?",
-  "Can we afford the lake house?",
-  "What if the market drops 20%?",
+  "How much house can we afford?",
+  "Can one of us take parental leave?",
+  "Are we saving enough to retire?",
+  "Can I take a lower-paying job?",
 ];
 
 const ageScenarios = {
-  58: { portfolio: "$5.7M", surplus: "+$640K", odds: "68–76%", note: "Possible, with less margin for a prolonged downturn." },
-  60: { portfolio: "$6.3M", surplus: "+$1.7M", odds: "75–85%", note: "The strongest balance of time, lifestyle, and resilience." },
-  62: { portfolio: "$7.1M", surplus: "+$2.8M", odds: "86–92%", note: "More cushion than your current goals appear to require." },
+  58: { portfolio: "$1.8M", surplus: "−$100K", odds: "62–72%", note: "Possible, but the plan has little room for a long downturn." },
+  60: { portfolio: "$2.1M", surplus: "+$200K", odds: "74–84%", note: "This keeps the planned lifestyle with a more useful cushion." },
+  62: { portfolio: "$2.4M", surplus: "+$500K", odds: "84–91%", note: "Working two more years adds flexibility, but may be more than the plan needs." },
 };
 
 export default function Home() {
@@ -30,11 +30,11 @@ export default function Home() {
 
       <section className="hero shell" id="top">
         <div className="hero-copy">
-          <div className="eyebrow"><span className="pulse" /> Your AI financial analyst</div>
-          <h1>Your money has an answer. <em>Linc shows the work.</em></h1>
+          <div className="eyebrow"><span className="pulse" /> Financial planning for real life</div>
+          <h1>See what a big decision changes. <em>Before you make it.</em></h1>
           <p className="hero-subhead">
-            Ask the hard questions about retirement, debt, and big decisions.
-            Get a clear recommendation grounded in your real finances and today&apos;s market.
+            Buying a home, growing your family, changing jobs, or planning retirement?
+            Ask Linc uses your accounts to show what you can afford, what else changes, and what to do next.
           </p>
           <div className="hero-actions">
             <MarketingGetStartedButton className="button button-primary" />
@@ -44,15 +44,15 @@ export default function Home() {
 
         <div className="answer-wrap" id="answer">
           <div className="context-chip context-chip-a">
-            <span>LIVE</span>
-            10Y Treasury&nbsp; 4.18%
+            <span>ILLUSTRATIVE</span>
+            30Y mortgage&nbsp; 6.4%
           </div>
           <article className="answer-card" aria-label="Example Ask Linc answer">
             <div className="answer-topbar">
               <div className="mini-brand"><span className="brand-mark small">L</span> Ask Linc</div>
               <div className="context-chip context-chip-inline context-chip-b">
-                <span>LINKED</span>
-                8 accounts
+                <span>SAMPLE</span>
+                6 accounts
               </div>
               <span className="sample-label">SAMPLE ANSWER</span>
             </div>
@@ -60,22 +60,22 @@ export default function Home() {
               <span className="avatar">
                 <Image src="/images/ethan-teng-cartoon.webp" alt="Ethan Teng" fill sizes="27px" />
               </span>
-              <p>Can we retire at 60 if rates stay higher for longer?</p>
+              <p>Can we afford a $700K home without pausing retirement savings?</p>
             </div>
             <div className="answer-body">
-              <p className="verdict"><span className="check">✓</span> Yes—with room to spare.</p>
+              <p className="verdict"><span className="check">✓</span> Yes—if you keep at least $45K in cash.</p>
               <p className="answer-summary">
-                At 60, you&apos;re projected to have <strong>$1.7M more</strong> than your plan requires.
-                The bigger risk isn&apos;t higher rates—it&apos;s having 92% in stocks this close to retirement.
+                A 15% down payment leaves a six-month emergency fund and keeps both retirement contributions unchanged.
+                Putting 20% down would leave too little cash after closing.
               </p>
               <div className="metrics">
-                <div><span>Projected at 60</span><strong>$6.3M</strong></div>
-                <div><span>Plan requires</span><strong>$4.6M</strong></div>
-                <div><span>Success range</span><strong>75–85%</strong></div>
+                <div><span>Home price</span><strong>$700K</strong></div>
+                <div><span>Cash after closing</span><strong>$48K</strong></div>
+                <div><span>Retirement saving</span><strong>On track</strong></div>
               </div>
               <div className="recommendation">
                 <span className="rec-label">LINC&apos;S TAKE</span>
-                <p>Target 60. Clear the $444K debt by 53, then move toward 70% equities.</p>
+                <p>Put 15% down, keep total housing costs below $4,800 a month, and leave both 401(k) contributions alone.</p>
               </div>
               <button className="math-toggle" type="button" onClick={() => setShowMath(!showMath)} aria-expanded={showMath}>
                 <span>∑</span> {showMath ? "Hide the math" : "Show the math"}
@@ -83,11 +83,11 @@ export default function Home() {
               </button>
               {showMath && (
                 <div className="math-panel">
-                  <div><span>Current invested assets</span><b>$3.18M</b></div>
-                  <div><span>Annual savings</span><b>$82K</b></div>
-                  <div><span>Retirement spending</span><b>$140K</b></div>
-                  <div><span>Inflation assumption</span><b>2.5%</b></div>
-                  <p>Calculated from linked sample accounts using a range of return and inflation assumptions.</p>
+                  <div><span>Cash available</span><b>$165K</b></div>
+                  <div><span>15% down payment</span><b>−$105K</b></div>
+                  <div><span>Closing + moving</span><b>−$12K</b></div>
+                  <div><span>Cash remaining</span><b>$48K</b></div>
+                  <p>Illustrative calculation using sample accounts and a 6.4% mortgage rate.</p>
                 </div>
               )}
             </div>
@@ -97,10 +97,10 @@ export default function Home() {
 
       <section className="proof-strip" aria-label="Product trust signals">
         <div className="shell proof-grid">
-          <p><strong>12,000+</strong><span>institutions connect via Plaid</span></p>
+          <p><strong>$9/month</strong><span>cancel anytime</span></p>
           <p><strong>Read-only</strong><span>Linc can&apos;t move your money</span></p>
-          <p><strong>Inspectable</strong><span>Every number shows its work</span></p>
-          <p><strong>Private</strong><span>Your data never trains AI</span></p>
+          <p><strong>Clear assumptions</strong><span>see the inputs and calculations</span></p>
+          <p><strong>Private by design</strong><span>sensitive labels removed before AI analysis</span></p>
         </div>
       </section>
 
@@ -115,29 +115,29 @@ export default function Home() {
         <div className="section-heading split-heading">
           <div>
             <p className="section-kicker">THE DIFFERENCE</p>
-            <h2>One financial life.<br />One connected answer.</h2>
+            <h2>One decision affects<br />the rest of your plan.</h2>
           </div>
-          <p>Most tools show you pieces. Linc reasons across the whole picture—so an answer about your mortgage already understands your retirement plan.</p>
+          <p>A larger home can change childcare options, emergency savings, and retirement. Linc checks those tradeoffs together instead of treating each account as a separate chart.</p>
         </div>
         <div className="model-grid">
           <article className="model-card model-inputs">
             <div className="model-card-label">YOUR FINANCIAL MODEL</div>
             <div className="orbit">
               <div className="orbit-core"><span className="brand-mark">L</span><b>Your plan</b></div>
-              <span className="orbit-item orbit-a">Investments <b>$3.18M</b></span>
-              <span className="orbit-item orbit-b">Mortgage <b>$444K</b></span>
-              <span className="orbit-item orbit-c">Income <b>$310K</b></span>
-              <span className="orbit-item orbit-d">Goals <b>Retire at 60</b></span>
+              <span className="orbit-item orbit-a">Cash <b>$92K</b></span>
+              <span className="orbit-item orbit-b">Retirement <b>$285K</b></span>
+              <span className="orbit-item orbit-c">Income <b>$210K</b></span>
+              <span className="orbit-item orbit-d">Goal <b>Buy in 18 mo.</b></span>
             </div>
             <p>Cash, debt, property, taxes, goals, and risk stay connected—not trapped in separate tabs.</p>
           </article>
           <article className="model-card market-card">
-            <div className="model-card-label">TODAY&apos;S MARKET</div>
+            <div className="model-card-label">ILLUSTRATIVE MARKET SNAPSHOT</div>
             <div className="market-visual">
               <div className="signal signal-up"><span>10Y TREASURY</span><b>4.18%</b><i>↗</i></div>
               <div className="signal"><span>CORE INFLATION</span><b>2.7%</b><i>→</i></div>
               <div className="signal signal-down"><span>S&amp;P 500</span><b>5,982</b><i>↘</i></div>
-              <div className="signal-note">Current signals shape the answer—not last year&apos;s assumptions.</div>
+              <div className="signal-note">When rates or inflation matter, Linc includes them and shows the source date.</div>
             </div>
           </article>
           <article className="model-card reasoning-card">
@@ -170,7 +170,7 @@ export default function Home() {
           <div className="scenario-card" aria-live="polite">
             <div className="scenario-card-head"><span>RETIREMENT SCENARIO</span><b>Age {retirementAge}</b></div>
             <div className="scenario-chart">
-              <div className="chart-line chart-target"><span>Plan needs $4.6M</span></div>
+              <div className="chart-line chart-target"><span>Plan needs $1.9M</span></div>
               <div className="chart-bar-wrap">
                 {[42, 52, 61, retirementAge === 58 ? 70 : retirementAge === 60 ? 78 : 88].map((height, index) => (
                   <div className="chart-bar" key={index} style={{ height: `${height}%` }}><span>{index === 4 ? activeScenario.portfolio : ""}</span></div>
@@ -191,8 +191,8 @@ export default function Home() {
         <div className="shell privacy-shell">
           <div className="privacy-copy">
             <p className="section-kicker light">PRIVACY BY DESIGN</p>
-            <h2>Your finances stay yours. Even from the AI.</h2>
-            <p>The AI never sees your bank names, account numbers, or identity. Sensitive details are stripped away before analysis.</p>
+            <h2>Use your real numbers without handing over every identifying detail.</h2>
+            <p>Account credentials stay with connection providers. Before AI analysis, Ask Linc replaces sensitive account and merchant labels with neutral tokens.</p>
             <Link className="light-link" href="/how-we-protect-your-data">See how your data is protected <span>→</span></Link>
           </div>
           <div className="privacy-flow" aria-label="How Ask Linc protects data">
@@ -204,8 +204,8 @@ export default function Home() {
           </div>
           <div className="privacy-points">
             <span><i>✓</i> Read-only access</span>
-            <span><i>✓</i> Never trains AI</span>
-            <span><i>✓</i> Delete anytime</span>
+            <span><i>✓</i> Not used for model training</span>
+            <span><i>✓</i> Disconnect anytime</span>
           </div>
         </div>
       </section>
@@ -225,7 +225,7 @@ export default function Home() {
           <p className="section-kicker">WHY I BUILT THIS</p>
           <h2>I wanted an answer I could trust with my own money.</h2>
           <p>After getting laid off, I pasted my bank statements into ChatGPT to answer tough money questions—and immediately regretted it.</p>
-          <p>Financial decisions need your real financial picture, reliable calculations, current market data, and numbers you can inspect. So I built Ask Linc.</p>
+          <p>Financial decisions need your real financial picture, reliable calculations, dated market inputs when they matter, and numbers you can inspect. So I built Ask Linc.</p>
           <Link className="text-link" href="/about">Read the full story <span>→</span></Link>
         </div>
       </section>
@@ -234,10 +234,10 @@ export default function Home() {
         <div className="shell pricing-shell">
           <div className="pricing-copy">
             <p className="section-kicker">SIMPLE PRICING</p>
-            <h2>Big decisions.<br />Small subscription.</h2>
+            <h2>Planning help before<br />the decision gets expensive.</h2>
             <p>No asset minimum. No percentage of your wealth. No sales call.</p>
             <div className="advisor-compare">
-              <span>A 1% advisor fee on $2M</span><strong>$20,000<small>/year</small></strong>
+              <span>A 1% advisor fee on $500K</span><strong>$5,000<small>/year</small></strong>
               <i>Illustrative comparison</i>
             </div>
           </div>
@@ -260,7 +260,7 @@ export default function Home() {
       <section className="final-cta">
         <div className="shell final-cta-inner">
           <p className="section-kicker light">YOUR NEXT DECISION STARTS HERE</p>
-          <h2>Ask the question your dashboard can&apos;t answer.</h2>
+          <h2>See what your next decision means for everything else.</h2>
           <MarketingGetStartedButton className="button button-primary" />
         </div>
       </section>

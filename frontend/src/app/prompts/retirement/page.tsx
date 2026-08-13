@@ -5,9 +5,9 @@ import { PROMPT_PAGES } from "@/lib/promptExamples";
 const config = PROMPT_PAGES.find((p) => p.slug === "retirement")!;
 
 export const metadata: Metadata = {
-  title: "Retirement Planning — Example Prompt | Ask Linc",
+  title: "Are We Saving Enough to Retire? — Example | Ask Linc",
   description:
-    "See a real example of how Ask Linc analyzes retirement readiness across different target ages. Get your own personalized analysis.",
+    "See an illustrative retirement answer that compares a target date, monthly saving, and lifestyle.",
   alternates: {
     canonical: "https://asklinc.com/prompts/retirement",
   },

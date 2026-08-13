@@ -1,7 +1,9 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MarketingContactForm } from "@/components/marketing/MarketingContactForm";
+import MarketingHome from "@/components/marketing/MarketingHome";
 import { SiteHeader } from "@/components/marketing/SiteShell";
+import { USE_CASE_LINKS } from "@/lib/site-nav";
 
 describe("marketing review fixes", () => {
   beforeEach(() => {
@@ -16,9 +18,12 @@ describe("marketing review fixes", () => {
     render(<SiteHeader />);
 
     const signInLink = screen.getByRole("link", { name: "Sign in" });
+    const compareLink = screen.getByRole("link", { name: "Compare" });
     expect(signInLink).toHaveAttribute("href", "/login");
     expect(signInLink.closest(".nav-actions")).not.toBeNull();
     expect(signInLink.closest(".nav-links")).toBeNull();
+    expect(compareLink).toHaveAttribute("href", "/vs");
+    expect(compareLink.closest(".nav-links")).not.toBeNull();
   });
 
   it("opens an accessible mobile menu with the primary subpages", async () => {
@@ -34,6 +39,7 @@ describe("marketing review fixes", () => {
     const mobileMenu = screen.getByLabelText("Mobile navigation");
     expect(within(mobileMenu).getByRole("link", { name: "Features" })).toHaveAttribute("href", "/features");
     expect(within(mobileMenu).getByRole("link", { name: "Use Cases" })).toHaveAttribute("href", "/use-cases");
+    expect(within(mobileMenu).getByRole("link", { name: "Compare" })).toHaveAttribute("href", "/vs");
     expect(within(mobileMenu).getByRole("link", { name: "Pricing" })).toHaveAttribute("href", "/pricing");
     expect(within(mobileMenu).getByRole("link", { name: "About" })).toHaveAttribute("href", "/about");
     expect(within(mobileMenu).getByRole("link", { name: "Sign in to Ask Linc" })).toHaveAttribute("href", "/login");
@@ -42,6 +48,19 @@ describe("marketing review fixes", () => {
 
     expect(screen.getByRole("button", { name: "Open menu" })).toHaveFocus();
     expect(screen.queryByRole("link", { name: "Sign in to Ask Linc" })).not.toBeInTheDocument();
+  });
+
+  it("grounds the homepage in recognizable life decisions", () => {
+    render(<MarketingHome />);
+
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "See what a big decision changes. Before you make it.",
+    );
+    expect(screen.getByText(/buying a home, growing your family, changing jobs/i)).toBeInTheDocument();
+    expect(USE_CASE_LINKS).toContainEqual({
+      href: "/use-cases/family-planning",
+      label: "Growing a Family",
+    });
   });
 
   it("submits the redesigned contact form through the existing API", async () => {

@@ -6,23 +6,23 @@ import { MarketingContactForm } from "./MarketingContactForm";
 import { MarketingGetStartedButton } from "./MarketingGetStartedButton";
 import { RotatingContextChips } from "./RotatingContextChips";
 import type { GhostPost } from "@/lib/ghost";
-import { getComparison } from "@/lib/comparisons";
+import { COMPARISONS, getComparison } from "@/lib/comparisons";
 
 type RouteProps = { params: Promise<{ slug: string[] }> };
 
 const faqs = [
-  ["Is this another budgeting app?", "No. Budgeting apps organize what already happened. Ask Linc helps you reason about what to do next by combining your accounts, goals, and current market conditions."],
+  ["Is this another budgeting app?", "No. Budgeting apps organize what already happened. Ask Linc helps you think through what to do next—such as how much house you can afford, whether a career change works, or how a new expense affects retirement."],
   ["Can I try it before connecting my accounts?", "Ask Linc is $9/month for full access with your own accounts. Cancel anytime."],
-  ["How do I know the AI isn’t confidently wrong?", "The numbers are produced by deterministic calculations, not improvised by the language model. Every answer can expose its inputs, assumptions, calculations, and sources."],
+  ["How do I know the AI isn’t confidently wrong?", "The numbers come from fixed, repeatable calculations rather than being improvised by the language model. You can inspect the inputs, assumptions, calculations, and sources."],
   ["Does Ask Linc give financial advice?", "Ask Linc provides informational analysis and decision support. It does not manage your money and is not a replacement for individualized investment, tax, or legal advice."],
   ["What account data can Linc access?", "Only the read-only financial data needed to answer your questions. Bank credentials are handled by connection providers and are never stored by Ask Linc."],
   ["Is my data used to train AI models?", "No. Sensitive details are anonymized before analysis, and your data is never used to train AI models."],
   ["What market information does Linc use?", "Relevant interest rates, yields, inflation readings, market conditions, and financial news are brought into the answer when they affect your decision."],
-  ["Can I delete everything?", "Yes. You can disconnect accounts, export your information, and request deletion of your data at any time."],
+  ["Can I delete everything?", "You can disconnect accounts immediately and request deletion at any time. Deletion is completed within 30 days, except for minimal records that may be required for security, fraud prevention, or legal compliance."],
 ];
 
 const securitySections = [
-  ["01", "You control the connection", "Choose which accounts to connect. Disconnect instantly. Delete your data without a support ticket or a dark pattern."],
+  ["01", "You control the connection", "Choose which accounts to connect and disconnect them whenever you want. You can also request deletion at any time."],
   ["02", "Read-only by design", "Plaid and SnapTrade handle account connections. Ask Linc never stores your bank credentials and cannot move your money."],
   ["03", "Identity removed before AI", "Account names and merchant details are tokenized before analysis, so the model gets useful context without your identifying details."],
   ["04", "Minimum context, protected models", "Only the context needed for the question is shared. Your financial data is not used to train AI models."],
@@ -32,16 +32,16 @@ const securitySections = [
 
 const comparisonData = {
   origin: {
-    eyebrow: "BROAD MONEY APP VS FOCUSED DECISION ENGINE",
-    fit: "Choose Ask Linc when your real question is ‘what should we do?’ Choose Origin when breadth and everyday money management are the primary job.",
+    eyebrow: "BIG-DECISION PLANNING VS BROAD MONEY MANAGEMENT",
+    fit: "Choose Ask Linc when you need help with a specific decision. Choose Origin when you want broader day-to-day money management.",
   },
   portfoliopilot: {
-    eyebrow: "HOUSEHOLD DECISIONS VS PORTFOLIO ANALYTICS",
-    fit: "Choose Ask Linc for connected household questions. Choose PortfolioPilot when deep portfolio analytics are the center of the job.",
+    eyebrow: "LIFE-DECISION PLANNING VS PORTFOLIO ANALYTICS",
+    fit: "Choose Ask Linc when the question involves your whole household. Choose PortfolioPilot when analyzing investments is the main job.",
   },
   monarch: {
-    eyebrow: "DECISION SUPPORT VS MONEY TRACKING",
-    fit: "Keep Monarch if shared budgeting and tracking are the main job. Choose Ask Linc when the pain is turning all that information into a decision.",
+    eyebrow: "BIG-DECISION PLANNING VS MONEY TRACKING",
+    fit: "Choose Monarch when shared budgeting and tracking are the priority. Choose Ask Linc when you need to turn your numbers into a decision.",
   },
 } as const;
 
@@ -51,10 +51,10 @@ const useCases = {
     number: "01",
     label: "RETIREMENT PLANNING",
     title: "Know what makes retirement work—before you pick the date.",
-    question: "Can we retire at 60 without cutting our lifestyle?",
-    answer: "Yes—with a $1.7M projected cushion in the base case.",
-    summary: "The bigger issue is not the date. It is reducing concentration risk before the first five years of withdrawals.",
-    metrics: [["PROJECTED AT 60", "$6.3M"], ["PLAN REQUIRES", "$4.6M"], ["SUCCESS RANGE", "75–85%"]],
+    question: "Are we saving enough to retire at 60 without cutting our lifestyle?",
+    answer: "You are close. Saving $600 more each month puts the plan on track.",
+    summary: "At the current pace, the plan is short by about $110K. A small monthly increase closes most of the gap without changing the retirement date.",
+    metrics: [["SAVING NOW", "$2.4K/mo"], ["SAVING NEEDED", "$3K/mo"], ["RETIREMENT AGE", "60"]],
     levers: [["Retirement age", "See how 58, 60, or 62 changes the margin."], ["Spending", "Test the lifestyle the portfolio actually needs to fund."], ["Market sequence", "Stress the plan against real historical downturns."]],
     context: ["Connected accounts", "Income + spending", "Social Security", "Rates + inflation", "Historical returns"],
     tone: "mint",
@@ -64,18 +64,31 @@ const useCases = {
     number: "02",
     label: "HOME BUYING",
     title: "Find the price that fits the rest of your life.",
-    question: "Can we buy the lake house without delaying retirement?",
-    answer: "Yes—if you keep the purchase below $780K.",
-    summary: "A 40% cash down payment protects the retirement plan while keeping a 14-month liquidity buffer.",
-    metrics: [["PURCHASE CEILING", "$780K"], ["DOWN PAYMENT", "$210K"], ["RETIREMENT SHIFT", "+8 mo"]],
+    question: "Can we afford a $700K home without pausing retirement savings?",
+    answer: "Yes—if you put 15% down and keep at least $45K in cash.",
+    summary: "That keeps a six-month emergency fund and leaves both retirement contributions unchanged. A 20% down payment would stretch cash too thin.",
+    metrics: [["HOME PRICE", "$700K"], ["DOWN PAYMENT", "$105K"], ["CASH LEFT", "$48K"]],
     levers: [["Purchase price", "See the point where the plan starts to bend."], ["Mortgage rate", "Compare financing now with a lower-rate refinance case."], ["Cash vs. financing", "Balance liquidity, debt, and the retirement timeline."],
     ],
-    context: ["Cash + investments", "Current mortgage rates", "Home value", "Property estimates", "Retirement goal"],
+    context: ["Cash + investments", "Mortgage rates", "Monthly spending", "Property estimates", "Retirement saving"],
     tone: "blue",
+  },
+  family: {
+    slug: "family-planning",
+    number: "03",
+    label: "GROWING A FAMILY",
+    title: "Plan for a child without guessing what has to give.",
+    question: "Can one of us take four months of leave and still afford childcare?",
+    answer: "Yes—if you build an $18K leave fund before the baby arrives.",
+    summary: "Saving $1,800 a month for ten months covers the unpaid leave, keeps the emergency fund intact, and avoids pausing retirement contributions.",
+    metrics: [["LEAVE FUND", "$18K"], ["CHILDCARE", "$2.1K/mo"], ["RETIREMENT", "Unchanged"]],
+    levers: [["Time away from work", "Compare paid and unpaid leave without losing sight of cash flow."], ["Childcare", "See when daycare costs begin and how long they overlap with leave."], ["Housing and space", "Test whether a move belongs in the same plan or can wait."]],
+    context: ["Income + benefits", "Cash savings", "Monthly spending", "Childcare estimates", "Retirement contributions"],
+    tone: "sand",
   },
   portfolio: {
     slug: "portfolio-analysis",
-    number: "03",
+    number: "04",
     label: "PORTFOLIO ANALYSIS",
     title: "See the risk behind the ticker symbols.",
     question: "Is our portfolio taking more risk than our plan needs?",
@@ -89,7 +102,7 @@ const useCases = {
   },
   market: {
     slug: "financial-stress-testing",
-    number: "04",
+    number: "05",
     label: "FINANCIAL STRESS TESTING",
     title: "Stress-test the plan before real life does.",
     question: "What if stocks fall 25% and inflation stays high?",
@@ -108,11 +121,11 @@ type UseCaseKey = keyof typeof useCases;
 function DecisionMiniature() {
   return (
     <article className="decision-miniature">
-      <div className="miniature-top"><span className="brand-mark small">L</span><b>ASK LINC · SAMPLE ANSWER</b><span>LIVE</span></div>
-      <p className="miniature-question">Can we afford the lake house without delaying retirement?</p>
-      <div className="miniature-verdict"><i>✓</i><div><span>THE SHORT ANSWER</span><strong>Yes—if you keep the purchase below $780K.</strong></div></div>
-      <div className="miniature-numbers"><span><small>DOWN PAYMENT</small><b>$210K</b></span><span><small>RETIREMENT SHIFT</small><b>+8 months</b></span><span><small>CASH BUFFER</small><b>14 months</b></span></div>
-      <div className="miniature-take"><span>LINC’S TAKE</span><p>Keep the primary mortgage intact, fund 40% in cash, and revisit if rates fall below 5.2%.</p></div>
+      <div className="miniature-top"><span className="brand-mark small">L</span><b>ASK LINC · SAMPLE ANSWER</b><span>ILLUSTRATIVE</span></div>
+      <p className="miniature-question">Can we afford a $700K home without pausing retirement savings?</p>
+      <div className="miniature-verdict"><i>✓</i><div><span>THE SHORT ANSWER</span><strong>Yes—if you put 15% down and keep at least $45K in cash.</strong></div></div>
+      <div className="miniature-numbers"><span><small>DOWN PAYMENT</small><b>$105K</b></span><span><small>CASH LEFT</small><b>$48K</b></span><span><small>RETIREMENT</small><b>On track</b></span></div>
+      <div className="miniature-take"><span>LINC’S TAKE</span><p>Cap total housing costs at $4,800 a month and keep both 401(k) contributions unchanged.</p></div>
       <button type="button">∑ &nbsp;Show the math <span>+</span></button>
     </article>
   );
@@ -126,14 +139,14 @@ function FeaturesPage() {
   return (
     <StandardPage className="features-page">
       <section className="subhero shell split-subhero">
-        <div><p className="section-kicker">FINANCIAL REASONING, BUILT TO BE CHECKED</p><h1>From a hard question to a <em>defensible decision.</em></h1><p className="subhero-copy">Ask Linc connects the facts of your financial life, brings in the market context that matters, and makes the recommendation—and the work behind it—easy to inspect.</p><div className="hero-actions"><MarketingGetStartedButton className="button button-primary" /><a className="text-link" href="#system">Explore the system ↓</a></div></div>
+        <div><p className="section-kicker">HOW ASK LINC WORKS</p><h1>See how one decision changes <em>the rest of your plan.</em></h1><p className="subhero-copy">Connect your accounts, ask a plain-language question, and get a recommendation with the assumptions and calculations attached.</p><div className="hero-actions"><MarketingGetStartedButton className="button button-primary" /><a className="text-link" href="#system">See what goes into an answer ↓</a></div></div>
         <DecisionMiniature />
       </section>
       <section className="page-section shell" id="system">
         <FeatureScenario />
         <div className="feature-proof-intro">
-          <p className="section-kicker">WHAT MAKES THE ANSWER DIFFERENT</p>
-          <h2>Every answer starts with more of the truth.</h2>
+          <p className="section-kicker">WHAT THE ANSWER USES</p>
+          <h2>Your accounts, your goals, and the assumptions that matter.</h2>
         </div>
         <div className="feature-proof-grid">
           <article className="feature-proof-card feature-model-card">
@@ -141,21 +154,21 @@ function FeaturesPage() {
             <h3>A living model of your finances</h3>
             <p>Cash, investments, debt, property, income, goals, and risk stay connected so every question starts with the same complete picture.</p>
             <div className="account-stack" aria-label="Sample connected financial picture">
-              <span>INVESTMENTS <b>$3.18M</b></span>
-              <span>PROPERTY <b>$1.24M</b></span>
-              <span>DEBT <b>−$444K</b></span>
-              <span>ANNUAL SAVINGS <b>$82K</b></span>
+              <span>CASH <b>$92K</b></span>
+              <span>RETIREMENT <b>$285K</b></span>
+              <span>DEBT <b>−$18K</b></span>
+              <span>ANNUAL SAVINGS <b>$36K</b></span>
             </div>
           </article>
           <article className="feature-proof-card feature-market">
             <span className="card-index">03 / CONTEXT</span>
-            <h3>The market, as it is now</h3>
-            <div className="market-readout" aria-label="Sample current market context">
+            <h3>Relevant market context</h3>
+            <div className="market-readout" aria-label="Illustrative market context">
               <span>10Y TREASURY <b>4.18% ↗</b></span>
               <span>CORE INFLATION <b>2.7% →</b></span>
               <span>MORTGAGE RATE <b>6.42% ↘</b></span>
             </div>
-            <p>Current rates, inflation, and market conditions enter the answer only when relevant.</p>
+            <p>When rates, inflation, or prices affect the answer, Linc includes them with a source date.</p>
           </article>
           <article className="feature-proof-card feature-trust">
             <span className="card-index">04 / VERIFY</span>
@@ -164,7 +177,7 @@ function FeaturesPage() {
           </article>
         </div>
       </section>
-      <section className="context-section dark-band"><div className="shell context-layout"><div className="context-copy"><p className="section-kicker light">A LOT OF DATA. ONE USEFUL CONTEXT.</p><h2>Linc connects the sources so you don’t have to.</h2><p>Your accounts, holdings, property, and the live market arrive as one decision context—not nine more dashboards to check.</p><Link className="light-link" href="/use-cases">See what Linc can answer →</Link></div><div className="context-map" aria-label="Data sources connected by Ask Linc"><div className="context-row"><b>YOUR MONEY</b><span>Plaid<small>banking + debt</small></span><span>SnapTrade<small>investments</small></span></div><div className="context-row"><b>WHAT YOU OWN</b><span>RentCast<small>home values</small></span><span>FMP + Tiingo<small>funds + price history</small></span></div><div className="context-row"><b>THE WORLD NOW</b><span>FRED<small>rates + inflation</small></span><span>Alpha Vantage + Massive<small>market data</small></span></div><div className="context-output"><span className="brand-mark">L</span><div><small>THE OUTPUT</small><strong>One answer, with the relevant context already attached.</strong></div></div></div></div></section>
+      <section className="context-section dark-band"><div className="shell context-layout"><div className="context-copy"><p className="section-kicker light">THE FACTS BEHIND THE DECISION</p><h2>One place for the numbers that affect your choice.</h2><p>Ask Linc brings together your cash, debt, investments, property, goals, and relevant market data before it answers.</p><Link className="light-link" href="/use-cases">See the decisions Linc can help with →</Link></div><div className="context-map" aria-label="Data sources connected by Ask Linc"><div className="context-row"><b>YOUR MONEY</b><span>Plaid<small>banking + debt</small></span><span>SnapTrade<small>investments</small></span></div><div className="context-row"><b>WHAT YOU OWN</b><span>RentCast<small>home values</small></span><span>FMP + Tiingo<small>funds + price history</small></span></div><div className="context-row"><b>RELEVANT CONTEXT</b><span>FRED<small>rates + inflation</small></span><span>Alpha Vantage + Massive<small>market data</small></span></div><div className="context-output"><span className="brand-mark">L</span><div><small>THE OUTPUT</small><strong>A recommendation with the assumptions and math attached.</strong></div></div></div></div></section>
       <PageCta />
     </StandardPage>
   );
@@ -173,9 +186,9 @@ function FeaturesPage() {
 function UseCasesPage() {
   return (
     <StandardPage className="use-cases-page">
-      <section className="subhero centered-subhero shell"><p className="section-kicker">USE CASES</p><h1>Start with the decision. <em>Not the data entry.</em></h1><p className="subhero-copy">Ask Linc brings your finances and the live context together around the question in front of you.</p></section>
+      <section className="subhero centered-subhero shell"><p className="section-kicker">USE CASES</p><h1>Start with what you&apos;re <em>trying to decide.</em></h1><p className="subhero-copy">Ask a question about a home, a growing family, work, investments, or retirement. Linc checks it against the rest of your financial life.</p></section>
       <section className="use-case-index shell">{Object.values(useCases).map((item)=><Link href={`/use-cases/${item.slug}`} className={`use-case-tile ${item.tone}`} key={item.slug}><span>{item.number} / {item.label}</span><h2>{item.title}</h2><div className="use-case-question"><small>ASK LINC</small><b>“{item.question}”</b></div><strong>Explore this decision <i>→</i></strong></Link>)}</section>
-      <section className="use-case-bridge"><div className="shell"><p className="section-kicker">THE COMMON THREAD</p><h2>The answer to one question already understands the others.</h2><p>A home purchase changes retirement. A market drop changes risk. A debt decision changes liquidity. Linc keeps the whole model connected.</p></div></section>
+      <section className="use-case-bridge"><div className="shell"><p className="section-kicker">WHY THE WHOLE PLAN MATTERS</p><h2>A home, a child, a career change, and retirement share the same money.</h2><p>Linc checks how one choice affects cash flow, savings, debt, and the goals that come after it.</p></div></section>
       <PageCta />
     </StandardPage>
   );
@@ -185,9 +198,9 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
   const item = useCases[useCase];
   return (
     <StandardPage className={`use-case-page ${item.tone}`}>
-      <section className="subhero shell use-case-hero"><div><Link href="/use-cases" className="back-link">← All use cases</Link><p className="section-kicker">{item.number} / {item.label}</p><h1>{item.title}</h1><p className="subhero-copy">Ask the real question. Linc pulls together the accounts, assumptions, and current conditions that determine the answer.</p><MarketingGetStartedButton className="button button-primary" /></div><article className="use-case-answer"><div className="miniature-top"><span className="brand-mark small">L</span><b>SAMPLE DECISION</b><span>LIVE CONTEXT</span></div><p>{item.question}</p><div className="use-case-verdict"><small>THE SHORT ANSWER</small><h2>{item.answer}</h2><span>{item.summary}</span></div><div className="use-case-metrics">{item.metrics.map(([label,value])=><span key={label}><small>{label}</small><b>{value}</b></span>)}</div><div className="use-case-check">∑ &nbsp;Every input, assumption, and calculation is inspectable.</div></article></section>
+      <section className="subhero shell use-case-hero"><div><Link href="/use-cases" className="back-link">← All use cases</Link><p className="section-kicker">{item.number} / {item.label}</p><h1>{item.title}</h1><p className="subhero-copy">Ask the question in your own words. Linc checks your accounts, goals, and the assumptions that can change the answer.</p><MarketingGetStartedButton className="button button-primary" /></div><article className="use-case-answer"><div className="miniature-top"><span className="brand-mark small">L</span><b>SAMPLE DECISION</b><span>ILLUSTRATIVE</span></div><p>{item.question}</p><div className="use-case-verdict"><small>THE SHORT ANSWER</small><h2>{item.answer}</h2><span>{item.summary}</span></div><div className="use-case-metrics">{item.metrics.map(([label,value])=><span key={label}><small>{label}</small><b>{value}</b></span>)}</div><div className="use-case-check">∑ &nbsp;Every input, assumption, and calculation is inspectable.</div></article></section>
       <section className="decision-levers shell"><div className="editorial-heading"><p className="section-kicker">WHAT MOVES THE ANSWER</p><h2>Change the assumption. See the consequence.</h2></div><div className="lever-grid">{item.levers.map(([title,copy],index)=><article key={title}><span>0{index+1}</span><h3>{title}</h3><p>{copy}</p></article>)}</div></section>
-      <section className="case-context dark-band"><div className="shell case-context-inner"><div><p className="section-kicker light">CONTEXT LINC BRINGS IN</p><h2>No exports. No tab juggling.</h2></div><RotatingContextChips items={item.context} /></div></section>
+      <section className="case-context dark-band"><div className="shell case-context-inner"><div><p className="section-kicker light">WHAT LINC CHECKS FIRST</p><h2>The numbers that can change the answer.</h2></div><RotatingContextChips items={item.context} /></div></section>
       <section className="other-cases shell"><span>EXPLORE ANOTHER DECISION</span>{Object.values(useCases).filter((candidate)=>candidate.slug!==item.slug).map((candidate)=><Link href={`/use-cases/${candidate.slug}`} key={candidate.slug}>{candidate.label}<b>→</b></Link>)}</section>
       <PageCta title={`Bring your ${item.label.toLowerCase()} question to Linc.`} />
     </StandardPage>
@@ -197,10 +210,10 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
 function PricingPage() {
   return (
     <StandardPage className="pricing-page">
-      <section className="subhero centered-subhero shell"><p className="section-kicker">SIMPLE PRICING</p><h1>One plan. <em>Full access.</em></h1><p className="subhero-copy">$9/month for unlimited questions, connected accounts, and market-aware analysis. Cancel anytime.</p></section>
+      <section className="subhero centered-subhero shell"><p className="section-kicker">SIMPLE PRICING</p><h1>Everything you need for <em>$9 a month.</em></h1><p className="subhero-copy">Ask as many questions as you need, connect your accounts, and compare what-if scenarios. Cancel anytime.</p></section>
       <section className="pricing-stage shell">
-        <div className="price-argument"><p className="section-kicker">PAY FOR THE PRODUCT—NOT A PERCENTAGE OF YOUR WEALTH</p><h2>A serious tool at a deliberately small price.</h2><p>No asset minimum. No annual contract. No sales call.</p><div className="cost-comparison"><span><small>ASK LINC</small><b>$108</b><i>per year</i></span><span className="versus">VS</span><span><small>1% OF A $2M PORTFOLIO</small><b>$20,000</b><i>per year · illustrative</i></span></div></div>
-        <article className="sub-price-card"><div className="price-card-top"><span>ASK LINC</span><b>EVERYTHING INCLUDED</b></div><div className="price"><sup>$</sup>9<span>/month</span></div><p>Cancel anytime.</p><ul><li>Unlimited questions and follow-ups</li><li>Unlimited connected accounts</li><li>What-if scenarios</li><li>Market-aware financial reasoning</li><li>Retirement and risk analysis</li><li>Show the math on every answer</li><li>Privacy-first architecture</li></ul><MarketingGetStartedButton className="button button-primary price-button" /></article>
+        <div className="price-argument"><p className="section-kicker">PAY FOR THE PRODUCT—NOT A PERCENTAGE OF YOUR WEALTH</p><h2>Planning help before the decision gets expensive.</h2><p>No asset minimum. No annual contract. No sales call.</p><div className="cost-comparison"><span><small>ASK LINC</small><b>$108</b><i>per year</i></span><span className="versus">VS</span><span><small>1% OF A $500K PORTFOLIO</small><b>$5,000</b><i>per year · illustrative</i></span></div></div>
+        <article className="sub-price-card"><div className="price-card-top"><span>ASK LINC</span><b>EVERYTHING INCLUDED</b></div><div className="price"><sup>$</sup>9<span>/month</span></div><p>Cancel anytime.</p><ul><li>Unlimited questions and follow-ups</li><li>Unlimited connected accounts</li><li>What-if scenarios</li><li>Dated market inputs when relevant</li><li>Retirement and risk analysis</li><li>Show the math on every answer</li><li>Privacy-first architecture</li></ul><MarketingGetStartedButton className="button button-primary price-button" /></article>
       </section>
       <section className="page-section shell compact-faq"><div><p className="section-kicker">PRICING QUESTIONS</p><h2>No tiers to decode.</h2></div><div>{faqs.slice(0,4).map(([q,a])=><details key={q}><summary>{q}<span>+</span></summary><p>{a}</p></details>)}</div></section>
       <PageCta title="Bring your hardest money question to Linc." />
@@ -211,9 +224,9 @@ function PricingPage() {
 function AboutPage() {
   return (
     <StandardPage className="about-page">
-      <section className="subhero shell about-hero"><div><p className="section-kicker">WHY ASK LINC EXISTS</p><h1>Financial answers should be more than <em>convincing.</em></h1></div><p className="about-lede">They should understand your whole picture, use reliable calculations, reflect the world as it is today, and let you inspect the numbers before you act.</p></section>
-      <section className="founder-origin shell"><div className="founder-portrait"><span className="founder-portrait-photo"><Image src="/images/ethan-teng-cartoon.webp" alt="Cartoon portrait of Ethan Teng" fill sizes="150px" priority /></span><div><b>Ethan Teng</b><small>FOUNDER · ASK LINC</small></div></div><div className="origin-copy"><p className="section-kicker">THE ORIGIN</p><h2>It started with a layoff—and a bad idea.</h2><p className="lead-paragraph">After getting laid off, I pasted my own bank statements into ChatGPT to answer some tough money questions—and immediately regretted it.</p><p>The responses were polished, but the process was wrong. A general chatbot didn’t have a trustworthy model of my finances. It could blur facts with assumptions, make fragile calculations sound certain, and give me no clean way to inspect the work.</p><p>So I built Ask Linc: a way to get decision-ready answers from your actual finances, with current market context and calculations you can verify.</p><div className="signature-line"><span><Image src="/images/ethan-teng-cartoon.webp" alt="" fill sizes="41px" /></span><div><b>Ethan Teng</b><small>Builder, user, and first skeptic</small></div></div></div></section>
-      <section className="page-section values-band"><div className="shell"><div className="editorial-heading"><p className="section-kicker">WHAT WE BELIEVE</p><h2>Trust is a product decision.</h2></div><div className="belief-grid"><article><span>01</span><h3>Answers over dashboards</h3><p>Your finances are not improved by another screen of charts. The product should help you decide.</p></article><article><span>02</span><h3>Math should be boring</h3><p>Important calculations should be fixed, reproducible, and inspectable—not generated on the fly.</p></article><article><span>03</span><h3>Privacy is architecture</h3><p>Protecting identity and minimizing context should happen before data reaches a model.</p></article><article><span>04</span><h3>Clarity beats certainty</h3><p>A good answer shows ranges, risks, and assumptions instead of pretending the future is knowable.</p></article></div></div></section>
+      <section className="subhero shell about-hero"><div><p className="section-kicker">WHY ASK LINC EXISTS</p><h1>A money answer should be <em>easy to check.</em></h1></div><p className="about-lede">Especially before a big decision. Ask Linc starts with your actual accounts, states the assumptions, runs repeatable calculations, and shows what can change the result.</p></section>
+      <section className="founder-origin shell"><div className="founder-portrait"><span className="founder-portrait-photo"><Image src="/images/ethan-teng-cartoon.webp" alt="Cartoon portrait of Ethan Teng" fill sizes="150px" priority /></span><div><b>Ethan Teng</b><small>FOUNDER · ASK LINC</small></div></div><div className="origin-copy"><p className="section-kicker">THE ORIGIN</p><h2>It started with a layoff—and a bad idea.</h2><p className="lead-paragraph">After getting laid off, I pasted my own bank statements into ChatGPT to answer some tough money questions—and immediately regretted it.</p><p>The responses were polished, but the process was wrong. A general chatbot didn’t have a trustworthy model of my finances. It could blur facts with assumptions, make fragile calculations sound certain, and give me no clean way to inspect the work.</p><p>So I built Ask Linc to answer a specific question with the accounts, goals, assumptions, and calculations that actually affect it.</p><div className="signature-line"><span><Image src="/images/ethan-teng-cartoon.webp" alt="" fill sizes="41px" /></span><div><b>Ethan Teng</b><small>Builder, user, and first skeptic</small></div></div></div></section>
+      <section className="page-section values-band"><div className="shell"><div className="editorial-heading"><p className="section-kicker">HOW WE BUILD</p><h2>You should be able to see why an answer changed.</h2></div><div className="belief-grid"><article><span>01</span><h3>Start with the decision</h3><p>Show the numbers that help someone choose, not another screen of charts to interpret.</p></article><article><span>02</span><h3>Use repeatable math</h3><p>Important calculations should produce the same result from the same inputs and be open to inspection.</p></article><article><span>03</span><h3>Remove identifying detail</h3><p>Replace sensitive labels before financial context reaches an AI model.</p></article><article><span>04</span><h3>Show ranges and tradeoffs</h3><p>The future is uncertain. A useful answer says what could change and how much it matters.</p></article></div></div></section>
       <PageCta title="Make the next hard question easier to answer." />
     </StandardPage>
   );
@@ -234,11 +247,36 @@ function SecurityPage() {
   return (
     <StandardPage className="security-page">
       <section className="security-hero"><div className="shell split-subhero"><div><p className="section-kicker light">PRIVACY BY DESIGN</p><h1>Your finances stay yours. <em>Even from the AI.</em></h1><p>The AI doesn’t need your bank names, account numbers, or identity to reason about the decision. So it doesn’t get them.</p></div><div className="privacy-diagram"><span><i>▰</i><b>Your accounts</b><small>Read-only connection</small></span><b>→</b><span className="active"><i>◇</i><b>Privacy layer</b><small>Identity removed</small></span><b>→</b><span><i>L</i><b>Linc’s analysis</b><small>Minimum context</small></span></div></div></section>
-      <section className="security-promises shell"><span><b>READ-ONLY</b>Linc can’t move money</span><span><b>NO TRAINING</b>Your data never trains AI</span><span><b>FULL CONTROL</b>Export or delete anytime</span></section>
+      <section className="security-promises shell"><span><b>READ-ONLY</b>Linc can’t move money</span><span><b>NO TRAINING</b>Your data is not used for model training</span><span><b>YOUR CONNECTIONS</b>Disconnect accounts anytime</span></section>
       <section className="page-section shell"><div className="editorial-heading"><p className="section-kicker">HOW PROTECTION WORKS</p><h2>Six promises, built into the system.</h2></div><div className="security-grid">{securitySections.map(([n,t,d])=><article key={n}><span>{n}</span><h3>{t}</h3><p>{d}</p></article>)}</div></section>
       <section className="token-demo"><div className="shell token-grid"><div><p className="section-kicker">WHAT ANONYMIZATION LOOKS LIKE</p><h2>Useful context in.<br/>Identity left out.</h2><p>Before analysis, sensitive labels are replaced with neutral tokens. The financial relationship remains; the identifying detail does not.</p></div><div className="token-card"><span><del>Bank of America Checking</del><b>Account_1</b></span><span><del>Chase Sapphire Preferred</del><b>Card_2</b></span><span><del>Trader Joe’s</del><b>Merchant_12</b></span><small>TRANSFORMATION OCCURS BEFORE AI ANALYSIS</small></div></div></section>
-      <section className="security-contact shell"><div><p className="section-kicker">QUESTIONS DESERVE A HUMAN ANSWER</p><h2>Privacy is a relationship, not a legal checkbox.</h2></div><div><p>If you have a question, concern, or deletion request, email the founder directly.</p><a className="text-link" href="mailto:hello@asklinc.com">hello@asklinc.com →</a></div></section>
+      <section className="security-contact shell"><div><p className="section-kicker">A HUMAN IS RESPONSIBLE</p><h2>Have a privacy question? Ask the person who built the system.</h2></div><div><p>If you have a question, concern, or deletion request, email the founder directly.</p><a className="text-link" href="mailto:hello@asklinc.com">hello@asklinc.com →</a></div></section>
       <PageCta />
+    </StandardPage>
+  );
+}
+
+function CompareIndexPage() {
+  return (
+    <StandardPage className="compare-index-page">
+      <section className="subhero centered-subhero shell">
+        <p className="section-kicker">COMPARE ASK LINC</p>
+        <h1>Choose the tool built for <em>the job you need done.</em></h1>
+        <p className="subhero-copy">
+          Ask Linc focuses on planning a specific life decision. See how that differs from broader money management, budgeting, and portfolio analytics.
+        </p>
+      </section>
+      <section className="compare-index-grid shell" aria-label="Ask Linc comparisons">
+        {COMPARISONS.map((page, index) => (
+          <Link href={`/vs/${page.slug}`} className="compare-index-card" key={page.slug}>
+            <span>{String(index + 1).padStart(2, "0")} / COMPARISON</span>
+            <h2>Ask Linc <em>vs {page.competitorName}</em></h2>
+            <p>{page.summary}</p>
+            <strong>Read the comparison <i>→</i></strong>
+          </Link>
+        ))}
+      </section>
+      <PageCta title="Start with the financial decision in front of you." />
     </StandardPage>
   );
 }
@@ -252,8 +290,8 @@ function ComparisonPage({ product }: { product: keyof typeof comparisonData }) {
     <StandardPage className="comparison-page">
       <section className="subhero shell comparison-hero"><div><p className="section-kicker">{design.eyebrow}</p><h1>Ask Linc <em>vs {page.competitorName}</em></h1><p className="subhero-copy">{page.summary}</p><div className="hero-actions"><MarketingGetStartedButton className="button button-primary" /><Link className="text-link" href="/pricing">View $9 pricing</Link></div></div><div className="versus-mark"><span className="brand-mark">L</span><b>VS</b><span>{page.competitorName.slice(0,2).toUpperCase()}</span></div></section>
       <section className="comparison-strip"><div className="shell"><span>ASK LINC</span><i>Different tools for different jobs</i><span>{page.competitorName.toUpperCase()}</span></div></section>
-      <section className="page-section shell comparison-section"><div className="editorial-heading"><p className="section-kicker">THE SHORT VERSION</p><h2>Start with the job you need done.</h2></div><div className="comparison-table" role="table"><div className="comparison-row comparison-head" role="row"><span>DIMENSION</span><b>ASK LINC</b><b>{page.competitorName.toUpperCase()}</b></div>{page.rows.map(({ dimension, askLinc, competitor })=><div className="comparison-row" role="row" key={dimension}><span>{dimension}</span><b>{askLinc}</b><b>{competitor}</b></div>)}</div></section>
-      <section className="fit-section"><div className="shell"><p className="section-kicker">OUR HONEST TAKE</p><h2>{design.fit}</h2><p>Ask Linc is not trying to replace every financial product. It is purpose-built for decision support with transparent math.</p></div></section>
+      <section className="page-section shell comparison-section"><div className="editorial-heading"><p className="section-kicker">THE SHORT VERSION</p><h2>Start with the job you need done.</h2></div><div className="comparison-table" role="table"><div className="comparison-row comparison-head" role="row"><span>DIMENSION</span><b>ASK LINC</b><b>{page.competitorName.toUpperCase()}</b></div>{page.rows.map(({ dimension, askLinc, competitor })=><div className="comparison-row" role="row" key={dimension}><span className="comparison-dimension" role="rowheader">{dimension}</span><div className="comparison-value" role="cell"><small>ASK LINC</small><b>{askLinc}</b></div><div className="comparison-value" role="cell"><small>{page.competitorName.toUpperCase()}</small><b>{competitor}</b></div></div>)}</div></section>
+      <section className="fit-section"><div className="shell"><p className="section-kicker">OUR HONEST TAKE</p><h2>{design.fit}</h2><p>Ask Linc does not replace a budget app, investment platform, or human professional. It helps you compare options and inspect the calculations behind them.</p></div></section>
       <section className="page-section shell compact-faq comparison-faq"><div><p className="section-kicker">BEFORE YOU CHOOSE</p><h2>The questions people actually ask.</h2></div><div>{page.faqs.map((faq)=><details key={faq.question}><summary>{faq.question}<span>+</span></summary><p>{faq.answer}</p></details>)}</div></section>
       <section className="other-comparisons shell"><span>COMPARE ASK LINC WITH</span>{Object.keys(comparisonData).filter((key)=>key!==product).map((key)=>{ const other = getComparison(key); return other ? <Link href={`/vs/${key}`} key={key}>{other.competitorName} <b>→</b></Link> : null; })}</section>
       <PageCta title="See which experience answers your question." />
@@ -366,7 +404,7 @@ export function MarketingArticlePage({ post, processedHtml }: { post: GhostPost;
         <article className="marketing-article-body ghost-content" dangerouslySetInnerHTML={{ __html: processedHtml }} />
       </section>
       <section className="next-reading shell"><span>KEEP EXPLORING</span><h2>Bring the question back to your own numbers.</h2><MarketingGetStartedButton className="button button-primary" /></section>
-      <PageCta title="See what transparent financial reasoning feels like." />
+      <PageCta title="Try a real question with your own numbers." />
     </StandardPage>
   );
 }
@@ -378,12 +416,14 @@ export default async function Subpage({ params }: RouteProps) {
   if (path === "use-cases") return <UseCasesPage />;
   if (path === "use-cases/retirement" || path === "use-cases/retirement-planning") return <UseCasePage useCase="retirement" />;
   if (path === "use-cases/home-buying") return <UseCasePage useCase="home" />;
+  if (path === "use-cases/family-planning") return <UseCasePage useCase="family" />;
   if (path === "use-cases/portfolio-analysis") return <UseCasePage useCase="portfolio" />;
   if (path === "use-cases/financial-stress-testing" || path === "use-cases/market-impact-analysis") return <UseCasePage useCase="market" />;
   if (path === "pricing") return <PricingPage />;
   if (path === "about") return <AboutPage />;
   if (path === "faq") return <FaqPage />;
   if (path === "how-we-protect-your-data") return <SecurityPage />;
+  if (path === "vs") return <CompareIndexPage />;
   if (path === "privacy" || path === "privacy-policy") return <LegalPage type="privacy" />;
   if (path === "terms") return <LegalPage type="terms" />;
   if (path === "contact") return <ContactPage />;

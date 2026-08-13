@@ -5,9 +5,9 @@ import { PROMPT_PAGES } from "@/lib/promptExamples";
 const config = PROMPT_PAGES.find((p) => p.slug === "geopolitical-retirement")!;
 
 export const metadata: Metadata = {
-  title: "Geopolitical Impact on Retirement — Example Prompt | Ask Linc",
+  title: "What If Markets Fall and Inflation Stays High? | Ask Linc",
   description:
-    "See how Ask Linc assesses the impact of geopolitical events like the Iran conflict on your retirement portfolio. Get your own personalized analysis.",
+    "See an illustrative example of how a market decline and higher inflation change a retirement plan.",
   alternates: {
     canonical: "https://asklinc.com/prompts/geopolitical-retirement",
   },

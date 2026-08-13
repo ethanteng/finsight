@@ -5,9 +5,9 @@ import { PROMPT_PAGES } from "@/lib/promptExamples";
 const config = PROMPT_PAGES.find((p) => p.slug === "financial-stress-testing")!;
 
 export const metadata: Metadata = {
-  title: "Financial Stress Testing — Example Prompt | Ask Linc",
+  title: "Could We Live on One Income? — Example | Ask Linc",
   description:
-    "See a real example of how Ask Linc stress tests your portfolio and assesses withdrawal sustainability. Get your own personalized analysis.",
+    "See an illustrative example that tests one income against childcare, housing, cash reserves, and retirement saving.",
   alternates: {
     canonical: "https://asklinc.com/prompts/financial-stress-testing",
   },

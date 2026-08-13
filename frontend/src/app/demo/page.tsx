@@ -2,15 +2,15 @@ import type { Metadata } from 'next';
 import DemoPageClient from './DemoPageClient';
 
 export const metadata: Metadata = {
-  title: 'Ask Linc | AI Financial Analysis Platform',
-  description: 'Ask Linc helps households plan retirement, evaluate major purchases, and stress-test financial decisions with answers grounded in real accounts and live market context.',
+  title: 'Try Ask Linc With Fictional Accounts',
+  description: 'Try questions about a home, family costs, career changes, investments, and retirement using fictional accounts.',
   keywords: ['Ask Linc', 'AI financial analysis', 'retirement planning', 'financial reasoning', 'personal finance AI'],
   alternates: {
     canonical: 'https://asklinc.com/demo',
   },
   openGraph: {
-    title: 'Ask Linc | AI Financial Analysis Platform',
-    description: 'Decision-ready financial answers grounded in your accounts and live market context.',
+    title: 'Try Ask Linc With Fictional Accounts',
+    description: 'See how Ask Linc works through a big financial decision using fictional accounts.',
     type: 'website',
     url: 'https://asklinc.com/demo',
     siteName: 'Ask Linc',
@@ -19,14 +19,14 @@ export const metadata: Metadata = {
         url: 'https://asklinc.com/og-image.jpg',
         width: 1200,
         height: 630,
-        alt: 'Ask Linc - AI Financial Analysis Platform',
+        alt: 'Ask Linc demo using fictional financial accounts',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Ask Linc | AI Financial Analysis Platform',
-    description: 'Decision-ready financial answers grounded in your accounts and live market context.',
+    title: 'Try Ask Linc With Fictional Accounts',
+    description: 'See how Ask Linc works through a big financial decision using fictional accounts.',
     images: ['https://asklinc.com/og-image.jpg'],
   },
   robots: {
@@ -37,4 +37,4 @@ export const metadata: Metadata = {
 
 export default function DemoPage() {
   return <DemoPageClient />;
-} 
+}

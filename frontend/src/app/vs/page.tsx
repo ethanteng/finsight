@@ -1,0 +1,27 @@
+import type { Metadata } from 'next';
+import MarketingSubpage from '../../components/marketing/MarketingSubpage';
+
+export const metadata: Metadata = {
+  title: 'Compare Ask Linc With Other Money Tools',
+  description:
+    'Compare Ask Linc with Origin, PortfolioPilot, and Monarch by the financial job each product is built to do.',
+  alternates: {
+    canonical: 'https://asklinc.com/vs',
+  },
+  openGraph: {
+    title: 'Compare Ask Linc With Other Money Tools',
+    description:
+      'See how planning a specific life decision differs from broad money management, budgeting, and portfolio analytics.',
+    type: 'website',
+    url: 'https://asklinc.com/vs',
+    siteName: 'Ask Linc',
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+};
+
+export default function CompareIndexRoute() {
+  return <MarketingSubpage params={Promise.resolve({ slug: ['vs'] })} />;
+}

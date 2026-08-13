@@ -35,7 +35,7 @@ export function SiteFooter() {
             <span className="brand-mark" aria-hidden="true">L</span>
             <span>Ask Linc</span>
           </Link>
-          <p>Decision-ready answers grounded in your real finances, current context, and calculations you can inspect.</p>
+          <p>Plan a home, a growing family, a career change, and retirement using your real numbers.</p>
           <MarketingGetStartedButton className="footer-demo" />
         </div>
         <div className="footer-column">
@@ -72,11 +72,11 @@ export function SiteFooter() {
   );
 }
 
-export function PageCta({ title = "Bring Ask Linc your hardest money question." }: { title?: string }) {
+export function PageCta({ title = "See what your next decision means for the rest of your plan." }: { title?: string }) {
   return (
     <section className="page-cta">
       <div className="page-cta-inner shell">
-        <p className="section-kicker light">SEE THE ANSWER FOR YOURSELF</p>
+        <p className="section-kicker light">TRY IT WITH YOUR OWN NUMBERS</p>
         <h2>{title}</h2>
         <MarketingGetStartedButton className="button button-primary" />
       </div>
