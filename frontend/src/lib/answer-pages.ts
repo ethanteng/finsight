@@ -154,7 +154,7 @@ export const canIRetireWithTwoMillion: AnswerPageData = {
   productBridge: {
     heading: "$2 million is a number. Retirement is a connected plan.",
     body: "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
-    priceNote: "$9/month. Cancel anytime.",
+    priceNote: "1 month free, then $9/month. Cancel anytime.",
   },
   faqs: [
     { question: "How much income can $2 million generate in retirement?", answer: "A $2 million portfolio equals $60,000 of first-year withdrawals at 3%, $70,000 at 3.5%, $80,000 at 4%, or $100,000 at 5%, before tax. Those are planning illustrations, not promised returns or guaranteed lifetime income." },
@@ -257,7 +257,7 @@ export const canIRetireWithOneMillion: AnswerPageData = {
   productBridge: {
     heading: "$1 million is a milestone. Retirement is a connected plan.",
     body: "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
-    priceNote: "$9/month. Cancel anytime.",
+    priceNote: "1 month free, then $9/month. Cancel anytime.",
   },
   faqs: [
     { question: "How much income can $1 million generate in retirement?", answer: "A $1 million portfolio equals $30,000 of first-year withdrawals at 3%, $35,000 at 3.5%, $40,000 at 4%, or $50,000 at 5%, before tax. These are planning illustrations, not promised returns or guaranteed lifetime income." },

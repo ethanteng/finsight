@@ -47,7 +47,8 @@ function PaymentSuccessContentInner() {
           const data = await response.json();
           setIsTrialing(Boolean(data.trialing));
           
-          // Fire Google Ads conversion event if payment was successful and not already fired
+          // A free trial is not a purchase. Keep this conversion paid-only;
+          // trial-start tracking requires a separately configured analytics event.
           if (
             data.paid &&
             !sessionStorage.getItem('purchase_event_fired')

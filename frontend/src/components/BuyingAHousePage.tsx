@@ -314,7 +314,7 @@ const BuyingAHousePage = () => {
                   >
                     Get started
                   </Button>
-                  <p className="text-[0.7875rem]">$9/month. Cancel anytime.</p>
+                  <p className="text-[0.7875rem]">1 month free, then $9/month. Cancel anytime.</p>
                 </div>
               </div>
             </div>
@@ -551,7 +551,7 @@ const BuyingAHousePage = () => {
               >
                 {isLoading === 'premium' ? 'Creating...' : 'Get started'}
               </Button>
-              <p className="text-[1.00625rem] text-primary font-medium">$9/month. Cancel anytime.</p>
+              <p className="text-[1.00625rem] text-primary font-medium">1 month free, then $9/month. Cancel anytime.</p>
             </div>
           </div>
         </div>

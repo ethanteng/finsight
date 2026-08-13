@@ -98,7 +98,7 @@ export default function UseCasesPage() {
                 {isLoading ? "Loading..." : "Get started"}
               </Button>
               <p className="text-center text-sm text-muted-foreground">
-                $9/month. Cancel anytime.
+                1 month free, then $9/month. Cancel anytime.
               </p>
             </div>
           </div>

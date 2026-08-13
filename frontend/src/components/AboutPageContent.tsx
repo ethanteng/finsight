@@ -112,7 +112,7 @@ export default function AboutPageContent() {
                 — and private.
               </p>
               <p className="text-muted-foreground leading-relaxed">
-                $9/month flat. Cancel anytime.
+                1 month free, then $9/month flat. Cancel anytime.
               </p>
             </div>
 
