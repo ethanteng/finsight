@@ -1,6 +1,6 @@
 "use client";
 import { useState, useMemo } from 'react';
-import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import InvestmentPortfolio from '../InvestmentPortfolio';
 
 interface Account {
@@ -680,17 +680,16 @@ export default function AccountDetailModal({
                             />
                             <Bar
                               dataKey="total"
+                              fill={isCashAccount ? '#397052' : '#486657'}
+                              background={{ fill: '#e3e7de' }}
+                              radius={[0, 4, 4, 0]}
                               onClick={(data) => {
                                 if (data && data.fullCategory) {
                                   setSelectedCategory(data.fullCategory);
                                 }
                               }}
                               style={{ cursor: 'pointer' }}
-                            >
-                              {categoryTotals.income.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={getCategoryColor(entry.type, index)} />
-                              ))}
-                            </Bar>
+                            />
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
@@ -774,17 +773,16 @@ export default function AccountDetailModal({
                             />
                             <Bar
                               dataKey="total"
+                              fill={isCashAccount ? '#9B5B50' : '#66758A'}
+                              background={{ fill: '#e3e7de' }}
+                              radius={[0, 4, 4, 0]}
                               onClick={(data) => {
                                 if (data && data.fullCategory) {
                                   setSelectedCategory(data.fullCategory);
                                 }
                               }}
                               style={{ cursor: 'pointer' }}
-                            >
-                              {categoryTotals.expense.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={getCategoryColor(entry.type, index)} />
-                              ))}
-                            </Bar>
+                            />
                           </BarChart>
                         </ResponsiveContainer>
                       </div>

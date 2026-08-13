@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface Security {
   id: string;
@@ -156,18 +156,18 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
       .sort((a, b) => b.value - a.value);
   }, [holdings]);
 
-  // Color palette for bar chart
+  // A restrained tonal scale keeps dense holdings data aligned with the brand.
   const COLORS = [
     '#397052',
-    '#82B79D',
-    '#91ADDA',
-    '#B1C7A4',
-    '#A87565',
-    '#6F8D78',
-    '#8F7E9D',
-    '#B3C65B',
-    '#6E829E',
-    '#C3A778',
+    '#477D5E',
+    '#568A6B',
+    '#659678',
+    '#75A285',
+    '#86AE92',
+    '#98BAA0',
+    '#AAC6AE',
+    '#BCD2BD',
+    '#CEDDCC',
   ];
 
   if (!portfolio) {
@@ -188,19 +188,19 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
 
       {/* Portfolio Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-gray-700 rounded-lg p-4">
+        <div className="rounded-xl border border-[#102319]/10 bg-[#f3f2e9] p-4">
           <div className="text-sm text-gray-400">Total Portfolio Value</div>
           <div className="text-2xl font-bold text-white">{formatCurrency(portfolio.totalValue)}</div>
         </div>
-        <div className="bg-gray-700 rounded-lg p-4">
+        <div className="rounded-xl border border-[#102319]/10 bg-[#f3f2e9] p-4">
           <div className="text-sm text-gray-400">Total Holdings</div>
           <div className="text-2xl font-bold text-white">{portfolio.holdingCount}</div>
         </div>
-        <div className="bg-gray-700 rounded-lg p-4">
+        <div className="rounded-xl border border-[#102319]/10 bg-[#f3f2e9] p-4">
           <div className="text-sm text-gray-400">Unique Securities</div>
           <div className="text-2xl font-bold text-white">{portfolio.securityCount}</div>
         </div>
-        <div className="bg-gray-700 rounded-lg p-4">
+        <div className="rounded-xl border border-[#102319]/10 bg-[#f3f2e9] p-4">
           <div className="text-sm text-gray-400">Recent Transactions</div>
           <div className="text-2xl font-bold text-white">
             {transactions?.length || 0}
@@ -209,13 +209,13 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex space-x-1 mb-6 bg-gray-700 rounded-lg p-1">
+      <div className="mb-6 flex space-x-1 rounded-xl border border-[#102319]/10 bg-[#f3f2e9] p-1">
         <button
           onClick={() => setActiveTab('overview')}
           className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
             activeTab === 'overview'
-              ? 'bg-gray-600 text-white'
-              : 'text-gray-400 hover:text-white'
+              ? 'bg-[#102319] text-white shadow-sm'
+              : 'text-[#5e6b63] hover:bg-white/60 hover:text-[#102319]'
           }`}
         >
           Portfolio Overview
@@ -224,8 +224,8 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
           onClick={() => setActiveTab('holdings')}
           className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
             activeTab === 'holdings'
-              ? 'bg-gray-600 text-white'
-              : 'text-gray-400 hover:text-white'
+              ? 'bg-[#102319] text-white shadow-sm'
+              : 'text-[#5e6b63] hover:bg-white/60 hover:text-[#102319]'
           }`}
         >
           Holdings
@@ -234,8 +234,8 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
           onClick={() => setActiveTab('transactions')}
           className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
             activeTab === 'transactions'
-              ? 'bg-gray-600 text-white'
-              : 'text-gray-400 hover:text-white'
+              ? 'bg-[#102319] text-white shadow-sm'
+              : 'text-[#5e6b63] hover:bg-white/60 hover:text-[#102319]'
           }`}
         >
           Transactions
@@ -250,14 +250,14 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
             <h3 className="text-lg font-medium text-white mb-4">Asset Allocation</h3>
             <div className="space-y-3">
               {getAssetAllocationArray().map((allocation) => (
-                <div key={allocation.type} className="flex items-center space-x-3">
+                <div key={allocation.type} className="flex items-center space-x-3 rounded-xl border border-[#102319]/10 bg-[#f8f7ef] px-4 py-3">
                   <div className="text-2xl">{getAssetTypeIcon(allocation.type)}</div>
                   <div className="flex-1">
                     <div className="flex justify-between text-sm">
                       <span className="text-white">{allocation.type}</span>
                       <span className="text-gray-400">{formatCurrency(allocation.value)}</span>
                     </div>
-                    <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
+                    <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#dfe4da]">
                       <div
                         className="h-2 rounded-full bg-[#397052] transition-all duration-300"
                         style={{ width: `${allocation.percentage}%` }}
@@ -279,7 +279,7 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
           {holdings && holdings.length > 0 ? (
             <>
               {/* Horizontal Bar Chart */}
-              <div className="bg-gray-700 rounded-lg p-6 border border-gray-600">
+              <div className="rounded-2xl border border-[#102319]/12 bg-[#fffdf5] p-6">
                 <ResponsiveContainer width="100%" height={Math.min(500, holdingsBarData.length * 40)}>
                   <BarChart
                     data={holdingsBarData}
@@ -325,12 +325,10 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                     />
                     <Bar
                       dataKey="value"
+                      fill="#397052"
+                      background={{ fill: '#e3e7de' }}
                       radius={[0, 4, 4, 0]}
-                    >
-                      {holdingsBarData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Bar>
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -340,7 +338,7 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                 {holdingsBarData.map((holdingData, index) => {
                   const holding = holdingData.holding;
                   return (
-                    <div key={holding.id || holding.security_id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
+                    <div key={holding.id || holding.security_id} className="rounded-xl border border-[#102319]/10 bg-[#f8f7ef] p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-3 flex-1">
                           <div
@@ -387,7 +385,7 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
         <div className="space-y-4 max-h-96 overflow-y-auto">
           {transactions && transactions.length > 0 ? (
             transactions.map((transaction) => (
-              <div key={transaction.id || transaction.transaction_id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
+              <div key={transaction.id || transaction.transaction_id} className="rounded-xl border border-[#102319]/10 bg-[#f8f7ef] p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3 flex-1">
                     <div className="text-2xl">

@@ -186,7 +186,7 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
           <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
-            className="bg-gray-700 text-white px-3 py-1 rounded text-sm border border-gray-600 focus:border-blue-500 focus:outline-none"
+            className="rounded-lg border border-[#102319]/15 bg-[#fffdf5] px-3 py-2 text-sm text-[#102319] focus:border-[#397052] focus:outline-none"
           >
             <option value="7">Last 7 days</option>
             <option value="30">Last 30 days</option>
@@ -197,10 +197,10 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
           <button
             onClick={loadTransactions}
             disabled={loading}
-            className={`px-3 py-1 rounded text-sm transition-colors ${
+            className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
               loading 
-                ? 'bg-gray-500 cursor-not-allowed' 
-                : 'bg-blue-600 hover:bg-blue-700'
+                ? 'cursor-not-allowed bg-[#dfe2da] text-[#7a847d]'
+                : 'bg-[#d9ff6f] text-[#102319] hover:bg-[#cdef64]'
             }`}
           >
             {loading ? 'Loading...' : 'Refresh'}
@@ -221,15 +221,15 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
             return (
             <div 
               key={transaction.id} 
-              className={`bg-gray-700 rounded-lg p-4 border-l-4 ${
-                transaction.amount < 0 ? 'border-red-500' : 'border-green-500'
-              } ${hasEnrichedData ? 'ring-1 ring-blue-400/30' : ''}`}
+              className={`rounded-xl border border-[#102319]/10 bg-[#f8f7ef] p-4 shadow-[inset_3px_0_0_var(--transaction-accent)] ${
+                transaction.amount < 0 ? '[--transaction-accent:#b56a5f]' : '[--transaction-accent:#6f9b7e]'
+              } ${hasEnrichedData ? 'ring-1 ring-[#397052]/15' : ''}`}
             >
               {/* Enriched data indicator */}
               {hasEnrichedData && (
                 <div className="flex items-center gap-1 mb-2">
-                  <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-                  <span className="text-xs text-blue-400 font-medium">Enhanced Data Available</span>
+                  <div className="h-2 w-2 rounded-full bg-[#397052]"></div>
+                  <span className="text-xs font-medium text-[#397052]">Enhanced Data Available</span>
                 </div>
               )}
               
@@ -275,7 +275,7 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                     {transaction.transaction_type && 
                      !['place', 'special', 'digital', 'atm', 'other'].includes(transaction.transaction_type.toLowerCase()) && (
                       <div className="mb-2">
-                        <span className="inline-block px-2 py-1 bg-purple-900/30 text-purple-300 text-xs rounded border border-purple-700/50 font-medium">
+                        <span className="inline-block rounded-full border border-[#397052]/20 bg-[#c9f2df]/55 px-2.5 py-1 text-xs font-semibold text-[#285c43]">
                           {transaction.transaction_type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
                         </span>
                       </div>
@@ -289,14 +289,14 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                        transaction.enriched_data.category.length > 0 && 
                        transaction.enriched_data.category.some(cat => cat && cat.trim() !== '' && cat !== '0') ? (
                         <div>
-                          <span className="text-blue-400 font-medium text-xs">Enhanced Categories:</span>
+                          <span className="text-xs font-medium text-[#5e6b63]">Enhanced Categories:</span>
                           <div className="flex flex-wrap gap-1 mt-1">
                             {transaction.enriched_data.category
                               .filter(cat => cat && cat.trim() !== '' && cat !== '0')
                               .map((cat, index) => (
                                 <span 
                                   key={index}
-                                  className="inline-block px-2 py-1 bg-blue-900/30 text-blue-300 text-xs rounded border border-blue-700/50"
+                                  className="inline-block rounded-full border border-[#397052]/18 bg-[#edf3e9] px-2.5 py-1 text-xs text-[#365d49]"
                                 >
                                   {cat.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
                                 </span>
@@ -318,7 +318,7 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                               .map((cat, index) => (
                                 <span 
                                   key={index}
-                                  className="inline-block px-2 py-1 bg-gray-600/30 text-gray-300 text-xs rounded border border-gray-500/50"
+                                  className="inline-block rounded-full border border-[#102319]/12 bg-[#ecece4] px-2.5 py-1 text-xs text-[#56635b]"
                                 >
                                   {cat.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
                                 </span>
@@ -349,7 +349,7 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                           href={transaction.enriched_data.website.startsWith('http') ? transaction.enriched_data.website : `https://${transaction.enriched_data.website}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-blue-400 hover:text-blue-300 underline"
+                          className="text-[#397052] underline hover:text-[#102319]"
                         >
                           {transaction.enriched_data.website}
                         </a>
@@ -372,12 +372,12 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                 
                 <div className="text-right ml-4 flex-shrink-0">
                   <div className={`font-semibold text-lg ${
-                    transaction.amount < 0 ? 'text-red-400' : 'text-green-400'
+                    transaction.amount < 0 ? 'text-[#8b4137]' : 'text-[#28704d]'
                   }`}>
                     {transaction.amount < 0 ? '' : '+'}${Math.abs(transaction.amount).toFixed(2)}
                   </div>
                   {transaction.pending && (
-                    <div className="text-xs text-yellow-400 mt-1">Pending</div>
+                    <div className="mt-1 text-xs text-[#76510f]">Pending</div>
                   )}
                 </div>
               </div>
@@ -393,4 +393,4 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
       )}
     </div>
   );
-}) 
+})

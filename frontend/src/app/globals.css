@@ -285,6 +285,15 @@
 .authenticated-site .bg-gray-900 { background-color: var(--auth-paper); }
 .authenticated-site .bg-gray-800 { background-color: var(--auth-cream); }
 .authenticated-site .bg-gray-700 { background-color: rgb(255 255 255 / .52); }
+.authenticated-site :where(div, article, li, button).bg-gray-700.rounded-lg {
+  border: 1px solid rgb(16 35 25 / .11);
+  background-color: #f8f7ef;
+  box-shadow: 0 5px 16px rgb(16 35 25 / .035);
+}
+.authenticated-site button.bg-gray-700.rounded-lg:hover {
+  border-color: rgb(16 35 25 / .2);
+  background-color: #f0f0e8;
+}
 .authenticated-site .bg-gray-600 { background-color: #e5e7de; }
 .authenticated-site .hover\:bg-gray-750:hover,
 .authenticated-site .hover\:bg-gray-700:hover,

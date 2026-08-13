@@ -831,40 +831,40 @@ export default function AdminPage() {
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
             <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-2xl font-bold text-blue-400">...</div>
+              <div className="text-2xl font-semibold text-[#397052]">...</div>
               <div className="text-gray-400 text-sm">Active Sessions</div>
             </div>
             <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-2xl font-bold text-green-400">...</div>
+              <div className="text-2xl font-semibold text-[#397052]">...</div>
               <div className="text-gray-400 text-sm">Total Conversations</div>
             </div>
             <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-2xl font-bold text-yellow-400">...</div>
+              <div className="text-2xl font-semibold text-[#397052]">...</div>
               <div className="text-gray-400 text-sm">Avg Conversations/Session</div>
             </div>
             <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-2xl font-bold text-purple-400">...</div>
+              <div className="text-2xl font-semibold text-[#397052]">...</div>
               <div className="text-gray-400 text-sm">Multi-Question Sessions</div>
             </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
             <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-2xl font-bold text-blue-400">{demoSessions?.length || 0}</div>
+              <div className="text-2xl font-semibold text-[#397052]">{demoSessions?.length || 0}</div>
               <div className="text-gray-400 text-sm">Active Sessions</div>
             </div>
             <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-2xl font-bold text-green-400">{demoConversations?.length || 0}</div>
+              <div className="text-2xl font-semibold text-[#397052]">{demoConversations?.length || 0}</div>
               <div className="text-gray-400 text-sm">Total Conversations</div>
             </div>
             <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-2xl font-bold text-yellow-400">
+              <div className="text-2xl font-semibold text-[#397052]">
                 {demoConversations?.length > 0 && demoSessions?.length > 0 ? Math.round(demoConversations.length / demoSessions.length) : 0}
               </div>
               <div className="text-gray-400 text-sm">Avg Conversations/Session</div>
             </div>
             <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-2xl font-bold text-purple-400">
+              <div className="text-2xl font-semibold text-[#397052]">
                 {demoSessions?.length > 0 ? Math.round(demoSessions.filter(s => s.conversationCount > 1).length / demoSessions.length * 100) : 0}%
               </div>
               <div className="text-gray-400 text-sm">Multi-Question Sessions</div>
@@ -879,7 +879,7 @@ export default function AdminPage() {
             {questionCategories && Object.entries(questionCategories)
               .sort(([,a], [,b]) => b - a)
               .map(([category, count]) => (
-                <div key={category} className="bg-gray-700 rounded p-3">
+                <div key={category} className="rounded-xl border border-[#102319]/10 bg-[#f8f7ef] p-3">
                   <div className="text-lg font-semibold text-blue-400">{count}</div>
                   <div className="text-sm text-gray-400">{category}</div>
                 </div>
@@ -1128,11 +1128,11 @@ export default function AdminPage() {
         {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-gray-800 rounded-lg p-4">
-            <div className="text-2xl font-bold text-blue-400">{productionUsers.length}</div>
+            <div className="text-2xl font-semibold text-[#397052]">{productionUsers.length}</div>
             <div className="text-gray-400 text-sm">Active Users</div>
           </div>
           <div className="bg-gray-800 rounded-lg p-4">
-            <div className="text-2xl font-bold text-green-400">
+            <div className="text-2xl font-semibold text-[#397052]">
               {productionConversations.filter(conv => conv.user).length}
               {productionConversations.some(conv => !conv.user) && (
                 <span className="text-sm text-yellow-400 ml-1">
@@ -1148,13 +1148,13 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="bg-gray-800 rounded-lg p-4">
-            <div className="text-2xl font-bold text-yellow-400">
+            <div className="text-2xl font-semibold text-[#397052]">
               {productionConversations.filter(conv => conv.user).length > 0 ? Math.round(productionConversations.filter(conv => conv.user).length / productionUsers.length) : 0}
             </div>
             <div className="text-gray-400 text-sm">Avg Conversations/User</div>
           </div>
           <div className="bg-gray-800 rounded-lg p-4">
-            <div className="text-2xl font-bold text-purple-400">
+            <div className="text-2xl font-semibold text-[#397052]">
               {productionUsers.length > 0 ? Math.round(productionUsers.filter(u => u.conversationCount > 1).length / productionUsers.length * 100) : 0}%
             </div>
             <div className="text-gray-400 text-sm">Multi-Question Users</div>
@@ -1168,7 +1168,7 @@ export default function AdminPage() {
             {Object.entries(questionCategories)
               .sort(([,a], [,b]) => b - a)
               .map(([category, count]) => (
-                <div key={category} className="bg-gray-700 rounded p-3">
+                <div key={category} className="rounded-xl border border-[#102319]/10 bg-[#f8f7ef] p-3">
                   <div className="text-lg font-semibold text-blue-400">{count}</div>
                   <div className="text-sm text-gray-400">{category}</div>
                 </div>

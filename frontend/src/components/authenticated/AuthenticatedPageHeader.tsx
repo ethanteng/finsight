@@ -1,7 +1,7 @@
 import Link from 'next/link';
-import { BarChart3, MessageSquareText, Settings, WalletCards } from 'lucide-react';
+import { MessageSquareText, Settings, WalletCards } from 'lucide-react';
 
-type ActivePage = 'app' | 'finances' | 'transactions' | 'profile' | 'admin';
+type ActivePage = 'app' | 'finances' | 'profile' | 'admin';
 
 interface AuthenticatedPageHeaderProps {
   activePage: ActivePage;
@@ -15,7 +15,6 @@ interface AuthenticatedPageHeaderProps {
 const links = [
   { href: '/app', label: 'Decisions', page: 'app' as const, icon: MessageSquareText },
   { href: '/finances', label: 'Finances', page: 'finances' as const, icon: WalletCards },
-  { href: '/transactions', label: 'Transactions', page: 'transactions' as const, icon: BarChart3 },
   { href: '/profile', label: 'Accounts & profile', page: 'profile' as const, icon: Settings },
 ];
 
@@ -60,7 +59,7 @@ export default function AuthenticatedPageHeader({
       </div>
 
       <div className="border-t border-[#102319]/10 lg:hidden">
-        <nav className="mx-auto grid max-w-[1200px] grid-cols-2 gap-1 px-4 py-2" aria-label="Workspace navigation">
+        <nav className="mx-auto grid max-w-[1200px] grid-cols-3 gap-1 px-4 py-2" aria-label="Workspace navigation">
           {links.map(({ href, label, page, icon: Icon }) => (
             <Link
               key={href}
