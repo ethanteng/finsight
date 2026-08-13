@@ -18,6 +18,7 @@ import {
 import { sendContactEmail } from './resend-email';
 import { stripe } from '../config/stripe';
 import { sendWelcomeEmail } from '../services/stripe-email';
+import { analytics } from '../analytics/heycatch';
 
 const router = Router();
 const prisma = getPrismaClient();
@@ -218,6 +219,17 @@ router.post('/register', async (req: Request, res: Response) => {
               } catch (emailError) {
                 console.error(`Failed to send welcome email to ${user.email} during registration:`, emailError);
                 // Don't fail registration if email fails
+              }
+
+              try {
+                await analytics.setIdentity(user.id, { email: user.email, plan: tier });
+                await analytics.trackEvent(
+                  'subscription_started',
+                  { plan: tier },
+                  { userId: user.id },
+                );
+              } catch (analyticsError) {
+                console.error(`Failed to record subscription_started for ${user.email} during registration:`, analyticsError);
               }
             }
           }
