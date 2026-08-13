@@ -318,6 +318,7 @@
 .authenticated-site .bg-green-600.text-white,
 .authenticated-site .bg-green-700.text-white,
 .authenticated-site [class*="bg-[#102319]"].text-white,
+.authenticated-site [class*="bg-[#102319]"] .text-white,
 .authenticated-site button[class*="bg-[#102319]"] { color: white; }
 .authenticated-site .hover\:bg-blue-700:hover,
 .authenticated-site .hover\:bg-green-700:hover { background-color: var(--auth-forest); }
