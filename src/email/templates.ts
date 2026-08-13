@@ -1,9 +1,8 @@
 /**
  * Shared email template module for Ask Linc.
- * Professional, clean design for financial planning communications.
+ * Uses the same cream, deep green, and lime palette as the marketing site.
  */
 
-// Get base URL for development vs production
 export function getBaseUrl(): string {
   const isDevelopment =
     !process.env.NODE_ENV ||
@@ -21,8 +20,8 @@ export interface CreateEmailHtmlOptions {
 
 /**
  * Creates a full HTML email with Ask Linc branding.
- * @param content - HTML content for the main body area
- * @param options - Optional title and footer note
+ * Important presentation styles are repeated inline for email clients that
+ * strip or only partially support embedded CSS.
  */
 export function createEmailHtml(content: string, options: CreateEmailHtmlOptions = {}): string {
   const baseUrl = getBaseUrl();
@@ -34,248 +33,178 @@ export function createEmailHtml(content: string, options: CreateEmailHtmlOptions
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light only">
   <title>${title}</title>
   <style>
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      line-height: 1.6;
-      color: #1a1a1a;
+      width: 100% !important;
       margin: 0;
       padding: 0;
-      background-color: #f8f9fa;
+      background-color: #f5f1e8;
+      color: #123c2f;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
     }
+    .email-shell { width: 100%; background-color: #f5f1e8; }
+    .email-pad { padding: 36px 18px; }
     .container {
+      width: 100%;
       max-width: 600px;
       margin: 0 auto;
-      background-color: #ffffff;
-      border-radius: 6px;
       overflow: hidden;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      border: 1px solid #d8d2c5;
+      border-radius: 18px;
+      background-color: #fffdf7;
+      box-shadow: 0 16px 42px rgba(18, 60, 47, 0.09);
     }
+    .accent-bar { height: 6px; background-color: #cfff68; font-size: 0; line-height: 0; }
     .header {
-      background-color: #0C121D;
-      padding: 32px 24px;
-      text-align: center;
-      color: white;
+      padding: 25px 32px 23px;
+      border-bottom: 1px solid #e2ddd2;
+      background-color: #fffdf7;
+      text-align: left;
     }
-    .logo {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 8px;
-    }
-    .logo-text {
-      font-size: 22px;
-      font-weight: 600;
-      letter-spacing: -0.02em;
-    }
-    .header-subtitle {
-      font-size: 14px;
-      opacity: 0.9;
-      margin: 0;
-      font-weight: 400;
-    }
-    .content {
-      padding: 32px 24px;
-      background-color: #ffffff;
-    }
+    .brand-logo { display: block; width: 180px; max-width: 100%; height: auto; border: 0; }
+    .content { padding: 42px 42px 36px; background-color: #fffdf7; }
     .welcome-message {
-      font-size: 20px;
-      font-weight: 600;
-      color: #111827;
-      margin-bottom: 20px;
+      margin: 0 0 16px;
+      color: #123c2f;
+      font-size: 30px;
+      font-weight: 700;
+      line-height: 1.15;
+      letter-spacing: -0.035em;
     }
     .description {
+      margin: 0 0 28px;
+      color: #526d64;
       font-size: 16px;
-      color: #4b5563;
       line-height: 1.7;
-      margin-bottom: 32px;
     }
     .verification-code {
-      background-color: #f3f4f6;
-      border: 1px solid #e5e7eb;
-      color: #111827;
-      padding: 20px;
-      border-radius: 4px;
+      margin: 26px 0;
+      padding: 23px 18px;
+      border: 1px solid #b8c8bc;
+      border-radius: 14px;
+      background-color: #edf4e9;
+      color: #123c2f;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+      font-size: 32px;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: 8px;
       text-align: center;
-      margin: 24px 0;
-      font-size: 28px;
-      font-weight: 600;
-      letter-spacing: 4px;
-      font-family: 'Courier New', monospace;
     }
-    .expiration-notice {
-      background-color: #fffbeb;
-      border-left: 3px solid #d97706;
+    .expiration-notice, .time-limit {
+      margin: 22px 0;
       padding: 14px 16px;
-      margin: 20px 0;
-      border-radius: 0 4px 4px 0;
+      border: 1px solid #d7debd;
+      border-radius: 12px;
+      background-color: #f4f8e7;
     }
-    .expiration-notice p {
-      margin: 0;
-      color: #92400e;
-      font-size: 14px;
-    }
+    .expiration-notice p, .time-limit p { margin: 0; color: #4c632d; font-size: 14px; line-height: 1.55; }
+    .button-wrap { margin: 28px 0; text-align: center; }
     .cta-button {
       display: inline-block;
-      background-color: #ffffff;
-      color: #0f766e;
-      padding: 12px 24px;
-      text-decoration: none;
-      border-radius: 4px;
-      font-weight: 600;
+      margin: 0;
+      padding: 14px 26px;
+      border: 1px solid #123c2f;
+      border-radius: 999px;
+      background-color: #123c2f;
+      color: #ffffff !important;
       font-size: 15px;
-      margin: 20px 0;
+      font-weight: 700;
+      line-height: 1.2;
       text-align: center;
-      border: 2px solid #0f766e;
+      text-decoration: none;
     }
     .fallback-link {
-      background-color: #f9fafb;
-      border: 1px solid #e5e7eb;
-      padding: 14px 16px;
-      border-radius: 4px;
-      margin: 20px 0;
-      font-family: 'Courier New', monospace;
-      font-size: 14px;
-      color: #374151;
+      margin: 22px 0;
+      padding: 16px;
+      border: 1px solid #d8d2c5;
+      border-radius: 12px;
+      background-color: #f8f5ed;
+      color: #526d64;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+      font-size: 12px;
+      line-height: 1.6;
       word-break: break-all;
     }
-    .time-limit {
-      background-color: #fffbeb;
-      border-left: 3px solid #d97706;
-      padding: 14px 16px;
-      margin: 20px 0;
-      border-radius: 0 4px 4px 0;
-    }
-    .time-limit p {
-      margin: 0;
-      color: #92400e;
-      font-size: 14px;
-    }
+    .fallback-link strong { color: #29483f; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
     .security-note {
-      background-color: #f8fafc;
-      border-left: 3px solid #64748b;
-      padding: 14px 16px;
-      margin: 20px 0;
-      border-radius: 0 4px 4px 0;
+      margin: 24px 0 0;
+      padding: 16px;
+      border-left: 3px solid #537266;
+      border-radius: 0 10px 10px 0;
+      background-color: #edf2ef;
     }
-    .security-note p {
-      margin: 0;
-      color: #0c4a6e;
-      font-size: 14px;
-    }
+    .security-note p { margin: 0; color: #476258; font-size: 13px; line-height: 1.6; }
     .tier-badge {
       display: inline-block;
-      background-color: #f3f4f6;
-      color: #374151;
-      padding: 6px 14px;
-      border-radius: 4px;
-      font-weight: 500;
+      margin: 0 0 20px;
+      padding: 7px 13px;
+      border-radius: 999px;
+      background-color: #eaf5d5;
+      color: #34551c;
       font-size: 13px;
-      margin-bottom: 20px;
+      font-weight: 700;
     }
-    .feature-list {
-      background-color: #f9fafb;
-      border: 1px solid #e5e7eb;
-      border-radius: 4px;
+    .feature-list, .message-block {
+      margin: 22px 0;
       padding: 20px;
-      margin: 20px 0;
+      border: 1px solid #d8d2c5;
+      border-radius: 14px;
+      background-color: #f8f5ed;
     }
-    .feature-item {
-      display: flex;
-      align-items: center;
-      margin-bottom: 12px;
-      font-size: 14px;
-      color: #4b5563;
-    }
-    .feature-item:last-child {
-      margin-bottom: 0;
-    }
-    .feature-check {
-      color: #6b7280;
-      margin-right: 10px;
-      font-size: 14px;
-    }
-    .message-block {
-      background-color: #f9fafb;
-      border: 1px solid #e5e7eb;
-      border-radius: 4px;
-      padding: 18px;
-      margin: 18px 0;
-    }
-    .footer {
-      background-color: #f1f5f9;
-      color: #334155;
-      padding: 24px;
-      text-align: center;
-    }
-    .footer-links {
-      margin-bottom: 20px;
-    }
-    .footer-link {
-      color: #0f766e;
-      text-decoration: none;
-      margin: 0 12px;
-      font-size: 13px;
-    }
-    .social-links {
-      margin-top: 20px;
-    }
-    .social-icon {
-      display: inline-block;
-      width: 32px;
-      height: 32px;
-      background-color: #374151;
-      border-radius: 50%;
-      margin: 0 8px;
-      text-align: center;
-      line-height: 32px;
-      color: #9ca3af;
-      text-decoration: none;
-    }
-    .social-icon:hover {
-      background-color: #4b5563;
-      color: #d1d5db;
-    }
-    @media (max-width: 600px) {
-      .container {
-        margin: 0;
-        border-radius: 0;
-      }
-      .header, .content, .footer {
-        padding: 20px;
-      }
-      .verification-code {
-        font-size: 24px;
-        letter-spacing: 2px;
-      }
+    .feature-item { margin: 0 0 12px; color: #526d64; font-size: 14px; line-height: 1.5; }
+    .feature-item:last-child { margin-bottom: 0; }
+    .feature-check { margin-right: 9px; color: #397052; font-weight: 700; }
+    .footer { padding: 28px 32px; background-color: #123c2f; color: #d7e1dc; text-align: center; }
+    .footer-links { margin: 0 0 18px; }
+    .footer-link { margin: 0 9px; color: #cfff68 !important; font-size: 12px; font-weight: 600; text-decoration: none; }
+    .footer p { color: #d7e1dc; }
+    @media only screen and (max-width: 620px) {
+      .email-pad { padding: 0; }
+      .container { border: 0; border-radius: 0; box-shadow: none; }
+      .header { padding: 22px 24px 20px; }
+      .brand-logo { width: 160px; }
+      .content { padding: 34px 24px 30px; }
+      .welcome-message { font-size: 27px; }
+      .verification-code { font-size: 28px; letter-spacing: 5px; }
+      .footer { padding: 26px 20px; }
+      .footer-link { display: inline-block; margin: 5px 7px; }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header" style="background-color: #0C121D; padding: 32px 24px; text-align: center; color: #ffffff;">
-      <div class="logo">
-        <img src="${baseUrl}/ask-linc.png" alt="Ask Linc" width="200" height="48" style="max-width: 200px; height: auto; display: block; margin: 0 auto;" />
-      </div>
-    </div>
+  <table role="presentation" class="email-shell" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; background-color: #f5f1e8;">
+    <tr>
+      <td class="email-pad" style="padding: 36px 18px;">
+        <div class="container" style="width: 100%; max-width: 600px; margin: 0 auto; overflow: hidden; border: 1px solid #d8d2c5; border-radius: 18px; background-color: #fffdf7;">
+          <div class="accent-bar" style="height: 6px; background-color: #cfff68; font-size: 0; line-height: 0;">&nbsp;</div>
+          <div class="header" style="padding: 25px 32px 23px; border-bottom: 1px solid #e2ddd2; background-color: #fffdf7; text-align: left;">
+            <a href="${baseUrl}" aria-label="Ask Linc home" style="display: inline-block; text-decoration: none;">
+              <img class="brand-logo" src="${baseUrl}/ask-linc-logo.png" alt="Ask Linc" width="180" style="display: block; width: 180px; max-width: 100%; height: auto; border: 0;" />
+            </a>
+          </div>
 
-    <div class="content">
-      ${content}
-    </div>
+          <div class="content" style="padding: 42px 42px 36px; background-color: #fffdf7;">
+            ${content}
+          </div>
 
-    <div class="footer" style="background-color: #f1f5f9; color: #334155; padding: 24px; text-align: center;">
-      <div class="footer-links" style="margin-bottom: 20px;">
-        <a href="${baseUrl}" style="color: #0f766e; text-decoration: none; margin: 0 12px; font-size: 13px;">Home</a>
-        <a href="https://asklinc.com/features" style="color: #0f766e; text-decoration: none; margin: 0 12px; font-size: 13px;">Features</a>
-        <a href="${baseUrl}/privacy" style="color: #0f766e; text-decoration: none; margin: 0 12px; font-size: 13px;">Privacy</a>
-        <a href="${baseUrl}/blog" style="color: #0f766e; text-decoration: none; margin: 0 12px; font-size: 13px;">Blog</a>
-      </div>
-
-      <p style="margin: 0; color: #475569;">© ${new Date().getFullYear()} Ask Linc. All rights reserved.</p>
-      ${footerNote ? `<p style="margin: 5px 0 0 0; color: #475569; font-size: 12px;">${footerNote}</p>` : ''}
-    </div>
-  </div>
+          <div class="footer" style="padding: 28px 32px; background-color: #123c2f; color: #d7e1dc; text-align: center;">
+            <div class="footer-links" style="margin: 0 0 18px;">
+              <a class="footer-link" href="${baseUrl}" style="margin: 0 9px; color: #cfff68; font-size: 12px; font-weight: 600; text-decoration: none;">Home</a>
+              <a class="footer-link" href="${baseUrl}/features" style="margin: 0 9px; color: #cfff68; font-size: 12px; font-weight: 600; text-decoration: none;">Features</a>
+              <a class="footer-link" href="${baseUrl}/how-we-protect-your-data" style="margin: 0 9px; color: #cfff68; font-size: 12px; font-weight: 600; text-decoration: none;">Privacy &amp; Security</a>
+              <a class="footer-link" href="${baseUrl}/contact" style="margin: 0 9px; color: #cfff68; font-size: 12px; font-weight: 600; text-decoration: none;">Contact</a>
+            </div>
+            <p style="margin: 0; color: #d7e1dc; font-size: 12px; line-height: 1.6;">© ${new Date().getFullYear()} Ethan Teng Consulting LLC</p>
+            ${footerNote ? `<p style="margin: 5px 0 0; color: #aebeb6; font-size: 11px; line-height: 1.5;">${footerNote}</p>` : ''}
+          </div>
+        </div>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>
 `;

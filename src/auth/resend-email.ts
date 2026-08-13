@@ -59,9 +59,9 @@ export async function sendEmailVerificationCode(
         <p><strong>This code expires in 15 minutes.</strong></p>
       </div>
 
-      <div style="text-align: center;">
-        <a href="${baseUrl}" class="cta-button" style="color: #0f766e; background-color: #ffffff; border: 2px solid #0f766e; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: 600; display: inline-block;">
-          Visit Ask Linc
+      <div class="button-wrap" style="margin: 28px 0; text-align: center;">
+        <a href="${baseUrl}/verify-email" class="cta-button" style="display: inline-block; padding: 14px 26px; border: 1px solid #123c2f; border-radius: 999px; background-color: #123c2f; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700;">
+          Verify in Ask Linc
         </a>
       </div>
 
@@ -121,8 +121,8 @@ export async function sendPasswordResetEmail(
         We received a request to reset the password for your Ask Linc account. Click the button below to create a new password.
       </div>
 
-      <div style="text-align: center;">
-        <a href="${resetUrl}" class="cta-button" style="color: #0f766e; background-color: #ffffff; border: 2px solid #0f766e; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-weight: 600; display: inline-block;">
+      <div class="button-wrap" style="margin: 28px 0; text-align: center;">
+        <a href="${resetUrl}" class="cta-button" style="display: inline-block; padding: 14px 26px; border: 1px solid #123c2f; border-radius: 999px; background-color: #123c2f; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 700;">
           Reset password
         </a>
       </div>

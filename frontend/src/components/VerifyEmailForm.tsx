@@ -2,7 +2,8 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import SiteFooter from './SiteFooter';
+import { ArrowRight, CircleAlert, CircleCheck, LoaderCircle, MailCheck, RefreshCw } from 'lucide-react';
+import AuthFlowShell from './auth/AuthFlowShell';
 
 interface SubscriptionContext {
   subscription: string;
@@ -146,94 +147,104 @@ function VerifyEmailFormContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex flex-col">
-      <div className="flex-1 flex items-center justify-center">
-      <div className="max-w-md w-full space-y-8 p-8">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold">Verify Your Email</h1>
-          <p className="text-gray-400 mt-2">Enter the verification code sent to your email</p>
-          
+    <AuthFlowShell
+      eyebrow="One last step"
+      title="Verify your email."
+      description="Enter the six-digit code we sent to your inbox to activate your Ask Linc account."
+      asideTitle="Your financial context stays yours."
+      asideDescription="Email verification helps keep your private workspace and connected financial information in the right hands."
+      benefits={[
+        'A short-lived code protects account activation',
+        'Your workspace remains private and encrypted',
+        'Verification takes less than a minute',
+      ]}
+    >
           {subscriptionContext && (
-            <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-md">
-              <p className="text-green-400 text-sm">
-                🎉 Your subscription is waiting!
-              </p>
-              <p className="text-green-400 text-xs mt-1">
-                Verify your email to activate your subscription.
-              </p>
+            <div className="mb-5 flex gap-3 rounded-2xl border border-[#719632]/25 bg-[#eaf5d5] p-4 text-sm text-[#34551c]" role="status">
+              <CircleCheck className="mt-0.5 shrink-0" size={18} />
+              <div>
+                <strong className="block">Your subscription is ready.</strong>
+                <span className="mt-1 block text-[#4d6a35]">Verify your email to open your workspace.</span>
+              </div>
             </div>
           )}
-        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
           {error && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-md p-3 text-red-400 text-sm">
-              {error}
+            <div role="alert" className="flex gap-3 rounded-2xl border border-[#b84a3d]/25 bg-[#fff2ed] p-4 text-sm leading-6 text-[#8b3027]">
+              <CircleAlert className="mt-0.5 shrink-0" size={18} />
+              <span>{error}</span>
             </div>
           )}
 
           {success && (
-            <div className="bg-green-500/10 border border-green-500/20 rounded-md p-3 text-green-400 text-sm">
-              {success}
+            <div role="status" className="flex gap-3 rounded-2xl border border-[#719632]/25 bg-[#eaf5d5] p-4 text-sm leading-6 text-[#34551c]">
+              <CircleCheck className="mt-0.5 shrink-0" size={18} />
+              <span>{success}</span>
             </div>
           )}
 
           <div>
-            <label htmlFor="code" className="block text-sm font-medium text-gray-300 mb-2">
+            <label htmlFor="code" className="mb-2 block text-sm font-semibold text-[#29483f]">
               Verification Code
             </label>
-            <input
-              id="code"
-              type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              required
-              maxLength={6}
-              className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-center text-2xl tracking-widest"
-              placeholder="000000"
-            />
+            <div className="relative">
+              <MailCheck className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#71857f]" size={19} />
+              <input
+                id="code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                value={code}
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                required
+                maxLength={6}
+                className="h-14 w-full rounded-xl border border-[#123c2f]/20 bg-[#fffdf7] py-3 pl-12 pr-4 text-center font-mono text-2xl font-semibold tracking-[0.3em] text-[#123c2f] shadow-sm outline-none placeholder:text-[#a6b0ac] focus:border-[#123c2f] focus:ring-4 focus:ring-[#123c2f]/10"
+                placeholder="000000"
+                aria-describedby="code-help"
+              />
+            </div>
+            <p id="code-help" className="mt-2 text-xs leading-5 text-[#71857f]">The code expires 15 minutes after it is sent.</p>
           </div>
 
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-primary hover:bg-primary/90 disabled:opacity-50 text-white font-medium py-2 px-4 rounded-md transition-colors"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#123c2f] px-5 py-3.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(18,60,47,.16)] transition hover:bg-[#1a5140] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isLoading ? 'Verifying...' : 'Verify Email'}
+            {isLoading ? <><LoaderCircle className="animate-spin" size={17} />Verifying…</> : <>Verify email <ArrowRight size={17} /></>}
           </button>
         </form>
 
-        <div className="space-y-4">
-          <div className="text-center">
+        <div className="mt-7 border-t border-[#123c2f]/10 pt-6">
+          <div className="flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-5">
             <button
+              type="button"
               onClick={handleResendCode}
               disabled={isResending}
-              className="text-primary hover:text-primary/80 disabled:opacity-50 text-sm"
+              className="inline-flex items-center gap-2 text-sm font-semibold text-[#175cce] hover:underline disabled:opacity-50"
             >
-              {isResending ? 'Sending...' : 'Resend Code'}
+              <RefreshCw className={isResending ? 'animate-spin' : ''} size={15} />
+              {isResending ? 'Sending…' : 'Resend code'}
             </button>
-          </div>
-
-          <div className="text-center">
             <button
+              type="button"
               onClick={handleSendCode}
               disabled={isResending}
-              className="text-gray-400 hover:text-white disabled:opacity-50 text-sm"
+              className="text-sm font-semibold text-[#34594e] hover:text-[#123c2f] disabled:opacity-50"
             >
-              {isResending ? 'Sending...' : 'Send New Code'}
+              Send a new code
             </button>
           </div>
         </div>
 
-        <div className="text-center">
-          <Link href="/login" className="text-gray-400 hover:text-white text-sm">
+        <div className="mt-5 text-center">
+          <Link href="/login" className="text-sm text-[#71857f] hover:text-[#123c2f]">
             Skip for now
           </Link>
         </div>
-      </div>
-      </div>
-      <SiteFooter />
-    </div>
+    </AuthFlowShell>
   );
 }
 
@@ -244,4 +255,3 @@ export default function VerifyEmailForm() {
     </Suspense>
   );
 }
-

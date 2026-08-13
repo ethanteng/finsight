@@ -3,8 +3,28 @@ import { Brain } from 'lucide-react';
 import Link from 'next/link';
 
 export default function SiteFooter({ variant = 'default' }: { variant?: 'default' | 'auth' }) {
+  if (variant === 'auth') {
+    return (
+      <footer className="border-t border-[#123c2f]/10 bg-[#ebe6da] py-8 text-[#123c2f]">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-5 px-5 sm:px-8 md:flex-row">
+          <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-tight transition hover:opacity-80">
+            <span className="grid h-8 w-8 place-items-center rounded-[9px_9px_9px_2px] bg-[#102319] text-sm font-bold text-[#d9ff6f]">L</span>
+            <span>Ask Linc</span>
+          </Link>
+          <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-medium text-[#607b72]" aria-label="Account footer">
+            <Link href="/how-we-protect-your-data" className="hover:text-[#123c2f]">Privacy &amp; Security</Link>
+            <Link href="/privacy" className="hover:text-[#123c2f]">Privacy</Link>
+            <Link href="/terms" className="hover:text-[#123c2f]">Terms</Link>
+            <Link href="/contact" className="hover:text-[#123c2f]">Contact</Link>
+          </nav>
+          <p className="text-center text-xs text-[#71857f] md:text-right">&copy; {new Date().getFullYear()} Ethan Teng Consulting LLC</p>
+        </div>
+      </footer>
+    );
+  }
+
   return (
-    <footer className={variant === 'auth' ? 'border-t border-[#123c2f]/10 bg-[#ebe6da] py-10 text-[#123c2f]' : 'bg-muted/50 py-12'}>
+    <footer className="bg-muted/50 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col md:flex-row justify-between items-center gap-5">
           <Link href="/" className="flex items-center space-x-2 hover:opacity-90 transition-opacity">
