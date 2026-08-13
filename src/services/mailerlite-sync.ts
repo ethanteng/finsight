@@ -104,15 +104,17 @@ export class MailerLiteSyncService {
           // This ensures consistency between admin view and MailerLite sync
           let hasActiveSubscription = false;
           
-          if (user.subscriptionStatus === 'active') {
-            // Active subscription - full access
+          if (user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing') {
+            // Active or trialing subscription - full access
             hasActiveSubscription = true;
           } else if (user.subscriptions.length === 0 && user.subscriptionStatus === 'inactive') {
             // Admin-created user - no Stripe subscription records exist
             hasActiveSubscription = true;
           } else {
             // Check if any subscription is active
-            hasActiveSubscription = user.subscriptions.some((sub: any) => sub.status === 'active');
+            hasActiveSubscription = user.subscriptions.some((sub: any) =>
+              sub.status === 'active' || sub.status === 'trialing'
+            );
           }
           
           // Get current tier (from subscription or user default)
@@ -240,8 +242,8 @@ export class MailerLiteSyncService {
       }
 
       // Check both the subscriptionStatus field and if there are active subscriptions
-      const hasActiveSubscription = user.subscriptionStatus === 'active' || 
-        user.subscriptions.some((sub: any) => sub.status === 'active');
+      const hasActiveSubscription = ['active', 'trialing'].includes(user.subscriptionStatus) ||
+        user.subscriptions.some((sub: any) => sub.status === 'active' || sub.status === 'trialing');
       const currentTier = hasActiveSubscription && user.subscriptions.length > 0
         ? user.subscriptions[0].tier 
         : user.tier;

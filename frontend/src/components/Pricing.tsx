@@ -61,7 +61,7 @@ export const Pricing = () => {
                 <span className="text-muted-foreground text-xl">/ month</span>
               </div>
               <p className="text-muted-foreground text-base max-w-md mx-auto">
-                $9/month flat — vs the 1-2% of your wealth a human advisor charges every year.
+                1 month free, then $9/month flat — vs the 1-2% of your wealth a human advisor charges every year.
               </p>
             </div>
             
@@ -108,4 +108,4 @@ export const Pricing = () => {
       </div>
     </section>
   );
-}; 
+};

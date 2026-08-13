@@ -55,7 +55,7 @@ export default function PricingPageContent() {
                 One plan. <span className="gradient-text">Full access.</span>
               </h1>
               <p className="text-slate-300">
-                $9/month for full access with your own accounts. Cancel anytime.
+                Start with 1 month free, then $9/month. Cancel anytime.
               </p>
             </div>
 
@@ -97,10 +97,10 @@ export default function PricingPageContent() {
                     onClick={handleBuyClick}
                     disabled={isLoading}
                   >
-                    {isLoading ? 'Creating...' : 'Get started'}
+                    {isLoading ? 'Creating...' : 'Start free trial'}
                   </Button>
                   <p className="text-center text-xs text-muted-foreground">
-                    Cancel anytime.
+                    1 month free, then $9/month. Cancel anytime.
                   </p>
                 </div>
               </CardContent>

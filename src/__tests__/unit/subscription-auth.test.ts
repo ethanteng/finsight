@@ -94,6 +94,25 @@ describe('Subscription Auth Middleware', () => {
       );
     });
 
+    it('should allow access while the subscription is trialing', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user123',
+        tier: 'premium',
+        subscriptionStatus: 'trialing',
+        subscriptions: [{
+          id: 'sub123',
+          status: 'trialing',
+          currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        }]
+      });
+
+      const middleware = subscriptionAuthMiddleware('premium');
+      await middleware(mockRequest, mockResponse, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect(mockResponse.status).not.toHaveBeenCalled();
+    });
+
     it('should handle past due subscriptions with grace period', async () => {
       const gracePeriodEnd = new Date(Date.now() + (5 * 24 * 60 * 60 * 1000)); // 5 days from now
       
@@ -231,6 +250,21 @@ describe('Subscription Auth Middleware', () => {
           code: 'ACTIVE_SUBSCRIPTION_REQUIRED'
         })
       );
+    });
+
+    it('should treat trialing subscriptions as active', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        subscriptionStatus: 'trialing',
+        subscriptions: [{
+          id: 'sub123',
+          status: 'trialing'
+        }]
+      });
+
+      await requireActiveSubscription(mockRequest, mockResponse, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect(mockResponse.status).not.toHaveBeenCalled();
     });
   });
 

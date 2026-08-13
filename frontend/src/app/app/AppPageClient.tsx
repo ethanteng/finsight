@@ -44,7 +44,7 @@ export default function AppPageClient() {
           router.push(`/login?message=${encodeURIComponent(data.message)}`);
           return;
         }
-        setSubscriptionStatus({ ...data, message: data.message || '', isActive: data.status === 'active', accessLevel: data.accessLevel || 'none', upgradeRequired: data.upgradeRequired || false });
+        setSubscriptionStatus({ ...data, message: data.message || '', isActive: ['active', 'trialing'].includes(data.status), accessLevel: data.accessLevel || 'none', upgradeRequired: data.upgradeRequired || false });
       } else if (res.status === 403) {
         const data = await res.json();
         localStorage.removeItem('auth_token');

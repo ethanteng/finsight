@@ -280,7 +280,7 @@ describe('AdminPage', () => {
       expect(screen.getAllByText('No market context available for this tier.')).toHaveLength(3);
     });
   });
-}); 
+});
 
 describe('Admin User Management', () => {
   beforeEach(() => {
@@ -298,6 +298,10 @@ describe('Admin User Management', () => {
                 createdAt: '2024-01-01T00:00:00Z',
                 lastLoginAt: '2024-01-02T00:00:00Z',
                 isActive: true,
+                subscriptionStatus: 'active',
+                accessLevel: 'full',
+                upgradeRequired: false,
+                subscriptionMessage: '',
                 _count: { conversations: 5 }
               },
               {
@@ -307,7 +311,25 @@ describe('Admin User Management', () => {
                 createdAt: '2024-01-01T00:00:00Z',
                 lastLoginAt: null,
                 isActive: false,
+                subscriptionStatus: 'canceled',
+                accessLevel: 'none',
+                upgradeRequired: true,
+                subscriptionMessage: 'Subscription canceled.',
                 _count: { conversations: 0 }
+              },
+              {
+                id: 'user3',
+                email: 'trial@example.com',
+                tier: 'premium',
+                createdAt: '2026-08-13T00:00:00Z',
+                lastLoginAt: null,
+                isActive: true,
+                subscriptionStatus: 'trialing',
+                trialExpiresAt: '2026-09-12T12:00:00Z',
+                accessLevel: 'full',
+                upgradeRequired: false,
+                subscriptionMessage: 'premium trial is active',
+                _count: { conversations: 1 }
               }
             ]
           })
@@ -344,46 +366,6 @@ describe('Admin User Management', () => {
   });
 
   it('should display user management tab with user information', async () => {
-    // Mock all the API calls that happen on component mount
-    (global.fetch as jest.Mock)
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ sessions: [] }) }) // demo-sessions
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ conversations: [] }) }) // demo-conversations
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ users: [] }) }) // production-sessions
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ conversations: [] }) }) // production-conversations
-      .mockResolvedValueOnce({ ok: true, json: async () => ({
-        users: [
-          {
-            id: 'user1',
-            email: 'test@example.com',
-            tier: 'starter',
-            createdAt: '2024-01-01T00:00:00Z',
-            lastLoginAt: '2024-01-02T00:00:00Z',
-            isActive: true,
-            subscriptionStatus: 'active',
-            accessLevel: 'full',
-            upgradeRequired: false,
-            subscriptionMessage: '',
-            _count: { conversations: 5 }
-          },
-          {
-            id: 'user2',
-            email: 'test2@example.com',
-            tier: 'premium',
-            createdAt: '2024-01-01T00:00:00Z',
-            lastLoginAt: null,
-            isActive: false,
-            subscriptionStatus: 'canceled',
-            accessLevel: 'none',
-            upgradeRequired: true,
-            subscriptionMessage: 'Subscription canceled.',
-            _count: { conversations: 0 }
-          }
-        ]
-      }) }) // production-users
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'starter' }) }) // market-news/context/starter
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'standard' }) }) // market-news/context/standard
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ contextText: '', dataSources: [], keyEvents: [], lastUpdate: '', tier: 'premium' }) }); // market-news/context/premium
-
     render(<AdminPage />);
     
     // Wait for data to load
@@ -392,18 +374,22 @@ describe('Admin User Management', () => {
     });
 
     // Click on User Management tab
-    const userTab = screen.getByText('User Management');
+    const userTab = await screen.findByText('User Management');
     fireEvent.click(userTab);
 
     // Wait for user data to load
     await waitFor(() => {
       expect(screen.getByText('test@example.com')).toBeInTheDocument();
       expect(screen.getByText('test2@example.com')).toBeInTheDocument();
+      expect(screen.getByText('trial@example.com')).toBeInTheDocument();
     });
 
     // Check that active/inactive status is displayed
     expect(screen.getByText('Active')).toBeInTheDocument();
     expect(screen.getByText('Admin Revoked')).toBeInTheDocument();
+    expect(screen.getByText('Active trials').parentElement).toHaveTextContent(/1\s*Active trials/);
+    expect(screen.getByText('Trialing')).toBeInTheDocument();
+    expect(screen.getByText(/Trial ends:/)).toHaveTextContent('9/12/2026');
   });
 
   it('should allow revoking user access', async () => {
@@ -791,4 +777,4 @@ describe('Admin User Management', () => {
       expect(screen.queryByText(/⚠️ Warning:/)).not.toBeInTheDocument();
     });
   });
-}); 
+});

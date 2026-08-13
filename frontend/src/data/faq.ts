@@ -12,7 +12,7 @@ export const FAQ_ITEMS: FaqItem[] = [
   {
     question: "Is there a free plan or trial?",
     answer:
-      "No. Ask Linc is $9/month for full access with your own accounts. Cancel anytime.",
+      "Yes. Start with a free 1-month trial, then Ask Linc is $9/month for full access with your own accounts. Cancel anytime.",
   },
   {
     question: "I don't want to give AI companies all my financial data...",
@@ -70,6 +70,6 @@ export const PRODUCT_OFFER_SCHEMA = {
     availability: "https://schema.org/InStock",
     url: "https://asklinc.com/pricing",
     priceValidUntil: "2027-12-31",
-    description: "$9/month for unlimited questions, connected accounts, what-if scenarios, and calculations you can inspect.",
+    description: "Free for 1 month, then $9/month for unlimited questions, connected accounts, what-if scenarios, and calculations you can inspect.",
   },
 };

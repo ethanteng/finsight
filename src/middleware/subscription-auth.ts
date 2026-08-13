@@ -53,16 +53,18 @@ export const subscriptionAuthMiddleware = (requiredTier: string, requiredStatus:
       const subscriptionStatus = user.subscriptionStatus;
       
       // Check if subscription has expired by looking at the subscription record
-      const activeSubscription = user.subscriptions.find((sub: any) => sub.status === 'active');
-      const isExpired = activeSubscription ? 
-        (activeSubscription.currentPeriodEnd && new Date() > activeSubscription.currentPeriodEnd) : 
+      const currentSubscription = user.subscriptions.find((sub: any) =>
+        sub.status === 'active' || sub.status === 'trialing'
+      );
+      const isExpired = currentSubscription ?
+        (currentSubscription.currentPeriodEnd && new Date() > currentSubscription.currentPeriodEnd) :
         false;
 
       // Determine access level
       let hasAccess = false;
       let accessReason = '';
 
-      if (subscriptionStatus === 'active' && !isExpired) {
+      if ((subscriptionStatus === 'active' || subscriptionStatus === 'trialing') && !isExpired) {
         // Check tier access
         const tierHierarchy = ['starter', 'standard', 'premium'];
         const userTierIndex = tierHierarchy.indexOf(currentTier);
@@ -164,7 +166,7 @@ export const requireActiveSubscription = async (req: AuthenticatedRequest, res: 
       where: { id: req.user.id },
       include: {
         subscriptions: {
-          where: { status: 'active' },
+          where: { status: { in: ['active', 'trialing'] } },
           orderBy: { createdAt: 'desc' },
           take: 1
         }
@@ -179,7 +181,7 @@ export const requireActiveSubscription = async (req: AuthenticatedRequest, res: 
     }
 
     const activeSubscription = user.subscriptions[0];
-    const isActive = user.subscriptionStatus === 'active' && activeSubscription;
+    const isActive = ['active', 'trialing'].includes(user.subscriptionStatus) && activeSubscription;
 
     if (!isActive) {
       return res.status(403).json({

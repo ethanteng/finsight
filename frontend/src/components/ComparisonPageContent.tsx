@@ -62,7 +62,7 @@ export default function ComparisonPageContent({ page }: { page: ComparisonPage }
                   {isLoading ? "Loading..." : "Get started"}
                 </Button>
                 <Button variant="outline" size="lg" asChild>
-                  <Link href="/pricing">$9/month pricing</Link>
+                  <Link href="/pricing">1 month free, then $9/month</Link>
                 </Button>
               </div>
             </div>

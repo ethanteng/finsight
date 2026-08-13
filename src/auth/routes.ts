@@ -18,6 +18,11 @@ import {
 import { sendContactEmail } from './resend-email';
 import { stripe } from '../config/stripe';
 import { sendWelcomeEmail } from '../services/stripe-email';
+import { analytics } from '../analytics/heycatch';
+
+function isUniqueConstraintError(error: unknown): error is { code: string } {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
+}
 
 const router = Router();
 const prisma = getPrismaClient();
@@ -114,7 +119,7 @@ router.post('/register', async (req: Request, res: Response) => {
         email: email.toLowerCase(),
         passwordHash,
         tier,
-        subscriptionStatus: stripeSessionIdToUse ? 'active' : 'inactive'
+        subscriptionStatus: 'inactive'
       },
       select: {
         id: true,
@@ -126,9 +131,23 @@ router.post('/register', async (req: Request, res: Response) => {
 
     // If coming from Stripe checkout, create Stripe customer and link subscription
     if (stripeSessionIdToUse) {
+      let linkedStripeSubscription = false;
       try {
         // First, find the Stripe session to get the subscription ID
-        const session = await stripe.client.checkout.sessions.retrieve(stripeSessionIdToUse);
+        const session = await stripe.client.checkout.sessions.retrieve(stripeSessionIdToUse, {
+          expand: ['subscription']
+        });
+
+        const checkoutIsComplete = session.status === 'complete' &&
+          (session.payment_status === 'paid' || session.payment_status === 'no_payment_required');
+        if (!checkoutIsComplete) {
+          throw new Error('Stripe Checkout session is not complete');
+        }
+
+        const checkoutEmail = session.customer_details?.email?.toLowerCase();
+        if (checkoutEmail && checkoutEmail !== user.email.toLowerCase()) {
+          throw new Error('Stripe Checkout email does not match the registered account');
+        }
         
         if (session.subscription && session.customer) {
           // Create or get Stripe customer
@@ -141,54 +160,100 @@ router.post('/register', async (req: Request, res: Response) => {
             customer = session.customer;
           }
           
-          // Update user with Stripe customer ID
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { 
+          const stripeSubscription = typeof session.subscription === 'string'
+            ? await stripe.client.subscriptions.retrieve(session.subscription)
+            : session.subscription;
+
+          if (stripeSubscription) {
+            const subscription = stripeSubscription as any;
+            const subscriptionStatus = subscription.status || 'incomplete';
+            const currentPeriodStart = subscription.current_period_start
+              ? new Date(subscription.current_period_start * 1000)
+              : new Date();
+            const currentPeriodEnd = subscription.current_period_end
+              ? new Date(subscription.current_period_end * 1000)
+              : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+            const subscriptionData = {
+              userId: user.id,
               stripeCustomerId: customer.id,
-              subscriptionStatus: 'active'
+              tier,
+              status: subscriptionStatus,
+              currentPeriodStart,
+              currentPeriodEnd,
+              cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+            };
+
+            // Persist the subscription before exposing the Stripe customer ID.
+            // The webhook cannot find this user until the record it would update
+            // already exists, preventing both paths from claiming first delivery.
+            // Claim first delivery with an atomic insert so concurrent registration
+            // retries or webhook replay cannot repeat welcome/analytics side effects.
+            let isNewSubscription = false;
+            try {
+              await prisma.subscription.create({
+                data: {
+                  ...subscriptionData,
+                  stripeSubscriptionId: subscription.id,
+                },
+              });
+              isNewSubscription = true;
+            } catch (error) {
+              if (!isUniqueConstraintError(error)) {
+                throw error;
+              }
+
+              await prisma.subscription.update({
+                where: { stripeSubscriptionId: subscription.id },
+                data: subscriptionData,
+              });
             }
-          });
-          
-          console.log(`Linked user ${user.email} to Stripe customer ${customer.id}`);
-          
-          // Find the subscription by Stripe subscription ID
-          const subscriptionId = typeof session.subscription === 'string' 
-            ? session.subscription 
-            : session.subscription?.id;
-            
-          if (subscriptionId) {
-            const subscription = await prisma.subscription.findFirst({
-              where: {
-                stripeSubscriptionId: subscriptionId
+
+            await prisma.user.update({
+              where: { id: user.id },
+              data: {
+                stripeCustomerId: customer.id,
+                subscriptionStatus
               }
             });
 
-            if (subscription) {
-              // Link the user to the subscription
-              await prisma.subscription.update({
-                where: { id: subscription.id },
-                data: { userId: user.id }
-              });
-
-              console.log(`Linked user ${user.email} to subscription ${subscription.id}`);
-            } else {
-              console.log(`Subscription ${subscriptionId} not found yet, will be created by webhook`);
-            }
+            linkedStripeSubscription = true;
+            console.log(`Linked user ${user.email} to Stripe customer ${customer.id} and subscription ${subscription.id}`);
             
-            // Send welcome email for new Stripe users (regardless of webhook status)
-            try {
-              await sendWelcomeEmail(user.email, tier);
-              console.log(`Welcome email sent to ${user.email} for ${tier} plan during registration`);
-            } catch (emailError) {
-              console.error(`Failed to send welcome email to ${user.email} during registration:`, emailError);
-              // Don't fail registration if email fails
+            // Only send when registration creates the subscription record first. If the
+            // webhook already linked it, skip to avoid duplicate welcome emails.
+            if (isNewSubscription) {
+              try {
+                await sendWelcomeEmail(user.email, tier);
+                console.log(`Welcome email sent to ${user.email} for ${tier} plan during registration`);
+              } catch (emailError) {
+                console.error(`Failed to send welcome email to ${user.email} during registration:`, emailError);
+                // Don't fail registration if email fails
+              }
+
+              try {
+                await analytics.setIdentity(user.id, { email: user.email, plan: tier });
+                await analytics.trackEvent(
+                  'subscription_started',
+                  { plan: tier },
+                  { userId: user.id },
+                );
+              } catch (analyticsError) {
+                console.error(`Failed to record subscription_started for ${user.email} during registration:`, analyticsError);
+              }
             }
           }
         }
       } catch (subscriptionError) {
         console.error('Error linking user to subscription:', subscriptionError);
         // Don't fail registration if subscription linking fails
+      }
+
+      if (!linkedStripeSubscription) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { subscriptionStatus: 'incomplete' }
+        });
       }
     }
 
@@ -740,4 +805,4 @@ router.post('/contact', async (req: Request, res: Response) => {
   }
 });
 
-export default router; 
+export default router;

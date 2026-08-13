@@ -133,7 +133,7 @@ export class SubscriptionSyncService {
   }
 
   /**
-   * Sync all active subscriptions in the system
+   * Sync all active and trialing subscriptions in the system
    */
   static async syncAllSubscriptions(): Promise<{
     success: boolean;
@@ -143,7 +143,9 @@ export class SubscriptionSyncService {
     try {
       const prisma = getPrismaClient();
       const subscriptions = await prisma.subscription.findMany({
-        where: { status: 'active' }
+        where: {
+          status: { in: ['active', 'trialing'] }
+        }
       });
       
       let syncedCount = 0;
@@ -157,7 +159,7 @@ export class SubscriptionSyncService {
       return {
         success: true,
         syncedCount,
-        message: `Synced ${syncedCount} active subscription(s)`
+        message: `Synced ${syncedCount} active or trialing subscription(s)`
       };
     } catch (error) {
       console.error('Error syncing all subscriptions:', error);

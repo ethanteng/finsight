@@ -22,9 +22,9 @@ export const COMPARISONS: ComparisonPage[] = [
     rows: [
       {
         dimension: 'Price',
-        askLinc: '$9/month flat for full access. Cancel anytime.',
+        askLinc: '1 month free, then $9/month flat for full access. Cancel anytime.',
         competitor:
-          'Check Origin for its current plans and feature limits. Ask Linc has one $9 monthly plan.',
+          'Check Origin for its current plans and feature limits. Ask Linc starts with 1 month free, then costs $9/month on its single plan.',
       },
       {
         dimension: 'Reasoning vs dashboards',
@@ -50,7 +50,7 @@ export const COMPARISONS: ComparisonPage[] = [
       {
         question: 'Why is Ask Linc $9?',
         answer:
-          '$9/month includes unlimited questions, connected accounts, what-if scenarios, and inspectable calculations.',
+          'The first month is free, then $9/month includes unlimited questions, connected accounts, what-if scenarios, and inspectable calculations.',
       },
     ],
   },
@@ -66,9 +66,9 @@ export const COMPARISONS: ComparisonPage[] = [
     rows: [
       {
         dimension: 'Price',
-        askLinc: '$9/month flat. Full access. Cancel anytime.',
+        askLinc: '1 month free, then $9/month flat. Full access. Cancel anytime.',
         competitor:
-          'Check PortfolioPilot for its current plans and feature limits. Ask Linc has one $9 monthly plan.',
+          'Check PortfolioPilot for its current plans and feature limits. Ask Linc starts with 1 month free, then costs $9/month on its single plan.',
       },
       {
         dimension: 'Reasoning vs dashboards',
@@ -110,7 +110,7 @@ export const COMPARISONS: ComparisonPage[] = [
     rows: [
       {
         dimension: 'Price',
-        askLinc: '$9/month flat for unlimited questions and accounts.',
+        askLinc: '1 month free, then $9/month flat for unlimited questions and accounts.',
         competitor:
           'Monarch is typically a higher monthly subscription for household budgeting/tracking — check Monarch for current pricing.',
       },

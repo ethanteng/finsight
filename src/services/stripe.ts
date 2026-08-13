@@ -13,6 +13,10 @@ import { getPrismaClient } from '../prisma-client';
 import { sendWelcomeEmail, sendTierChangeEmail, sendCancellationEmail } from './stripe-email';
 import { analytics } from '../analytics/heycatch';
 
+function isUniqueConstraintError(error: unknown): error is { code: string } {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
+}
+
 export class StripeService {
   /**
    * Generate success URL for checkout session
@@ -72,6 +76,7 @@ export class StripeService {
           source: 'web_checkout'
         },
         subscription_data: {
+          trial_period_days: STRIPE_CONFIG.subscriptionSettings.trialPeriodDays,
           metadata: {
             tier: tier,
             source: 'web_checkout'
@@ -190,19 +195,39 @@ export class StripeService {
       ? new Date(subscription.current_period_end * 1000)
       : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // Default to 30 days from now
 
-    // Create subscription record
-    await prisma.subscription.create({
-      data: {
-        userId: user.id,
-        stripeCustomerId: customerId,
-        stripeSubscriptionId: subscriptionId,
-        tier: tier,
-        status: subscription.status,
-        currentPeriodStart: currentPeriodStart,
-        currentPeriodEnd: currentPeriodEnd,
-        cancelAtPeriodEnd: subscription.cancel_at_period_end,
+    const subscriptionData = {
+      userId: user.id,
+      stripeCustomerId: customerId,
+      tier,
+      status: subscription.status,
+      currentPeriodStart,
+      currentPeriodEnd,
+      cancelAtPeriodEnd: subscription.cancel_at_period_end,
+    };
+
+    // Claim first delivery with an atomic insert. A separate read followed by
+    // upsert lets concurrent Stripe deliveries both run one-time side effects.
+    let isNewSubscription = false;
+    try {
+      await prisma.subscription.create({
+        data: {
+          ...subscriptionData,
+          stripeSubscriptionId: subscriptionId,
+        }
+      });
+      isNewSubscription = true;
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) {
+        throw error;
       }
-    });
+
+      // Registration or another delivery created the record first. Continue
+      // syncing current Stripe state, but do not repeat welcome/analytics.
+      await prisma.subscription.update({
+        where: { stripeSubscriptionId: subscriptionId },
+        data: subscriptionData
+      });
+    }
 
     // Update user subscription status
     await prisma.user.update({
@@ -213,21 +238,24 @@ export class StripeService {
       }
     });
 
-    // Send welcome email for new subscription
-    try {
-      await sendWelcomeEmail(user.email, tier);
-      console.log(`Welcome email sent to ${user.email} for ${tier} plan`);
-    } catch (emailError) {
-      console.error(`Failed to send welcome email to ${user.email}:`, emailError);
-      // Don't fail the webhook if email fails
-    }
+    if (isNewSubscription) {
+      try {
+        await sendWelcomeEmail(user.email, tier);
+        console.log(`Welcome email sent to ${user.email} for ${tier} plan`);
+      } catch (emailError) {
+        console.error(`Failed to send welcome email to ${user.email}:`, emailError);
+        // Don't fail the webhook if email fails
+      }
 
-    await analytics.setIdentity(user.id, { email: user.email, plan: tier });
-    await analytics.trackEvent(
-      'subscription_started',
-      { plan: tier },
-      { userId: user.id },
-    );
+      await analytics.setIdentity(user.id, { email: user.email, plan: tier });
+      await analytics.trackEvent(
+        'subscription_started',
+        { plan: tier },
+        { userId: user.id },
+      );
+    } else {
+      console.log(`Subscription ${subscriptionId} already exists; skipped welcome and start analytics`);
+    }
 
     console.log(`Subscription ${subscriptionId} activated for user ${user.id}`);
   }
@@ -542,15 +570,31 @@ export class StripeService {
     if (subscriptionId) {
       console.log(`Payment succeeded for subscription: ${subscriptionId}`);
 
+      const prisma = getPrismaClient();
+      const existingSubscription = await prisma.subscription.findUnique({
+        where: { stripeSubscriptionId: subscriptionId },
+        select: { id: true }
+      });
+
+      if (!existingSubscription) {
+        console.log(
+          `Subscription ${subscriptionId} not found in database yet; skipping payment succeeded update`
+        );
+        return;
+      }
+
       // Auto-sync tier to ensure it's correct after payment
       await this.autoSyncSubscriptionTier(subscriptionId, 'unknown');
 
-      // Update subscription status to active
-      const prisma = getPrismaClient();
+      // Use Stripe as the source of truth so $0 trial invoices do not
+      // prematurely mark a still-trialing subscription as active.
+      const stripeSubscription = await stripe.client.subscriptions.retrieve(subscriptionId);
+      const subscriptionStatus = stripeSubscription.status;
+
       await prisma.subscription.update({
         where: { stripeSubscriptionId: subscriptionId },
         data: {
-          status: 'active',
+          status: subscriptionStatus,
         }
       });
 
@@ -564,7 +608,7 @@ export class StripeService {
         await prisma.user.update({
           where: { id: subscriptionRecord.user.id },
           data: {
-            subscriptionStatus: 'active',
+            subscriptionStatus,
           }
         });
 
@@ -786,20 +830,30 @@ export class StripeService {
       
       // Get the actual subscription status from the subscription record if it exists
       let actualSubscriptionStatus = subscriptionStatus;
+      let expiresAt: Date | undefined;
       if (user.subscriptions.length > 0) {
         const latestSubscription = user.subscriptions[0];
         actualSubscriptionStatus = latestSubscription.status;
+        if (actualSubscriptionStatus === 'trialing') {
+          expiresAt = latestSubscription.currentPeriodEnd;
+        }
         console.log(`  - Actual subscription status from record: ${actualSubscriptionStatus}`);
       }
 
       // Simplified logic: Trust Stripe status, no complex date logic
-      if (actualSubscriptionStatus === 'active') {
-        // Active subscription - full access (Stripe handles expiration)
+      if (actualSubscriptionStatus === 'active' || actualSubscriptionStatus === 'trialing') {
+        // Active and trialing subscriptions both receive full access. Stripe
+        // remains responsible for transitioning the status when the trial ends.
         accessLevel = 'full';
         upgradeRequired = false;
-        message = `Active ${currentTier} subscription`;
-      } else if (subscriptionStatus === 'active' && user.subscriptions.length === 0) {
-        // Payment completed but account setup incomplete
+        message = actualSubscriptionStatus === 'trialing'
+          ? `${currentTier} trial is active`
+          : `Active ${currentTier} subscription`;
+      } else if (
+        (subscriptionStatus === 'active' || subscriptionStatus === 'trialing') &&
+        user.subscriptions.length === 0
+      ) {
+        // Checkout completed but subscription record not linked yet
         accessLevel = 'none';
         upgradeRequired = false; // Not an upgrade issue
         message = 'Payment completed but account setup incomplete. Please complete your account setup to access Ask Linc.';
@@ -827,9 +881,6 @@ export class StripeService {
           case 'incomplete_expired':
             message = 'Subscription setup expired. Please start over to restore access.';
             break;
-          case 'trialing':
-            message = 'Trial period ended. Please subscribe to restore access.';
-            break;
           case 'unpaid':
             message = 'Payment failed. Please update payment method to restore access.';
             break;
@@ -845,9 +896,10 @@ export class StripeService {
       console.log(`    - message: ${message}`);
       console.log(`    - actualStatus: ${actualSubscriptionStatus}`);
 
-              return {
+      return {
           tier: currentTier,
           status: actualSubscriptionStatus, // Use the actual status from subscription record
+          ...(expiresAt && { expiresAt }),
           accessLevel,
           upgradeRequired,
           message
@@ -1010,4 +1062,3 @@ export class StripeService {
 
 // Export singleton instance
 export const stripeService = new StripeService();
-

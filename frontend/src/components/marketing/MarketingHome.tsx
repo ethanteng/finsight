@@ -39,7 +39,7 @@ export default function Home() {
           <div className="hero-actions">
             <MarketingGetStartedButton className="button button-primary" />
           </div>
-          <p className="microcopy">$9/month. Cancel anytime.</p>
+          <p className="microcopy">1 month free, then $9/month. Cancel anytime.</p>
         </div>
 
         <div className="answer-wrap" id="answer">
@@ -97,7 +97,7 @@ export default function Home() {
 
       <section className="proof-strip" aria-label="Product trust signals">
         <div className="shell proof-grid">
-          <p><strong>$9/month</strong><span>cancel anytime</span></p>
+          <p><strong>1 month free</strong><span>then $9/month · cancel anytime</span></p>
           <p><strong>Read-only</strong><span>Linc can&apos;t move your money</span></p>
           <p><strong>Clear assumptions</strong><span>see the inputs and calculations</span></p>
           <p><strong>Private by design</strong><span>sensitive labels removed before AI analysis</span></p>

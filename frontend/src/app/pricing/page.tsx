@@ -4,9 +4,9 @@ import StructuredData from '../../components/StructuredData';
 import { buildFaqPageSchema, PRODUCT_OFFER_SCHEMA } from '../../data/faq';
 
 export const metadata: Metadata = {
-  title: 'Ask Linc Pricing — Everything Included for $9/month',
+  title: 'Ask Linc Pricing — 1 Month Free, Then $9/month',
   description:
-    '$9/month for unlimited questions, connected accounts, what-if scenarios, and calculations you can inspect. Cancel anytime.',
+    'Start with 1 month free, then pay $9/month for unlimited questions, connected accounts, what-if scenarios, and calculations you can inspect. Cancel anytime.',
   keywords: [
     'Ask Linc pricing',
     'AI financial advisor cost',
@@ -17,9 +17,9 @@ export const metadata: Metadata = {
     canonical: 'https://asklinc.com/pricing',
   },
   openGraph: {
-    title: 'Pricing | Ask Linc — $9/month',
+    title: 'Pricing | Ask Linc — 1 Month Free, Then $9/month',
     description:
-      '$9/month for unlimited questions, connected accounts, what-if scenarios, and calculations you can inspect. Cancel anytime.',
+      'Start with 1 month free, then pay $9/month for unlimited questions, connected accounts, what-if scenarios, and calculations you can inspect. Cancel anytime.',
     type: 'website',
     url: 'https://asklinc.com/pricing',
     siteName: 'Ask Linc',

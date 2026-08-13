@@ -46,7 +46,7 @@ export function MarketingGetStartedButton({
 
   return (
     <button className={className} type="button" onClick={handleClick} disabled={isLoading}>
-      {isLoading ? "Loading..." : "Get started"}
+      {isLoading ? "Loading..." : "Start free trial"}
     </button>
   );
 }
