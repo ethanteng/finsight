@@ -46,6 +46,7 @@ export function SiteFooter() {
           <Link href="/faq">FAQ</Link>
           <Link href="/can-i-retire-with-1-million">Retire With $1M</Link>
           <Link href="/can-i-retire-with-2-million">Retire With $2M</Link>
+          <Link href="/can-i-retire-at-55">Retire at 55</Link>
         </div>
         <div className="footer-column">
           <b>COMPARE</b>

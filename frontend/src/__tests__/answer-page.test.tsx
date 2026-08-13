@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import AnswerPage from "@/components/marketing/AnswerPage";
-import { buildAnswerPageSchemas, canIRetireWithOneMillion, canIRetireWithTwoMillion } from "@/lib/answer-pages";
+import { buildAnswerPageSchemas, canIRetireAt55, canIRetireWithOneMillion, canIRetireWithTwoMillion } from "@/lib/answer-pages";
 
 describe("evergreen answer page", () => {
   it("renders a structured retirement answer with reusable scenarios and sources", () => {
@@ -105,5 +105,39 @@ describe("evergreen answer page", () => {
     expect(screen.getByText("Custom income scenario footnote")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Custom product bridge heading" })).toBeInTheDocument();
     expect(screen.getByText("Custom price note")).toBeInTheDocument();
+  });
+
+  it("renders the age-55 timeline, planning scenarios, and official sources", () => {
+    render(<AnswerPage page={canIRetireAt55} />);
+
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Can I retire at 55?Build a bridge to the benefits that start later.",
+    );
+    const timeline = screen.getByRole("list", {
+      name: "Retirement planning milestones from age 55",
+    });
+    expect(within(timeline).getByText("59½")).toBeInTheDocument();
+    expect(within(timeline).getByText("Earliest claiming age")).toBeInTheDocument();
+    expect(within(timeline).getByText("Typical Medicare eligibility")).toBeInTheDocument();
+
+    const portfolioTable = screen.getByRole("table", {
+      name: "Illustrative portfolio needed before tax and other income",
+    });
+    expect(within(portfolioTable).getByRole("columnheader", { name: "$60K annual spending" })).toBeInTheDocument();
+    expect(within(portfolioTable).getByRole("row", { name: /4\.0% \$1,500,000 \$2,000,000/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Topic No\. 558/i })).toHaveAttribute(
+      "href",
+      "https://www.irs.gov/taxtopics/tc558",
+    );
+    expect(screen.getByRole("link", { name: "Retire at 55" })).toHaveAttribute(
+      "href",
+      "/can-i-retire-at-55",
+    );
+
+    const schemas = buildAnswerPageSchemas(canIRetireAt55);
+    expect(schemas.article).toMatchObject({
+      url: "https://asklinc.com/can-i-retire-at-55",
+      headline: "Can I retire at 55?",
+    });
   });
 });
