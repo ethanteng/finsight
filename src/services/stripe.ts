@@ -557,12 +557,16 @@ export class StripeService {
       // Auto-sync tier to ensure it's correct after payment
       await this.autoSyncSubscriptionTier(subscriptionId, 'unknown');
 
-      // Update subscription status to active
+      // Use Stripe as the source of truth so $0 trial invoices do not
+      // prematurely mark a still-trialing subscription as active.
       const prisma = getPrismaClient();
+      const stripeSubscription = await stripe.client.subscriptions.retrieve(subscriptionId);
+      const subscriptionStatus = stripeSubscription.status;
+
       await prisma.subscription.update({
         where: { stripeSubscriptionId: subscriptionId },
         data: {
-          status: 'active',
+          status: subscriptionStatus,
         }
       });
 
@@ -576,7 +580,7 @@ export class StripeService {
         await prisma.user.update({
           where: { id: subscriptionRecord.user.id },
           data: {
-            subscriptionStatus: 'active',
+            subscriptionStatus,
           }
         });
 
@@ -813,8 +817,11 @@ export class StripeService {
         message = actualSubscriptionStatus === 'trialing'
           ? `${currentTier} trial is active`
           : `Active ${currentTier} subscription`;
-      } else if (subscriptionStatus === 'active' && user.subscriptions.length === 0) {
-        // Payment completed but account setup incomplete
+      } else if (
+        (subscriptionStatus === 'active' || subscriptionStatus === 'trialing') &&
+        user.subscriptions.length === 0
+      ) {
+        // Checkout completed but subscription record not linked yet
         accessLevel = 'none';
         upgradeRequired = false; // Not an upgrade issue
         message = 'Payment completed but account setup incomplete. Please complete your account setup to access Ask Linc.';
