@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import AnswerPage from "@/components/marketing/AnswerPage";
-import { buildAnswerPageSchemas, canIRetireAt55, canIRetireAt60, canIRetireWithOneMillion, canIRetireWithTwoMillion } from "@/lib/answer-pages";
+import { buildAnswerPageSchemas, canIRetireAt55, canIRetireAt60, canIRetireWithOneMillion, canIRetireWithThreeMillion, canIRetireWithTwoMillion } from "@/lib/answer-pages";
 
 describe("evergreen answer page", () => {
   it("renders a structured retirement answer with reusable scenarios and sources", () => {
@@ -172,6 +172,35 @@ describe("evergreen answer page", () => {
     expect(schemas.article).toMatchObject({
       url: "https://asklinc.com/can-i-retire-at-60",
       headline: "Can I retire at 60?",
+    });
+  });
+
+  it("renders the $3 million page with after-tax planning assumptions", () => {
+    render(<AnswerPage page={canIRetireWithThreeMillion} />);
+
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Can I retire with $3 million?Translate the balance into after-tax spending.",
+    );
+    expect(screen.getByLabelText("Example $3 million withdrawal amounts")).toBeInTheDocument();
+
+    const withdrawalTable = screen.getByRole("table", {
+      name: "First-year withdrawals from a $3 million portfolio",
+    });
+    expect(within(withdrawalTable).getByRole("row", { name: /4\.0% \$120,000 \$10,000/i })).toBeInTheDocument();
+    expect(screen.getByText(/same \$3 million starting portfolio/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Medicare premiums for higher-income beneficiaries/i })).toHaveAttribute(
+      "href",
+      "https://www.ssa.gov/benefits/medicare/medicare-premiums.html",
+    );
+    expect(screen.getByRole("link", { name: "Retire With $3M" })).toHaveAttribute(
+      "href",
+      "/can-i-retire-with-3-million",
+    );
+
+    const schemas = buildAnswerPageSchemas(canIRetireWithThreeMillion);
+    expect(schemas.article).toMatchObject({
+      url: "https://asklinc.com/can-i-retire-with-3-million",
+      headline: "Can I retire with $3 million?",
     });
   });
 });
