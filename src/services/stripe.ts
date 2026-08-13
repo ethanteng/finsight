@@ -565,12 +565,24 @@ export class StripeService {
     if (subscriptionId) {
       console.log(`Payment succeeded for subscription: ${subscriptionId}`);
 
+      const prisma = getPrismaClient();
+      const existingSubscription = await prisma.subscription.findUnique({
+        where: { stripeSubscriptionId: subscriptionId },
+        select: { id: true }
+      });
+
+      if (!existingSubscription) {
+        console.log(
+          `Subscription ${subscriptionId} not found in database yet; skipping payment succeeded update`
+        );
+        return;
+      }
+
       // Auto-sync tier to ensure it's correct after payment
       await this.autoSyncSubscriptionTier(subscriptionId, 'unknown');
 
       // Use Stripe as the source of truth so $0 trial invoices do not
       // prematurely mark a still-trialing subscription as active.
-      const prisma = getPrismaClient();
       const stripeSubscription = await stripe.client.subscriptions.retrieve(subscriptionId);
       const subscriptionStatus = stripeSubscription.status;
 

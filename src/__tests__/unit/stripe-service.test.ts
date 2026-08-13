@@ -263,6 +263,20 @@ describe('StripeService', () => {
       expect(analytics.trackEvent).not.toHaveBeenCalled();
     });
 
+    it('should skip payment succeeded updates when the subscription record is not linked yet', async () => {
+      const mockStripe = require('../../config/stripe');
+
+      mockPrisma.subscription.findUnique.mockResolvedValue(null);
+
+      await stripeService.processWebhookEvent('invoice.payment_succeeded', {
+        object: { subscription: 'sub_test_123' }
+      });
+
+      expect(mockStripe.stripe.client.subscriptions.retrieve).not.toHaveBeenCalled();
+      expect(mockPrisma.subscription.update).not.toHaveBeenCalled();
+      expect(mockPrisma.user.update).not.toHaveBeenCalled();
+    });
+
     it('should preserve trialing status on a successful trial invoice', async () => {
       const mockStripe = require('../../config/stripe');
       const subscriptionRecord = {

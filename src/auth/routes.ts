@@ -169,6 +169,12 @@ router.post('/register', async (req: Request, res: Response) => {
               ? new Date(subscription.current_period_end * 1000)
               : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
+            const existingSubscription = await prisma.subscription.findUnique({
+              where: { stripeSubscriptionId: subscription.id },
+              select: { id: true }
+            });
+            const isNewSubscription = !existingSubscription;
+
             await prisma.user.update({
               where: { id: user.id },
               data: {
@@ -203,13 +209,16 @@ router.post('/register', async (req: Request, res: Response) => {
             linkedStripeSubscription = true;
             console.log(`Linked user ${user.email} to Stripe customer ${customer.id} and subscription ${subscription.id}`);
             
-            // Send welcome email for new Stripe users (regardless of webhook status)
-            try {
-              await sendWelcomeEmail(user.email, tier);
-              console.log(`Welcome email sent to ${user.email} for ${tier} plan during registration`);
-            } catch (emailError) {
-              console.error(`Failed to send welcome email to ${user.email} during registration:`, emailError);
-              // Don't fail registration if email fails
+            // Only send when registration creates the subscription record first. If the
+            // webhook already linked it, skip to avoid duplicate welcome emails.
+            if (isNewSubscription) {
+              try {
+                await sendWelcomeEmail(user.email, tier);
+                console.log(`Welcome email sent to ${user.email} for ${tier} plan during registration`);
+              } catch (emailError) {
+                console.error(`Failed to send welcome email to ${user.email} during registration:`, emailError);
+                // Don't fail registration if email fails
+              }
             }
           }
         }
