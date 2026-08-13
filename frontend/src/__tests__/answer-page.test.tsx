@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import AnswerPage from "@/components/marketing/AnswerPage";
-import { buildAnswerPageSchemas, canIRetireWithTwoMillion } from "@/lib/answer-pages";
+import { buildAnswerPageSchemas, canIRetireWithOneMillion, canIRetireWithTwoMillion } from "@/lib/answer-pages";
 
 describe("evergreen answer page", () => {
   it("renders a structured retirement answer with reusable scenarios and sources", () => {
@@ -24,7 +24,7 @@ describe("evergreen answer page", () => {
       "href",
       "https://www.ssa.gov/prepare/get-benefits-estimate",
     );
-    expect(screen.getByRole("link", { name: "Retirement Answers" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Retire With $2M" })).toHaveAttribute(
       "href",
       "/can-i-retire-with-2-million",
     );
@@ -43,6 +43,31 @@ describe("evergreen answer page", () => {
     expect(schemas.faq.mainEntity[0]).toMatchObject({
       "@type": "Question",
       acceptedAnswer: { "@type": "Answer" },
+    });
+  });
+
+  it("renders the $1 million page with its own assumptions and cross-links", () => {
+    render(<AnswerPage page={canIRetireWithOneMillion} />);
+
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Can I retire with $1 million?Focus on the gap your savings must cover.",
+    );
+    expect(screen.getByLabelText("Example $1 million withdrawal amounts")).toBeInTheDocument();
+
+    const withdrawalTable = screen.getByRole("table", {
+      name: "First-year withdrawals from a $1 million portfolio",
+    });
+    expect(within(withdrawalTable).getByRole("row", { name: /4\.0% \$40,000 \$3,333/i })).toBeInTheDocument();
+    expect(screen.getByText(/same \$1 million starting portfolio/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Can I retire with \$2 million/i })).toHaveAttribute(
+      "href",
+      "/can-i-retire-with-2-million",
+    );
+
+    const schemas = buildAnswerPageSchemas(canIRetireWithOneMillion);
+    expect(schemas.article).toMatchObject({
+      url: "https://asklinc.com/can-i-retire-with-1-million",
+      headline: "Can I retire with $1 million?",
     });
   });
 
