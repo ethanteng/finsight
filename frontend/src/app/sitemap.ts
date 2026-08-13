@@ -59,6 +59,9 @@ const STATIC_ROUTES: StaticRoute[] = [
   { path: '/retirement-readiness', changeFrequency: 'monthly', priority: 0.9 },
   { path: '/buying-a-house', changeFrequency: 'monthly', priority: 0.9 },
 
+  // Evergreen answer pages (top-level routes, separate from Ghost)
+  { path: '/can-i-retire-with-2-million', changeFrequency: 'monthly', priority: 0.9 },
+
   // Trust pages
   { path: '/how-we-protect-your-data', changeFrequency: 'monthly', priority: 0.7 },
   { path: '/privacy', changeFrequency: 'yearly', priority: 0.3 },
