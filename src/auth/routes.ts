@@ -20,6 +20,10 @@ import { stripe } from '../config/stripe';
 import { sendWelcomeEmail } from '../services/stripe-email';
 import { analytics } from '../analytics/heycatch';
 
+function isUniqueConstraintError(error: unknown): error is { code: string } {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
+}
+
 const router = Router();
 const prisma = getPrismaClient();
 
@@ -170,37 +174,40 @@ router.post('/register', async (req: Request, res: Response) => {
               ? new Date(subscription.current_period_end * 1000)
               : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-            const existingSubscription = await prisma.subscription.findUnique({
-              where: { stripeSubscriptionId: subscription.id },
-              select: { id: true }
-            });
-            const isNewSubscription = !existingSubscription;
+            const subscriptionData = {
+              userId: user.id,
+              stripeCustomerId: customer.id,
+              tier,
+              status: subscriptionStatus,
+              currentPeriodStart,
+              currentPeriodEnd,
+              cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+            };
 
             // Persist the subscription before exposing the Stripe customer ID.
             // The webhook cannot find this user until the record it would update
             // already exists, preventing both paths from claiming first delivery.
-            await prisma.subscription.upsert({
-              where: { stripeSubscriptionId: subscription.id },
-              update: {
-                userId: user.id,
-                stripeCustomerId: customer.id,
-                tier,
-                status: subscriptionStatus,
-                currentPeriodStart,
-                currentPeriodEnd,
-                cancelAtPeriodEnd: subscription.cancel_at_period_end || false
-              },
-              create: {
-                userId: user.id,
-                stripeCustomerId: customer.id,
-                stripeSubscriptionId: subscription.id,
-                tier,
-                status: subscriptionStatus,
-                currentPeriodStart,
-                currentPeriodEnd,
-                cancelAtPeriodEnd: subscription.cancel_at_period_end || false
+            // Claim first delivery with an atomic insert so concurrent registration
+            // retries or webhook replay cannot repeat welcome/analytics side effects.
+            let isNewSubscription = false;
+            try {
+              await prisma.subscription.create({
+                data: {
+                  ...subscriptionData,
+                  stripeSubscriptionId: subscription.id,
+                },
+              });
+              isNewSubscription = true;
+            } catch (error) {
+              if (!isUniqueConstraintError(error)) {
+                throw error;
               }
-            });
+
+              await prisma.subscription.update({
+                where: { stripeSubscriptionId: subscription.id },
+                data: subscriptionData,
+              });
+            }
 
             await prisma.user.update({
               where: { id: user.id },
