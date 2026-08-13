@@ -39,10 +39,19 @@ export type AnswerPageData = {
   description: string;
   reviewedOn: string;
   reviewedOnIso: string;
+  readTime: string;
   breadcrumbs: AnswerBreadcrumb[];
   directAnswer: string;
   directAnswerDetail: string;
   keyNumbers: Array<{ label: string; value: string; note: string }>;
+  numberStripLabel: string;
+  withdrawalSection: {
+    tocLabel: string;
+    heading: string;
+    tableCaption: string;
+    noteTitle: string;
+    noteBody: string;
+  };
   withdrawalScenarios: WithdrawalScenario[];
   example: {
     title: string;
@@ -51,9 +60,16 @@ export type AnswerPageData = {
     result: string;
     note: string;
   };
+  scenarioTableCaption: string;
+  scenarioTableFootnote: string;
   retirementScenarios: RetirementScenario[];
   factors: Array<{ number: string; title: string; body: string }>;
   checkpoints: string[];
+  productBridge: {
+    heading: string;
+    body: string;
+    priceNote: string;
+  };
   faqs: Array<{ question: string; answer: string }>;
   relatedAnswers: RelatedAnswer[];
   sources: AnswerPageSource[];
@@ -68,6 +84,7 @@ export const canIRetireWithTwoMillion: AnswerPageData = {
     "See how spending, retirement age, Social Security, taxes, inflation, healthcare, and withdrawal rates determine whether $2 million is enough to retire.",
   reviewedOn: "August 13, 2026",
   reviewedOnIso: "2026-08-13",
+  readTime: "10 min read",
   breadcrumbs: [
     { label: "Home", href: "/" },
     { label: "Retirement", href: "/use-cases/retirement" },
@@ -82,6 +99,14 @@ export const canIRetireWithTwoMillion: AnswerPageData = {
     { label: "3.5% initial withdrawal", value: "$70K/yr", note: "$5,833 a month before tax" },
     { label: "4% initial withdrawal", value: "$80K/yr", note: "$6,667 a month before tax" },
   ],
+  numberStripLabel: "Example $2 million withdrawal amounts",
+  withdrawalSection: {
+    tocLabel: "What $2M can support",
+    heading: "What can $2 million support?",
+    tableCaption: "First-year withdrawals from a $2 million portfolio",
+    noteTitle: "Keep the language precise.",
+    noteBody: "“4%” describes an initial withdrawal equal to $80,000. It is not the same thing as earning 4%, and it is not a guarantee that the balance never falls.",
+  },
   withdrawalScenarios: [
     { rate: "3.0%", annualWithdrawal: "$60,000", monthlyWithdrawal: "$5,000", planningUse: "Lower starting draw; more room for a long horizon or weak early returns." },
     { rate: "3.5%", annualWithdrawal: "$70,000", monthlyWithdrawal: "$5,833", planningUse: "A middle scenario for testing spending against other income." },
@@ -103,6 +128,8 @@ export const canIRetireWithTwoMillion: AnswerPageData = {
     note:
       "This is only a starting frame. It does not yet include your actual tax mix, investment fees, healthcare costs, spending changes, or the timing of each income source.",
   },
+  scenarioTableCaption: "Illustrative income needs with $30,000 of annual income outside the portfolio",
+  scenarioTableFootnote: "All scenarios use the same $2 million starting portfolio and $30,000 of illustrative annual income outside the portfolio. Gross income target means income before taxes. Real plans should model when each income source begins.",
   retirementScenarios: [
     { label: "Lower spending", annualIncomeTarget: "$70,000", otherIncome: "$30,000", portfolioWithdrawal: "$40,000", initialRate: "2.0%" },
     { label: "Moderate spending", annualIncomeTarget: "$90,000", otherIncome: "$30,000", portfolioWithdrawal: "$60,000", initialRate: "3.0%" },
@@ -124,6 +151,11 @@ export const canIRetireWithTwoMillion: AnswerPageData = {
     "Test lower returns, higher inflation, a long life, and an early bear market.",
     "Decide which expenses can flex if the plan falls outside its target range.",
   ],
+  productBridge: {
+    heading: "$2 million is a number. Retirement is a connected plan.",
+    body: "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
+    priceNote: "$9/month. Cancel anytime.",
+  },
   faqs: [
     { question: "How much income can $2 million generate in retirement?", answer: "A $2 million portfolio equals $60,000 of first-year withdrawals at 3%, $70,000 at 3.5%, $80,000 at 4%, or $100,000 at 5%, before tax. Those are planning illustrations, not promised returns or guaranteed lifetime income." },
     { question: "How long will $2 million last in retirement?", answer: "There is no fixed number of years. The result depends on withdrawals, investment returns, inflation, fees, taxes, and whether spending adjusts after poor markets. A year-by-year projection and stress test are more useful than dividing the balance by annual spending." },

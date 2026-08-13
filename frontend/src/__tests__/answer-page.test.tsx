@@ -45,4 +45,40 @@ describe("evergreen answer page", () => {
       acceptedAnswer: { "@type": "Answer" },
     });
   });
+
+  it("takes page-specific assumptions and labels from the page model", () => {
+    const customPage = {
+      ...canIRetireWithTwoMillion,
+      readTime: "6 min read",
+      numberStripLabel: "Example custom portfolio withdrawals",
+      withdrawalSection: {
+        ...canIRetireWithTwoMillion.withdrawalSection,
+        tocLabel: "What the custom balance supports",
+        heading: "What can the custom balance support?",
+        tableCaption: "First-year withdrawals from a custom portfolio",
+        noteTitle: "Custom note title",
+        noteBody: "Custom note body",
+      },
+      scenarioTableCaption: "Custom income scenario caption",
+      scenarioTableFootnote: "Custom income scenario footnote",
+      productBridge: {
+        heading: "Custom product bridge heading",
+        body: "Custom product bridge body",
+        priceNote: "Custom price note",
+      },
+    };
+
+    render(<AnswerPage page={customPage} />);
+
+    expect(screen.getByText(/Reviewed August 13, 2026 · 6 min read/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Example custom portfolio withdrawals")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "What the custom balance supports" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "What can the custom balance support?" })).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "First-year withdrawals from a custom portfolio" })).toBeInTheDocument();
+    expect(screen.getByText("Custom note body")).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Custom income scenario caption" })).toBeInTheDocument();
+    expect(screen.getByText("Custom income scenario footnote")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Custom product bridge heading" })).toBeInTheDocument();
+    expect(screen.getByText("Custom price note")).toBeInTheDocument();
+  });
 });

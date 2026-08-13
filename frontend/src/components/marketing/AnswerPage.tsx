@@ -18,11 +18,11 @@ export function AnswerBreadcrumbs({ items }: { items: AnswerPageData["breadcrumb
   );
 }
 
-export function WithdrawalScenarioTable({ scenarios }: { scenarios: WithdrawalScenario[] }) {
+export function WithdrawalScenarioTable({ caption, scenarios }: { caption: string; scenarios: WithdrawalScenario[] }) {
   return (
     <div className="answer-table-wrap">
       <table className="answer-table">
-        <caption>First-year withdrawals from a $2 million portfolio</caption>
+        <caption>{caption}</caption>
         <thead>
           <tr><th scope="col">Initial rate</th><th scope="col">Per year</th><th scope="col">Per month</th><th scope="col">How to read it</th></tr>
         </thead>
@@ -41,11 +41,11 @@ export function WithdrawalScenarioTable({ scenarios }: { scenarios: WithdrawalSc
   );
 }
 
-export function RetirementScenarioTable({ scenarios }: { scenarios: RetirementScenario[] }) {
+export function RetirementScenarioTable({ caption, scenarios }: { caption: string; scenarios: RetirementScenario[] }) {
   return (
     <div className="answer-table-wrap scenario-comparison-table">
       <table className="answer-table">
-        <caption>Illustrative income needs with $30,000 of annual income outside the portfolio</caption>
+        <caption>{caption}</caption>
         <thead>
           <tr><th scope="col">Scenario</th><th scope="col">Gross income target</th><th scope="col">Other income</th><th scope="col">Portfolio draw</th><th scope="col">Initial rate</th></tr>
         </thead>
@@ -112,17 +112,17 @@ export default function AnswerPage({ page }: { page: AnswerPageData }) {
           <p className="section-kicker">{page.category.toUpperCase()}</p>
           <h1>{page.title}<em>{page.titleAccent}</em></h1>
           <p className="answer-standfirst">{page.description}</p>
-          <p className="answer-review-date">Reviewed {page.reviewedOn} · 10 min read</p>
+          <p className="answer-review-date">Reviewed {page.reviewedOn} · {page.readTime}</p>
         </div>
         <article className="answer-direct-card" aria-label="The short answer">
           <div><span className="brand-mark small" aria-hidden="true">L</span><b>THE SHORT ANSWER</b><span>ILLUSTRATIVE</span></div>
           <h2>{page.directAnswer}</h2>
           <p>{page.directAnswerDetail}</p>
-          <a href="#what-2-million-supports">See the numbers <span aria-hidden="true">↓</span></a>
+          <a href="#portfolio-support">See the numbers <span aria-hidden="true">↓</span></a>
         </article>
       </header>
 
-      <section className="answer-number-strip" aria-label="Example $2 million withdrawal amounts">
+      <section className="answer-number-strip" aria-label={page.numberStripLabel}>
         <div className="shell">
           {page.keyNumbers.map((number) => (
             <div key={number.label}><span>{number.label}</span><strong>{number.value}</strong><small>{number.note}</small></div>
@@ -133,7 +133,7 @@ export default function AnswerPage({ page }: { page: AnswerPageData }) {
       <div className="answer-layout shell">
         <aside className="answer-toc" aria-label="On this page">
           <b>ON THIS PAGE</b>
-          <a href="#what-2-million-supports">What $2M can support</a>
+          <a href="#portfolio-support">{page.withdrawalSection.tocLabel}</a>
           <a href="#simple-example">A simple example</a>
           <a href="#what-changes-the-answer">What changes the answer</a>
           <a href="#test-your-plan">How to test your plan</a>
@@ -142,12 +142,12 @@ export default function AnswerPage({ page }: { page: AnswerPageData }) {
         </aside>
 
         <article className="answer-content">
-          <section id="what-2-million-supports">
+          <section id="portfolio-support">
             <p className="section-kicker">START WITH THE RANGE</p>
-            <h2>What can $2 million support?</h2>
+            <h2>{page.withdrawalSection.heading}</h2>
             <p className="answer-lede">The first useful calculation is simple: multiply the portfolio by a starting withdrawal rate. This shows what the investments would provide in year one before taxes. It does not predict how markets will behave or promise that a given rate will last for life.</p>
-            <WithdrawalScenarioTable scenarios={page.withdrawalScenarios} />
-            <div className="answer-note"><b>Keep the language precise.</b><p>“4%” describes an initial withdrawal equal to $80,000. It is not the same thing as earning 4%, and it is not a guarantee that the balance never falls.</p></div>
+            <WithdrawalScenarioTable caption={page.withdrawalSection.tableCaption} scenarios={page.withdrawalScenarios} />
+            <div className="answer-note"><b>{page.withdrawalSection.noteTitle}</b><p>{page.withdrawalSection.noteBody}</p></div>
           </section>
 
           <section id="simple-example">
@@ -155,8 +155,8 @@ export default function AnswerPage({ page }: { page: AnswerPageData }) {
             <h2>Subtract the income your portfolio does not need to provide.</h2>
             <p>Retirement spending can be funded by several sources. The portfolio only needs to cover the gap between the income you want and reliable income from Social Security, pensions, or other sources.</p>
             <CalculationDisplay example={page.example} />
-            <RetirementScenarioTable scenarios={page.retirementScenarios} />
-            <p className="table-footnote">All scenarios use the same $2 million starting portfolio and $30,000 of illustrative annual income outside the portfolio. Gross income target means income before taxes. Real plans should model when each income source begins.</p>
+            <RetirementScenarioTable caption={page.scenarioTableCaption} scenarios={page.retirementScenarios} />
+            <p className="table-footnote">{page.scenarioTableFootnote}</p>
           </section>
 
           <section id="what-changes-the-answer">
@@ -183,10 +183,10 @@ export default function AnswerPage({ page }: { page: AnswerPageData }) {
           <section className="answer-product-bridge">
             <div>
               <p className="section-kicker">NOW USE YOUR ACTUAL FINANCES</p>
-              <h2>$2 million is a number. Retirement is a connected plan.</h2>
-              <p>Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.</p>
+              <h2>{page.productBridge.heading}</h2>
+              <p>{page.productBridge.body}</p>
             </div>
-            <div><MarketingGetStartedButton className="button button-primary" /><small>$9/month. Cancel anytime.</small></div>
+            <div><MarketingGetStartedButton className="button button-primary" /><small>{page.productBridge.priceNote}</small></div>
           </section>
 
           <section className="answer-faq" aria-labelledby="faq-heading">
