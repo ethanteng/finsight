@@ -152,10 +152,10 @@ export default function AccountDetailModal({
   // Color palette function for different category types
   const getCategoryColor = (type: 'income' | 'expense' | 'payment' | 'additionalDebt', index: number): string => {
     const palettes = {
-      income: ['#10B981', '#059669', '#047857', '#065F46'], // Green shades
-      expense: ['#EF4444', '#DC2626', '#B91C1C', '#991B1B'], // Red shades
-      payment: ['#06B6D4', '#0891B2', '#0E7490', '#155E75'], // Cyan/teal shades
-      additionalDebt: ['#6366F1', '#4F46E5', '#4338CA', '#3730A3'] // Indigo/blue shades (replacing yellow/orange)
+      income: ['#397052', '#5F8D72', '#82B79D', '#A7CFB8'],
+      expense: ['#9B4137', '#B76155', '#C98578', '#DDA99E'],
+      payment: ['#486657', '#6F8D78', '#91AC98', '#B3C8B8'],
+      additionalDebt: ['#5D7190', '#7891B6', '#91ADDA', '#B5C9E8']
     };
     return palettes[type][index % palettes[type].length];
   };
@@ -644,17 +644,17 @@ export default function AccountDetailModal({
                             layout="vertical"
                             margin={{ top: 5, right: 30, left: 150, bottom: 5 }}
                           >
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                            <CartesianGrid strokeDasharray="3 3" stroke="#D6DBD1" />
                             <XAxis
                               type="number"
-                              stroke="#9CA3AF"
+                              stroke="#66736B"
                               style={{ fontSize: '12px' }}
                               tickFormatter={formatCurrency}
                             />
                             <YAxis
                               type="category"
                               dataKey="shortenedCategory"
-                              stroke="#9CA3AF"
+                              stroke="#66736B"
                               style={{ fontSize: '12px' }}
                               width={140}
                             />
@@ -668,8 +668,8 @@ export default function AccountDetailModal({
                               }}
                               labelFormatter={() => ''}
                               contentStyle={{
-                                backgroundColor: '#1F2937',
-                                border: '1px solid #374151',
+                                backgroundColor: '#102319',
+                                border: '1px solid #486657',
                                 borderRadius: '8px',
                                 color: '#fff',
                                 fontSize: '12px',
@@ -738,17 +738,17 @@ export default function AccountDetailModal({
                             layout="vertical"
                             margin={{ top: 5, right: 30, left: 150, bottom: 5 }}
                           >
-                            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                            <CartesianGrid strokeDasharray="3 3" stroke="#D6DBD1" />
                             <XAxis
                               type="number"
-                              stroke="#9CA3AF"
+                              stroke="#66736B"
                               style={{ fontSize: '12px' }}
                               tickFormatter={formatCurrency}
                             />
                             <YAxis
                               type="category"
                               dataKey="shortenedCategory"
-                              stroke="#9CA3AF"
+                              stroke="#66736B"
                               style={{ fontSize: '12px' }}
                               width={140}
                             />
@@ -762,8 +762,8 @@ export default function AccountDetailModal({
                               }}
                               labelFormatter={() => ''}
                               contentStyle={{
-                                backgroundColor: '#1F2937',
-                                border: '1px solid #374151',
+                                backgroundColor: '#102319',
+                                border: '1px solid #486657',
                                 borderRadius: '8px',
                                 color: '#fff',
                                 fontSize: '12px',

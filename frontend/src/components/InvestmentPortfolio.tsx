@@ -158,16 +158,16 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
 
   // Color palette for bar chart
   const COLORS = [
-    '#3B82F6', // blue
-    '#10B981', // green
-    '#8B5CF6', // purple
-    '#F59E0B', // orange
-    '#EF4444', // red
-    '#06B6D4', // cyan
-    '#EC4899', // pink
-    '#84CC16', // lime
-    '#6366F1', // indigo
-    '#F97316', // orange-500
+    '#397052',
+    '#82B79D',
+    '#91ADDA',
+    '#B1C7A4',
+    '#A87565',
+    '#6F8D78',
+    '#8F7E9D',
+    '#B3C65B',
+    '#6E829E',
+    '#C3A778',
   ];
 
   if (!portfolio) {
@@ -259,7 +259,7 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                     </div>
                     <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
                       <div
-                        className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                        className="h-2 rounded-full bg-[#397052] transition-all duration-300"
                         style={{ width: `${allocation.percentage}%` }}
                       />
                     </div>
@@ -286,20 +286,20 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                     layout="vertical"
                     margin={{ top: 5, right: 30, left: 90, bottom: 5 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#D6DBD1" />
                     <XAxis
                       type="number"
-                      stroke="#9CA3AF"
+                      stroke="#66736B"
                       style={{ fontSize: '12px' }}
                       tickFormatter={formatCurrency}
                     />
                     <YAxis
                       type="category"
                       dataKey="ticker"
-                      stroke="#9CA3AF"
+                      stroke="#66736B"
                       style={{ fontSize: '12px' }}
                       width={80}
-                      tick={{ fill: '#9CA3AF' }}
+                      tick={{ fill: '#66736B' }}
                     />
                     <Tooltip
                       formatter={(value: number, name: string, props: { payload?: { percentage: number; ticker?: string; quantity: number; price: number; name: string } }) => {
@@ -315,8 +315,8 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                       }}
                       labelFormatter={(label) => `Holding: ${label}`}
                       contentStyle={{
-                        backgroundColor: '#1F2937',
-                        border: '1px solid #374151',
+                        backgroundColor: '#102319',
+                        border: '1px solid #486657',
                         borderRadius: '8px',
                         color: '#fff'
                       }}

@@ -124,9 +124,9 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           {
             label: 'Total Cash',
             data: dataPoints.map(d => ({ x: d.x, y: d.totalCash })),
-            backgroundColor: 'rgba(20, 184, 166, 0.6)', // Teal-500 - modern teal
-            borderColor: '#14B8A6',
-            borderWidth: 0,
+            backgroundColor: 'rgba(201, 242, 223, 0.82)',
+            borderColor: '#82B79D',
+            borderWidth: 1,
             fill: true,
             stack: 'assets',
             order: 2,
@@ -135,9 +135,9 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           {
             label: 'Total Investments',
             data: dataPoints.map(d => ({ x: d.x, y: d.totalInvestments })),
-            backgroundColor: 'rgba(79, 70, 229, 0.6)', // Indigo-600 - deep indigo (not light purple)
-            borderColor: '#4F46E5',
-            borderWidth: 0,
+            backgroundColor: 'rgba(198, 219, 255, 0.72)',
+            borderColor: '#91ADDA',
+            borderWidth: 1,
             fill: true,
             stack: 'assets',
             order: 2,
@@ -146,9 +146,9 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           {
             label: 'Home Value',
             data: dataPoints.map(d => ({ x: d.x, y: d.homeValue })),
-            backgroundColor: 'rgba(249, 115, 22, 0.6)', // Orange-500 - warm orange (not mustard yellow)
-            borderColor: '#F97316',
-            borderWidth: 0,
+            backgroundColor: 'rgba(223, 230, 212, 0.86)',
+            borderColor: '#A9B7A4',
+            borderWidth: 1,
             fill: true,
             stack: 'assets',
             order: 2,
@@ -157,9 +157,9 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           {
             label: 'Net Worth',
             data: dataPoints.map(d => ({ x: d.x, y: d.netWorth })),
-            borderColor: '#2563EB', // Blue-600 - deeper, more prominent blue
+            borderColor: '#173C2C',
             backgroundColor: 'transparent',
-            borderWidth: 4, // Thicker line for prominence
+            borderWidth: 3,
             fill: false,
             type: 'line' as const,
             pointRadius: 0,
@@ -176,8 +176,8 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           {
             label: 'Total Debt',
             data: dataPoints.map(d => ({ x: d.x, y: d.totalDebt })),
-            backgroundColor: 'rgba(239, 68, 68, 0.6)', // Red-500 - clear but not harsh
-            borderColor: '#EF4444',
+            backgroundColor: 'rgba(184, 74, 61, 0.14)',
+            borderColor: '#9B4137',
             borderWidth: 2,
             fill: true,
             type: 'line' as const,
@@ -222,7 +222,7 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
         display: true,
         position: 'top' as const,
         labels: {
-          color: '#9CA3AF',
+          color: '#66736B',
           usePointStyle: true,
           padding: 15,
           font: {
@@ -231,8 +231,8 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
         },
       },
       tooltip: {
-        backgroundColor: '#1F2937',
-        borderColor: '#374151',
+        backgroundColor: '#102319',
+        borderColor: '#486657',
         borderWidth: 1,
         padding: 12,
         titleColor: '#fff',
@@ -282,11 +282,11 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
           },
         },
         grid: {
-          color: '#374151',
+          color: 'rgba(16, 35, 25, 0.11)',
           drawBorder: false,
         },
         ticks: {
-          color: '#9CA3AF',
+          color: '#66736B',
           font: {
             size: 12,
           },
@@ -298,11 +298,11 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
         beginAtZero: true,
         max: yAxisMax,
         grid: {
-          color: '#374151',
+          color: 'rgba(16, 35, 25, 0.11)',
           drawBorder: false,
         },
         ticks: {
-          color: '#9CA3AF',
+          color: '#66736B',
           font: {
             size: 12,
           },

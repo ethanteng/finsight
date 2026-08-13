@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import MarkdownRenderer from '../../components/MarkdownRenderer';
 import PageMeta from '../../components/PageMeta';
+import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
 
 interface DemoConversation {
   id: string;
@@ -1878,10 +1879,13 @@ export default function AdminPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white p-6">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold mb-6">Admin Dashboard</h1>
-          <div className="text-gray-400">Loading admin data...</div>
+      <div className="authenticated-site min-h-screen">
+        <AuthenticatedPageHeader activePage="admin" eyebrow="Internal operations" title="Platform administration" />
+        <div className="mx-auto max-w-[1200px] px-5 py-12 sm:px-6">
+          <div className="flex items-center gap-3 rounded-[20px] border border-[#102319]/12 bg-[#fffdf5] p-6 text-sm text-[#5e6b63] shadow-[0_18px_45px_rgba(16,35,25,.055)]">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#102319]/20 border-t-[#102319]" />
+            Loading admin data…
+          </div>
         </div>
       </div>
     );
@@ -1889,9 +1893,9 @@ export default function AdminPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white p-6">
-        <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-bold mb-6">Admin Dashboard</h1>
+      <div className="authenticated-site min-h-screen">
+        <AuthenticatedPageHeader activePage="admin" eyebrow="Internal operations" title="Platform administration" />
+        <div className="mx-auto max-w-[1200px] px-5 py-12 sm:px-6">
           <div className="bg-red-900 border border-red-700 text-red-100 px-4 py-3 rounded mb-6">
             <div className="flex">
               <div className="flex-shrink-0">
@@ -1923,10 +1927,12 @@ export default function AdminPage() {
         title="Platform Administration | Ask Linc System Management" 
         description="Administrative control center for Ask Linc. Monitor user activity, manage system performance, oversee platform operations, and access comprehensive administrative tools for platform management."
       />
-      <div className="min-h-screen bg-gray-900 text-white p-6">
-        <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+      <div className="authenticated-site min-h-screen">
+        <AuthenticatedPageHeader activePage="admin" eyebrow="Internal operations" title="Platform administration" />
+        <div className="mx-auto max-w-[1200px] px-5 py-10 sm:px-6 md:py-12">
+        <div className="authenticated-intro mb-10">
+          <h2>Monitor the system without the visual noise.</h2>
+          <p>Review product activity, users, market context, and response guidance from one operational workspace.</p>
         </div>
 
         {/* Tab Navigation */}
@@ -1993,4 +1999,4 @@ export default function AdminPage() {
       </div>
     </>
   );
-} 
+}

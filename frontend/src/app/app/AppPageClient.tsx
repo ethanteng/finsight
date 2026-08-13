@@ -114,24 +114,24 @@ export default function AppPageClient() {
   };
 
   if (isLoading) return (
-    <main className="min-h-screen bg-[#f5f1e8] grid place-items-center text-[#123c2f]" aria-busy="true">
-      <div className="text-center"><div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-2 border-[#123c2f]/20 border-t-[#123c2f]" /><p className="font-medium">Preparing your workspace…</p></div>
+    <main className="min-h-screen bg-[#f3f2e9] grid place-items-center text-[#102319]" aria-busy="true">
+      <div className="text-center"><div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-2 border-[#102319]/20 border-t-[#102319]" /><p className="font-medium">Preparing your workspace…</p></div>
     </main>
   );
   if (!isAuthenticated) return null;
 
   return (
-    <div className="app-workspace min-h-screen bg-[#f5f1e8] text-[#17372e]">
-      <header className="sticky top-0 z-40 flex h-16 items-center border-b border-[#17372e]/10 bg-[#f5f1e8]/95 px-4 backdrop-blur lg:hidden">
-        <button onClick={() => setMobileNavOpen(!mobileNavOpen)} className="rounded-full p-2 hover:bg-[#17372e]/5" aria-label="Toggle navigation">{mobileNavOpen ? <X /> : <Menu />}</button>
-        <span className="ml-3 text-xl font-semibold tracking-tight">Ask Linc</span>
-        <button onClick={() => setSelectedPrompt(null)} className="ml-auto rounded-full bg-[#c9f46b] p-2 text-[#123c2f]" aria-label="Start a new decision"><Plus /></button>
+    <div className="app-workspace min-h-screen bg-[#f3f2e9] text-[#102319]">
+      <header className="sticky top-0 z-40 flex h-16 items-center border-b border-[#102319]/10 bg-[#f3f2e9]/95 px-4 backdrop-blur lg:hidden">
+        <button onClick={() => setMobileNavOpen(!mobileNavOpen)} className="rounded-full p-2 hover:bg-[#102319]/5" aria-label="Toggle navigation">{mobileNavOpen ? <X /> : <Menu />}</button>
+        <span className="ml-3 flex items-center gap-2 text-lg font-extrabold tracking-[-.04em]"><span className="grid h-8 w-8 place-items-center rounded-[9px_9px_9px_2px] bg-[#102319] text-sm font-extrabold text-[#d9ff6f]">L</span>Ask Linc</span>
+        <button onClick={() => setSelectedPrompt(null)} className="ml-auto rounded-full bg-[#d9ff6f] p-2 text-[#102319]" aria-label="Start a new decision"><Plus /></button>
       </header>
 
-      <aside className={`${mobileNavOpen ? 'flex' : 'hidden'} fixed inset-y-16 left-0 z-30 w-full flex-col bg-[#123c2f] text-[#f8f4e9] lg:inset-y-0 lg:flex lg:w-72`}>
-        <div className="hidden h-20 items-center border-b border-white/10 px-6 lg:flex"><span className="text-2xl font-semibold tracking-tight">Ask Linc</span><span className="ml-2 rounded-full bg-[#c9f46b] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#123c2f]">{subscriptionStatus?.tier || 'member'}</span></div>
+      <aside className={`${mobileNavOpen ? 'flex' : 'hidden'} fixed inset-y-16 left-0 z-30 w-full flex-col bg-[#102319] text-[#f8f4e9] lg:inset-y-0 lg:flex lg:w-72`}>
+        <div className="hidden h-20 items-center border-b border-white/10 px-6 lg:flex"><span className="grid h-8 w-8 place-items-center rounded-[9px_9px_9px_2px] bg-[#d9ff6f] text-sm font-extrabold text-[#102319]">L</span><span className="ml-2 text-xl font-extrabold tracking-[-.04em]">Ask Linc</span><span className="ml-2 rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white/65">{subscriptionStatus?.tier || 'member'}</span></div>
         <nav className="space-y-1 px-4 py-5" aria-label="Primary navigation">
-          <button onClick={() => { setSelectedPrompt(null); setMobileNavOpen(false); }} className="flex w-full items-center gap-3 rounded-xl bg-[#c9f46b] px-4 py-3 font-semibold text-[#123c2f]"><Plus size={18} />New decision</button>
+          <button onClick={() => { setSelectedPrompt(null); setMobileNavOpen(false); }} className="flex w-full items-center gap-3 rounded-xl bg-[#d9ff6f] px-4 py-3 font-semibold text-[#102319]"><Plus size={18} />New decision</button>
           <Link href="/app" className="mt-4 flex items-center gap-3 rounded-xl bg-white/10 px-4 py-3 font-medium"><MessageSquareText size={18} />Decisions</Link>
           <Link href="/finances" className="flex items-center gap-3 rounded-xl px-4 py-3 text-white/70 hover:bg-white/10 hover:text-white"><WalletCards size={18} />Finances</Link>
           <Link href="/transactions" className="flex items-center gap-3 rounded-xl px-4 py-3 text-white/70 hover:bg-white/10 hover:text-white"><BarChart3 size={18} />Transactions</Link>
@@ -140,7 +140,7 @@ export default function AppPageClient() {
         </nav>
         <section className="min-h-0 flex-1 overflow-y-auto border-t border-white/10 px-4 py-5" aria-labelledby="recent-decisions">
           <div className="mb-3 flex items-center justify-between px-2"><h2 id="recent-decisions" className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">Recent decisions</h2><span className="text-xs text-white/40">{promptHistory.length}</span></div>
-          {historyError ? <button onClick={loadConversationHistory} className="rounded-xl border border-white/15 p-3 text-left text-sm text-white/70">History couldn’t load. <span className="text-[#c9f46b]">Try again</span></button> : promptHistory.length === 0 ? <p className="px-2 text-sm leading-6 text-white/50">Your completed questions will appear here.</p> : (
+          {historyError ? <button onClick={loadConversationHistory} className="rounded-xl border border-white/15 p-3 text-left text-sm text-white/70">History couldn’t load. <span className="text-[#d9ff6f]">Try again</span></button> : promptHistory.length === 0 ? <p className="px-2 text-sm leading-6 text-white/50">Your completed questions will appear here.</p> : (
             <div className="space-y-1">{promptHistory.map(prompt => <button key={prompt.id} onClick={() => { setSelectedPrompt(prompt); setMobileNavOpen(false); }} className={`w-full rounded-xl px-3 py-3 text-left transition ${selectedPrompt?.id === prompt.id ? 'bg-white/12' : 'hover:bg-white/7'}`}><span className="line-clamp-2 text-sm font-medium leading-5">{prompt.question}</span><span className="mt-1 block text-xs text-white/40">{relativeDate(prompt.timestamp)}</span></button>)}</div>
           )}
         </section>
@@ -150,14 +150,14 @@ export default function AppPageClient() {
       <main className="lg:ml-72">
         <div className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-10 lg:py-9">
           <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-            <div><p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#3d6558]">Decision workspace</p><h1 className="max-w-3xl text-3xl font-semibold tracking-[-0.035em] text-[#123c2f] sm:text-4xl">Make the next financial decision with context.</h1></div>
-            <Link href="/finances" className="inline-flex items-center gap-2 text-sm font-semibold text-[#123c2f] hover:underline">Review connected data <ChevronRight size={16} /></Link>
+            <div><p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#49725a]">Decision workspace</p><h1 className="max-w-3xl text-3xl font-semibold tracking-[-0.035em] text-[#102319] sm:text-4xl">Make the next financial decision with context.</h1></div>
+            <Link href="/finances" className="inline-flex items-center gap-2 text-sm font-semibold text-[#102319] hover:underline">Review connected data <ChevronRight size={16} /></Link>
           </div>
           <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
             <FinanceQA onNewAnswer={loadConversationHistory} selectedPrompt={selectedPrompt} onNewQuestion={() => setSelectedPrompt(null)} />
             <aside className="space-y-5 xl:sticky xl:top-8" aria-label="Financial context">
               <FinancialOverview tier={subscriptionStatus?.tier} />
-              <div className="rounded-2xl border border-[#17372e]/10 bg-white/60 p-5"><div className="mb-2 flex items-center gap-2 text-[#123c2f]"><Landmark size={18} /><h2 className="font-semibold">Data confidence</h2></div><p className="text-sm leading-6 text-[#48675e]">Answers use your connected financial data and available market context. Review accounts when balances are missing or stale.</p><button onClick={() => router.push('/profile')} className="mt-4 text-sm font-semibold text-[#175cce] hover:underline">Inspect connected accounts</button></div>
+              <div className="rounded-2xl border border-[#102319]/10 bg-white/60 p-5"><div className="mb-2 flex items-center gap-2 text-[#102319]"><Landmark size={18} /><h2 className="font-semibold">Data confidence</h2></div><p className="text-sm leading-6 text-[#48675e]">Answers use your connected financial data and available market context. Review accounts when balances are missing or stale.</p><button onClick={() => router.push('/profile')} className="mt-4 text-sm font-semibold text-[#397052] hover:underline">Inspect connected accounts</button></div>
             </aside>
           </div>
         </div>

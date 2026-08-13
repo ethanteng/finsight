@@ -98,8 +98,8 @@ export default function Feedback({ conversationId, isDemo, onFeedbackSubmitted }
   }
 
   return (
-    <fieldset className="mt-4 rounded-2xl border border-[#123c2f]/15 bg-[#fffaf0] p-4 sm:p-5">
-      <legend className="w-full px-2 text-center text-sm font-semibold text-[#123c2f]">
+    <fieldset className="mt-4 rounded-2xl border border-[#102319]/15 bg-[#fffaf0] p-4 sm:p-5">
+      <legend className="w-full px-2 text-center text-sm font-semibold text-[#102319]">
         How helpful was this response?
       </legend>
       <div className="mt-3 flex justify-center gap-2">
@@ -107,10 +107,10 @@ export default function Feedback({ conversationId, isDemo, onFeedbackSubmitted }
           <label
             key={score}
             className={`
-              flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-2 text-sm font-semibold transition-all duration-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#123c2f] has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-[#fffaf0]
+              flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-2 text-sm font-semibold transition-all duration-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-[#102319] has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-[#fffaf0]
               ${rating === score
-                ? 'border-[#123c2f] bg-[#c9f46b] text-[#123c2f] shadow-sm'
-                : 'border-[#527166] bg-[#fffdf7] text-[#123c2f] hover:border-[#123c2f] hover:bg-[#eef6da]'
+                ? 'border-[#102319] bg-[#d9ff6f] text-[#102319] shadow-sm'
+                : 'border-[#527166] bg-[#fffdf5] text-[#102319] hover:border-[#102319] hover:bg-[#eef6da]'
               }
               ${submitting ? 'pointer-events-none opacity-50' : ''}
             `}

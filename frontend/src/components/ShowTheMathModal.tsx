@@ -41,16 +41,16 @@ interface CollapsibleSectionProps {
 function CollapsibleSection({ title, children, defaultOpen = false }: CollapsibleSectionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
-    <div className="border border-gray-600 rounded-lg overflow-hidden">
+    <div className="overflow-hidden rounded-2xl border border-[#102319]/15 bg-[#fffdf5]">
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-4 py-3 bg-gray-800 hover:bg-gray-750 text-left text-sm font-medium text-gray-200"
+        className="flex w-full items-center justify-between bg-[#f3f2e9] px-4 py-3.5 text-left text-sm font-semibold text-[#102319] transition hover:bg-[#ebece3]"
       >
         {title}
-        <span className="text-gray-400">{isOpen ? '−' : '+'}</span>
+        <span className="ml-4 grid h-7 w-7 shrink-0 place-items-center rounded-full border border-[#102319]/15 text-[#486657]">{isOpen ? '−' : '+'}</span>
       </button>
-      {isOpen && <div className="p-4 bg-gray-900 border-t border-gray-700">{children}</div>}
+      {isOpen && <div className="border-t border-[#102319]/12 bg-[#fffdf5] p-4 sm:p-5">{children}</div>}
     </div>
   );
 }
@@ -61,14 +61,14 @@ function TruncatablePre({ text, maxLength = 2000 }: { text: string; maxLength?: 
   const display = truncated ? text.slice(0, maxLength) + '\n...' : text;
   return (
     <div className="space-y-2">
-      <pre className="text-xs text-gray-300 whitespace-pre-wrap break-words font-mono overflow-x-auto max-h-96 overflow-y-auto p-3 bg-gray-950 rounded">
+      <pre className="max-h-96 overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words rounded-xl border border-[#102319]/12 bg-[#102319] p-4 font-mono text-xs leading-5 text-[#e8eee8]">
         {display}
       </pre>
       {truncated && (
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="text-sm text-blue-400 hover:text-blue-300"
+          className="text-sm font-semibold text-[#397052] hover:text-[#102319]"
         >
           Show more
         </button>
@@ -86,11 +86,11 @@ export function ShowTheMathContent({ data }: { data: Partial<ShowTheMathData> | 
           <CollapsibleSection title="Context to Claude (system + user message)" defaultOpen>
             <div className="space-y-4">
               <div>
-                <p className="text-gray-400 text-xs mb-1">System prompt</p>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-[.08em] text-[#66736b]">System prompt</p>
                 <TruncatablePre text={data.claudeFirstCall.systemPrompt} />
               </div>
               <div>
-                <p className="text-gray-400 text-xs mb-1">User message</p>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-[.08em] text-[#66736b]">User message</p>
                 <TruncatablePre text={data.claudeFirstCall.userMessage} />
               </div>
             </div>
@@ -104,16 +104,16 @@ export function ShowTheMathContent({ data }: { data: Partial<ShowTheMathData> | 
         <CollapsibleSection title="Gemini validation">
           <div className="space-y-4">
             <div>
-              <p className="text-gray-400 text-xs mb-1">Prompt sent to Gemini</p>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[.08em] text-[#66736b]">Prompt sent to Gemini</p>
               <TruncatablePre text={data.geminiValidation.prompt} />
             </div>
             <div>
-              <p className="text-gray-400 text-xs mb-1">Gemini raw response</p>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[.08em] text-[#66736b]">Gemini raw response</p>
               <TruncatablePre text={data.geminiValidation.rawResponse} />
             </div>
             <div>
-              <p className="text-gray-400 text-xs mb-1">Parsed result</p>
-              <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono p-3 bg-gray-950 rounded">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[.08em] text-[#66736b]">Parsed result</p>
+              <pre className="whitespace-pre-wrap rounded-xl border border-[#102319]/12 bg-[#102319] p-4 font-mono text-xs leading-5 text-[#e8eee8]">
                 {JSON.stringify(data.geminiValidation.parsedResult, null, 2)}
               </pre>
             </div>
@@ -124,15 +124,15 @@ export function ShowTheMathContent({ data }: { data: Partial<ShowTheMathData> | 
         <CollapsibleSection title="Claude retry (after validation feedback)">
           <div className="space-y-4">
             <div>
-              <p className="text-gray-400 text-xs mb-1">Retry system prompt</p>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[.08em] text-[#66736b]">Retry system prompt</p>
               <TruncatablePre text={data.claudeRetry.systemPrompt} maxLength={500} />
             </div>
             <div>
-              <p className="text-gray-400 text-xs mb-1">Retry user message</p>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[.08em] text-[#66736b]">Retry user message</p>
               <TruncatablePre text={data.claudeRetry.userMessage} maxLength={500} />
             </div>
             <div>
-              <p className="text-gray-400 text-xs mb-1">Retry raw response</p>
+              <p className="mb-1 text-xs font-semibold uppercase tracking-[.08em] text-[#66736b]">Retry raw response</p>
               <TruncatablePre text={data.claudeRetry.rawResponse} />
             </div>
           </div>
@@ -230,16 +230,19 @@ export default function ShowTheMathModal({ isOpen, onClose, data, loading, error
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} aria-hidden />
-      <div className="relative bg-gray-800 rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b border-gray-700">
-          <h2 className="text-lg font-semibold text-white">Show the math</h2>
+      <div className="absolute inset-0 bg-[#102319]/70 backdrop-blur-sm" onClick={onClose} aria-hidden />
+      <div className="relative flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-[24px] border border-[#ccd1c4] bg-[#fffdf5] text-[#102319] shadow-[0_28px_80px_rgba(16,35,25,.28)]">
+        <div className="flex items-center justify-between border-b border-[#102319]/12 px-5 py-4 sm:px-6">
+          <div>
+            <p className="text-[10px] font-extrabold uppercase tracking-[.15em] text-[#49725a]">Decision transparency</p>
+            <h2 className="mt-1 text-xl font-semibold tracking-[-.035em] text-[#102319]">Show the math</h2>
+          </div>
           <div className="flex items-center gap-2">
             {canDownload && (
               <button
                 type="button"
                 onClick={() => downloadAsText(data!)}
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-300 hover:text-white hover:bg-gray-600 rounded-lg transition-colors"
+                className="inline-flex items-center gap-2 rounded-full border border-[#102319]/15 px-3.5 py-2 text-sm font-semibold text-[#486657] transition hover:bg-[#f3f2e9] hover:text-[#102319]"
                 aria-label="Download as text file"
               >
                 <Download className="w-4 h-4" />
@@ -249,22 +252,22 @@ export default function ShowTheMathModal({ isOpen, onClose, data, loading, error
             <button
               type="button"
               onClick={onClose}
-              className="text-gray-400 hover:text-white p-1 rounded"
+              className="grid h-9 w-9 place-items-center rounded-full text-2xl leading-none text-[#66736b] transition hover:bg-[#f3f2e9] hover:text-[#102319]"
               aria-label="Close"
             >
               ×
             </button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 space-y-4 overflow-y-auto p-5 sm:p-6">
           {loading && (
-            <p className="text-gray-400 text-center py-8">Loading pipeline data...</p>
+            <p className="py-8 text-center text-sm text-[#66736b]">Loading pipeline data...</p>
           )}
           {error && (
-            <p className="text-amber-400 text-center py-8">{error}</p>
+            <p className="rounded-2xl bg-[#f4ead0] px-4 py-8 text-center text-sm text-[#76510f]">{error}</p>
           )}
           {!loading && !error && !data && (
-            <p className="text-gray-400 text-center py-8">No pipeline data available for this conversation.</p>
+            <p className="rounded-2xl bg-[#f3f2e9] px-4 py-8 text-center text-sm text-[#66736b]">No pipeline data available for this conversation.</p>
           )}
           {!loading && !error && data && <ShowTheMathContent data={data} />}
         </div>

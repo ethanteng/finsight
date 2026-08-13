@@ -9,6 +9,7 @@ import ManualAccountList from '../../components/ManualAccountList';
 import PageMeta from '../../components/PageMeta';
 import type { ManualAccount } from '../../types/manual-account';
 import { resetUserIdentity } from '../../lib/heycatch';
+import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
 
 // (removed) local InvestmentHolding type - no longer used after snapshot refactor
 
@@ -1224,10 +1225,10 @@ export default function ProfilePage() {
   // Don't render anything until we've determined if this is demo mode or not
   if (!demoStatusDetermined || isDemo === undefined) {
     return (
-      <div className="min-h-screen bg-[#f5f1e8] text-[#123c2f] flex items-center justify-center">
+      <div className="min-h-screen bg-[#f3f2e9] text-[#102319] flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-[#607b72]">Loading your financial context…</p>
+          <p className="text-[#5e6b63]">Loading your financial context…</p>
         </div>
       </div>
     );
@@ -1239,44 +1240,23 @@ export default function ProfilePage() {
         title="Account Settings | Manage Ask Linc Profile" 
         description="Take control of your Ask Linc experience. Manage your account settings, update personal information, review connected financial accounts, and customize your AI financial assistant preferences."
       />
-      <div className="auth-legacy-surface min-h-screen">
-        
-        {/* Header */}
-        <div className="sticky top-0 z-30 border-b border-[#123c2f]/10 bg-[#f5f1e8]/95 px-4 py-4 backdrop-blur">
-          <div className="mx-auto flex max-w-6xl items-center justify-between">
-            <div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#477064]">Accounts & context</p><h1 className="text-2xl font-semibold tracking-tight text-[#123c2f]">{isDemo ? 'Demo profile' : 'Your profile'}</h1></div>
-            <div className="flex items-center space-x-3">
-              {userEmail && !isDemo && (
-                <span className="text-gray-400 text-sm">
-                  {userEmail}
-                </span>
-              )}
-              <a 
-                href={isDemo ? "/demo" : "/app"}
-                className="bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded text-sm transition-colors"
-              >
-                Back to App
-              </a>
-              {!isDemo && (
-                <button 
-                  onClick={() => {
-                    // Reset Plaid Link initialization flag when logging out
-                    resetPlaidLinkInitialization();
-                    localStorage.removeItem('auth_token');
-                    resetUserIdentity();
-                    window.location.href = '/login';
-                  }}
-                  className="text-gray-300 hover:text-white text-sm transition-colors"
-                >
-                  Logout
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+      <div className="authenticated-site min-h-screen">
+        <AuthenticatedPageHeader
+          activePage="profile"
+          eyebrow="Accounts & context"
+          title={isDemo ? 'Demo profile' : 'Your profile'}
+          email={!isDemo ? userEmail : undefined}
+          homeHref={isDemo ? '/demo' : '/app'}
+          onLogout={!isDemo ? () => {
+            resetPlaidLinkInitialization();
+            localStorage.removeItem('auth_token');
+            resetUserIdentity();
+            window.location.href = '/login';
+          } : undefined}
+        />
 
-        <main className="mx-auto max-w-6xl p-4 py-8 md:p-8">
-          <div className="mb-8"><h2 className="text-3xl font-semibold tracking-tight text-[#123c2f]">Keep your financial context current.</h2><p className="mt-2 max-w-2xl text-[#607b72]">Manage the accounts and household details that ground every Ask Linc answer.</p></div>
+        <main className="mx-auto max-w-[1200px] p-5 py-10 sm:px-6 md:py-12">
+          <div className="authenticated-intro mb-10"><h2>Keep your financial context current.</h2><p>Manage the accounts and household details that ground every Ask Linc answer.</p></div>
           {/* User Profile Section */}
           {demoStatusDetermined && (
             <UserProfile userId={userEmail ? 'user' : undefined} isDemo={isDemo} />
@@ -1805,4 +1785,4 @@ export default function ProfilePage() {
       </div>
     </>
   );
-} 
+}

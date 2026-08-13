@@ -187,14 +187,14 @@ export default function TrendChart({
                 y1={y}
                 x2={width - padding}
                 y2={y}
-                stroke="#374151"
+                stroke="#D6DBD1"
                 strokeWidth="1"
                 strokeDasharray="4 4"
               />
               <text
                 x={padding - 10}
                 y={y + 4}
-                fill="#9CA3AF"
+                fill="#66736B"
                 fontSize="10"
                 textAnchor="end"
               >
@@ -214,7 +214,7 @@ export default function TrendChart({
         <path
           d={pathData}
           fill="none"
-          stroke={type === 'netWorth' ? '#3B82F6' : '#EF4444'}
+          stroke={type === 'netWorth' ? '#173C2C' : '#9B4137'}
           strokeWidth="2"
         />
 
@@ -225,7 +225,7 @@ export default function TrendChart({
             cx={p.x}
             cy={p.y}
             r="3"
-            fill={type === 'netWorth' ? '#3B82F6' : '#EF4444'}
+            fill={type === 'netWorth' ? '#173C2C' : '#9B4137'}
           />
         ))}
 
@@ -237,7 +237,7 @@ export default function TrendChart({
               key={i}
               x={p.x}
               y={height - padding + 20}
-              fill="#9CA3AF"
+              fill="#66736B"
               fontSize="10"
               textAnchor="middle"
             >
@@ -290,4 +290,3 @@ export default function TrendChart({
     </div>
   );
 }
-
