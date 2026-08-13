@@ -64,6 +64,7 @@ const STATIC_ROUTES: StaticRoute[] = [
   { path: '/can-i-retire-at-60', changeFrequency: 'monthly', priority: 0.9 },
   { path: '/can-i-retire-with-1-million', changeFrequency: 'monthly', priority: 0.9 },
   { path: '/can-i-retire-with-2-million', changeFrequency: 'monthly', priority: 0.9 },
+  { path: '/can-i-retire-with-3-million', changeFrequency: 'monthly', priority: 0.9 },
 
   // Trust pages
   { path: '/how-we-protect-your-data', changeFrequency: 'monthly', priority: 0.7 },
