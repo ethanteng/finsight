@@ -12,7 +12,7 @@ export const FAQ_ITEMS: FaqItem[] = [
   {
     question: "Is there a free plan or trial?",
     answer:
-      "No. Ask Linc is $9/month for full access with your own accounts. Cancel anytime.",
+      "Yes. Start with a free 1-month trial, then Ask Linc is $9/month for full access with your own accounts. Cancel anytime.",
   },
   {
     question: "I don't want to give AI companies all my financial data...",

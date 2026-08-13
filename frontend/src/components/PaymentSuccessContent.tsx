@@ -20,6 +20,7 @@ declare global {
 function PaymentSuccessContentInner() {
   const [error, setError] = useState<string | null>(null);
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
+  const [isTrialing, setIsTrialing] = useState(false);
   const searchParams = useSearchParams();
 
   useEffect(() => {
@@ -44,6 +45,7 @@ function PaymentSuccessContentInner() {
         if (response.ok) {
           // Parse the JSON response to get the redirect URL
           const data = await response.json();
+          setIsTrialing(Boolean(data.trialing));
           
           // Fire Google Ads conversion event if payment was successful and not already fired
           if (
@@ -148,9 +150,13 @@ function PaymentSuccessContentInner() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h3 className="mt-2 text-sm font-medium text-gray-900">Payment Successful!</h3>
+              <h3 className="mt-2 text-sm font-medium text-gray-900">
+                {isTrialing ? 'Free trial started!' : 'Payment successful!'}
+              </h3>
               <p className="mt-1 text-sm text-gray-500">
-                Redirecting you to complete your account setup...
+                {isTrialing
+                  ? 'Your first charge will be due after the trial. Redirecting you to finish setup...'
+                  : 'Redirecting you to complete your account setup...'}
               </p>
               <div className="mt-6">
                 <Link
@@ -227,4 +233,3 @@ export default function PaymentSuccessContent() {
     </Suspense>
   );
 }
-

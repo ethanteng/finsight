@@ -1643,14 +1643,14 @@ export default function ProfilePage() {
                         <div className="flex items-center space-x-2">
                           <span className="text-sm font-medium text-gray-300">Status</span>
                           <span className={`px-2 py-1 text-xs rounded-full ${
-                            subscriptionStatus.stripeCustomerId && subscriptionStatus.status === 'active'
+                            subscriptionStatus.stripeCustomerId && ['active', 'trialing'].includes(subscriptionStatus.status || '')
                               ? 'bg-green-600 text-white' 
                               : subscriptionStatus.accessLevel === 'full'
                               ? 'bg-blue-600 text-white'
                               : 'bg-yellow-600 text-white'
                           }`}>
-                            {subscriptionStatus.stripeCustomerId && subscriptionStatus.status === 'active'
-                              ? 'Active Subscription'
+                            {subscriptionStatus.stripeCustomerId && ['active', 'trialing'].includes(subscriptionStatus.status || '')
+                              ? subscriptionStatus.status === 'trialing' ? 'Free Trial' : 'Active Subscription'
                               : subscriptionStatus.accessLevel === 'full'
                               ? 'Admin Access'
                               : subscriptionStatus.status}

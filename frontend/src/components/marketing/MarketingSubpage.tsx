@@ -12,7 +12,7 @@ type RouteProps = { params: Promise<{ slug: string[] }> };
 
 const faqs = [
   ["Is this another budgeting app?", "No. Budgeting apps organize what already happened. Ask Linc helps you think through what to do next—such as how much house you can afford, whether a career change works, or how a new expense affects retirement."],
-  ["Can I try it before connecting my accounts?", "Ask Linc is $9/month for full access with your own accounts. Cancel anytime."],
+  ["Can I try it before connecting my accounts?", "Yes. Start with a free 1-month trial, then Ask Linc is $9/month for full access with your own accounts. Cancel anytime."],
   ["How do I know the AI isn’t confidently wrong?", "The numbers come from fixed, repeatable calculations rather than being improvised by the language model. You can inspect the inputs, assumptions, calculations, and sources."],
   ["Does Ask Linc give financial advice?", "Ask Linc provides informational analysis and decision support. It does not manage your money and is not a replacement for individualized investment, tax, or legal advice."],
   ["What account data can Linc access?", "Only the read-only financial data needed to answer your questions. Bank credentials are handled by connection providers and are never stored by Ask Linc."],
@@ -210,10 +210,10 @@ function UseCasePage({ useCase }: { useCase: UseCaseKey }) {
 function PricingPage() {
   return (
     <StandardPage className="pricing-page">
-      <section className="subhero centered-subhero shell"><p className="section-kicker">SIMPLE PRICING</p><h1>Everything you need for <em>$9 a month.</em></h1><p className="subhero-copy">Ask as many questions as you need, connect your accounts, and compare what-if scenarios. Cancel anytime.</p></section>
+      <section className="subhero centered-subhero shell"><p className="section-kicker">SIMPLE PRICING</p><h1>One month free. Then <em>$9 a month.</em></h1><p className="subhero-copy">Ask as many questions as you need, connect your accounts, and compare what-if scenarios. Cancel anytime.</p></section>
       <section className="pricing-stage shell">
         <div className="price-argument"><p className="section-kicker">PAY FOR THE PRODUCT—NOT A PERCENTAGE OF YOUR WEALTH</p><h2>Planning help before the decision gets expensive.</h2><p>No asset minimum. No annual contract. No sales call.</p><div className="cost-comparison"><span><small>ASK LINC</small><b>$108</b><i>per year</i></span><span className="versus">VS</span><span><small>1% OF A $500K PORTFOLIO</small><b>$5,000</b><i>per year · illustrative</i></span></div></div>
-        <article className="sub-price-card"><div className="price-card-top"><span>ASK LINC</span><b>EVERYTHING INCLUDED</b></div><div className="price"><sup>$</sup>9<span>/month</span></div><p>Cancel anytime.</p><ul><li>Unlimited questions and follow-ups</li><li>Unlimited connected accounts</li><li>What-if scenarios</li><li>Dated market inputs when relevant</li><li>Retirement and risk analysis</li><li>Show the math on every answer</li><li>Privacy-first architecture</li></ul><MarketingGetStartedButton className="button button-primary price-button" /></article>
+        <article className="sub-price-card"><div className="price-card-top"><span>ASK LINC</span><b>EVERYTHING INCLUDED</b></div><div className="price"><sup>$</sup>9<span>/month</span></div><p>First month free. Cancel anytime.</p><ul><li>Unlimited questions and follow-ups</li><li>Unlimited connected accounts</li><li>What-if scenarios</li><li>Dated market inputs when relevant</li><li>Retirement and risk analysis</li><li>Show the math on every answer</li><li>Privacy-first architecture</li></ul><MarketingGetStartedButton className="button button-primary price-button" /></article>
       </section>
       <section className="page-section shell compact-faq"><div><p className="section-kicker">PRICING QUESTIONS</p><h2>No tiers to decode.</h2></div><div>{faqs.slice(0,4).map(([q,a])=><details key={q}><summary>{q}<span>+</span></summary><p>{a}</p></details>)}</div></section>
       <PageCta title="Bring your hardest money question to Linc." />

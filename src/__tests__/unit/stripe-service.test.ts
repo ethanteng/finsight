@@ -3,6 +3,11 @@ import { getPrismaClient } from '../../prisma-client';
 
 // Mock Stripe
 jest.mock('../../config/stripe', () => ({
+  STRIPE_CONFIG: {
+    subscriptionSettings: {
+      trialPeriodDays: 30
+    }
+  },
   stripe: {
     client: {
       checkout: {
@@ -48,6 +53,7 @@ describe('StripeService', () => {
       },
       subscription: {
         create: jest.fn(),
+        upsert: jest.fn(),
         update: jest.fn(),
         findUnique: jest.fn()
       },
@@ -90,7 +96,10 @@ describe('StripeService', () => {
           line_items: [{ price: 'price_test_123', quantity: 1 }],
           success_url: 'https://example.com/success',
           cancel_url: 'https://example.com/cancel',
-          customer_email: 'test@example.com'
+          customer_email: 'test@example.com',
+          subscription_data: expect.objectContaining({
+            trial_period_days: 30
+          })
         })
       );
     });
@@ -177,7 +186,7 @@ describe('StripeService', () => {
       };
       
       mockPrisma.user.findFirst.mockResolvedValue(mockUser);
-      mockPrisma.subscription.create.mockResolvedValue({ id: 'sub_123' });
+      mockPrisma.subscription.upsert.mockResolvedValue({ id: 'sub_123' });
       mockPrisma.user.update.mockResolvedValue({ id: 'user_123' });
 
       const eventData = {
@@ -197,7 +206,7 @@ describe('StripeService', () => {
       expect(mockPrisma.user.findFirst).toHaveBeenCalledWith({
         where: { stripeCustomerId: 'cus_test_123' }
       });
-      expect(mockPrisma.subscription.create).toHaveBeenCalled();
+      expect(mockPrisma.subscription.upsert).toHaveBeenCalled();
       expect(mockPrisma.user.update).toHaveBeenCalled();
     });
 
@@ -301,6 +310,28 @@ describe('StripeService', () => {
       expect(result.accessLevel).toBe('none');
       expect(result.upgradeRequired).toBe(true);
       expect(result.message).toContain('Payment past due');
+    });
+
+    it('should grant full access while a subscription is trialing', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'user123',
+        tier: 'premium',
+        subscriptionStatus: 'trialing',
+        subscriptions: [{
+          id: 'sub123',
+          status: 'trialing'
+        }]
+      });
+
+      const result = await stripeService.getUserSubscriptionStatus('user123');
+
+      expect(result).toEqual({
+        tier: 'premium',
+        status: 'trialing',
+        accessLevel: 'full',
+        upgradeRequired: false,
+        message: 'premium trial is active'
+      });
     });
 
     it('should handle expired subscription', async () => {

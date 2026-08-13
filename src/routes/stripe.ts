@@ -49,11 +49,17 @@ router.get('/payment-success', async (req, res) => {
     try {
       const session = await stripe.client.checkout.sessions.retrieve(session_id as string);
       
-      if (session.payment_status !== 'paid') {
-        console.error('Session payment status is not paid:', session.payment_status);
+      const isPaid = session.payment_status === 'paid';
+      const isTrial = session.payment_status === 'no_payment_required' && session.status === 'complete';
+
+      if (!isPaid && !isTrial) {
+        console.error('Checkout session is not complete:', {
+          paymentStatus: session.payment_status,
+          sessionStatus: session.status
+        });
         return res.status(400).json({
-          error: 'Payment not completed',
-          code: 'PAYMENT_NOT_COMPLETED'
+          error: 'Checkout not completed',
+          code: 'CHECKOUT_NOT_COMPLETED'
         });
       }
 
@@ -78,7 +84,8 @@ router.get('/payment-success', async (req, res) => {
       // Prepare response with tracking data
       const responseData: any = {
         success: true,
-        paid: true,
+        paid: isPaid,
+        trialing: isTrial,
         amount: conversionValue,
         currency: 'USD',
         session_id: session_id as string,

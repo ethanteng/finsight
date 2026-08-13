@@ -1,6 +1,23 @@
 import Stripe from 'stripe';
 import { getSubscriptionPlans, SubscriptionTier } from '../types/stripe';
 
+function getTrialPeriodDays(): number {
+  const configuredTrialPeriodDays = Number.parseInt(
+    process.env.STRIPE_TRIAL_PERIOD_DAYS || '30',
+    10
+  );
+
+  if (
+    !Number.isInteger(configuredTrialPeriodDays) ||
+    configuredTrialPeriodDays < 1 ||
+    configuredTrialPeriodDays > 730
+  ) {
+    throw new Error('STRIPE_TRIAL_PERIOD_DAYS must be an integer between 1 and 730');
+  }
+
+  return configuredTrialPeriodDays;
+}
+
 // Lazy initialization of Stripe client to avoid issues in test environments
 let stripeClient: Stripe | null = null;
 
@@ -70,7 +87,9 @@ export const STRIPE_CONFIG = {
   
   // Subscription settings
   subscriptionSettings: {
-    trialPeriodDays: undefined, // No trial for now
+    get trialPeriodDays() {
+      return getTrialPeriodDays();
+    },
     prorationBehavior: 'create_prorations' as const,
     paymentSettings: {
       paymentMethodTypes: ['card'],

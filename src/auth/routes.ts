@@ -114,7 +114,7 @@ router.post('/register', async (req: Request, res: Response) => {
         email: email.toLowerCase(),
         passwordHash,
         tier,
-        subscriptionStatus: stripeSessionIdToUse ? 'active' : 'inactive'
+        subscriptionStatus: 'inactive'
       },
       select: {
         id: true,
@@ -128,7 +128,20 @@ router.post('/register', async (req: Request, res: Response) => {
     if (stripeSessionIdToUse) {
       try {
         // First, find the Stripe session to get the subscription ID
-        const session = await stripe.client.checkout.sessions.retrieve(stripeSessionIdToUse);
+        const session = await stripe.client.checkout.sessions.retrieve(stripeSessionIdToUse, {
+          expand: ['subscription']
+        });
+
+        const checkoutIsComplete = session.status === 'complete' &&
+          (session.payment_status === 'paid' || session.payment_status === 'no_payment_required');
+        if (!checkoutIsComplete) {
+          throw new Error('Stripe Checkout session is not complete');
+        }
+
+        const checkoutEmail = session.customer_details?.email?.toLowerCase();
+        if (checkoutEmail && checkoutEmail !== user.email.toLowerCase()) {
+          throw new Error('Stripe Checkout email does not match the registered account');
+        }
         
         if (session.subscription && session.customer) {
           // Create or get Stripe customer
@@ -141,40 +154,52 @@ router.post('/register', async (req: Request, res: Response) => {
             customer = session.customer;
           }
           
-          // Update user with Stripe customer ID
-          await prisma.user.update({
-            where: { id: user.id },
-            data: { 
-              stripeCustomerId: customer.id,
-              subscriptionStatus: 'active'
-            }
-          });
-          
-          console.log(`Linked user ${user.email} to Stripe customer ${customer.id}`);
-          
-          // Find the subscription by Stripe subscription ID
-          const subscriptionId = typeof session.subscription === 'string' 
-            ? session.subscription 
-            : session.subscription?.id;
-            
-          if (subscriptionId) {
-            const subscription = await prisma.subscription.findFirst({
-              where: {
-                stripeSubscriptionId: subscriptionId
+          const stripeSubscription = typeof session.subscription === 'string'
+            ? await stripe.client.subscriptions.retrieve(session.subscription)
+            : session.subscription;
+
+          if (stripeSubscription) {
+            const subscription = stripeSubscription as any;
+            const subscriptionStatus = subscription.status || 'incomplete';
+            const currentPeriodStart = subscription.current_period_start
+              ? new Date(subscription.current_period_start * 1000)
+              : new Date();
+            const currentPeriodEnd = subscription.current_period_end
+              ? new Date(subscription.current_period_end * 1000)
+              : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+            await prisma.user.update({
+              where: { id: user.id },
+              data: {
+                stripeCustomerId: customer.id,
+                subscriptionStatus
               }
             });
 
-            if (subscription) {
-              // Link the user to the subscription
-              await prisma.subscription.update({
-                where: { id: subscription.id },
-                data: { userId: user.id }
-              });
+            await prisma.subscription.upsert({
+              where: { stripeSubscriptionId: subscription.id },
+              update: {
+                userId: user.id,
+                stripeCustomerId: customer.id,
+                tier,
+                status: subscriptionStatus,
+                currentPeriodStart,
+                currentPeriodEnd,
+                cancelAtPeriodEnd: subscription.cancel_at_period_end || false
+              },
+              create: {
+                userId: user.id,
+                stripeCustomerId: customer.id,
+                stripeSubscriptionId: subscription.id,
+                tier,
+                status: subscriptionStatus,
+                currentPeriodStart,
+                currentPeriodEnd,
+                cancelAtPeriodEnd: subscription.cancel_at_period_end || false
+              }
+            });
 
-              console.log(`Linked user ${user.email} to subscription ${subscription.id}`);
-            } else {
-              console.log(`Subscription ${subscriptionId} not found yet, will be created by webhook`);
-            }
+            console.log(`Linked user ${user.email} to Stripe customer ${customer.id} and subscription ${subscription.id}`);
             
             // Send welcome email for new Stripe users (regardless of webhook status)
             try {
@@ -740,4 +765,4 @@ router.post('/contact', async (req: Request, res: Response) => {
   }
 });
 
-export default router; 
+export default router;

@@ -72,6 +72,7 @@ export class StripeService {
           source: 'web_checkout'
         },
         subscription_data: {
+          trial_period_days: STRIPE_CONFIG.subscriptionSettings.trialPeriodDays,
           metadata: {
             tier: tier,
             source: 'web_checkout'
@@ -190,9 +191,20 @@ export class StripeService {
       ? new Date(subscription.current_period_end * 1000)
       : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // Default to 30 days from now
 
-    // Create subscription record
-    await prisma.subscription.create({
-      data: {
+    // The registration callback and this webhook can race. Upsert makes either
+    // delivery order safe and preserves the Stripe subscription as the source of truth.
+    await prisma.subscription.upsert({
+      where: { stripeSubscriptionId: subscriptionId },
+      update: {
+        userId: user.id,
+        stripeCustomerId: customerId,
+        tier: tier,
+        status: subscription.status,
+        currentPeriodStart: currentPeriodStart,
+        currentPeriodEnd: currentPeriodEnd,
+        cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      },
+      create: {
         userId: user.id,
         stripeCustomerId: customerId,
         stripeSubscriptionId: subscriptionId,
@@ -793,11 +805,14 @@ export class StripeService {
       }
 
       // Simplified logic: Trust Stripe status, no complex date logic
-      if (actualSubscriptionStatus === 'active') {
-        // Active subscription - full access (Stripe handles expiration)
+      if (actualSubscriptionStatus === 'active' || actualSubscriptionStatus === 'trialing') {
+        // Active and trialing subscriptions both receive full access. Stripe
+        // remains responsible for transitioning the status when the trial ends.
         accessLevel = 'full';
         upgradeRequired = false;
-        message = `Active ${currentTier} subscription`;
+        message = actualSubscriptionStatus === 'trialing'
+          ? `${currentTier} trial is active`
+          : `Active ${currentTier} subscription`;
       } else if (subscriptionStatus === 'active' && user.subscriptions.length === 0) {
         // Payment completed but account setup incomplete
         accessLevel = 'none';
@@ -826,9 +841,6 @@ export class StripeService {
             break;
           case 'incomplete_expired':
             message = 'Subscription setup expired. Please start over to restore access.';
-            break;
-          case 'trialing':
-            message = 'Trial period ended. Please subscribe to restore access.';
             break;
           case 'unpaid':
             message = 'Payment failed. Please update payment method to restore access.';
@@ -1010,4 +1022,3 @@ export class StripeService {
 
 // Export singleton instance
 export const stripeService = new StripeService();
-
