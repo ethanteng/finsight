@@ -370,6 +370,45 @@
 .authenticated-site textarea:focus,
 .authenticated-site select:focus { border-color: #4e785f; box-shadow: 0 0 0 3px rgb(78 120 95 / .12); }
 
+.authenticated-site .admin-panel {
+  border: 1px solid rgb(16 35 25 / .11);
+  border-radius: 20px;
+  background: #fffdf5;
+  box-shadow: 0 18px 45px rgb(16 35 25 / .05);
+}
+.authenticated-site .admin-row {
+  border: 1px solid rgb(16 35 25 / .12);
+  border-radius: 16px;
+  background: #f8f7ef;
+  box-shadow: 0 5px 16px rgb(16 35 25 / .025);
+}
+.authenticated-site .admin-stat-cell {
+  border: 1px solid rgb(16 35 25 / .09);
+  border-radius: 12px;
+  background: #f8f7ef;
+  padding: 1rem;
+  text-align: center;
+}
+.authenticated-site :is(.admin-button-primary, .admin-button-secondary, .admin-button-danger, .admin-button-danger-subtle) {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: .45rem .9rem;
+  font-weight: 700;
+  line-height: 1.2;
+  transition: background-color .2s, border-color .2s, color .2s;
+}
+.authenticated-site .admin-button-primary { border: 1px solid #102319; background: #102319; color: white; }
+.authenticated-site .admin-button-primary:hover { background: #173c2c; }
+.authenticated-site .admin-button-secondary { border: 1px solid rgb(16 35 25 / .18); background: #fffdf5; color: #102319; }
+.authenticated-site .admin-button-secondary:hover { background: #ecece4; }
+.authenticated-site .admin-button-danger { border: 1px solid #8b3027; background: #8b3027; color: white; }
+.authenticated-site .admin-button-danger:hover { background: #76271f; }
+.authenticated-site .admin-button-danger-subtle { border: 1px solid rgb(139 48 39 / .25); background: #f8e8e3; color: #8b3027; }
+.authenticated-site .admin-button-danger-subtle:hover { background: #f3d9d2; }
+
 /* Market context uses the shared Markdown renderer, whose defaults are dark.
    This scope gives the modal a light editorial treatment without affecting
    answer content elsewhere in the product. */

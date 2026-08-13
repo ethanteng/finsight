@@ -1424,16 +1424,20 @@ export default function AdminPage() {
 
   const renderUsersTab = () => {
     return (
-      <div>
+      <div className="space-y-6">
         {/* Header with refresh button */}
-        <div className="flex justify-end items-center mb-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-[#49725a]">Access operations</p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-[-.035em] text-[#102319]">User management</h2>
+          </div>
           <button
             onClick={refreshUsersData}
             disabled={refreshingUsers}
-            className={`px-4 py-2 rounded text-sm ${
+            className={`admin-button-primary ${
               refreshingUsers 
-                ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                : 'bg-green-600 hover:bg-green-700 text-white'
+                ? 'cursor-not-allowed opacity-55'
+                : ''
             }`}
             title="Refresh user management data only"
           >
@@ -1442,27 +1446,27 @@ export default function AdminPage() {
         </div>
 
         {/* User Status Summary */}
-        <div className="mb-6 p-4 bg-gray-800 rounded-lg">
-          <h3 className="text-lg font-semibold text-white mb-4">User Status Summary</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-400">{usersForManagement?.filter(u => u.accessLevel === 'full' && u.subscriptionStatus === 'active').length || 0}</div>
-              <div className="text-sm text-gray-400">Active Subscriptions</div>
+        <section className="admin-panel p-5 sm:p-6">
+          <h3 className="mb-4 text-lg font-semibold text-[#102319]">User status summary</h3>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="admin-stat-cell">
+              <div className="text-2xl font-semibold text-[#397052]">{usersForManagement?.filter(u => u.accessLevel === 'full' && u.subscriptionStatus === 'active').length || 0}</div>
+              <div className="mt-1 text-xs font-medium text-[#66736b]">Active subscriptions</div>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-400">{usersForManagement?.filter(u => u.accessLevel === 'full' && u.subscriptionStatus !== 'active').length || 0}</div>
-              <div className="text-sm text-gray-400">Admin Created</div>
+            <div className="admin-stat-cell">
+              <div className="text-2xl font-semibold text-[#397052]">{usersForManagement?.filter(u => u.accessLevel === 'full' && u.subscriptionStatus !== 'active').length || 0}</div>
+              <div className="mt-1 text-xs font-medium text-[#66736b]">Admin created</div>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-orange-400">{usersForManagement?.filter(u => 
+            <div className="admin-stat-cell">
+              <div className="text-2xl font-semibold text-[#76510f]">{usersForManagement?.filter(u =>
                 (u.subscriptionStatus === 'active' && u.subscriptionMessage.includes('account setup incomplete')) ||
                 (u.subscriptionStatus === 'incomplete' && u.subscriptionMessage.includes('setup incomplete'))
               ).length || 0}</div>
-              <div className="text-sm text-gray-400">Setup Required</div>
+              <div className="mt-1 text-xs font-medium text-[#66736b]">Setup required</div>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-red-400">{usersForManagement?.filter(u => !u.isActive || (u.accessLevel === 'none' && !u.subscriptionMessage.includes('account setup incomplete'))).length || 0}</div>
-              <div className="text-sm text-gray-400">No Access</div>
+            <div className="admin-stat-cell">
+              <div className="text-2xl font-semibold text-[#8b3027]">{usersForManagement?.filter(u => !u.isActive || (u.accessLevel === 'none' && !u.subscriptionMessage.includes('account setup incomplete'))).length || 0}</div>
+              <div className="mt-1 text-xs font-medium text-[#66736b]">No access</div>
             </div>
           </div>
           
@@ -1470,9 +1474,9 @@ export default function AdminPage() {
             (u.subscriptionStatus === 'active' && u.subscriptionMessage.includes('account setup incomplete')) ||
             (u.subscriptionStatus === 'incomplete' && u.subscriptionMessage.includes('setup incomplete'))
           ).length > 0 && (
-            <div className="mt-4 p-3 bg-orange-900/20 border border-orange-700 rounded">
-              <h4 className="font-medium text-orange-300 mb-2">
-                ⚠️ Setup Required ({usersForManagement.filter(u => 
+            <div className="mt-4 rounded-xl border border-[#9d6a16]/20 bg-[#f4ead0] p-4">
+              <h4 className="mb-2 font-semibold text-[#76510f]">
+                Setup required ({usersForManagement.filter(u =>
                   (u.subscriptionStatus === 'active' && u.subscriptionMessage.includes('account setup incomplete')) ||
                   (u.subscriptionStatus === 'incomplete' && u.subscriptionMessage.includes('setup incomplete'))
                 ).length} users)
@@ -1488,30 +1492,30 @@ export default function AdminPage() {
               </div>
             </div>
           )}
-        </div>
+        </section>
 
-        <div className="bg-gray-800 rounded-lg p-6">
-          <div className="space-y-4">
+        <section className="admin-panel p-4 sm:p-5">
+          <div className="space-y-3">
             {usersForManagement?.map((user) => (
-              <div key={user.id} className="bg-gray-700 rounded-lg p-4">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <div className="font-medium text-white">
+              <article key={user.id} className="admin-row p-4 sm:p-5">
+                <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+                  <div className="min-w-0">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <div className="break-all font-semibold text-[#102319]">
                         {user.email}
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <span className={`px-2 py-1 text-xs rounded-full ${
+                      <div className="flex items-center gap-2">
+                        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                           !user.isActive
-                            ? 'bg-red-600 text-white'
+                            ? 'border-[#b84a3d]/20 bg-[#f8e8e3] text-[#8b3027]'
                             : user.accessLevel === 'full'
                               ? user.subscriptionStatus === 'active'
-                                ? 'bg-green-600 text-white'
-                                : 'bg-blue-600 text-white'
+                                ? 'border-[#397052]/18 bg-[#c9f2df]/60 text-[#285c43]'
+                                : 'border-[#5d7190]/18 bg-[#e6edf8] text-[#4b617e]'
                               : (user.subscriptionStatus === 'active' && user.subscriptionMessage.includes('account setup incomplete')) ||
                                 (user.subscriptionStatus === 'incomplete' && user.subscriptionMessage.includes('setup incomplete'))
-                                ? 'bg-orange-600 text-white'
-                                : 'bg-red-600 text-white'
+                                ? 'border-[#9d6a16]/20 bg-[#f4ead0] text-[#76510f]'
+                                : 'border-[#b84a3d]/20 bg-[#f8e8e3] text-[#8b3027]'
                         }`}>
                           {!user.isActive
                             ? 'Admin Revoked'
@@ -1535,20 +1539,20 @@ export default function AdminPage() {
                       {user.upgradeRequired && <span className="text-yellow-400"> • Upgrade Required</span>}
                     </div>
                     {user.subscriptionMessage && (
-                      <div className="text-xs text-gray-300 mb-2 bg-gray-700 px-2 py-1 rounded">
+                      <div className="mt-3 rounded-lg border border-[#102319]/8 bg-[#fffdf5] px-3 py-2 text-xs leading-5 text-[#5e6b63]">
                         {user.subscriptionMessage}
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-col items-end space-y-3">
+                  <div className="flex flex-col gap-2.5 lg:min-w-[220px] lg:items-end">
                     {/* Tier Management */}
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center gap-2">
                       <span className="text-sm text-gray-400">Tier:</span>
                       <select
                         value={user.tier}
                         onChange={(e) => updateUserTier(user.id, e.target.value)}
                         disabled={updatingTier === user.id}
-                        className="bg-gray-600 text-white px-3 py-1 rounded text-sm border border-gray-500 focus:outline-none focus:border-blue-500"
+                        className="rounded-lg border border-[#102319]/15 bg-[#fffdf5] px-3 py-1.5 text-sm text-[#102319] focus:outline-none"
                       >
                         <option value="starter">Starter</option>
                         <option value="standard">Standard</option>
@@ -1560,12 +1564,12 @@ export default function AdminPage() {
                     </div>
                     
                     {/* Ask Linc: rebuild cached financial snapshot (Plaid + SnapTrade) */}
-                    <div className="flex flex-col items-end gap-1">
+                    <div className="flex flex-col gap-1 lg:items-end">
                       <button
                         type="button"
                         onClick={() => refreshUserAskLincSnapshot(user.id)}
                         disabled={refreshingUserSnapshot === user.id}
-                        className="px-3 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                        className="admin-button-secondary text-xs disabled:cursor-not-allowed disabled:opacity-55"
                         title="Recompute FinancialSummarySnapshot and finances summary so Ask Linc matches linked accounts (e.g. after SnapTrade)."
                       >
                         {refreshingUserSnapshot === user.id ? 'Rebuilding…' : 'Rebuild Ask Linc cache'}
@@ -1582,12 +1586,12 @@ export default function AdminPage() {
                     </div>
 
                     {/* Access Management */}
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center gap-2">
                       {user.isActive ? (
                         <button
                           onClick={() => revokeUserAccess(user.id)}
                           disabled={revokingAccess === user.id}
-                          className="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                          className="admin-button-danger-subtle text-xs disabled:cursor-not-allowed disabled:opacity-55"
                           title="Revoke user access (prevent login)"
                         >
                           {revokingAccess === user.id ? 'Revoking...' : 'Revoke Access'}
@@ -1596,7 +1600,7 @@ export default function AdminPage() {
                         <button
                           onClick={() => restoreUserAccess(user.id)}
                           disabled={revokingAccess === user.id}
-                          className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                          className="admin-button-primary text-xs disabled:cursor-not-allowed disabled:opacity-55"
                           title="Restore user access (allow login)"
                         >
                           {revokingAccess === user.id ? 'Restoring...' : 'Restore Access'}
@@ -1608,7 +1612,7 @@ export default function AdminPage() {
                     <button
                       onClick={() => setShowDeleteConfirm(user.id)}
                       disabled={deletingAccount === user.id}
-                      className="px-3 py-1 bg-red-800 text-white text-xs rounded hover:bg-red-900 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                      className="admin-button-danger text-xs disabled:cursor-not-allowed disabled:opacity-55"
                       title="Delete user account completely (including login/email)"
                     >
                       {deletingAccount === user.id ? 'Deleting...' : 'Delete Account'}
@@ -1618,7 +1622,7 @@ export default function AdminPage() {
                 
                 {/* Delete Confirmation Modal */}
                 {showDeleteConfirm === user.id && (
-                  <div className="mt-4 p-4 bg-red-900 border border-red-700 rounded-lg">
+                  <div className="mt-4 rounded-xl border border-[#b84a3d]/22 bg-[#f8e8e3] p-4">
                     <div className="text-red-200 text-sm mb-3">
                       <strong>⚠️ Warning:</strong> This will permanently delete the user account for <strong>{user.email}</strong>, including:
                     </div>
@@ -1635,24 +1639,24 @@ export default function AdminPage() {
                       <button
                         onClick={() => deleteUserAccount(user.id)}
                         disabled={deletingAccount === user.id}
-                        className="px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
+                        className="admin-button-danger text-sm disabled:cursor-not-allowed disabled:opacity-55"
                       >
                         {deletingAccount === user.id ? 'Deleting...' : 'Yes, Delete Account'}
                       </button>
                       <button
                         onClick={() => setShowDeleteConfirm(null)}
                         disabled={deletingAccount === user.id}
-                        className="px-4 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 disabled:bg-gray-500 disabled:cursor-not-allowed"
+                        className="admin-button-secondary text-sm disabled:cursor-not-allowed disabled:opacity-55"
                       >
                         Cancel
                       </button>
                     </div>
                   </div>
                 )}
-              </div>
+              </article>
             ))}
           </div>
-        </div>
+        </section>
       </div>
     );
   };
@@ -1757,16 +1761,20 @@ export default function AdminPage() {
     
     return (
       <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <h2 className="text-xl font-semibold text-white">Market News Context</h2>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-[#49725a]">Editorial context</p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-[-.035em] text-[#102319]">Market news context</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#66736b]">Review the market evidence bundle provided to each subscription tier.</p>
+          </div>
           <div className="flex space-x-2">
             <button
               onClick={() => refreshAllMarketContexts()}
               disabled={refreshingAllContexts}
-              className={`px-4 py-2 rounded ${
+              className={`admin-button-primary ${
                 refreshingAllContexts 
-                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  ? 'cursor-not-allowed opacity-55'
+                  : ''
               }`}
               title="Refresh all market news contexts"
             >
@@ -1782,17 +1790,20 @@ export default function AdminPage() {
             const isRefreshing = refreshingContext === tier;
             
             return (
-              <div key={tier} className="bg-gray-800 rounded-lg p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold text-white capitalize">{tier} Tier</h3>
-                  <div className="flex space-x-2">
+              <section key={tier} className="admin-panel overflow-hidden">
+                <div className="flex flex-col gap-3 border-b border-[#102319]/10 bg-[#fffdf5] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                  <div>
+                    <p className="text-[10px] font-extrabold uppercase tracking-[.12em] text-[#49725a]">Subscription context</p>
+                    <h3 className="mt-1 text-lg font-semibold capitalize text-[#102319]">{tier} tier</h3>
+                  </div>
+                  <div className="flex gap-2">
                     <button
                       onClick={() => refreshMarketContext(tier)}
                       disabled={isRefreshing}
-                      className={`px-3 py-1 rounded text-sm ${
+                      className={`admin-button-primary text-sm ${
                         isRefreshing 
-                          ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                          : 'bg-green-600 text-white hover:bg-green-700'
+                          ? 'cursor-not-allowed opacity-55'
+                          : ''
                       }`}
                     >
                       {isRefreshing ? 'Refreshing...' : 'Refresh'}
@@ -1800,10 +1811,10 @@ export default function AdminPage() {
                     <button
                       onClick={() => editMarketContext(tier)}
                       disabled={isEditing}
-                      className={`px-3 py-1 rounded text-sm ${
+                      className={`admin-button-secondary text-sm ${
                         isEditing 
-                          ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                          : 'bg-yellow-600 text-white hover:bg-yellow-700'
+                          ? 'cursor-not-allowed opacity-55'
+                          : ''
                       }`}
                     >
                       Edit
@@ -1811,24 +1822,25 @@ export default function AdminPage() {
                   </div>
                 </div>
                 
+                <div className="p-5 sm:p-6">
                 {isEditing ? (
                   <div>
                     <textarea
                       value={editingText}
                       onChange={(e) => setEditingText(e.target.value)}
-                      className="w-full h-64 p-3 bg-gray-700 text-white rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+                      className="h-72 w-full rounded-xl border border-[#102319]/15 bg-[#fffdf5] p-4 font-mono text-sm leading-6 text-[#102319] focus:outline-none"
                       placeholder="Enter market context..."
                     />
                     <div className="mt-3 flex space-x-2">
                       <button
                         onClick={() => saveMarketContext(tier)}
-                        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                        className="admin-button-primary"
                       >
                         Save
                       </button>
                       <button
                         onClick={cancelEdit}
-                        className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+                        className="admin-button-secondary"
                       >
                         Cancel
                       </button>
@@ -1836,40 +1848,50 @@ export default function AdminPage() {
                   </div>
                 ) : (
                   <div>
-                    <div className="text-sm text-gray-400 mb-2">
-                      Last updated: {formatDate(context?.lastUpdate || '')}
+                    <div className="mb-5 flex flex-col gap-4 rounded-xl border border-[#102319]/10 bg-[#e9eee5] px-4 py-4 text-sm text-[#56635b] sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <span className="block text-[10px] font-extrabold uppercase tracking-[.12em] text-[#49725a]">Last updated</span>
+                        <span className="mt-1 block font-medium text-[#102319]">{formatDate(context?.lastUpdate || '')}</span>
+                      </div>
                       {context?.dataSources && context.dataSources.length > 0 && (
-                        <span className="ml-4">
-                          Sources: {context.dataSources.join(', ')}
-                        </span>
+                        <div className="sm:max-w-[60%] sm:text-right">
+                          <span className="block text-[10px] font-extrabold uppercase tracking-[.12em] text-[#49725a]">Sources</span>
+                          <div className="mt-2 flex flex-wrap gap-1.5 sm:justify-end">
+                            {context.dataSources.map((source) => (
+                              <span key={source} className="rounded-full border border-[#102319]/10 bg-[#fffdf5] px-2.5 py-1 text-xs font-medium text-[#486657]">{source}</span>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
                     
                     {context?.contextText ? (
-                      <div className="text-gray-300 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto bg-gray-700 p-4 rounded">
+                      <article className="market-news-article rounded-[20px] border border-[#102319]/10 bg-[#fffdf5] px-5 py-4 shadow-[0_14px_38px_rgba(16,35,25,.045)] sm:px-7 sm:py-6">
                         <MarkdownRenderer>{context.contextText}</MarkdownRenderer>
-                      </div>
+                      </article>
                     ) : (
-                      <div className="text-gray-500 italic text-sm bg-gray-700 p-4 rounded">
+                      <div className="rounded-xl border border-[#102319]/10 bg-[#f8f7ef] p-5 text-sm italic text-[#66736b]">
                         No market context available for this tier.
                       </div>
                     )}
                     
                     {context?.keyEvents && context.keyEvents.length > 0 && (
-                      <div className="mt-4">
-                        <h4 className="text-sm font-medium text-gray-400 mb-2">Key Events:</h4>
-                        <div className="flex flex-wrap gap-2">
+                      <div className="mt-5">
+                        <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[.14em] text-[#49725a]">Key events</p>
+                        <div className="grid gap-2 sm:grid-cols-2">
                           {context.keyEvents.map((event, index) => (
-                            <span key={index} className="px-2 py-1 bg-blue-600 text-white text-xs rounded">
-                              {event}
-                            </span>
+                            <div key={index} className="flex gap-3 rounded-xl border border-[#102319]/10 bg-[#fffdf5] px-4 py-3 text-sm leading-6 text-[#486657]">
+                              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#397052]" aria-hidden="true" />
+                              <span>{event}</span>
+                            </div>
                           ))}
                         </div>
                       </div>
                     )}
                   </div>
                 )}
-              </div>
+                </div>
+              </section>
             );
           })}
         </div>
@@ -1936,13 +1958,13 @@ export default function AdminPage() {
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex space-x-1 mb-8 bg-gray-800 rounded-lg p-1">
+        <div className="mb-8 flex gap-1 overflow-x-auto rounded-xl border border-[#102319]/10 bg-[#e9eee5] p-1">
           <button
             onClick={() => setActiveTab('demo')}
             className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
               activeTab === 'demo' 
-                ? 'bg-blue-600 text-white' 
-                : 'text-gray-300 hover:text-white hover:bg-gray-700'
+                ? 'bg-[#102319] text-white shadow-sm'
+                : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'
             }`}
           >
             Demo
@@ -1951,8 +1973,8 @@ export default function AdminPage() {
             onClick={() => setActiveTab('production')}
             className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
               activeTab === 'production' 
-                ? 'bg-blue-600 text-white' 
-                : 'text-gray-300 hover:text-white hover:bg-gray-700'
+                ? 'bg-[#102319] text-white shadow-sm'
+                : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'
             }`}
           >
             Production
@@ -1961,8 +1983,8 @@ export default function AdminPage() {
             onClick={() => setActiveTab('users')}
             className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
               activeTab === 'users' 
-                ? 'bg-blue-600 text-white' 
-                : 'text-gray-300 hover:text-white hover:bg-gray-700'
+                ? 'bg-[#102319] text-white shadow-sm'
+                : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'
             }`}
           >
             User Management
@@ -1971,8 +1993,8 @@ export default function AdminPage() {
             onClick={() => setActiveTab('market-news')}
             className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
               activeTab === 'market-news' 
-                ? 'bg-blue-600 text-white' 
-                : 'text-gray-300 hover:text-white hover:bg-gray-700'
+                ? 'bg-[#102319] text-white shadow-sm'
+                : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'
             }`}
           >
             Market News
@@ -1981,8 +2003,8 @@ export default function AdminPage() {
             onClick={() => setActiveTab('ai-tone')}
             className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
               activeTab === 'ai-tone'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-300 hover:text-white hover:bg-gray-700'
+                ? 'bg-[#102319] text-white shadow-sm'
+                : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'
             }`}
           >
             AI Tone
