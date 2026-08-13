@@ -200,6 +200,7 @@ export const canIRetireWithTwoMillion: AnswerPageData = {
     { question: "Questions to ask before retiring", eyebrow: "Explore prompts", href: "/prompts/retirement" },
     { question: "Can I retire with $1 million?", eyebrow: "Answer page", href: "/can-i-retire-with-1-million" },
     { question: "Can I retire at 55?", eyebrow: "Answer page", href: "/can-i-retire-at-55" },
+    { question: "Can I retire at 60?", eyebrow: "Answer page", href: "/can-i-retire-at-60" },
   ],
   sources: [
     { title: "Get a benefits estimate", publisher: "Social Security Administration", href: "https://www.ssa.gov/prepare/get-benefits-estimate", use: "Personalized Social Security estimates and claiming-age scenarios." },
@@ -303,6 +304,7 @@ export const canIRetireWithOneMillion: AnswerPageData = {
     { question: "Check your retirement readiness", eyebrow: "Use your details", href: "/retirement-readiness" },
     { question: "Questions to ask before retiring", eyebrow: "Explore prompts", href: "/prompts/retirement" },
     { question: "Can I retire at 55?", eyebrow: "Answer page", href: "/can-i-retire-at-55" },
+    { question: "Can I retire at 60?", eyebrow: "Answer page", href: "/can-i-retire-at-60" },
   ],
   sources: [
     { title: "Get a benefits estimate", publisher: "Social Security Administration", href: "https://www.ssa.gov/prepare/get-benefits-estimate", use: "Personalized Social Security estimates and claiming-age scenarios." },
@@ -424,7 +426,7 @@ export const canIRetireAt55: AnswerPageData = {
     heading: "Age 55 is a date. Retirement is a connected timeline.",
     body:
       "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
-    priceNote: "$9/month. Cancel anytime.",
+    priceNote: "1 month free, then $9/month. Cancel anytime.",
   },
   faqs: [
     { question: "How much money do I need to retire at 55?", answer: "There is no single balance. As a simple illustration, $60,000 of first-year portfolio withdrawals equals a $2 million portfolio at 3%, about $1.71 million at 3.5%, or $1.5 million at 4%, before tax and other income. A plan should also model future benefits, healthcare, inflation, fees, and market risk." },
@@ -438,7 +440,7 @@ export const canIRetireAt55: AnswerPageData = {
     { question: "Can I retire with $2 million?", eyebrow: "Answer page", href: "/can-i-retire-with-2-million" },
     { question: "Check your retirement readiness", eyebrow: "Use your details", href: "/retirement-readiness" },
     { question: "How Ask Linc tests a retirement decision", eyebrow: "See the product", href: "/use-cases/retirement" },
-    { question: "Can I retire at 60?", eyebrow: "Answer page", href: undefined },
+    { question: "Can I retire at 60?", eyebrow: "Answer page", href: "/can-i-retire-at-60" },
   ],
   sources: [
     { title: "Significant ages for retirement plan participants", publisher: "Internal Revenue Service", href: "https://www.irs.gov/retirement-plans/retirement-topics-significant-ages-for-retirement-plan-participants", use: "Current federal retirement-plan milestones, including ages 55 and 59½." },
@@ -449,6 +451,147 @@ export const canIRetireAt55: AnswerPageData = {
   methodology: [
     "This page uses deterministic arithmetic to illustrate first-year portfolio needs: annual spending divided by an initial withdrawal rate. It does not assume a guaranteed return or label any rate “safe.” Dollar examples are nominal, before fees, and before tax unless stated otherwise.",
     "The age timeline summarizes general federal rules for U.S. retirement accounts, Social Security, and Medicare. Individual eligibility, employer-plan terms, state taxes, and health coverage vary. Confirm current information with the linked agencies and consider qualified tax, legal, healthcare, or investment guidance before acting.",
+  ],
+};
+
+export const canIRetireAt60: AnswerPageData = {
+  slug: "can-i-retire-at-60",
+  category: "Retirement timing answer",
+  title: "Can I retire at 60?",
+  titleAccent: "Plan the five years before Medicare—and every year after.",
+  description:
+    "See how savings, spending, Social Security timing, healthcare, taxes, and retirement-account withdrawals determine whether you can retire at 60.",
+  reviewedOn: "August 13, 2026",
+  reviewedOnIso: "2026-08-13",
+  readTime: "11 min read",
+  breadcrumbs: [
+    { label: "Home", href: "/" },
+    { label: "Retirement", href: "/use-cases/retirement" },
+    { label: "Can I retire at 60?" },
+  ],
+  directAnswer:
+    "Yes—retiring at 60 can be realistic when your savings cover the initial income gap, five years of pre-Medicare healthcare, and a retirement that may last three decades or longer.",
+  directAnswerDetail:
+    "At 60, the general 59½ early-distribution threshold has passed, but Social Security cannot start until 62 and Medicare usually begins at 65. The useful question is how much your portfolio must provide before and after those milestones—not only whether you have reached a particular balance.",
+  keyNumbers: [
+    { label: "Retirement-account access", value: "59½", note: "The general early-distribution threshold has passed" },
+    { label: "Earliest Social Security", value: "62", note: "A two-year income bridge from age 60" },
+    { label: "Typical Medicare eligibility", value: "65", note: "A five-year healthcare bridge" },
+  ],
+  numberStripLabel: "Key planning ages when retiring at 60",
+  withdrawalSection: {
+    tocLabel: "The age-60 bridge",
+    heading: "At 60, the first five years deserve their own plan.",
+    tableCaption: "Illustrative portfolio needed before tax and other income",
+    noteTitle: "A shorter bridge still needs a long-term test.",
+    noteBody:
+      "The table divides annual spending by an illustrative starting withdrawal rate. It does not include Social Security, pensions, taxes, fees, healthcare, changing expenses, or investment returns. Retiring at 60 can still mean funding 30 years or more.",
+    linkLabel: "See the age-60 timeline",
+    kicker: "MAP WHAT CHANGES AFTER 60",
+    lede:
+      "Retiring at 60 creates two immediate bridges: two years before Social Security can begin and about five years before typical Medicare eligibility. Your withdrawals may change at each milestone, so model the periods separately.",
+    tableColumns: ["Starting rate", "$60K annual spending", "$80K annual spending", "How to read it"],
+  },
+  withdrawalScenarios: [
+    { rate: "3.0%", annualWithdrawal: "$2,000,000", monthlyWithdrawal: "$2,666,667", planningUse: "A lower starting draw with more room for weak early returns or a long lifespan." },
+    { rate: "3.5%", annualWithdrawal: "$1,714,286", monthlyWithdrawal: "$2,285,714", planningUse: "A middle planning case that still needs year-by-year testing." },
+    { rate: "4.0%", annualWithdrawal: "$1,500,000", monthlyWithdrawal: "$2,000,000", planningUse: "A common planning reference—not guaranteed lifetime income." },
+  ],
+  timeline: {
+    ariaLabel: "Retirement planning milestones from age 60",
+    items: [
+      { age: "60", label: "Retirement begins", title: "Fund the initial income gap", body: "Retirement accounts are generally beyond the 59½ additional-tax threshold, but ordinary income tax and employer-plan distribution rules still matter." },
+      { age: "62", label: "Social Security", title: "Earliest claiming age", body: "Benefits can begin, but claiming before full retirement age generally produces a lower monthly amount than waiting." },
+      { age: "65", label: "Healthcare", title: "Typical Medicare eligibility", body: "Most people first become eligible around 65, so plan premiums and out-of-pocket costs for the five years before then." },
+      { age: "67", label: "Social Security", title: "Full retirement age for many", body: "For people attaining age 62 in 2026, Social Security lists 67 as full retirement age." },
+      { age: "70", label: "Social Security", title: "Delayed credits stop", body: "Waiting beyond full retirement age can increase benefits through 70; Social Security says there is no additional increase for delaying after 70." },
+    ],
+  },
+  exampleSection: {
+    tocLabel: "A $1.5M example",
+    kicker: "COMPARE BEFORE AND AFTER BENEFITS",
+    heading: "Your initial withdrawal may not be your permanent withdrawal.",
+    intro:
+      "Someone retiring at 60 may rely entirely on investments for the first two years, then reduce portfolio withdrawals if Social Security begins at 62. The claiming decision should be tested rather than assumed.",
+  },
+  example: {
+    title: "A simple $70K spending example",
+    intro:
+      "Suppose you retire at 60 with $1.5 million, want $70,000 of gross annual income, and have no reliable outside income in the first year.",
+    steps: [
+      { label: "Annual income target", value: "$70,000" },
+      { label: "Outside income at age 60", value: "$0", operator: "−" },
+      { label: "Needed from portfolio", value: "$70,000", operator: "=" },
+      { label: "$70,000 ÷ $1,500,000", value: "4.7%", operator: "=" },
+    ],
+    result: "The initial portfolio withdrawal rate is about 4.7% before tax.",
+    note:
+      "If $30,000 of annual Social Security or pension income later begins, the same $70,000 target would leave $40,000 for the portfolio to provide—about 2.7% of the original $1.5 million balance. Actual benefits, balances, and taxes will differ.",
+  },
+  scenarioTableCaption: "Illustrative income phases for a $1.5 million starting portfolio",
+  scenarioTableFootnote:
+    "The $30,000 benefit is illustrative, not an estimate. Rates use the original $1.5 million balance only to make the comparison understandable; an actual portfolio balance will change over time. Taxes, fees, inflation, healthcare, and investment returns are not included.",
+  retirementScenarios: [
+    { label: "Age 60–61", annualIncomeTarget: "$70,000", otherIncome: "$0", portfolioWithdrawal: "$70,000", initialRate: "4.7%" },
+    { label: "Age 62+ with $30K benefit", annualIncomeTarget: "$70,000", otherIncome: "$30,000", portfolioWithdrawal: "$40,000", initialRate: "2.7%" },
+    { label: "Age 62+ with $30K benefit + higher spending", annualIncomeTarget: "$80,000", otherIncome: "$30,000", portfolioWithdrawal: "$50,000", initialRate: "3.3%" },
+    { label: "Delay benefits", annualIncomeTarget: "$70,000", otherIncome: "$0", portfolioWithdrawal: "$70,000", initialRate: "4.7%" },
+  ],
+  factorsSection: {
+    kicker: "AGE 60 IS ONLY ONE INPUT",
+    heading: "Six things that can change the answer.",
+  },
+  factors: [
+    { number: "01", title: "Spending before and after 65", body: "Separate essential and flexible expenses, then model how health coverage, travel, housing, and taxes may change once Medicare begins." },
+    { number: "02", title: "Social Security timing", body: "Claiming at 62 creates income sooner but generally reduces the monthly benefit. Waiting requires more portfolio support now in exchange for potentially higher benefits later." },
+    { number: "03", title: "Healthcare for five years", body: "Coverage may come from a spouse's plan, COBRA, an ACA Marketplace plan, retiree benefits, or another source. Include premiums and out-of-pocket costs." },
+    { number: "04", title: "Taxes and withdrawal order", body: "Traditional, Roth, and taxable accounts can have different after-tax values. The mix of withdrawals may also affect taxable income and healthcare costs." },
+    { number: "05", title: "Early market returns", body: "Losses near retirement can be more damaging when withdrawals continue. Flexible spending and cash reserves can create room to adjust." },
+    { number: "06", title: "Pensions, work, and household income", body: "A pension, part-time work, rental income, or a spouse's earnings can reduce portfolio withdrawals, but each source needs its own start and end date." },
+  ],
+  checklistSection: {
+    kicker: "TURN AGE 60 INTO A YEAR-BY-YEAR PLAN",
+    heading: "Model the transitions—not just retirement day.",
+    intro:
+      "A useful retirement plan shows how cash flow, taxes, healthcare, and portfolio withdrawals change at 62, 65, and each later milestone.",
+  },
+  checkpoints: [
+    "Estimate spending from 60 through 65, including health insurance, taxes, and irregular expenses.",
+    "List each retirement account, its tax treatment, and the employer plan's distribution options.",
+    "Compare Social Security claiming ages using your actual benefit estimate.",
+    "Test weak early returns, higher inflation, a long life, and higher healthcare costs.",
+    "Define which expenses, income sources, or retirement dates could change if the plan misses its target range.",
+  ],
+  productBridge: {
+    heading: "Age 60 is a starting point. Retirement is a connected timeline.",
+    body:
+      "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
+    priceNote: "1 month free, then $9/month. Cancel anytime.",
+  },
+  faqs: [
+    { question: "How much money do I need to retire at 60?", answer: "There is no single balance. As a simple illustration, $60,000 of first-year portfolio withdrawals equals $2 million at 3%, about $1.71 million at 3.5%, or $1.5 million at 4%, before tax and other income. Your plan should also model future benefits, healthcare, inflation, fees, and market risk." },
+    { question: "Can I withdraw from my 401(k) or IRA at 60?", answer: "Generally, distributions after age 59½ are not subject to the 10% additional tax for early distributions, though ordinary income tax may still apply. Workplace plans can have their own distribution terms, and Roth distributions have additional qualification rules." },
+    { question: "Can I collect Social Security at 60?", answer: "No. Social Security retirement benefits can begin as early as age 62. Starting before full retirement age generally reduces the monthly benefit, while delaying can increase it through age 70." },
+    { question: "How do I pay for healthcare if I retire at 60?", answer: "Possible coverage sources include a spouse's employer plan, COBRA, an ACA Marketplace plan, retiree coverage, or private insurance. Most people first become eligible for Medicare around 65, so plan for roughly five years of premiums and out-of-pocket costs." },
+    { question: "Is $1.5 million enough to retire at 60?", answer: "It may be. A $1.5 million portfolio equals $45,000 of first-year withdrawals at 3%, $52,500 at 3.5%, or $60,000 at 4%, before tax. Social Security, pensions, healthcare, taxes, investment returns, and spending flexibility can materially change the result." },
+  ],
+  relatedAnswers: [
+    { question: "Can I retire at 55?", eyebrow: "Answer page", href: "/can-i-retire-at-55" },
+    { question: "Can I retire with $1 million?", eyebrow: "Answer page", href: "/can-i-retire-with-1-million" },
+    { question: "Can I retire with $2 million?", eyebrow: "Answer page", href: "/can-i-retire-with-2-million" },
+    { question: "Check your retirement readiness", eyebrow: "Use your details", href: "/retirement-readiness" },
+    { question: "How Ask Linc tests a retirement decision", eyebrow: "See the product", href: "/use-cases/retirement" },
+    { question: "Can I retire with $3 million?", eyebrow: "Answer page", href: undefined },
+  ],
+  sources: [
+    { title: "Significant ages for retirement plan participants", publisher: "Internal Revenue Service", href: "https://www.irs.gov/retirement-plans/retirement-topics-significant-ages-for-retirement-plan-participants", use: "Current federal retirement-plan milestones, including the age 59½ distribution threshold." },
+    { title: "Publication 590-B: Distributions from IRAs", publisher: "Internal Revenue Service", href: "https://www.irs.gov/publications/p590b", use: "IRA distribution rules and the age 59½ additional-tax threshold." },
+    { title: "Receiving benefits before full retirement age", publisher: "Social Security Administration", href: "https://www.ssa.gov/benefits/retirement/planner/applying2.html", use: "Earliest claiming age, reductions before full retirement age, and delayed credits through 70." },
+    { title: "Get started with Medicare", publisher: "Medicare.gov", href: "https://www.medicare.gov/basics/get-started-with-medicare", use: "Medicare eligibility and enrollment context around age 65." },
+  ],
+  methodology: [
+    "This page uses deterministic arithmetic to illustrate first-year portfolio needs and how withdrawals might change after an illustrative benefit begins. It does not assume a guaranteed return or label any withdrawal rate “safe.” Dollar examples are nominal, before fees, and before tax unless stated otherwise.",
+    "The age timeline summarizes general federal rules for U.S. retirement accounts, Social Security, and Medicare. Individual eligibility, employer-plan terms, state taxes, benefit amounts, and health coverage vary. Confirm current information with the linked agencies and consider qualified tax, legal, healthcare, or investment guidance before acting.",
   ],
 };
 
