@@ -959,6 +959,9 @@ export default function ProfilePage() {
         case 'active':
           setSubscriptionMessage('✅ Your subscription is now active!');
           break;
+        case 'trialing':
+          setSubscriptionMessage('✅ Your free 1-month trial has started!');
+          break;
       }
       // Clear the message after 5 seconds
       setTimeout(() => setSubscriptionMessage(''), 5000);

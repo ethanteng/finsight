@@ -1450,16 +1450,16 @@ export default function AdminPage() {
           <h3 className="mb-4 text-lg font-semibold text-[#102319]">User status summary</h3>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <div className="admin-stat-cell">
-              <div className="text-2xl font-semibold text-[#397052]">{usersForManagement?.filter(u => u.accessLevel === 'full' && u.subscriptionStatus === 'active').length || 0}</div>
-              <div className="mt-1 text-xs font-medium text-[#66736b]">Active subscriptions</div>
+              <div className="text-2xl font-semibold text-[#397052]">{usersForManagement?.filter(u => u.accessLevel === 'full' && ['active', 'trialing'].includes(u.subscriptionStatus)).length || 0}</div>
+              <div className="mt-1 text-xs font-medium text-[#66736b]">Active or trialing</div>
             </div>
             <div className="admin-stat-cell">
-              <div className="text-2xl font-semibold text-[#397052]">{usersForManagement?.filter(u => u.accessLevel === 'full' && u.subscriptionStatus !== 'active').length || 0}</div>
+              <div className="text-2xl font-semibold text-[#397052]">{usersForManagement?.filter(u => u.accessLevel === 'full' && !['active', 'trialing'].includes(u.subscriptionStatus)).length || 0}</div>
               <div className="mt-1 text-xs font-medium text-[#66736b]">Admin created</div>
             </div>
             <div className="admin-stat-cell">
               <div className="text-2xl font-semibold text-[#76510f]">{usersForManagement?.filter(u =>
-                (u.subscriptionStatus === 'active' && u.subscriptionMessage.includes('account setup incomplete')) ||
+                (['active', 'trialing'].includes(u.subscriptionStatus) && u.subscriptionMessage.includes('account setup incomplete')) ||
                 (u.subscriptionStatus === 'incomplete' && u.subscriptionMessage.includes('setup incomplete'))
               ).length || 0}</div>
               <div className="mt-1 text-xs font-medium text-[#66736b]">Setup required</div>
@@ -1471,13 +1471,13 @@ export default function AdminPage() {
           </div>
           
           {usersForManagement && usersForManagement.filter(u => 
-            (u.subscriptionStatus === 'active' && u.subscriptionMessage.includes('account setup incomplete')) ||
+            (['active', 'trialing'].includes(u.subscriptionStatus) && u.subscriptionMessage.includes('account setup incomplete')) ||
             (u.subscriptionStatus === 'incomplete' && u.subscriptionMessage.includes('setup incomplete'))
           ).length > 0 && (
             <div className="mt-4 rounded-xl border border-[#9d6a16]/20 bg-[#f4ead0] p-4">
               <h4 className="mb-2 font-semibold text-[#76510f]">
                 Setup required ({usersForManagement.filter(u =>
-                  (u.subscriptionStatus === 'active' && u.subscriptionMessage.includes('account setup incomplete')) ||
+                  (['active', 'trialing'].includes(u.subscriptionStatus) && u.subscriptionMessage.includes('account setup incomplete')) ||
                   (u.subscriptionStatus === 'incomplete' && u.subscriptionMessage.includes('setup incomplete'))
                 ).length} users)
               </h4>
@@ -1486,7 +1486,7 @@ export default function AdminPage() {
               </div>
               <div className="mt-2 text-xs text-gray-400">
                 {usersForManagement.filter(u => 
-                  (u.subscriptionStatus === 'active' && u.subscriptionMessage.includes('account setup incomplete')) ||
+                  (['active', 'trialing'].includes(u.subscriptionStatus) && u.subscriptionMessage.includes('account setup incomplete')) ||
                   (u.subscriptionStatus === 'incomplete' && u.subscriptionMessage.includes('setup incomplete'))
                 ).map(user => user.email).join(', ')}
               </div>
@@ -1509,10 +1509,10 @@ export default function AdminPage() {
                           !user.isActive
                             ? 'border-[#b84a3d]/20 bg-[#f8e8e3] text-[#8b3027]'
                             : user.accessLevel === 'full'
-                              ? user.subscriptionStatus === 'active'
+                              ? ['active', 'trialing'].includes(user.subscriptionStatus)
                                 ? 'border-[#397052]/18 bg-[#c9f2df]/60 text-[#285c43]'
                                 : 'border-[#5d7190]/18 bg-[#e6edf8] text-[#4b617e]'
-                              : (user.subscriptionStatus === 'active' && user.subscriptionMessage.includes('account setup incomplete')) ||
+                              : (['active', 'trialing'].includes(user.subscriptionStatus) && user.subscriptionMessage.includes('account setup incomplete')) ||
                                 (user.subscriptionStatus === 'incomplete' && user.subscriptionMessage.includes('setup incomplete'))
                                 ? 'border-[#9d6a16]/20 bg-[#f4ead0] text-[#76510f]'
                                 : 'border-[#b84a3d]/20 bg-[#f8e8e3] text-[#8b3027]'
@@ -1522,8 +1522,10 @@ export default function AdminPage() {
                             : user.accessLevel === 'full'
                               ? user.subscriptionStatus === 'active'
                                 ? 'Active'
-                                : 'Admin Created'
-                              : (user.subscriptionStatus === 'active' && user.subscriptionMessage.includes('account setup incomplete')) ||
+                                : user.subscriptionStatus === 'trialing'
+                                  ? 'Trialing'
+                                  : 'Admin Created'
+                              : (['active', 'trialing'].includes(user.subscriptionStatus) && user.subscriptionMessage.includes('account setup incomplete')) ||
                                 (user.subscriptionStatus === 'incomplete' && user.subscriptionMessage.includes('setup incomplete'))
                                 ? 'Setup Required'
                                 : 'Subscription Expired'}

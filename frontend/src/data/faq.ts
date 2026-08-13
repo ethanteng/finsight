@@ -70,6 +70,6 @@ export const PRODUCT_OFFER_SCHEMA = {
     availability: "https://schema.org/InStock",
     url: "https://asklinc.com/pricing",
     priceValidUntil: "2027-12-31",
-    description: "$9/month for unlimited questions, connected accounts, what-if scenarios, and calculations you can inspect.",
+    description: "Free for 1 month, then $9/month for unlimited questions, connected accounts, what-if scenarios, and calculations you can inspect.",
   },
 };

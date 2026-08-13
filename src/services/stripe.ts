@@ -191,6 +191,14 @@ export class StripeService {
       ? new Date(subscription.current_period_end * 1000)
       : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // Default to 30 days from now
 
+    // Stripe can retry or replay this event. Continue syncing subscription and
+    // user state, but only run one-time side effects for the first delivery.
+    const existingSubscription = await prisma.subscription.findUnique({
+      where: { stripeSubscriptionId: subscriptionId },
+      select: { id: true }
+    });
+    const isNewSubscription = !existingSubscription;
+
     // The registration callback and this webhook can race. Upsert makes either
     // delivery order safe and preserves the Stripe subscription as the source of truth.
     await prisma.subscription.upsert({
@@ -225,21 +233,24 @@ export class StripeService {
       }
     });
 
-    // Send welcome email for new subscription
-    try {
-      await sendWelcomeEmail(user.email, tier);
-      console.log(`Welcome email sent to ${user.email} for ${tier} plan`);
-    } catch (emailError) {
-      console.error(`Failed to send welcome email to ${user.email}:`, emailError);
-      // Don't fail the webhook if email fails
-    }
+    if (isNewSubscription) {
+      try {
+        await sendWelcomeEmail(user.email, tier);
+        console.log(`Welcome email sent to ${user.email} for ${tier} plan`);
+      } catch (emailError) {
+        console.error(`Failed to send welcome email to ${user.email}:`, emailError);
+        // Don't fail the webhook if email fails
+      }
 
-    await analytics.setIdentity(user.id, { email: user.email, plan: tier });
-    await analytics.trackEvent(
-      'subscription_started',
-      { plan: tier },
-      { userId: user.id },
-    );
+      await analytics.setIdentity(user.id, { email: user.email, plan: tier });
+      await analytics.trackEvent(
+        'subscription_started',
+        { plan: tier },
+        { userId: user.id },
+      );
+    } else {
+      console.log(`Subscription ${subscriptionId} already exists; skipped welcome and start analytics`);
+    }
 
     console.log(`Subscription ${subscriptionId} activated for user ${user.id}`);
   }

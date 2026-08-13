@@ -1,6 +1,19 @@
 import { stripeService } from '../../services/stripe';
 import { getPrismaClient } from '../../prisma-client';
 
+jest.mock('../../services/stripe-email', () => ({
+  sendWelcomeEmail: jest.fn().mockResolvedValue(true),
+  sendTierChangeEmail: jest.fn().mockResolvedValue(true),
+  sendCancellationEmail: jest.fn().mockResolvedValue(true)
+}));
+
+jest.mock('../../analytics/heycatch', () => ({
+  analytics: {
+    setIdentity: jest.fn().mockResolvedValue(undefined),
+    trackEvent: jest.fn().mockResolvedValue(undefined)
+  }
+}));
+
 // Mock Stripe
 jest.mock('../../config/stripe', () => ({
   STRIPE_CONFIG: {
@@ -180,12 +193,15 @@ describe('StripeService', () => {
 
   describe('processWebhookEvent', () => {
     it('should handle subscription created event', async () => {
+      const { sendWelcomeEmail } = require('../../services/stripe-email');
+      const { analytics } = require('../../analytics/heycatch');
       const mockUser = {
         id: 'user_123',
         email: 'test@example.com'
       };
       
       mockPrisma.user.findFirst.mockResolvedValue(mockUser);
+      mockPrisma.subscription.findUnique.mockResolvedValue(null);
       mockPrisma.subscription.upsert.mockResolvedValue({ id: 'sub_123' });
       mockPrisma.user.update.mockResolvedValue({ id: 'user_123' });
 
@@ -208,6 +224,78 @@ describe('StripeService', () => {
       });
       expect(mockPrisma.subscription.upsert).toHaveBeenCalled();
       expect(mockPrisma.user.update).toHaveBeenCalled();
+      expect(sendWelcomeEmail).toHaveBeenCalledWith('test@example.com', 'standard');
+      expect(analytics.trackEvent).toHaveBeenCalledWith(
+        'subscription_started',
+        { plan: 'standard' },
+        { userId: 'user_123' }
+      );
+    });
+
+    it('should skip one-time side effects when a subscription created event is replayed', async () => {
+      const { sendWelcomeEmail } = require('../../services/stripe-email');
+      const { analytics } = require('../../analytics/heycatch');
+
+      mockPrisma.user.findFirst.mockResolvedValue({
+        id: 'user_123',
+        email: 'test@example.com'
+      });
+      mockPrisma.subscription.findUnique.mockResolvedValue({ id: 'sub_123' });
+      mockPrisma.subscription.upsert.mockResolvedValue({ id: 'sub_123' });
+      mockPrisma.user.update.mockResolvedValue({ id: 'user_123' });
+
+      await stripeService.processWebhookEvent('customer.subscription.created', {
+        object: {
+          id: 'sub_test_123',
+          customer: 'cus_test_123',
+          status: 'trialing',
+          current_period_start: Math.floor(Date.now() / 1000),
+          current_period_end: Math.floor(Date.now() / 1000) + 86400,
+          cancel_at_period_end: false,
+          metadata: { tier: 'premium' }
+        }
+      });
+
+      expect(mockPrisma.subscription.upsert).toHaveBeenCalled();
+      expect(mockPrisma.user.update).toHaveBeenCalled();
+      expect(sendWelcomeEmail).not.toHaveBeenCalled();
+      expect(analytics.setIdentity).not.toHaveBeenCalled();
+      expect(analytics.trackEvent).not.toHaveBeenCalled();
+    });
+
+    it('should preserve trialing status on a successful trial invoice', async () => {
+      const mockStripe = require('../../config/stripe');
+      const subscriptionRecord = {
+        id: 'sub_123',
+        tier: 'premium',
+        user: {
+          id: 'user_123',
+          email: 'test@example.com',
+          tier: 'premium'
+        }
+      };
+
+      mockStripe.stripe.client.subscriptions.retrieve.mockResolvedValue({
+        status: 'trialing',
+        items: { data: [{ price: { id: 'price_test_123' } }] }
+      });
+      mockStripe.getTierFromPriceId.mockReturnValue('premium');
+      mockPrisma.subscription.findUnique.mockResolvedValue(subscriptionRecord);
+      mockPrisma.subscription.update.mockResolvedValue(subscriptionRecord);
+      mockPrisma.user.update.mockResolvedValue(subscriptionRecord.user);
+
+      await stripeService.processWebhookEvent('invoice.payment_succeeded', {
+        object: { subscription: 'sub_test_123' }
+      });
+
+      expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
+        where: { stripeSubscriptionId: 'sub_test_123' },
+        data: { status: 'trialing' }
+      });
+      expect(mockPrisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user_123' },
+        data: { subscriptionStatus: 'trialing' }
+      });
     });
 
     it('should handle subscription updated event', async () => {

@@ -225,7 +225,6 @@ STRIPE_SECRET_KEY="sk_..."
 STRIPE_PUBLISHABLE_KEY="pk_..."
 STRIPE_WEBHOOK_SECRET="whsec_..."
 STRIPE_PRICE_PREMIUM="price_..."        # Stripe price ID for premium tier
-STRIPE_TRIAL_PERIOD_DAYS="30"           # Optional (default: 30-day free trial)
 STRIPE_CHECKOUT_SUCCESS_URL="..."      # Optional (default: /api/stripe/payment-success)
 STRIPE_CHECKOUT_CANCEL_URL="..."       # Optional (default: /pricing)
 STRIPE_PORTAL_RETURN_URL="..."          # Optional (default: /profile)

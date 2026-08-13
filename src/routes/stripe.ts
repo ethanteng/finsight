@@ -96,7 +96,8 @@ router.get('/payment-success', async (req, res) => {
         // User exists - redirect to dashboard or profile
         console.log('User already exists, redirecting to dashboard');
         const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
-        const redirectUrl = `${baseUrl}/profile?subscription=active&tier=${tierName}`;
+        const subscriptionState = isTrial ? 'trialing' : 'active';
+        const redirectUrl = `${baseUrl}/profile?subscription=${subscriptionState}&tier=${tierName}`;
         responseData.redirectUrl = redirectUrl;
         responseData.redirect = redirectUrl;
         responseData.message = 'User already exists, redirecting to profile';
