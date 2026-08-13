@@ -81,17 +81,23 @@ export default function MarketNewsModal({ isOpen, onClose, tier }: MarketNewsMod
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#102319]/70 p-4 backdrop-blur-sm" onClick={onClose}>
       <div 
-        className="bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col"
+        className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-[24px] border border-[#ccd1c4] bg-[#f3f2e9] text-[#102319] shadow-[0_30px_90px_rgba(16,35,25,.3)]"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="market-news-title"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-700">
-          <h2 className="text-xl font-semibold text-white">Market News</h2>
+        <div className="flex items-center justify-between border-b border-[#102319]/12 bg-[#fffdf5] px-5 py-4 sm:px-6 sm:py-5">
+          <div>
+            <p className="text-[10px] font-extrabold uppercase tracking-[.15em] text-[#49725a]">Current market context</p>
+            <h2 id="market-news-title" className="mt-1 text-xl font-semibold tracking-[-.035em] text-[#102319] sm:text-2xl">Market News</h2>
+          </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors"
+            className="grid h-10 w-10 place-items-center rounded-full border border-[#102319]/12 text-[#66736b] transition hover:bg-[#f3f2e9] hover:text-[#102319]"
             aria-label="Close modal"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -101,65 +107,76 @@ export default function MarketNewsModal({ isOpen, onClose, tier }: MarketNewsMod
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto px-5 py-6 sm:px-6 sm:py-7">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-              <span className="ml-3 text-gray-400">Loading market news...</span>
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#102319]/15 border-t-[#102319]"></div>
+              <span className="ml-3 text-sm text-[#66736b]">Loading market news...</span>
             </div>
           ) : error ? (
-            <div className="bg-red-900 border border-red-700 text-red-100 px-4 py-3 rounded">
+            <div className="rounded-2xl border border-[#b84a3d]/20 bg-[#f8e8e3] px-4 py-4 text-sm text-[#8b3027]">
               {error}
             </div>
           ) : marketNews ? (
-            <div className="space-y-4">
+            <div className="space-y-6">
               {/* Metadata */}
-              <div className="text-sm text-gray-400">
-                Last updated: {formatDate(marketNews.lastUpdate)}
+              <div className="flex flex-col gap-4 rounded-2xl border border-[#102319]/10 bg-[#e9eee5] px-4 py-4 text-sm text-[#56635b] sm:flex-row sm:items-start sm:justify-between sm:px-5">
+                <div>
+                  <span className="block text-[10px] font-extrabold uppercase tracking-[.12em] text-[#49725a]">Last updated</span>
+                  <span className="mt-1 block font-medium text-[#102319]">{formatDate(marketNews.lastUpdate)}</span>
+                </div>
                 {marketNews.dataSources && marketNews.dataSources.length > 0 && (
-                  <span className="ml-4">
-                    Sources: {marketNews.dataSources.join(', ')}
-                  </span>
+                  <div className="sm:max-w-[60%] sm:text-right">
+                    <span className="block text-[10px] font-extrabold uppercase tracking-[.12em] text-[#49725a]">Sources</span>
+                    <div className="mt-2 flex flex-wrap gap-1.5 sm:justify-end">
+                      {marketNews.dataSources.map((source) => (
+                        <span key={source} className="rounded-full border border-[#102319]/10 bg-[#fffdf5] px-2.5 py-1 text-xs font-medium text-[#486657]">
+                          {source}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
 
               {/* Market News Content */}
               {marketNews.contextText ? (
-                <div className="text-gray-300 whitespace-pre-wrap text-sm bg-gray-700 p-4 rounded">
+                <article className="market-news-article rounded-[20px] border border-[#102319]/11 bg-[#fffdf5] px-5 py-4 shadow-[0_14px_38px_rgba(16,35,25,.045)] sm:px-7 sm:py-6">
                   <MarkdownRenderer>{marketNews.contextText}</MarkdownRenderer>
-                </div>
+                </article>
               ) : (
-                <div className="text-gray-500 italic text-sm bg-gray-700 p-4 rounded">
+                <div className="rounded-2xl border border-[#102319]/10 bg-[#fffdf5] p-5 text-sm italic text-[#66736b]">
                   No market context available for this tier.
                 </div>
               )}
 
               {/* Key Events */}
               {marketNews.keyEvents && marketNews.keyEvents.length > 0 && (
-                <div className="mt-4">
-                  <h4 className="text-sm font-medium text-gray-400 mb-2">Key Events:</h4>
-                  <div className="flex flex-wrap gap-2">
+                <section>
+                  <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[.14em] text-[#49725a]">Key events</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
                     {marketNews.keyEvents.map((event, index) => (
-                      <span key={index} className="px-2 py-1 bg-blue-600 text-white text-xs rounded">
-                        {event}
-                      </span>
+                      <div key={index} className="flex gap-3 rounded-xl border border-[#102319]/10 bg-[#fffdf5] px-4 py-3 text-sm leading-6 text-[#486657]">
+                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#397052]" aria-hidden="true" />
+                        <span>{event}</span>
+                      </div>
                     ))}
                   </div>
-                </div>
+                </section>
               )}
             </div>
           ) : (
-            <div className="text-gray-500 italic text-sm">
+            <div className="rounded-2xl border border-[#102319]/10 bg-[#fffdf5] p-5 text-sm italic text-[#66736b]">
               No market news available.
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-gray-700">
+        <div className="flex justify-end border-t border-[#102319]/12 bg-[#fffdf5] px-5 py-4 sm:px-6">
           <button
             onClick={onClose}
-            className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
+            className="rounded-full bg-[#102319] px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-[#173c2c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319] focus-visible:ring-offset-2"
           >
             Close
           </button>

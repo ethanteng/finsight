@@ -370,6 +370,24 @@
 .authenticated-site textarea:focus,
 .authenticated-site select:focus { border-color: #4e785f; box-shadow: 0 0 0 3px rgb(78 120 95 / .12); }
 
+/* Market context uses the shared Markdown renderer, whose defaults are dark.
+   This scope gives the modal a light editorial treatment without affecting
+   answer content elsewhere in the product. */
+.market-news-article .markdown-renderer { color: #486657; }
+.market-news-article .markdown-renderer :is(p, li, td) { color: #486657; font-size: .925rem; line-height: 1.75; }
+.market-news-article .markdown-renderer :is(h1, h2, h3, strong, th) { color: #102319; }
+.market-news-article .markdown-renderer :is(h1, h2, h3) { letter-spacing: -.025em; }
+.market-news-article .markdown-renderer h1 { font-size: 1.45rem; }
+.market-news-article .markdown-renderer h2 { font-size: 1.2rem; }
+.market-news-article .markdown-renderer h3 { font-size: 1rem; text-transform: uppercase; letter-spacing: .04em; }
+.market-news-article .markdown-renderer blockquote { border-color: #397052; background: #e9eee5; color: #486657; }
+.market-news-article .markdown-renderer :is(code, thead) { background: #e9eee5; color: #102319; }
+.market-news-article .markdown-renderer pre { border-color: rgb(16 35 25 / .14); background: #102319; }
+.market-news-article .markdown-renderer pre code { background: transparent; color: #e8eee8; }
+.market-news-article .markdown-renderer table { border-color: rgb(16 35 25 / .14); }
+.market-news-article .markdown-renderer tbody { background: #fffdf5; }
+.market-news-article .markdown-renderer tr { border-color: rgb(16 35 25 / .12); }
+
 /* Ghost.io formatting enhancements */
 .ghost-content {
   /* Preserve Ghost's original spacing and layout */
