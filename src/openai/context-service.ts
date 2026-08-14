@@ -7,6 +7,9 @@ import { buildAccountSummaries } from './account-summary';
 import type { DemoAccount, DemoTransaction } from '../demo-data';
 import { buildCanonicalCashFlowAnalyses } from './cash-flow-context';
 import { resolveRetirementInputs, retirementPortfolioFingerprint } from './retirement-inputs';
+import { classifyAccount, getAccountBalance } from '../services/account-classifier';
+import { computeFinancialOverview } from '../domain/financial-truth';
+import { buildTransactionSummary } from '../services/transaction-summary-service';
 
 interface GatherContextArgs {
   userId?: string;
@@ -86,6 +89,9 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     if (questionNeeds.needsHomeValue) {
       homeValueSummary = 'Home value data is not available in demo mode.';
     }
+    const demoCanonical = buildDemoCanonicalContext(accounts, bankingTransactions, investmentsSnapshot);
+    financialSummary = demoCanonical.financialSummary;
+    transactionSummary = demoCanonical.transactionSummary;
   } else if (userId) {
     // Fetch the canonical snapshot with only the large JSON columns this
     // question needs. Aggregate financial and cash-flow truth is always loaded.
@@ -1054,6 +1060,66 @@ function deriveCategory(transaction: Transaction): string | undefined {
   }
   
   return undefined;
+}
+
+function buildDemoCanonicalContext(
+  accounts: Account[],
+  bankingTransactions: Transaction[],
+  investmentsSnapshot?: InvestmentSnapshot,
+): {
+  financialSummary: NonNullable<FinancialContextSnapshot['financialSummary']>;
+  transactionSummary: FinancialContextSnapshot['transactionSummary'];
+} {
+  const reportingCurrency = 'USD';
+  const computedAt = new Date();
+  let totalCash = 0;
+  let totalDebt = 0;
+
+  accounts.forEach((account) => {
+    const classified = classifyAccount(account);
+    if (classified.isInvestment) return;
+    const balance = getAccountBalance(account);
+    if (classified.isDebt) totalDebt += Math.abs(balance);
+    else if (classified.isCash) {
+      totalCash += Math.max(0, balance);
+      if (balance < 0) totalDebt += Math.abs(balance);
+    }
+  });
+
+  const totalInvestments = investmentsSnapshot?.totalValue ?? 0;
+  const financialOverview = computeFinancialOverview({
+    reportingCurrency,
+    totalCash,
+    totalInvestments,
+    homeValue: null,
+    totalDebt,
+  });
+  const txWindowStart = new Date(computedAt.getTime() - 365 * 24 * 60 * 60 * 1000);
+  const { transactionsSummary } = buildTransactionSummary(
+    bankingTransactions,
+    txWindowStart,
+    computedAt,
+    reportingCurrency,
+  );
+
+  return {
+    financialSummary: {
+      computedAt,
+      asOf: computedAt,
+      status: 'current',
+      reportingCurrency,
+      financialOverview,
+      investmentPortfolio: totalInvestments > 0
+        ? {
+            totalValue: totalInvestments,
+            holdingCount: investmentsSnapshot?.holdingCount ?? 0,
+            securityCount: investmentsSnapshot?.holdingCount ?? 0,
+            assetAllocation: [],
+          }
+        : undefined,
+    },
+    transactionSummary: transactionsSummary,
+  };
 }
 
 function mapDemoAccount(account: DemoAccount): Account {
