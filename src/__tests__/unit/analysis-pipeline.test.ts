@@ -145,4 +145,30 @@ describe('runAskLincAnalysis validation routing', () => {
       suggested_actions: [],
     });
   });
+
+  it('re-runs secondary validation after a retry for complex questions', async () => {
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'You can withdraw $250,000 per year in retirement.',
+        insights: [],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Based on your portfolio, a sustainable withdrawal may be lower.',
+        insights: [],
+        suggested_actions: [],
+      }));
+    mockedValidateWithGemini
+      .mockResolvedValueOnce({ valid: false, issues: ['Withdrawal amount is unsupported by the portfolio.'] })
+      .mockResolvedValueOnce({ valid: true, issues: [] });
+
+    await runAskLincAnalysis({
+      question: 'Am I on track for retirement?',
+      userId: 'user-1',
+      enableValidation: true,
+    });
+
+    expect(mockedAskClaude).toHaveBeenCalledTimes(2);
+    expect(mockedValidateWithGemini).toHaveBeenCalledTimes(2);
+  });
 });

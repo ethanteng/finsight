@@ -149,10 +149,8 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   let claudeRetry: ShowTheMathClaudeCall | undefined;
   let validationIssues = groundingResult.issues;
 
-  // Step 5: Deterministic grounding runs for every response. The slower
-  // secondary-model review is reserved for questions involving projections,
-  // comparisons, or other complex calculations.
-  if (enableValidation && questionNeeds.needsSecondaryValidation) {
+  const runSecondaryValidation = async (): Promise<string[]> => {
+    if (!enableValidation || !questionNeeds.needsSecondaryValidation) return [];
     try {
       onProgress?.('Sanity checking with Gemini');
       const { validateWithGemini } = await import('./response-validator');
@@ -168,13 +166,17 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         };
         onShowTheMathProgress?.({ geminiValidation });
       }
-      if (!validationResult.valid && validationResult.issues?.length) {
-        validationIssues = Array.from(new Set([...validationIssues, ...validationResult.issues]));
-      }
+      return validationResult.valid ? [] : (validationResult.issues || []);
     } catch (err) {
       console.warn('Ask Linc: Validation layer failed, using initial response:', err);
+      return [];
     }
-  }
+  };
+
+  validationIssues = Array.from(new Set([
+    ...validationIssues,
+    ...(await runSecondaryValidation()),
+  ]));
 
   if (validationIssues.length > 0) {
     console.warn('Ask Linc: Response validation failed, regenerating with feedback:', validationIssues);
@@ -197,6 +199,11 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     if (!groundingResult.valid) {
       console.error('Ask Linc: Retry was still not grounded:', groundingResult.issues);
       structuredResponse = sanitizeUngroundedResponse(structuredResponse, groundingResult);
+    } else {
+      const postRetryIssues = await runSecondaryValidation();
+      if (postRetryIssues.length > 0) {
+        console.warn('Ask Linc: Retry passed grounding but secondary validation still flagged issues:', postRetryIssues);
+      }
     }
   }
 
