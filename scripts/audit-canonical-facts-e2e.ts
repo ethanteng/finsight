@@ -1,9 +1,9 @@
 /**
- * End-to-end audit: real authenticated user, Plaid sandbox, SnapTrade, snapshot,
- * retirement analysis (Tiingo/FMP/FRED), and /ask/display-real via Claude + Gemini.
+ * End-to-end audit: real authenticated user, connected data, canonical snapshot,
+ * retirement analysis, canonical-facts response grounding, and lazy evidence.
  *
  * Usage:
- *   npx ts-node scripts/audit-claude-gemini-math-e2e.ts [--skip-snaptrade-wait]
+ *   npx ts-node scripts/audit-canonical-facts-e2e.ts [--skip-snaptrade-wait]
  *
  * Prerequisites:
  *   - Backend running on BASE_URL (default http://localhost:3000)
@@ -106,46 +106,24 @@ function num(v: unknown): number | undefined {
   return undefined;
 }
 
-function pctWholeFromFraction(v: number): number {
-  // DB retirement metrics store rates as fractions; prompt/LLM use whole-number percents.
-  return Math.abs(v) <= 1 ? v * 100 : v;
-}
-
-function extractAuthoritativeFromDb(showTheMath: Json): AuthoritativeMetrics {
-  const db = (showTheMath.databaseData || {}) as Json;
-  const analysisContext = (db.analysis_context_snapshot || {}) as Json;
-  const financialSummary = (analysisContext.financialSummary || {}) as Json;
-  const overview = (financialSummary.financialOverview || {}) as Json;
-  const summary = (db.financial_summaries || {}) as Json;
-  const legacyOverview = (summary.financialOverview || summary.overview || {}) as Json;
-  const snapshotOverview = ((db.financial_summary_snapshots as Json | undefined)?.financialOverview || {}) as Json;
+function extractAuthoritativeFromManifest(showTheMath: Json): AuthoritativeMetrics {
+  const manifest = (showTheMath.evidenceManifest || {}) as Json;
+  const facts = (manifest.facts || []) as Json[];
+  const value = (id: string) => num(facts.find((fact) => fact.id === id)?.value);
   const metrics: AuthoritativeMetrics = {
-    netWorth: num(overview.netWorth ?? legacyOverview.netWorth ?? snapshotOverview.netWorth ?? summary.netWorth),
-    totalCash: num(overview.totalCash ?? legacyOverview.totalCash ?? snapshotOverview.totalCash ?? summary.totalCash),
-    totalInvestments: num(overview.totalInvestments ?? legacyOverview.totalInvestments ?? snapshotOverview.totalInvestments ?? summary.totalInvestments),
-    totalDebt: num(overview.totalDebt ?? legacyOverview.totalDebt ?? snapshotOverview.totalDebt ?? summary.totalDebt),
-    homeValue: num(overview.homeValue ?? legacyOverview.homeValue ?? snapshotOverview.homeValue ?? summary.homeValue) ?? null,
+    netWorth: value('net_worth'),
+    totalCash: value('total_cash'),
+    totalInvestments: value('total_investments'),
+    totalDebt: value('total_debt'),
+    homeValue: value('home_value') ?? null,
+    withdrawalRate: value('withdrawal_rate'),
+    survivalRate: value('survival_rate'),
+    yearsOfExpenses: value('years_of_expenses'),
+    equityAllocation: value('equity_allocation'),
+    annualWithdrawalAmount: value('annual_withdrawal_amount'),
+    currentAge: value('retirement_current_age'),
+    retirementAge: value('retirement_age'),
   };
-
-  const analyses = db.retirement_analyses as Json[] | undefined;
-  const latest = analyses?.[0];
-  if (latest) {
-    const input = (latest.analysisInput || latest.inputParams || latest.input || {}) as Json;
-    metrics.currentAge = num(input.currentAge);
-    metrics.retirementAge = num(input.retirementAge);
-    metrics.annualWithdrawalAmount = num(input.annualWithdrawalAmount);
-
-    const full = (latest.historicalImplications || latest.analysisResult || latest.analysis || latest.result || {}) as Json;
-    const portfolioMetrics = (latest.portfolioMetrics || {}) as Json;
-    const stressTestResults = (latest.stressTestResults || {}) as Json;
-    const m = (full.metrics || portfolioMetrics || {}) as Json;
-    const st = (full.stressTest || stressTestResults || {}) as Json;
-    metrics.withdrawalRate = num(m.withdrawalRate);
-    metrics.survivalRate = num(st.survivalRate);
-    metrics.yearsOfExpenses = num(m.yearsOfExpenses);
-    metrics.equityAllocation = num(m.equityAllocation);
-  }
-
   return metrics;
 }
 
@@ -235,105 +213,30 @@ async function seedManualAccountsAndHoldings(token: string, userId: string): Pro
   }
 }
 
-function formatCandidates(value: number, opts?: { asPercentWhole?: boolean; asDollars?: boolean }): string[] {
-  const candidates = new Set<string>();
-  candidates.add(String(value));
-  candidates.add(value.toFixed(0));
-  candidates.add(value.toFixed(1));
-  candidates.add(value.toFixed(2));
-
-  if (opts?.asPercentWhole) {
-    const whole = pctWholeFromFraction(value);
-    candidates.add(String(whole));
-    candidates.add(whole.toFixed(1));
-    candidates.add(whole.toFixed(2));
-    candidates.add(`${whole.toFixed(2)}%`);
-    candidates.add(`${whole.toFixed(1)}%`);
-  }
-
-  if (opts?.asDollars || (!opts?.asPercentWhole && Math.abs(value) >= 100)) {
-    const abs = Math.abs(value);
-    candidates.add(abs.toLocaleString('en-US', { maximumFractionDigits: 0 }));
-    candidates.add(abs.toLocaleString('en-US', { maximumFractionDigits: 2 }));
-    candidates.add(`$${abs.toLocaleString('en-US', { maximumFractionDigits: 0 })}`);
-    candidates.add(`$${abs.toLocaleString('en-US', { maximumFractionDigits: 2 })}`);
-    if (value < 0) {
-      candidates.add(`-$${abs.toLocaleString('en-US', { maximumFractionDigits: 2 })}`);
-    }
-  }
-
-  return [...candidates].filter(Boolean);
-}
-
-function textContainsMetric(haystack: string, value: number | undefined, opts?: { asPercentWhole?: boolean }): boolean {
-  if (value === undefined || !Number.isFinite(value)) return false;
-  const candidates = formatCandidates(value, { asPercentWhole: opts?.asPercentWhole, asDollars: !opts?.asPercentWhole });
-  return candidates.some((c) => haystack.includes(c));
-}
-
-function verifyMetricPipeline(
-  label: string,
-  value: number | undefined,
-  locations: Record<string, string | undefined>,
-  opts?: { asPercentWhole?: boolean; required?: boolean }
-): AuditIssue[] {
-  const issues: AuditIssue[] = [];
-  if (value === undefined || !Number.isFinite(value)) {
-    if (opts?.required) {
-      issues.push({ severity: 'warn', category: label, message: 'Authoritative value missing from DB snapshot' });
-    }
-    return issues;
-  }
-
-  for (const [place, text] of Object.entries(locations)) {
-    if (!text) {
-      issues.push({ severity: 'error', category: label, message: `${place} is empty` });
-      continue;
-    }
-    if (!textContainsMetric(text, value, opts)) {
-      issues.push({
-        severity: 'error',
-        category: label,
-        message: `${place} does not contain authoritative value ${value} (candidates tried: ${formatCandidates(value, opts).slice(0, 6).join(', ')})`,
-      });
-    }
-  }
-  return issues;
-}
-
-function verifyKeyNumbersAgainstAuthority(
-  keyNumbers: Record<string, number> | undefined,
-  authority: AuthoritativeMetrics
-): AuditIssue[] {
+function verifyKeyNumbersAgainstManifest(keyNumbers: Record<string, unknown> | undefined, showTheMath: Json): AuditIssue[] {
   const issues: AuditIssue[] = [];
   if (!keyNumbers) return [{ severity: 'warn', category: 'key_numbers', message: 'No key_numbers in structured response' }];
-
-  const checks: Array<{ keys: string[]; authority?: number; asPercent?: boolean; tolerance?: number }> = [
-    { keys: ['net_worth', 'networth', 'total_net_worth'], authority: authority.netWorth },
-    { keys: ['total_cash', 'cash'], authority: authority.totalCash },
-    { keys: ['total_investments', 'investments', 'portfolio_value'], authority: authority.totalInvestments },
-    { keys: ['total_debt', 'debt'], authority: authority.totalDebt },
-    { keys: ['withdrawal_rate', 'portfolio_withdrawal_rate'], authority: authority.withdrawalRate, asPercent: true, tolerance: 0.15 },
-    { keys: ['survival_rate', 'portfolio_survival_rate'], authority: authority.survivalRate, asPercent: true, tolerance: 0.15 },
-    { keys: ['years_of_expenses', 'years_expenses_covered'], authority: authority.yearsOfExpenses, tolerance: 0.25 },
-    { keys: ['equity_allocation', 'stock_allocation'], authority: authority.equityAllocation, asPercent: true, tolerance: 1.5 },
-  ];
-
-  for (const check of checks) {
-    const responseVal = check.keys.map((k) => keyNumbers[k]).find((v) => typeof v === 'number');
-    if (responseVal === undefined || check.authority === undefined) continue;
-
-    const expected = check.asPercent ? pctWholeFromFraction(check.authority) : check.authority;
-    const tol = check.tolerance ?? Math.max(1, Math.abs(expected) * 0.02);
-    if (Math.abs(responseVal - expected) > tol) {
+  const manifest = (showTheMath.evidenceManifest || {}) as Json;
+  const facts = (manifest.facts || []) as Json[];
+  for (const [key, rawMetric] of Object.entries(keyNumbers)) {
+    if (!rawMetric || typeof rawMetric !== 'object') {
       issues.push({
         severity: 'error',
         category: 'key_numbers',
-        message: `key_numbers mismatch for ${check.keys[0]}: response=${responseVal}, authoritative=${expected.toFixed(2)} (tol=${tol})`,
+        message: `${key} does not use the typed value/unit/provenance schema`,
+      });
+      continue;
+    }
+    const metric = rawMetric as Json;
+    const fact = facts.find((candidate) => candidate.id === metric.provenance);
+    if (!fact || num(metric.value) !== num(fact.value) || metric.unit !== fact.unit) {
+      issues.push({
+        severity: 'error',
+        category: 'key_numbers',
+        message: `${key} does not exactly match its cited canonical fact`,
       });
     }
   }
-
   return issues;
 }
 
@@ -467,7 +370,7 @@ async function main() {
   const question =
     'Based on my current portfolio and retirement analysis, am I on track to retire at 68 with $100,000 per year in withdrawals? Show net worth, withdrawal rate, survival rate, and years of expenses covered.';
 
-  log('POST /ask/display-real (Claude + Gemini validation)');
+  log('POST /ask/display-real (canonical-facts pipeline)');
   const ask = await api('/ask/display-real', {
     method: 'POST',
     token,
@@ -480,7 +383,7 @@ async function main() {
 
   const conversationId = ask.body.conversationId as string | undefined;
   const structured = (ask.body.structuredResponse || ask.body.structured || {}) as Json;
-  const keyNumbers = structured.key_numbers as Record<string, number> | undefined;
+  const keyNumbers = structured.key_numbers as Record<string, unknown> | undefined;
   const displayText = (ask.body.answer || ask.body.displayText || '') as string;
 
   log('Ask response received', {
@@ -498,45 +401,40 @@ async function main() {
   }
   const showTheMath = (stm.body.showTheMathData || stm.body) as Json;
 
-  const claudePrompt = ((showTheMath.claudeFirstCall as Json)?.userMessage || '') as string;
-  const claudeRaw = ((showTheMath.claudeFirstCall as Json)?.rawResponse || '') as string;
-  const gemini = showTheMath.geminiValidation as Json | undefined;
-  const geminiPrompt = (gemini?.prompt || '') as string;
-  const geminiRaw = (gemini?.rawResponse || '') as string;
-  const geminiValid = (gemini?.parsedResult as Json | undefined)?.valid;
-
-  if (!gemini) {
-    issues.push({ severity: 'error', category: 'gemini', message: 'Gemini validation block missing from Show the Math data' });
-  } else {
-    log('Gemini validation', { valid: geminiValid, issues: (gemini?.parsedResult as Json | undefined)?.issues });
+  const manifest = showTheMath.evidenceManifest as Json | undefined;
+  if (!manifest) {
+    issues.push({ severity: 'error', category: 'manifest', message: 'Canonical evidence manifest is missing' });
+  }
+  const validation = (manifest?.validation || {}) as Json;
+  const deterministic = (validation.deterministic || {}) as Json;
+  if (deterministic.valid !== true) {
+    issues.push({ severity: 'error', category: 'grounding', message: `Deterministic validation did not pass: ${JSON.stringify(deterministic.issues)}` });
+  }
+  if ('claudeFirstCall' in showTheMath || 'geminiValidation' in showTheMath) {
+    issues.push({ severity: 'error', category: 'manifest', message: 'Show the Math still persists raw prompts or model responses' });
   }
 
-  const authority = extractAuthoritativeFromDb(showTheMath);
-  log('Authoritative DB metrics', authority);
+  const authority = extractAuthoritativeFromManifest(showTheMath);
+  log('Authoritative manifest metrics', authority);
 
-  const metricChecks: Array<{ label: string; value?: number; asPercent?: boolean; required?: boolean }> = [
+  const metricChecks: Array<{ label: string; value?: number; required?: boolean }> = [
     { label: 'netWorth', value: authority.netWorth, required: true },
     { label: 'totalCash', value: authority.totalCash },
     { label: 'totalInvestments', value: authority.totalInvestments, required: true },
     { label: 'totalDebt', value: authority.totalDebt },
-    { label: 'withdrawalRate', value: authority.withdrawalRate, asPercent: true, required: true },
-    { label: 'survivalRate', value: authority.survivalRate, asPercent: true, required: true },
+    { label: 'withdrawalRate', value: authority.withdrawalRate, required: true },
+    { label: 'survivalRate', value: authority.survivalRate, required: true },
     { label: 'yearsOfExpenses', value: authority.yearsOfExpenses, required: true },
-    { label: 'equityAllocation', value: authority.equityAllocation, asPercent: true },
+    { label: 'equityAllocation', value: authority.equityAllocation },
   ];
 
   for (const check of metricChecks) {
-    issues.push(
-      ...verifyMetricPipeline(check.label, check.value, {
-        'Claude prompt': claudePrompt,
-        'Gemini validation prompt': geminiPrompt,
-        'Claude raw response': claudeRaw,
-        'Final answer text': displayText,
-      }, { asPercentWhole: check.asPercent, required: check.required })
-    );
+    if (check.required && check.value === undefined) {
+      issues.push({ severity: 'error', category: check.label, message: 'Required canonical fact is missing from the manifest' });
+    }
   }
 
-  issues.push(...verifyKeyNumbersAgainstAuthority(keyNumbers, authority));
+  issues.push(...verifyKeyNumbersAgainstManifest(keyNumbers, showTheMath));
 
   const errors = issues.filter((i) => i.severity === 'error');
   const warns = issues.filter((i) => i.severity === 'warn');
@@ -548,7 +446,7 @@ async function main() {
   console.log(`Conversation: ${conversationId}`);
   console.log(`Plaid connected: ${plaidConnected ? 'yes' : 'no (used manual+holdings fallback)'}`);
   console.log(`SnapTrade connected: ${snapTradeConnected ? 'yes' : 'no'}`);
-  console.log(`Gemini validation: ${gemini ? String(geminiValid) : 'missing'}`);
+  console.log(`Deterministic grounding: ${String(deterministic.valid)}`);
   console.log(`Errors: ${errors.length}, Warnings: ${warns.length}`);
 
   if (errors.length) {
@@ -560,7 +458,7 @@ async function main() {
     for (const w of warns) console.log(`  [${w.category}] ${w.message}`);
   }
 
-  const reportPath = `/workspace/logs/audit-claude-gemini-math-${Date.now()}.json`;
+  const reportPath = `/workspace/logs/audit-canonical-facts-${Date.now()}.json`;
   const fs = await import('fs');
   fs.mkdirSync('/workspace/logs', { recursive: true });
   fs.writeFileSync(
@@ -574,7 +472,7 @@ async function main() {
         snapTradeConnected,
         authority,
         keyNumbers,
-        geminiValidation: gemini?.parsedResult,
+        validation,
         issues,
         askSummary: structured.summary,
       },

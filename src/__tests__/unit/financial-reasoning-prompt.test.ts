@@ -20,8 +20,9 @@ describe('buildFinancialReasoningPrompt – system prompt safeguards', () => {
   });
 
   it('instructs the model to use authoritative totals and not recompute them', () => {
-    expect(systemPrompt).toMatch(/Values labeled authoritative are exact/i);
-    expect(systemPrompt).toMatch(/Do NOT recompute/i);
+    expect(systemPrompt).toMatch(/Canonical facts are exact/i);
+    expect(systemPrompt).toMatch(/never recompute/i);
+    expect(systemPrompt).toMatch(/Do not perform authoritative arithmetic/i);
   });
 
   it('includes the (EXPENSE)/(FEE) transaction filtering rule', () => {
@@ -30,9 +31,12 @@ describe('buildFinancialReasoningPrompt – system prompt safeguards', () => {
     expect(systemPrompt).toMatch(/Exclude transfers, income, trades, deposits, and withdrawals/i);
   });
 
-  it('requires whole-number percentages and raw numbers in key_numbers', () => {
-    expect(systemPrompt).toMatch(/whole-number form/i);
-    expect(systemPrompt).toMatch(/no "\$", "%", or commas/);
+  it('requires typed key numbers with canonical provenance', () => {
+    expect(systemPrompt).toContain('"value"');
+    expect(systemPrompt).toContain('"unit"');
+    expect(systemPrompt).toContain('"provenance"');
+    expect(systemPrompt).toMatch(/copy value, unit, and provenance exactly/i);
+    expect(systemPrompt).toMatch(/Every numeric value mentioned anywhere/i);
   });
 });
 

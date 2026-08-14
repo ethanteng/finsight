@@ -8,7 +8,7 @@
  * 4. Optional validation (Gemini)
  * 5. Structured response
  *
- * Designed to allow future replacement of LLM calculations with deterministic engines.
+ * Application code owns canonical facts and arithmetic; models explain those results.
  */
 
 import { UserTier } from '../data/types';
@@ -22,9 +22,12 @@ import { validateUserPrompt, getRejectionMessage } from '../security/prompt-vali
 import { validateLLMResponse } from '../security/output-validation';
 import { logRejectedPrompt, logFlaggedOutput } from '../security/security-logger';
 import { PromptValidationError } from '../openai';
-import { fetchShowTheMathDBData } from './show-the-math-db-service';
-import type { ShowTheMathData, ShowTheMathClaudeCall, ShowTheMathGeminiValidation } from './show-the-math-types';
-import { sanitizeUngroundedResponse, validateResponseGrounding } from './response-grounding';
+import type { EvidenceManifest, ShowTheMathData } from './show-the-math-types';
+import { sanitizeUngroundedResponse } from './response-grounding';
+import { canonicalizeResponseNumbers, validateResponseFacts } from './response-facts';
+import { validateCanonicalFactPack } from './canonical-facts';
+import { askOpenAIWithPreparedPrompt } from './openai-fallback-client';
+import { createHash } from 'crypto';
 
 export interface RunAskLincAnalysisOptions {
   question: string;
@@ -36,8 +39,6 @@ export interface RunAskLincAnalysisOptions {
   enableValidation?: boolean;
   /** Optional callback for progress updates (e.g. for SSE streaming) */
   onProgress?: (message: string) => void;
-  /** Optional callback for live Show the Math data (streams partial data as pipeline runs) */
-  onShowTheMathProgress?: (partial: Partial<ShowTheMathData>) => void;
   /** Optional callback for incremental answer text (the summary field) as Claude streams it. */
   onAnswerDelta?: (delta: string) => void;
   /** Optional callback signalling the streamed answer so far should be discarded (e.g. before a validation retry). */
@@ -49,11 +50,19 @@ export interface RunAskLincAnalysisOptions {
  * incremental "summary" text via onAnswerDelta. Returns a no-op when no delta
  * sink is provided (non-streaming callers).
  */
-function makeAnswerStreamer(onAnswerDelta?: (delta: string) => void): (delta: string) => void {
+function makeAnswerStreamer(
+  onAnswerDelta?: (delta: string) => void,
+  onFirstDelta?: () => void
+): (delta: string) => void {
   if (!onAnswerDelta) return () => {};
   let raw = '';
   let emitted = 0;
+  let receivedFirstDelta = false;
   return (delta: string) => {
+    if (!receivedFirstDelta) {
+      receivedFirstDelta = true;
+      onFirstDelta?.();
+    }
     raw += delta;
     const partial = extractPartialSummary(raw);
     if (partial.length > emitted) {
@@ -69,10 +78,33 @@ export interface RunAskLincAnalysisResult {
   showTheMathData?: ShowTheMathData;
 }
 
+function evidenceTickers(
+  snapshot: Awaited<ReturnType<typeof gatherContextSnapshot>>,
+  question: string
+): string[] {
+  const tickers = new Set<string>();
+  const mentionedTickers = new Set<string>();
+  for (const item of [...(snapshot.investments?.holdings || []), ...(snapshot.investments?.securities || [])]) {
+    const ticker = (item as { ticker_symbol?: string }).ticker_symbol?.trim().toUpperCase();
+    if (ticker && ticker !== 'CASH' && ticker.length <= 10) {
+      tickers.add(ticker);
+      const escapedTicker = ticker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (new RegExp(`\\b${escapedTicker}\\b`, 'i').test(question)) mentionedTickers.add(ticker);
+    }
+  }
+  return Array.from(mentionedTickers).sort();
+}
+
+function contextDigest(value: string | undefined): string | undefined {
+  return value ? createHash('sha256').update(value).digest('hex') : undefined;
+}
+
 /**
  * Run the Ask Linc financial analysis pipeline.
  */
 export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Promise<RunAskLincAnalysisResult> {
+  const pipelineStartedAt = Date.now();
+  let firstAnswerTokenAt: number | undefined;
   const {
     question,
     userId,
@@ -82,7 +114,6 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     demoProfile,
     enableValidation = process.env.ENABLE_RESPONSE_VALIDATION === 'true',
     onProgress,
-    onShowTheMathProgress,
     onAnswerDelta,
     onAnswerReset
   } = options;
@@ -107,6 +138,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   const questionNeeds = analyzeQuestionNeeds(question, recentQuestions);
 
   // Step 1: Retrieve context (snapshot, profile, market summary, RAG)
+  const contextGatherStartedAt = Date.now();
   const snapshot = await gatherContextSnapshot({
     userId,
     isDemo,
@@ -116,42 +148,95 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     demoProfile,
     onProgress
   });
+  const contextGatherMs = Date.now() - contextGatherStartedAt;
 
   // Step 2: Build the prompt directly from the persisted canonical snapshot.
+  const promptBuildStartedAt = Date.now();
   onProgress?.('Submitting to Claude for analysis');
   await loadResponseToneConfig();
+  const orderedConversationHistory = conversationHistory
+    .slice()
+    .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
   const promptInput = buildPromptInputFromSnapshot(
     question,
     snapshot,
-    conversationHistory.map(c => ({ question: c.question, answer: c.answer }))
+    questionNeeds,
+    orderedConversationHistory.map(c => ({ question: c.question, answer: c.answer }))
   );
-
-  // Show the Math: the DB fetch is independent of the Claude call, so run them
-  // concurrently and let the (fast) DB read hide under the (slow) LLM latency.
-  const databaseDataPromise = fetchShowTheMathDBData(userId, snapshot);
+  const factPack = promptInput.canonicalFacts!;
+  const factPackIssues = validateCanonicalFactPack(factPack);
+  if (factPackIssues.length > 0) {
+    throw new Error(`Canonical fact validation failed: ${factPackIssues.join(' ')}`);
+  }
 
   // Step 3: LLM financial reasoning (Claude Sonnet). Build the prompt once and
   // pass it through (avoids rebuilding the large reasoning prompt inside the client).
   // When a delta sink is provided, stream the answer's summary text as it arrives.
   const { systemPrompt, userMessage } = buildFinancialReasoningPrompt(promptInput);
-  const claudePromise = onAnswerDelta
-    ? askClaudeStream(systemPrompt, userMessage, makeAnswerStreamer(onAnswerDelta))
-    : askClaude(systemPrompt, userMessage);
-
-  const databaseData = await databaseDataPromise;
-  onShowTheMathProgress?.({ databaseData });
-
-  let rawResponse = await claudePromise;
-  const claudeFirstCall: ShowTheMathClaudeCall = { systemPrompt, userMessage, rawResponse };
-  onShowTheMathProgress?.({ claudeFirstCall });
+  const promptBuildMs = Date.now() - promptBuildStartedAt;
+  const modelCalls: EvidenceManifest['modelCalls'] = [];
+  const secondaryValidations: NonNullable<EvidenceManifest['validation']['secondary']> = [];
+  const callAnalysisModel = async (
+    prompt: { systemPrompt: string; userMessage: string },
+    phase: 'initial' | 'retry',
+    preferredProvider: 'claude' | 'openai' = 'claude'
+  ): Promise<{ rawResponse: string; provider: 'claude' | 'openai' }> => {
+    if (preferredProvider === 'openai') {
+      const startedAt = Date.now();
+      const rawResponse = await askOpenAIWithPreparedPrompt(prompt.systemPrompt, prompt.userMessage);
+      firstAnswerTokenAt ??= Date.now();
+      modelCalls.push({
+        phase,
+        provider: 'openai',
+        outcome: 'success',
+        promptCharacters: prompt.systemPrompt.length + prompt.userMessage.length,
+        responseCharacters: rawResponse.length,
+        durationMs: Date.now() - startedAt,
+      });
+      return {
+        rawResponse,
+        provider: 'openai',
+      };
+    }
+    const claudeStartedAt = Date.now();
+    try {
+      const raw = onAnswerDelta
+        ? await askClaudeStream(prompt.systemPrompt, prompt.userMessage, makeAnswerStreamer(onAnswerDelta, () => {
+            firstAnswerTokenAt ??= Date.now();
+          }))
+        : await askClaude(prompt.systemPrompt, prompt.userMessage);
+      firstAnswerTokenAt ??= Date.now();
+      modelCalls.push({
+        phase,
+        provider: 'claude',
+        outcome: 'success',
+        promptCharacters: prompt.systemPrompt.length + prompt.userMessage.length,
+        responseCharacters: raw.length,
+        durationMs: Date.now() - claudeStartedAt,
+      });
+      return { rawResponse: raw, provider: 'claude' };
+    } catch (error) {
+      modelCalls.push({
+        phase,
+        provider: 'claude',
+        outcome: 'failed',
+        promptCharacters: prompt.systemPrompt.length + prompt.userMessage.length,
+        responseCharacters: 0,
+        durationMs: Date.now() - claudeStartedAt,
+      });
+      console.error('Ask Linc: Claude failed; reusing the prepared context pack with OpenAI:', error);
+      onAnswerReset?.();
+      firstAnswerTokenAt = undefined;
+      onProgress?.('Primary model unavailable; using backup analysis model');
+      return callAnalysisModel(prompt, phase, 'openai');
+    }
+  };
+  let { rawResponse, provider } = await callAnalysisModel({ systemPrompt, userMessage }, 'initial');
 
   // Step 4: Parse structured response
-  let structuredResponse = parseStructuredResponse(rawResponse);
-  let groundingResult = validateResponseGrounding(structuredResponse, snapshot, question);
+  let structuredResponse = canonicalizeResponseNumbers(parseStructuredResponse(rawResponse), factPack);
+  let groundingResult = validateResponseFacts(structuredResponse, factPack);
 
-  let geminiValidation: ShowTheMathGeminiValidation | undefined;
-  let claudeRetry: ShowTheMathClaudeCall | undefined;
-  let geminiRetryValidation: ShowTheMathGeminiValidation | undefined;
   let validationIssues = groundingResult.issues;
 
   const runSecondaryValidation = async (phase: 'initial' | 'retry'): Promise<string[]> => {
@@ -160,23 +245,11 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       onProgress?.('Sanity checking with Gemini');
       const { validateWithGemini } = await import('./response-validator');
       const validationResult = await validateWithGemini(structuredResponse, { question, snapshot });
-      if (validationResult.promptSent != null && validationResult.rawResponse != null) {
-        const audit: ShowTheMathGeminiValidation = {
-          prompt: validationResult.promptSent,
-          rawResponse: validationResult.rawResponse,
-          parsedResult: {
-            valid: validationResult.valid,
-            issues: validationResult.issues
-          }
-        };
-        if (phase === 'initial') {
-          geminiValidation = audit;
-          onShowTheMathProgress?.({ geminiValidation });
-        } else {
-          geminiRetryValidation = audit;
-          onShowTheMathProgress?.({ geminiRetryValidation });
-        }
-      }
+      secondaryValidations.push({
+        phase,
+        valid: validationResult.valid,
+        issues: validationResult.issues || [],
+      });
       return validationResult.valid ? [] : (validationResult.issues || []);
     } catch (err) {
       console.warn('Ask Linc: Validation layer failed, using initial response:', err);
@@ -196,17 +269,12 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       validationFeedback: validationIssues.slice(0, 8),
     });
     onAnswerReset?.();
-    rawResponse = onAnswerDelta
-      ? await askClaudeStream(retryPrompt.systemPrompt, retryPrompt.userMessage, makeAnswerStreamer(onAnswerDelta))
-      : await askClaude(retryPrompt.systemPrompt, retryPrompt.userMessage);
-    claudeRetry = {
-      systemPrompt: retryPrompt.systemPrompt,
-      userMessage: retryPrompt.userMessage,
-      rawResponse,
-    };
-    onShowTheMathProgress?.({ claudeRetry });
-    structuredResponse = parseStructuredResponse(rawResponse);
-    groundingResult = validateResponseGrounding(structuredResponse, snapshot, question);
+    firstAnswerTokenAt = undefined;
+    const retryResult = await callAnalysisModel(retryPrompt, 'retry', provider);
+    rawResponse = retryResult.rawResponse;
+    provider = retryResult.provider;
+    structuredResponse = canonicalizeResponseNumbers(parseStructuredResponse(rawResponse), factPack);
+    groundingResult = validateResponseFacts(structuredResponse, factPack);
     if (!groundingResult.valid) {
       console.error('Ask Linc: Retry was still not grounded:', groundingResult.issues);
       structuredResponse = sanitizeUngroundedResponse(structuredResponse, groundingResult);
@@ -237,12 +305,41 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     };
   }
 
+  const marketContextDigest = contextDigest(snapshot.marketContext);
+  const searchContextDigest = contextDigest(snapshot.searchContext);
   const showTheMathData: ShowTheMathData = {
-    claudeFirstCall,
-    databaseData,
-    ...(geminiValidation && { geminiValidation }),
-    ...(claudeRetry && { claudeRetry }),
-    ...(geminiRetryValidation && { geminiRetryValidation })
+    evidenceManifest: {
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      snapshot: {
+        ...(factPack.snapshotComputedAt && { computedAt: factPack.snapshotComputedAt }),
+        ...(factPack.snapshotAsOf && { asOf: factPack.snapshotAsOf }),
+        ...(snapshot.financialSummary?.status && { status: snapshot.financialSummary.status }),
+      },
+      facts: factPack.facts,
+      contextSelection: snapshot.contextSelection,
+      modelCalls,
+      timings: {
+        contextGatherMs,
+        promptBuildMs,
+        ...(firstAnswerTokenAt && { timeToFirstAnswerTokenMs: firstAnswerTokenAt - pipelineStartedAt }),
+        totalMs: Date.now() - pipelineStartedAt,
+      },
+      validation: {
+        deterministic: { valid: groundingResult.valid, issues: groundingResult.issues },
+        ...(secondaryValidations.length > 0 && { secondary: secondaryValidations }),
+      },
+      evidenceRefs: {
+        tickers: evidenceTickers(snapshot, question),
+        retirementAnalysis: Boolean(snapshot.retirementAnalysis),
+        ...(snapshot.retirementAnalysis?._evidence?.recordId && {
+          retirementAnalysisId: snapshot.retirementAnalysis._evidence.recordId,
+        }),
+        marketContext: Boolean(snapshot.marketContext),
+        ...(marketContextDigest && { marketContextDigest }),
+        ...(searchContextDigest && { searchContextDigest }),
+      },
+    },
   };
 
   return {

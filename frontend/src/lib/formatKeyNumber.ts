@@ -1,18 +1,6 @@
 function isPercentageKey(keyLower: string): boolean {
-  return (
-    keyLower.includes('percent') ||
-    keyLower.includes('pct') ||
-    keyLower.includes('rate') ||
-    keyLower.includes('allocation') ||
-    keyLower.includes('apy')
-  );
-}
-
-function normalizePercentageValue(value: number): number {
-  if (Math.abs(value) > 100) {
-    return value / 100;
-  }
-  return value;
+  const tokens = keyLower.split(/[^a-z0-9]+/).filter(Boolean);
+  return tokens.some((token) => ['percent', 'pct', 'rate', 'allocation', 'apy'].includes(token));
 }
 
 function formatDollars(value: number): string {
@@ -22,13 +10,28 @@ function formatDollars(value: number): string {
 }
 
 /** Format a key_number value for display based on the key name. */
-export function formatKeyNumberValue(key: string, value: number | unknown): string {
-  if (typeof value !== 'number') return String(value);
+export interface DisplayKeyNumber {
+  value: number;
+  unit: 'usd' | 'percent' | 'months' | 'years' | 'age' | 'count' | 'ratio';
+  provenance: string;
+}
+
+export function formatKeyNumberValue(key: string, metric: number | DisplayKeyNumber | unknown): string {
+  const value = typeof metric === 'number'
+    ? metric
+    : metric && typeof metric === 'object' && typeof (metric as DisplayKeyNumber).value === 'number'
+      ? (metric as DisplayKeyNumber).value
+      : null;
+  if (value === null) return String(metric);
+  const unit = metric && typeof metric === 'object'
+    ? (metric as DisplayKeyNumber).unit
+    : undefined;
   const keyLower = key.toLowerCase();
-  if (isPercentageKey(keyLower)) {
-    return `${normalizePercentageValue(value)}%`;
+  if (unit === 'percent' || (!unit && isPercentageKey(keyLower))) {
+    return `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
   }
-  if (keyLower.includes('months') || keyLower.includes('years')) {
+  if (unit === 'months' || unit === 'years' || unit === 'age' || unit === 'count' || unit === 'ratio' ||
+      (!unit && (keyLower.includes('months') || keyLower.includes('years') || keyLower.includes('age') || keyLower.includes('count')))) {
     return value.toLocaleString();
   }
   return formatDollars(value);

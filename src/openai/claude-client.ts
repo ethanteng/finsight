@@ -7,21 +7,17 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { buildFinancialReasoningPrompt, FinancialReasoningPromptInput } from './financial-reasoning-prompt';
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const DEFAULT_MODEL = 'claude-sonnet-4-5';
-const configuredMaxTokens = Number.parseInt(process.env.ASK_LINC_MAX_OUTPUT_TOKENS || '8192', 10);
-const DEFAULT_MAX_TOKENS = Number.isFinite(configuredMaxTokens) && configuredMaxTokens > 0
-  ? configuredMaxTokens
-  : 8192;
 
 let anthropicClient: Anthropic | null = null;
 
 function getClient(): Anthropic {
   if (!anthropicClient) {
-    if (!ANTHROPIC_API_KEY) {
+    const apiKey = process.env.ANTHROPIC_API_KEY || '';
+    if (!apiKey) {
       throw new Error('ANTHROPIC_API_KEY is required for Ask Linc pipeline. Set it in your environment.');
     }
-    anthropicClient = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+    anthropicClient = new Anthropic({ apiKey });
   }
   return anthropicClient;
 }
@@ -29,6 +25,11 @@ function getClient(): Anthropic {
 export interface AskClaudeOptions {
   model?: string;
   maxTokens?: number;
+}
+
+function configuredMaxTokens(): number {
+  const value = Number.parseInt(process.env.ASK_LINC_MAX_OUTPUT_TOKENS || '8192', 10);
+  return Number.isFinite(value) && value > 0 ? value : 8192;
 }
 
 /**
@@ -43,7 +44,7 @@ export async function askClaude(
 ): Promise<string> {
   const client = getClient();
   const model = options.model || DEFAULT_MODEL;
-  const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
+  const maxTokens = options.maxTokens ?? configuredMaxTokens();
 
   const response = await client.messages.create({
     model,
@@ -69,7 +70,7 @@ export async function askClaudeStream(
 ): Promise<string> {
   const client = getClient();
   const model = options.model || DEFAULT_MODEL;
-  const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
+  const maxTokens = options.maxTokens ?? configuredMaxTokens();
 
   const stream = client.messages.stream({
     model,

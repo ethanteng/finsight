@@ -53,7 +53,7 @@ function analyzeSingleQuestion(question: string): QuestionNeeds {
     needsInvestments;
 
   const needsTransactionDetails =
-    /\b(transaction|transactions|purchase|purchases|merchant|merchants|paycheck|salary|subscription|subscriptions|fee|fees)\b/.test(qLower) ||
+    /\b(transaction|transactions|purchase|purchases|merchant|merchants|category|categories|paycheck|salary|subscription|subscriptions|fee|fees)\b/.test(qLower) ||
     /\b(recent|latest|largest|individual|specific)\s+(spend|spending|expense|expenses|income)\b/.test(qLower) ||
     /\bspend(?:ing)?\s+(?:at|with|from)\b/.test(qLower);
 

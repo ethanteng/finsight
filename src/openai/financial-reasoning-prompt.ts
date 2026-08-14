@@ -4,9 +4,10 @@
  * Concise structured-output prompt for Ask Linc financial analysis.
  */
 
-import { buildFinancialContextForPrompt } from './prompt-builder';
 import { getActiveResponseTone } from './prompt-config';
-import { FinancialContextSnapshot } from './types';
+import { FinancialContextSnapshot, QuestionNeeds } from './types';
+import { buildCanonicalFactPack, type CanonicalFactPack } from './canonical-facts';
+import { buildQuestionContextPack, formatQuestionContextPack } from './context-pack';
 
 export interface FinancialReasoningPromptInput {
   question: string;
@@ -15,6 +16,7 @@ export interface FinancialReasoningPromptInput {
   userProfile: string;
   marketSummary: string;
   ragKnowledge: string;
+  canonicalFacts?: CanonicalFactPack;
   /** For context only — what the user has been asking about. NOT canonical data; financial context supersedes. */
   conversationHistory?: Array<{ question: string; answer: string }>;
   /** When present, instructs Claude to fix these validation issues from a previous response. */
@@ -28,23 +30,30 @@ Tone for all user-facing fields:
 ${getActiveResponseTone()}
 
 Grounding and calculation rules:
-- Do not invent financial data that is not present in the Financial Context. Never estimate, guess, or fabricate a number that is not derivable from the provided data.
+- Do not invent financial data that is not present in the Canonical Fact Pack.
 - Treat all monetary amounts as USD unless clearly specified otherwise.
-- Values labeled authoritative are exact. Do not recompute net worth, total cash, total investments, total debt, home value, monthly income, or monthly expenses from detail rows.
-- For any new arithmetic, verify intermediate values internally and include the concise formula in the summary or an insight when it materially helps the user.
+- Canonical facts are exact. Copy them; never recompute or modify them from detail rows.
+- Do not perform authoritative arithmetic. Any supported derived value is already supplied as a fact with calculation provenance.
+- If the answer would require a number that is absent from the fact pack, explain what is missing instead of estimating it.
 - For spending detail, include only transactions labeled (EXPENSE) or (FEE). Exclude transfers, income, trades, deposits, and withdrawals regardless of sign.
 - State material assumptions and data-quality limitations. Be conservative with projections and estimates.
 
 Return only one valid JSON object with this exact shape:
 {
   "summary": "One paragraph summary for the user",
-  "key_numbers": { "metric_name": number },
+  "key_numbers": {
+    "metric_name": {
+      "value": 187547.25,
+      "unit": "usd",
+      "provenance": "exact_canonical_fact_id"
+    }
+  },
   "insights": ["insight 1", "insight 2"],
   "suggested_actions": ["action 1", "action 2"]
 }
 
-- key_numbers values must be raw JSON numbers (no "$", "%", or commas). Express percentages and rates in whole-number form, e.g. 4.15 means 4.15% (not 0.0415). Express dollar amounts in full, e.g. 187547.25 (not 187.5).
-- Every number must be traceable to the Financial Context or a stated formula.
+- Each key number must copy value, unit, and provenance exactly from one supplied canonical fact whose displayable property is not false. Facts marked displayable=false are calculation evidence only. Valid units are usd, percent, months, years, age, count, and ratio.
+- Every numeric value mentioned anywhere in the response must exactly match a supplied canonical fact. Use words such as "a few" when a recommendation does not need an authoritative number.
 - Keep arrays to 3-5 items max to avoid truncation.
 - Use each key once and emit complete JSON.`;
 }
@@ -75,8 +84,8 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
     '## User Question',
     question,
     '',
-    '## Financial Context (CANONICAL — use this as the source of truth)',
-    'The data below is authoritative. It supersedes any numbers or figures mentioned in Recent Conversation History. Always use values from this section for calculations and analysis.',
+    '## Question-Specific Context Pack (CANONICAL — use this as the source of truth)',
+    'The facts below are authoritative and supersede every number in conversation history. Explain them; do not calculate replacements.',
     '',
     financialContext || '(No financial data available)'
   );
@@ -115,14 +124,18 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
 export function buildPromptInputFromSnapshot(
   question: string,
   snapshot: FinancialContextSnapshot,
+  questionNeeds: QuestionNeeds,
   conversationHistory?: Array<{ question: string; answer: string }>
 ): FinancialReasoningPromptInput {
+  const canonicalFacts = buildCanonicalFactPack(snapshot, question, questionNeeds);
+  const contextPack = buildQuestionContextPack(snapshot, questionNeeds, canonicalFacts, question);
   return {
     question,
-    financialContext: buildFinancialContextForPrompt(snapshot),
+    financialContext: formatQuestionContextPack(contextPack),
     userProfile: snapshot.userProfile || '',
     marketSummary: snapshot.marketContext || '',
     ragKnowledge: snapshot.searchContext || '',
-    conversationHistory
+    conversationHistory,
+    canonicalFacts,
   };
 }
