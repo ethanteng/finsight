@@ -1,6 +1,14 @@
 import { describe, expect, beforeEach, it, jest } from '@jest/globals';
 import { FinancialDataService } from '../../services/financial-data-service';
 
+const mockGetOriginalProfile = jest.fn<() => Promise<string>>();
+
+jest.mock('../../profile/manager', () => ({
+  ProfileManager: jest.fn().mockImplementation(() => ({
+    getOriginalProfile: mockGetOriginalProfile,
+  })),
+}));
+
 jest.mock('@prisma/client', () => {
   const mockPrisma = {
     account: {
@@ -131,6 +139,7 @@ describe('FinancialDataService investment persistence safeguards', () => {
     (mockPrisma.accessToken.findMany as any).mockResolvedValue([]);
     (mockPrisma.transaction.findMany as any).mockResolvedValue([]);
     (mockPrisma.manualAccount.findMany as any).mockResolvedValue([]);
+    mockGetOriginalProfile.mockReset();
   });
 
   it('skips persisted Plaid snapshot when investments are requested', async () => {
@@ -194,5 +203,34 @@ describe('FinancialDataService investment persistence safeguards', () => {
     expect(result.investments.holdings).toEqual([mockHolding]);
     expect(result.investments.portfolio.totalValue).toBe(mockHolding.institution_value);
   });
-});
 
+  it('keeps an address-only home value unavailable', async () => {
+    mockGetOriginalProfile.mockResolvedValue('HOME_ADDRESS: 123 Main St');
+    const service = new FinancialDataService();
+
+    const result = await (service as any).fetchHomeValue('user-123');
+
+    expect(result).toEqual({
+      address: '123 Main St',
+      valueLow: null,
+      valueMid: null,
+      valueHigh: null,
+      lastUpdated: null,
+    });
+  });
+
+  it('does not synthesize a fresh timestamp for a legacy home estimate', async () => {
+    mockGetOriginalProfile.mockResolvedValue([
+      'HOME_ADDRESS: 123 Main St',
+      'HOME_VALUE: 500000',
+      'HOME_VALUE_LOW: 475000',
+      'HOME_VALUE_HIGH: 525000',
+    ].join('\n'));
+    const service = new FinancialDataService();
+
+    const result = await (service as any).fetchHomeValue('user-123');
+
+    expect(result.valueMid).toBe(500000);
+    expect(result.lastUpdated).toBeNull();
+  });
+});

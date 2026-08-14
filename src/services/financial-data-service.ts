@@ -7,9 +7,9 @@ import { TransactionNormalizationService } from './transaction-normalization-ser
 import { TransactionCategorizationService, CategorizationDetail, TransactionType } from './transaction-categorization-service';
 import { persistTransactionsToDb, persistSnapTradeActivitiesToDb } from '../data/persistence';
 import { cacheService } from '../data/cache';
-import { classifyAccount } from './account-classifier';
 import { financialAccountIdentityKey, isNewerAccountSnapshot } from './account-identity';
 import { resolveCanonicalTransactionType } from './canonical-transaction-adapter';
+import { buildCanonicalInvestmentPortfolio } from './canonical-financial-snapshot';
 
 const prisma = new PrismaClient();
 
@@ -54,7 +54,7 @@ export interface Account {
   type: string;
   subtype: string;
   balance: {
-    current: number;
+    current: number | null;
     available?: number;
     limit?: number;
     iso_currency_code: string;
@@ -73,7 +73,7 @@ export interface Account {
 }
 
 export interface Balance {
-  current: number;
+  current: number | null;
   available?: number;
   limit?: number;
   iso_currency_code: string;
@@ -83,11 +83,11 @@ export interface Holding {
   id: string;
   account_id: string;
   security_id: string;
-  institution_value: number;
-  institution_price: number;
+  institution_value: number | null;
+  institution_price: number | null;
   institution_price_as_of: string;
-  cost_basis: number;
-  quantity: number;
+  cost_basis: number | null;
+  quantity: number | null;
   iso_currency_code: string;
   security_name?: string;
   security_type?: string;
@@ -120,6 +120,7 @@ export interface Transaction {
 }
 
 export interface PortfolioAnalysis {
+  reportingCurrency: string;
   totalValue: number;
   assetAllocation: Array<{
     type: string;
@@ -128,14 +129,16 @@ export interface PortfolioAnalysis {
   }>;
   holdingCount: number;
   securityCount: number;
+  currencyMismatchIds: string[];
+  unavailableValueIds: string[];
 }
 
 export interface HomeData {
   address: string;
-  valueLow: number;
-  valueMid: number;
-  valueHigh: number;
-  lastUpdated: string;
+  valueLow: number | null;
+  valueMid: number | null;
+  valueHigh: number | null;
+  lastUpdated: string | null;
 }
 
 export interface ErrorDetail {
@@ -1020,7 +1023,7 @@ export class FinancialDataService {
         type: record.type,
         subtype: record.subtype || undefined,
         balance: {
-          current: record.currentBalance || 0,
+          current: record.currentBalance,
           available: record.availableBalance ?? undefined,
           limit: record.limit ?? undefined,
           iso_currency_code: record.currency || 'USD',
@@ -1041,7 +1044,9 @@ export class FinancialDataService {
           record.persistentAccountId !== record.plaidAccountId
             ? record.persistentAccountId
             : undefined,
-        snapshotTimestamp: (record.lastSynced || record.updatedAt)?.toISOString?.(),
+        snapshotTimestamp: (
+          record.balanceLastFetched || record.lastSynced || record.updatedAt
+        )?.toISOString?.(),
         lastSyncedAt: record.lastSynced?.toISOString?.()
       }));
 
@@ -1354,7 +1359,7 @@ export class FinancialDataService {
               type: account.type,
               subtype: account.subtype,
               balance: {
-                current: account.balances.current || 0,
+                current: account.balances.current ?? null,
                 available: account.balances.available,
                 limit: account.balances.limit,
                 iso_currency_code: account.balances.iso_currency_code || 'USD',
@@ -1738,7 +1743,7 @@ export class FinancialDataService {
           const fetchedAt = new Date().toISOString();
 
           for (const account of accountsResult.data.accounts) {
-            const balance = account.balance?.value || account.currentBalance || 0;
+            const balance = account.balance?.value ?? account.currentBalance ?? null;
             // ✅ CRITICAL: SnapTrade accounts use account_id format: snaptrade-{id}
             // Do NOT set plaidAccountId for SnapTrade accounts (they don't have one)
             const accountId = account.id.startsWith('snaptrade-') ? account.id : `snaptrade-${account.id}`;
@@ -1880,15 +1885,28 @@ export class FinancialDataService {
                   }
                   // If still Unknown after all checks, keep it as Unknown
                   
+                  const positionPrice = typeof position.price === 'number' && Number.isFinite(position.price)
+                    ? position.price
+                    : null;
+                  const positionUnits = typeof position.units === 'number' && Number.isFinite(position.units)
+                    ? position.units
+                    : null;
+                  const averagePurchasePrice = typeof position.average_purchase_price === 'number' && Number.isFinite(position.average_purchase_price)
+                    ? position.average_purchase_price
+                    : null;
                   const holding = {
                     id: `snaptrade-${accountHolding.account?.id}-${position.symbol?.id || position.symbol?.symbol?.symbol}`,
                     account_id: `snaptrade-${accountHolding.account?.id}`,
                     security_id: position.symbol?.id || position.symbol?.symbol?.symbol || 'unknown',
-                    institution_value: (position.price || 0) * (position.units || 0),
-                    institution_price: position.price || 0,
+                    institution_value: positionPrice !== null && positionUnits !== null
+                      ? positionPrice * positionUnits
+                      : null,
+                    institution_price: positionPrice,
                     institution_price_as_of: new Date().toISOString(),
-                    cost_basis: (position.average_purchase_price || 0) * (position.units || 0),
-                    quantity: position.units || 0,
+                    cost_basis: averagePurchasePrice !== null && positionUnits !== null
+                      ? averagePurchasePrice * positionUnits
+                      : null,
+                    quantity: positionUnits,
                     iso_currency_code: position.currency?.code || 'USD',
                     security_name: position.symbol?.symbol?.description || position.symbol?.description || 'Unknown',
                     security_type: securityType,
@@ -2188,23 +2206,18 @@ export class FinancialDataService {
         return null;
       }
 
-      const value = parsed.value ?? 0;
-      const valueLow = parsed.valueLow ?? (value > 0 ? value * 0.9 : 0);
-      const valueHigh = parsed.valueHigh ?? (value > 0 ? value * 1.1 : 0);
-      const valueMid = value > 0 ? value : 0;
-
-      if (valueMid > 0) {
-        console.log(`🏠 Home value extracted - valueMid: $${valueMid.toLocaleString()}, isManual: ${parsed.isManualOverride}`);
+      if (parsed.value !== null) {
+        console.log(`🏠 Home value extracted - valueMid: $${parsed.value.toLocaleString()}, isManual: ${parsed.isManualOverride}`);
       } else {
-        console.warn(`⚠️ Home value is 0 or null despite having address: ${parsed.address}`);
+        console.warn(`⚠️ Home value is unavailable despite having address: ${parsed.address}`);
       }
 
       return {
         address: parsed.address,
-        valueLow: valueLow > 0 ? valueLow : 0,
-        valueMid,
-        valueHigh: valueHigh > 0 ? valueHigh : 0,
-        lastUpdated: parsed.lastUpdated?.toISOString() ?? new Date().toISOString()
+        valueLow: parsed.valueLow,
+        valueMid: parsed.value,
+        valueHigh: parsed.valueHigh,
+        lastUpdated: parsed.lastUpdated?.toISOString() ?? null
       };
     } catch (error: any) {
       console.error('Error fetching home value:', error);
@@ -2427,62 +2440,16 @@ export class FinancialDataService {
    * Analyze portfolio
    */
   private analyzePortfolio(holdings: Holding[], securities: Security[], accounts?: Account[]): PortfolioAnalysis {
-    // Calculate portfolio value from holdings
-    let portfolioValue = holdings.reduce((total, holding) => {
-      return total + (holding.institution_value || 0);
-    }, 0);
+    const portfolio = buildCanonicalInvestmentPortfolio(
+      holdings,
+      securities,
+      accounts || [],
+      'USD'
+    );
 
-    // Add manual investment accounts (they don't have holdings, so add their balance directly)
-    if (accounts) {
-      const manualInvestmentAccounts = accounts.filter(acc => {
-        const accountAny = acc as any;
-        // Use the shared classifier so "investment account" means the same thing
-        // here as in the summary/snapshot/canonical builders.
-        return accountAny.source === 'manual' && classifyAccount(acc).isInvestment;
-      });
-      
-      const manualInvestmentValue = manualInvestmentAccounts.reduce((sum, acc) => {
-        const balance = acc.balance?.current ?? acc.balance?.available ?? 0;
-        return sum + Math.max(0, balance);
-      }, 0);
-      
-      if (manualInvestmentValue > 0) {
-        console.log(`📊 analyzePortfolio: Adding ${manualInvestmentAccounts.length} manual investment accounts with total value: $${manualInvestmentValue.toFixed(2)}`);
-        portfolioValue += manualInvestmentValue;
-      }
-    }
+    console.log(`📊 analyzePortfolio: Analyzing ${portfolio.holdingCount} holdings, ${portfolio.securityCount} unique securities, total value: $${portfolio.totalValue.toFixed(2)}`);
 
-    const securityMap = new Map(securities.map(sec => [sec.security_id, sec]));
-    
-    const assetAllocation = holdings.reduce((allocation, holding) => {
-      const security = securityMap.get(holding.security_id);
-      const assetType = security?.type || holding.security_type || 'Unknown';
-      
-      if (!allocation[assetType]) {
-        allocation[assetType] = 0;
-      }
-      allocation[assetType] += holding.institution_value || 0;
-      
-      return allocation;
-    }, {} as Record<string, number>);
-
-    const allocationPercentages = Object.entries(assetAllocation).map(([type, value]) => ({
-      type,
-      value: value as number,
-      percentage: portfolioValue > 0 ? ((value as number) / portfolioValue) * 100 : 0
-    }));
-
-    // Calculate unique securities count
-    const uniqueSecurityIds = new Set(holdings.map(h => h.security_id));
-
-    console.log(`📊 analyzePortfolio: Analyzing ${holdings.length} holdings, ${uniqueSecurityIds.size} unique securities, total value: $${portfolioValue.toFixed(2)}`);
-
-    return {
-      totalValue: portfolioValue,
-      assetAllocation: allocationPercentages,
-      holdingCount: holdings.length,
-      securityCount: uniqueSecurityIds.size
-    };
+    return portfolio;
   }
 
   /**

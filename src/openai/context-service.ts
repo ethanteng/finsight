@@ -2,7 +2,8 @@ import { UserTier } from '../data/types';
 import { dataOrchestrator } from '../data/orchestrator';
 import { Account, Transaction, UnifiedFinancialData, HomeData } from '../services/financial-data-service';
 import { TokenStatus } from '../services/token-validation-service';
-import { QuestionNeeds, FinancialContextSnapshot, AccountSummaryItem, TransactionSummaryItem, InvestmentSnapshot } from './types';
+import { QuestionNeeds, FinancialContextSnapshot, TransactionSummaryItem, InvestmentSnapshot } from './types';
+import { buildAccountSummaries } from './account-summary';
 import type { DemoAccount, DemoTransaction } from '../demo-data';
 
 interface GatherContextArgs {
@@ -66,7 +67,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   let investmentsSnapshot: InvestmentSnapshot | undefined;
   let homeValueSummary: string | undefined;
   let metadata: UnifiedFinancialData['metadata'] = { ...DEFAULT_METADATA };
-  let financialSummary: { financialOverview?: any; investmentPortfolio?: any } | null = null;
+  let financialSummary: FinancialContextSnapshot['financialSummary'] | null = null;
 
   if (isDemo) {
     const { demoData } = await import('../demo-data');
@@ -142,10 +143,21 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
         console.log(`📊 gatherContextSnapshot: Retrieved ${bankingTransactions.length} transactions from snapshot for user ${userId}`);
       }
       
-      metadata = snapshot.meta as UnifiedFinancialData['metadata'];
+      metadata = {
+        ...DEFAULT_METADATA,
+        lastUpdated: new Date(snapshot.computedAt),
+        persistedAsOf: snapshot.asOf ? new Date(snapshot.asOf) : null,
+      };
       
       // ✅ Set financialSummary for prompt builder
       financialSummary = {
+        computedAt: snapshot.computedAt,
+        asOf: snapshot.asOf,
+        status: snapshot.status
+          ? (snapshot.status as 'current' | 'stale' | 'partial' | 'unavailable')
+          : undefined,
+        reportingCurrency: snapshot.reportingCurrency,
+        quality: snapshot.quality as NonNullable<FinancialContextSnapshot['financialSummary']>['quality'],
         financialOverview: snapshot.financialOverview,
         investmentPortfolio: snapshot.investmentPortfolio
       };
@@ -174,8 +186,10 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
           holdingCount: (snapshot.investmentPortfolio as any).holdingCount || 0,
           summaryLines: holdings.slice(0, 10).map((holding: any) => {
             const name = holding.security_name || holding.ticker_symbol || 'Holding';
-            const value = holding.institution_value || 0;
-            return `- ${name}: $${value.toFixed(2)}`;
+            const value = holding.institution_value;
+            return typeof value === 'number' && Number.isFinite(value)
+              ? `- ${name}: $${value.toFixed(2)}`
+              : `- ${name}: Value unavailable`;
           }),
           holdings: holdings,
           securities: securities,
@@ -210,26 +224,16 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
           }
         }
         
-        if (homeValue) {
+        if (homeValue !== null && homeValue !== undefined) {
           if (typeof homeValue === 'number') {
-            if (homeValue > 0) {
-              homeValueSummary = `Home value: $${new Intl.NumberFormat('en-US', {
-                style: 'currency',
-                currency: 'USD',
-                maximumFractionDigits: 0
-              }).format(homeValue)}`;
-            } else {
-              // Value is 0 but address might be available
-              const address = homeAddressFromProfile;
-              if (address) {
-                homeValueSummary = `Home address: ${address}. Home value estimate is not currently available, but the user owns this property.`;
-              } else {
-                homeValueSummary = 'Home value data is currently unavailable.';
-              }
-            }
+            homeValueSummary = `Home value: ${new Intl.NumberFormat('en-US', {
+              style: 'currency',
+              currency: 'USD',
+              maximumFractionDigits: 0
+            }).format(homeValue)}`;
           } else {
             // HomeData object
-            if (homeValue.valueMid > 0 || homeValue.valueHigh > 0 || homeValue.valueLow > 0) {
+            if (typeof homeValue.valueMid === 'number') {
               homeValueSummary = buildHomeValueSummary(homeValue);
             } else if (homeValue.address) {
               // Address exists but value is 0
@@ -336,7 +340,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   // ✅ Use deduplicated accounts and sorted transactions directly (no anonymization)
   console.log(`📊 gatherContextSnapshot: Using ${deduplicatedAccounts.length} deduplicated accounts (from ${accounts.length} original)`);
 
-  const accountSummaries = buildAccountSummaries(deduplicatedAccounts, isDemo);
+  const accountSummaries = buildAccountSummaries(deduplicatedAccounts);
   // Create account map for quick lookup by account_id
   const accountMap = new Map<string, Account>();
   deduplicatedAccounts.forEach(account => {
@@ -953,29 +957,6 @@ async function fetchOrCreateRetirementAnalysis(args: {
 
 
 
-function buildAccountSummaries(accounts: Account[], isDemo: boolean): AccountSummaryItem[] {
-  return accounts.map(account => {
-    const subtype = account.subtype || account.type;
-    const balance =
-      typeof account.balance?.available === 'number' &&
-      (account.type === 'depository' || account.type === 'checking' || account.type === 'savings')
-        ? account.balance.available
-        : account.balance?.current ?? 0;
-
-    const summary: AccountSummaryItem = {
-      id: account.account_id || account.id,
-      name: account.name,
-      type: account.type,
-      subtype,
-      balance,
-      institution: account.institution,
-      interestRate: (account as any).interestRate
-    };
-
-    return summary;
-  });
-}
-
 /**
  * Deduplicate transactions by removing pending versions when settled versions exist.
  * 
@@ -1374,7 +1355,7 @@ function deriveInvestmentSnapshot(data: any): InvestmentSnapshot | undefined {
 }
 
 function buildHomeValueSummary(homeData: HomeData): string {
-  const formatCurrency = (value: number | undefined) => {
+  const formatCurrency = (value: number | null | undefined) => {
     if (typeof value !== 'number' || Number.isNaN(value)) {
       return 'Unknown';
     }
@@ -1385,7 +1366,7 @@ function buildHomeValueSummary(homeData: HomeData): string {
     }).format(value);
   };
 
-  const midValue = formatCurrency(homeData.valueMid ?? homeData.valueHigh ?? homeData.valueLow);
+  const midValue = formatCurrency(homeData.valueMid);
   const lowValue = typeof homeData.valueLow === 'number' ? formatCurrency(homeData.valueLow) : undefined;
   const highValue = typeof homeData.valueHigh === 'number' ? formatCurrency(homeData.valueHigh) : undefined;
   const rangeLine =
@@ -1670,10 +1651,10 @@ async function loadUserProfile(params: {
         type: account.type,
         subtype: account.subtype,
         balance: {
-          current: account.balance?.current,
+          current: account.balance?.current ?? undefined,
           available: account.balance?.available
         },
-        currentBalance: account.balance?.current,
+        currentBalance: account.balance?.current ?? undefined,
         availableBalance: account.balance?.available,
         institution: account.institution
       }));
@@ -1798,4 +1779,3 @@ function deduplicateLiabilitySections(profileText: string): string {
   
   return deduplicated;
 }
-

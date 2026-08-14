@@ -57,7 +57,7 @@ The following data is passed to Claude (Ask Linc), OpenAI (fallback), and Gemini
 | **Transactions**                              | DB snapshot                            | Same snapshot source.                                                                                |
 | **Income analysis**                           | `buildIncomeAnalysis()`                | Pure logic over transactions + overrides.                                                            |
 | **Expense analysis**                          | `buildExpenseAnalysis()`               | Same pattern.                                                                                        |
-| **Canonical snapshot**                        | `toCanonicalSnapshot()`                | Derived from snapshot via fixed transforms.                                                          |
+| **Canonical snapshot**                        | `buildCanonicalSnapshotCore()`          | Computed once from unified source data, persisted, and reused by history, UI, and LLM context.       |
 | **Search context summary**                    | `generateSearchSummary()`              | String concatenation of search results; no LLM.                                                      |
 | **Tier context**                              | `buildTierAwareContext()`              | Rule-based; no LLM.                                                                                  |
 | **Retirement analysis (core)**                | Retirement engine                      | Survival rate, depletion percentiles, drawdowns, etc. Deterministic when using real historical data. |
@@ -131,4 +131,3 @@ The following data is passed to Claude (Ask Linc), OpenAI (fallback), and Gemini
 - [Ask Linc LLM Financial Analysis](./ASK_LINC_LLM_FINANCIAL_ANALYSIS.md) — Pipeline architecture
 - [Retirement Analytics Setup](../../RETIREMENT_ANALYTICS_SETUP.md) — Retirement module configuration
 - [GPT Prompt Construction](./GPT_PROMPT_CONSTRUCTION.md) — Prompt structure
-

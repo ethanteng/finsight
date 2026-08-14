@@ -114,25 +114,34 @@ If `override` is provided (not null/undefined), the analysis string uses that va
 
 ## 5. Canonical Snapshot (Ask Linc)
 
-**Source:** `toCanonicalSnapshot()`  
-**File:** `src/openai/canonical-snapshot.ts`
+**Source:** `buildCanonicalSnapshotCore()`
+
+**File:** `src/services/canonical-financial-snapshot.ts`
+
+The canonical producer computes the financial overview, investment portfolio, source
+observations, timestamps, and quality status once. The persisted summary, historical
+snapshots, app UI, and Ask Linc prompt all consume those canonical values.
 
 ### Assets
 
 ```
-cash = overview.totalCash ?? derivedCash  (derived: Σ Math.max(0, balance) for depository/checking/savings/cd/money market/prepaid)
-brokerage = Σ Math.max(0, balance)  (subtype in [brokerage] or type=investment without retirement subtype)
-retirement = overview.totalInvestments ?? derivedRetirement  (subtype includes 401k, ira, roth, pension, annuity, hsa, 529)
+cash = Σ Math.max(0, known cash-account balance)
+investments = Σ known holding values + Σ Math.max(0, known manual investment balances)
+home = finite home-value midpoint >= 0, otherwise null
+totalAssets = cash + investments + (home ?? 0)
 ```
+
+Only values already denominated in the reporting currency are included. Unknown and
+unconverted values are excluded and recorded as unavailable source observations; they
+are not converted to zero.
 
 ### Liabilities
 
 ```
-liabilityValue = Math.abs(balance)  (for all liability accounts)
-mortgage = Σ liabilityValue  (subtype includes mortgage, home equity)
-credit = Σ liabilityValue  (type=credit)
-loan[subtype] = Σ liabilityValue  (type=loan or subtype in [student, personal, auto])
-overdraft = Σ liabilityValue  (cash accounts with balance < 0) — consistent with FinancialSummaryService
+debt = Σ Math.abs(known debt-account balance)
+overdraft = Σ Math.abs(known negative cash-account balance)
+totalDebt = debt + overdraft
+netWorth = totalAssets - totalDebt
 ```
 
 ### Income / Expenses
@@ -335,10 +344,11 @@ The LLMs are instructed to **use the provided values as authoritative** and not 
 
 | Calculation | Primary File |
 |-------------|---------------|
-| Financial overview | `src/services/financial-summary-service.ts` |
-| Portfolio value & allocation | `src/services/financial-data-service.ts` |
+| Financial overview | `src/services/canonical-financial-snapshot.ts` |
+| Portfolio value & allocation | `src/services/canonical-financial-snapshot.ts` |
+| Unified source-data aggregation | `src/services/financial-data-service.ts` |
 | Income/expense analysis | `src/openai/context-service.ts` |
-| Canonical snapshot | `src/openai/canonical-snapshot.ts` |
+| Canonical snapshot and quality | `src/services/canonical-financial-snapshot.ts`, `src/domain/financial-truth.ts` |
 | Retirement portfolio metrics | `src/retirement-analytics/engine/portfolio-analyzer.ts` |
 | Withdrawal simulation | `src/retirement-analytics/engine/withdrawal-simulator.ts` |
 | Historical withdrawal rates | `src/retirement-analytics/engine/withdrawal-rate-solver.ts` |

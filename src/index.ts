@@ -2951,19 +2951,11 @@ app.post('/profile/home', requireAuth, async (req: Request, res: Response) => {
       });
     }
     
-    // Invalidate financial summary caches so net worth includes new home value
-    // Refresh both FinancialSummaryService (for /finances page) and SummaryCacheService (for GPT prompts)
+    // Refresh the canonical snapshot so every consumer sees the new home value.
     try {
-      const { FinancialSummaryService } = await import('./services/financial-summary-service');
       const { SummaryCacheService } = await import('./services/summary-cache-service');
-      const financialSummaryService = new FinancialSummaryService();
-      
-      // Trigger async refresh of both caches with new home value
       setImmediate(() => {
-        Promise.all([
-          financialSummaryService.refreshUserSummary(req.user!.id),
-          SummaryCacheService.computeForUser(req.user!.id, { categorize: false })
-        ]).catch(error => {
+        SummaryCacheService.computeForUser(req.user!.id, { categorize: false }).catch(error => {
           console.error(`Failed to refresh financial summaries after home value update:`, error);
         });
       });
@@ -3034,19 +3026,11 @@ app.post('/profile/home/refresh', requireAuth, async (req: Request, res: Respons
       });
     }
     
-    // Invalidate financial summary caches so net worth includes refreshed home value
-    // Refresh both FinancialSummaryService (for /finances page) and SummaryCacheService (for GPT prompts)
+    // Refresh the canonical snapshot so every consumer sees the refreshed value.
     try {
-      const { FinancialSummaryService } = await import('./services/financial-summary-service');
       const { SummaryCacheService } = await import('./services/summary-cache-service');
-      const financialSummaryService = new FinancialSummaryService();
-      
-      // Trigger async refresh of both caches with refreshed home value
       setImmediate(() => {
-        Promise.all([
-          financialSummaryService.refreshUserSummary(req.user!.id),
-          SummaryCacheService.computeForUser(req.user!.id, { categorize: false })
-        ]).catch(error => {
+        SummaryCacheService.computeForUser(req.user!.id, { categorize: false }).catch(error => {
           console.error(`Failed to refresh financial summaries after home value refresh:`, error);
         });
       });
@@ -3110,19 +3094,11 @@ app.put('/profile/home/value', requireAuth, async (req: Request, res: Response) 
     // Update manual override
     const homeData = await profileManager.updateManualHomeValue(req.user!.id, value);
     
-    // Invalidate financial summary caches so net worth includes updated home value
-    // Refresh both FinancialSummaryService (for /finances page) and SummaryCacheService (for GPT prompts)
+    // Refresh the canonical snapshot so every consumer sees the override.
     try {
-      const { FinancialSummaryService } = await import('./services/financial-summary-service');
       const { SummaryCacheService } = await import('./services/summary-cache-service');
-      const financialSummaryService = new FinancialSummaryService();
-      
-      // Trigger async refresh of both caches with updated home value
       setImmediate(() => {
-        Promise.all([
-          financialSummaryService.refreshUserSummary(req.user!.id),
-          SummaryCacheService.computeForUser(req.user!.id, { categorize: false })
-        ]).catch(error => {
+        SummaryCacheService.computeForUser(req.user!.id, { categorize: false }).catch(error => {
           console.error(`Failed to refresh financial summaries after home value update:`, error);
         });
       });
@@ -3176,19 +3152,11 @@ app.delete('/profile/home/value', requireAuth, async (req: Request, res: Respons
     // Remove manual override
     const homeData = await profileManager.removeManualHomeValue(req.user!.id);
     
-    // Invalidate financial summary caches so net worth reflects removed manual override
-    // Refresh both FinancialSummaryService (for /finances page) and SummaryCacheService (for GPT prompts)
+    // Refresh the canonical snapshot so every consumer sees the removed override.
     try {
-      const { FinancialSummaryService } = await import('./services/financial-summary-service');
       const { SummaryCacheService } = await import('./services/summary-cache-service');
-      const financialSummaryService = new FinancialSummaryService();
-      
-      // Trigger async refresh of both caches
       setImmediate(() => {
-        Promise.all([
-          financialSummaryService.refreshUserSummary(req.user!.id),
-          SummaryCacheService.computeForUser(req.user!.id, { categorize: false })
-        ]).catch(error => {
+        SummaryCacheService.computeForUser(req.user!.id, { categorize: false }).catch(error => {
           console.error(`Failed to refresh financial summaries after removing manual home value:`, error);
         });
       });
@@ -3670,11 +3638,16 @@ app.get('/api/financial-history', requireAuth, async (req: Request, res: Respons
     // Convert dates to ISO strings for JSON response
     const formattedSnapshots = snapshots.map(snapshot => ({
       computedAt: snapshot.computedAt.toISOString(),
+      asOf: snapshot.asOf?.toISOString() || null,
+      status: snapshot.status,
+      reportingCurrency: snapshot.reportingCurrency,
       netWorth: snapshot.netWorth,
       totalCash: snapshot.totalCash,
       totalInvestments: snapshot.totalInvestments,
       totalDebt: snapshot.totalDebt,
       homeValue: snapshot.homeValue,
+      totalAssets: snapshot.totalAssets,
+      totalLiabilities: snapshot.totalLiabilities,
     }));
     
     res.json(formattedSnapshots);
@@ -3698,12 +3671,8 @@ app.post('/api/refresh-summary', requireAuth, async (req: Request, res: Response
     const { cacheService } = await import('./data/cache');
     await cacheService.invalidate(`financial-data:${userId}`);
     const { SummaryCacheService } = await import('./services/summary-cache-service');
-    const { FinancialSummaryService } = await import('./services/financial-summary-service');
     // Fast path: skip heavy categorization to avoid request timeouts
-    const [payload] = await Promise.all([
-      SummaryCacheService.computeForUser(userId, { categorize: false }),
-      new FinancialSummaryService().refreshUserSummary(userId),
-    ]);
+    const payload = await SummaryCacheService.computeForUser(userId, { categorize: false });
     res.json(payload);
   } catch (error) {
     console.error('❌ Failed to refresh financial summary:', error);
@@ -4155,12 +4124,7 @@ app.post('/admin/refresh-user-snapshot/:userId', adminAuth, async (req: Request,
     await cacheService.invalidate(`financial-data:${userId}`);
 
     const { SummaryCacheService } = await import('./services/summary-cache-service');
-    const { FinancialSummaryService } = await import('./services/financial-summary-service');
-
-    const [payload] = await Promise.all([
-      SummaryCacheService.computeForUser(userId, { categorize: false }),
-      new FinancialSummaryService().refreshUserSummary(userId),
-    ]);
+    const payload = await SummaryCacheService.computeForUser(userId, { categorize: false });
 
     res.json({
       success: true,

@@ -17,11 +17,11 @@ interface Holding {
   id: string;
   account_id: string;
   security_id: string;
-  institution_value: number;
-  institution_price: number;
+  institution_value: number | null;
+  institution_price: number | null;
   institution_price_as_of: string;
-  cost_basis: number;
-  quantity: number;
+  cost_basis: number | null;
+  quantity: number | null;
   iso_currency_code: string;
   security_name?: string;
   security_type?: string;
@@ -135,25 +135,34 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
   // Bar chart data for holdings
   const holdingsBarData = useMemo(() => {
     if (!holdings || holdings.length === 0) return [];
-    
-    const totalValue = holdings.reduce((sum, h) => sum + (h.institution_value || h.value || 0), 0);
+
+    const knownValue = (holding: Holding): number | null => {
+      if (typeof holding.institution_value === 'number' && Number.isFinite(holding.institution_value)) {
+        return holding.institution_value;
+      }
+      return typeof holding.value === 'number' && Number.isFinite(holding.value)
+        ? holding.value
+        : null;
+    };
+    const totalValue = holdings.reduce((sum, holding) => sum + (knownValue(holding) ?? 0), 0);
     
     return holdings
       .map(holding => {
         const fullName = holding.security_name || holding.name || 'Unknown Security';
         // Use ticker if available, otherwise use first 10 chars of name as fallback
         const ticker = holding.ticker_symbol || fullName.substring(0, 10);
+        const value = knownValue(holding);
         return {
           name: fullName,
           ticker: ticker,
-          value: holding.institution_value || holding.value || 0,
-          percentage: totalValue > 0 ? ((holding.institution_value || holding.value || 0) / totalValue) * 100 : 0,
-          quantity: holding.quantity || 0,
-          price: holding.institution_price || 0,
+          value,
+          percentage: totalValue > 0 && value !== null ? (value / totalValue) * 100 : 0,
+          quantity: holding.quantity,
+          price: holding.institution_price,
           holding: holding
         };
       })
-      .sort((a, b) => b.value - a.value);
+      .sort((a, b) => (b.value ?? -Infinity) - (a.value ?? -Infinity));
   }, [holdings]);
 
   // A restrained tonal scale keeps dense holdings data aligned with the brand.
@@ -355,13 +364,13 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                             </div>
                             <div className="text-xs text-gray-500 mt-1">
                               Qty: {holding.quantity?.toLocaleString() || 'N/A'}
-                              {holding.institution_price > 0 && ` • ${formatCurrency(holding.institution_price)}/share`}
+                              {holding.institution_price !== null && holding.institution_price > 0 && ` • ${formatCurrency(holding.institution_price)}/share`}
                             </div>
                           </div>
                         </div>
                         <div className="text-right">
                           <div className="font-semibold text-white text-lg">
-                            {formatCurrency(holding.institution_value || holding.value || 0)}
+                            {holdingData.value === null ? 'Value unavailable' : formatCurrency(holdingData.value)}
                           </div>
                           <div className="text-sm text-gray-400">
                             {holdingData.percentage.toFixed(1)}%

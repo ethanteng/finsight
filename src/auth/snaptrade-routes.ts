@@ -342,12 +342,9 @@ router.delete('/delete', requireAuth, async (req, res) => {
       // Ask Linc reads FinancialSummarySnapshot; refresh so removed SnapTrade accounts drop out of GPT context
       try {
         const { SummaryCacheService } = await import('../services/summary-cache-service');
-        const { FinancialSummaryService } = await import('../services/financial-summary-service');
         setImmediate(() => {
-          Promise.all([
-            SummaryCacheService.computeForUser(userId, { categorize: false }),
-            new FinancialSummaryService().refreshUserSummary(userId),
-          ]).catch((err) => console.warn('SnapTrade delete: snapshot refresh failed', err));
+          SummaryCacheService.computeForUser(userId, { categorize: false })
+            .catch((err) => console.warn('SnapTrade delete: snapshot refresh failed', err));
         });
       } catch {
         // non-fatal

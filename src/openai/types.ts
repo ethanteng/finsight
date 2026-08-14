@@ -14,7 +14,7 @@ export interface AccountSummaryItem {
   name: string;
   type: string;
   subtype?: string;
-  balance: number;
+  balance: number | null;
   institution?: string;
   interestRate?: number;
 }
@@ -158,6 +158,16 @@ export interface FinancialContextSnapshot {
     lastUpdated: Date;
   }>;
   financialSummary?: {
+    computedAt?: Date | string;
+    asOf?: Date | string | null;
+    status?: 'current' | 'stale' | 'partial' | 'unavailable';
+    reportingCurrency?: string;
+    quality?: {
+      staleSourceIds?: string[];
+      unavailableSourceIds?: string[];
+      requiredUnavailableSourceIds?: string[];
+      errors?: Array<{ sourceId: string; message: string }>;
+    };
     financialOverview?: {
       netWorth: number;
       totalCash: number;
@@ -167,7 +177,8 @@ export interface FinancialContextSnapshot {
     };
     investmentPortfolio?: {
       totalValue: number;
-      holdingsCount: number;
+      holdingCount?: number;
+      holdingsCount?: number;
       assetAllocation: Array<{
         type: string;
         value: number;
@@ -189,4 +200,3 @@ export interface PromptPayload {
   systemPrompt: string;
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
 }
-
