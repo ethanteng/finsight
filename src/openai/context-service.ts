@@ -620,6 +620,10 @@ async function fetchOrCreateRetirementAnalysis(args: {
           analysis: {
             ...cachedAnalysis,
             _storedInputParams: storedInput,
+            _evidence: {
+              recordId: recentAnalysis.id,
+              computedAt: recentAnalysis.computedAt.toISOString(),
+            },
           },
         };
       }
@@ -652,7 +656,11 @@ async function fetchOrCreateRetirementAnalysis(args: {
           missingData: []
         },
         disclaimers: [],
-        _storedInputParams: storedInput
+        _storedInputParams: storedInput,
+        _evidence: {
+          recordId: recentAnalysis.id,
+          computedAt: recentAnalysis.computedAt.toISOString(),
+        },
       };
       return { analysis: reconstructed };
     }
@@ -686,7 +694,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
 
     // Store in database
     // Note: Store full analysis result in historicalImplications field for retrieval
-    await prisma.retirementAnalysis.create({
+    const createdAnalysis = await prisma.retirementAnalysis.create({
       data: {
         userId,
         analysisInput: analysisInput as any,
@@ -717,6 +725,10 @@ async function fetchOrCreateRetirementAnalysis(args: {
       annualWithdrawalAmount: analysisInput.annualWithdrawalAmount,
       withdrawalStartAge: analysisInput.withdrawalStartAge,
       lifeExpectancy: analysisInput.lifeExpectancy,
+    };
+    resultWithInputs._evidence = {
+      recordId: createdAnalysis.id,
+      computedAt: createdAnalysis.computedAt.toISOString(),
     };
     return { analysis: resultWithInputs };
   } catch (error) {

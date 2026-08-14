@@ -6,7 +6,7 @@ import MarkdownRenderer from './MarkdownRenderer';
 import { useAnalytics } from './Analytics';
 import Feedback from './Feedback';
 import { ShowTheMathContent, DatabaseSourceSection, downloadShowTheMathAsText, type ShowTheMathData } from './ShowTheMathModal';
-import { formatKeyNumberValue } from '@/lib/formatKeyNumber';
+import { formatKeyNumberValue, type DisplayKeyNumber } from '@/lib/formatKeyNumber';
 
 interface PromptHistory {
   id: string;
@@ -37,12 +37,11 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   const [streamingAnswer, setStreamingAnswer] = useState('');
   const [structuredResponse, setStructuredResponse] = useState<{
     summary: string;
-    key_numbers?: Record<string, number>;
+    key_numbers?: Record<string, DisplayKeyNumber | number>;
     insights?: string[];
     suggested_actions?: string[];
   } | null>(null);
   const [showTheMathData, setShowTheMathData] = useState<ShowTheMathData | null>(null);
-  const [liveShowTheMathData, setLiveShowTheMathData] = useState<Partial<ShowTheMathData>>({});
   const [loadingShowTheMath, setLoadingShowTheMath] = useState(false);
   const [showTheMathError, setShowTheMathError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<'answer' | 'math' | 'sources'>('answer');
@@ -132,7 +131,6 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       setConversationId(selectedPrompt.id);
       setStructuredResponse(null);
       setShowTheMathData(null);
-      setLiveShowTheMathData({});
       setError('');
       setActiveView('answer');
       setSelectedSourceKey(null);
@@ -141,7 +139,6 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       setStreamingAnswer('');
       setStructuredResponse(null);
       setShowTheMathData(null);
-      setLiveShowTheMathData({});
       setError('');
     }
   }, [selectedPrompt]);
@@ -159,7 +156,6 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     setStreamingAnswer('');
     setStructuredResponse(null);
     setShowTheMathData(null);
-    setLiveShowTheMathData({});
     setActiveView('answer');
     setSelectedSourceKey(null);
     
@@ -247,18 +243,12 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
               } else if (currentEvent === 'answerReset') {
                 // Validation triggered a regeneration; discard the streamed first pass.
                 setStreamingAnswer('');
-              } else if (currentEvent === 'showTheMathProgress') {
-                setLiveShowTheMathData((prev) => ({ ...prev, ...data }));
               } else if (currentEvent === 'result') {
                 if (data.answer) {
                   setAnswer(data.answer);
                   setStreamingAnswer('');
                   if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
                   if (data.conversationId) setConversationId(data.conversationId);
-                  if (data.showTheMathData) {
-                    setShowTheMathData(data.showTheMathData);
-                    setLiveShowTheMathData({});
-                  }
                   if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
                   trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier, is_demo: isDemo });
                 } else {
@@ -307,7 +297,6 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
           if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
           if (data.conversationId) setConversationId(data.conversationId);
           else if (isDemo) setConversationId(`demo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
-          if (data.showTheMathData) setShowTheMathData(data.showTheMathData);
           if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
           trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier, is_demo: isDemo });
         } else {
@@ -361,17 +350,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     }
   }, [showTheMathData, loadingShowTheMath, conversationId, isDemo, propSessionId, API_URL]);
 
-  const showTheMathViewData: Partial<ShowTheMathData> | null = showTheMathData ?? (
-    Object.keys(liveShowTheMathData).length > 0
-      ? {
-          claudeFirstCall: liveShowTheMathData.claudeFirstCall,
-          databaseData: liveShowTheMathData.databaseData || {},
-          ...(liveShowTheMathData.geminiValidation && { geminiValidation: liveShowTheMathData.geminiValidation }),
-          ...(liveShowTheMathData.claudeRetry && { claudeRetry: liveShowTheMathData.claudeRetry }),
-          ...(liveShowTheMathData.geminiRetryValidation && { geminiRetryValidation: liveShowTheMathData.geminiRetryValidation })
-        }
-      : null
-  );
+  const showTheMathViewData: Partial<ShowTheMathData> | null = showTheMathData;
 
 
   const sourceEntries = Object.entries(showTheMathViewData?.databaseData || {}).filter(([, value]) => value != null);
@@ -427,7 +406,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
               <div className="space-y-7">
                 <div className="flex items-center gap-2 text-sm font-semibold text-[#49725a]">{loading ? <LoaderCircle className="animate-spin" size={17} /> : <CheckCircle2 size={17} />} {loading ? (progressMessage || 'Building your answer') : 'Current answer'}</div>
                 {structuredResponse?.key_numbers && Object.keys(structuredResponse.key_numbers).length > 0 && (
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Key numbers">{Object.entries(structuredResponse.key_numbers).map(([key, value]) => <div key={key} className="rounded-2xl bg-[#f3f2e9] p-4"><div className="text-xs font-semibold uppercase tracking-wider text-[#5e6b63]">{key.replace(/_/g, ' ')}</div><div className="mt-2 text-2xl font-semibold tracking-tight text-[#102319]">{formatKeyNumberValue(key, value)}</div></div>)}</div>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-label="Key numbers">{Object.entries(structuredResponse.key_numbers).map(([key, value]) => <div key={key} className="rounded-2xl bg-[#f3f2e9] p-4"><div className="text-xs font-semibold uppercase tracking-wider text-[#5e6b63]">{key.replace(/_/g, ' ')}</div><div className="mt-2 text-2xl font-semibold tracking-tight text-[#102319]">{formatKeyNumberValue(key, value)}</div>{typeof value === 'object' && value.provenance && <div className="mt-2 break-all text-[10px] text-[#66736b]">Source: {value.provenance}</div>}</div>)}</div>
                 )}
                 <div className="decision-answer prose prose-slate max-w-none text-[#48574e] prose-headings:text-[#102319] prose-a:text-[#397052]">{structuredResponse ? <MarkdownRenderer>{structuredResponse.summary}</MarkdownRenderer> : streamingAnswer ? <><MarkdownRenderer>{streamingAnswer}</MarkdownRenderer><span className="inline-block h-4 w-1.5 animate-pulse bg-[#102319]" /></> : answer ? <MarkdownRenderer>{answer}</MarkdownRenderer> : <div className="space-y-3" aria-label="Answer loading"><div className="h-4 w-11/12 animate-pulse rounded bg-[#dfe6d4]" /><div className="h-4 w-4/5 animate-pulse rounded bg-[#dfe6d4]" /><div className="h-4 w-2/3 animate-pulse rounded bg-[#dfe6d4]" /></div>}</div>
                 {structuredResponse?.insights && structuredResponse.insights.length > 0 && <section className="rounded-2xl border border-[#102319]/10 p-5"><h3 className="mb-3 font-semibold text-[#102319]">Key assumptions and decision factors</h3><ul className="space-y-3 text-sm leading-6 text-[#48675e]">{structuredResponse.insights.map((insight, index) => <li key={index} className="flex gap-3"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#49725a]" />{insight}</li>)}</ul></section>}

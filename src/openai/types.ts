@@ -158,6 +158,10 @@ export interface FinancialContextSnapshot {
       withdrawalStartAge?: number;
       lifeExpectancy?: number;
     };
+    _evidence?: {
+      recordId: string;
+      computedAt: string;
+    };
   };
   retirementAnalysisNeedsInfo?: {
     missingParams: Array<'currentAge' | 'retirementAge' | 'annualWithdrawalAmount' | 'withdrawalStartAge'>;

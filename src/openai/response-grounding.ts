@@ -175,7 +175,8 @@ export function validateResponseGrounding(
     }
   }
 
-  for (const [rawKey, value] of Object.entries(response.key_numbers || {})) {
+  for (const [rawKey, metric] of Object.entries(response.key_numbers || {})) {
+    const value = typeof metric === 'number' ? metric : metric.value;
     const key = normalizeMetricKey(rawKey);
     if (!Number.isFinite(value)) {
       issues.push(`${rawKey} is not a finite number.`);

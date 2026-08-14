@@ -15,7 +15,10 @@ describe('parseStructuredResponse', () => {
     });
     const parsed = parseStructuredResponse(raw);
     expect(parsed.summary).toBe('You are doing well.');
-    expect(parsed.key_numbers).toEqual({ net_worth: 250000, withdrawal_rate: 4.15 });
+    expect(parsed.key_numbers).toEqual({
+      net_worth: { value: 250000, unit: 'usd', provenance: '' },
+      withdrawal_rate: { value: 4.15, unit: 'percent', provenance: '' },
+    });
     expect(parsed.insights).toEqual(['Insight A', 'Insight B']);
     expect(parsed.suggested_actions).toEqual(['Action A']);
   });
@@ -30,7 +33,22 @@ describe('parseStructuredResponse', () => {
   it('coerces stringified numbers in key_numbers and drops non-numeric values', () => {
     const raw = '{"summary":"s","key_numbers":{"a":"1234.5","b":"not-a-number","c":42}}';
     const parsed = parseStructuredResponse(raw);
-    expect(parsed.key_numbers).toEqual({ a: 1234.5, c: 42 });
+    expect(parsed.key_numbers).toEqual({
+      a: { value: 1234.5, unit: 'usd', provenance: '' },
+      c: { value: 42, unit: 'usd', provenance: '' },
+    });
+  });
+
+  it('preserves the explicit value, unit, and provenance schema', () => {
+    const raw = JSON.stringify({
+      summary: 's',
+      key_numbers: {
+        savings_rate: { value: 12.5, unit: 'percent', provenance: 'savings_rate' },
+      },
+    });
+    expect(parseStructuredResponse(raw).key_numbers).toEqual({
+      savings_rate: { value: 12.5, unit: 'percent', provenance: 'savings_rate' },
+    });
   });
 
   it('repairs truncated JSON (unclosed array/braces)', () => {

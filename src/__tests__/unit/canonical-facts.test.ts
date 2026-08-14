@@ -1,0 +1,89 @@
+import { buildCanonicalFactPack, validateCanonicalFactPack } from '../../openai/canonical-facts';
+import { analyzeQuestionNeeds } from '../../openai/question-analysis';
+
+function snapshot() {
+  return {
+    accounts: [{ id: 'checking-1', name: 'Checking', type: 'depository', balance: 5000 }],
+    bankingTransactions: [
+      { id: 'expense-1', name: 'Coffee', merchantName: 'Cafe', amount: -12, date: '2026-08-12', typeLabel: '(EXPENSE)' },
+      { id: 'expense-2', name: 'Lunch', merchantName: 'Cafe', amount: 20, date: '2026-08-13', typeLabel: '(EXPENSE)' },
+      { id: 'transfer-1', name: 'Transfer', amount: 1000, date: '2026-08-13', typeLabel: '(TRANSFER_OUT)' },
+    ],
+    averageMonthlyIncome: 10_000,
+    averageMonthlyExpense: 7_500,
+    transactionSummary: { byCategory: { Dining: 32 } },
+    metadata: { lastUpdated: new Date(), dataSources: {}, errors: [] },
+    tierContext: { tierInfo: { currentTier: 'starter', availableSources: [] }, upgradeHints: [] },
+    financialSummary: {
+      computedAt: '2026-08-14T00:00:00.000Z',
+      financialOverview: { netWorth: 100_000, totalCash: 20_000, totalInvestments: 90_000, totalDebt: 10_000, homeValue: null },
+    },
+  } as any;
+}
+
+describe('buildCanonicalFactPack', () => {
+  it('selects overview facts according to question intent', () => {
+    const pack = buildCanonicalFactPack(snapshot(), 'What is my net worth?', analyzeQuestionNeeds('What is my net worth?'));
+    expect(pack.facts.map((fact) => fact.id)).toEqual(['net_worth']);
+  });
+
+  it('supplies and validates deterministic cash-flow calculations', () => {
+    const pack = buildCanonicalFactPack(snapshot(), 'What is my savings rate?', analyzeQuestionNeeds('What is my savings rate?'));
+    expect(pack.facts.find((fact) => fact.id === 'average_monthly_operating_cash_flow')?.value).toBe(2500);
+    expect(pack.facts.find((fact) => fact.id === 'savings_rate')?.value).toBe(25);
+    expect(validateCanonicalFactPack(pack)).toEqual([]);
+
+    pack.facts.find((fact) => fact.id === 'savings_rate')!.value = 30;
+    expect(validateCanonicalFactPack(pack)).toContain('savings_rate does not match its deterministic formula.');
+  });
+
+  it('includes the compact balance-sheet and cash-flow facts needed for an affordability decision', () => {
+    const question = 'Can I afford to buy a house?';
+    const pack = buildCanonicalFactPack(snapshot(), question, analyzeQuestionNeeds(question));
+    expect(pack.facts.map((fact) => fact.id)).toEqual(expect.arrayContaining([
+      'net_worth',
+      'total_cash',
+      'total_debt',
+      'average_monthly_income',
+      'average_monthly_expenses',
+      'average_monthly_operating_cash_flow',
+    ]));
+  });
+
+  it('aggregates only expense and fee transactions with traceable inputs', () => {
+    const question = 'Which merchant has my largest purchases?';
+    const pack = buildCanonicalFactPack(snapshot(), question, analyzeQuestionNeeds(question));
+    const merchant = pack.facts.find((fact) => fact.id === 'merchant_spending_cafe');
+    expect(merchant).toMatchObject({ value: 32, unit: 'usd' });
+    expect(merchant?.provenance.inputFactIds).toHaveLength(2);
+    expect(pack.facts.some((fact) => fact.id.includes('transfer'))).toBe(false);
+    expect(validateCanonicalFactPack(pack)).toEqual([]);
+  });
+
+  it('records fraction-to-percent retirement conversions as deterministic calculations', () => {
+    const data = snapshot();
+    data.retirementAnalysis = {
+      metrics: {
+        withdrawalRate: 0.04,
+        equityAllocation: 70,
+        yearsOfExpenses: 25,
+        historicalWithdrawalRates: { p10: 0.03, p25: 0.035, p50: 0.04, p75: 0.045, p90: 0.05 },
+      },
+      stressTest: {
+        survivalRate: 0.91,
+        totalSequences: 100,
+        depletionPercentiles: { p10: 12, p25: 18, p50: 25, p75: 30, p90: 35 },
+      },
+      _storedInputParams: { currentAge: 50, retirementAge: 65, annualWithdrawalAmount: 40_000, withdrawalStartAge: 65 },
+    };
+    const question = 'Am I on track for retirement?';
+    const pack = buildCanonicalFactPack(data, question, analyzeQuestionNeeds(question));
+    expect(pack.facts.find((fact) => fact.id === 'withdrawal_rate_ratio')).toMatchObject({ value: 0.04, displayable: false });
+    expect(pack.facts.find((fact) => fact.id === 'withdrawal_rate')).toMatchObject({
+      value: 4,
+      unit: 'percent',
+      provenance: { kind: 'calculation', formula: 'input * 100', inputFactIds: ['withdrawal_rate_ratio'] },
+    });
+    expect(validateCanonicalFactPack(pack)).toEqual([]);
+  });
+});

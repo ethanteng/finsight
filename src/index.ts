@@ -55,6 +55,8 @@ console.log('  SNAPTRADE_CONSUMER_KEY_PROD:', process.env.SNAPTRADE_CONSUMER_KEY
 import { setupPlaidRoutes } from './plaid';
 import { askOpenAI, askOpenAIWithEnhancedContext, PromptValidationError } from './openai';
 import { runAskLincAnalysis } from './openai/analysis-pipeline';
+import { loadShowTheMathEvidence } from './openai/show-the-math-db-service';
+import type { AskLincResponse } from './openai/structured-response';
 import { aiRateLimitMiddleware } from './security/ai-rate-limiter';
 
 // Import SnapTrade configuration
@@ -555,14 +557,10 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
       
       // Get AI response - use Ask Linc pipeline when enabled, else OpenAI
       let aiResponse: string;
-      let structuredResponse: { summary: string; key_numbers?: Record<string, number>; insights?: string[]; suggested_actions?: string[] } | undefined;
+      let structuredResponse: AskLincResponse | undefined;
 
       const onProgress = useStreaming
         ? (message: string) => writeSSE(res, 'progress', { message })
-        : undefined;
-
-      const onShowTheMathProgress = useStreaming
-        ? (partial: object) => writeSSE(res, 'showTheMathProgress', partial)
         : undefined;
 
       const onAnswerDelta = useStreaming
@@ -586,19 +584,27 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
             demoProfile: undefined,
             enableValidation: process.env.ENABLE_RESPONSE_VALIDATION === 'true',
             onProgress,
-            onShowTheMathProgress,
             onAnswerDelta,
             onAnswerReset
           });
           aiResponse = result.displayText;
           structuredResponse = result.structuredResponse;
           showTheMathData = result.showTheMathData;
+          const manifest = result.showTheMathData?.evidenceManifest;
+          if (manifest) {
+            span.setAttribute('ai.context_gather_ms', manifest.timings.contextGatherMs);
+            span.setAttribute('ai.prompt_build_ms', manifest.timings.promptBuildMs);
+            span.setAttribute('ai.prompt_characters', manifest.modelCalls[0]?.promptCharacters || 0);
+            if (manifest.timings.timeToFirstAnswerTokenMs !== undefined) {
+              span.setAttribute('ai.time_to_first_answer_token_ms', manifest.timings.timeToFirstAnswerTokenMs);
+            }
+          }
         } catch (err) {
           if (err instanceof PromptValidationError) {
             throw err;
           }
-          console.error('Ask Linc pipeline failed, falling back to OpenAI:', err);
-          aiResponse = await askOpenAIWithEnhancedContext(question, conversationHistory, userTier, isDemo, userId);
+          console.error('Ask Linc pipeline failed after provider fallback:', err);
+          throw err;
         }
       } else {
         aiResponse = await askOpenAIWithEnhancedContext(question, conversationHistory, userTier, isDemo, userId);
@@ -673,16 +679,14 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
           writeSSE(res, 'result', {
             answer: displayResponse,
             conversationId: null,
-            ...(structuredResponse && { structuredResponse }),
-            ...(showTheMathData && { showTheMathData })
+            ...(structuredResponse && { structuredResponse })
           });
           return res.end();
         }
         return res.json({ 
           answer: displayResponse,
           conversationId: null,
-          ...(structuredResponse && { structuredResponse }),
-          ...(showTheMathData && { showTheMathData })
+          ...(structuredResponse && { structuredResponse })
         });
       }
 
@@ -719,16 +723,14 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
             writeSSE(res, 'result', {
               answer: displayResponse,
               conversationId: conversation.id,
-              ...(structuredResponse && { structuredResponse }),
-              ...(showTheMathData && { showTheMathData })
+              ...(structuredResponse && { structuredResponse })
             });
             return res.end();
           }
           return res.json({ 
             answer: displayResponse,
             conversationId: conversation.id,
-            ...(structuredResponse && { structuredResponse }),
-            ...(showTheMathData && { showTheMathData })
+            ...(structuredResponse && { structuredResponse })
           });
         } catch (error) {
           console.error('Error saving conversation:', error);
@@ -745,16 +747,14 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
         writeSSE(res, 'result', {
           answer: displayResponse,
           conversationId: null,
-          ...(structuredResponse && { structuredResponse }),
-          ...(showTheMathData && { showTheMathData })
+          ...(structuredResponse && { structuredResponse })
         });
         return res.end();
       }
       return res.json({ 
         answer: displayResponse,
         conversationId: null,
-        ...(structuredResponse && { structuredResponse }),
-        ...(showTheMathData && { showTheMathData })
+        ...(structuredResponse && { structuredResponse })
       });
     });
   } catch (error) {
@@ -1439,7 +1439,7 @@ app.get('/conversations/:id/show-the-math', async (req: Request, res: Response) 
     if (!conversation.showTheMathData) {
       return res.status(404).json({ error: 'No pipeline data available for this conversation' });
     }
-    res.json(conversation.showTheMathData);
+    res.json(await loadShowTheMathEvidence(conversation.showTheMathData, user.id));
   } catch (err) {
     if (err instanceof Error) {
       Sentry.captureException(err);
@@ -1473,7 +1473,7 @@ app.get('/demo/conversations/:id/show-the-math', async (req: Request, res: Respo
     if (!conversation.showTheMathData) {
       return res.status(404).json({ error: 'No pipeline data available for this conversation' });
     }
-    res.json(conversation.showTheMathData);
+    res.json(await loadShowTheMathEvidence(conversation.showTheMathData));
   } catch (err) {
     if (err instanceof Error) {
       Sentry.captureException(err);

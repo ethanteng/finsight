@@ -5,12 +5,47 @@
  * and parses LLM output (JSON block or markdown) into the structure.
  */
 
+import type { CanonicalFactUnit } from './canonical-facts';
+
+export interface ResponseKeyNumber {
+  value: number;
+  unit: CanonicalFactUnit;
+  /** Canonical fact ID. The server verifies and normalizes this before display. */
+  provenance: string;
+}
+
 export interface AskLincResponse {
   summary: string;
-  key_numbers?: Record<string, number>;
+  /** Numeric form is accepted only for legacy stored responses; the Step 7 pipeline emits typed values. */
+  key_numbers?: Record<string, ResponseKeyNumber | number>;
   insights?: string[];
   suggested_actions?: string[];
 }
+
+/** Provider-agnostic contract used in prompts and by providers that support JSON Schema. */
+export const ASK_LINC_RESPONSE_JSON_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    summary: { type: 'string' },
+    key_numbers: {
+      type: 'object',
+      additionalProperties: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          value: { type: 'number' },
+          unit: { type: 'string', enum: ['usd', 'percent', 'months', 'years', 'age', 'count', 'ratio'] },
+          provenance: { type: 'string' },
+        },
+        required: ['value', 'unit', 'provenance'],
+      },
+    },
+    insights: { type: 'array', items: { type: 'string' } },
+    suggested_actions: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['summary', 'key_numbers', 'insights', 'suggested_actions'],
+} as const;
 
 /**
  * Extract the (possibly incomplete) decoded value of the top-level "summary"
@@ -207,7 +242,7 @@ function extractFieldsFromMalformedJson(str: string): AskLincResponse | null {
   const summaryMatch = jsonSection.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
   const summary = summaryMatch ? summaryMatch[1].replace(/\\"/g, '"') : '';
 
-  let key_numbers: Record<string, number> | undefined;
+  let key_numbers: Record<string, ResponseKeyNumber> | undefined;
   const keyNumbersMatch = jsonSection.match(/"key_numbers"\s*:\s*(\{[^}]*\})/);
   if (keyNumbersMatch) {
     try {
@@ -216,7 +251,9 @@ function extractFieldsFromMalformedJson(str: string): AskLincResponse | null {
         key_numbers = {};
         for (const [k, v] of Object.entries(parsed)) {
           const num = typeof v === 'number' ? v : parseFloat(String(v));
-          if (!Number.isNaN(num)) key_numbers[k] = num;
+          if (!Number.isNaN(num)) {
+            key_numbers[k] = { value: num, unit: inferKeyNumberUnit(k), provenance: '' };
+          }
         }
       }
     } catch {
@@ -267,11 +304,21 @@ function tryParseJson(str: string): AskLincResponse | null {
 
 function normalizeResponse(obj: Record<string, unknown>): AskLincResponse {
   const summary = typeof obj.summary === 'string' ? obj.summary : String(obj.summary ?? '');
-  const key_numbers: Record<string, number> = {};
+  const key_numbers: Record<string, ResponseKeyNumber> = {};
   if (obj.key_numbers && typeof obj.key_numbers === 'object' && !Array.isArray(obj.key_numbers)) {
     for (const [k, v] of Object.entries(obj.key_numbers)) {
-      const num = typeof v === 'number' ? v : parseFloat(String(v));
-      if (Number.isFinite(num)) key_numbers[k] = num;
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        const raw = v as Record<string, unknown>;
+        const value = typeof raw.value === 'number' ? raw.value : Number.parseFloat(String(raw.value));
+        const unit = isCanonicalFactUnit(raw.unit) ? raw.unit : inferKeyNumberUnit(k);
+        const provenance = typeof raw.provenance === 'string' ? raw.provenance : '';
+        if (Number.isFinite(value)) key_numbers[k] = { value, unit, provenance };
+      } else {
+        const value = typeof v === 'number' ? v : Number.parseFloat(String(v));
+        if (Number.isFinite(value)) {
+          key_numbers[k] = { value, unit: inferKeyNumberUnit(k), provenance: '' };
+        }
+      }
     }
   }
   const insights = Array.isArray(obj.insights)
@@ -290,13 +337,25 @@ function normalizeResponse(obj: Record<string, unknown>): AskLincResponse {
 }
 
 function isPercentageKey(keyLower: string): boolean {
-  return (
-    keyLower.includes('percent') ||
-    keyLower.includes('pct') ||
-    keyLower.includes('rate') ||
-    keyLower.includes('allocation') ||
-    keyLower.includes('apy')
-  );
+  const tokens = keyLower.split(/[^a-z0-9]+/).filter(Boolean);
+  return tokens.some((token) => ['percent', 'pct', 'rate', 'allocation', 'apy'].includes(token));
+}
+
+function isCanonicalFactUnit(value: unknown): value is CanonicalFactUnit {
+  return value === 'usd' || value === 'percent' || value === 'years' ||
+    value === 'months' || value === 'age' || value === 'count' || value === 'ratio';
+}
+
+export function inferKeyNumberUnit(key: string): CanonicalFactUnit {
+  const keyLower = key.toLowerCase();
+  const tokens = keyLower.split(/[^a-z0-9]+/).filter(Boolean);
+  if (isPercentageKey(keyLower)) return 'percent';
+  if (tokens.some((token) => token === 'month' || token === 'months')) return 'months';
+  if (tokens.some((token) => token === 'year' || token === 'years')) return 'years';
+  if (tokens.includes('age')) return 'age';
+  if (tokens.includes('count')) return 'count';
+  if (tokens.includes('ratio')) return 'ratio';
+  return 'usd';
 }
 
 /** Format a numeric value as a USD amount rounded to the nearest dollar. */
@@ -320,12 +379,13 @@ function formatDollars(value: number): string {
  * Percentages are expected in whole-number form (e.g. 4.15 for 4.15%). Values
  * are displayed exactly; grounding validation handles implausible model output.
  */
-export function formatKeyNumberValue(key: string, value: number): string {
-  const keyLower = key.toLowerCase();
-  if (isPercentageKey(keyLower)) {
+export function formatKeyNumberValue(key: string, metric: number | ResponseKeyNumber): string {
+  const value = typeof metric === 'number' ? metric : metric.value;
+  const unit = typeof metric === 'number' ? inferKeyNumberUnit(key) : metric.unit;
+  if (unit === 'percent') {
     return `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
   }
-  if (keyLower.includes('months') || keyLower.includes('years')) {
+  if (unit === 'months' || unit === 'years' || unit === 'age' || unit === 'count' || unit === 'ratio') {
     return value.toLocaleString();
   }
   // Remaining keys (including "loss", "surplus", "buffer", "dollars") are dollar amounts.
@@ -342,7 +402,7 @@ export function toDisplayText(response: AskLincResponse): string {
     parts.push('\n\n**Key Numbers:**');
     for (const [k, v] of Object.entries(response.key_numbers)) {
       const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-      const formatted = typeof v === 'number' ? formatKeyNumberValue(k, v) : String(v);
+      const formatted = formatKeyNumberValue(k, v);
       parts.push(`- ${label}: ${formatted}`);
     }
   }

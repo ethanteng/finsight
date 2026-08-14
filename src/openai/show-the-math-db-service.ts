@@ -4,44 +4,24 @@
  */
 
 import { getPrismaClient } from '../prisma-client';
-import type { FinancialContextSnapshot } from './types';
-import type { ShowTheMathDatabaseData } from './show-the-math-types';
+import type { EvidenceManifest, ShowTheMathDatabaseData, ShowTheMathData } from './show-the-math-types';
+import { createHash } from 'crypto';
 
-function extractTickersFromSnapshot(snapshot: FinancialContextSnapshot): string[] {
-  const tickers = new Set<string>();
-
-  // From investments.holdings
-  const holdings = snapshot.investments?.holdings || [];
-  for (const h of holdings) {
-    const ticker = (h as { ticker_symbol?: string }).ticker_symbol?.toUpperCase();
-    if (ticker && ticker.length > 0 && ticker.length <= 10 && ticker !== 'CASH') {
-      tickers.add(ticker);
-    }
-  }
-
-  // From investments.securities
-  const securities = snapshot.investments?.securities || [];
-  for (const s of securities) {
-    const ticker = (s as { ticker_symbol?: string }).ticker_symbol?.toUpperCase();
-    if (ticker && ticker.length > 0 && ticker.length <= 10 && ticker !== 'CASH') {
-      tickers.add(ticker);
-    }
-  }
-
-  return Array.from(tickers);
+function digest(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
 }
 
 export async function fetchShowTheMathDBData(
   userId: string | undefined,
-  snapshot: FinancialContextSnapshot
+  manifest: EvidenceManifest
 ): Promise<ShowTheMathDatabaseData> {
   const result: ShowTheMathDatabaseData = {
-    analysis_context_snapshot: JSON.parse(JSON.stringify(snapshot))
+    canonical_facts: manifest.facts,
   };
 
-  const tickers = extractTickersFromSnapshot(snapshot);
-  const needsUserRecords = Boolean(userId && (snapshot.retirementAnalysis || tickers.length > 0));
-  const needsMarketRecords = Boolean(snapshot.contextSelection?.marketContextRequested);
+  const tickers = manifest.evidenceRefs.tickers;
+  const needsUserRecords = Boolean(userId && (manifest.evidenceRefs.retirementAnalysis || tickers.length > 0));
+  const needsMarketRecords = manifest.evidenceRefs.marketContext;
   if (!needsUserRecords && !needsMarketRecords) return result;
 
   const prisma = getPrismaClient();
@@ -50,10 +30,13 @@ export async function fetchShowTheMathDBData(
 
   // User-scoped tables (skip for demo)
   if (userId) {
-    if (snapshot.retirementAnalysis) {
+    if (manifest.evidenceRefs.retirementAnalysis) {
       try {
         const retirementAnalyses = await prisma.retirementAnalysis.findMany({
-          where: { userId },
+          where: {
+            userId,
+            ...(manifest.evidenceRefs.retirementAnalysisId && { id: manifest.evidenceRefs.retirementAnalysisId }),
+          },
           orderBy: { computedAt: 'desc' },
           take: 3
         });
@@ -92,12 +75,16 @@ export async function fetchShowTheMathDBData(
   }
 
   // Market-news records are relevant only when market context was part of the prompt.
-  if (snapshot.contextSelection?.marketContextRequested) {
+  if (manifest.evidenceRefs.marketContext) {
     try {
       const activeContext = await prisma.marketNewsContext.findFirst({
         where: { isActive: true }
       });
-      if (activeContext) {
+      const matchesActive = activeContext && (
+        !manifest.evidenceRefs.marketContextDigest ||
+        digest(activeContext.contextText) === manifest.evidenceRefs.marketContextDigest
+      );
+      if (matchesActive && activeContext) {
         result.market_news_context = JSON.parse(JSON.stringify(activeContext));
         const history = await prisma.marketNewsHistory.findMany({
           where: { contextId: activeContext.id },
@@ -105,6 +92,14 @@ export async function fetchShowTheMathDBData(
           take: 10
         });
         result.market_news_history = history.map((h) => JSON.parse(JSON.stringify(h)));
+      } else if (activeContext && manifest.evidenceRefs.marketContextDigest) {
+        const history = await prisma.marketNewsHistory.findMany({
+          where: { contextId: activeContext.id },
+          orderBy: { createdAt: 'desc' },
+          take: 25,
+        });
+        const matchingHistory = history.find((record) => digest(record.contextText) === manifest.evidenceRefs.marketContextDigest);
+        if (matchingHistory) result.market_news_history = [JSON.parse(JSON.stringify(matchingHistory))];
       }
     } catch (err) {
       console.warn('Show the math: failed to fetch market news data:', err);
@@ -112,4 +107,30 @@ export async function fetchShowTheMathDBData(
   }
 
   return result;
+}
+
+export function isEvidenceManifestData(value: unknown): value is ShowTheMathData {
+  if (!value || typeof value !== 'object') return false;
+  const manifest = (value as { evidenceManifest?: unknown }).evidenceManifest;
+  if (!manifest || typeof manifest !== 'object') return false;
+  const candidate = manifest as {
+    version?: unknown;
+    facts?: unknown;
+    evidenceRefs?: { tickers?: unknown; retirementAnalysis?: unknown; marketContext?: unknown };
+  };
+  return candidate.version === 1 &&
+    Array.isArray(candidate.facts) &&
+    Array.isArray(candidate.evidenceRefs?.tickers) &&
+    typeof candidate.evidenceRefs?.retirementAnalysis === 'boolean' &&
+    typeof candidate.evidenceRefs?.marketContext === 'boolean';
+}
+
+/** Expand compact persisted evidence only when the user opens Show the Math. */
+export async function loadShowTheMathEvidence(
+  stored: unknown,
+  userId?: string
+): Promise<unknown> {
+  if (!isEvidenceManifestData(stored)) return stored;
+  const databaseData = await fetchShowTheMathDBData(userId, stored.evidenceManifest);
+  return { ...stored, databaseData };
 }

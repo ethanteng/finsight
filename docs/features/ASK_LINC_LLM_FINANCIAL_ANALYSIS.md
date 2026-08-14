@@ -1,6 +1,6 @@
 # Ask Linc LLM Financial Analysis Layer
 
-This document describes the **LLM-driven financial reasoning pipeline** for Ask Linc—the analysis layer that orchestrates existing systems (financial snapshot, user profile, market summary, RAG) and performs financial reasoning using Claude Sonnet.
+This document describes Ask Linc's canonical-facts analysis pipeline. Deterministic application code owns financial values and arithmetic; the language model explains those facts and helps the user interpret them.
 
 ---
 
@@ -8,8 +8,8 @@ This document describes the **LLM-driven financial reasoning pipeline** for Ask 
 
 Ask Linc behaves like an **AI financial analyst**, not a generic chatbot. The system prioritizes:
 
-- **Transparency** — Preserve the exact analysis context and model calls for Show the Math
-- **Explainable calculations** — Include concise formulas when new arithmetic materially helps
+- **Transparency** — Persist compact fact provenance and calculation manifests for Show the Math
+- **Explainable calculations** — Compute authoritative arithmetic locally and give the model the result plus formula provenance
 - **Grounded financial reasoning** — No invented data; clearly state assumptions
 - **Clear guidance** — Practical, actionable insights for the user
 - **Low latency** — Retrieve and validate only what the question needs
@@ -26,6 +26,8 @@ flowchart LR
     C --> E[Concise structured prompt]
     D --> E
     E --> F[Claude]
+    F -->|provider unavailable; same prompt| K[OpenAI fallback]
+    K --> G
     F --> G[Deterministic grounding]
     G -->|valid, simple question| H[Structured response]
     G -->|valid, complex question| I[Optional Gemini review]
@@ -43,11 +45,11 @@ flowchart LR
 2. **Classify question needs** → decide whether account rows, transaction rows, holdings, market context, search, retirement analysis, or secondary validation are relevant
 3. **Retrieve a canonical projection** → `SummaryCacheService.getSnapshotForAnalysis()` always loads aggregate truth and opts into large JSON columns only as needed
 4. **Retrieve optional context** → market and search providers run only for explicit external/current-market questions
-5. **Build a compact prompt** → persisted financial totals and cash-flow averages are authoritative; unused sections and older conversation turns are omitted
-6. **LLM analysis** → Claude returns one structured JSON object
-7. **Ground deterministically** → known `key_numbers` must match canonical snapshot values and percentages retain their true magnitude
+5. **Build canonical facts and a compact context pack** → application code calculates cash flow, savings rate, and requested transaction aggregates; unrelated sections are omitted
+6. **LLM analysis** → Claude returns one structured JSON object; if Claude is unavailable, OpenAI receives the exact already-built prompt without gathering context again
+7. **Ground deterministically** → every key number must copy a canonical fact's value, unit, and provenance; every money or percentage in prose must match a fact
 8. **Validate selectively** → Gemini is reserved for projections, retirement, comparisons, recommendations, and other complex calculations
-9. **Retry once when needed** → validation issues are fed back to Claude; any still-ungrounded key numbers are omitted
+9. **Retry once when needed** → validation issues are fed back to the active provider using the same context pack; a still-ungrounded answer is replaced with a safe response
 10. **Structured response** → JSON with `summary`, `key_numbers`, `insights`, `suggested_actions`
 
 ---
@@ -90,7 +92,8 @@ The pipeline reads the same persisted canonical revision used by the application
 - **Overview totals** come directly from `financialSummarySnapshot.financialOverview`; the LLM must not recompute them from detail rows.
 - **Monthly income and expenses** come from persisted `transactionsSummary.byMonth`, using the same canonical transaction classifications and exclusions as the app. Manual overrides replace only the displayed monthly average, not the persisted totals.
 - **Account balances** use the revision-aligned display balance persisted in snapshot metadata, falling back to current balance before available balance.
-- **Show the Math** captures the exact projected context used for the response, so a later snapshot refresh cannot make the displayed evidence disagree with the model input.
+- **Show the Math** persists the exact canonical facts, snapshot timestamp, formulas, provider metrics, and evidence references. It does not persist full prompts, raw model output, or the entire snapshot. Referenced database evidence is loaded only when the user opens the view.
+- **Performance evidence** records context-gather time, prompt-build time, time to the first final-answer token, provider duration, and prompt character count. The request span receives the same key latency and prompt-size metrics for production comparison.
 
 ---
 
@@ -102,9 +105,10 @@ Rules:
 
 - Do not invent financial data that is not present
 - Clearly state assumptions
-- Use authoritative totals exactly and show a concise formula only for new arithmetic
+- Copy canonical facts exactly; do not perform authoritative arithmetic
 - Be conservative with estimates
-- Use whole-number percentage values in output (`4.15` means `4.15%`)
+- Emit explicit value, unit, and canonical provenance for every key number
+- Mention only money and percentage values present in the fact pack
 - Include only `(EXPENSE)` and `(FEE)` records in spending detail
 
 ---
@@ -115,14 +119,22 @@ The API returns:
 
 ```json
 {
-  "summary": "Based on your current savings and spending, you are not yet on track to retire at age 62.",
+  "summary": "Based on the retirement analysis in your current snapshot, your planned withdrawal rate is above the range supported by the historical stress test.",
   "key_numbers": {
-    "retirement_assets": 780000,
-    "estimated_safe_withdrawal": 31200
+    "portfolio_value": {
+      "value": 780000,
+      "unit": "usd",
+      "provenance": "portfolio_value"
+    },
+    "withdrawal_rate": {
+      "value": 4.0,
+      "unit": "percent",
+      "provenance": "withdrawal_rate"
+    }
   },
   "insights": [
-    "Your retirement savings would support roughly $31K annually using the 4% rule.",
-    "Your current spending is significantly higher than that level."
+    "The result is most sensitive to planned withdrawals and the portfolio mix.",
+    "The historical stress test is evidence, not a forecast."
   ],
   "suggested_actions": [
     "increase retirement contributions",
@@ -133,7 +145,7 @@ The API returns:
 ```
 
 - **summary** — One-paragraph answer for the user
-- **key_numbers** — Important metrics (optional)
+- **key_numbers** — Important canonical metrics with explicit `value`, `unit`, and `provenance` (optional)
 - **insights** — Supporting observations (optional)
 - **suggested_actions** — Actionable next steps (optional)
 
@@ -146,13 +158,17 @@ The API returns:
 | `src/services/canonical-financial-snapshot.ts` | Produces canonical financial metrics and source-quality metadata |
 | `src/openai/context-service.ts` | Loads persisted canonical values and assembles LLM context |
 | `src/openai/question-analysis.ts` | Selects question-specific data and validation needs |
+| `src/openai/canonical-facts.ts` | Builds and locally validates question-specific numeric facts and calculations |
+| `src/openai/context-pack.ts` | Produces the compact detail payload selected for the question |
 | `src/openai/cash-flow-context.ts` | Builds monthly income/expense context from the canonical summary |
 | `src/openai/retirement-inputs.ts` | Resolves explicit retirement assumptions and reports missing inputs |
 | `src/openai/financial-reasoning-prompt.ts` | Structured reasoning prompt template |
 | `src/openai/structured-response.ts` | Response schema and JSON parser |
-| `src/openai/response-grounding.ts` | Deterministic canonical-number validation |
+| `src/openai/response-facts.ts` | Normalizes and validates response values, units, provenance, and prose claims |
 | `src/openai/claude-client.ts` | Claude Sonnet integration |
+| `src/openai/openai-fallback-client.ts` | OpenAI provider fallback using the already-built prompt |
 | `src/openai/response-validator.ts` | Optional Gemini validation |
+| `src/openai/show-the-math-db-service.ts` | Lazily expands compact evidence manifests |
 | `src/openai/analysis-pipeline.ts` | Pipeline orchestrator |
 
 ---
@@ -165,17 +181,19 @@ The API returns:
 |----------|----------|---------|
 | `USE_ASK_LINC_PIPELINE` | No | Set to `true` to enable the Claude pipeline (default: `false`) |
 | `ANTHROPIC_API_KEY` | Yes (when enabled) | Claude Sonnet API key |
+| `OPENAI_API_KEY` | Yes for provider fallback | OpenAI fallback API key |
+| `OPENAI_FALLBACK_MODEL` | No | Override OpenAI fallback model (default: `gpt-4o`) |
 | `ENABLE_RESPONSE_VALIDATION` | No | Set to `true` for Gemini validation (default: `false`) |
 | `GOOGLE_AI_API_KEY` or `GEMINI_API_KEY` | No | For Gemini validation when enabled |
 | `GEMINI_VALIDATION_MODEL` | No | Override Gemini model (default: `gemini-3-flash-preview`) |
-| `ASK_LINC_MAX_OUTPUT_TOKENS` | No | Maximum Claude output tokens (default: `8192`) |
+| `ASK_LINC_MAX_OUTPUT_TOKENS` | No | Maximum primary and fallback output tokens (default: `8192`) |
 
 ### Feature Flag
 
 When `USE_ASK_LINC_PIPELINE=true`:
 
 - `/ask/display-real` calls `runAskLincAnalysis` instead of `askOpenAIWithEnhancedContext`
-- On pipeline failure, falls back to OpenAI
+- If Claude is unavailable, the pipeline calls OpenAI with the same prepared prompt and does not reload the snapshot, RAG, or market context
 - Response includes `structuredResponse` when available
 
 ---
