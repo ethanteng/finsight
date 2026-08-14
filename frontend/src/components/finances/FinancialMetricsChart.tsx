@@ -19,6 +19,7 @@ import {
   BarController,
 } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
+import { historyPointDisplayDate } from '../../lib/canonical-financial-history';
 
 // Register Chart.js components
 // ChartJS.register is idempotent and safe to call multiple times
@@ -39,6 +40,8 @@ ChartJS.register(
 
 export interface HistoricalSnapshot {
   computedAt: string;
+  observationDate?: string | null;
+  timeZone?: string | null;
   netWorth: number;
   totalCash: number;
   totalInvestments: number;
@@ -87,7 +90,7 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
     }
     
     return data.filter(item => {
-      const itemDate = new Date(item.computedAt);
+      const itemDate = historyPointDisplayDate(item);
       return itemDate >= cutoff;
     });
   }, [data, timeRange]);
@@ -96,14 +99,14 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
   const chartData = useMemo(() => {
     if (!filteredData || filteredData.length === 0) return null;
 
-    // Sort data by date (oldest first)
-    const sortedData = [...filteredData].sort((a, b) => 
-      new Date(a.computedAt).getTime() - new Date(b.computedAt).getTime()
+    // Sort by calendar observation date so local-day semantics stay stable.
+    const sortedData = [...filteredData].sort(
+      (a, b) => historyPointDisplayDate(a).getTime() - historyPointDisplayDate(b).getTime()
     );
 
     // Prepare data points with dates normalized to start of day
     const dataPoints = sortedData.map(item => {
-      const date = new Date(item.computedAt);
+      const date = historyPointDisplayDate(item);
       // Normalize to start of day (midnight) to group by day
       date.setHours(0, 0, 0, 0);
       return {

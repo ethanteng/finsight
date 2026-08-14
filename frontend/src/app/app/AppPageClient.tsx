@@ -9,6 +9,7 @@ import FinancialOverview from '../../components/FinancialOverview';
 import MarketNewsModal from '../../components/MarketNewsModal';
 import { resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
 import { identifyUser, resetUserIdentity } from '../../lib/heycatch';
+import { syncStoredUserTimeZoneFromAuthUser } from '../../lib/browser-time-zone';
 
 interface PromptHistory { id: string; question: string; answer: string; timestamp: number }
 interface SubscriptionStatus { status: string; tier: string; message: string; isActive: boolean; accessLevel: 'full' | 'none'; upgradeRequired: boolean; expiresAt?: string }
@@ -85,6 +86,7 @@ export default function AppPageClient() {
         const data = await res.json();
         setIsAuthenticated(true);
         setUserEmail(data.user.email);
+        syncStoredUserTimeZoneFromAuthUser(data.user);
         identifyUser(data.user);
         await checkSubscriptionStatus(token);
       } catch (error) {

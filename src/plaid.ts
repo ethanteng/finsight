@@ -2651,7 +2651,10 @@ export const setupPlaidRoutes = (app: any) => {
           if (req.user?.id) {
             const { SummaryCacheService } = await import('./services/summary-cache-service');
             // Fast path to avoid long request times; cron will run full categorization
-            snapshot = await SummaryCacheService.computeForUser(req.user.id, { categorize: false });
+            snapshot = await SummaryCacheService.computeForUser(req.user.id, {
+              categorize: false,
+              history: { kind: 'material', reason: 'account-sync' },
+            });
           }
         } catch (e) {
           console.warn('sync_transactions: snapshot refresh failed (non-fatal):', e);

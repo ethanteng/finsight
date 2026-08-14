@@ -39,7 +39,9 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
     
     // Trigger snapshot refresh
     const { SummaryCacheService } = await import('../services/summary-cache-service');
-    await SummaryCacheService.computeForUser(userId).catch(err => {
+    await SummaryCacheService.computeForUser(userId, {
+      history: { kind: 'material', reason: 'manual-account-created' },
+    }).catch(err => {
       console.error('Failed to refresh snapshot after creating manual account:', err);
     });
 
@@ -130,7 +132,9 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
     
     // Trigger snapshot refresh
     const { SummaryCacheService } = await import('../services/summary-cache-service');
-    await SummaryCacheService.computeForUser(userId).catch(err => {
+    await SummaryCacheService.computeForUser(userId, {
+      history: { kind: 'material', reason: 'manual-account-updated' },
+    }).catch(err => {
       console.error('Failed to refresh snapshot after updating manual account:', err);
     });
 
@@ -211,7 +215,9 @@ router.delete('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
     
     // Trigger snapshot refresh
     const { SummaryCacheService } = await import('../services/summary-cache-service');
-    await SummaryCacheService.computeForUser(userId).catch(err => {
+    await SummaryCacheService.computeForUser(userId, {
+      history: { kind: 'material', reason: 'manual-account-deleted' },
+    }).catch(err => {
       console.error('Failed to refresh snapshot after deleting manual account:', err);
     });
 

@@ -4,7 +4,11 @@ import { BalanceService } from './balance-service';
 import { FinancialDataService } from './financial-data-service';
 import { buildTransactionSummary } from './transaction-summary-service';
 import { buildCanonicalSnapshotCore } from './canonical-financial-snapshot';
-import { FinancialHistoryService, type CanonicalHistoryInput } from './financial-history-service';
+import {
+  FinancialHistoryService,
+  type CanonicalHistoryInput,
+  type HistoryWriteIntent,
+} from './financial-history-service';
 
 // Lazy Prisma to avoid multiple instances during different runtimes
 let prisma: PrismaClient | null = null;
@@ -14,6 +18,11 @@ const getPrisma = (): PrismaClient => {
 };
 
 type ViewMode = 'summary' | 'full';
+
+export interface SummaryComputeOptions {
+  categorize?: boolean;
+  history?: HistoryWriteIntent;
+}
 
 export class SummaryCacheService {
   static getEnvWindows() {
@@ -28,7 +37,7 @@ export class SummaryCacheService {
    * Applies env-driven windows and balance refresh throttling.
    * opts.categorize: when true, runs heavier categorization; when false, skips for faster completion.
    */
-  static async computeForUser(userId: string, opts: { categorize?: boolean } = {}) {
+  static async computeForUser(userId: string, opts: SummaryComputeOptions = {}) {
     const prisma = getPrisma();
     const { txDays, invYears, balanceHours } = this.getEnvWindows();
 
@@ -142,7 +151,11 @@ export class SummaryCacheService {
         reportingCurrency: canonical.reportingCurrency,
         financialOverview: canonical.financialOverview,
       };
-      await FinancialHistoryService.saveHistoricalSnapshot(userId, historySnapshot);
+      await FinancialHistoryService.saveHistoricalSnapshot(
+        userId,
+        historySnapshot,
+        opts.history || { kind: 'daily', reason: 'automatic-refresh' }
+      );
     } catch (error) {
       // Log but don't fail - historical snapshot is non-critical
       console.warn(`Failed to save historical snapshot for user ${userId}:`, error);

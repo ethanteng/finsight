@@ -18,6 +18,7 @@ model User {
   lastLoginAt            DateTime?
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
+  timeZone               String                  @default("UTC")
   stripeCustomerId       String?
   subscriptionStatus     String                  @default("inactive")
   monthlyIncomeOverride  Float?
@@ -475,9 +476,15 @@ model FinancialSummaryHistory {
   homeValue        Float?
   totalAssets      Float?
   totalLiabilities Float?
+  observationDate  DateTime?
+  observationKind  String   @default("daily")
+  observationReason String?
+  timeZone         String   @default("UTC")
+  dailyKey         String?  @unique
   createdAt        DateTime @default(now())
 
   @@index([userId, computedAt])
+  @@index([userId, observationKind, observationDate])
   @@map("financial_summary_history")
 }
 

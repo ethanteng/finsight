@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowRight, Brain, Check, CircleAlert, LoaderCircle, LockKeyhole, ShieldCheck } from 'lucide-react';
 import SiteFooter from './SiteFooter';
+import { getBrowserTimeZone, setStoredUserTimeZone } from '@/lib/browser-time-zone';
 
 interface SubscriptionContext {
   subscription: string;
@@ -158,7 +159,7 @@ function LoginFormContent() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, timeZone: getBrowserTimeZone() }),
       });
 
       const data = await res.json();
@@ -194,6 +195,9 @@ function LoginFormContent() {
 
         localStorage.setItem('auth_token', data.token);
         if (data.user) {
+          if (data.user.timeZone) {
+            setStoredUserTimeZone(data.user.timeZone);
+          }
           identifyUser(data.user);
         }
         router.push('/app');
@@ -289,4 +293,3 @@ export default function LoginForm() {
     </Suspense>
   );
 }
-
