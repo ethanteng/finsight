@@ -153,6 +153,13 @@ router.put('/transactions/:transactionId/transaction-type', requireAuth, async (
       },
     });
 
+    const { cacheService } = await import('../data/cache');
+    await cacheService.invalidate(`financial-data:${userId}`);
+    const { SummaryCacheService } = await import('../services/summary-cache-service');
+    void SummaryCacheService.computeForUser(userId, { categorize: false }).catch((err) => {
+      console.warn('Manual transaction-type correction: snapshot refresh failed (non-fatal):', err);
+    });
+
     res.json({
       id: updatedTransaction.id,
       name: updatedTransaction.name,
