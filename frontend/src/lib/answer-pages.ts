@@ -118,7 +118,7 @@ export const canIRetireWithTwoMillion: AnswerPageData = {
   readTime: "10 min read",
   breadcrumbs: [
     { label: "Home", href: "/" },
-    { label: "Retirement", href: "/use-cases/retirement" },
+    { label: "Retirement answers", href: "/retirement-answers" },
     { label: "Can I retire with $2 million?" },
   ],
   directAnswer:
@@ -223,7 +223,7 @@ export const canIRetireWithThreeMillion: AnswerPageData = {
   readTime: "10 min read",
   breadcrumbs: [
     { label: "Home", href: "/" },
-    { label: "Retirement", href: "/use-cases/retirement" },
+    { label: "Retirement answers", href: "/retirement-answers" },
     { label: "Can I retire with $3 million?" },
   ],
   directAnswer:
@@ -332,7 +332,7 @@ export const canIRetireWithOneMillion: AnswerPageData = {
   readTime: "9 min read",
   breadcrumbs: [
     { label: "Home", href: "/" },
-    { label: "Retirement", href: "/use-cases/retirement" },
+    { label: "Retirement answers", href: "/retirement-answers" },
     { label: "Can I retire with $1 million?" },
   ],
   directAnswer:
@@ -436,7 +436,7 @@ export const canIRetireAt55: AnswerPageData = {
   readTime: "11 min read",
   breadcrumbs: [
     { label: "Home", href: "/" },
-    { label: "Retirement", href: "/use-cases/retirement" },
+    { label: "Retirement answers", href: "/retirement-answers" },
     { label: "Can I retire at 55?" },
   ],
   directAnswer:
@@ -576,7 +576,7 @@ export const canIRetireAt60: AnswerPageData = {
   readTime: "11 min read",
   breadcrumbs: [
     { label: "Home", href: "/" },
-    { label: "Retirement", href: "/use-cases/retirement" },
+    { label: "Retirement answers", href: "/retirement-answers" },
     { label: "Can I retire at 60?" },
   ],
   directAnswer:

@@ -10,7 +10,7 @@ describe("evergreen answer page", () => {
       "Can I retire with $2 million?Start with what it needs to support.",
     );
     expect(screen.getByRole("navigation", { name: "Breadcrumb" })).toHaveTextContent(
-      "Home/Retirement/Can I retire with $2 million?",
+      "Home/Retirement answers/Can I retire with $2 million?",
     );
 
     const withdrawalTable = screen.getByRole("table", {
@@ -24,9 +24,9 @@ describe("evergreen answer page", () => {
       "href",
       "https://www.ssa.gov/prepare/get-benefits-estimate",
     );
-    expect(screen.getByRole("link", { name: "Retire With $2M" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Retirement Answers" })).toHaveAttribute(
       "href",
-      "/can-i-retire-with-2-million",
+      "/retirement-answers",
     );
   });
 
@@ -129,9 +129,9 @@ describe("evergreen answer page", () => {
       "href",
       "https://www.irs.gov/taxtopics/tc558",
     );
-    expect(screen.getByRole("link", { name: "Retire at 55" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Retirement Answers" })).toHaveAttribute(
       "href",
-      "/can-i-retire-at-55",
+      "/retirement-answers",
     );
 
     const schemas = buildAnswerPageSchemas(canIRetireAt55);
@@ -163,9 +163,9 @@ describe("evergreen answer page", () => {
       "href",
       "https://www.ssa.gov/benefits/retirement/planner/applying2.html",
     );
-    expect(screen.getByRole("link", { name: "Retire at 60" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Retirement Answers" })).toHaveAttribute(
       "href",
-      "/can-i-retire-at-60",
+      "/retirement-answers",
     );
 
     const schemas = buildAnswerPageSchemas(canIRetireAt60);
@@ -192,9 +192,9 @@ describe("evergreen answer page", () => {
       "href",
       "https://www.ssa.gov/benefits/medicare/medicare-premiums.html",
     );
-    expect(screen.getByRole("link", { name: "Retire With $3M" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Retirement Answers" })).toHaveAttribute(
       "href",
-      "/can-i-retire-with-3-million",
+      "/retirement-answers",
     );
 
     const schemas = buildAnswerPageSchemas(canIRetireWithThreeMillion);
