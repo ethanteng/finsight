@@ -2,7 +2,9 @@ import {
   calendarDateInTimeZone,
   clearStoredUserTimeZone,
   getEffectiveUserTimeZone,
+  getStoredUserTimeZone,
   observationDateForCalendarDate,
+  setStoredUserTimeZone,
   USER_TIME_ZONE_KEY,
 } from '../browser-time-zone';
 
@@ -19,7 +21,8 @@ describe('browser time-zone helpers', () => {
   });
 
   it('persists the authenticated user time zone for chart deduplication', () => {
-    localStorage.setItem(USER_TIME_ZONE_KEY, 'America/New_York');
+    setStoredUserTimeZone(' America/New_York ');
+    expect(getStoredUserTimeZone()).toBe('America/New_York');
     expect(getEffectiveUserTimeZone()).toBe('America/New_York');
     clearStoredUserTimeZone();
     expect(localStorage.getItem(USER_TIME_ZONE_KEY)).toBeNull();

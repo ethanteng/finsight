@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import LoginForm from '@/components/LoginForm';
+import { USER_TIME_ZONE_KEY } from '@/lib/browser-time-zone';
 
 const push = jest.fn();
 
@@ -27,7 +28,13 @@ describe('LoginForm', () => {
 
   it('preserves authentication and subscription verification before entering the app', async () => {
     global.fetch = jest.fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ token: 'secure-token', user: { email: 'member@example.com' } }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          token: 'secure-token',
+          user: { email: 'member@example.com', timeZone: 'America/New_York' },
+        }),
+      })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'active', accessLevel: 'full' }) });
 
     render(<LoginForm />);
@@ -37,6 +44,7 @@ describe('LoginForm', () => {
 
     await waitFor(() => expect(push).toHaveBeenCalledWith('/app'));
     expect(localStorage.getItem('auth_token')).toBe('secure-token');
+    expect(localStorage.getItem(USER_TIME_ZONE_KEY)).toBe('America/New_York');
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 });
