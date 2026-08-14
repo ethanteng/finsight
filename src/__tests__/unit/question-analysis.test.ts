@@ -52,4 +52,11 @@ describe('question-aware LLM context routing', () => {
       needsSecondaryValidation: true,
     });
   });
+
+  it('does not load holdings for general stock-market questions', () => {
+    expect(analyzeQuestionNeeds('How is the stock market doing today?')).toMatchObject({
+      needsMarketContext: true,
+      needsInvestments: false,
+    });
+  });
 });

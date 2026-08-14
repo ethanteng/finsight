@@ -25,15 +25,19 @@ export function analyzeQuestionNeeds(question: string): QuestionNeeds {
     qLower.includes('real estate') ||
     qLower.includes('mortgage');
 
+  const mentionsStockMarket = /\b(stock|bond|treasury) market\b/.test(qLower);
+
   const needsInvestments =
-    qLower.includes('portfolio') ||
-    qLower.includes('holding') ||
-    qLower.includes('investment') ||
-    qLower.includes('stock') ||
-    qLower.includes('securities') ||
-    qLower.includes('asset allocation') ||
-    qLower.includes('diversif') ||
-    /\b(401k|403b|ira|brokerage)\b/.test(qLower);
+    !mentionsStockMarket && (
+      qLower.includes('portfolio') ||
+      qLower.includes('holding') ||
+      qLower.includes('investment') ||
+      qLower.includes('stock') ||
+      qLower.includes('securities') ||
+      qLower.includes('asset allocation') ||
+      qLower.includes('diversif') ||
+      /\b(401k|403b|ira|brokerage)\b/.test(qLower)
+    );
 
   const needsRetirement =
     qLower.includes('retirement') ||
