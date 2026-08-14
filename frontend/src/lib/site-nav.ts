@@ -19,4 +19,5 @@ export const COMPARE_LINKS = [
   { href: '/vs/origin', label: 'vs Origin' },
   { href: '/vs/portfoliopilot', label: 'vs PortfolioPilot' },
   { href: '/vs/monarch', label: 'vs Monarch' },
+  { href: '/vs/boldin', label: 'vs Boldin' },
 ];

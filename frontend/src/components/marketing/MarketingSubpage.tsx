@@ -43,6 +43,10 @@ const comparisonData = {
     eyebrow: "BIG-DECISION PLANNING VS MONEY TRACKING",
     fit: "Choose Monarch when shared budgeting and tracking are the priority. Choose Ask Linc when you need to turn your numbers into a decision.",
   },
+  boldin: {
+    eyebrow: "CONNECTED LIFE DECISIONS VS DETAILED RETIREMENT PLANNING",
+    fit: "Choose Boldin when you want to build and maintain a detailed retirement model. Choose Ask Linc when retirement is one part of a connected household decision.",
+  },
 } as const;
 
 const useCases = {
@@ -263,7 +267,7 @@ function CompareIndexPage() {
         <p className="section-kicker">COMPARE ASK LINC</p>
         <h1>Choose the tool built for <em>the job you need done.</em></h1>
         <p className="subhero-copy">
-          Ask Linc focuses on planning a specific life decision. See how that differs from broader money management, budgeting, and portfolio analytics.
+          Ask Linc focuses on planning a specific life decision. See how that differs from broader money management, budgeting, portfolio analytics, and detailed retirement planning.
         </p>
       </section>
       <section className="compare-index-grid shell" aria-label="Ask Linc comparisons">
@@ -291,7 +295,7 @@ function ComparisonPage({ product }: { product: keyof typeof comparisonData }) {
       <section className="subhero shell comparison-hero"><div><p className="section-kicker">{design.eyebrow}</p><h1>Ask Linc <em>vs {page.competitorName}</em></h1><p className="subhero-copy">{page.summary}</p><div className="hero-actions"><MarketingGetStartedButton className="button button-primary" /><Link className="text-link" href="/pricing">View free-trial pricing</Link></div></div><div className="versus-mark"><span className="brand-mark">L</span><b>VS</b><span>{page.competitorName.slice(0,2).toUpperCase()}</span></div></section>
       <section className="comparison-strip"><div className="shell"><span>ASK LINC</span><i>Different tools for different jobs</i><span>{page.competitorName.toUpperCase()}</span></div></section>
       <section className="page-section shell comparison-section"><div className="editorial-heading"><p className="section-kicker">THE SHORT VERSION</p><h2>Start with the job you need done.</h2></div><div className="comparison-table" role="table"><div className="comparison-row comparison-head" role="row"><span>DIMENSION</span><b>ASK LINC</b><b>{page.competitorName.toUpperCase()}</b></div>{page.rows.map(({ dimension, askLinc, competitor })=><div className="comparison-row" role="row" key={dimension}><span className="comparison-dimension" role="rowheader">{dimension}</span><div className="comparison-value" role="cell"><small>ASK LINC</small><b>{askLinc}</b></div><div className="comparison-value" role="cell"><small>{page.competitorName.toUpperCase()}</small><b>{competitor}</b></div></div>)}</div></section>
-      <section className="fit-section"><div className="shell"><p className="section-kicker">OUR HONEST TAKE</p><h2>{design.fit}</h2><p>Ask Linc does not replace a budget app, investment platform, or human professional. It helps you compare options and inspect the calculations behind them.</p></div></section>
+      <section className="fit-section"><div className="shell"><p className="section-kicker">OUR HONEST TAKE</p><h2>{design.fit}</h2><p>Ask Linc does not replace a budget app, investment platform, dedicated retirement-planning system, or human professional. It helps you compare options and inspect the calculations behind them.</p></div></section>
       <section className="page-section shell compact-faq comparison-faq"><div><p className="section-kicker">BEFORE YOU CHOOSE</p><h2>The questions people actually ask.</h2></div><div>{page.faqs.map((faq)=><details key={faq.question}><summary>{faq.question}<span>+</span></summary><p>{faq.answer}</p></details>)}</div></section>
       <section className="other-comparisons shell"><span>COMPARE ASK LINC WITH</span>{Object.keys(comparisonData).filter((key)=>key!==product).map((key)=>{ const other = getComparison(key); return other ? <Link href={`/vs/${key}`} key={key}>{other.competitorName} <b>→</b></Link> : null; })}</section>
       <PageCta title="See which experience answers your question." />
@@ -430,5 +434,6 @@ export default async function Subpage({ params }: RouteProps) {
   if (path === "vs/origin") return <ComparisonPage product="origin" />;
   if (path === "vs/portfoliopilot") return <ComparisonPage product="portfoliopilot" />;
   if (path === "vs/monarch") return <ComparisonPage product="monarch" />;
+  if (path === "vs/boldin") return <ComparisonPage product="boldin" />;
   return <StandardPage><section className="not-found shell"><span>404</span><h1>That page moved.</h1><Link className="button button-primary" href="/">Back to Ask Linc →</Link></section></StandardPage>;
 }

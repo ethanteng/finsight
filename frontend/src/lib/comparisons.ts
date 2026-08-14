@@ -142,6 +142,67 @@ export const COMPARISONS: ComparisonPage[] = [
       },
     ],
   },
+  {
+    slug: 'boldin',
+    competitorName: 'Boldin',
+    title: 'Ask Linc vs Boldin | Connected Decisions vs Retirement Planning',
+    description:
+      'Compare Ask Linc and Boldin for retirement planning, scenario modeling, pricing, AI guidance, and the financial job each product is built to do.',
+    headline: 'Ask Linc vs Boldin',
+    summary:
+      'Boldin is a comprehensive retirement-planning system with detailed scenario, tax, and withdrawal tools. Ask Linc starts with a plain-language question and connects retirement to cash, debt, housing, family costs, investments, and other decisions.',
+    rows: [
+      {
+        dimension: 'Price',
+        askLinc: '1 month free, then $9/month flat for full access. Cancel anytime.',
+        competitor:
+          'Boldin Basic is free. PlannerPlus is $144/year after a 14-day trial and unlocks its advanced planning features. Check Boldin for current pricing.',
+      },
+      {
+        dimension: 'Planning experience',
+        askLinc:
+          'Start with a plain-language question and get a recommendation, assumptions, and calculations across your connected household finances.',
+        competitor:
+          'Build and maintain a detailed retirement plan with extensive inputs, side-by-side scenarios, reports, and Monte Carlo analysis.',
+      },
+      {
+        dimension: 'Scope',
+        askLinc:
+          'Connect retirement to home buying, family costs, career changes, debt, cash flow, and portfolio decisions in one conversation.',
+        competitor:
+          'Specialized retirement planning with tools for taxes, Roth conversions, Social Security, healthcare, withdrawals, and future spending.',
+      },
+      {
+        dimension: 'AI and privacy',
+        askLinc:
+          'Read-only connections, sensitive labels replaced before AI analysis, and financial data not used for model training.',
+        competitor:
+          'Boldin says it is SOC 2 Type II compliant, encrypts data in transit and at rest, does not sell data, and does not use AI conversations to train public models.',
+      },
+    ],
+    faqs: [
+      {
+        question: 'Is Ask Linc a Boldin alternative?',
+        answer:
+          'It can be when you want retirement considered alongside another household decision. Boldin is the stronger fit when your priority is building and maintaining a highly detailed retirement model.',
+      },
+      {
+        question: 'Which is better for detailed retirement planning?',
+        answer:
+          'Boldin is purpose-built for deep retirement modeling, including scenario comparisons, taxes, withdrawals, and Monte Carlo analysis. Ask Linc is built for asking a connected financial question in plain language and inspecting the recommendation and math.',
+      },
+      {
+        question: 'Can I use Ask Linc and Boldin together?',
+        answer:
+          'Yes. You can use Boldin to maintain a detailed retirement plan and Ask Linc to reason through a specific decision that affects retirement and the rest of your household finances.',
+      },
+      {
+        question: 'How do Ask Linc and Boldin prices compare?',
+        answer:
+          'Ask Linc includes a free first month and then costs $9/month. Boldin offers a free Basic plan, while PlannerPlus is listed at $144/year after a 14-day trial. Check each product for current pricing and feature limits.',
+      },
+    ],
+  },
 ];
 
 export function getComparison(slug: string): ComparisonPage | undefined {
