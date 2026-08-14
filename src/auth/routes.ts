@@ -129,6 +129,7 @@ router.post('/register', async (req: Request, res: Response) => {
         id: true,
         email: true,
         tier: true,
+        timeZone: true,
         createdAt: true
       }
     });
@@ -301,6 +302,7 @@ router.post('/register', async (req: Request, res: Response) => {
         id: user.id,
         email: user.email,
         tier: user.tier,
+        timeZone: user.timeZone,
         createdAt: user.createdAt
       },
       token
@@ -330,6 +332,7 @@ router.post('/login', async (req: Request, res: Response) => {
 
     // Update last login
     const validTimeZone = isValidTimeZone(timeZone) ? timeZone.trim() : undefined;
+    const effectiveTimeZone = validTimeZone || normalizeTimeZone(user.timeZone);
     await prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date(), ...(validTimeZone ? { timeZone: validTimeZone } : {}) }
@@ -364,6 +367,7 @@ router.post('/login', async (req: Request, res: Response) => {
         id: user.id,
         email: user.email,
         tier: user.tier,
+        timeZone: effectiveTimeZone,
         createdAt: user.createdAt
       },
       token

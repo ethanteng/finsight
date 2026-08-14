@@ -1,0 +1,17 @@
+import {
+  calendarDateInTimeZone,
+  observationDateForCalendarDate,
+} from '../browser-time-zone';
+
+describe('browser time-zone helpers', () => {
+  it('derives the same user calendar day used by backend history keys', () => {
+    const instant = new Date('2026-08-15T06:30:00.000Z');
+
+    expect(calendarDateInTimeZone(instant, 'America/Los_Angeles')).toBe('2026-08-14');
+    expect(calendarDateInTimeZone(instant, 'Asia/Tokyo')).toBe('2026-08-15');
+  });
+
+  it('serializes a calendar date without shifting it', () => {
+    expect(observationDateForCalendarDate('2026-08-14')).toBe('2026-08-14T00:00:00.000Z');
+  });
+});

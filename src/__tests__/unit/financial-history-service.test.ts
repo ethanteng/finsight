@@ -4,7 +4,7 @@ const mockUserFindUnique = jest.fn();
 const mockFindUnique = jest.fn();
 const mockFindFirst = jest.fn();
 const mockFindMany = jest.fn();
-const mockUpsert = jest.fn();
+const mockUpdateMany = jest.fn();
 const mockCreate = jest.fn();
 
 jest.mock('@prisma/client', () => ({
@@ -14,7 +14,7 @@ jest.mock('@prisma/client', () => ({
       findUnique: mockFindUnique,
       findFirst: mockFindFirst,
       findMany: mockFindMany,
-      upsert: mockUpsert,
+      updateMany: mockUpdateMany,
       create: mockCreate,
     },
   })),
@@ -62,11 +62,11 @@ describe('FinancialHistoryService', () => {
     mockUserFindUnique.mockResolvedValue({ timeZone: 'America/Los_Angeles' } as never);
     mockFindUnique.mockResolvedValue(null as never);
     mockFindFirst.mockResolvedValue(null as never);
-    mockUpsert.mockResolvedValue({ id: 'daily-1' } as never);
+    mockUpdateMany.mockResolvedValue({ count: 1 } as never);
     mockCreate.mockResolvedValue({ id: 'material-1' } as never);
   });
 
-  it('upserts one daily observation using the user calendar date', async () => {
+  it('creates one daily observation using the user calendar date', async () => {
     await FinancialHistoryService.saveHistoricalSnapshot('user-1', snapshot);
 
     const data = {
@@ -79,12 +79,8 @@ describe('FinancialHistoryService', () => {
       timeZone: 'America/Los_Angeles',
       dailyKey: 'user-1:2026-08-14',
     };
-    expect(mockUpsert).toHaveBeenCalledWith({
-      where: { dailyKey: 'user-1:2026-08-14' },
-      create: data,
-      update: data,
-    });
-    expect(mockCreate).not.toHaveBeenCalled();
+    expect(mockCreate).toHaveBeenCalledWith({ data });
+    expect(mockUpdateMany).not.toHaveBeenCalled();
   });
 
   it('does not rewrite an identical daily observation', async () => {
@@ -92,7 +88,7 @@ describe('FinancialHistoryService', () => {
 
     await FinancialHistoryService.saveHistoricalSnapshot('user-1', snapshot);
 
-    expect(mockUpsert).not.toHaveBeenCalled();
+    expect(mockUpdateMany).not.toHaveBeenCalled();
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
@@ -104,7 +100,7 @@ describe('FinancialHistoryService', () => {
       reason: 'manual-account-created',
     });
 
-    expect(mockUpsert).toHaveBeenCalledTimes(1);
+    expect(mockCreate).toHaveBeenCalledTimes(2);
     expect(mockCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
         userId: 'user-1',
@@ -125,7 +121,7 @@ describe('FinancialHistoryService', () => {
       reason: 'user-refresh',
     });
 
-    expect(mockUpsert).not.toHaveBeenCalled();
+    expect(mockUpdateMany).not.toHaveBeenCalled();
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
@@ -138,7 +134,13 @@ describe('FinancialHistoryService', () => {
       reason: 'account-sync',
     });
 
-    expect(mockUpsert).toHaveBeenCalledTimes(1);
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: {
+        dailyKey: 'user-1:2026-08-14',
+        computedAt: { lte: computedAt },
+      },
+      data: expect.objectContaining({ observationKind: 'daily' }),
+    });
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
@@ -147,7 +149,7 @@ describe('FinancialHistoryService', () => {
 
     expect(mockUserFindUnique).not.toHaveBeenCalled();
     expect(mockFindUnique).not.toHaveBeenCalled();
-    expect(mockUpsert).not.toHaveBeenCalled();
+    expect(mockUpdateMany).not.toHaveBeenCalled();
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
@@ -159,8 +161,37 @@ describe('FinancialHistoryService', () => {
       reason: 'account-sync',
     });
 
-    expect(mockUpsert).toHaveBeenCalledTimes(1);
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    expect(mockCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ observationKind: 'daily' }),
+    });
+  });
+
+  it('does not let an older computation replace a newer daily observation', async () => {
+    mockFindUnique.mockResolvedValue({
+      ...canonicalValues,
+      computedAt: new Date('2026-08-15T06:45:00.000Z'),
+      netWorth: 30,
+    } as never);
+
+    await FinancialHistoryService.saveHistoricalSnapshot('user-1', snapshot);
+
+    expect(mockUpdateMany).not.toHaveBeenCalled();
     expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('conditionally updates after another computation wins the daily create race', async () => {
+    mockCreate.mockRejectedValueOnce({ code: 'P2002' } as never);
+
+    await FinancialHistoryService.saveHistoricalSnapshot('user-1', snapshot);
+
+    expect(mockUpdateMany).toHaveBeenCalledWith({
+      where: {
+        dailyKey: 'user-1:2026-08-14',
+        computedAt: { lte: computedAt },
+      },
+      data: expect.objectContaining({ observationKind: 'daily' }),
+    });
   });
 
   it('returns only daily observations by default', async () => {
@@ -170,7 +201,37 @@ describe('FinancialHistoryService', () => {
 
     expect(mockFindMany).toHaveBeenCalledWith({
       where: { userId: 'user-1', observationKind: 'daily' },
-      orderBy: { computedAt: 'desc' },
+      orderBy: [
+        { observationDate: 'desc' },
+        { computedAt: 'desc' },
+      ],
+      take: undefined,
+    });
+  });
+
+  it('filters calendar ranges by observationDate', async () => {
+    mockFindMany.mockResolvedValue([] as never);
+    const startDate = new Date('2026-08-01T00:00:00.000Z');
+    const endDate = new Date('2026-08-14T00:00:00.000Z');
+
+    await FinancialHistoryService.getHistoricalSnapshots(
+      'user-1',
+      startDate,
+      endDate,
+      undefined,
+      true
+    );
+
+    expect(mockFindMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        observationKind: { in: ['daily', 'material'] },
+        observationDate: { gte: startDate, lte: endDate },
+      },
+      orderBy: [
+        { observationDate: 'desc' },
+        { computedAt: 'desc' },
+      ],
       take: undefined,
     });
   });

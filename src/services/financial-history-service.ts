@@ -63,6 +63,20 @@ function sameDate(left: Date | null, right: Date | null): boolean {
   );
 }
 
+function isUniqueConstraintError(error: unknown): error is { code: string } {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
+}
+
+function isOlderThanExisting(
+  existing: Record<string, unknown> | null,
+  snapshot: CanonicalHistoryInput
+): boolean {
+  return (
+    existing?.computedAt instanceof Date &&
+    existing.computedAt.getTime() > snapshot.computedAt.getTime()
+  );
+}
+
 function hasSameCanonicalValues(
   existing: Record<string, unknown> | null,
   snapshot: CanonicalHistoryInput
@@ -161,7 +175,10 @@ export class FinancialHistoryService {
           : Promise.resolve(null),
       ]);
 
-      if (!hasSameCanonicalValues(existingDaily, snapshot)) {
+      if (
+        !hasSameCanonicalValues(existingDaily, snapshot) &&
+        !isOlderThanExisting(existingDaily, snapshot)
+      ) {
         const dailyData = canonicalHistoryData(userId, snapshot, {
           observationDate,
           observationKind: 'daily',
@@ -169,11 +186,26 @@ export class FinancialHistoryService {
           timeZone,
           dailyKey,
         });
-        await prisma.financialSummaryHistory.upsert({
-          where: { dailyKey },
-          create: dailyData,
-          update: dailyData,
+        const updateDailyIfCurrent = () => prisma.financialSummaryHistory.updateMany({
+          where: { dailyKey, computedAt: { lte: snapshot.computedAt } },
+          data: dailyData,
         });
+
+        if (existingDaily) {
+          // The computedAt predicate makes this update safe if a newer
+          // computation wins the race after the read above.
+          await updateDailyIfCurrent();
+        } else {
+          try {
+            await prisma.financialSummaryHistory.create({ data: dailyData });
+          } catch (error) {
+            if (!isUniqueConstraintError(error)) throw error;
+
+            // Another computation created this day's row first. Update it
+            // only when this snapshot is at least as recent.
+            await updateDailyIfCurrent();
+          }
+        }
       }
 
       if (intent.kind === 'material' && latest && !hasSameFinancialValues(latest, snapshot)) {
@@ -211,20 +243,21 @@ export class FinancialHistoryService {
     };
     
     if (startDate || endDate) {
-      where.computedAt = {};
+      where.observationDate = {};
       if (startDate) {
-        where.computedAt.gte = startDate;
+        where.observationDate.gte = startDate;
       }
       if (endDate) {
-        where.computedAt.lte = endDate;
+        where.observationDate.lte = endDate;
       }
     }
     
     const snapshots = await prisma.financialSummaryHistory.findMany({
       where,
-      orderBy: {
-        computedAt: 'desc',
-      },
+      orderBy: [
+        { observationDate: 'desc' },
+        { computedAt: 'desc' },
+      ],
       take: limit,
     });
     
