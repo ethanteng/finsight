@@ -416,10 +416,11 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     }
   }
 
-  const { incomeResult, expenseResult } = buildCanonicalCashFlowAnalyses(
+  const { incomeResult, expenseResult, monthlyAnalysis } = buildCanonicalCashFlowAnalyses(
     transactionSummary,
     monthlyIncomeOverride,
-    monthlyExpenseOverride
+    monthlyExpenseOverride,
+    questionNeeds.needsMonthlyCashFlow
   );
   const incomeAnalysis = incomeResult?.text;
   const expenseAnalysis = expenseResult?.text;
@@ -478,6 +479,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     tierContext,
     incomeAnalysis,
     expenseAnalysis,
+    monthlyCashFlowAnalysis: monthlyAnalysis,
     averageMonthlyIncome: incomeResult?.averageMonthly ?? null,
     averageMonthlyExpense: expenseResult?.averageMonthly ?? null,
     transactionSummary,
@@ -545,6 +547,8 @@ async function fetchOrCreateRetirementAnalysis(args: {
     orderBy: { computedAt: 'desc' }
   });
   const storedInput = (recentAnalysis?.analysisInput || {}) as Record<string, number | null | undefined>;
+  const confirmsStoredAnnualWithdrawal =
+    /\b(?:yes|same|unchanged|continue|keep (?:it|that|the same)|use (?:it|that|the same|my previous|the previous)(?: amount)?)\b/i.test(question);
   const {
     currentAge,
     retirementAge,
@@ -552,11 +556,13 @@ async function fetchOrCreateRetirementAnalysis(args: {
     withdrawalStartAge,
     lifeExpectancy,
     missingParams,
+    confirmationRequiredParams,
   } = resolveRetirementInputs({
     questionParams,
     profileAge,
     profileRetirementAge,
     storedInput,
+    allowStoredAnnualWithdrawal: confirmsStoredAnnualWithdrawal,
   });
 
   if (
@@ -573,9 +579,13 @@ async function fetchOrCreateRetirementAnalysis(args: {
         detectedParams: {
           currentAge: currentAge ?? undefined,
           retirementAge: retirementAge ?? undefined,
-          annualWithdrawalAmount: annualWithdrawalAmount ?? undefined,
+          annualWithdrawalAmount: annualWithdrawalAmount
+            ?? (confirmationRequiredParams.includes('annualWithdrawalAmount')
+              ? storedInput.annualWithdrawalAmount ?? undefined
+              : undefined),
           withdrawalStartAge: withdrawalStartAge ?? undefined
-        }
+        },
+        confirmationRequiredParams,
       }
     };
   }

@@ -12,6 +12,7 @@ import { logGPTContext } from './services/gpt-logger';
 import { validateUserPrompt, getRejectionMessage } from './security/prompt-validation';
 import { validateLLMResponse } from './security/output-validation';
 import { logRejectedPrompt, logFlaggedOutput } from './security/security-logger';
+import { sanitizeUngroundedResponse, validateResponseGrounding } from './openai/response-grounding';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 export const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
@@ -63,7 +64,11 @@ export async function askOpenAIWithEnhancedContext(
       );
     }
 
-    const questionNeeds = analyzeQuestionNeeds(question);
+    const recentQuestions = conversationHistory
+      .slice()
+      .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime())
+      .map((entry) => entry.question);
+    const questionNeeds = analyzeQuestionNeeds(question, recentQuestions);
 
     const normalizedHistory: ConversationEntry[] = conversationHistory.map(item => ({
       id: item.id,
@@ -145,6 +150,12 @@ export async function askOpenAIWithEnhancedContext(
 
     answer = postProcessAnswer(answer);
 
+    const groundingResult = validateResponseGrounding({ summary: answer }, snapshot, question);
+    if (!groundingResult.valid) {
+      console.warn('Legacy Ask Linc response failed deterministic grounding:', groundingResult.issues);
+      answer = sanitizeUngroundedResponse({ summary: answer }, groundingResult).summary;
+    }
+
     // Output validation - sanitize before returning to user
     const outputValidation = validateLLMResponse(answer);
     if (!outputValidation.safe) {
@@ -217,4 +228,3 @@ export async function askOpenAIForTests(
 
 export { filterConversationHistory, analyzeConversationContext } from './openai/conversation-context';
 export { analyzeQuestionNeeds } from './openai/question-analysis';
-

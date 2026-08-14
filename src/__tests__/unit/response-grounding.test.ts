@@ -52,7 +52,37 @@ describe('deterministic response grounding', () => {
     expect(result.invalidSummary).toBe(true);
   });
 
-  it('removes only invalid key-number fields after a failed retry', () => {
+  it('flags canonical mismatches anywhere in user-facing fields for broad questions', () => {
+    const response = {
+      summary: 'Here is your overall financial picture. Your net worth is $999.',
+      key_numbers: { net_worth: 999 },
+      insights: ['Your total investments are $1,000.'],
+      suggested_actions: ['Plan around a $999 net worth.'],
+    };
+    const result = validateResponseGrounding(response, snapshot, 'How am I doing financially?');
+
+    expect(result.valid).toBe(false);
+    expect(result.invalidSummary).toBe(true);
+    expect(sanitizeUngroundedResponse(response, result).insights).toEqual([]);
+  });
+
+  it('understands magnitude words in canonical user-facing amounts', () => {
+    expect(validateResponseGrounding(
+      { summary: 'Your net worth is 250 thousand dollars.' },
+      snapshot,
+      'What is my net worth?'
+    ).valid).toBe(true);
+
+    const result = validateResponseGrounding(
+      { summary: 'Your net worth is 240 thousand dollars.' },
+      snapshot,
+      'What is my net worth?'
+    );
+    expect(result.valid).toBe(false);
+    expect(result.invalidSummary).toBe(true);
+  });
+
+  it('can identify and remove invalid key-number fields', () => {
     expect(omitInvalidKeyNumbers({
       summary: 'Response',
       key_numbers: { net_worth: 240000, years_of_expenses: 12 },

@@ -249,7 +249,7 @@ PERSIST_GPT_CONTEXT="false"             # Toggle GPT context logging to /opt/ren
 USE_ASK_LINC_PIPELINE="false"           # Enable Claude-based analysis pipeline (requires ANTHROPIC_API_KEY)
 ANTHROPIC_API_KEY="your_anthropic_api_key"  # Required when USE_ASK_LINC_PIPELINE=true
 ENABLE_RESPONSE_VALIDATION="false"      # Optional: validate Claude responses with Gemini
-ASK_LINC_MAX_OUTPUT_TOKENS="4096"       # Optional: maximum Claude output tokens (default: 4096)
+ASK_LINC_MAX_OUTPUT_TOKENS="8192"       # Optional: maximum Claude output tokens (default: 8192)
 
 # Gemini (market news synthesis + optional validation)
 GOOGLE_AI_API_KEY="your_google_ai_key"  # Required for market news; optional for validation (or GEMINI_API_KEY)

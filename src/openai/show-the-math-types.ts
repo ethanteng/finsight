@@ -31,5 +31,6 @@ export interface ShowTheMathData {
   claudeFirstCall: ShowTheMathClaudeCall;
   geminiValidation?: ShowTheMathGeminiValidation;
   claudeRetry?: ShowTheMathClaudeCall;
+  geminiRetryValidation?: ShowTheMathGeminiValidation;
   databaseData: ShowTheMathDatabaseData;
 }

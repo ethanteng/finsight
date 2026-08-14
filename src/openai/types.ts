@@ -9,6 +9,7 @@ export interface QuestionNeeds {
   needsRetirement?: boolean;
   needsAccountDetails: boolean;
   needsTransactionDetails: boolean;
+  needsMonthlyCashFlow: boolean;
   needsUserProfile: boolean;
   needsSecondaryValidation: boolean;
 }
@@ -51,6 +52,7 @@ export interface FinancialContextSnapshot {
   tierContext: TierAwareContext;
   incomeAnalysis?: string;
   expenseAnalysis?: string;
+  monthlyCashFlowAnalysis?: string;
   /** Structured numeric values — use these instead of parsing incomeAnalysis/expenseAnalysis strings */
   averageMonthlyIncome?: number | null;
   averageMonthlyExpense?: number | null;
@@ -165,6 +167,7 @@ export interface FinancialContextSnapshot {
       annualWithdrawalAmount?: number;
       withdrawalStartAge?: number;
     };
+    confirmationRequiredParams?: Array<'annualWithdrawalAmount'>;
     /** When retirement analysis cannot run despite a retirement question (e.g. no holdings). */
     unavailableReason?: string;
   };

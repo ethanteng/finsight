@@ -29,6 +29,33 @@ describe('question-aware LLM context routing', () => {
     });
   });
 
+  it('loads the persisted monthly breakdown for time-bounded cash-flow questions', () => {
+    expect(analyzeQuestionNeeds('How much did I spend last month?')).toMatchObject({
+      needsMonthlyCashFlow: true,
+      needsTransactionDetails: false,
+    });
+    expect(analyzeQuestionNeeds('What was my income in July?')).toMatchObject({
+      needsMonthlyCashFlow: true,
+      needsTransactionDetails: false,
+    });
+  });
+
+  it('inherits data needs for short contextual follow-ups', () => {
+    expect(analyzeQuestionNeeds('Which one?', ['Show all my accounts.'])).toMatchObject({
+      needsAccountDetails: true,
+    });
+    expect(analyzeQuestionNeeds('What about 65 instead?', ['Am I on track to retire at 68?'])).toMatchObject({
+      needsRetirement: true,
+      needsSecondaryValidation: true,
+    });
+  });
+
+  it('does not inherit unrelated data needs for a standalone question', () => {
+    expect(analyzeQuestionNeeds('What is my net worth?', ['Show all my accounts.'])).toMatchObject({
+      needsAccountDetails: false,
+    });
+  });
+
   it('requests external context only for explicit current-rate or market questions', () => {
     expect(analyzeQuestionNeeds('What are current mortgage rates?')).toMatchObject({
       needsSearchContext: true,

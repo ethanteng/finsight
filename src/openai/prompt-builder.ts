@@ -120,6 +120,10 @@ function buildSystemPrompt(snapshot: FinancialContextSnapshot): string {
     sections.push(`# Expense Analysis (authoritative)\n${snapshot.expenseAnalysis}`);
   }
 
+  if (snapshot.monthlyCashFlowAnalysis) {
+    sections.push(`# Monthly Cash Flow (authoritative)\n${snapshot.monthlyCashFlowAnalysis}`);
+  }
+
   if (snapshot.marketContext) {
     sections.push(`# Market Context\n${snapshot.marketContext}`);
   }
@@ -523,6 +527,7 @@ function formatRetirementAnalysisInfoRequest(needsInfo: FinancialContextSnapshot
   }
 
   const missingLabels = needsInfo.missingParams.map(p => paramLabels[p] || p);
+  const requiresWithdrawalConfirmation = needsInfo.confirmationRequiredParams?.includes('annualWithdrawalAmount');
 
   sections.push('## Instructions for Linc');
   sections.push(
@@ -530,6 +535,9 @@ function formatRetirementAnalysisInfoRequest(needsInfo: FinancialContextSnapshot
     'YOU MUST ask the user for the missing information before you can provide retirement analysis.\n\n' +
     (detectedInfo.length > 0 
       ? `Information already provided:\n${detectedInfo.map(i => `- ${i}`).join('\n')}\n\n`
+      : '') +
+    (requiresWithdrawalConfirmation && needsInfo.detectedParams.annualWithdrawalAmount != null
+      ? `A recent analysis used $${needsInfo.detectedParams.annualWithdrawalAmount.toLocaleString()} per year. Ask the user to confirm whether to keep that annual withdrawal amount or provide a new one. Do not silently reuse it.\n\n`
       : '') +
     `Missing information needed:\n${missingLabels.map(l => `- ${l}`).join('\n')}\n\n` +
     'Ask the user politely and clearly for this information. Use natural language, not a form.\n' +
@@ -573,6 +581,10 @@ export function buildFinancialContextForPrompt(snapshot: FinancialContextSnapsho
 
   if (snapshot.expenseAnalysis) {
     sections.push(`# Expense Analysis (authoritative)\n${snapshot.expenseAnalysis}`);
+  }
+
+  if (snapshot.monthlyCashFlowAnalysis) {
+    sections.push(`# Monthly Cash Flow (authoritative)\n${snapshot.monthlyCashFlowAnalysis}`);
   }
 
   if (snapshot.homeValueSummary) {

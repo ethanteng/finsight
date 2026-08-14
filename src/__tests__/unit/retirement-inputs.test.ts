@@ -64,6 +64,43 @@ describe('resolveRetirementInputs', () => {
       missingParams: [],
     });
   });
+
+  it('requires confirmation before reusing a persisted annual withdrawal amount', () => {
+    const resolved = resolveRetirementInputs({
+      questionParams: { hasRetirementIntent: true },
+      profileAge: null,
+      profileRetirementAge: null,
+      storedInput: {
+        currentAge: 50,
+        retirementAge: 67,
+        annualWithdrawalAmount: 80_000,
+        withdrawalStartAge: 67,
+      },
+    });
+
+    expect(resolved.annualWithdrawalAmount).toBeUndefined();
+    expect(resolved.missingParams).toContain('annualWithdrawalAmount');
+    expect(resolved.confirmationRequiredParams).toEqual(['annualWithdrawalAmount']);
+  });
+
+  it('reuses a persisted annual withdrawal after explicit confirmation', () => {
+    const resolved = resolveRetirementInputs({
+      questionParams: { hasRetirementIntent: true },
+      profileAge: null,
+      profileRetirementAge: null,
+      storedInput: {
+        currentAge: 50,
+        retirementAge: 67,
+        annualWithdrawalAmount: 80_000,
+        withdrawalStartAge: 67,
+      },
+      allowStoredAnnualWithdrawal: true,
+    });
+
+    expect(resolved.annualWithdrawalAmount).toBe(80_000);
+    expect(resolved.missingParams).toEqual([]);
+    expect(resolved.confirmationRequiredParams).toEqual([]);
+  });
 });
 
 describe('retirementPortfolioFingerprint', () => {

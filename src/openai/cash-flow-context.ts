@@ -10,10 +10,12 @@ export interface IncomeExpenseAnalysisResult {
 export function buildCanonicalCashFlowAnalyses(
   summary: FinancialContextSnapshot['transactionSummary'],
   monthlyIncomeOverride?: number | null,
-  monthlyExpenseOverride?: number | null
+  monthlyExpenseOverride?: number | null,
+  includeMonthlyBreakdown = false
 ): {
   incomeResult?: IncomeExpenseAnalysisResult;
   expenseResult?: IncomeExpenseAnalysisResult;
+  monthlyAnalysis?: string;
 } {
   const averages = averageCanonicalTransactionSummary(summary);
   if (!averages && monthlyIncomeOverride == null && monthlyExpenseOverride == null) return {};
@@ -33,8 +35,27 @@ export function buildCanonicalCashFlowAnalyses(
     .slice(0, 5)
     .map(([label, value]) => `${label}: $${value.toFixed(2)}`)
     .join(', ');
+  const monthlyAnalysis = includeMonthlyBreakdown
+    ? Object.entries(summary?.byMonth || {})
+      .filter((entry): entry is [string, { income?: number; expense?: number; operatingCashFlow?: number }] =>
+        Boolean(entry[1]) && typeof entry[1] === 'object')
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([month, values]) => {
+        const income = finite(values.income);
+        const expense = finite(values.expense);
+        const cashFlow = finite(values.operatingCashFlow);
+        const valuesForMonth = [
+          income !== null ? `income $${income.toFixed(2)}` : null,
+          expense !== null ? `expenses $${expense.toFixed(2)}` : null,
+          cashFlow !== null ? `operating cash flow $${cashFlow.toFixed(2)}` : null,
+        ].filter(Boolean);
+        return `${month}: ${valuesForMonth.join(', ')}`;
+      })
+      .join('\n')
+    : undefined;
 
   return {
+    ...(monthlyAnalysis && { monthlyAnalysis }),
     ...(incomeAverage !== null && {
       incomeResult: {
         averageMonthly: incomeAverage,

@@ -9,10 +9,10 @@ import { buildFinancialReasoningPrompt, FinancialReasoningPromptInput } from './
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const DEFAULT_MODEL = 'claude-sonnet-4-5';
-const configuredMaxTokens = Number.parseInt(process.env.ASK_LINC_MAX_OUTPUT_TOKENS || '4096', 10);
+const configuredMaxTokens = Number.parseInt(process.env.ASK_LINC_MAX_OUTPUT_TOKENS || '8192', 10);
 const DEFAULT_MAX_TOKENS = Number.isFinite(configuredMaxTokens) && configuredMaxTokens > 0
   ? configuredMaxTokens
-  : 4096;
+  : 8192;
 
 let anthropicClient: Anthropic | null = null;
 

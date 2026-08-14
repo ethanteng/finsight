@@ -148,6 +148,9 @@ function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnapshot): 
   if (snapshot.expenseAnalysis) {
     parts.push(`Expense analysis: ${snapshot.expenseAnalysis.slice(0, 200)}`);
   }
+  if (snapshot.monthlyCashFlowAnalysis) {
+    parts.push(`Monthly cash flow: ${snapshot.monthlyCashFlowAnalysis.slice(0, 1_000)}`);
+  }
 
   return parts.length > 0 ? parts.join('\n') : '(no snapshot data)';
 }

@@ -171,4 +171,46 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(mockedAskClaude).toHaveBeenCalledTimes(2);
     expect(mockedValidateWithGemini).toHaveBeenCalledTimes(2);
   });
+
+  it('returns a safe response when Gemini also rejects the Claude retry', async () => {
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Initial retirement answer.',
+        insights: [],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Retry retirement answer.',
+        insights: ['Still unsupported.'],
+        suggested_actions: ['Act on it.'],
+      }));
+    mockedValidateWithGemini
+      .mockResolvedValueOnce({
+        valid: false,
+        issues: ['Initial answer is unsupported.'],
+        promptSent: 'initial validation prompt',
+        rawResponse: 'initial invalid result',
+      })
+      .mockResolvedValueOnce({
+        valid: false,
+        issues: ['Retry is still unsupported.'],
+        promptSent: 'retry validation prompt',
+        rawResponse: 'retry invalid result',
+      });
+
+    const result = await runAskLincAnalysis({
+      question: 'Am I on track for retirement?',
+      userId: 'user-1',
+      enableValidation: true,
+    });
+
+    expect(result.structuredResponse).toEqual({
+      summary: 'I could not verify the generated answer against your current financial snapshot. Please try the question again.',
+      key_numbers: undefined,
+      insights: [],
+      suggested_actions: [],
+    });
+    expect(result.showTheMathData?.geminiValidation?.prompt).toBe('initial validation prompt');
+    expect(result.showTheMathData?.geminiRetryValidation?.prompt).toBe('retry validation prompt');
+  });
 });

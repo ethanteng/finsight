@@ -100,7 +100,11 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
 
   onProgress?.('Loading your financial snapshot');
 
-  const questionNeeds = analyzeQuestionNeeds(question);
+  const recentQuestions = conversationHistory
+    .slice()
+    .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+    .map((entry) => entry.question);
+  const questionNeeds = analyzeQuestionNeeds(question, recentQuestions);
 
   // Step 1: Retrieve context (snapshot, profile, market summary, RAG)
   const snapshot = await gatherContextSnapshot({
@@ -147,16 +151,17 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
 
   let geminiValidation: ShowTheMathGeminiValidation | undefined;
   let claudeRetry: ShowTheMathClaudeCall | undefined;
+  let geminiRetryValidation: ShowTheMathGeminiValidation | undefined;
   let validationIssues = groundingResult.issues;
 
-  const runSecondaryValidation = async (): Promise<string[]> => {
+  const runSecondaryValidation = async (phase: 'initial' | 'retry'): Promise<string[]> => {
     if (!enableValidation || !questionNeeds.needsSecondaryValidation) return [];
     try {
       onProgress?.('Sanity checking with Gemini');
       const { validateWithGemini } = await import('./response-validator');
       const validationResult = await validateWithGemini(structuredResponse, { question, snapshot });
       if (validationResult.promptSent != null && validationResult.rawResponse != null) {
-        geminiValidation = {
+        const audit: ShowTheMathGeminiValidation = {
           prompt: validationResult.promptSent,
           rawResponse: validationResult.rawResponse,
           parsedResult: {
@@ -164,7 +169,13 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
             issues: validationResult.issues
           }
         };
-        onShowTheMathProgress?.({ geminiValidation });
+        if (phase === 'initial') {
+          geminiValidation = audit;
+          onShowTheMathProgress?.({ geminiValidation });
+        } else {
+          geminiRetryValidation = audit;
+          onShowTheMathProgress?.({ geminiRetryValidation });
+        }
       }
       return validationResult.valid ? [] : (validationResult.issues || []);
     } catch (err) {
@@ -175,7 +186,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
 
   validationIssues = Array.from(new Set([
     ...validationIssues,
-    ...(await runSecondaryValidation()),
+    ...(await runSecondaryValidation('initial')),
   ]));
 
   if (validationIssues.length > 0) {
@@ -200,9 +211,15 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       console.error('Ask Linc: Retry was still not grounded:', groundingResult.issues);
       structuredResponse = sanitizeUngroundedResponse(structuredResponse, groundingResult);
     } else {
-      const postRetryIssues = await runSecondaryValidation();
+      const postRetryIssues = await runSecondaryValidation('retry');
       if (postRetryIssues.length > 0) {
-        console.warn('Ask Linc: Retry passed grounding but secondary validation still flagged issues:', postRetryIssues);
+        console.error('Ask Linc: Retry passed grounding but secondary validation still flagged issues:', postRetryIssues);
+        structuredResponse = sanitizeUngroundedResponse(structuredResponse, {
+          valid: false,
+          issues: postRetryIssues,
+          invalidKeyNumbers: [],
+          invalidSummary: true,
+        });
       }
     }
   }
@@ -224,7 +241,8 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     claudeFirstCall,
     databaseData,
     ...(geminiValidation && { geminiValidation }),
-    ...(claudeRetry && { claudeRetry })
+    ...(claudeRetry && { claudeRetry }),
+    ...(geminiRetryValidation && { geminiRetryValidation })
   };
 
   return {

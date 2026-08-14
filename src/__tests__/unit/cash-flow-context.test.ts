@@ -34,4 +34,16 @@ describe('buildCanonicalCashFlowAnalyses', () => {
     expect(result.incomeResult?.text).toContain('Canonical Income Total: $12000.00');
     expect(result.expenseResult?.averageMonthly).toBe(4_000);
   });
+
+  it('includes persisted monthly aggregates only when requested', () => {
+    expect(buildCanonicalCashFlowAnalyses(summary).monthlyAnalysis).toBeUndefined();
+
+    const result = buildCanonicalCashFlowAnalyses(summary, null, null, true);
+    expect(result.monthlyAnalysis).toContain(
+      '2026-01: income $5000.00, expenses $3000.00, operating cash flow $2000.00'
+    );
+    expect(result.monthlyAnalysis).toContain(
+      '2026-02: income $7000.00, expenses $4500.00, operating cash flow $2500.00'
+    );
+  });
 });

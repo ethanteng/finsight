@@ -17,6 +17,7 @@ export interface StoredRetirementInputs {
 export interface ResolvedRetirementInputs extends StoredRetirementInputs {
   lifeExpectancy: number;
   missingParams: MissingRetirementInput[];
+  confirmationRequiredParams: Array<'annualWithdrawalAmount'>;
 }
 
 function finiteOrNull(value: unknown): number | null {
@@ -50,11 +51,23 @@ export function resolveRetirementInputs(args: {
   profileAge: number | null;
   profileRetirementAge: number | null;
   storedInput?: StoredRetirementInputs;
+  allowStoredAnnualWithdrawal?: boolean;
 }): ResolvedRetirementInputs {
-  const { questionParams, profileAge, profileRetirementAge, storedInput = {} } = args;
+  const {
+    questionParams,
+    profileAge,
+    profileRetirementAge,
+    storedInput = {},
+    allowStoredAnnualWithdrawal = false,
+  } = args;
   const currentAge = questionParams.currentAge ?? profileAge ?? storedInput.currentAge;
   const retirementAge = questionParams.retirementAge ?? profileRetirementAge ?? storedInput.retirementAge;
-  const annualWithdrawalAmount = questionParams.annualWithdrawalAmount ?? storedInput.annualWithdrawalAmount;
+  const storedAnnualWithdrawalNeedsConfirmation =
+    questionParams.annualWithdrawalAmount == null &&
+    storedInput.annualWithdrawalAmount != null &&
+    !allowStoredAnnualWithdrawal;
+  const annualWithdrawalAmount = questionParams.annualWithdrawalAmount
+    ?? (allowStoredAnnualWithdrawal ? storedInput.annualWithdrawalAmount : undefined);
   const withdrawalStartAge = questionParams.withdrawalStartAge
     ?? questionParams.retirementAge
     ?? profileRetirementAge
@@ -75,5 +88,8 @@ export function resolveRetirementInputs(args: {
     withdrawalStartAge,
     lifeExpectancy,
     missingParams,
+    confirmationRequiredParams: storedAnnualWithdrawalNeedsConfirmation
+      ? ['annualWithdrawalAmount']
+      : [],
   };
 }

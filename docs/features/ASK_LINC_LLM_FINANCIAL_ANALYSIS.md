@@ -168,7 +168,7 @@ The API returns:
 | `ENABLE_RESPONSE_VALIDATION` | No | Set to `true` for Gemini validation (default: `false`) |
 | `GOOGLE_AI_API_KEY` or `GEMINI_API_KEY` | No | For Gemini validation when enabled |
 | `GEMINI_VALIDATION_MODEL` | No | Override Gemini model (default: `gemini-3-flash-preview`) |
-| `ASK_LINC_MAX_OUTPUT_TOKENS` | No | Maximum Claude output tokens (default: `4096`) |
+| `ASK_LINC_MAX_OUTPUT_TOKENS` | No | Maximum Claude output tokens (default: `8192`) |
 
 ### Feature Flag
 
