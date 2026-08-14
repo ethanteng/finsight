@@ -5,15 +5,17 @@ import { pushBeginCheckout } from "@/lib/dataLayer";
 
 type MarketingGetStartedButtonProps = {
   className?: string;
+  trackingLocation?: string;
 };
 
 export function MarketingGetStartedButton({
   className = "button button-small button-dark",
+  trackingLocation = "marketing_cta",
 }: MarketingGetStartedButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleClick = async () => {
-    pushBeginCheckout();
+    pushBeginCheckout(trackingLocation);
     setIsLoading(true);
 
     try {

@@ -18,7 +18,7 @@ export function SiteHeader() {
         </div>
         <div className="nav-actions">
           <Link className="nav-sign-in" href="/login">Sign in</Link>
-          <MarketingGetStartedButton />
+          <MarketingGetStartedButton trackingLocation="header" />
           <MarketingMobileMenu />
         </div>
       </nav>
@@ -36,7 +36,7 @@ export function SiteFooter() {
             <span>Ask Linc</span>
           </Link>
           <p>Plan a home, a growing family, a career change, and retirement using your real numbers.</p>
-          <MarketingGetStartedButton className="footer-demo" />
+          <MarketingGetStartedButton className="footer-demo" trackingLocation="footer" />
         </div>
         <div className="footer-column">
           <b>PRODUCT</b>
@@ -44,11 +44,7 @@ export function SiteFooter() {
           <Link href="/use-cases">Use Cases</Link>
           <Link href="/pricing">Pricing</Link>
           <Link href="/faq">FAQ</Link>
-          <Link href="/can-i-retire-with-1-million">Retire With $1M</Link>
-          <Link href="/can-i-retire-with-2-million">Retire With $2M</Link>
-          <Link href="/can-i-retire-with-3-million">Retire With $3M</Link>
-          <Link href="/can-i-retire-at-55">Retire at 55</Link>
-          <Link href="/can-i-retire-at-60">Retire at 60</Link>
+          <Link href="/retirement-answers">Retirement Answers</Link>
         </div>
         <div className="footer-column">
           <b>COMPARE</b>
@@ -83,7 +79,7 @@ export function PageCta({ title = "See what your next decision means for the res
       <div className="page-cta-inner shell">
         <p className="section-kicker light">TRY IT WITH YOUR OWN NUMBERS</p>
         <h2>{title}</h2>
-        <MarketingGetStartedButton className="button button-primary" />
+        <MarketingGetStartedButton className="button button-primary" trackingLocation="page_cta" />
       </div>
     </section>
   );

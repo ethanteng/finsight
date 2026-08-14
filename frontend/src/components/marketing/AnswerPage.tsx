@@ -232,7 +232,7 @@ export default function AnswerPage({ page }: { page: AnswerPageData }) {
               <h2>{page.productBridge.heading}</h2>
               <p>{page.productBridge.body}</p>
             </div>
-            <div><MarketingGetStartedButton className="button button-primary" /><small>{page.productBridge.priceNote}</small></div>
+            <div><MarketingGetStartedButton className="button button-primary" trackingLocation="answer_product_bridge" /><small>{page.productBridge.priceNote}</small></div>
           </section>
 
           <section className="answer-faq" aria-labelledby="faq-heading">

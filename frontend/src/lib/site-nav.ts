@@ -1,6 +1,7 @@
 export const PRIMARY_NAV_LINKS = [
   { href: '/features', label: 'Features' },
   { href: '/use-cases', label: 'Use Cases' },
+  { href: '/retirement-answers', label: 'Answers' },
   { href: '/vs', label: 'Compare' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/about', label: 'About' },
