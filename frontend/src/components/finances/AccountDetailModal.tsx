@@ -84,7 +84,7 @@ export default function AccountDetailModal({
     };
     void loadDetails();
     return () => { cancelled = true; };
-  }, [API_URL, accountId]);
+  }, [API_URL, accountId, revisionId]);
 
   const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -174,7 +174,7 @@ export default function AccountDetailModal({
           {loadError && <div className="rounded border border-red-700/50 bg-red-900/30 p-4 text-red-300">{loadError}</div>}
           {!loading && !loadError && details && details.revisionId !== revisionId && (
             <div className="mb-4 rounded border border-amber-700/40 bg-amber-900/20 p-3 text-sm text-amber-200">
-              Account details come from a newer financial snapshot.
+              Account details are from a different snapshot revision than the overview.
             </div>
           )}
           {!loading && !loadError && details && isInvestment && (
