@@ -27,6 +27,11 @@ export interface CachedBalanceData extends BalanceData {
   expires_at: Date;
 }
 
+interface AccessTokenScope {
+  id: string;
+  userId: string | null;
+}
+
 export class BalanceService {
   private static readonly CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
   private static readonly CACHE_PREFIX = 'balance_';
@@ -40,8 +45,9 @@ export class BalanceService {
     plaidClient: PlaidApi,
     forceRefresh: boolean = false
   ): Promise<BalanceData[]> {
+    const tokenScope = await this.getAccessTokenScope(accessToken);
     const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
-    const cacheKey = `${this.CACHE_PREFIX}${accessToken}_${today}`;
+    const cacheKey = `${this.CACHE_PREFIX}${tokenScope.id}_${today}`;
 
     // Check cache first (unless force refresh)
     if (!forceRefresh) {
@@ -54,7 +60,7 @@ export class BalanceService {
 
     // Check database for recent data (within 24 hours)
     if (!forceRefresh) {
-      const dbBalances = await this.getRecentBalancesFromDB(accessToken);
+      const dbBalances = await this.getRecentBalancesFromDB(tokenScope.id);
       if (dbBalances.length > 0) {
         console.log(`BalanceService: Using recent database balance data`);
         // Cache the database data for future requests
@@ -71,7 +77,7 @@ export class BalanceService {
     await this.cacheBalanceData(cacheKey, freshBalances);
     
     // Update database with fresh data
-    await this.updateDatabaseBalances(freshBalances);
+    await this.updateDatabaseBalances(freshBalances, tokenScope);
 
     return freshBalances;
   }
@@ -114,7 +120,7 @@ export class BalanceService {
    */
   static async refreshAllUserBalances(userId: string, plaidClient: PlaidApi): Promise<void> {
     const accessTokens = await getPrismaClient().accessToken.findMany({
-      where: { userId }
+      where: { userId, isActive: true }
     });
 
     for (const tokenRecord of accessTokens) {
@@ -149,15 +155,21 @@ export class BalanceService {
     }));
   }
 
-  private static async getRecentBalancesFromDB(accessToken: string): Promise<BalanceData[]> {
-    // Get accounts associated with this access token
+  private static async getAccessTokenScope(accessToken: string): Promise<AccessTokenScope> {
+    const tokenRecord = await getPrismaClient().accessToken.findUnique({
+      where: { token: accessToken },
+      select: { id: true, userId: true }
+    });
+    if (!tokenRecord) {
+      throw new Error('Cannot refresh balances for an unknown Plaid connection');
+    }
+    return tokenRecord;
+  }
+
+  private static async getRecentBalancesFromDB(accessTokenId: string): Promise<BalanceData[]> {
     const accounts = await getPrismaClient().account.findMany({
       where: {
-        user: {
-          accessTokens: {
-            some: { token: accessToken }
-          }
-        },
+        accessTokenId,
         balanceLastFetched: {
           gte: new Date(Date.now() - this.CACHE_TTL) // Within last 24 hours
         }
@@ -185,16 +197,32 @@ export class BalanceService {
     await cacheService.set(cacheKey, cachedData, this.CACHE_TTL);
   }
 
-  private static async updateDatabaseBalances(balances: BalanceData[]): Promise<void> {
+  private static async updateDatabaseBalances(
+    balances: BalanceData[],
+    tokenScope: AccessTokenScope
+  ): Promise<void> {
     for (const balance of balances) {
       await getPrismaClient().account.updateMany({
-        where: { plaidAccountId: balance.account_id },
+        where: {
+          plaidAccountId: balance.account_id,
+          ...(tokenScope.userId
+            ? {
+                OR: [
+                  { accessTokenId: tokenScope.id },
+                  // Repair a legacy unscoped account only when it belongs to
+                  // this token's owner.
+                  { accessTokenId: null, userId: tokenScope.userId },
+                ],
+              }
+            : { accessTokenId: tokenScope.id }),
+        },
         data: {
           currentBalance: balance.current,
           availableBalance: balance.available,
           limit: balance.limit,
           currency: balance.iso_currency_code,
-          balanceLastFetched: balance.last_fetched
+          balanceLastFetched: balance.last_fetched,
+          accessTokenId: tokenScope.id
         }
       });
     }

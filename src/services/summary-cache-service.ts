@@ -3,6 +3,8 @@ import { plaidClient } from '../plaid';
 import { BalanceService } from './balance-service';
 import { FinancialDataService } from './financial-data-service';
 import { classifyAccount } from './account-classifier';
+import { buildTransactionSummary } from './transaction-summary-service';
+import { financialAccountIdentityKey, isNewerAccountSnapshot } from './account-identity';
 
 // Lazy Prisma to avoid multiple instances during different runtimes
 let prisma: PrismaClient | null = null;
@@ -79,9 +81,16 @@ export class SummaryCacheService {
     // Derive overview/portfolio and pre-aggregations
     const overview = SummaryCacheService.computeFinancialOverview(data);
     const portfolio = SummaryCacheService.computeInvestmentPortfolio(data);
-    const { windowedTransactions, transactionsSummary } = SummaryCacheService.extractWindowedTransactions(
-      data,
-      txSince
+    const computedAt = new Date();
+    const allTransactions = [
+      ...(Array.isArray(data?.bankingTransactions) ? data.bankingTransactions : []),
+      ...(Array.isArray(data?.investments?.transactions) ? data.investments.transactions : []),
+    ];
+    const { windowedTransactions, transactionsSummary } = buildTransactionSummary(
+      allTransactions,
+      txSince,
+      computedAt,
+      'USD'
     );
     const activities = SummaryCacheService.extractWindowedInvestmentActivities(data, invSince);
 
@@ -91,33 +100,8 @@ export class SummaryCacheService {
     const accountMap = new Map<string, any>();
     const rawAccounts = data?.accounts || [];
     
-    // Parse timestamp helper (matches mergeFinancialData() logic)
-    const parseSnapshotTimestamp = (source: any): number | null => {
-      const raw =
-        source?.snapshotTimestamp ||
-        source?.lastSyncedAt ||
-        source?.persistedAsOf ||
-        source?.lastSynced ||
-        (source as any)?.updatedAt ||
-        null;
-
-      if (!raw) {
-        return null;
-      }
-
-      if (raw instanceof Date) {
-        return raw.getTime();
-      }
-
-      const parsed = Date.parse(raw);
-      return Number.isNaN(parsed) ? null : parsed;
-    };
-    
     for (const account of rawAccounts) {
-      // ✅ Primary unique identifier: account_id (works for both Plaid and SnapTrade)
-      // Fallback: plaidAccountId (Plaid) or persistentAccountId (SnapTrade)
-      // Do NOT use account.id as fallback - it may be a database ID, not a unique account identifier
-      const accountId = account.account_id || (account as any).plaidAccountId || (account as any).persistentAccountId;
+      const accountId = financialAccountIdentityKey(account);
       
       if (!accountId) {
         console.warn(`⚠️ SummaryCacheService: Account without ID found: ${account.name} (${account.type}/${account.subtype}), skipping`);
@@ -131,24 +115,7 @@ export class SummaryCacheService {
         continue;
       }
 
-      // Duplicate found - keep the most recent based on timestamp
-      const existingTimestamp = parseSnapshotTimestamp(existing);
-      const candidateTimestamp = parseSnapshotTimestamp(account);
-
-      let shouldReplace = false;
-
-      if (candidateTimestamp !== null && (existingTimestamp === null || candidateTimestamp > existingTimestamp)) {
-        shouldReplace = true;
-      } else if (existingTimestamp !== null && candidateTimestamp === null) {
-        shouldReplace = false;
-      } else if (candidateTimestamp === null && existingTimestamp === null) {
-        // Both missing timestamps - prefer the one with higher balance (more recent data)
-        const existingBalance = existing.balance?.current ?? existing.balance?.available ?? 0;
-        const candidateBalance = account.balance?.current ?? account.balance?.available ?? 0;
-        shouldReplace = candidateBalance >= existingBalance;
-      }
-
-      if (shouldReplace) {
+      if (isNewerAccountSnapshot(existing, account)) {
         accountMap.set(accountId, account);
       }
     }
@@ -161,7 +128,7 @@ export class SummaryCacheService {
     }
 
     const payload: any = {
-      computedAt: new Date(),
+      computedAt,
       financialOverview: overview,
       investmentPortfolio: portfolio,
       accounts: deduplicatedAccounts, // Use deduplicated accounts
@@ -317,34 +284,6 @@ export class SummaryCacheService {
     return { totalValue, holdingCount, securityCount, assetAllocation };
   }
 
-  private static extractWindowedTransactions(data: any, txSince: Date) {
-    const allBank = Array.isArray(data?.bankingTransactions) ? data.bankingTransactions : [];
-    const allInv = Array.isArray(data?.investments?.transactions) ? data.investments.transactions : [];
-    const all = [...allBank, ...allInv];
-    const windowed = all.filter((t: any) => {
-      const d = new Date(t.date || t.authorized_date || t.posted_date || t.trade_date || t.transaction_date || t.createdAt);
-      return !isNaN(d.getTime()) && d >= txSince;
-    });
-    // Aggregate simple monthly income/expense and by-category totals
-    const summary = {
-      incomeTotal: windowed.filter((t: any) => t.amount < 0).reduce((s: number, t: any) => s + Math.abs(t.amount), 0),
-      expenseTotal: windowed.filter((t: any) => t.amount > 0).reduce((s: number, t: any) => s + t.amount, 0),
-      byCategory: {} as Record<string, number>,
-      byMonth: {} as Record<string, { income: number; expense: number }>,
-    };
-    for (const t of windowed) {
-      const cat = t.category || 'Uncategorized';
-      summary.byCategory[cat] = (summary.byCategory[cat] || 0) + Math.abs(t.amount);
-      const d = new Date(t.date);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const bucket = summary.byMonth[key] || { income: 0, expense: 0 };
-      if (t.amount < 0) bucket.income += Math.abs(t.amount);
-      else bucket.expense += t.amount;
-      summary.byMonth[key] = bucket;
-    }
-    return { windowedTransactions: windowed, transactionsSummary: summary };
-  }
-
   private static extractWindowedInvestmentActivities(data: any, invSince: Date) {
     const acts = Array.isArray(data?.investments?.transactions) ? data.investments.transactions : [];
     return acts.filter((a: any) => {
@@ -355,4 +294,3 @@ export class SummaryCacheService {
 }
 
 export default SummaryCacheService;
-

@@ -21,7 +21,7 @@ An account is identified by this immutable tuple:
 - A refresh for one connection may only read or update accounts belonging to that connection.
 - Cross-provider deduplication may create an explicit link between identities, but similarity of names or balances must never merge them automatically.
 
-The current `Account` schema does not persist its Plaid connection/Item relationship. Adding that relationship and using it in balance refresh is Step 2.
+The `Account.accessTokenId` relationship persists Plaid connection ownership. Legacy accounts with one unambiguous connection are backfilled by migration; ambiguous legacy rows remain unscoped until a successful provider sync repairs them.
 
 ## 2. Transaction semantics
 
@@ -49,7 +49,7 @@ Canonical sign/type disagreements are errors; they must not be silently correcte
 
 Reporting periods use an inclusive start and exclusive end. Date-only values are interpreted as UTC; timestamp strings must include `Z` or an explicit offset. Monthly averages divide by every UTC calendar month in the requested window, including months with no activity.
 
-The current cached transaction summary reverses the normalized depository sign convention and treats investment activity as income/spending. Replacing it with this contract is Step 2.
+Cached transaction summaries use the canonical classification and cash-flow adapter. Unclassified transactions and currencies that have not been converted are reported explicitly and omitted from totals rather than guessed.
 
 ## 3. Core metric formulas
 

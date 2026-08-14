@@ -15,7 +15,10 @@ export interface Transaction {
   payment_channel?: string;
   pending?: boolean;
   category?: string[];
+  category_id?: string;
   iso_currency_code: string;
+  source_amount?: number;
+  cash_flow_amount?: number;
   [key: string]: any;
 }
 
@@ -32,7 +35,8 @@ export class TransactionNormalizationService {
    * Normalize a single transaction based on account type
    */
   normalizeTransaction(transaction: Transaction, accountType: string, accountSubtype?: string): Transaction {
-    const normalized = { ...transaction };
+    const sourceAmount = transaction.source_amount ?? transaction.amount;
+    const normalized = { ...transaction, source_amount: sourceAmount };
 
     // ✅ CRITICAL: Convert personal_finance_category to category if category is empty
     // This matches the logic in processTransactionData from plaid.ts
@@ -97,6 +101,17 @@ export class TransactionNormalizationService {
         normalized.amount = -Math.abs(transaction.amount);
       }
     }
+
+    const transactionType = String((transaction as any).transaction_type || '').toLowerCase();
+    const inflowTypes = ['income', 'refund', 'transfer_in', 'deposit', 'sell'];
+    const outflowTypes = ['expense', 'fee', 'transfer_out', 'withdrawal', 'buy'];
+    normalized.cash_flow_amount = inflowTypes.includes(transactionType)
+      ? Math.abs(sourceAmount)
+      : outflowTypes.includes(transactionType)
+        ? -Math.abs(sourceAmount)
+        : accountType === 'credit'
+          ? -Math.abs(sourceAmount)
+          : normalized.amount;
 
     return normalized;
   }
@@ -263,4 +278,3 @@ export class TransactionNormalizationService {
     return issues;
   }
 }
-

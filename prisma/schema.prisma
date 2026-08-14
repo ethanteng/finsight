@@ -63,7 +63,12 @@ model Account {
   verificationStatus  String?
   userId              String?
   user                User?         @relation(fields: [userId], references: [id])
+  accessTokenId       String?
+  accessToken         AccessToken?  @relation(fields: [accessTokenId], references: [id], onDelete: SetNull)
   transactions        Transaction[]
+
+  @@index([accessTokenId])
+  @@index([userId, accessTokenId])
 }
 
 model AccessToken {
@@ -75,6 +80,7 @@ model AccessToken {
   lastRefreshed        DateTime?
   userId               String?
   user                 User?     @relation(fields: [userId], references: [id])
+  accounts             Account[]
   isActive             Boolean   @default(true)
   lastError            String?
   lastChecked          DateTime?
@@ -98,7 +104,9 @@ model Transaction {
   id                   String    @id @default(cuid())
   plaidTransactionId   String    @unique
   accountId            String
-  amount               Float
+  amount               Float     // Legacy/display amount; do not use for financial aggregation
+  sourceAmount         Float?    // Untouched provider amount for reconciliation
+  cashFlowAmount       Float?    // User perspective: inflow positive, outflow negative
   date                 DateTime
   name                 String
   category             String?

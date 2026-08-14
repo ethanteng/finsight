@@ -6,6 +6,7 @@
  */
 
 import OpenAI from 'openai';
+import { resolveCanonicalTransactionType } from './canonical-transaction-adapter';
 import {
   isCanonicalTransactionType,
   type CanonicalTransactionType,
@@ -183,6 +184,17 @@ export class TransactionCategorizationService {
         categorization_confidence: 1.0, // Manual corrections have full confidence
         categorization_method: 'gpt', // Keep as 'gpt' for consistency, but we could add 'manual' if needed
         categorization_reason: (transaction as any).aiCategoryReason || 'Manually corrected by user'
+      };
+    }
+
+    const deterministicType = resolveCanonicalTransactionType(transaction);
+    if (deterministicType) {
+      return {
+        ...transaction,
+        transaction_type: deterministicType,
+        categorization_confidence: 0.95,
+        categorization_method: 'plaid',
+        categorization_reason: 'Deterministic provider category mapping',
       };
     }
 
