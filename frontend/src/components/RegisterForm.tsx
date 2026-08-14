@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, Suspense } from 'react';
 import { identifyUser } from '@/lib/heycatch';
+import { getBrowserTimeZone } from '@/lib/browser-time-zone';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import SiteFooter from './SiteFooter';
@@ -95,7 +96,8 @@ function RegisterFormContent() {
         password: string;
         tier?: string;
         stripeSessionId?: string;
-      } = { email, password };
+        timeZone: string;
+      } = { email, password, timeZone: getBrowserTimeZone() };
       
       // If coming from successful subscription, include tier and session info
       if (subscriptionContext) {
@@ -254,4 +256,3 @@ export default function RegisterForm() {
     </Suspense>
   );
 }
-

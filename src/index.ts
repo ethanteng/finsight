@@ -2955,7 +2955,10 @@ app.post('/profile/home', requireAuth, async (req: Request, res: Response) => {
     try {
       const { SummaryCacheService } = await import('./services/summary-cache-service');
       setImmediate(() => {
-        SummaryCacheService.computeForUser(req.user!.id, { categorize: false }).catch(error => {
+        SummaryCacheService.computeForUser(req.user!.id, {
+          categorize: false,
+          history: { kind: 'material', reason: 'home-value-updated' },
+        }).catch(error => {
           console.error(`Failed to refresh financial summaries after home value update:`, error);
         });
       });
@@ -3030,7 +3033,10 @@ app.post('/profile/home/refresh', requireAuth, async (req: Request, res: Respons
     try {
       const { SummaryCacheService } = await import('./services/summary-cache-service');
       setImmediate(() => {
-        SummaryCacheService.computeForUser(req.user!.id, { categorize: false }).catch(error => {
+        SummaryCacheService.computeForUser(req.user!.id, {
+          categorize: false,
+          history: { kind: 'material', reason: 'home-value-refreshed' },
+        }).catch(error => {
           console.error(`Failed to refresh financial summaries after home value refresh:`, error);
         });
       });
@@ -3098,7 +3104,10 @@ app.put('/profile/home/value', requireAuth, async (req: Request, res: Response) 
     try {
       const { SummaryCacheService } = await import('./services/summary-cache-service');
       setImmediate(() => {
-        SummaryCacheService.computeForUser(req.user!.id, { categorize: false }).catch(error => {
+        SummaryCacheService.computeForUser(req.user!.id, {
+          categorize: false,
+          history: { kind: 'material', reason: 'home-value-override-set' },
+        }).catch(error => {
           console.error(`Failed to refresh financial summaries after home value update:`, error);
         });
       });
@@ -3156,7 +3165,10 @@ app.delete('/profile/home/value', requireAuth, async (req: Request, res: Respons
     try {
       const { SummaryCacheService } = await import('./services/summary-cache-service');
       setImmediate(() => {
-        SummaryCacheService.computeForUser(req.user!.id, { categorize: false }).catch(error => {
+        SummaryCacheService.computeForUser(req.user!.id, {
+          categorize: false,
+          history: { kind: 'material', reason: 'home-value-override-removed' },
+        }).catch(error => {
           console.error(`Failed to refresh financial summaries after removing manual home value:`, error);
         });
       });
@@ -3616,6 +3628,7 @@ app.get('/api/financial-history', requireAuth, async (req: Request, res: Respons
     const limit = req.query.limit 
       ? parseInt(req.query.limit as string, 10) 
       : undefined;
+    const includeMaterial = req.query.includeMaterial === 'true';
     
     // Validate dates
     if (startDate && isNaN(startDate.getTime())) {
@@ -3632,7 +3645,8 @@ app.get('/api/financial-history', requireAuth, async (req: Request, res: Respons
       userId,
       startDate,
       endDate,
-      limit
+      limit,
+      includeMaterial
     );
     
     // Convert dates to ISO strings for JSON response
@@ -3648,6 +3662,10 @@ app.get('/api/financial-history', requireAuth, async (req: Request, res: Respons
       homeValue: snapshot.homeValue,
       totalAssets: snapshot.totalAssets,
       totalLiabilities: snapshot.totalLiabilities,
+      observationDate: snapshot.observationDate?.toISOString() || null,
+      observationKind: snapshot.observationKind,
+      observationReason: snapshot.observationReason,
+      timeZone: snapshot.timeZone,
     }));
     
     res.json(formattedSnapshots);
@@ -3672,7 +3690,10 @@ app.post('/api/refresh-summary', requireAuth, async (req: Request, res: Response
     await cacheService.invalidate(`financial-data:${userId}`);
     const { SummaryCacheService } = await import('./services/summary-cache-service');
     // Fast path: skip heavy categorization to avoid request timeouts
-    const payload = await SummaryCacheService.computeForUser(userId, { categorize: false });
+    const payload = await SummaryCacheService.computeForUser(userId, {
+      categorize: false,
+      history: { kind: 'material', reason: 'user-refresh' },
+    });
     res.json(payload);
   } catch (error) {
     console.error('❌ Failed to refresh financial summary:', error);

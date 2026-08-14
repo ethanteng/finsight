@@ -19,6 +19,7 @@ import { sendContactEmail } from './resend-email';
 import { stripe } from '../config/stripe';
 import { sendWelcomeEmail } from '../services/stripe-email';
 import { analytics } from '../analytics/heycatch';
+import { isValidTimeZone, normalizeTimeZone } from '../domain/time-zone';
 
 function isUniqueConstraintError(error: unknown): error is { code: string } {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
@@ -50,6 +51,7 @@ router.get('/verify', async (req: Request, res: Response) => {
         email: true,
         tier: true,
         isActive: true,
+        timeZone: true,
         createdAt: true
       }
     });
@@ -70,6 +72,7 @@ router.get('/verify', async (req: Request, res: Response) => {
         id: user.id,
         email: user.email,
         tier: user.tier,
+        timeZone: user.timeZone,
         createdAt: user.createdAt
       }
     });
@@ -82,7 +85,7 @@ router.get('/verify', async (req: Request, res: Response) => {
 // Register new user
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { email, password, tier = 'premium', stripeSessionId, session_id } = req.body;
+    const { email, password, tier = 'premium', stripeSessionId, session_id, timeZone } = req.body;
     
     // Handle both parameter names for Stripe session ID
     const stripeSessionIdToUse = stripeSessionId || session_id;
@@ -119,6 +122,7 @@ router.post('/register', async (req: Request, res: Response) => {
         email: email.toLowerCase(),
         passwordHash,
         tier,
+        timeZone: normalizeTimeZone(timeZone),
         subscriptionStatus: 'inactive'
       },
       select: {
@@ -310,7 +314,7 @@ router.post('/register', async (req: Request, res: Response) => {
 // Login user
 router.post('/login', async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, timeZone } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
@@ -325,9 +329,10 @@ router.post('/login', async (req: Request, res: Response) => {
     const user = validation.user!;
 
     // Update last login
+    const validTimeZone = isValidTimeZone(timeZone) ? timeZone.trim() : undefined;
     await prisma.user.update({
       where: { id: user.id },
-      data: { lastLoginAt: new Date() }
+      data: { lastLoginAt: new Date(), ...(validTimeZone ? { timeZone: validTimeZone } : {}) }
     });
 
     // Generate token
@@ -378,6 +383,7 @@ router.get('/profile', authenticateUser, async (req: AuthenticatedRequest, res: 
         id: true,
         email: true,
         tier: true,
+        timeZone: true,
         isActive: true,
         emailVerified: true,
         lastLoginAt: true,
@@ -400,15 +406,19 @@ router.get('/profile', authenticateUser, async (req: AuthenticatedRequest, res: 
 // Update user profile
 router.put('/profile', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { tier } = req.body;
+    const { tier, timeZone } = req.body;
     const allowedTiers = ['starter', 'standard', 'premium'];
 
     if (tier && !allowedTiers.includes(tier)) {
       return res.status(400).json({ error: 'Invalid tier' });
     }
+    if (timeZone !== undefined && !isValidTimeZone(timeZone)) {
+      return res.status(400).json({ error: 'Invalid IANA time zone' });
+    }
 
     const updateData: any = {};
     if (tier) updateData.tier = tier;
+    if (timeZone) updateData.timeZone = timeZone.trim();
 
     const user = await prisma.user.update({
       where: { id: req.user!.id },
@@ -417,6 +427,7 @@ router.put('/profile', authenticateUser, async (req: AuthenticatedRequest, res: 
         id: true,
         email: true,
         tier: true,
+        timeZone: true,
         isActive: true,
         emailVerified: true,
         lastLoginAt: true,

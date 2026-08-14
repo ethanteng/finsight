@@ -72,7 +72,7 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
     
     // Trigger snapshot refresh
     const { SummaryCacheService } = await import('../services/summary-cache-service');
-    await SummaryCacheService.computeForUser(userId).catch(err => {
+    await SummaryCacheService.computeForUser(userId, { history: { kind: 'none' } }).catch(err => {
       console.error('Failed to refresh snapshot after updating account name:', err);
     });
 

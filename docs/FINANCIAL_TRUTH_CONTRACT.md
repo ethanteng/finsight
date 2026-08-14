@@ -82,6 +82,7 @@ Optional sources do not make a snapshot partial when absent. If present but stal
 
 1. The backend computes financial metrics; the frontend only formats and displays them.
 2. Persisted history copies canonical snapshot values and their original `asOf`; it never reconstructs old values from today's data.
+   The chart series contains at most one daily observation for the user's IANA timezone. A changed balance-sheet mutation may also create a separate `material` observation with an explicit reason. Identical recomputations and non-financial mutations such as account renames do not create event observations.
 3. The LLM receives canonical values, units, provenance, and snapshot status; it does not recalculate authoritative totals from raw arrays.
 4. Unknown is represented as `null`/unavailable, not zero. Zero is used only for a known zero.
 5. Provider errors and partial data are never erased by a successful cache write.
