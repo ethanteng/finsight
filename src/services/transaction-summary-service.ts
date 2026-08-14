@@ -1,4 +1,9 @@
-import { summarizeCashFlow } from '../domain/financial-truth';
+import {
+  averageMonthlyCashFlow,
+  summarizeCashFlow,
+  type CashFlowSummary,
+  type MonthlyCashFlowAverage,
+} from '../domain/financial-truth';
 import { toCanonicalTransaction } from './canonical-transaction-adapter';
 
 export interface TransactionSummaryResult {
@@ -15,6 +20,40 @@ export interface TransactionSummaryResult {
     unclassifiedTransactionIds: string[];
     currencyMismatchTransactionIds: string[];
   };
+}
+
+export function averageCanonicalTransactionSummary(value: unknown): MonthlyCashFlowAverage | null {
+  if (!value || typeof value !== 'object') return null;
+  const summary = value as any;
+  if (!summary.byMonth || typeof summary.byMonth !== 'object') return null;
+  const finite = (candidate: unknown): number =>
+    typeof candidate === 'number' && Number.isFinite(candidate) ? candidate : 0;
+  const canonical: CashFlowSummary = {
+    currency: typeof summary.reportingCurrency === 'string' ? summary.reportingCurrency : 'USD',
+    incomeTotal: finite(summary.incomeTotal),
+    expenseTotal: finite(summary.expenseTotal),
+    operatingCashFlow: finite(summary.operatingCashFlow),
+    byExpenseCategory: summary.byCategory && typeof summary.byCategory === 'object'
+      ? summary.byCategory
+      : {},
+    byMonth: Object.fromEntries(
+      Object.entries(summary.byMonth).map(([month, raw]) => {
+        const entry = raw && typeof raw === 'object' ? raw as any : {};
+        return [month, {
+          income: finite(entry.income),
+          expenses: finite(entry.expense),
+          operatingCashFlow: finite(entry.operatingCashFlow),
+        }];
+      })
+    ),
+    includedTransactionIds: Array.isArray(summary.includedTransactionIds)
+      ? summary.includedTransactionIds
+      : [],
+    excludedTransactionIds: Array.isArray(summary.excludedTransactionIds)
+      ? summary.excludedTransactionIds
+      : [],
+  };
+  return averageMonthlyCashFlow(canonical);
 }
 
 function transactionDate(transaction: any): Date | null {

@@ -1,8 +1,6 @@
-import {
-  averageMonthlyCashFlow,
-  type CashFlowSummary,
-  type SnapshotQuality,
-} from '../domain/financial-truth';
+import { type SnapshotQuality } from '../domain/financial-truth';
+import { averageCanonicalTransactionSummary } from './transaction-summary-service';
+export { averageCanonicalTransactionSummary } from './transaction-summary-service';
 import { classifyAccount } from './account-classifier';
 import { buildCanonicalInvestmentPortfolio } from './canonical-financial-snapshot';
 
@@ -226,39 +224,6 @@ export function withAccountDisplayBalances<T extends FinancesSnapshotLike>(snaps
 
 function normalizeStatus(value: unknown): FinancesSnapshotStatus {
   return value === 'stale' || value === 'partial' || value === 'unavailable' ? value : 'current';
-}
-
-export function averageCanonicalTransactionSummary(value: unknown) {
-  if (!value || typeof value !== 'object') return null;
-  const summary = value as any;
-  if (!summary.byMonth || typeof summary.byMonth !== 'object') return null;
-  const byMonth = Object.fromEntries(
-    Object.entries(summary.byMonth).map(([month, raw]) => {
-      const entry = raw && typeof raw === 'object' ? raw as any : {};
-      return [month, {
-        income: finite(entry.income) ?? 0,
-        expenses: finite(entry.expense) ?? 0,
-        operatingCashFlow: finite(entry.operatingCashFlow) ?? 0,
-      }];
-    })
-  );
-  const canonical: CashFlowSummary = {
-    currency: typeof summary.reportingCurrency === 'string' ? summary.reportingCurrency : 'USD',
-    incomeTotal: finite(summary.incomeTotal) ?? 0,
-    expenseTotal: finite(summary.expenseTotal) ?? 0,
-    operatingCashFlow: finite(summary.operatingCashFlow) ?? 0,
-    byExpenseCategory: summary.byCategory && typeof summary.byCategory === 'object'
-      ? summary.byCategory
-      : {},
-    byMonth,
-    includedTransactionIds: Array.isArray(summary.includedTransactionIds)
-      ? summary.includedTransactionIds
-      : [],
-    excludedTransactionIds: Array.isArray(summary.excludedTransactionIds)
-      ? summary.excludedTransactionIds
-      : [],
-  };
-  return averageMonthlyCashFlow(canonical);
 }
 
 function snapshotHome(snapshot: FinancesSnapshotLike, currentHome?: FinancesHomeData | null): FinancesHomeData | null {

@@ -5,6 +5,8 @@ import { TokenStatus } from '../services/token-validation-service';
 import { QuestionNeeds, FinancialContextSnapshot, TransactionSummaryItem, InvestmentSnapshot } from './types';
 import { buildAccountSummaries } from './account-summary';
 import type { DemoAccount, DemoTransaction } from '../demo-data';
+import { buildCanonicalCashFlowAnalyses } from './cash-flow-context';
+import { resolveRetirementInputs, retirementPortfolioFingerprint } from './retirement-inputs';
 
 interface GatherContextArgs {
   userId?: string;
@@ -13,8 +15,6 @@ interface GatherContextArgs {
   questionNeeds: QuestionNeeds;
   tier: UserTier;
   demoProfile?: string;
-  /** When true, always fetch market and RAG context (for Ask Linc financial reasoning pipeline) */
-  alwaysIncludeMarketAndRAG?: boolean;
   /** Optional callback for progress updates (e.g. for SSE streaming) */
   onProgress?: (message: string) => void;
 }
@@ -58,7 +58,6 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     questionNeeds,
     tier,
     demoProfile,
-    alwaysIncludeMarketAndRAG = false,
     onProgress
   } = args;
 
@@ -68,6 +67,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   let homeValueSummary: string | undefined;
   let metadata: UnifiedFinancialData['metadata'] = { ...DEFAULT_METADATA };
   let financialSummary: FinancialContextSnapshot['financialSummary'] | null = null;
+  let transactionSummary: FinancialContextSnapshot['transactionSummary'];
+  let accountDisplayBalances: Record<string, unknown> = {};
 
   if (isDemo) {
     const { demoData } = await import('../demo-data');
@@ -86,9 +87,14 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       homeValueSummary = 'Home value data is not available in demo mode.';
     }
   } else if (userId) {
-    // Fetch full snapshot for GPT context (single source of truth, already deduplicated)
+    // Fetch the canonical snapshot with only the large JSON columns this
+    // question needs. Aggregate financial and cash-flow truth is always loaded.
     const { SummaryCacheService } = await import('../services/summary-cache-service');
-    const snapshot = await SummaryCacheService.getLatestSnapshot(userId, 'full');
+    const snapshot = await SummaryCacheService.getSnapshotForAnalysis(userId, {
+      includeAccounts: questionNeeds.needsAccountDetails,
+      includeTransactions: questionNeeds.needsTransactionDetails,
+      includeInvestments: questionNeeds.needsInvestments || Boolean(questionNeeds.needsRetirement),
+    });
 
     if (snapshot) {
       // Log snapshot metadata for debugging
@@ -136,10 +142,17 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       // When retrieved, Prisma parses it, but we need to ensure it's an array
       const rawTransactions = snapshot.transactions as any;
       bankingTransactions = Array.isArray(rawTransactions) ? rawTransactions as Transaction[] : [];
+      transactionSummary = snapshot.transactionsSummary && typeof snapshot.transactionsSummary === 'object'
+        ? snapshot.transactionsSummary as FinancialContextSnapshot['transactionSummary']
+        : undefined;
+      const snapshotMeta = snapshot.meta && typeof snapshot.meta === 'object' ? snapshot.meta as any : {};
+      accountDisplayBalances = snapshotMeta.accountDisplayBalances && typeof snapshotMeta.accountDisplayBalances === 'object'
+        ? snapshotMeta.accountDisplayBalances
+        : {};
       
-      if (!Array.isArray(rawTransactions)) {
+      if (questionNeeds.needsTransactionDetails && !Array.isArray(rawTransactions)) {
         console.warn(`⚠️ gatherContextSnapshot: Snapshot transactions is not an array (type: ${typeof rawTransactions}), defaulting to empty array`);
-      } else {
+      } else if (Array.isArray(rawTransactions)) {
         console.log(`📊 gatherContextSnapshot: Retrieved ${bankingTransactions.length} transactions from snapshot for user ${userId}`);
       }
       
@@ -158,8 +171,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
           : undefined,
         reportingCurrency: snapshot.reportingCurrency,
         quality: snapshot.quality as NonNullable<FinancialContextSnapshot['financialSummary']>['quality'],
-        financialOverview: snapshot.financialOverview,
-        investmentPortfolio: snapshot.investmentPortfolio
+        financialOverview: snapshot.financialOverview as NonNullable<FinancialContextSnapshot['financialSummary']>['financialOverview'],
+        investmentPortfolio: snapshot.investmentPortfolio as NonNullable<FinancialContextSnapshot['financialSummary']>['investmentPortfolio']
       };
 
       // Load investments if needed for investments OR retirement analysis
@@ -207,30 +220,19 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
 
       if (questionNeeds.needsHomeValue) {
         const homeValue = (snapshot.financialOverview as any).homeValue;
-        
-        // Also check user profile for home address (in case it's there but homeValue fetch failed)
-        let homeAddressFromProfile: string | null = null;
-        if (userId && !isDemo) {
-          try {
-            const { ProfileManager } = await import('../profile/manager');
-            const profileManager = new ProfileManager();
-            const profileText = await profileManager.getOriginalProfile(userId);
-            const addressMatch = profileText.match(/HOME_ADDRESS:\s*(.+)/);
-            if (addressMatch) {
-              homeAddressFromProfile = addressMatch[1].trim();
-            }
-          } catch (error) {
-            // Ignore errors - we'll use homeValue data if available
-          }
-        }
-        
+        const storedHome = snapshotMeta.home && typeof snapshotMeta.home === 'object'
+          ? snapshotMeta.home as any
+          : null;
         if (homeValue !== null && homeValue !== undefined) {
-          if (typeof homeValue === 'number') {
-            homeValueSummary = `Home value: ${new Intl.NumberFormat('en-US', {
+          if (typeof homeValue === 'number' && Number.isFinite(homeValue)) {
+            const valueLine = `Home value: ${new Intl.NumberFormat('en-US', {
               style: 'currency',
               currency: 'USD',
               maximumFractionDigits: 0
             }).format(homeValue)}`;
+            homeValueSummary = storedHome?.address
+              ? `Home address: ${storedHome.address}\n${valueLine}`
+              : valueLine;
           } else {
             // HomeData object
             if (typeof homeValue.valueMid === 'number') {
@@ -243,10 +245,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
             }
           }
         } else {
-          // Check if we have address in profile even without value
-          const address = homeAddressFromProfile;
-          if (address) {
-            homeValueSummary = `Home address: ${address}. Home value estimate is not currently available, but the user owns this property.`;
+          if (storedHome?.address) {
+            homeValueSummary = `Home address: ${storedHome.address}. Home value estimate is not currently available, but the user owns this property.`;
           } else {
             homeValueSummary = 'Home value data is currently unavailable.';
           }
@@ -340,7 +340,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   // ✅ Use deduplicated accounts and sorted transactions directly (no anonymization)
   console.log(`📊 gatherContextSnapshot: Using ${deduplicatedAccounts.length} deduplicated accounts (from ${accounts.length} original)`);
 
-  const accountSummaries = buildAccountSummaries(deduplicatedAccounts);
+  const accountSummaries = buildAccountSummaries(deduplicatedAccounts, accountDisplayBalances);
   // Create account map for quick lookup by account_id
   const accountMap = new Map<string, Account>();
   deduplicatedAccounts.forEach(account => {
@@ -353,10 +353,6 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     0,
     MAX_PROMPT_TRANSACTIONS
   );
-
-  const effectiveQuestionNeeds = alwaysIncludeMarketAndRAG
-    ? { ...questionNeeds, needsMarketContext: true, needsSearchContext: true }
-    : questionNeeds;
 
   // Fetch user overrides for monthly income/expenses (isolated so a failure
   // doesn't reject the whole parallel batch — preserves prior behavior).
@@ -383,126 +379,62 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
 
   // These operations are independent of one another — run them concurrently
   // instead of serially to cut the time spent gathering context before the LLM call.
-  onProgress?.('Searching financial knowledge base');
-  onProgress?.('Fetching market context');
-  console.log(`📊 gatherContextSnapshot: Passing ${deduplicatedAccounts.length} deduplicated accounts to loadUserProfile`);
-  onProgress?.('Preparing your profile');
+  if (questionNeeds.needsSearchContext) onProgress?.('Searching financial knowledge base');
+  if (questionNeeds.needsMarketContext) onProgress?.('Fetching market context');
+  if (questionNeeds.needsUserProfile) onProgress?.('Preparing your profile');
 
   const [tierContext, searchContext, marketContext, userOverrides, userProfile] = await Promise.all([
     dataOrchestrator.buildTierAwareContext(
       tier,
       deduplicatedAccounts,
       sortedTransactions.slice(0, MAX_PROMPT_TRANSACTIONS),
-      isDemo
-    ),
-    maybeFetchSearchContext(question, effectiveQuestionNeeds, tier, isDemo),
-    maybeFetchMarketContext(effectiveQuestionNeeds, tier, isDemo),
-    fetchUserOverrides(),
-    loadUserProfile({
-      userId,
       isDemo,
-      demoProfile,
-      accounts: deduplicatedAccounts,
-      transactions: sortedTransactions
-    })
+      { includeMarketContext: false }
+    ),
+    maybeFetchSearchContext(question, questionNeeds, tier, isDemo),
+    maybeFetchMarketContext(questionNeeds, tier, isDemo),
+    fetchUserOverrides(),
+    questionNeeds.needsUserProfile
+      ? loadUserProfile({ userId, isDemo, demoProfile })
+      : Promise.resolve(undefined)
   ]);
 
   const monthlyIncomeOverride = userOverrides.monthlyIncomeOverride;
   const monthlyExpenseOverride = userOverrides.monthlyExpenseOverride;
 
-  const incomeResult = buildIncomeAnalysis(sortedTransactions, monthlyIncomeOverride);
-  const expenseResult = buildExpenseAnalysis(sortedTransactions, monthlyExpenseOverride);
+  if (questionNeeds.needsHomeValue && userProfile && homeValueSummary === 'Home value data is currently unavailable.') {
+    const address = userProfile.match(/HOME_ADDRESS:\s*(.+)/)?.[1]?.trim();
+    if (address) {
+      homeValueSummary = `Home address: ${address}. Home value estimate is not currently available, but the user owns this property.`;
+    }
+  }
+
+  const { incomeResult, expenseResult } = buildCanonicalCashFlowAnalyses(
+    transactionSummary,
+    monthlyIncomeOverride,
+    monthlyExpenseOverride
+  );
   const incomeAnalysis = incomeResult?.text;
   const expenseAnalysis = expenseResult?.text;
 
-  // Fetch or create retirement analysis if question is retirement-related
+  // Fetch or create deterministic retirement analysis only for retirement questions.
   let retirementAnalysis: FinancialContextSnapshot['retirementAnalysis'] | undefined;
   let retirementAnalysisNeedsInfo: FinancialContextSnapshot['retirementAnalysisNeedsInfo'] | undefined;
-  
-  // Debug logging for retirement analysis trigger
-  console.log('🔍 Retirement analysis trigger check:', {
-    userId,
-    isDemo,
-    needsRetirement: questionNeeds.needsRetirement,
-    hasInvestments: !!investmentsSnapshot?.holdings,
-    holdingsCount: investmentsSnapshot?.holdings?.length || 0,
-    question: question.substring(0, 100),
-    willTrigger: userId && !isDemo && questionNeeds.needsRetirement && investmentsSnapshot?.holdings && investmentsSnapshot.holdings.length > 0
-  });
-  
+
   if (userId && !isDemo && questionNeeds.needsRetirement && investmentsSnapshot?.holdings && investmentsSnapshot.holdings.length > 0) {
     try {
       onProgress?.('Building your retirement snapshot');
-      console.log('✅ Retirement analysis conditions met, parsing question...');
-      // First check if we have the required parameters
-      const { parseRetirementQuestion } = await import('../retirement-analytics/retirement-question-parser');
-      const { extractAgeFromProfile, extractRetirementAgeFromProfile } = await import('../retirement-analytics/profile-age-extractor');
-      const questionParams = parseRetirementQuestion(question);
-      const profileAge = extractAgeFromProfile(userProfile || '');
-      const profileRetirementAge = extractRetirementAgeFromProfile(userProfile || '');
-      
-      console.log('📊 Retirement parameters parsed:', {
-        questionParams: {
-          hasRetirementIntent: questionParams.hasRetirementIntent,
-          currentAge: questionParams.currentAge,
-          retirementAge: questionParams.retirementAge,
-          annualWithdrawalAmount: questionParams.annualWithdrawalAmount
-        },
-        profileAge,
-        profileRetirementAge
+      const result = await fetchOrCreateRetirementAnalysis({
+        userId,
+        question,
+        userProfile: userProfile || '',
+        holdings: investmentsSnapshot.holdings,
+        securities: investmentsSnapshot.securities || [],
       });
-      
-      // Calculate portfolio value for withdrawal amount estimation
-      const portfolioValue = investmentsSnapshot.totalValue || 
-        investmentsSnapshot.holdings.reduce((sum: number, h: any) => sum + (h.institution_value || h.value || 0), 0);
-      
-      // Apply reasonable defaults for missing parameters
-      const currentAge = questionParams.currentAge || profileAge || 45; // Default to 45 if not available
-      const retirementAge = questionParams.retirementAge || profileRetirementAge || 65; // Default to 65 if not available
-      // Use 4% rule (portfolio value * 0.04) as default annual withdrawal if not specified
-      const annualWithdrawalAmount = questionParams.annualWithdrawalAmount || (portfolioValue > 0 ? portfolioValue * 0.04 : undefined);
-      const withdrawalStartAge = questionParams.withdrawalStartAge || retirementAge;
-      
-      // Check what's still missing (after applying defaults)
-      const missingParams: Array<'currentAge' | 'retirementAge' | 'annualWithdrawalAmount' | 'withdrawalStartAge'> = [];
-      if (!currentAge) missingParams.push('currentAge');
-      if (!annualWithdrawalAmount) missingParams.push('annualWithdrawalAmount');
-      
-      if (missingParams.length > 0) {
-        console.log('⚠️ Retirement analysis: Missing parameters after defaults:', missingParams);
-        // Set needsInfo flag so Linc will ask
-        retirementAnalysisNeedsInfo = {
-          missingParams,
-          detectedParams: {
-            currentAge: currentAge || undefined,
-            retirementAge: retirementAge || undefined,
-            annualWithdrawalAmount: annualWithdrawalAmount || undefined,
-            withdrawalStartAge: withdrawalStartAge || undefined
-          }
-        };
+      if (result.needsInfo) {
+        retirementAnalysisNeedsInfo = result.needsInfo;
       } else {
-        console.log('✅ Retirement parameters ready (with defaults applied):', {
-          currentAge,
-          retirementAge,
-          annualWithdrawalAmount,
-          withdrawalStartAge,
-          portfolioValue,
-          usedDefaults: {
-            currentAge: !questionParams.currentAge && !profileAge,
-            retirementAge: !questionParams.retirementAge && !profileRetirementAge,
-            annualWithdrawalAmount: !questionParams.annualWithdrawalAmount
-          }
-        });
-        // We have all required info (with defaults), proceed with analysis
-        const result = await fetchOrCreateRetirementAnalysis({
-          userId,
-          question,
-          userProfile: userProfile || '',
-          holdings: investmentsSnapshot.holdings,
-          securities: investmentsSnapshot.securities || []
-        });
-        retirementAnalysis = result;
-        console.log('✅ Retirement analysis completed:', result ? 'Analysis returned' : 'No analysis returned');
+        retirementAnalysis = result.analysis;
       }
     } catch (error) {
       console.error('❌ Error fetching/creating retirement analysis:', error);
@@ -520,54 +452,6 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     });
   }
 
-  // Always fetch existing retirement analysis for investment/portfolio/retirement questions
-  // This ensures follow-up questions can reference the analysis even without exact parameter matching
-  let retirementPortfolioSnapshot: FinancialContextSnapshot['retirementPortfolioSnapshot'] | undefined;
-  let retirementSecurityMetadata: FinancialContextSnapshot['retirementSecurityMetadata'] | undefined;
-  let existingAnalysisInput: any = undefined;
-  
-  if (userId && !isDemo && (questionNeeds.needsRetirement || questionNeeds.needsMarketContext || questionNeeds.needsInvestments)) {
-    try {
-      console.log('🔍 Checking for existing retirement analysis (triggered by retirement/investment/portfolio question)');
-      const existingAnalysisData = await fetchExistingRetirementAnalysis(userId);
-      
-      if (existingAnalysisData.analysis && !retirementAnalysis) {
-        // Use existing analysis if we don't have a new one
-        // Attach stored input params to the analysis object for reference
-        if (existingAnalysisData.analysisInput) {
-          (existingAnalysisData.analysis as any)._storedInputParams = existingAnalysisData.analysisInput;
-        }
-        retirementAnalysis = existingAnalysisData.analysis;
-        existingAnalysisInput = existingAnalysisData.analysisInput;
-        console.log('📦 Using existing retirement analysis for investment/portfolio question (no new analysis created)');
-      } else if (existingAnalysisData.analysis && retirementAnalysis) {
-        // We have both existing and new analysis - log this case
-        existingAnalysisInput = existingAnalysisData.analysisInput;
-        console.log('📦 Both existing and new retirement analysis available - using new analysis, but existing analysis data also available');
-      }
-      
-      if (existingAnalysisData.portfolioSnapshot) {
-        retirementPortfolioSnapshot = existingAnalysisData.portfolioSnapshot;
-        console.log(`📊 Including portfolio snapshot: ${retirementPortfolioSnapshot.holdings.length} holdings, ${retirementPortfolioSnapshot.securities.length} securities`);
-        
-        // Fetch security metadata for all tickers in the portfolio
-        const metadataStartTime = Date.now();
-        retirementSecurityMetadata = await fetchSecurityMetadataForPortfolio(existingAnalysisData.portfolioSnapshot);
-        const metadataFetchTime = Date.now() - metadataStartTime;
-        const metadataCount = Object.keys(retirementSecurityMetadata).length;
-        console.log(`📋 Fetched security metadata for ${metadataCount} tickers in ${metadataFetchTime}ms`);
-        
-        // Log cache hit/miss details
-        if (metadataCount > 0) {
-          console.log(`✅ Security metadata available for tickers: ${Object.keys(retirementSecurityMetadata).slice(0, 10).join(', ')}${metadataCount > 10 ? '...' : ''}`);
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error fetching existing retirement analysis:', error);
-      // Don't fail if we can't fetch existing analysis
-    }
-  }
-
   return {
     accounts: accountSummaries,
     bankingTransactions: transactionSummaries,
@@ -578,6 +462,14 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     expenseAnalysis,
     averageMonthlyIncome: incomeResult?.averageMonthly ?? null,
     averageMonthlyExpense: expenseResult?.averageMonthly ?? null,
+    transactionSummary,
+    contextSelection: {
+      accountsIncluded: questionNeeds.needsAccountDetails,
+      transactionDetailsIncluded: questionNeeds.needsTransactionDetails,
+      investmentDetailsIncluded: questionNeeds.needsInvestments || Boolean(questionNeeds.needsRetirement),
+      marketContextRequested: questionNeeds.needsMarketContext,
+      searchContextRequested: questionNeeds.needsSearchContext,
+    },
     searchContext,
     marketContext,
     userProfile,
@@ -585,163 +477,24 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     financialSummary: financialSummary || undefined,
     retirementAnalysis,
     retirementAnalysisNeedsInfo,
-    retirementPortfolioSnapshot,
-    retirementSecurityMetadata
   };
 }
 
-/**
- * Fetch existing retirement analysis without parameter matching
- * Used to include analysis in context for any investment/portfolio/retirement question
- */
-async function fetchExistingRetirementAnalysis(userId: string): Promise<{
-  analysis: FinancialContextSnapshot['retirementAnalysis'] | null;
-  portfolioSnapshot: { holdings: any[]; securities: any[] } | null;
-  analysisInput?: any; // Store input parameters for comparison
-}> {
-  try {
-    const { getPrismaClient } = await import('../prisma-client');
-    const prisma = getPrismaClient();
-    
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    console.log(`🔍 Checking for existing retirement analysis for user ${userId} (within last 7 days, since ${sevenDaysAgo.toISOString()})`);
-    
-    const recentAnalysis = await prisma.retirementAnalysis.findFirst({
-      where: {
-        userId,
-        computedAt: {
-          gte: sevenDaysAgo
-        }
-      },
-      orderBy: {
-        computedAt: 'desc'
-      }
-    });
-    
-    if (!recentAnalysis) {
-      console.log('📭 No recent retirement analysis found (within 7 days)');
-      return { analysis: null, portfolioSnapshot: null };
-    }
-    
-    const ageInDays = Math.floor((Date.now() - recentAnalysis.computedAt.getTime()) / (24 * 60 * 60 * 1000));
-    console.log(`✅ Found existing retirement analysis from ${ageInDays} days ago (computed at ${recentAnalysis.computedAt.toISOString()})`);
-    
-    // Extract analysis from historicalImplications field
-    const cachedAnalysis = recentAnalysis.historicalImplications as any;
-    const portfolioSnapshot = recentAnalysis.portfolioSnapshot as any;
-    const analysisInput = recentAnalysis.analysisInput as any;
-    
-    console.log('📊 Analysis details:', {
-      hasFullAnalysis: !!(cachedAnalysis && cachedAnalysis.summary),
-      hasPortfolioSnapshot: !!portfolioSnapshot,
-      portfolioSnapshotHoldings: portfolioSnapshot?.holdings?.length || 0,
-      portfolioSnapshotSecurities: portfolioSnapshot?.securities?.length || 0,
-      storedInputParams: analysisInput ? {
-        currentAge: analysisInput.currentAge,
-        retirementAge: analysisInput.retirementAge,
-        annualWithdrawalAmount: analysisInput.annualWithdrawalAmount,
-        withdrawalStartAge: analysisInput.withdrawalStartAge
-      } : null
-    });
-    
-    if (cachedAnalysis && cachedAnalysis.summary) {
-      // Full analysis result is stored, return it directly
-      console.log('✅ Using full stored analysis from historicalImplications field');
-      return {
-        analysis: cachedAnalysis,
-        portfolioSnapshot: portfolioSnapshot || null,
-        analysisInput
-      };
-    }
-    
-    // Fallback: reconstruct from stored fields if needed
-    console.log('⚠️ Full analysis not found in historicalImplications, reconstructing from stored fields');
-    const reconstructedAnalysis: FinancialContextSnapshot['retirementAnalysis'] = {
-      summary: {
-        characteristics: recentAnalysis.characteristics as any,
-        tradeoffs: (recentAnalysis.characteristics as any).tradeoffs || cachedAnalysis?.summary?.tradeoffs || { upside: '', downside: '' },
-        primaryObservation: (recentAnalysis.characteristics as any).primaryObservation || cachedAnalysis?.summary?.primaryObservation || '',
-        confidence: cachedAnalysis?.summary?.confidence || 'medium' as const,
-        timelineBucket: cachedAnalysis?.summary?.timelineBucket || '20' as const,
-        timelineBucketNote: cachedAnalysis?.summary?.timelineBucketNote || ''
-      },
-      metrics: recentAnalysis.portfolioMetrics as any,
-      stressTest: recentAnalysis.stressTestResults as any,
-      historicalImplications: Array.isArray(cachedAnalysis?.historicalImplications) ? cachedAnalysis.historicalImplications : [],
-      dataQuality: {
-        completeness: recentAnalysis.dataQualityScore,
-        priceHistoryCoverage: 0.8,
-        metadataConfidence: 'medium' as const,
-        portfolioMappingConfidence: 'medium' as const,
-        proxiedValuePercentage: 0,
-        proxyUsage: {
-          usEquityProxy: 'VTI',
-          internationalEquityProxy: 'VXUS',
-          bondsProxy: 'AGG',
-          unmappedHoldings: [],
-          mappingMethod: 'direct'
-        },
-        assumptions: [],
-        missingData: []
-      },
-      disclaimers: []
-    };
-    
-    return {
-      analysis: reconstructedAnalysis,
-      portfolioSnapshot: portfolioSnapshot || null,
-      analysisInput
-    };
-  } catch (error) {
-    console.error('❌ Error fetching existing retirement analysis:', error);
-    return { analysis: null, portfolioSnapshot: null };
-  }
+type RetirementAnalysis = NonNullable<FinancialContextSnapshot['retirementAnalysis']>;
+
+interface RetirementAnalysisResolution {
+  analysis?: RetirementAnalysis;
+  needsInfo?: FinancialContextSnapshot['retirementAnalysisNeedsInfo'];
 }
 
-/**
- * Fetch security metadata for all tickers in a portfolio snapshot
- */
-async function fetchSecurityMetadataForPortfolio(portfolioSnapshot: { holdings: any[]; securities: any[] }): Promise<Record<string, any>> {
-  const metadataMap: Record<string, any> = {};
-  
-  try {
-    const { dbCache } = await import('../retirement-analytics/data/db-cache');
-    
-    // Extract unique tickers from holdings
-    const tickers = new Set<string>();
-    const securityMap = new Map(portfolioSnapshot.securities.map((sec: any) => [sec.security_id, sec]));
-    
-    for (const holding of portfolioSnapshot.holdings) {
-      const security = securityMap.get(holding.security_id);
-      const ticker = security?.ticker_symbol?.toUpperCase() || holding.ticker_symbol?.toUpperCase();
-      if (ticker && ticker.length > 0 && ticker.length <= 10) {
-        tickers.add(ticker);
-      }
-    }
-    
-    // Single batch query avoids N+1 SELECTs on security_metadata
-    const batchResult = await dbCache.getSecurityMetadataBatch(Array.from(tickers));
-    for (const [ticker, metadata] of batchResult) {
-      metadataMap[ticker] = metadata;
-    }
-    
-    return metadataMap;
-  } catch (error) {
-    console.error('Error fetching security metadata for portfolio:', error);
-    return metadataMap;
-  }
-}
-
-/**
- * Fetch existing retirement analysis or create a new one
- */
+/** Fetch a matching retirement analysis or create one from explicit, persisted inputs. */
 async function fetchOrCreateRetirementAnalysis(args: {
   userId: string;
   question: string;
   userProfile: string;
   holdings: any[];
   securities: any[];
-}): Promise<FinancialContextSnapshot['retirementAnalysis'] | undefined> {
+}): Promise<RetirementAnalysisResolution> {
   const { userId, question, userProfile, holdings, securities } = args;
 
   // Parse retirement parameters from question
@@ -759,92 +512,80 @@ async function fetchOrCreateRetirementAnalysis(args: {
   // Note: We already check for retirement keywords at the trigger level,
   // so we proceed with parameter extraction even if parser doesn't detect intent
 
-  // Calculate portfolio value for withdrawal amount estimation
-  const portfolioValue = holdings.reduce((sum: number, h: any) => sum + (h.institution_value || h.value || 0), 0);
-
   // Extract age from profile if not in question
   const { extractAgeFromProfile, extractRetirementAgeFromProfile } = await import('../retirement-analytics/profile-age-extractor');
   const profileAge = extractAgeFromProfile(userProfile);
   const profileRetirementAge = extractRetirementAgeFromProfile(userProfile);
 
-  // Apply reasonable defaults for missing parameters
-  const currentAge = questionParams.currentAge || profileAge || 45; // Default to 45 if not available
-  const retirementAge = questionParams.retirementAge || profileRetirementAge || 65; // Default to 65 if not available
-  // Use 4% rule (portfolio value * 0.04) as default annual withdrawal if not specified
-  const annualWithdrawalAmount = questionParams.annualWithdrawalAmount || (portfolioValue > 0 ? portfolioValue * 0.04 : undefined);
-  const withdrawalStartAge = questionParams.withdrawalStartAge || retirementAge;
-
-  // Check what's still missing (after applying defaults)
-  const missingParams: Array<'currentAge' | 'retirementAge' | 'annualWithdrawalAmount' | 'withdrawalStartAge'> = [];
-  if (!currentAge) missingParams.push('currentAge');
-  if (!annualWithdrawalAmount) missingParams.push('annualWithdrawalAmount');
-  // retirementAge and withdrawalStartAge are optional (user might already be retired)
-
-  // Log defaults being used
-  if (missingParams.length === 0) {
-    console.log('✅ Retirement parameters ready (with defaults applied):', {
-      currentAge,
-      retirementAge,
-      annualWithdrawalAmount,
-      withdrawalStartAge,
-      portfolioValue,
-      usedDefaults: {
-        currentAge: !questionParams.currentAge && !profileAge,
-        retirementAge: !questionParams.retirementAge && !profileRetirementAge,
-        annualWithdrawalAmount: !questionParams.annualWithdrawalAmount
-      }
-    });
-  }
-
-  // If we don't have enough info after defaults, return a signal for Linc to ask
-  if (missingParams.length > 0) {
-    console.log(`Retirement analysis: Missing required parameters after defaults: ${missingParams.join(', ')}`);
-    // Return a special indicator that will trigger Linc to ask for missing info
-    return {
-      needsInfo: true,
-      missingParams,
-      detectedParams: {
-        currentAge: currentAge || undefined,
-        retirementAge: retirementAge || undefined,
-        annualWithdrawalAmount: annualWithdrawalAmount || undefined,
-        withdrawalStartAge: withdrawalStartAge || undefined
-      }
-    } as any; // Cast to any to match the return type, will be handled in prompt builder
-  }
-
-  // Check for recent analysis in database (within last 7 days)
   const { getPrismaClient } = await import('../prisma-client');
   const prisma = getPrismaClient();
   const recentAnalysis = await prisma.retirementAnalysis.findFirst({
     where: {
       userId,
-      computedAt: {
-        gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // Last 7 days
-      }
+      computedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
     },
-    orderBy: {
-      computedAt: 'desc'
-    }
+    orderBy: { computedAt: 'desc' }
   });
+  const storedInput = (recentAnalysis?.analysisInput || {}) as Record<string, number | null | undefined>;
+  const {
+    currentAge,
+    retirementAge,
+    annualWithdrawalAmount,
+    withdrawalStartAge,
+    lifeExpectancy,
+    missingParams,
+  } = resolveRetirementInputs({
+    questionParams,
+    profileAge,
+    profileRetirementAge,
+    storedInput,
+  });
+
+  if (
+    missingParams.length > 0 ||
+    currentAge == null ||
+    retirementAge == null ||
+    annualWithdrawalAmount == null ||
+    withdrawalStartAge == null
+  ) {
+    console.log(`Retirement analysis: Missing required parameters: ${missingParams.join(', ')}`);
+    return {
+      needsInfo: {
+        missingParams,
+        detectedParams: {
+          currentAge: currentAge ?? undefined,
+          retirementAge: retirementAge ?? undefined,
+          annualWithdrawalAmount: annualWithdrawalAmount ?? undefined,
+          withdrawalStartAge: withdrawalStartAge ?? undefined
+        }
+      }
+    };
+  }
 
   // If recent analysis exists and parameters match, use it
   if (recentAnalysis) {
-    const storedInput = recentAnalysis.analysisInput as any;
+    const storedPortfolio = recentAnalysis.portfolioSnapshot as any;
+    const portfolioMatches = Array.isArray(storedPortfolio?.holdings)
+      && Array.isArray(storedPortfolio?.securities)
+      && retirementPortfolioFingerprint(holdings, securities) === retirementPortfolioFingerprint(
+        storedPortfolio.holdings,
+        storedPortfolio.securities
+      );
     if (
+      portfolioMatches &&
       storedInput.currentAge === currentAge &&
       storedInput.retirementAge === retirementAge &&
-      storedInput.annualWithdrawalAmount === questionParams.annualWithdrawalAmount &&
-      storedInput.withdrawalStartAge === (questionParams.withdrawalStartAge || retirementAge)
+      storedInput.annualWithdrawalAmount === annualWithdrawalAmount &&
+      storedInput.withdrawalStartAge === withdrawalStartAge &&
+      (storedInput.lifeExpectancy ?? 95) === lifeExpectancy
     ) {
       console.log('📦 Using cached retirement analysis from database');
-      // Return the full analysis output (stored in historicalImplications field as RetirementAnalysisOutput)
       const cachedAnalysis = recentAnalysis.historicalImplications as any;
       if (cachedAnalysis && cachedAnalysis.summary) {
-        // Full analysis result is stored, return it directly
-        return cachedAnalysis;
+        cachedAnalysis._storedInputParams = storedInput;
+        return { analysis: cachedAnalysis };
       }
-      // Fallback: reconstruct from stored fields if needed
-      return {
+      const reconstructed: RetirementAnalysis = {
         summary: {
           characteristics: recentAnalysis.characteristics as any,
           tradeoffs: (recentAnalysis.characteristics as any).tradeoffs || cachedAnalysis?.summary?.tradeoffs || { upside: '', downside: '' },
@@ -872,8 +613,10 @@ async function fetchOrCreateRetirementAnalysis(args: {
           assumptions: [],
           missingData: []
         },
-        disclaimers: []
+        disclaimers: [],
+        _storedInputParams: storedInput
       };
+      return { analysis: reconstructed };
     }
   }
 
@@ -884,11 +627,11 @@ async function fetchOrCreateRetirementAnalysis(args: {
     const analysisInput = {
       holdings,
       securities,
-      currentAge: currentAge!, // Non-null assertion: validated above
+      currentAge,
       retirementAge,
-      lifeExpectancy: questionParams.lifeExpectancy || 95,
-      annualWithdrawalAmount: annualWithdrawalAmount!, // Non-null assertion: validated above
-      withdrawalStartAge: withdrawalStartAge || retirementAge || currentAge! + 20
+      lifeExpectancy,
+      annualWithdrawalAmount,
+      withdrawalStartAge
     };
 
     console.log('🔄 Running new retirement analysis for user:', userId);
@@ -929,7 +672,15 @@ async function fetchOrCreateRetirementAnalysis(args: {
     });
 
     console.log('💾 Retirement analysis completed and stored in database');
-    return analysisResult as any;
+    const resultWithInputs = analysisResult as RetirementAnalysis;
+    resultWithInputs._storedInputParams = {
+      currentAge: analysisInput.currentAge,
+      retirementAge: analysisInput.retirementAge,
+      annualWithdrawalAmount: analysisInput.annualWithdrawalAmount,
+      withdrawalStartAge: analysisInput.withdrawalStartAge,
+      lifeExpectancy: analysisInput.lifeExpectancy,
+    };
+    return { analysis: resultWithInputs };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : 'No stack trace';
@@ -951,7 +702,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
         'Check Tiingo API status and rate limits.');
     }
     
-    return undefined;
+    return {};
   }
 }
 
@@ -1433,165 +1184,12 @@ async function maybeFetchMarketContext(
   }
 }
 
-export interface IncomeExpenseAnalysisResult {
-  text: string;
-  averageMonthly: number;
-}
-
-function buildIncomeAnalysis(transactions: Transaction[], override?: number | null): IncomeExpenseAnalysisResult | undefined {
-  // If override is provided (not null/undefined), use it
-  if (override !== null && override !== undefined) {
-    return {
-      text: [
-        `Average Monthly Income: $${override.toFixed(2)} (Manual Override)`,
-        `Income Transactions Analyzed: N/A (using manual override)`,
-        `Months Covered: N/A (using manual override)`,
-        `Top Sources: N/A (using manual override)`
-      ].join('\n'),
-      averageMonthly: override
-    };
-  }
-
-  if (transactions.length === 0) {
-    return undefined;
-  }
-
-  const incomeTransactions = transactions.filter(transaction => {
-    const type = (transaction as any).transaction_type || transaction.aiCategory;
-    const amount = Number(transaction.amount) || 0;
-    return typeof type === 'string' && type.toLowerCase() === 'income' && amount > 0;
-  });
-
-  if (incomeTransactions.length === 0) {
-    return undefined;
-  }
-
-  const monthlyTotals = new Map<string, number>();
-  const sourceTotals = new Map<string, number>();
-
-  for (const transaction of incomeTransactions) {
-    const amount = Number(transaction.amount) || 0;
-    const date = new Date(transaction.date);
-    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    monthlyTotals.set(monthKey, (monthlyTotals.get(monthKey) || 0) + amount);
-
-    const category = deriveCategory(transaction) || 'Income';
-    sourceTotals.set(category, (sourceTotals.get(category) || 0) + amount);
-  }
-
-  const monthEntries = Array.from(monthlyTotals.entries()).sort(([a], [b]) =>
-    a.localeCompare(b)
-  );
-  const totalIncome = monthEntries.reduce((sum, [, value]) => sum + value, 0);
-
-  // Calendar months between min and max (inclusive). Jan 31 → Feb 1 = 2 months, not 0.
-  // Avoids day-based span (1 day → 0 months → ∞ average).
-  const dateSpanMonths = (() => {
-    if (incomeTransactions.length === 0) return 0;
-    const timestamps = incomeTransactions.map(t => new Date(t.date).getTime());
-    const minDate = new Date(Math.min(...timestamps));
-    const maxDate = new Date(Math.max(...timestamps));
-    return (maxDate.getFullYear() - minDate.getFullYear()) * 12 + (maxDate.getMonth() - minDate.getMonth()) + 1;
-  })();
-  const averageMonthlyIncome = dateSpanMonths > 0 ? totalIncome / dateSpanMonths : 0;
-
-  const topSources = Array.from(sourceTotals.entries())
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 5)
-    .map(([label, value]) => `${label}: $${value.toFixed(2)}`)
-    .join(', ');
-
-  return {
-    text: [
-      `Average Monthly Income: $${averageMonthlyIncome.toFixed(2)}`,
-      `Income Transactions Analyzed: ${incomeTransactions.length}`,
-      `Months Covered: ${dateSpanMonths} (span from earliest to latest income transaction)`,
-      `Top Sources: ${topSources || 'Not available'}`
-    ].join('\n'),
-    averageMonthly: averageMonthlyIncome
-  };
-}
-
-function buildExpenseAnalysis(transactions: Transaction[], override?: number | null): IncomeExpenseAnalysisResult | undefined {
-  // If override is provided (not null/undefined), use it
-  if (override !== null && override !== undefined) {
-    return {
-      text: [
-        `Average Monthly Expenses: $${override.toFixed(2)} (Manual Override)`,
-        `Expense Transactions Analyzed: N/A (using manual override)`,
-        `Months Covered: N/A (using manual override)`,
-        `Top Categories: N/A (using manual override)`
-      ].join('\n'),
-      averageMonthly: override
-    };
-  }
-
-  if (transactions.length === 0) {
-    return undefined;
-  }
-
-  const expenseTransactions = transactions.filter(transaction => {
-    const type = (transaction as any).transaction_type || transaction.aiCategory;
-    return typeof type === 'string' && (type.toLowerCase() === 'expense' || type.toLowerCase() === 'fee');
-  });
-
-  if (expenseTransactions.length === 0) {
-    return undefined;
-  }
-
-  const monthlyTotals = new Map<string, number>();
-  const categoryTotals = new Map<string, number>();
-
-  for (const transaction of expenseTransactions) {
-    const amount = Math.abs(Number(transaction.amount) || 0);
-    const date = new Date(transaction.date);
-    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    monthlyTotals.set(monthKey, (monthlyTotals.get(monthKey) || 0) + amount);
-
-    const category = deriveCategory(transaction) || 'Uncategorized';
-    categoryTotals.set(category, (categoryTotals.get(category) || 0) + amount);
-  }
-
-  const monthEntries = Array.from(monthlyTotals.entries()).sort(([a], [b]) =>
-    a.localeCompare(b)
-  );
-  const totalExpense = monthEntries.reduce((sum, [, value]) => sum + value, 0);
-
-  // Calendar months between min and max (inclusive). Jan 31 → Feb 1 = 2 months, not 0.
-  const dateSpanMonths = (() => {
-    if (expenseTransactions.length === 0) return 0;
-    const timestamps = expenseTransactions.map(t => new Date(t.date).getTime());
-    const minDate = new Date(Math.min(...timestamps));
-    const maxDate = new Date(Math.max(...timestamps));
-    return (maxDate.getFullYear() - minDate.getFullYear()) * 12 + (maxDate.getMonth() - minDate.getMonth()) + 1;
-  })();
-  const averageMonthlyExpense = dateSpanMonths > 0 ? totalExpense / dateSpanMonths : 0;
-
-  const topCategories = Array.from(categoryTotals.entries())
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 5)
-    .map(([label, value]) => `${label}: $${value.toFixed(2)}`)
-    .join(', ');
-
-  return {
-    text: [
-      `Average Monthly Expenses: $${averageMonthlyExpense.toFixed(2)}`,
-      `Expense Transactions Analyzed: ${expenseTransactions.length}`,
-      `Months Covered: ${dateSpanMonths} (span from earliest to latest expense transaction)`,
-      `Top Categories: ${topCategories || 'Not available'}`
-    ].join('\n'),
-    averageMonthly: averageMonthlyExpense
-  };
-}
-
 async function loadUserProfile(params: {
   userId?: string;
   isDemo: boolean;
   demoProfile?: string;
-  accounts: Account[];
-  transactions: Transaction[];
 }): Promise<string | undefined> {
-  const { userId, isDemo, demoProfile, accounts, transactions } = params;
+  const { userId, isDemo, demoProfile } = params;
 
   if (isDemo && demoProfile) {
     return demoProfile;
@@ -1605,104 +1203,13 @@ async function loadUserProfile(params: {
     const { ProfileManager } = await import('../profile/manager');
     const profileManager = new ProfileManager(userId);
 
-    const rawProfile = await profileManager.getOriginalProfile(userId);
-    if (!rawProfile) {
-      return undefined;
-    }
-
-    try {
-      const { PlaidProfileEnhancer } = await import('../profile/plaid-enhancer');
-      const enhancer = new PlaidProfileEnhancer();
-      
-      // ✅ CRITICAL: Deduplicate accounts before passing to profile enhancer
-      // The snapshot should already be deduplicated, but add defensive deduplication here
-      // to prevent inflated totals in profile text
-      const accountMap = new Map<string, typeof accounts[0]>();
-      accounts.forEach(account => {
-        const accountId = account.account_id || (account as any).plaidAccountId || (account as any).persistentAccountId || account.id;
-        if (accountId) {
-          if (accountMap.has(accountId)) {
-            console.warn(`⚠️ loadUserProfile: Duplicate account_id detected: ${accountId} (${account.name}). Snapshot should have deduplicated this!`);
-            // Keep the account with the most recent data (if available)
-            const existing = accountMap.get(accountId)!;
-            const existingTimestamp = existing.lastSyncedAt || existing.snapshotTimestamp || (existing as any).updatedAt;
-            const newTimestamp = account.lastSyncedAt || account.snapshotTimestamp || (account as any).updatedAt;
-            if (newTimestamp && (!existingTimestamp || new Date(newTimestamp) > new Date(existingTimestamp))) {
-              accountMap.set(accountId, account);
-            }
-          } else {
-            accountMap.set(accountId, account);
-          }
-        } else {
-          console.warn(`⚠️ loadUserProfile: Account without account_id/plaidAccountId: ${account.name}, skipping`);
-        }
-      });
-      const deduplicatedAccounts = Array.from(accountMap.values());
-      if (deduplicatedAccounts.length !== accounts.length) {
-        console.warn(`⚠️ loadUserProfile: Deduplicated accounts: ${accounts.length} → ${deduplicatedAccounts.length} (removed ${accounts.length - deduplicatedAccounts.length} duplicates)`);
-        console.warn(`   This indicates the snapshot JSON contains duplicates. The snapshot should be regenerated.`);
-      } else {
-        console.log(`✅ loadUserProfile: Received ${accounts.length} accounts, all unique (no deduplication needed)`);
-      }
-      
-      const plaidAccounts = deduplicatedAccounts.map(account => ({
-        id: account.account_id || account.id,
-        name: account.name,
-        type: account.type,
-        subtype: account.subtype,
-        balance: {
-          current: account.balance?.current ?? undefined,
-          available: account.balance?.available
-        },
-        currentBalance: account.balance?.current ?? undefined,
-        availableBalance: account.balance?.available,
-        institution: account.institution
-      }));
-
-      // Filter out pending transactions before passing to profile enhancer
-      // This ensures profile enhancement uses only settled transactions (consistent with GPT context)
-      const filteredTransactionsForProfile = deduplicateTransactions(transactions);
-      
-      const plaidTransactions = filteredTransactionsForProfile.map(tx => ({
-        id: (tx as any).transaction_id || (tx as any).id || `${tx.account_id}-${tx.date}-${tx.name}`,
-        account_id: tx.account_id,
-        amount: tx.amount,
-        date: tx.date,
-        name: tx.name,
-        merchant_name: (tx as any).merchant_name,
-        category: Array.isArray(tx.category) ? tx.category : undefined,
-        pending: Boolean((tx as any).pending),
-        enriched_data: tx.enriched_data
-      }));
-
-      const enhanced = await enhancer.enhanceProfileFromPlaidData(
-        userId,
-        plaidAccounts,
-        plaidTransactions,
-        rawProfile
-      );
-
-      if (enhanced && enhanced !== rawProfile) {
-        await profileManager.updateProfile(userId, enhanced);
-      }
-    } catch (enhanceError) {
-      console.warn('Profile enhancement failed', enhanceError);
-    }
-
-    // ✅ Use original profile (no anonymization)
-    const originalProfile = await profileManager.getOriginalProfile(userId);
-    
-    // ✅ CRITICAL: Normalize and deduplicate profile sections before passing to Claude
-    // - Home data: use latest RentCast + latest manual override; rebuild section to eliminate duplicates
-    // - Fallback: extract home value from natural language if user specified in prompt
-    // - LIABILITIES INFORMATION: GPT may add this section multiple times during profile enhancement
-    if (originalProfile) {
-      const normalized = profileManager.normalizeProfileHomeDataSection(originalProfile);
+    const profile = await profileManager.getOriginalProfile(userId);
+    if (profile) {
+      const normalized = profileManager.normalizeProfileHomeDataSection(profile);
       const deduped = profileManager.deduplicateHomeValueManual(normalized);
       return deduplicateLiabilitySections(deduped);
     }
-    
-    return originalProfile;
+    return undefined;
   } catch (error) {
     console.warn('Profile load failed', error);
     return undefined;

@@ -1,5 +1,6 @@
 import { PromptPayload, FinancialContextSnapshot, AccountSummaryItem, TransactionSummaryItem, ConversationEntry } from './types';
 import { getActiveResponseTone } from './prompt-config';
+import type { Holding } from '../services/financial-data-service';
 
 interface PromptBuilderArgs {
   question: string;
@@ -109,41 +110,7 @@ function buildSystemPrompt(snapshot: FinancialContextSnapshot): string {
 
   const accountSummary = formatAccountSummary(snapshot.accounts);
   const transactionSummary = formatTransactionSummary(snapshot.bankingTransactions);
-  
-  // Use summary investment portfolio if available, otherwise use detailed snapshot
-  let investmentSummary = '';
-  if (snapshot.financialSummary?.investmentPortfolio) {
-    const portfolio = snapshot.financialSummary.investmentPortfolio;
-    investmentSummary = `Total Portfolio Value: $${portfolio.totalValue.toFixed(2)}\n` +
-      `Holdings: ${portfolio.holdingCount ?? portfolio.holdingsCount ?? 0}\n` +
-      `Securities: ${portfolio.securityCount}\n` +
-      `Asset Allocation:\n` +
-      portfolio.assetAllocation.map(aa => 
-        `- ${aa.type}: $${aa.value.toFixed(2)} (${aa.percentage.toFixed(1)}%)`
-      ).join('\n');
-    
-    // Add detailed holdings if available
-    if (snapshot.investments?.holdings && snapshot.investments.holdings.length > 0) {
-      const holdingsDetails = snapshot.investments.holdings.map(holding => {
-        const ticker = holding.ticker_symbol || '';
-        const name = holding.security_name || holding.ticker_symbol || 'Unknown Security';
-        const quantity = holding.quantity || 0;
-        const costBasis = holding.cost_basis || 0;
-        const currentValue = holding.institution_value || 0;
-        const securityType = holding.security_type || 'Unknown';
-        const gainLoss = currentValue - costBasis;
-        const gainLossPercent = costBasis > 0 ? ((gainLoss / costBasis) * 100).toFixed(2) : '0.00';
-        
-        const tickerPart = ticker ? `${ticker} (` : '';
-        const tickerClose = ticker ? ')' : '';
-        return `- ${tickerPart}${name}${tickerClose} [${securityType}]: Quantity ${quantity.toFixed(4)}, Cost Basis $${costBasis.toFixed(2)}, Current Value $${currentValue.toFixed(2)} (${gainLoss >= 0 ? '+' : ''}$${gainLoss.toFixed(2)}, ${gainLossPercent}%)`;
-      }).join('\n');
-      
-      investmentSummary += `\n\nDetailed Holdings:\n${holdingsDetails}`;
-    }
-  } else if (snapshot.investments) {
-    investmentSummary = formatInvestmentSummary(snapshot.investments);
-  }
+  const investmentSummary = formatInvestmentContext(snapshot);
 
   if (snapshot.incomeAnalysis) {
     sections.push(`# Income Analysis (authoritative)\n${snapshot.incomeAnalysis}`);
@@ -169,10 +136,14 @@ function buildSystemPrompt(snapshot: FinancialContextSnapshot): string {
     sections.push(`# Home Value\n${snapshot.homeValueSummary}`);
   }
 
-  sections.push(`# Accounts\n${accountSummary}`);
-  sections.push(`# Recent Transactions\n${transactionSummary}`);
+  if (!snapshot.contextSelection || snapshot.contextSelection.accountsIncluded) {
+    sections.push(`# Accounts\n${accountSummary}`);
+  }
+  if (!snapshot.contextSelection || snapshot.contextSelection.transactionDetailsIncluded) {
+    sections.push(`# Recent Transactions\n${transactionSummary}`);
+  }
 
-  if (investmentSummary) {
+  if (investmentSummary && (!snapshot.contextSelection || snapshot.contextSelection.investmentDetailsIncluded)) {
     sections.push(`# Investments\n${investmentSummary}`);
   }
 
@@ -185,18 +156,6 @@ function buildSystemPrompt(snapshot: FinancialContextSnapshot): string {
   if (snapshot.retirementAnalysisNeedsInfo) {
     sections.push(formatRetirementAnalysisInfoRequest(snapshot.retirementAnalysisNeedsInfo));
   }
-
-  // Add portfolio snapshot from stored retirement analysis if available
-  if (snapshot.retirementPortfolioSnapshot) {
-    sections.push(formatRetirementPortfolioSnapshot(snapshot.retirementPortfolioSnapshot));
-  }
-
-  // Add security metadata from stored retirement analysis if available
-  if (snapshot.retirementSecurityMetadata && Object.keys(snapshot.retirementSecurityMetadata).length > 0) {
-    sections.push(formatRetirementSecurityMetadata(snapshot.retirementSecurityMetadata));
-  }
-
-  sections.push(buildTierDetails(snapshot));
 
   const fullPrompt = sections.join('\n\n').trim();
   
@@ -319,20 +278,7 @@ export function formatInvestmentSummary(investments: FinancialContextSnapshot['i
   
   // Use detailed holdings if available, otherwise fall back to summary lines
   if (investments.holdings && investments.holdings.length > 0) {
-    const holdingsDetails = investments.holdings.map(holding => {
-      const ticker = holding.ticker_symbol || '';
-      const name = holding.security_name || holding.ticker_symbol || 'Unknown Security';
-      const quantity = holding.quantity || 0;
-      const costBasis = holding.cost_basis || 0;
-      const currentValue = holding.institution_value || 0;
-      const securityType = holding.security_type || 'Unknown';
-      const gainLoss = currentValue - costBasis;
-      const gainLossPercent = costBasis > 0 ? ((gainLoss / costBasis) * 100).toFixed(2) : '0.00';
-      
-      const tickerPart = ticker ? `${ticker} (` : '';
-      const tickerClose = ticker ? ')' : '';
-      return `- ${tickerPart}${name}${tickerClose} [${securityType}]: Quantity ${quantity.toFixed(4)}, Cost Basis $${costBasis.toFixed(2)}, Current Value $${currentValue.toFixed(2)} (${gainLoss >= 0 ? '+' : ''}$${gainLoss.toFixed(2)}, ${gainLossPercent}%)`;
-    }).join('\n');
+    const holdingsDetails = investments.holdings.map(formatHoldingLine).join('\n');
     
     return `${header}\n\nDetailed Holdings:\n${holdingsDetails}`.trim();
   } else if (investments.summaryLines && investments.summaryLines.length > 0) {
@@ -343,11 +289,52 @@ export function formatInvestmentSummary(investments: FinancialContextSnapshot['i
   return header;
 }
 
+function formatHoldingLine(holding: Holding): string {
+  const finite = (value: unknown): number | null =>
+    typeof value === 'number' && Number.isFinite(value) ? value : null;
+  const ticker = holding.ticker_symbol || '';
+  const name = holding.security_name || ticker || 'Unknown Security';
+  const securityType = holding.security_type || 'Unknown';
+  const quantity = finite(holding.quantity);
+  const costBasis = finite(holding.cost_basis);
+  const currentValue = finite(holding.institution_value);
+  const identity = ticker ? `${ticker} (${name})` : name;
+  const details = [
+    quantity === null ? 'Quantity unavailable' : `Quantity ${quantity.toFixed(4)}`,
+    costBasis === null ? 'Cost basis unavailable' : `Cost Basis $${costBasis.toFixed(2)}`,
+    currentValue === null ? 'Current value unavailable' : `Current Value $${currentValue.toFixed(2)}`,
+  ];
+  if (costBasis !== null && currentValue !== null) {
+    const gainLoss = currentValue - costBasis;
+    const gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : null;
+    details.push(
+      `${gainLoss >= 0 ? '+' : ''}$${gainLoss.toFixed(2)}${gainLossPercent === null ? '' : `, ${gainLossPercent.toFixed(2)}%`}`
+    );
+  }
+  return `- ${identity} [${securityType}]: ${details.join(', ')}`;
+}
+
+function formatInvestmentContext(snapshot: FinancialContextSnapshot): string {
+  const portfolio = snapshot.financialSummary?.investmentPortfolio;
+  if (!portfolio) return snapshot.investments ? formatInvestmentSummary(snapshot.investments) : '';
+  let summary = `Total Portfolio Value: $${portfolio.totalValue.toFixed(2)}\n` +
+    `Holdings: ${portfolio.holdingCount ?? portfolio.holdingsCount ?? 0}\n` +
+    `Securities: ${portfolio.securityCount}\n` +
+    `Asset Allocation:\n` +
+    portfolio.assetAllocation
+      .map(allocation => `- ${allocation.type}: $${allocation.value.toFixed(2)} (${allocation.percentage.toFixed(1)}%)`)
+      .join('\n');
+  if (snapshot.investments?.holdings?.length) {
+    summary += `\n\nDetailed Holdings:\n${snapshot.investments.holdings.map(formatHoldingLine).join('\n')}`;
+  }
+  return summary;
+}
+
 /**
  * Format retirement analysis for LLM consumption
  * Includes explicit instructions for descriptive-only language
  */
-function formatRetirementAnalysis(analysis: FinancialContextSnapshot['retirementAnalysis'], storedInputParams?: any, currentQuestionParams?: any): string {
+function formatRetirementAnalysis(analysis: FinancialContextSnapshot['retirementAnalysis']): string {
   if (!analysis) return '';
 
   const sections: string[] = [];
@@ -360,11 +347,11 @@ function formatRetirementAnalysis(analysis: FinancialContextSnapshot['retirement
     sections.push('## Analysis Parameters');
     sections.push(
       'This analysis was computed with the following parameters:\n' +
-      `- Current Age: ${storedParams.currentAge || 'N/A'}\n` +
-      `- Retirement Age: ${storedParams.retirementAge || 'N/A'}\n` +
-      `- Annual Withdrawal Amount: $${storedParams.annualWithdrawalAmount?.toLocaleString() || 'N/A'}\n` +
-      `- Withdrawal Start Age: ${storedParams.withdrawalStartAge || 'N/A'}\n\n` +
-      'Note: The current question may have different parameters, but the portfolio composition and analysis results remain valid for reference.'
+      `- Current Age: ${storedParams.currentAge ?? 'N/A'}\n` +
+      `- Retirement Age: ${storedParams.retirementAge ?? 'N/A'}\n` +
+      `- Annual Withdrawal Amount: ${storedParams.annualWithdrawalAmount == null ? 'N/A' : `$${storedParams.annualWithdrawalAmount.toLocaleString()}`}\n` +
+      `- Withdrawal Start Age: ${storedParams.withdrawalStartAge ?? 'N/A'}\n` +
+      `- Life Expectancy Assumption: ${storedParams.lifeExpectancy ?? 95}`
     );
   }
   
@@ -543,121 +530,6 @@ function formatRetirementAnalysisInfoRequest(needsInfo: FinancialContextSnapshot
 }
 
 /**
- * Format retirement portfolio snapshot for LLM consumption
- * Includes holdings and securities from stored retirement analysis
- */
-function formatRetirementPortfolioSnapshot(snapshot: FinancialContextSnapshot['retirementPortfolioSnapshot']): string {
-  if (!snapshot) return '';
-
-  const sections: string[] = [];
-  sections.push('# Retirement Portfolio Snapshot (from stored analysis)');
-  sections.push('IMPORTANT: This portfolio snapshot was captured when the retirement analysis was computed. Use this data when answering questions about portfolio composition, holdings, or individual investments. However, for net worth and total portfolio value calculations, ALWAYS use the values from the Financial Overview section above, as those include all accounts (including manual investment accounts) and are the authoritative source.\n');
-
-  // Format holdings
-  if (snapshot.holdings && snapshot.holdings.length > 0) {
-    sections.push('## Holdings');
-    const holdingsList = snapshot.holdings.map((holding: any, idx: number) => {
-      const security = snapshot.securities?.find((s: any) => s.security_id === holding.security_id);
-      const ticker = security?.ticker_symbol || holding.ticker_symbol || 'Unknown';
-      const name = security?.name || security?.security_name || holding.name || 'Unknown';
-      const value = holding.institution_value || holding.value || 0;
-      const quantity = holding.quantity || holding.shares || 'N/A';
-      
-      return `${idx + 1}. ${ticker} - ${name}\n   Value: $${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}\n   Quantity: ${quantity}`;
-    }).join('\n\n');
-    sections.push(holdingsList);
-  }
-
-  // Format securities summary
-  if (snapshot.securities && snapshot.securities.length > 0) {
-    sections.push('\n## Securities Summary');
-    sections.push(`Total Securities: ${snapshot.securities.length}`);
-    const securitiesList = snapshot.securities.map((security: any) => {
-      const ticker = security.ticker_symbol || 'Unknown';
-      const name = security.name || security.security_name || 'Unknown';
-      const type = security.type || security.security_type || 'Unknown';
-      return `- ${ticker}: ${name} (${type})`;
-    }).join('\n');
-    sections.push(securitiesList);
-  }
-
-  return sections.join('\n\n');
-}
-
-/**
- * Format security metadata for LLM consumption
- * Includes expense ratios, asset classes, and other metadata from database
- */
-function formatRetirementSecurityMetadata(metadata: FinancialContextSnapshot['retirementSecurityMetadata']): string {
-  if (!metadata || Object.keys(metadata).length === 0) return '';
-
-  const sections: string[] = [];
-  sections.push('# Security Metadata (from stored analysis)');
-  sections.push('This metadata provides detailed information about the securities in the user\'s portfolio. Use this when discussing expense ratios, asset classes, fund categories, or other security-specific details.\n');
-
-  const metadataEntries = Object.entries(metadata);
-  
-  for (const [ticker, meta] of metadataEntries) {
-    const metaSections: string[] = [];
-    metaSections.push(`## ${ticker}: ${meta.securityName}`);
-    
-    if (meta.assetClass) {
-      metaSections.push(`Asset Class: ${meta.assetClass}`);
-    }
-    
-    if (meta.fundCategory) {
-      metaSections.push(`Fund Category: ${meta.fundCategory}`);
-    }
-    
-    if (meta.expenseRatio !== undefined && meta.expenseRatio !== null) {
-      // Most financial datasets store expense ratios as decimals (0.0075 = 0.75%).
-      // Heuristic: value < 1 → decimal format → multiply by 100; else → already percent.
-      // Handles 0.065 = 6.5% (decimal). Edge case: 0.65 could mean 0.65% or 65% — data-model dependent.
-      const expenseRatio = meta.expenseRatio < 1
-        ? meta.expenseRatio * 100  // Decimal (0.0075 → 0.75%, 0.065 → 6.5%)
-        : meta.expenseRatio;        // Already percent (1.5 → 1.5%)
-      metaSections.push(`Expense Ratio: ${expenseRatio.toFixed(2)}%`);
-    }
-    
-    if (meta.geographicFocus) {
-      metaSections.push(`Geographic Focus: ${meta.geographicFocus}`);
-    }
-    
-    metaSections.push(`Type: ${meta.isETF ? 'ETF' : 'Mutual Fund'}`);
-    metaSections.push(`Data Source: ${meta.provider === 'fmp' ? 'Financial Modeling Prep API' : 'Inferred'}`);
-    
-    sections.push(metaSections.join('\n'));
-  }
-
-  return sections.join('\n\n');
-}
-
-function buildTierDetails(snapshot: FinancialContextSnapshot): string {
-  const { tierContext } = snapshot;
-  const pieces: string[] = [];
-
-  pieces.push(`# Tier Information\nCurrent Tier: ${String(tierContext.tierInfo.currentTier).toUpperCase()}`);
-
-  if (tierContext.tierInfo.availableSources.length > 0) {
-    pieces.push(
-      'Available Data Sources:\n' +
-        tierContext.tierInfo.availableSources.map(source => `- ${source}`).join('\n')
-    );
-  }
-
-  if (tierContext.upgradeHints.length > 0) {
-    pieces.push(
-      'Upgrade Suggestions:\n' +
-        tierContext.upgradeHints
-          .map(hint => `- ${hint.feature}: ${hint.benefit}`)
-          .join('\n')
-    );
-  }
-
-  return pieces.join('\n\n');
-}
-
-/**
  * Build the full Financial Context for LLM prompts (Ask Linc, etc.).
  * This is the canonical financial data — the same richness passed to Gemini for validation.
  * Use this data as the source of truth; it supersedes any numbers mentioned in conversation history.
@@ -696,43 +568,16 @@ export function buildFinancialContextForPrompt(snapshot: FinancialContextSnapsho
     sections.push(`# Home Value\n${snapshot.homeValueSummary}`);
   }
 
-  sections.push(`# Accounts\n${formatAccountSummary(snapshot.accounts)}`);
-  sections.push(`# Recent Transactions\n${formatTransactionSummary(snapshot.bankingTransactions)}`);
-
-  // Investment summary
-  let investmentSummary = '';
-  if (snapshot.financialSummary?.investmentPortfolio) {
-    const portfolio = snapshot.financialSummary.investmentPortfolio;
-    investmentSummary =
-      `Total Portfolio Value: $${portfolio.totalValue.toFixed(2)}\n` +
-      `Holdings: ${portfolio.holdingCount ?? portfolio.holdingsCount ?? 0}\n` +
-      `Securities: ${portfolio.securityCount}\n` +
-      `Asset Allocation:\n` +
-      portfolio.assetAllocation.map((aa) => `- ${aa.type}: $${aa.value.toFixed(2)} (${aa.percentage.toFixed(1)}%)`).join('\n');
-
-    if (snapshot.investments?.holdings && snapshot.investments.holdings.length > 0) {
-      const holdingsDetails = snapshot.investments.holdings
-        .map((holding) => {
-          const ticker = holding.ticker_symbol || '';
-          const name = holding.security_name || holding.ticker_symbol || 'Unknown Security';
-          const quantity = holding.quantity || 0;
-          const costBasis = holding.cost_basis || 0;
-          const currentValue = holding.institution_value || 0;
-          const securityType = holding.security_type || 'Unknown';
-          const gainLoss = currentValue - costBasis;
-          const gainLossPercent = costBasis > 0 ? ((gainLoss / costBasis) * 100).toFixed(2) : '0.00';
-          const tickerPart = ticker ? `${ticker} (` : '';
-          const tickerClose = ticker ? ')' : '';
-          return `- ${tickerPart}${name}${tickerClose} [${securityType}]: Quantity ${quantity.toFixed(4)}, Cost Basis $${costBasis.toFixed(2)}, Current Value $${currentValue.toFixed(2)} (${gainLoss >= 0 ? '+' : ''}$${gainLoss.toFixed(2)}, ${gainLossPercent}%)`;
-        })
-        .join('\n');
-      investmentSummary += `\n\nDetailed Holdings:\n${holdingsDetails}`;
-    }
-  } else if (snapshot.investments) {
-    investmentSummary = formatInvestmentSummary(snapshot.investments);
+  if (!snapshot.contextSelection || snapshot.contextSelection.accountsIncluded) {
+    sections.push(`# Accounts\n${formatAccountSummary(snapshot.accounts)}`);
+  }
+  if (!snapshot.contextSelection || snapshot.contextSelection.transactionDetailsIncluded) {
+    sections.push(`# Recent Transactions\n${formatTransactionSummary(snapshot.bankingTransactions)}`);
   }
 
-  if (investmentSummary) {
+  const investmentSummary = formatInvestmentContext(snapshot);
+
+  if (investmentSummary && (!snapshot.contextSelection || snapshot.contextSelection.investmentDetailsIncluded)) {
     sections.push(`# Investments\n${investmentSummary}`);
   }
 
@@ -743,16 +588,6 @@ export function buildFinancialContextForPrompt(snapshot: FinancialContextSnapsho
   if (snapshot.retirementAnalysisNeedsInfo) {
     sections.push(formatRetirementAnalysisInfoRequest(snapshot.retirementAnalysisNeedsInfo));
   }
-
-  if (snapshot.retirementPortfolioSnapshot) {
-    sections.push(formatRetirementPortfolioSnapshot(snapshot.retirementPortfolioSnapshot));
-  }
-
-  if (snapshot.retirementSecurityMetadata && Object.keys(snapshot.retirementSecurityMetadata).length > 0) {
-    sections.push(formatRetirementSecurityMetadata(snapshot.retirementSecurityMetadata));
-  }
-
-  sections.push(buildTierDetails(snapshot));
 
   return sections.join('\n\n').trim();
 }

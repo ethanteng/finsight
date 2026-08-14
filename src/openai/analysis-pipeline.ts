@@ -24,6 +24,7 @@ import { logRejectedPrompt, logFlaggedOutput } from '../security/security-logger
 import { PromptValidationError } from '../openai';
 import { fetchShowTheMathDBData } from './show-the-math-db-service';
 import type { ShowTheMathData, ShowTheMathClaudeCall, ShowTheMathGeminiValidation } from './show-the-math-types';
+import { sanitizeUngroundedResponse, validateResponseGrounding } from './response-grounding';
 
 export interface RunAskLincAnalysisOptions {
   question: string;
@@ -97,7 +98,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     throw new PromptValidationError(`Prompt rejected: ${validation.reason}`, validation.reason, userMessage);
   }
 
-  onProgress?.('Loading your account and transaction data');
+  onProgress?.('Loading your financial snapshot');
 
   const questionNeeds = analyzeQuestionNeeds(question);
 
@@ -109,7 +110,6 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     questionNeeds,
     tier,
     demoProfile,
-    alwaysIncludeMarketAndRAG: true,
     onProgress
   });
 
@@ -143,12 +143,16 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
 
   // Step 4: Parse structured response
   let structuredResponse = parseStructuredResponse(rawResponse);
+  let groundingResult = validateResponseGrounding(structuredResponse, snapshot, question);
 
   let geminiValidation: ShowTheMathGeminiValidation | undefined;
   let claudeRetry: ShowTheMathClaudeCall | undefined;
+  let validationIssues = groundingResult.issues;
 
-  // Step 5: Optional validation with Gemini (if enabled)
-  if (enableValidation) {
+  // Step 5: Deterministic grounding runs for every response. The slower
+  // secondary-model review is reserved for questions involving projections,
+  // comparisons, or other complex calculations.
+  if (enableValidation && questionNeeds.needsSecondaryValidation) {
     try {
       onProgress?.('Sanity checking with Gemini');
       const { validateWithGemini } = await import('./response-validator');
@@ -165,32 +169,34 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         onShowTheMathProgress?.({ geminiValidation });
       }
       if (!validationResult.valid && validationResult.issues?.length) {
-        console.warn('Ask Linc: Gemini validation failed, regenerating with feedback:', validationResult.issues);
-        // Rebuild prompt input with full Financial Context (same as initial pass) + validation feedback
-        const retryPromptInput = {
-          ...buildPromptInputFromSnapshot(
-            question,
-            snapshot,
-            conversationHistory.map(c => ({ question: c.question, answer: c.answer }))
-          ),
-          validationFeedback: validationResult.issues
-        };
-        const retryPrompt = buildFinancialReasoningPrompt(retryPromptInput);
-        // Discard the streamed first-pass answer before streaming the regenerated one.
-        onAnswerReset?.();
-        rawResponse = onAnswerDelta
-          ? await askClaudeStream(retryPrompt.systemPrompt, retryPrompt.userMessage, makeAnswerStreamer(onAnswerDelta))
-          : await askClaude(retryPrompt.systemPrompt, retryPrompt.userMessage);
-        claudeRetry = {
-          systemPrompt: retryPrompt.systemPrompt,
-          userMessage: retryPrompt.userMessage,
-          rawResponse
-        };
-        onShowTheMathProgress?.({ claudeRetry });
-        structuredResponse = parseStructuredResponse(rawResponse);
+        validationIssues = Array.from(new Set([...validationIssues, ...validationResult.issues]));
       }
     } catch (err) {
       console.warn('Ask Linc: Validation layer failed, using initial response:', err);
+    }
+  }
+
+  if (validationIssues.length > 0) {
+    console.warn('Ask Linc: Response validation failed, regenerating with feedback:', validationIssues);
+    const retryPrompt = buildFinancialReasoningPrompt({
+      ...promptInput,
+      validationFeedback: validationIssues.slice(0, 8),
+    });
+    onAnswerReset?.();
+    rawResponse = onAnswerDelta
+      ? await askClaudeStream(retryPrompt.systemPrompt, retryPrompt.userMessage, makeAnswerStreamer(onAnswerDelta))
+      : await askClaude(retryPrompt.systemPrompt, retryPrompt.userMessage);
+    claudeRetry = {
+      systemPrompt: retryPrompt.systemPrompt,
+      userMessage: retryPrompt.userMessage,
+      rawResponse,
+    };
+    onShowTheMathProgress?.({ claudeRetry });
+    structuredResponse = parseStructuredResponse(rawResponse);
+    groundingResult = validateResponseGrounding(structuredResponse, snapshot, question);
+    if (!groundingResult.valid) {
+      console.error('Ask Linc: Retry was still not grounded:', groundingResult.issues);
+      structuredResponse = sanitizeUngroundedResponse(structuredResponse, groundingResult);
     }
   }
 

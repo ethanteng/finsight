@@ -4,6 +4,8 @@
  */
 
 export interface ShowTheMathDatabaseData {
+  /** Exact canonical projection supplied to the analysis, captured before later refreshes can replace it. */
+  analysis_context_snapshot?: unknown;
   asset_price_history?: unknown[];
   financial_summaries?: unknown;
   financial_summary_snapshots?: unknown;

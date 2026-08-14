@@ -9,6 +9,10 @@ import { buildFinancialReasoningPrompt, FinancialReasoningPromptInput } from './
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const DEFAULT_MODEL = 'claude-sonnet-4-5';
+const configuredMaxTokens = Number.parseInt(process.env.ASK_LINC_MAX_OUTPUT_TOKENS || '4096', 10);
+const DEFAULT_MAX_TOKENS = Number.isFinite(configuredMaxTokens) && configuredMaxTokens > 0
+  ? configuredMaxTokens
+  : 4096;
 
 let anthropicClient: Anthropic | null = null;
 
@@ -39,7 +43,7 @@ export async function askClaude(
 ): Promise<string> {
   const client = getClient();
   const model = options.model || DEFAULT_MODEL;
-  const maxTokens = options.maxTokens ?? 8192;
+  const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
 
   const response = await client.messages.create({
     model,
@@ -65,7 +69,7 @@ export async function askClaudeStream(
 ): Promise<string> {
   const client = getClient();
   const model = options.model || DEFAULT_MODEL;
-  const maxTokens = options.maxTokens ?? 8192;
+  const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
 
   const stream = client.messages.stream({
     model,
