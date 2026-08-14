@@ -156,6 +156,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     setStreamingAnswer('');
     setStructuredResponse(null);
     setShowTheMathData(null);
+    setShowTheMathError(null);
     setActiveView('answer');
     setSelectedSourceKey(null);
     
@@ -174,7 +175,6 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
         const token = localStorage.getItem('auth_token');
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
-          console.log('Sending auth token for ask:', token.substring(0, 20) + '...');
         } else {
           console.log('No auth token found for ask request');
         }
@@ -185,13 +185,9 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
         headers['x-session-id'] = propSessionId;
       }
       
-      // Use different endpoints for demo vs production
-      const endpoint = isDemo ? '/ask' : '/ask/display-real';
-      const requestBody = isDemo ? {
-        question: questionToAsk,
-        userTier: 'premium', // Demo mode gets premium tier access
-        isDemo: true
-      } : {
+      // Use display-real for both demo and production so Show the Math evidence is persisted.
+      const endpoint = '/ask/display-real';
+      const requestBody = {
         question: questionToAsk,
         isDemo: isDemo,
         sessionId: propSessionId
@@ -296,7 +292,6 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
           setAnswer(data.answer);
           if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
           if (data.conversationId) setConversationId(data.conversationId);
-          else if (isDemo) setConversationId(`demo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
           if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
           trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier, is_demo: isDemo });
         } else {
@@ -336,6 +331,11 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
         ? `/demo/conversations/${conversationId}/show-the-math`
         : `/conversations/${conversationId}/show-the-math`;
       const res = await fetch(`${API_URL}${endpoint}`, { headers });
+      if (res.status === 401 && !isDemo) {
+        localStorage.removeItem('auth_token');
+        window.location.href = '/login?message=' + encodeURIComponent('Your session has expired. Please log in again.');
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         setShowTheMathData(data);

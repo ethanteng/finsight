@@ -9,5 +9,6 @@ describe('formatKeyNumberValue', () => {
   it('does not infer age from mortgage or rewrite percentages by magnitude', () => {
     expect(formatKeyNumberValue('mortgage_payoff_fund_balance', 4352.34)).toBe('$4,352');
     expect(formatKeyNumberValue('withdrawal_rate', 150)).toBe('150%');
+    expect(formatKeyNumberValue('retirement_age', 65)).toBe('65');
   });
 });

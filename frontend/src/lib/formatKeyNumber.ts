@@ -31,7 +31,7 @@ export function formatKeyNumberValue(key: string, metric: number | DisplayKeyNum
     return `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
   }
   if (unit === 'months' || unit === 'years' || unit === 'age' || unit === 'count' || unit === 'ratio' ||
-      (!unit && (keyLower.includes('months') || keyLower.includes('years')))) {
+      (!unit && (keyLower.includes('months') || keyLower.includes('years') || keyLower.includes('age') || keyLower.includes('count')))) {
     return value.toLocaleString();
   }
   return formatDollars(value);

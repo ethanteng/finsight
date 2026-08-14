@@ -92,7 +92,7 @@ function evidenceTickers(
       if (new RegExp(`\\b${escapedTicker}\\b`, 'i').test(question)) mentionedTickers.add(ticker);
     }
   }
-  return Array.from(mentionedTickers.size > 0 ? mentionedTickers : tickers).sort();
+  return Array.from(mentionedTickers).sort();
 }
 
 function contextDigest(value: string | undefined): string | undefined {

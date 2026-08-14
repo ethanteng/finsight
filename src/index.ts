@@ -614,6 +614,7 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
       if (isDemo) {
         console.log('Demo mode: using AI response directly (no tokenization needed for fake data)');
         const displayResponse = aiResponse;
+        let demoConversationId: string | null = null;
         
         // Save conversation for demo mode
         if (isDemo && sessionId) {
@@ -651,6 +652,7 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
               }
             });
             console.log('Demo conversation saved successfully:', conversation.id);
+            demoConversationId = conversation.id;
             
             // Verify the conversation was actually stored
             const verifyConversation = await prisma.demoConversation.findUnique({
@@ -678,14 +680,14 @@ app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: R
         if (useStreaming) {
           writeSSE(res, 'result', {
             answer: displayResponse,
-            conversationId: null,
+            conversationId: demoConversationId,
             ...(structuredResponse && { structuredResponse })
           });
           return res.end();
         }
         return res.json({ 
           answer: displayResponse,
-          conversationId: null,
+          conversationId: demoConversationId,
           ...(structuredResponse && { structuredResponse })
         });
       }
