@@ -5,6 +5,7 @@ import {
   averageMonthlyCashFlow,
   computeFinancialOverview,
   evaluateSnapshotQuality,
+  isCanonicalTransactionType,
   summarizeCashFlow,
   type CanonicalTransaction,
 } from '../../domain/financial-truth';
@@ -151,6 +152,25 @@ describe('financial truth contract', () => {
         'refund',
         'adjustment',
       ]);
+      expect(isCanonicalTransactionType('refund')).toBe(true);
+      expect(isCanonicalTransactionType('groceries')).toBe(false);
+    });
+
+    it('interprets date-only values as UTC and rejects timezone-less timestamps', () => {
+      const result = summarizeCashFlow(
+        [baseTransaction({ id: 'date-only', effectiveDate: '2026-05-31' })],
+        { start: '2026-05-01', endExclusive: '2026-06-01' },
+        'USD'
+      );
+
+      expect(result.byMonth['2026-05'].expenses).toBe(100);
+      expect(() =>
+        summarizeCashFlow(
+          [baseTransaction({ id: 'local-time', effectiveDate: '2026-05-31T23:30:00' })],
+          { start: '2026-05-01', endExclusive: '2026-06-01' },
+          'USD'
+        )
+      ).toThrow('effectiveDate for local-time timestamp must include a timezone offset');
     });
   });
 
@@ -259,8 +279,24 @@ describe('financial truth contract', () => {
       );
 
       expect(quality.status).toBe('partial');
-      expect(quality.unavailableSourceIds).toEqual(['holdings']);
+      expect(quality.unavailableSourceIds).toEqual(['holdings', 'home-value']);
+      expect(quality.requiredUnavailableSourceIds).toEqual(['holdings']);
       expect(quality.errors).toEqual([{ sourceId: 'holdings', message: 'provider timeout' }]);
+    });
+
+    it('preserves stale provenance when partial status takes precedence', () => {
+      const quality = evaluateSnapshotQuality(
+        [
+          { id: 'balances', required: true, status: 'available', asOf: '2026-05-08T10:00:00.000Z', maxAgeMs: oneDay },
+          { id: 'holdings', required: true, status: 'unavailable', asOf: null, maxAgeMs: oneDay },
+        ],
+        computedAt
+      );
+
+      expect(quality.status).toBe('partial');
+      expect(quality.staleSourceIds).toEqual(['balances']);
+      expect(quality.unavailableSourceIds).toEqual(['holdings']);
+      expect(quality.requiredUnavailableSourceIds).toEqual(['holdings']);
     });
 
     it('marks a snapshot unavailable when no source observation exists', () => {

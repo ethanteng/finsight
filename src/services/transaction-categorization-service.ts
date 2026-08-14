@@ -7,7 +7,7 @@
 
 import OpenAI from 'openai';
 import {
-  CANONICAL_TRANSACTION_TYPES,
+  isCanonicalTransactionType,
   type CanonicalTransactionType,
 } from '../domain/financial-truth';
 
@@ -89,7 +89,7 @@ export interface CategorizationBatchResult {
 }
 
 interface GPTCategorizationResponse {
-  transaction_type: TransactionType;
+  transaction_type: string;
   confidence: number;
   reason: string;
 }
@@ -98,14 +98,11 @@ export class TransactionCategorizationService {
   private readonly gptModel = 'gpt-4o-mini';
   private readonly confidenceThreshold = 0.7;
 
-  private readonly validTransactionTypes: readonly TransactionType[] = CANONICAL_TRANSACTION_TYPES;
-
   /**
    * Check if a string is a valid TransactionType
    */
   private isValidTransactionType(value: any): value is TransactionType {
-    return typeof value === 'string' && 
-           this.validTransactionTypes.includes(value.toLowerCase() as TransactionType);
+    return typeof value === 'string' && isCanonicalTransactionType(value.toLowerCase());
   }
 
   /**
@@ -267,7 +264,7 @@ Respond with ONLY a valid JSON object in this exact format (no markdown, no expl
       const gptResult: GPTCategorizationResponse = JSON.parse(jsonContent);
       
       // Validate transaction_type
-      if (!(CANONICAL_TRANSACTION_TYPES as readonly string[]).includes(gptResult.transaction_type)) {
+      if (!isCanonicalTransactionType(gptResult.transaction_type)) {
         throw new Error(`Invalid transaction_type from GPT: ${gptResult.transaction_type}`);
       }
 

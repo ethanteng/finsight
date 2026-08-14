@@ -47,7 +47,7 @@ Income and expense totals are determined by `type`, never by amount sign alone:
 
 Canonical sign/type disagreements are errors; they must not be silently corrected during aggregation. All amounts in one aggregation must already be converted to one reporting currency.
 
-Reporting periods use an inclusive start and exclusive end. Monthly averages divide by every UTC calendar month in the requested window, including months with no activity.
+Reporting periods use an inclusive start and exclusive end. Date-only values are interpreted as UTC; timestamp strings must include `Z` or an explicit offset. Monthly averages divide by every UTC calendar month in the requested window, including months with no activity.
 
 The current cached transaction summary reverses the normalized depository sign convention and treats investment activity as income/spending. Replacing it with this contract is Step 2.
 
@@ -74,7 +74,7 @@ Three concepts must remain distinct:
 - `computedAt`: when Ask Linc calculated the snapshot.
 - `status`: `current`, `stale`, `partial`, or `unavailable`.
 
-Recomputing a snapshot does not make its inputs fresher. Required unavailable sources make a snapshot `partial`; no available sources makes it `unavailable`; otherwise any source older than its declared maximum age makes it `stale`. Source errors and stale/unavailable source IDs remain attached to the snapshot for the UI and LLM.
+Recomputing a snapshot does not make its inputs fresher. Required unavailable sources make a snapshot `partial`; no available sources makes it `unavailable`; otherwise any source older than its declared maximum age makes it `stale`. When missing and stale sources coexist, `partial` is the primary status and the stale-source list still preserves the stale condition. Source errors and all stale/unavailable source IDs—including optional unavailable sources—remain attached to the snapshot for the UI and LLM.
 
 Optional sources do not make a snapshot partial when absent. If present but stale, they make the values that use them stale.
 

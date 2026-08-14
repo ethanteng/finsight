@@ -52,6 +52,12 @@ export const CANONICAL_TRANSACTION_TYPES = [
 
 export type CanonicalTransactionType = (typeof CANONICAL_TRANSACTION_TYPES)[number];
 
+const CANONICAL_TRANSACTION_TYPE_SET: ReadonlySet<string> = new Set(CANONICAL_TRANSACTION_TYPES);
+
+export function isCanonicalTransactionType(value: unknown): value is CanonicalTransactionType {
+  return typeof value === 'string' && CANONICAL_TRANSACTION_TYPE_SET.has(value);
+}
+
 /**
  * cashFlowAmount is from the user's perspective after provider normalization:
  * positive means money received and negative means money paid. sourceAmount is
@@ -107,7 +113,25 @@ const EXCLUDED_TYPES = new Set<CanonicalTransactionType>([
 ]);
 
 function parseDate(value: string | Date, fieldName: string): Date {
-  const parsed = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  let parsed: Date;
+  if (value instanceof Date) {
+    parsed = new Date(value.getTime());
+  } else if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    // Financial providers commonly return date-only values. Make their UTC
+    // meaning explicit rather than relying on runtime-specific parsing.
+    parsed = new Date(`${value}T00:00:00.000Z`);
+    if (parsed.toISOString().slice(0, 10) !== value) {
+      throw new Error(`${fieldName} must be a valid date`);
+    }
+  } else {
+    // Timestamp strings must identify an instant. A timestamp without an
+    // offset would be interpreted in the server's local timezone and can move
+    // a transaction into a different UTC month.
+    if (!/(?:Z|[+-]\d{2}:\d{2})$/i.test(value)) {
+      throw new Error(`${fieldName} timestamp must include a timezone offset`);
+    }
+    parsed = new Date(value);
+  }
   if (Number.isNaN(parsed.getTime())) {
     throw new Error(`${fieldName} must be a valid date`);
   }
@@ -359,7 +383,10 @@ export interface SnapshotQuality {
   asOf: Date | null;
   computedAt: Date;
   staleSourceIds: string[];
+  /** Every unavailable source, including optional sources, for provenance. */
   unavailableSourceIds: string[];
+  /** Required unavailable sources that make an otherwise available snapshot partial. */
+  requiredUnavailableSourceIds: string[];
   errors: Array<{ sourceId: string; message: string }>;
 }
 
@@ -375,6 +402,7 @@ export function evaluateSnapshotQuality(
   const availableDates: Date[] = [];
   const staleSourceIds: string[] = [];
   const unavailableSourceIds: string[] = [];
+  const requiredUnavailableSourceIds: string[] = [];
   const errors: Array<{ sourceId: string; message: string }> = [];
 
   for (const source of sources) {
@@ -385,7 +413,8 @@ export function evaluateSnapshotQuality(
     if (source.error) errors.push({ sourceId: source.id, message: source.error });
 
     if (source.status === 'unavailable' || source.asOf === null) {
-      if (source.required) unavailableSourceIds.push(source.id);
+      unavailableSourceIds.push(source.id);
+      if (source.required) requiredUnavailableSourceIds.push(source.id);
       continue;
     }
 
@@ -402,7 +431,7 @@ export function evaluateSnapshotQuality(
     : null;
   let status: SnapshotStatus = 'current';
   if (availableDates.length === 0) status = 'unavailable';
-  else if (unavailableSourceIds.length > 0) status = 'partial';
+  else if (requiredUnavailableSourceIds.length > 0) status = 'partial';
   else if (staleSourceIds.length > 0) status = 'stale';
 
   return {
@@ -411,6 +440,7 @@ export function evaluateSnapshotQuality(
     computedAt,
     staleSourceIds,
     unavailableSourceIds,
+    requiredUnavailableSourceIds,
     errors,
   };
 }
