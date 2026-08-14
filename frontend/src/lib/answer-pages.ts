@@ -199,6 +199,7 @@ export const canIRetireWithTwoMillion: AnswerPageData = {
     { question: "Check your retirement readiness", eyebrow: "Use your details", href: "/retirement-readiness" },
     { question: "Questions to ask before retiring", eyebrow: "Explore prompts", href: "/prompts/retirement" },
     { question: "Can I retire with $1 million?", eyebrow: "Answer page", href: "/can-i-retire-with-1-million" },
+    { question: "Can I retire with $3 million?", eyebrow: "Answer page", href: "/can-i-retire-with-3-million" },
     { question: "Can I retire at 55?", eyebrow: "Answer page", href: "/can-i-retire-at-55" },
     { question: "Can I retire at 60?", eyebrow: "Answer page", href: "/can-i-retire-at-60" },
   ],
@@ -206,6 +207,115 @@ export const canIRetireWithTwoMillion: AnswerPageData = {
     { title: "Get a benefits estimate", publisher: "Social Security Administration", href: "https://www.ssa.gov/prepare/get-benefits-estimate", use: "Personalized Social Security estimates and claiming-age scenarios." },
     { title: "Publication 590-B: Distributions from IRAs", publisher: "Internal Revenue Service", href: "https://www.irs.gov/publications/p590b", use: "IRA distribution, tax, early-withdrawal, and required-minimum-distribution rules." },
     { title: "Medicare costs", publisher: "Medicare.gov", href: "https://www.medicare.gov/basics/costs/medicare-costs", use: "Current premiums, deductibles, coinsurance, and plan-cost context." },
+    { title: "CPI Inflation Calculator", publisher: "U.S. Bureau of Labor Statistics", href: "https://www.bls.gov/data/inflation_calculator_inside.htm", use: "Consumer Price Index context for expressing spending in today’s dollars." },
+  ],
+};
+
+export const canIRetireWithThreeMillion: AnswerPageData = {
+  slug: "can-i-retire-with-3-million",
+  category: "Retirement answer",
+  title: "Can I retire with $3 million?",
+  titleAccent: "Translate the balance into after-tax spending.",
+  description:
+    "See how spending, retirement age, taxes, Social Security, healthcare, investment risk, and withdrawal rates determine whether $3 million is enough to retire.",
+  reviewedOn: "August 13, 2026",
+  reviewedOnIso: "2026-08-13",
+  readTime: "10 min read",
+  breadcrumbs: [
+    { label: "Home", href: "/" },
+    { label: "Retirement", href: "/use-cases/retirement" },
+    { label: "Can I retire with $3 million?" },
+  ],
+  directAnswer:
+    "Yes—for many households, $3 million can support a comfortable retirement. But a large balance is not the same thing as a complete retirement plan.",
+  directAnswerDetail:
+    "A $3 million portfolio produces $90,000 of first-year withdrawals at 3%, $105,000 at 3.5%, or $120,000 at 4%. Add Social Security, pensions, or other income, then test the total against taxes, healthcare, inflation, retirement timing, portfolio concentration, and the lifestyle or legacy you want to fund.",
+  keyNumbers: [
+    { label: "3% initial withdrawal", value: "$90K/yr", note: "$7,500 a month before tax" },
+    { label: "3.5% initial withdrawal", value: "$105K/yr", note: "$8,750 a month before tax" },
+    { label: "4% initial withdrawal", value: "$120K/yr", note: "$10,000 a month before tax" },
+  ],
+  numberStripLabel: "Example $3 million withdrawal amounts",
+  withdrawalSection: {
+    tocLabel: "What $3M can support",
+    heading: "What can $3 million support?",
+    tableCaption: "First-year withdrawals from a $3 million portfolio",
+    noteTitle: "Gross withdrawals are not spendable income.",
+    noteBody:
+      "A 4% initial withdrawal equals $120,000 before tax. The amount available to spend depends on which accounts fund the withdrawal, realized gains, other income, and healthcare premiums. The rate is a planning reference—not a guaranteed return or outcome.",
+  },
+  withdrawalScenarios: [
+    { rate: "3.0%", annualWithdrawal: "$90,000", monthlyWithdrawal: "$7,500", planningUse: "Lower starting draw; more room for a long horizon, legacy goals, or weak early returns." },
+    { rate: "3.5%", annualWithdrawal: "$105,000", monthlyWithdrawal: "$8,750", planningUse: "A middle scenario for testing lifestyle spending against other income." },
+    { rate: "4.0%", annualWithdrawal: "$120,000", monthlyWithdrawal: "$10,000", planningUse: "A common planning reference—not guaranteed lifetime income." },
+    { rate: "4.5%", annualWithdrawal: "$135,000", monthlyWithdrawal: "$11,250", planningUse: "A higher draw that needs more flexibility or a shorter horizon." },
+    { rate: "5.0%", annualWithdrawal: "$150,000", monthlyWithdrawal: "$12,500", planningUse: "More pressure on the portfolio, especially after early market losses." },
+  ],
+  example: {
+    title: "A simple $150K retirement-income example",
+    intro:
+      "Suppose your household wants $150,000 a year of gross income and expects $30,000 from Social Security or a pension.",
+    steps: [
+      { label: "Annual income target", value: "$150,000" },
+      { label: "Social Security + pension", value: "$30,000", operator: "−" },
+      { label: "Needed from portfolio", value: "$120,000", operator: "=" },
+      { label: "$120,000 ÷ $3,000,000", value: "4.0%", operator: "=" },
+    ],
+    result: "The initial portfolio withdrawal rate is 4% before tax.",
+    note:
+      "This starting frame does not include the tax character of each withdrawal, investment fees, income-related Medicare premiums, healthcare costs, spending changes, or the date each income source begins.",
+  },
+  scenarioTableCaption: "Illustrative income needs with $30,000 of annual income outside the portfolio",
+  scenarioTableFootnote:
+    "All scenarios use the same $3 million starting portfolio and $30,000 of illustrative annual income outside the portfolio. Gross income target means income before taxes. Real plans should model when each income source begins and the tax character of withdrawals.",
+  retirementScenarios: [
+    { label: "Lower spending", annualIncomeTarget: "$90,000", otherIncome: "$30,000", portfolioWithdrawal: "$60,000", initialRate: "2.0%" },
+    { label: "Moderate spending", annualIncomeTarget: "$120,000", otherIncome: "$30,000", portfolioWithdrawal: "$90,000", initialRate: "3.0%" },
+    { label: "Higher spending", annualIncomeTarget: "$150,000", otherIncome: "$30,000", portfolioWithdrawal: "$120,000", initialRate: "4.0%" },
+    { label: "Very high spending", annualIncomeTarget: "$180,000", otherIncome: "$30,000", portfolioWithdrawal: "$150,000", initialRate: "5.0%" },
+  ],
+  factors: [
+    { number: "01", title: "Your after-tax spending", body: "Separate lifestyle spending from the taxes needed to fund it. A $120,000 gross withdrawal may produce very different spendable income depending on the accounts used." },
+    { number: "02", title: "When retirement starts", body: "A retirement beginning at 50 or 55 may require decades of withdrawals and a healthcare bridge. A later start shortens the horizon and may increase Social Security income." },
+    { number: "03", title: "Account mix and withdrawal order", body: "Traditional, Roth, and taxable accounts have different tax treatment. Withdrawal order can affect taxes, future required distributions, and income-related Medicare premiums." },
+    { number: "04", title: "Portfolio concentration", body: "A $3 million balance concentrated in one company, sector, or asset can carry different risk than a diversified portfolio. Taxes and trading restrictions may complicate changes." },
+    { number: "05", title: "Lifestyle and legacy goals", body: "Travel, multiple homes, family support, charitable giving, and the amount you want to leave behind can turn the same balance into very different plans." },
+    { number: "06", title: "Inflation, markets, and healthcare", body: "Inflation erodes purchasing power, early losses can magnify withdrawal risk, and healthcare or long-term care costs can arrive unevenly." },
+  ],
+  checkpoints: [
+    "Estimate annual lifestyle spending and taxes separately in today’s dollars.",
+    "Add Social Security, pensions, and other income at the age each source begins.",
+    "Map withdrawals by account type and estimate their effect on taxable income.",
+    "Test a concentrated holding, weak early returns, higher inflation, and a long life.",
+    "Define spending flexibility and any legacy, gifting, or charitable goals.",
+  ],
+  productBridge: {
+    heading: "$3 million is a balance. Retirement is an after-tax cash-flow plan.",
+    body:
+      "Ask Linc can use your accounts, spending, income, and goals to compare retirement dates and show the assumptions and calculations behind the result.",
+    priceNote: "1 month free, then $9/month. Cancel anytime.",
+  },
+  faqs: [
+    { question: "How much income can $3 million generate in retirement?", answer: "A $3 million portfolio equals $90,000 of first-year withdrawals at 3%, $105,000 at 3.5%, $120,000 at 4%, or $150,000 at 5%, before tax. These are planning illustrations, not promised returns or guaranteed lifetime income." },
+    { question: "How long will $3 million last in retirement?", answer: "There is no fixed number of years. The result depends on withdrawals, investment returns, inflation, fees, taxes, portfolio concentration, and whether spending changes after poor markets. A year-by-year projection is more useful than dividing the balance by annual spending." },
+    { question: "Can a couple retire with $3 million?", answer: "For many couples, possibly yes. The answer depends on combined spending, Social Security benefits, pensions, housing, taxes, healthcare, longevity, and legacy goals. The important figure is the after-tax gap the portfolio must cover." },
+    { question: "Can I retire early with $3 million?", answer: "Possibly, but early retirement means more years of withdrawals, healthcare coverage before Medicare, and potentially more time before Social Security begins. Test lower starting rates, flexible spending, and poor early market returns." },
+    { question: "Do taxes matter if I have $3 million?", answer: "Yes. Traditional retirement-account withdrawals are generally taxable, taxable accounts may create capital gains, and Roth withdrawals can follow different rules. Higher modified adjusted gross income can also increase Medicare Part B and prescription drug coverage premiums." },
+    { question: "Is the 4% rule safe for a $3 million portfolio?", answer: "The 4% rule is a historical planning reference, not a guarantee. Your time horizon, asset mix, fees, taxes, concentration risk, and willingness to adjust spending all affect the result. Test several rates and market sequences." },
+  ],
+  relatedAnswers: [
+    { question: "Can I retire with $1 million?", eyebrow: "Answer page", href: "/can-i-retire-with-1-million" },
+    { question: "Can I retire with $2 million?", eyebrow: "Answer page", href: "/can-i-retire-with-2-million" },
+    { question: "Can I retire at 55?", eyebrow: "Answer page", href: "/can-i-retire-at-55" },
+    { question: "Can I retire at 60?", eyebrow: "Answer page", href: "/can-i-retire-at-60" },
+    { question: "Check your retirement readiness", eyebrow: "Use your details", href: "/retirement-readiness" },
+    { question: "How Ask Linc tests a retirement decision", eyebrow: "See the product", href: "/use-cases/retirement" },
+  ],
+  sources: [
+    { title: "Get a benefits estimate", publisher: "Social Security Administration", href: "https://www.ssa.gov/prepare/get-benefits-estimate", use: "Personalized Social Security estimates and claiming-age scenarios." },
+    { title: "Publication 590-B: Distributions from IRAs", publisher: "Internal Revenue Service", href: "https://www.irs.gov/publications/p590b", use: "IRA distribution, tax, Roth, and required-minimum-distribution rules." },
+    { title: "Medicare premiums for higher-income beneficiaries", publisher: "Social Security Administration", href: "https://www.ssa.gov/benefits/medicare/medicare-premiums.html", use: "How modified adjusted gross income can affect Medicare Part B and prescription drug coverage premiums." },
+    { title: "Asset allocation and diversification", publisher: "Investor.gov", href: "https://www.investor.gov/introduction-investing/getting-started/asset-allocation", use: "Diversification, time horizon, risk tolerance, and rebalancing principles." },
     { title: "CPI Inflation Calculator", publisher: "U.S. Bureau of Labor Statistics", href: "https://www.bls.gov/data/inflation_calculator_inside.htm", use: "Consumer Price Index context for expressing spending in today’s dollars." },
   ],
 };
@@ -581,7 +691,7 @@ export const canIRetireAt60: AnswerPageData = {
     { question: "Can I retire with $2 million?", eyebrow: "Answer page", href: "/can-i-retire-with-2-million" },
     { question: "Check your retirement readiness", eyebrow: "Use your details", href: "/retirement-readiness" },
     { question: "How Ask Linc tests a retirement decision", eyebrow: "See the product", href: "/use-cases/retirement" },
-    { question: "Can I retire with $3 million?", eyebrow: "Answer page", href: undefined },
+    { question: "Can I retire with $3 million?", eyebrow: "Answer page", href: "/can-i-retire-with-3-million" },
   ],
   sources: [
     { title: "Significant ages for retirement plan participants", publisher: "Internal Revenue Service", href: "https://www.irs.gov/retirement-plans/retirement-topics-significant-ages-for-retirement-plan-participants", use: "Current federal retirement-plan milestones, including the age 59½ distribution threshold." },
