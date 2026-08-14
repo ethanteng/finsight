@@ -13,6 +13,7 @@ import { groupAccounts } from '../../components/finances/AccountGrouping';
 import type { ManualAccount } from '../../types/manual-account';
 import { resetUserIdentity } from '../../lib/heycatch';
 import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
+import { mergeCanonicalCurrentWithHistory } from '../../lib/canonical-financial-history';
 
 const ManualAccountList = lazy(() => import('../../components/ManualAccountList'));
 
@@ -92,11 +93,11 @@ interface Holding {
   id: string;
   account_id: string;
   security_id: string;
-  institution_value: number;
-  institution_price: number;
+  institution_value: number | null;
+  institution_price: number | null;
   institution_price_as_of: string;
-  cost_basis: number;
-  quantity: number;
+  cost_basis: number | null;
+  quantity: number | null;
   iso_currency_code: string;
   security_name?: string;
   security_type?: string;
@@ -121,6 +122,9 @@ interface InvestmentTransaction {
 
 interface Snapshot {
   computedAt: string;
+  asOf?: string | null;
+  status?: 'current' | 'stale' | 'partial' | 'unavailable' | null;
+  reportingCurrency?: string;
   financialOverview: FinancialOverview;
   investmentPortfolio: InvestmentPortfolio;
   accounts?: Account[];
@@ -286,8 +290,8 @@ export default function FinancesPageClient() {
                 setHomeData({
                   address: homeDataResponse.homeData.address || '',
                   value: homeDataResponse.homeData.value,
-                  valueLow: homeDataResponse.homeData.valueLow || homeDataResponse.homeData.value * 0.9,
-                  valueHigh: homeDataResponse.homeData.valueHigh || homeDataResponse.homeData.value * 1.1,
+                  valueLow: homeDataResponse.homeData.valueLow,
+                  valueHigh: homeDataResponse.homeData.valueHigh,
                   lastUpdated: homeDataResponse.homeData.lastUpdated || snapshotData?.computedAt || new Date().toISOString(),
                   isManualOverride: homeDataResponse.homeData.isManualOverride || false
                 });
@@ -299,20 +303,7 @@ export default function FinancesPageClient() {
             }
           } catch (e) {
             console.log('🏠 FinancesPage: Error fetching from profile endpoint:', e);
-            // Fallback: try to use home value from snapshot if profile endpoint fails
-            if (snapshotData?.financialOverview?.homeValue && snapshotData.financialOverview.homeValue > 0) {
-              console.log(`🏠 FinancesPage: Using snapshot home value: $${snapshotData.financialOverview.homeValue}`);
-              setHomeData({
-                address: '',
-                value: snapshotData.financialOverview.homeValue,
-                valueLow: snapshotData.financialOverview.homeValue * 0.9,
-                valueHigh: snapshotData.financialOverview.homeValue * 1.1,
-                lastUpdated: snapshotData.computedAt || new Date().toISOString(),
-                isManualOverride: false
-              });
-            } else {
-              console.log('🏠 FinancesPage: No home value found in snapshot either');
-            }
+            setHomeData(null);
           }
         } else {
           if (res.status === 401) {
@@ -584,76 +575,41 @@ export default function FinancesPageClient() {
 
       <main className="mx-auto max-w-[1200px] space-y-6 p-5 py-10 sm:px-6 md:py-12">
         <div className="authenticated-intro mb-10"><h2>Your whole financial picture, in one place.</h2><p>A connected view of your net worth, trends, accounts, and the assumptions Ask Linc uses.</p></div>
-        {/* Net Worth Card */}
-        {/* Use snapshot.homeValue first (backend-calculated), then fall back to homeData.value for display */}
-        <NetWorthCard 
-          netWorth={Math.round(
-            snapshot.financialOverview.totalCash + 
-            snapshot.financialOverview.totalInvestments + 
-            (snapshot.financialOverview.homeValue ?? homeData?.value ?? 0) - 
-            snapshot.financialOverview.totalDebt
+        <div className="flex flex-wrap items-center gap-2 text-xs text-[#5e6b63]">
+          {snapshot.asOf && (
+            <span>Source data as of {new Date(snapshot.asOf).toLocaleString()}</span>
           )}
+          {snapshot.status && snapshot.status !== 'current' && (
+            <span className="rounded-full bg-[#fff3ce] px-2.5 py-1 font-semibold text-[#76510f]">
+              {snapshot.status === 'partial' ? 'Some data unavailable' :
+                snapshot.status === 'stale' ? 'Some data is stale' : 'Source data unavailable'}
+            </span>
+          )}
+        </div>
+        {/* Net Worth Card */}
+        <NetWorthCard 
+          netWorth={Math.round(snapshot.financialOverview.netWorth)}
           totalCash={Math.round(snapshot.financialOverview.totalCash)}
           totalInvestments={Math.round(snapshot.financialOverview.totalInvestments)}
           totalDebt={Math.round(snapshot.financialOverview.totalDebt)}
-          homeValue={snapshot.financialOverview.homeValue ?? homeData?.value ?? null}
+          homeValue={snapshot.financialOverview.homeValue}
         />
 
         {/* Financial Metrics Chart */}
         {!historicalDataLoading && snapshot && (() => {
-          // Get current home value (prefer snapshot.homeValue - backend-calculated, then fall back to homeData.value)
-          const currentHomeValue = snapshot.financialOverview.homeValue ?? homeData?.value ?? null;
-          
-          // Create current snapshot with accurate values
+          // Preserve the canonical values and source time exactly. The chart
+          // must not rewrite historical rows with today's home value.
           const currentSnapshot = {
-            computedAt: new Date().toISOString(),
-            netWorth: Math.round(
-              snapshot.financialOverview.totalCash + 
-              snapshot.financialOverview.totalInvestments + 
-              (currentHomeValue || 0) - 
-              snapshot.financialOverview.totalDebt
-            ),
-            totalCash: Math.round(snapshot.financialOverview.totalCash),
-            totalInvestments: Math.round(snapshot.financialOverview.totalInvestments),
-            totalDebt: Math.round(snapshot.financialOverview.totalDebt),
-            homeValue: currentHomeValue,
+            computedAt: snapshot.computedAt,
+            netWorth: snapshot.financialOverview.netWorth,
+            totalCash: snapshot.financialOverview.totalCash,
+            totalInvestments: snapshot.financialOverview.totalInvestments,
+            totalDebt: snapshot.financialOverview.totalDebt,
+            homeValue: snapshot.financialOverview.homeValue,
           };
 
-          // Recalculate net worth and fill in missing homeValue for all historical snapshots
-          // If a historical snapshot has homeValue as null/0 but we have a current homeValue,
-          // use the current homeValue (assuming home value doesn't change frequently)
-          // Ensure historicalData is always an array
           const safeHistoricalData = Array.isArray(historicalData) ? historicalData : [];
-          const today = new Date().toDateString();
-          
-          // Filter out any historical snapshots from today - we'll use current snapshot instead
-          // This ensures manual accounts are always included in today's data point
-          const historicalDataExcludingToday = safeHistoricalData.filter(snapshot => {
-            const snapshotDate = new Date(snapshot.computedAt).toDateString();
-            return snapshotDate !== today;
-          });
-          
-          const correctedHistoricalData = historicalDataExcludingToday.map(snapshot => {
-            // Use current homeValue if historical snapshot is missing it (null or 0)
-            const homeValue = (snapshot.homeValue != null && snapshot.homeValue > 0) 
-              ? snapshot.homeValue 
-              : (currentHomeValue || null);
-            
-            return {
-              ...snapshot,
-              homeValue: homeValue,
-              netWorth: Math.round(
-                snapshot.totalCash + 
-                snapshot.totalInvestments + 
-                (homeValue || 0) - 
-                snapshot.totalDebt
-              ),
-            };
-          });
-
-          // Always use current snapshot for today (includes manual accounts)
-          // Prepend it to historical data so it appears as the most recent point
-          const chartData = [currentSnapshot, ...correctedHistoricalData];
+          const chartData = mergeCanonicalCurrentWithHistory(currentSnapshot, safeHistoricalData);
 
           return (
             <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
@@ -717,13 +673,9 @@ export default function FinancesPageClient() {
           <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
             <div className="text-gray-400 text-sm mb-1">Home Value</div>
             <div className="text-white font-semibold text-xl">
-              {homeData && homeData.value > 0 ? 
-                new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(homeData.value)) :
-                (snapshot.financialOverview.homeValue && snapshot.financialOverview.homeValue > 0 ?
-                  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(snapshot.financialOverview.homeValue)) :
-                  '$0'
-                )
-              }
+              {snapshot.financialOverview.homeValue === null
+                ? 'Unavailable'
+                : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(snapshot.financialOverview.homeValue))}
             </div>
           </div>
         </div>

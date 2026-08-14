@@ -432,6 +432,9 @@ model FinancialSummarySnapshot {
   userId               String   @unique
   user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   computedAt           DateTime
+  asOf                 DateTime?
+  status               String?
+  reportingCurrency    String   @default("USD")
 
   // Summary sections
   financialOverview     Json    // { netWorth, totalCash, totalInvestments, totalDebt, homeValue }
@@ -447,6 +450,8 @@ model FinancialSummarySnapshot {
 
   // Metadata (includes window sizes and balance refresh info)
   meta                 Json?
+  quality              Json?
+  sourceObservations   Json?
 
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
@@ -460,11 +465,16 @@ model FinancialSummaryHistory {
   userId           String
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   computedAt       DateTime
+  asOf             DateTime?
+  status           String?
+  reportingCurrency String  @default("USD")
   netWorth         Float
   totalCash        Float
   totalInvestments Float
   totalDebt       Float
   homeValue        Float?
+  totalAssets      Float?
+  totalLiabilities Float?
   createdAt        DateTime @default(now())
 
   @@index([userId, computedAt])

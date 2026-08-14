@@ -76,12 +76,6 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
       console.error('Failed to refresh snapshot after updating account name:', err);
     });
 
-    // Refresh financial summary (updates FinancialSummary table)
-    const { FinancialSummaryService } = await import('../services/financial-summary-service');
-    await new FinancialSummaryService().refreshUserSummary(userId).catch(err => {
-      console.error('Failed to refresh financial summary after updating account name:', err);
-    });
-
     res.json({
       success: true,
       data: updatedAccount,

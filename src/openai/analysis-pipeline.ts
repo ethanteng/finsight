@@ -14,7 +14,6 @@
 import { UserTier } from '../data/types';
 import { analyzeQuestionNeeds } from './question-analysis';
 import { gatherContextSnapshot } from './context-service';
-import { toCanonicalSnapshot } from './canonical-snapshot';
 import { buildPromptInputFromSnapshot, buildFinancialReasoningPrompt } from './financial-reasoning-prompt';
 import { loadResponseToneConfig } from './prompt-config';
 import { askClaude, askClaudeStream } from './claude-client';
@@ -114,14 +113,12 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     onProgress
   });
 
-  // Step 2: Build canonical snapshot and prompt input
+  // Step 2: Build the prompt directly from the persisted canonical snapshot.
   onProgress?.('Submitting to Claude for analysis');
   await loadResponseToneConfig();
-  const canonicalSnapshot = toCanonicalSnapshot(snapshot);
   const promptInput = buildPromptInputFromSnapshot(
     question,
     snapshot,
-    canonicalSnapshot,
     conversationHistory.map(c => ({ question: c.question, answer: c.answer }))
   );
 
@@ -174,7 +171,6 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
           ...buildPromptInputFromSnapshot(
             question,
             snapshot,
-            canonicalSnapshot,
             conversationHistory.map(c => ({ question: c.question, answer: c.answer }))
           ),
           validationFeedback: validationResult.issues

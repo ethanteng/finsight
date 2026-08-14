@@ -43,12 +43,6 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
       console.error('Failed to refresh snapshot after creating manual account:', err);
     });
 
-    // Refresh financial summary (updates FinancialSummary table)
-    const { FinancialSummaryService } = await import('../services/financial-summary-service');
-    await new FinancialSummaryService().refreshUserSummary(userId).catch(err => {
-      console.error('Failed to refresh financial summary after creating manual account:', err);
-    });
-
     res.status(201).json({
       success: true,
       data: manualAccount,
@@ -140,12 +134,6 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
       console.error('Failed to refresh snapshot after updating manual account:', err);
     });
 
-    // Refresh financial summary (updates FinancialSummary table)
-    const { FinancialSummaryService } = await import('../services/financial-summary-service');
-    await new FinancialSummaryService().refreshUserSummary(userId).catch(err => {
-      console.error('Failed to refresh financial summary after updating manual account:', err);
-    });
-
     res.json({
       success: true,
       data: updatedAccount,
@@ -225,12 +213,6 @@ router.delete('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
     const { SummaryCacheService } = await import('../services/summary-cache-service');
     await SummaryCacheService.computeForUser(userId).catch(err => {
       console.error('Failed to refresh snapshot after deleting manual account:', err);
-    });
-
-    // Refresh financial summary (updates FinancialSummary table)
-    const { FinancialSummaryService } = await import('../services/financial-summary-service');
-    await new FinancialSummaryService().refreshUserSummary(userId).catch(err => {
-      console.error('Failed to refresh financial summary after deleting manual account:', err);
     });
 
     res.json({

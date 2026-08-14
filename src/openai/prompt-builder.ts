@@ -34,6 +34,28 @@ export function buildPromptPayload(args: PromptBuilderArgs): PromptPayload {
   };
 }
 
+function formatSnapshotDetails(
+  summary: NonNullable<FinancialContextSnapshot['financialSummary']>
+): string {
+  const lines: string[] = [];
+  const formatTimestamp = (value: Date | string): string => {
+    const timestamp = new Date(value);
+    return Number.isNaN(timestamp.getTime()) ? 'unknown' : timestamp.toISOString();
+  };
+  if (summary.status) lines.push(`Snapshot Status: ${summary.status}`);
+  if (summary.asOf) lines.push(`Source Data As Of: ${formatTimestamp(summary.asOf)}`);
+  if (summary.computedAt) lines.push(`Snapshot Computed At: ${formatTimestamp(summary.computedAt)}`);
+  if (summary.reportingCurrency) lines.push(`Reporting Currency: ${summary.reportingCurrency}`);
+  if (summary.status === 'partial') {
+    lines.push('Data Quality Note: Some required source data is unavailable. State relevant limitations and do not imply the snapshot is complete.');
+  } else if (summary.status === 'stale') {
+    lines.push('Data Quality Note: Some source data is stale. State the source-data date when freshness affects the answer.');
+  } else if (summary.status === 'unavailable') {
+    lines.push('Data Quality Note: Required source data is unavailable. Do not present snapshot amounts as a complete current picture.');
+  }
+  return lines.length > 0 ? `${lines.join('\n')}\n\n` : '';
+}
+
 function buildSystemPrompt(snapshot: FinancialContextSnapshot): string {
   const sections: string[] = [];
 
@@ -70,17 +92,14 @@ function buildSystemPrompt(snapshot: FinancialContextSnapshot): string {
   // Use financial summary if available (reduces prompt size)
   if (snapshot.financialSummary?.financialOverview) {
     const overview = snapshot.financialSummary.financialOverview;
+    const snapshotDetails = formatSnapshotDetails(snapshot.financialSummary);
     let homeValueLine = '';
     if (overview.homeValue !== null && overview.homeValue !== undefined) {
-      if (overview.homeValue > 0) {
-        homeValueLine = `\nHome Value: $${overview.homeValue.toFixed(2)}`;
-      } else {
-        // Value is 0 but include note that user owns home
-        homeValueLine = '\nHome Value: Not estimated yet (user owns a home)';
-      }
+      homeValueLine = `\nHome Value: $${overview.homeValue.toFixed(2)}`;
     }
     sections.push(`# Financial Overview\n` +
       `CRITICAL: These are the AUTHORITATIVE financial values. Use these exact values when discussing net worth, portfolio value, or total investments. Do NOT recalculate from holdings, accounts, or retirement portfolio snapshots - these values already include all accounts (including manual investment accounts) and are the source of truth.\n\n` +
+      snapshotDetails +
       `Net Worth: $${overview.netWorth.toFixed(2)}\n` +
       `Total Cash: $${overview.totalCash.toFixed(2)}\n` +
       `Total Investments: $${overview.totalInvestments.toFixed(2)}\n` +
@@ -96,7 +115,7 @@ function buildSystemPrompt(snapshot: FinancialContextSnapshot): string {
   if (snapshot.financialSummary?.investmentPortfolio) {
     const portfolio = snapshot.financialSummary.investmentPortfolio;
     investmentSummary = `Total Portfolio Value: $${portfolio.totalValue.toFixed(2)}\n` +
-      `Holdings: ${portfolio.holdingsCount}\n` +
+      `Holdings: ${portfolio.holdingCount ?? portfolio.holdingsCount ?? 0}\n` +
       `Securities: ${portfolio.securityCount}\n` +
       `Asset Allocation:\n` +
       portfolio.assetAllocation.map(aa => 
@@ -647,17 +666,15 @@ export function buildFinancialContextForPrompt(snapshot: FinancialContextSnapsho
   // Financial Overview
   if (snapshot.financialSummary?.financialOverview) {
     const overview = snapshot.financialSummary.financialOverview;
+    const snapshotDetails = formatSnapshotDetails(snapshot.financialSummary);
     let homeValueLine = '';
     if (overview.homeValue !== null && overview.homeValue !== undefined) {
-      if (overview.homeValue > 0) {
-        homeValueLine = `\nHome Value: $${overview.homeValue.toFixed(2)}`;
-      } else {
-        homeValueLine = '\nHome Value: Not estimated yet (user owns a home)';
-      }
+      homeValueLine = `\nHome Value: $${overview.homeValue.toFixed(2)}`;
     }
     sections.push(
       `# Financial Overview\n` +
         `CRITICAL: These are the AUTHORITATIVE financial values. Use these exact values when discussing net worth, portfolio value, or total investments. Do NOT recalculate from holdings, accounts, or retirement portfolio snapshots - these values already include all accounts (including manual investment accounts) and are the source of truth.\n\n` +
+        snapshotDetails +
         `Net Worth: $${overview.netWorth.toFixed(2)}\n` +
         `Total Cash: $${overview.totalCash.toFixed(2)}\n` +
         `Total Investments: $${overview.totalInvestments.toFixed(2)}\n` +
@@ -686,7 +703,7 @@ export function buildFinancialContextForPrompt(snapshot: FinancialContextSnapsho
     const portfolio = snapshot.financialSummary.investmentPortfolio;
     investmentSummary =
       `Total Portfolio Value: $${portfolio.totalValue.toFixed(2)}\n` +
-      `Holdings: ${portfolio.holdingsCount}\n` +
+      `Holdings: ${portfolio.holdingCount ?? portfolio.holdingsCount ?? 0}\n` +
       `Securities: ${portfolio.securityCount}\n` +
       `Asset Allocation:\n` +
       portfolio.assetAllocation.map((aa) => `- ${aa.type}: $${aa.value.toFixed(2)} (${aa.percentage.toFixed(1)}%)`).join('\n');
@@ -737,4 +754,3 @@ export function buildFinancialContextForPrompt(snapshot: FinancialContextSnapsho
 
   return sections.join('\n\n').trim();
 }
-

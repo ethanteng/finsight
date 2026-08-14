@@ -39,6 +39,8 @@ interface InvestmentData {
 }
 
 interface FinancialSummaryData {
+  asOf?: string | null;
+  status?: 'current' | 'stale' | 'partial' | 'unavailable' | null;
   financialOverview: {
     netWorth: number;
     totalCash: number;
@@ -48,7 +50,7 @@ interface FinancialSummaryData {
   };
   investmentPortfolio: {
     totalValue: number;
-    holdingsCount: number;
+    holdingCount: number;
     assetAllocation: Array<{
       type: string;
       value: number;
@@ -118,29 +120,32 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
             const portfolio = snapshot.investmentPortfolio;
             const computedAt = snapshot.computedAt || new Date().toISOString();
             setFinancialSummary({
+              asOf: snapshot.asOf,
+              status: snapshot.status,
               financialOverview: finOverview,
               investmentPortfolio: portfolio,
               lastUpdated: computedAt,
             } as unknown as FinancialSummaryData);
             setInvestmentData({ portfolio });
-            // Always fetch home data from /profile/home for authenticated users to get the correct
-            // value range (valueLow/valueHigh) that matches /finances. The snapshot only has
-            // homeValue (single number) - using ±10% for range was incorrect and caused mismatch.
+            // Only display a range when the provider supplied both bounds. The
+            // canonical midpoint remains the authoritative overview value.
             let profileHomeData: { address: string; value: number; valueLow: number; valueHigh: number; lastUpdated: string } | null = null;
             if (!isDemo) {
               try {
                 const homeRes = await fetch(`${API_URL}/profile/home`, { headers });
                 if (homeRes.ok) {
                   const homeDataResponse = await homeRes.json();
-                  if (homeDataResponse.hasHome && homeDataResponse.homeData?.value) {
+                  if (homeDataResponse.hasHome && homeDataResponse.homeData?.value != null) {
                     const hd = homeDataResponse.homeData;
-                    profileHomeData = {
-                      address: hd.address || '',
-                      value: hd.value,
-                      valueLow: hd.valueLow ?? hd.value * 0.9,
-                      valueHigh: hd.valueHigh ?? hd.value * 1.1,
-                      lastUpdated: hd.lastUpdated || computedAt
-                    };
+                    if (typeof hd.valueLow === 'number' && typeof hd.valueHigh === 'number') {
+                      profileHomeData = {
+                        address: hd.address || '',
+                        value: hd.value,
+                        valueLow: hd.valueLow,
+                        valueHigh: hd.valueHigh,
+                        lastUpdated: hd.lastUpdated || computedAt
+                      };
+                    }
                   }
                 }
               } catch (homeError) {
@@ -149,15 +154,6 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
             }
             if (profileHomeData) {
               setHomeData(profileHomeData);
-            } else if (finOverview?.homeValue && finOverview.homeValue > 0) {
-              // Fallback: snapshot has homeValue but no profile data (e.g. demo mode or edge case)
-              setHomeData({
-                address: '',
-                value: finOverview.homeValue,
-                valueLow: finOverview.homeValue * 0.9,
-                valueHigh: finOverview.homeValue * 1.1,
-                lastUpdated: computedAt
-              });
             } else {
               setHomeData(null);
             }
@@ -232,86 +228,14 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
     loadFinancialData();
   }, [API_URL, isDemo]);
 
-  // Calculate totals
-  const calculateTotals = () => {
-    // Compute derived totals from snapshot-first data
-    const deriveFromAccounts = () => {
-      let totalCash = 0;
-      let totalDebt = 0;
-      let uncategorizedAccounts = 0;
-      
-      accounts.forEach(account => {
-        let balance: number;
-        if (account.type === 'depository' || 
-            account.subtype === 'checking' || 
-            account.subtype === 'savings' || 
-            account.subtype === 'cd' ||
-            account.subtype === 'money market' ||
-            account.subtype === 'prepaid') {
-          balance = account.balance?.available !== undefined && account.balance?.available !== null 
-            ? account.balance.available 
-            : account.balance?.current || 0;
-        } else if (account.type === 'credit') {
-          balance = account.balance?.current || 0;
-        } else if (account.type === 'loan') {
-          balance = account.balance?.current || 0;
-        } else {
-          balance = account.balance?.current || 0;
-        }
-        
-        const t = account.type;
-        const st = account.subtype;
-        // Skip investment-like accounts here
-        if (t === 'investment' ||
-            st === '401k' || st === 'ira' || st === 'roth' ||
-            st === 'brokerage' || st === 'hsa' || st === '529' ||
-            st === 'pension' || st === 'annuity') {
-          return;
-        }
-        
-        if (t === 'depository' || st === 'checking' || st === 'savings' || st === 'cd' ||
-            st === 'money market' || st === 'prepaid') {
-          totalCash += Math.max(0, balance);
-        } else if (t === 'credit') {
-          totalDebt += Math.abs(balance);
-        } else if (t === 'loan' || st === 'mortgage' || st === 'student' || st === 'personal' ||
-                   st === 'auto' || st === 'home equity') {
-          totalDebt += Math.max(0, balance);
-        } else {
-          if (balance > 0) totalCash += balance;
-          else if (balance < 0) totalDebt += Math.abs(balance);
-          uncategorizedAccounts++;
-        }
-      });
-      
-      const totalInvestments = investmentData?.portfolio?.totalValue || 0;
-      const totalHomeValue = homeData?.value || 0;
-      return { totalCash, totalDebt, totalInvestments, totalHomeValue, uncategorizedAccounts };
-    };
-    
-    // Prefer snapshot (financialSummary) values, backfill from derived accounts if missing
-    if (financialSummary?.financialOverview) {
-      const derived = deriveFromAccounts();
-      const s = financialSummary.financialOverview;
-      console.log('✅ Using financial summary with derived backfill where needed', { summary: s, derived });
-      return {
-        totalCash: s.totalCash && s.totalCash > 0 ? s.totalCash : derived.totalCash,
-        totalDebt: s.totalDebt && s.totalDebt > 0 ? s.totalDebt : derived.totalDebt,
-        totalInvestments: s.totalInvestments && s.totalInvestments > 0 ? s.totalInvestments : derived.totalInvestments,
-        // Use snapshot homeValue if available (backend-calculated), otherwise fall back to derived
-        // This ensures consistency with backend net worth calculation
-        totalHomeValue: s.homeValue != null && s.homeValue > 0 ? s.homeValue : (derived.totalHomeValue || 0),
-        uncategorizedAccounts: derived.uncategorizedAccounts
-      };
-    }
-
-    // Fallback: derive entirely from accounts/holdings if no summary
-    const derived = deriveFromAccounts();
-    console.log('⚠️ Calculating totals from accounts (summary endpoint failed or unavailable)', derived);
-    return derived;
-  };
-
-  const { totalCash, totalDebt, totalInvestments, totalHomeValue, uncategorizedAccounts } = calculateTotals();
+  // Canonical metrics come only from the backend snapshot. A known zero remains
+  // zero; unavailable values are not reconstructed from raw account arrays.
+  const overview = financialSummary?.financialOverview;
+  const totalCash = overview?.totalCash ?? null;
+  const totalDebt = overview?.totalDebt ?? null;
+  const totalInvestments = overview?.totalInvestments ?? null;
+  const totalHomeValue = overview?.homeValue ?? null;
+  const netWorth = overview?.netWorth ?? null;
   const hasAccounts = accounts.length > 0 || snapTradeAccounts.length > 0;
 
   // ✅ Trust backend - FinancialDataService should have already deduplicated accounts
@@ -358,6 +282,9 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
       maximumFractionDigits: 0,
     }).format(amount);
   };
+
+  const formatMetric = (value: number | null) =>
+    value === null ? 'Unavailable' : formatCurrency(value);
 
   const handleAddAccounts = () => {
     // Set a flag in localStorage to indicate user wants to connect accounts
@@ -422,9 +349,6 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
     );
   }
 
-  // Calculate Net Worth
-  const netWorth = totalCash + totalInvestments + totalHomeValue - totalDebt;
-
   return (
     <>
       <div 
@@ -460,12 +384,25 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
             </button>
           )}
         </div>
+        {(financialSummary?.asOf || (financialSummary?.status && financialSummary.status !== 'current')) && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] text-[#5e6b63]">
+            {financialSummary.asOf && (
+              <span>Data as of {new Date(financialSummary.asOf).toLocaleString()}</span>
+            )}
+            {financialSummary.status && financialSummary.status !== 'current' && (
+              <span className="rounded-full bg-[#fff3ce] px-2 py-0.5 font-semibold text-[#76510f]">
+                {financialSummary.status === 'partial' ? 'Some data unavailable' :
+                  financialSummary.status === 'stale' ? 'Some data is stale' : 'Source data unavailable'}
+              </span>
+            )}
+          </div>
+        )}
       
       {/* Net Worth - Featured Card */}
       <div className="mb-3 rounded-2xl border border-[#397052]/12 bg-[#e2edff] p-4">
         <div className="mb-1 text-xs font-semibold text-[#486b91]">Net Worth</div>
         <div className="text-2xl font-bold text-[#102319]">
-          {formatCurrency(netWorth)}
+          {formatMetric(netWorth)}
         </div>
       </div>
 
@@ -498,28 +435,28 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
         <div className="min-w-0 rounded-xl bg-[#f3eee4] p-3">
           <div className="mb-1 text-[11px] leading-4 text-[#5e6b63]">Total Cash</div>
           <div className="break-words text-sm font-semibold text-[#102319] sm:text-base">
-            {formatCurrency(totalCash)}
+            {formatMetric(totalCash)}
           </div>
         </div>
         
         <div className="min-w-0 rounded-xl bg-[#f3eee4] p-3">
           <div className="mb-1 text-[11px] leading-4 text-[#5e6b63]">Total Debt</div>
           <div className="break-words text-sm font-semibold text-[#102319] sm:text-base">
-            {formatCurrency(totalDebt)}
+            {formatMetric(totalDebt)}
           </div>
         </div>
         
         <div className="min-w-0 rounded-xl bg-[#f3eee4] p-3">
           <div className="mb-1 text-[11px] leading-4 text-[#5e6b63]">Total Investments</div>
           <div className="break-words text-sm font-semibold text-[#102319] sm:text-base">
-            {formatCurrency(totalInvestments)}
+            {formatMetric(totalInvestments)}
           </div>
         </div>
 
         <div className="min-w-0 rounded-xl bg-[#f3eee4] p-3">
           <div className="mb-1 text-[11px] leading-4 text-[#5e6b63]">Home Value</div>
           <div className="break-words text-sm font-semibold text-[#102319] sm:text-base">
-            {totalHomeValue > 0 ? formatCurrency(totalHomeValue) : '$0'}
+            {formatMetric(totalHomeValue)}
           </div>
           {homeData && (
             <div className="mt-0.5 text-xs text-[#486b91]" title={`Range: ${formatCurrency(homeData.valueLow)} - ${formatCurrency(homeData.valueHigh)}`}>
@@ -550,13 +487,6 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
             </>
           )}
           
-          {/* Show uncategorized accounts count if any exist */}
-          {uncategorizedAccounts > 0 && (
-            <div className="rounded-xl bg-[#fff3ce] p-3">
-              <div className="mb-1 text-xs text-[#76510f]">Uncategorized</div>
-              <div className="break-words text-sm font-semibold text-[#5d410f] sm:text-base">{uncategorizedAccounts}</div>
-            </div>
-          )}
         </div>
       )}
       </div>

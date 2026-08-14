@@ -5,7 +5,6 @@
  * Sections: DATA EXTRACTION, CALCULATION PLAN, CALCULATIONS, INTERPRETATION, GUIDANCE
  */
 
-import { CanonicalFinancialSnapshot } from './canonical-snapshot';
 import { buildFinancialContextForPrompt } from './prompt-builder';
 import { getActiveResponseTone } from './prompt-config';
 import { FinancialContextSnapshot } from './types';
@@ -141,7 +140,6 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
 export function buildPromptInputFromSnapshot(
   question: string,
   snapshot: FinancialContextSnapshot,
-  _canonicalSnapshot: CanonicalFinancialSnapshot,
   conversationHistory?: Array<{ question: string; answer: string }>
 ): FinancialReasoningPromptInput {
   return {

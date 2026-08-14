@@ -51,11 +51,11 @@ interface Holding {
   id: string;
   account_id: string;
   security_id: string;
-  institution_value: number;
-  institution_price: number;
+  institution_value: number | null;
+  institution_price: number | null;
   institution_price_as_of: string;
-  cost_basis: number;
-  quantity: number;
+  cost_basis: number | null;
+  quantity: number | null;
   iso_currency_code: string;
   security_name?: string;
   security_type?: string;
@@ -341,13 +341,22 @@ export default function AccountDetailModal({
 
   // Calculate portfolio for this account
   const accountPortfolio = useMemo(() => {
-    const totalValue = accountHoldings.reduce((sum, h) => sum + (h.institution_value || 0), 0);
+    const totalValue = accountHoldings.reduce(
+      (sum, holding) => sum + (
+        typeof holding.institution_value === 'number' && Number.isFinite(holding.institution_value)
+          ? holding.institution_value
+          : 0
+      ),
+      0
+    );
     
     // Calculate asset allocation
     const allocationMap: Record<string, number> = {};
     accountHoldings.forEach(h => {
       const type = h.security_type || 'Unknown';
-      allocationMap[type] = (allocationMap[type] || 0) + (h.institution_value || 0);
+      if (typeof h.institution_value === 'number' && Number.isFinite(h.institution_value)) {
+        allocationMap[type] = (allocationMap[type] || 0) + h.institution_value;
+      }
     });
     
     const assetAllocation = Object.entries(allocationMap).map(([type, value]) => ({

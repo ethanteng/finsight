@@ -340,16 +340,12 @@ router.post('/login', async (req: Request, res: Response) => {
     // Trigger non-blocking financial summary refresh if stale
     setImmediate(async () => {
       try {
-        const { FinancialSummaryService } = await import('../services/financial-summary-service');
-        const summaryService = new FinancialSummaryService();
-        
-        // Check if summary exists and is stale
-        const cachedSummary = await prisma.financialSummary.findUnique({
-          where: { userId: user.id }
-        });
-        
-        if (!cachedSummary || summaryService.isSummaryStale(cachedSummary.lastUpdated)) {
-          await summaryService.refreshUserSummary(user.id);
+        const { SummaryCacheService } = await import('../services/summary-cache-service');
+        const snapshot = await SummaryCacheService.getLatestSnapshot(user.id, 'summary');
+        const computedAt = snapshot?.computedAt ? new Date(snapshot.computedAt) : null;
+        const cacheExpired = !computedAt || Date.now() - computedAt.getTime() > 24 * 60 * 60 * 1000;
+        if (!snapshot || snapshot.status !== 'current' || cacheExpired) {
+          await SummaryCacheService.computeForUser(user.id, { categorize: false });
         }
       } catch (error) {
         console.error(`Failed to refresh summary on login for user ${user.id}:`, error);
