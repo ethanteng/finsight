@@ -11,6 +11,20 @@ function digest(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
+function evidenceTimestamp(manifest: EvidenceManifest): Date {
+  for (const candidate of [manifest.snapshot.computedAt, manifest.snapshot.asOf, manifest.generatedAt]) {
+    if (!candidate) continue;
+    const parsed = new Date(candidate);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date(manifest.generatedAt);
+}
+
+function generatedTimestamp(manifest: EvidenceManifest): Date {
+  const generatedAt = new Date(manifest.generatedAt);
+  return Number.isNaN(generatedAt.getTime()) ? evidenceTimestamp(manifest) : generatedAt;
+}
+
 export async function fetchShowTheMathDBData(
   userId: string | undefined,
   manifest: EvidenceManifest
@@ -25,18 +39,19 @@ export async function fetchShowTheMathDBData(
   if (!needsUserRecords && !needsMarketRecords) return result;
 
   const prisma = getPrismaClient();
-  const ninetyDaysAgo = new Date();
-  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+  const evidenceAt = evidenceTimestamp(manifest);
+  const ninetyDaysBeforeEvidence = new Date(evidenceAt);
+  ninetyDaysBeforeEvidence.setDate(ninetyDaysBeforeEvidence.getDate() - 90);
 
   // User-scoped tables (skip for demo)
   if (userId) {
     if (manifest.evidenceRefs.retirementAnalysis) {
       try {
+        const retirementWhere = manifest.evidenceRefs.retirementAnalysisId
+          ? { userId, id: manifest.evidenceRefs.retirementAnalysisId }
+          : { userId, computedAt: { lte: generatedTimestamp(manifest) } };
         const retirementAnalyses = await prisma.retirementAnalysis.findMany({
-          where: {
-            userId,
-            ...(manifest.evidenceRefs.retirementAnalysisId && { id: manifest.evidenceRefs.retirementAnalysisId }),
-          },
+          where: retirementWhere,
           orderBy: { computedAt: 'desc' },
           take: 3
         });
@@ -53,13 +68,17 @@ export async function fetchShowTheMathDBData(
           prisma.assetPriceHistory.findMany({
             where: {
               tickerSymbol: { in: tickers },
-              date: { gte: ninetyDaysAgo }
+              date: { gte: ninetyDaysBeforeEvidence, lte: evidenceAt },
+              cachedAt: { lte: evidenceAt },
             },
             orderBy: [{ tickerSymbol: 'asc' }, { date: 'desc' }],
             take: 500
           }),
           prisma.securityMetadata.findMany({
-            where: { tickerSymbol: { in: tickers } }
+            where: {
+              tickerSymbol: { in: tickers },
+              lastUpdated: { lte: evidenceAt },
+            }
           })
         ]);
 

@@ -56,6 +56,22 @@ function parseMagnitude(value: string, magnitude?: string): number {
   return parsed;
 }
 
+function isNumericIdentifier(prose: string, index: number, rawValue: string): boolean {
+  const before = prose.slice(Math.max(0, index - 16), index);
+  const after = prose.slice(index + rawValue.length, index + rawValue.length + 16);
+  const digits = rawValue.trim().replace(/,/g, '').replace(/^-/, '').toLowerCase();
+  if (/^(?:401|403|457)$/.test(digits) && /^\s*\(\s*[a-z]\s*\)/i.test(after)) return true;
+  if (digits === '500' && /S\s*&\s*P\s*$/i.test(before)) return true;
+  if (digits === '100' && /Nasdaq\s*-?\s*$/i.test(before)) return true;
+  if (digits === '2000' && /Russell\s*$/i.test(before)) return true;
+  if (digits === '30' && /Dow\s*$/i.test(before)) return true;
+  if (digits === '1099' && /Form\s*$/i.test(before)) return true;
+  if (digits === '2' && /W\s*-?\s*$/i.test(before)) return true;
+  if (digits === '10' && /^\s*-\s*[KQ]\b/i.test(after)) return true;
+  if (digits === '529' && /^\s+plan\b/i.test(after)) return true;
+  return digits === '72' && /Rule\s+of\s*$/i.test(before);
+}
+
 /** Validate every structured number and every money/percentage in user-facing prose. */
 export function validateResponseFacts(
   response: AskLincResponse,
@@ -110,6 +126,7 @@ export function validateResponseFacts(
   const genericNumberPattern = /-?\d[\d,]*(?:\.\d+)?\s*(?:thousand|million|billion|[kmb])?/gi;
   for (const match of prose.matchAll(genericNumberPattern)) {
     const index = match.index ?? 0;
+    if (isNumericIdentifier(prose, index, match[0])) continue;
     const prefix = prose.slice(Math.max(0, index - 3), index).trimEnd();
     const afterMatch = prose.slice(index + match[0].length);
     const suffix = afterMatch.trimStart();

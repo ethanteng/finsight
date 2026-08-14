@@ -3,7 +3,7 @@ import type { FinancialContextSnapshot, QuestionNeeds } from './types';
 export type CanonicalFactUnit = 'usd' | 'percent' | 'months' | 'years' | 'age' | 'count' | 'ratio';
 
 export interface CanonicalFactProvenance {
-  kind: 'snapshot' | 'calculation';
+  kind: 'snapshot' | 'calculation' | 'user_input' | 'external_context';
   source: string;
   asOf?: string;
   formula?: string;
@@ -62,6 +62,53 @@ function safeFactId(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 80);
 }
 
+interface TrustedNumericValue {
+  value: number;
+  unit: CanonicalFactUnit;
+}
+
+function parseMagnitude(value: string, magnitude?: string): number {
+  const parsed = Number(value.replace(/,/g, ''));
+  const normalized = magnitude?.toLowerCase();
+  if (normalized === 'k' || normalized === 'thousand') return parsed * 1_000;
+  if (normalized === 'm' || normalized === 'million') return parsed * 1_000_000;
+  if (normalized === 'b' || normalized === 'billion') return parsed * 1_000_000_000;
+  return parsed;
+}
+
+/** Extract explicit, typed values without treating product names such as S&P 500 as facts. */
+function extractTrustedNumericValues(text: string): TrustedNumericValue[] {
+  const values: TrustedNumericValue[] = [];
+  const seen = new Set<string>();
+  const add = (value: number, unit: CanonicalFactUnit) => {
+    if (!Number.isFinite(value)) return;
+    const key = `${unit}:${value}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    values.push({ value, unit });
+  };
+
+  for (const match of text.matchAll(/(-?)\$\s*(\d[\d,]*(?:\.\d+)?)\s*(thousand|million|billion|[kmb])?/gi)) {
+    add((match[1] === '-' ? -1 : 1) * parseMagnitude(match[2], match[3]), 'usd');
+  }
+  for (const match of text.matchAll(/(-?\d[\d,]*(?:\.\d+)?)\s*(thousand|million|billion)?\s+dollars?\b/gi)) {
+    add(parseMagnitude(match[1], match[2]), 'usd');
+  }
+  for (const match of text.matchAll(/\b(\d[\d,]*(?:\.\d+)?)\s*(thousand|million|billion|[kmb])\b/gi)) {
+    add(parseMagnitude(match[1], match[2]), 'usd');
+  }
+  for (const match of text.matchAll(/(-?\d[\d,]*(?:\.\d+)?)\s*%/gi)) {
+    add(Number(match[1].replace(/,/g, '')), 'percent');
+  }
+  for (const match of text.matchAll(/\bage\s+(\d{1,3})\b/gi)) add(Number(match[1]), 'age');
+  for (const match of text.matchAll(/\b(\d{1,3})\s+years?\s+old\b/gi)) add(Number(match[1]), 'age');
+  for (const match of text.matchAll(/\bretir(?:e|ement)\s+(?:at|by)\s+(?:age\s+)?(\d{1,3})\b/gi)) add(Number(match[1]), 'age');
+  for (const match of text.matchAll(/\b(\d[\d,]*(?:\.\d+)?)\s*(?:-\s*)?(months?|years?)\b/gi)) {
+    add(Number(match[1].replace(/,/g, '')), match[2].toLowerCase().startsWith('month') ? 'months' : 'years');
+  }
+  return values;
+}
+
 /** Build the only numeric facts the model may display for this question. */
 export function buildCanonicalFactPack(
   snapshot: FinancialContextSnapshot,
@@ -110,6 +157,31 @@ export function buildCanonicalFactPack(
         inputFactIds,
         ...(asOf && { asOf }),
       },
+    });
+  };
+  const addTrustedTextFacts = (
+    text: string | undefined,
+    idPrefix: string,
+    labelPrefix: string,
+    kind: 'user_input' | 'external_context',
+    source: string,
+    sourceAsOf?: string,
+    limit = 20
+  ) => {
+    if (!text) return;
+    extractTrustedNumericValues(text).slice(0, limit).forEach((item, index) => {
+      const id = `${idPrefix}_${item.unit}_${index + 1}`;
+      facts.set(id, {
+        id,
+        label: `${labelPrefix} ${item.unit.replace('_', ' ')} value`,
+        value: item.value,
+        unit: item.unit,
+        provenance: {
+          kind,
+          source,
+          ...(sourceAsOf && { asOf: sourceAsOf }),
+        },
+      });
     });
   };
 
@@ -304,6 +376,31 @@ export function buildCanonicalFactPack(
     addSnapshotFact('retirement_age', 'Retirement age', retirement._storedInputParams?.retirementAge, 'age', 'retirementAnalysis.inputs.retirementAge');
     addSnapshotFact('annual_withdrawal_amount', 'Annual withdrawal amount', retirement._storedInputParams?.annualWithdrawalAmount, 'usd', 'retirementAnalysis.inputs.annualWithdrawalAmount');
     addSnapshotFact('withdrawal_start_age', 'Withdrawal start age', retirement._storedInputParams?.withdrawalStartAge, 'age', 'retirementAnalysis.inputs.withdrawalStartAge');
+  }
+
+  // Scenario premises and explicitly requested external context are canonical inputs too.
+  // This lets the model repeat a user-provided purchase price or a fetched market rate
+  // without weakening validation for numbers it invents itself.
+  addTrustedTextFacts(question, 'user_input', 'User-provided', 'user_input', 'userQuestion', undefined, 12);
+  if (needs.needsMarketContext) {
+    addTrustedTextFacts(
+      snapshot.marketContext,
+      'market_context',
+      'Market-context',
+      'external_context',
+      'marketContext',
+      isoString(snapshot.metadata.lastUpdated)
+    );
+  }
+  if (needs.needsSearchContext) {
+    addTrustedTextFacts(
+      snapshot.searchContext,
+      'search_context',
+      'Retrieved-context',
+      'external_context',
+      'searchContext',
+      isoString(snapshot.metadata.lastUpdated)
+    );
   }
 
   return {

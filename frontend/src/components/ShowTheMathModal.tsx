@@ -8,7 +8,7 @@ export interface CanonicalFact {
   unit: 'usd' | 'percent' | 'months' | 'years' | 'age' | 'count' | 'ratio';
   displayable?: boolean;
   provenance: {
-    kind: 'snapshot' | 'calculation';
+    kind: 'snapshot' | 'calculation' | 'user_input' | 'external_context';
     source: string;
     asOf?: string;
     formula?: string;
@@ -113,7 +113,13 @@ export function DatabaseSourceSection({
 
 export function ShowTheMathContent({ data }: { data: Partial<ShowTheMathData> | null }) {
   const manifest = data?.evidenceManifest;
-  if (!manifest) return null;
+  if (!manifest) {
+    return (
+      <p className="rounded-2xl bg-[#f3f2e9] p-5 text-sm leading-6 text-[#5e6b63]">
+        This answer was created before traceable evidence manifests were available. Its saved calculation details can’t be displayed in the current format.
+      </p>
+    );
+  }
   return (
     <div className="space-y-4">
       <CollapsibleSection title="Canonical facts and provenance" defaultOpen>

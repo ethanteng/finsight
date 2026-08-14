@@ -60,4 +60,35 @@ describe('fetchShowTheMathDBData', () => {
       where: { userId: 'user-1', id: 'analysis-123' },
     }));
   });
+
+  it('anchors lazy ticker evidence to the original snapshot time', async () => {
+    const priceFindMany = jest.fn().mockResolvedValue([]);
+    const metadataFindMany = jest.fn().mockResolvedValue([]);
+    mockedGetPrismaClient.mockReturnValue({
+      assetPriceHistory: { findMany: priceFindMany },
+      securityMetadata: { findMany: metadataFindMany },
+    } as any);
+
+    await fetchShowTheMathDBData('user-1', {
+      ...manifest,
+      snapshot: { computedAt: '2026-08-10T12:00:00.000Z' },
+      evidenceRefs: { ...manifest.evidenceRefs, tickers: ['AAPL'] },
+    });
+
+    const evidenceAt = new Date('2026-08-10T12:00:00.000Z');
+    const windowStart = new Date('2026-05-12T12:00:00.000Z');
+    expect(priceFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        tickerSymbol: { in: ['AAPL'] },
+        date: { gte: windowStart, lte: evidenceAt },
+        cachedAt: { lte: evidenceAt },
+      },
+    }));
+    expect(metadataFindMany).toHaveBeenCalledWith({
+      where: {
+        tickerSymbol: { in: ['AAPL'] },
+        lastUpdated: { lte: evidenceAt },
+      },
+    });
+  });
 });

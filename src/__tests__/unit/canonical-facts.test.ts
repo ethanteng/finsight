@@ -38,7 +38,7 @@ describe('buildCanonicalFactPack', () => {
   });
 
   it('includes the compact balance-sheet and cash-flow facts needed for an affordability decision', () => {
-    const question = 'Can I afford to buy a house?';
+    const question = 'Can I afford to buy a $500k house?';
     const pack = buildCanonicalFactPack(snapshot(), question, analyzeQuestionNeeds(question));
     expect(pack.facts.map((fact) => fact.id)).toEqual(expect.arrayContaining([
       'net_worth',
@@ -47,6 +47,35 @@ describe('buildCanonicalFactPack', () => {
       'average_monthly_income',
       'average_monthly_expenses',
       'average_monthly_operating_cash_flow',
+    ]));
+    expect(pack.facts).toContainEqual(expect.objectContaining({
+      id: 'user_input_usd_1',
+      value: 500_000,
+      unit: 'usd',
+      provenance: expect.objectContaining({ kind: 'user_input', source: 'userQuestion' }),
+    }));
+  });
+
+  it('promotes typed values from requested market context into traceable facts', () => {
+    const data = snapshot();
+    data.marketContext = 'The current average mortgage rate is 6.5%.';
+    const question = 'How do current mortgage rates affect me?';
+    const needs = { ...analyzeQuestionNeeds(question), needsMarketContext: true };
+    const pack = buildCanonicalFactPack(data, question, needs);
+    expect(pack.facts).toContainEqual(expect.objectContaining({
+      id: 'market_context_percent_1',
+      value: 6.5,
+      unit: 'percent',
+      provenance: expect.objectContaining({ kind: 'external_context', source: 'marketContext' }),
+    }));
+  });
+
+  it('recognizes common user-entered retirement premises', () => {
+    const question = 'Can I retire at 55 with 2 million?';
+    const pack = buildCanonicalFactPack(snapshot(), question, analyzeQuestionNeeds(question));
+    expect(pack.facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ value: 55, unit: 'age', provenance: expect.objectContaining({ kind: 'user_input' }) }),
+      expect.objectContaining({ value: 2_000_000, unit: 'usd', provenance: expect.objectContaining({ kind: 'user_input' }) }),
     ]));
   });
 

@@ -44,7 +44,20 @@ describe('canonical response facts', () => {
 
   it('does not treat account types or historical years as numeric claims', () => {
     expect(validateResponseFacts({ summary: 'Consider your 401k allocation.' }, pack).valid).toBe(true);
+    expect(validateResponseFacts({ summary: 'Compare your 401(k) and 403(b) allocations with the S&P 500.' }, pack).valid).toBe(true);
     expect(validateResponseFacts({ summary: 'In 2008 markets crashed.' }, pack).valid).toBe(true);
+  });
+
+  it('accepts typed scenario premises supplied by the user', () => {
+    const scenarioQuestion = 'Can I afford a $500k house with 20% down?';
+    const scenarioPack = buildCanonicalFactPack(snapshot, scenarioQuestion, analyzeQuestionNeeds(scenarioQuestion));
+    expect(validateResponseFacts({
+      summary: 'A $500,000 home with 20% down is the scenario to compare with your cash flow.',
+      key_numbers: {
+        purchase_price: { value: 500_000, unit: 'usd', provenance: 'user_input_usd_1' },
+        down_payment_rate: { value: 20, unit: 'percent', provenance: 'user_input_percent_2' },
+      },
+    }, scenarioPack).valid).toBe(true);
   });
 
   it('does not allow internal calculation inputs to be displayed', () => {
