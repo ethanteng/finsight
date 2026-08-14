@@ -19,6 +19,7 @@ import {
   getEffectiveUserTimeZone,
   observationDateForCalendarDate,
   clearStoredUserTimeZone,
+  syncStoredUserTimeZoneFromAuthUser,
 } from '../../lib/browser-time-zone';
 
 const ManualAccountList = lazy(() => import('../../components/ManualAccountList'));
@@ -273,6 +274,17 @@ export default function FinancesPageClient() {
           return;
         }
         headers['Authorization'] = `Bearer ${token}`;
+
+        const verifyRes = await fetch(`${API_URL}/auth/verify`, { headers });
+        if (!verifyRes.ok) {
+          if (verifyRes.status === 401) {
+            router.push('/login');
+            return;
+          }
+        } else {
+          const verifyData = await verifyRes.json();
+          syncStoredUserTimeZoneFromAuthUser(verifyData.user);
+        }
 
         // Load snapshot
         let snapshotData: Snapshot | null = null;

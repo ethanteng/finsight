@@ -21,6 +21,14 @@ export function setStoredUserTimeZone(timeZone: string): void {
   }
 }
 
+export function syncStoredUserTimeZoneFromAuthUser(
+  user: { timeZone?: string | null } | null | undefined
+): void {
+  if (user?.timeZone?.trim()) {
+    setStoredUserTimeZone(user.timeZone);
+  }
+}
+
 export function clearStoredUserTimeZone(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(USER_TIME_ZONE_KEY);

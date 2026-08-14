@@ -5,6 +5,7 @@ import {
   getStoredUserTimeZone,
   observationDateForCalendarDate,
   setStoredUserTimeZone,
+  syncStoredUserTimeZoneFromAuthUser,
   USER_TIME_ZONE_KEY,
 } from '../browser-time-zone';
 
@@ -26,5 +27,11 @@ describe('browser time-zone helpers', () => {
     expect(getEffectiveUserTimeZone()).toBe('America/New_York');
     clearStoredUserTimeZone();
     expect(localStorage.getItem(USER_TIME_ZONE_KEY)).toBeNull();
+  });
+
+  it('hydrates stored time zone from auth verify payloads', () => {
+    syncStoredUserTimeZoneFromAuthUser({ timeZone: 'America/Chicago' });
+    expect(getStoredUserTimeZone()).toBe('America/Chicago');
+    clearStoredUserTimeZone();
   });
 });

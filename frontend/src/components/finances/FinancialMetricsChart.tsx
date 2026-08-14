@@ -99,9 +99,9 @@ export default function FinancialMetricsChart({ data, timeRange = 'All' }: Finan
   const chartData = useMemo(() => {
     if (!filteredData || filteredData.length === 0) return null;
 
-    // Sort data by date (oldest first)
-    const sortedData = [...filteredData].sort((a, b) => 
-      new Date(a.computedAt).getTime() - new Date(b.computedAt).getTime()
+    // Sort by calendar observation date so local-day semantics stay stable.
+    const sortedData = [...filteredData].sort(
+      (a, b) => historyPointDisplayDate(a).getTime() - historyPointDisplayDate(b).getTime()
     );
 
     // Prepare data points with dates normalized to start of day
