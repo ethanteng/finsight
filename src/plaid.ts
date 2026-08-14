@@ -228,11 +228,14 @@ export const processTransactionData = (transaction: any) => {
     id: transaction.transaction_id,
     account_id: transaction.account_id,
     amount: correctedAmount, // Use corrected amount
+    source_amount: transaction.source_amount ?? transaction.amount,
     date: transaction.date,
     name: transaction.name,
     category: basicCategory,
     category_id: basicCategoryId,
+    personal_finance_category: transaction.personal_finance_category,
     pending: transaction.pending,
+    iso_currency_code: transaction.iso_currency_code || 'USD',
     merchant_name: transaction.merchant_name,
     payment_channel: transaction.payment_channel, // This is Plaid's payment method indicator
     // ❌ REMOVED: transaction_type: transaction.transaction_type, // This is Plaid's payment method, not our categorization!
@@ -679,17 +682,18 @@ export const setupPlaidRoutes = (app: any) => {
         lastError: null
       };
 
+      let storedToken;
       if (existingToken) {
         // Update the existing token with the new access token
         console.log(`Updating existing token for item ${item_id}`);
-        await getPrismaClient().accessToken.update({
+        storedToken = await getPrismaClient().accessToken.update({
           where: { id: existingToken.id },
           data: tokenData
         });
       } else {
         // Create a new access token
         console.log(`Creating new token for item ${item_id}`);
-        await getPrismaClient().accessToken.create({
+        storedToken = await getPrismaClient().accessToken.create({
           data: {
             ...tokenData,
             itemId: item_id
@@ -750,7 +754,7 @@ export const setupPlaidRoutes = (app: any) => {
                         OR: [{ institution: institutionName }, { institution: null }],
                         plaidAccountId: { in: Array.from(oldAccountIds) }
                       },
-                      select: { id: true, plaidAccountId: true, name: true, type: true, subtype: true }
+                      select: { id: true, plaidAccountId: true, persistentAccountId: true, name: true, type: true, subtype: true }
                     })
                   : [];
                 if (orphanedAccounts.length > 0) {
@@ -766,7 +770,9 @@ export const setupPlaidRoutes = (app: any) => {
                     limit: account.balances?.limit,
                     currency: account.balances?.iso_currency_code,
                     institution: institutionName,
+                    persistentAccountId: account.persistent_account_id || null,
                     userId: req.user.id,
+                    accessTokenId: storedToken.id,
                     lastSynced: new Date()
                   });
                   for (const account of accounts) {
@@ -797,28 +803,19 @@ export const setupPlaidRoutes = (app: any) => {
                       userId: req.user.id,
                       plaidAccountId: { in: Array.from(newAccountIds) }
                     },
-                    select: { id: true, name: true, type: true, subtype: true }
+                    select: { id: true, persistentAccountId: true }
                   });
-                  // Build map keyed by name|type|subtype. When multiple new accounts share the same key,
-                  // mark as ambiguous - we cannot reliably match orphans to the correct account.
-                  const newAccountByKey = new Map<string, string>();
-                  const ambiguousKeys = new Set<string>();
+                  const newAccountByPersistentId = new Map<string, string>();
                   for (const a of newAccountRecords) {
-                    const key = `${(a.name || '').trim()}|${(a.type || '').trim()}|${(a.subtype || '').trim()}`;
-                    if (newAccountByKey.has(key)) {
-                      ambiguousKeys.add(key);
-                      newAccountByKey.delete(key);
-                    } else if (!ambiguousKeys.has(key)) {
-                      newAccountByKey.set(key, a.id);
+                    if (a.persistentAccountId) {
+                      newAccountByPersistentId.set(a.persistentAccountId, a.id);
                     }
-                  }
-                  if (ambiguousKeys.size > 0) {
-                    console.warn(`   ${ambiguousKeys.size} account key(s) have duplicates - skipping migration for those to avoid wrong attribution`);
                   }
                   console.log(`Migrating transactions and removing ${orphanedAccounts.length} orphaned accounts from previous ${institutionName} link`);
                   for (const orphan of orphanedAccounts) {
-                    const orphanKey = `${(orphan.name || '').trim()}|${(orphan.type || '').trim()}|${(orphan.subtype || '').trim()}`;
-                    const newAccountId = ambiguousKeys.has(orphanKey) ? undefined : newAccountByKey.get(orphanKey);
+                    const newAccountId = orphan.persistentAccountId
+                      ? newAccountByPersistentId.get(orphan.persistentAccountId)
+                      : undefined;
                     if (newAccountId) {
                       const migrated = await getPrismaClient().transaction.updateMany({
                         where: { accountId: orphan.id },
@@ -829,7 +826,7 @@ export const setupPlaidRoutes = (app: any) => {
                       }
                       await getPrismaClient().account.delete({ where: { id: orphan.id } });
                     } else {
-                      console.warn(`   Skipping orphan ${orphan.name} (${orphan.type}/${orphan.subtype}) - no matching new account found, preserving to avoid transaction loss`);
+                      console.warn(`   Skipping orphan ${orphan.name} (${orphan.type}/${orphan.subtype}) - no stable persistent account match, preserving to avoid transaction loss`);
                     }
                   }
                 }
@@ -2578,6 +2575,12 @@ export const setupPlaidRoutes = (app: any) => {
       }
 
       const { access_token } = req.body;
+      if (!access_token) return res.status(400).json({ error: 'Access token required' });
+      const tokenRecord = await getPrismaClient().accessToken.findFirst({
+        where: { token: access_token, userId: user.id, isActive: true },
+        select: { id: true },
+      });
+      if (!tokenRecord) return res.status(404).json({ error: 'Plaid connection not found' });
       const accountsResponse = await plaidClient.accountsGet({
         access_token: access_token,
       });
@@ -2596,7 +2599,9 @@ export const setupPlaidRoutes = (app: any) => {
             currentBalance: account.balances.current,
             availableBalance: account.balances.available,
             currency: account.balances.iso_currency_code,
+            persistentAccountId: (account as any).persistent_account_id || null,
             userId: user.id, // Associate with authenticated user
+            accessTokenId: tokenRecord.id,
           },
           create: {
             plaidAccountId: account.account_id,
@@ -2607,7 +2612,9 @@ export const setupPlaidRoutes = (app: any) => {
             currentBalance: account.balances.current,
             availableBalance: account.balances.available,
             currency: account.balances.iso_currency_code,
+            persistentAccountId: (account as any).persistent_account_id || null,
             userId: user.id, // Associate with authenticated user
+            accessTokenId: tokenRecord.id,
           },
         });
         count++;
@@ -2628,6 +2635,11 @@ export const setupPlaidRoutes = (app: any) => {
       if (!access_token) {
         return res.status(400).json({ error: 'Access token required' });
       }
+      if (!req.user?.id) return res.status(401).json({ error: 'Authentication required' });
+      const ownsConnection = await getPrismaClient().accessToken.count({
+        where: { token: access_token, userId: req.user.id, isActive: true },
+      });
+      if (!ownsConnection) return res.status(404).json({ error: 'Plaid connection not found' });
 
       // Use TransactionSyncService to sync transactions with cursor management
       const result = await TransactionSyncService.syncTransactionsForToken(access_token);
@@ -2666,6 +2678,13 @@ export const setupPlaidRoutes = (app: any) => {
   app.post('/plaid/refresh_data', async (req: any, res: any) => {
     try {
       const { access_token } = req.body;
+      if (!req.user?.id) return res.status(401).json({ error: 'Authentication required' });
+      if (!access_token) return res.status(400).json({ error: 'Access token required' });
+      const tokenRecord = await getPrismaClient().accessToken.findFirst({
+        where: { token: access_token, userId: req.user.id, isActive: true },
+        select: { id: true },
+      });
+      if (!tokenRecord) return res.status(404).json({ error: 'Plaid connection not found' });
       
       // Refresh accounts
       const accountsResponse = await plaidClient.accountsGet({
@@ -2686,6 +2705,9 @@ export const setupPlaidRoutes = (app: any) => {
             currentBalance: account.balances.current,
             availableBalance: account.balances.available,
             currency: account.balances.iso_currency_code,
+            persistentAccountId: (account as any).persistent_account_id || null,
+            userId: req.user.id,
+            accessTokenId: tokenRecord.id,
           },
           create: {
             plaidAccountId: account.account_id,
@@ -2696,56 +2718,17 @@ export const setupPlaidRoutes = (app: any) => {
             currentBalance: account.balances.current,
             availableBalance: account.balances.available,
             currency: account.balances.iso_currency_code,
+            persistentAccountId: (account as any).persistent_account_id || null,
+            userId: req.user.id,
+            accessTokenId: tokenRecord.id,
           },
         });
         accountCount++;
       }
 
-      // Refresh transactions
-      const now = new Date();
-      const startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-      
-      const transactionsResponse = await plaidClient.transactionsGet({
-        access_token: access_token,
-        start_date: startDate.toISOString().split('T')[0],
-        end_date: now.toISOString().split('T')[0],
-      });
-
-      const transactions = transactionsResponse.data.transactions;
-      let transactionCount = 0;
-
-      for (const transaction of transactions) {
-        // Check if account exists before upserting transaction
-        const account = await getPrismaClient().account.findUnique({
-          where: { plaidAccountId: transaction.account_id },
-        });
-        if (!account) {
-          console.warn(`Skipping transaction for unknown accountId: ${transaction.account_id}`);
-          continue;
-        }
-        
-        await getPrismaClient().transaction.upsert({
-          where: { plaidTransactionId: transaction.transaction_id },
-          update: {
-            accountId: account.id,
-            amount: transaction.amount,
-            date: new Date(transaction.date),
-            name: transaction.name,
-            category: transaction.category?.join(', ') || '',
-            pending: transaction.pending,
-          },
-          create: {
-            plaidTransactionId: transaction.transaction_id,
-            accountId: account.id,
-            amount: transaction.amount,
-            date: new Date(transaction.date),
-            name: transaction.name,
-            category: transaction.category?.join(', ') || '',
-            pending: transaction.pending,
-          },
-        });
-        transactionCount++;
-      }
+      const transactionSync = await TransactionSyncService.syncTransactionsForToken(access_token);
+      if (!transactionSync.success) throw new Error(transactionSync.error || 'Transaction sync failed');
+      const transactionCount = transactionSync.added + transactionSync.modified + transactionSync.removed;
 
       res.json({ 
         success: true, 
@@ -2761,8 +2744,8 @@ export const setupPlaidRoutes = (app: any) => {
   // Disconnect accounts endpoint
   app.delete('/plaid/disconnect_accounts', async (req: any, res: any) => {
     try {
-      // Delete all access tokens (this effectively disconnects all accounts)
-      await getPrismaClient().accessToken.deleteMany();
+      if (!req.user?.id) return res.status(401).json({ error: 'Authentication required' });
+      await getPrismaClient().accessToken.deleteMany({ where: { userId: req.user.id } });
       
       res.json({ success: true, message: 'All accounts disconnected' });
     } catch (error) {

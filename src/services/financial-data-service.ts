@@ -8,6 +8,8 @@ import { TransactionCategorizationService, CategorizationDetail, TransactionType
 import { persistTransactionsToDb, persistSnapTradeActivitiesToDb } from '../data/persistence';
 import { cacheService } from '../data/cache';
 import { classifyAccount } from './account-classifier';
+import { financialAccountIdentityKey, isNewerAccountSnapshot } from './account-identity';
+import { resolveCanonicalTransactionType } from './canonical-transaction-adapter';
 
 const prisma = new PrismaClient();
 
@@ -65,6 +67,7 @@ export interface Account {
   source: 'plaid' | 'snaptrade';
   transactions?: Array<any>;
   persistentAccountId?: string | null;
+  sourceConnectionId?: string;
   snapshotTimestamp?: string;
   lastSyncedAt?: string;
 }
@@ -396,25 +399,7 @@ export class FinancialDataService {
           };
           
       const inferInvestmentTransactionType = (tx: Record<string, any>): TransactionType => {
-        const amount = Number(tx.amount) || 0;
-        const rawType = `${tx.type || ''} ${tx.subtype || ''}`.toLowerCase();
-
-        if (rawType.includes('dividend') || rawType.includes('interest') || rawType.includes('distribution')) {
-          return 'income';
-        }
-        if (rawType.includes('sell') || rawType.includes('redemption') || rawType.includes('liquidation')) {
-          return 'sell';
-        }
-        if (rawType.includes('buy') || rawType.includes('purchase')) {
-          return 'buy';
-        }
-        if (amount > 0) {
-          return 'sell';
-        }
-        if (amount < 0) {
-          return 'buy';
-        }
-        return 'adjustment';
+        return resolveCanonicalTransactionType(tx) ?? 'adjustment';
       };
 
           const processTransactionGroup = async (
@@ -784,6 +769,8 @@ export class FinancialDataService {
                 // Ensure all required fields are present for persistence
                 account_id: tx.account_id,
                 amount: tx.amount,
+                source_amount: (tx as any).source_amount ?? (tx as any).sourceAmount ?? tx.amount,
+                cash_flow_amount: (tx as any).cash_flow_amount ?? (tx as any).cashFlowAmount,
                 date: tx.date,
                 name: tx.name,
                 category: tx.category || [],
@@ -1044,10 +1031,11 @@ export class FinancialDataService {
         institution_logo: undefined,
         institution_url: undefined,
         source: 'plaid',
+        sourceConnectionId: record.accessTokenId || undefined,
         persisted: true,
         // Pass through persistentAccountId only when it's the real Plaid value (TAN institutions).
-        // When persistentAccountId === plaidAccountId it was likely our incorrect fallback - omit it
-        // so we use institution+name dedup and match fresh API data that has no persistent_account_id.
+        // When persistentAccountId === plaidAccountId it was likely our incorrect fallback. Omit it
+        // so identity falls back to the source connection plus the provider account ID.
         persistentAccountId:
           record.persistentAccountId &&
           record.persistentAccountId !== record.plaidAccountId
@@ -1144,6 +1132,8 @@ export class FinancialDataService {
               transaction_id: dbTx.plaidTransactionId,
               account_id: plaidAccountId,
               amount: dbTx.amount,
+              source_amount: dbTx.sourceAmount ?? dbTx.amount,
+              cash_flow_amount: dbTx.cashFlowAmount ?? undefined,
               date: dbTx.date.toISOString().split('T')[0],
               name: dbTx.name,
               category: categoryArray,
@@ -1375,10 +1365,11 @@ export class FinancialDataService {
               institution_logo: institutionLogo,
               institution_url: institutionUrl,
               source: 'plaid',
+              sourceConnectionId: tokenRecord.id,
               plaidAccountId: plaidAccountId, // ✅ Always set for Plaid accounts
               // Pass through persistentAccountId only when it differs from plaidAccountId (matches persisted logic).
-              // When Plaid returns persistent_account_id === account_id, both fresh and persisted must use
-              // institution+name dedup so getLogicalKey produces the same key for both.
+              // When Plaid returns persistent_account_id === account_id, omit the redundant value so both
+              // fresh and persisted data use the same source-connection + provider-account identity.
               persistentAccountId:
                 (account as any).persistent_account_id &&
                 (account as any).persistent_account_id !== plaidAccountId
@@ -2270,10 +2261,8 @@ export class FinancialDataService {
       ...(manualAccountsData?.accounts || [])
     ];
 
-    // ✅ DEDUPLICATION: Use logical identity to detect same account across re-links
-    // - Primary: persistent_account_id (Plaid TAN institutions - Chase, PNC, US Bank)
-    // - Fallback for Plaid: institution_id + name + type + subtype (per Plaid duplicate detection guidance)
-    // - SnapTrade/Manual: account_id (already unique per source)
+    // Deduplicate only on provider identity. Names, balances, and account types
+    // are mutable attributes and cannot prove that two accounts are identical.
 
     const accountMap = new Map<string, any>();
 
@@ -2282,66 +2271,6 @@ export class FinancialDataService {
     // - tryLoadPersistedPlaidData: Only filters corrupted records (safety), no deduplication
     // - /plaid/all-accounts: Only verification/logging, no deduplication
     // - Frontend: No deduplication (trusts backend)
-
-    const parseSnapshotTimestamp = (source: any): number | null => {
-      const raw =
-        source?.snapshotTimestamp ||
-        source?.lastSyncedAt ||
-        source?.persistedAsOf ||
-        source?.lastSynced ||
-        null;
-
-      if (!raw) {
-        return null;
-      }
-
-      if (raw instanceof Date) {
-        return raw.getTime();
-      }
-
-      const parsed = Date.parse(raw);
-      return Number.isNaN(parsed) ? null : parsed;
-    };
-
-    // Strip common user-added suffixes for dedup (e.g. " - Joint Taxable", " - Taxable")
-    // so renamed duplicates still match when loading from persisted data (no plaidOriginalName)
-    const normalizeNameForDedup = (n: string): string => {
-      let s = (n || '').trim();
-      for (const suffix of [' - Joint Taxable', ' - Taxable', ' - Joint', ' - Joint taxable', ' - taxable']) {
-        if (s.endsWith(suffix)) s = s.slice(0, -suffix.length).trim();
-      }
-      return s;
-    };
-
-    // Balance tolerance for "same account re-linked" heuristic (0.5% - matches fix-duplicate-accounts.ts)
-    const BALANCE_TOLERANCE_PCT = 0.005;
-
-    const getLogicalKey = (account: any, includeAccountId = false): string => {
-      const accountId = account.account_id ||
-                       (account as any).plaidAccountId ||
-                       (account as any).persistentAccountId;
-      const persistentId = (account as any).persistentAccountId;
-      if (persistentId && account.source === 'plaid') {
-        return `persistent:${persistentId}`;
-      }
-      if (account.source === 'plaid' && accountId) {
-        const rawName = (account as any).plaidOriginalName || account.name || '';
-        const name = (account as any).plaidOriginalName ? rawName.trim() : normalizeNameForDedup(rawName);
-        const type = (account.type || '').trim();
-        const subtype = (account.subtype || '').trim();
-        const institutionKey = (account as any).institution || (account as any).institution_id || '';
-        const base = `plaid:${institutionKey}|${name}|${type}|${subtype}`;
-        return includeAccountId ? `${base}|${accountId}` : base;
-      }
-      return accountId ? `id:${accountId}` : '';
-    };
-
-    const balancesWithinTolerance = (a: any, b: any): boolean => {
-      const balA = a.balance?.current ?? a.balance?.available ?? 0;
-      const balB = b.balance?.current ?? b.balance?.available ?? 0;
-      const maxBal = Math.max(Math.abs(balA), Math.abs(balB), 1);
-      return Math.abs(balA - balB) / maxBal <= BALANCE_TOLERANCE_PCT;
-    };
 
     for (const account of rawAccounts) {
       const accountId = account.account_id ||
@@ -2353,7 +2282,7 @@ export class FinancialDataService {
         continue;
       }
 
-      const baseKey = getLogicalKey(account, false);
+      const baseKey = financialAccountIdentityKey(account);
       if (!baseKey) {
         console.warn(`⚠️ Account without logical key: ${account.name} (${account.type}/${account.subtype}), skipping`);
         continue;
@@ -2365,73 +2294,7 @@ export class FinancialDataService {
         continue;
       }
 
-      const existingAccountId = existing.account_id || (existing as any).plaidAccountId || (existing as any).persistentAccountId;
-      const isSameAccountId = existingAccountId === accountId;
-
-      if (isSameAccountId) {
-        // Same account_id in batch - true duplicate, replace by timestamp/persisted
-        const existingIsPersisted = existing.persisted === true;
-        const candidateIsPersisted = account.persisted === true;
-        let shouldReplace = false;
-        if (existingIsPersisted && !candidateIsPersisted) {
-          shouldReplace = false;
-        } else if (!existingIsPersisted && candidateIsPersisted) {
-          shouldReplace = true;
-        } else {
-          const existingTimestamp = parseSnapshotTimestamp(existing);
-          const candidateTimestamp = parseSnapshotTimestamp(account);
-          if (candidateTimestamp !== null && (existingTimestamp === null || candidateTimestamp > existingTimestamp)) {
-            shouldReplace = true;
-          } else if (existingTimestamp !== null && candidateTimestamp === null) {
-            shouldReplace = false;
-          } else if (candidateTimestamp === null && existingTimestamp === null) {
-            const existingBalance = existing.balance?.current ?? existing.balance?.available ?? 0;
-            const candidateBalance = account.balance?.current ?? account.balance?.available ?? 0;
-            shouldReplace = candidateBalance >= existingBalance;
-          }
-        }
-        if (shouldReplace) {
-          accountMap.set(baseKey, account);
-        }
-        continue;
-      }
-
-      // Different account_ids - could be re-linked same account OR different accounts (e.g. two CDs)
-      // Heuristic: same balance within tolerance → same account re-linked → dedupe
-      //            different balances → different accounts → keep both (use account_id in key)
-      if (balancesWithinTolerance(existing, account)) {
-        // Same account re-linked (e.g. Betterment IRA connected twice)
-        const existingIsPersisted = existing.persisted === true;
-        const candidateIsPersisted = account.persisted === true;
-        let shouldReplace = false;
-        if (existingIsPersisted && !candidateIsPersisted) {
-          shouldReplace = false;
-        } else if (!existingIsPersisted && candidateIsPersisted) {
-          shouldReplace = true;
-        } else {
-          const existingTimestamp = parseSnapshotTimestamp(existing);
-          const candidateTimestamp = parseSnapshotTimestamp(account);
-          if (candidateTimestamp !== null && (existingTimestamp === null || candidateTimestamp > existingTimestamp)) {
-            shouldReplace = true;
-          } else if (existingTimestamp !== null && candidateTimestamp === null) {
-            shouldReplace = false;
-          } else if (candidateTimestamp === null && existingTimestamp === null) {
-            const existingBalance = existing.balance?.current ?? existing.balance?.available ?? 0;
-            const candidateBalance = account.balance?.current ?? account.balance?.available ?? 0;
-            shouldReplace = candidateBalance >= existingBalance;
-          }
-        }
-        if (shouldReplace) {
-          accountMap.set(baseKey, account);
-        }
-        continue;
-      }
-
-      // Different accounts (e.g. Popular Direct CD 8/7/2026 vs 8/8/2027) - keep both
-      // Re-key existing with account_id so it stays; add candidate with its account_id
-      accountMap.delete(baseKey);
-      accountMap.set(getLogicalKey(existing, true), existing);
-      accountMap.set(getLogicalKey(account, true), account);
+      if (isNewerAccountSnapshot(existing, account)) accountMap.set(baseKey, account);
     }
 
     const finalAccounts = Array.from(accountMap.values());
@@ -2465,21 +2328,20 @@ export class FinancialDataService {
       // SnapTrade balances are already in account objects
     };
 
-    // Build account_id → logicalKey map so we can deduplicate holdings from duplicate accounts
-    // (same institution re-linked = different account_ids but same logical account = same holdings)
+    // Build account_id → provider identity map for holding replacement.
     const accountIdToLogicalKey = new Map<string, string>();
     for (const account of rawAccounts) {
       const accountId = account.account_id || (account as any).plaidAccountId || (account as any).persistentAccountId;
       if (accountId) {
-        const logicalKey = getLogicalKey(account);
+        const logicalKey = financialAccountIdentityKey(account);
         if (logicalKey) {
           accountIdToLogicalKey.set(accountId, logicalKey);
         }
       }
     }
 
-    // Merge holdings with deduplication by LOGICAL account + security + quantity
-    // (not raw account_id - duplicate tokens produce same holdings with different account_ids)
+    // A holding is one security position inside one account. Quantity changes
+    // over time and therefore cannot be part of the position's identity.
     const rawHoldings = [
       ...(plaidData?.holdings || []),
       ...(snapTradeData?.holdings || [])
@@ -2491,12 +2353,17 @@ export class FinancialDataService {
     let duplicatesSkipped = 0;
     for (const holding of rawHoldings) {
       const logicalKey = accountIdToLogicalKey.get(holding.account_id) ?? `id:${holding.account_id}`;
-      const holdingLogicalId = `${logicalKey}|${holding.security_id}|${holding.quantity}`;
-      if (!holdingMap.has(holdingLogicalId)) {
+      const holdingLogicalId = `${logicalKey}|${holding.security_id}`;
+      const existing = holdingMap.get(holdingLogicalId);
+      if (!existing) {
         holdingMap.set(holdingLogicalId, holding);
       } else {
         duplicatesSkipped++;
-        console.log(`⚠️ Skipping duplicate holding (same logical account): ${holdingLogicalId} (${holding.security_name || holding.security_id})`);
+        const existingTimestamp = Date.parse(existing.institution_price_as_of || existing.snapshotTimestamp || '');
+        const candidateTimestamp = Date.parse(holding.institution_price_as_of || holding.snapshotTimestamp || '');
+        if (!Number.isNaN(candidateTimestamp) && (Number.isNaN(existingTimestamp) || candidateTimestamp >= existingTimestamp)) {
+          holdingMap.set(holdingLogicalId, holding);
+        }
       }
     }
     const holdings = Array.from(holdingMap.values());
@@ -2646,4 +2513,3 @@ export class FinancialDataService {
     return snapTradeData?.errors || [];
   }
 }
-

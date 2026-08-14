@@ -226,7 +226,7 @@ describe('Account Identity Standardization', () => {
       expect(result.accounts[0].snapshotTimestamp).toBe('2025-01-01T00:00:00Z');
     });
 
-    it('should use balance comparison when both accounts lack timestamps', () => {
+    it('should keep deterministic source order when both accounts lack timestamps', () => {
       const plaidData = {
         accounts: [
           {
@@ -263,7 +263,7 @@ describe('Account Identity Standardization', () => {
       const result = (financialDataService as any).mergeFinancialData(plaidData, null, null);
 
       expect(result.accounts).toHaveLength(1);
-      expect(result.accounts[0].balance.current).toBe(2000); // Higher balance preferred
+      expect(result.accounts[0].balance.current).toBe(1000);
     });
 
     it('should skip accounts without account_id', () => {
@@ -308,4 +308,3 @@ describe('Account Identity Standardization', () => {
     });
   });
 });
-

@@ -91,8 +91,7 @@ describe('Deduplication Integration', () => {
     });
   });
 
-  it('should deduplicate re-linked same account (e.g. Betterment IRA connected twice)', () => {
-    // Same account from two Plaid connections - same name, same balance, different account_ids
+  it('should not infer identity for same-name, same-balance accounts', () => {
     const plaidAccounts = [
       {
         account_id: 'JmKkKyzmdDf3zYaBrJqRtKX9ZpXQk7cXJggBD',
@@ -125,8 +124,7 @@ describe('Deduplication Integration', () => {
     const plaidData = { accounts: plaidAccounts, balances: {}, holdings: [], securities: [], transactions: [] };
     const merged = (financialDataService as any).mergeFinancialData(plaidData, null, null);
 
-    expect(merged.accounts).toHaveLength(1);
-    expect(merged.accounts[0].balance.current).toBe(577940.96);
+    expect(merged.accounts).toHaveLength(2);
   });
 
   it('should NOT deduplicate different accounts with same institution+type+subtype (e.g. two CDs)', () => {
@@ -205,8 +203,35 @@ describe('Deduplication Integration', () => {
     const merged = (financialDataService as any).mergeFinancialData(plaidData, null, null);
 
     expect(merged.accounts).toHaveLength(1);
-    // Should prefer higher balance when timestamps are missing
-    expect(merged.accounts[0].balance.current).toBe(2000);
+    // Balance magnitude is not a freshness signal; preserve deterministic source order.
+    expect(merged.accounts[0].balance.current).toBe(1000);
+  });
+
+  it('replaces a holding when its quantity changes instead of duplicating the position', () => {
+    const account = {
+      account_id: 'brokerage-1',
+      id: 'brokerage-1',
+      name: 'Brokerage',
+      type: 'investment',
+      subtype: 'brokerage',
+      balance: { current: 1200, iso_currency_code: 'USD' },
+      source: 'plaid',
+      sourceConnectionId: 'connection-1',
+    };
+    const plaidData = {
+      accounts: [account],
+      balances: {},
+      holdings: [
+        { account_id: 'brokerage-1', security_id: 'security-1', quantity: 10, institution_value: 1000, institution_price_as_of: '2026-08-12' },
+        { account_id: 'brokerage-1', security_id: 'security-1', quantity: 12, institution_value: 1200, institution_price_as_of: '2026-08-13' },
+      ],
+      securities: [{ security_id: 'security-1', type: 'equity' }],
+      transactions: [],
+    };
+
+    const merged = (financialDataService as any).mergeFinancialData(plaidData, null, null);
+
+    expect(merged.investments.holdings).toHaveLength(1);
+    expect(merged.investments.holdings[0].quantity).toBe(12);
   });
 });
-

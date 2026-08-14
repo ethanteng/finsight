@@ -2,9 +2,11 @@ import { PrismaClient } from '@prisma/client';
 import { plaidClient } from '../plaid';
 import { processTransactionData } from '../plaid';
 import { TransactionCategorizationService } from './transaction-categorization-service';
+import { TransactionNormalizationService } from './transaction-normalization-service';
 
 const prisma = new PrismaClient();
 const categorizationService = new TransactionCategorizationService();
+const normalizationService = new TransactionNormalizationService();
 
 export interface TransactionSyncResult {
   success: boolean;
@@ -25,14 +27,12 @@ export class TransactionSyncService {
     cursor?: string | null
   ): Promise<TransactionSyncResult> {
     try {
-      // Retrieve stored cursor from database if not provided
-      if (!cursor) {
-        const tokenRecord = await prisma.accessToken.findUnique({
-          where: { token: accessToken },
-          select: { transactionSyncCursor: true },
-        });
-        cursor = tokenRecord?.transactionSyncCursor || undefined;
-      }
+      const tokenRecord = await prisma.accessToken.findUnique({
+        where: { token: accessToken },
+        select: { id: true, userId: true, transactionSyncCursor: true },
+      });
+      if (!tokenRecord) throw new Error('Unknown Plaid connection');
+      if (!cursor) cursor = tokenRecord.transactionSyncCursor || undefined;
 
       const added: any[] = [];
       const modified: any[] = [];
@@ -78,7 +78,7 @@ export class TransactionSyncService {
       let addedCount = 0;
       for (const transaction of added) {
         try {
-          await this.upsertTransaction(transaction, accessToken);
+          await this.upsertTransaction(transaction, tokenRecord);
           addedCount++;
         } catch (error: any) {
           console.error(`Error processing added transaction ${transaction.transaction_id}:`, error.message);
@@ -90,7 +90,7 @@ export class TransactionSyncService {
       let modifiedCount = 0;
       for (const transaction of modified) {
         try {
-          await this.upsertTransaction(transaction, accessToken);
+          await this.upsertTransaction(transaction, tokenRecord);
           modifiedCount++;
         } catch (error: any) {
           console.error(`Error processing modified transaction ${transaction.transaction_id}:`, error.message);
@@ -174,15 +174,33 @@ export class TransactionSyncService {
    * Upsert a transaction to the database
    * Handles account lookup, transaction data processing, and categorization
    */
-  private static async upsertTransaction(transaction: any, _accessToken: string): Promise<void> {
-    // Find the account for this transaction
-    const account = await prisma.account.findUnique({
-      where: { plaidAccountId: transaction.account_id },
+  private static async upsertTransaction(
+    transaction: any,
+    connection: { id: string; userId: string | null }
+  ): Promise<void> {
+    const account = await prisma.account.findFirst({
+      where: {
+        plaidAccountId: transaction.account_id,
+        ...(connection.userId
+          ? {
+              OR: [
+                { accessTokenId: connection.id },
+                { accessTokenId: null, userId: connection.userId },
+              ],
+            }
+          : { accessTokenId: connection.id }),
+      },
     });
 
     if (!account) {
       console.warn(`Skipping transaction ${transaction.transaction_id} for unknown accountId: ${transaction.account_id}`);
       return;
+    }
+    if (account.accessTokenId === null) {
+      await prisma.account.update({
+        where: { id: account.id },
+        data: { accessTokenId: connection.id },
+      });
     }
 
     // Process transaction data (handles amount correction, category extraction, etc.)
@@ -240,12 +258,20 @@ export class TransactionSyncService {
       categoryComparedAt = existing.categoryComparedAt;
     }
 
+    const normalizedTx = normalizationService.normalizeTransaction(
+      { ...processedTx, transaction_type: aiCategory || undefined },
+      account.type,
+      account.subtype || undefined
+    );
+
     // Upsert transaction
     await prisma.transaction.upsert({
       where: { plaidTransactionId: transaction.transaction_id },
       update: {
         accountId: account.id,
-        amount: processedTx.amount,
+        amount: normalizedTx.amount,
+        sourceAmount: normalizedTx.source_amount,
+        cashFlowAmount: normalizedTx.cash_flow_amount,
         date: new Date(processedTx.date),
         name: processedTx.name,
         category: categoryStr,
@@ -270,7 +296,9 @@ export class TransactionSyncService {
       create: {
         plaidTransactionId: transaction.transaction_id,
         accountId: account.id,
-        amount: processedTx.amount,
+        amount: normalizedTx.amount,
+        sourceAmount: normalizedTx.source_amount,
+        cashFlowAmount: normalizedTx.cash_flow_amount,
         date: new Date(processedTx.date),
         name: processedTx.name,
         category: categoryStr,
@@ -375,4 +403,3 @@ export class TransactionSyncService {
     };
   }
 }
-

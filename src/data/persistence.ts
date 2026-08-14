@@ -37,6 +37,7 @@ export async function persistTransactionsToDb(
       // Note: We now store SnapTrade accounts so users can rename them
       const isSnapTrade = (typeof plaidAccountId === 'string' && plaidAccountId.startsWith('snaptrade-')) ||
                           source === 'snaptrade';
+      const sourceConnectionId = source === 'plaid' ? account.sourceConnectionId : undefined;
       
       // Log SnapTrade accounts for debugging
       if (isSnapTrade) {
@@ -111,7 +112,9 @@ export async function persistTransactionsToDb(
             currency: account.balance?.iso_currency_code || account.currency || 'USD',
             institution: account.institution || null,
             limit: account.balance?.limit || account.limit || null,
+            persistentAccountId: account.persistentAccountId || account.persistent_account_id || null,
             userId,
+            accessTokenId: sourceConnectionId,
             lastSynced: new Date(),
           },
           update: {
@@ -122,6 +125,8 @@ export async function persistTransactionsToDb(
             currentBalance: account.balance?.current || account.currentBalance || 0,
             availableBalance: account.balance?.available || account.availableBalance || null,
             limit: account.balance?.limit || account.limit || null,
+            persistentAccountId: account.persistentAccountId || account.persistent_account_id || undefined,
+            ...(sourceConnectionId && { accessTokenId: sourceConnectionId, userId }),
             lastSynced: new Date(),
           },
         });
@@ -176,6 +181,8 @@ export async function persistTransactionsToDb(
           // Only update these fields if explicitly provided AND not preserving a manual correction
           const updateData: any = {
             amount: transaction.amount,
+            sourceAmount: transaction.source_amount ?? transaction.sourceAmount ?? transaction.amount,
+            cashFlowAmount: transaction.cash_flow_amount ?? transaction.cashFlowAmount ?? null,
             date: new Date(transaction.date),
             name: transaction.name,
             category: categoryStr,
@@ -257,6 +264,8 @@ export async function persistTransactionsToDb(
               plaidTransactionId,
               accountId: dbAccountId,
               amount: transaction.amount,
+              sourceAmount: transaction.source_amount ?? transaction.sourceAmount ?? transaction.amount,
+              cashFlowAmount: transaction.cash_flow_amount ?? transaction.cashFlowAmount ?? null,
               date: new Date(transaction.date),
               name: transaction.name,
               category: categoryStr,
@@ -374,4 +383,3 @@ export async function persistSnapTradeActivitiesToDb(
     throw error;
   }
 }
-
