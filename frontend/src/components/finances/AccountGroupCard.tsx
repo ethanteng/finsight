@@ -1,15 +1,15 @@
 "use client";
 import { useState } from 'react';
 
-interface Account {
+export interface Account {
   id: string;
   account_id: string;
   name: string;
   type: string;
   subtype: string;
   balance: {
-    current: number;
-    available?: number;
+    current: number | null;
+    available?: number | null;
     limit?: number;
     iso_currency_code: string;
   };
@@ -17,29 +17,72 @@ interface Account {
   source?: 'plaid' | 'snaptrade';
 }
 
-interface SnapTradeAccount {
+export interface SnapTradeAccount {
   id: string;
   name: string;
   type: string;
   institution: string;
-  balance: number;
+  balance: number | null;
   accountNumber: string;
 }
 
 interface AccountGroupCardProps {
   title: string;
   accounts: (Account | SnapTradeAccount)[];
-  totalBalance: number;
+  totalBalance: number | null;
+  unavailableBalanceCount?: number;
   isExpanded: boolean;
   onToggle: () => void;
   onAccountClick: (accountId: string) => void;
   onAccountRenamed?: () => void;
 }
 
+export function getAccountBalance(account: Account | SnapTradeAccount): number | null {
+  let value: unknown;
+  if ('balance' in account && account.balance !== null && typeof account.balance === 'object') {
+    const acc = account as Account;
+    if (acc.type === 'depository' ||
+        acc.subtype === 'checking' ||
+        acc.subtype === 'savings') {
+      value = typeof acc.balance.available === 'number' && Number.isFinite(acc.balance.available)
+        ? acc.balance.available
+        : acc.balance.current;
+    } else {
+      value = acc.balance.current;
+    }
+  } else {
+    value = (account as SnapTradeAccount).balance;
+  }
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+export function summarizeAccountBalances(
+  accounts: (Account | SnapTradeAccount)[],
+  absoluteValues = false
+): { totalBalance: number | null; unavailableBalanceCount: number } {
+  let totalBalance = 0;
+  let unavailableBalanceCount = 0;
+  accounts.forEach(account => {
+    const balance = getAccountBalance(account);
+    if (balance === null) {
+      unavailableBalanceCount += 1;
+    } else {
+      totalBalance += absoluteValues ? Math.abs(balance) : balance;
+    }
+  });
+  return {
+    totalBalance: accounts.length > 0 && unavailableBalanceCount === accounts.length
+      ? null
+      : totalBalance,
+    unavailableBalanceCount,
+  };
+}
+
 export default function AccountGroupCard({
   title,
   accounts,
   totalBalance,
+  unavailableBalanceCount = 0,
   isExpanded,
   onToggle,
   onAccountClick,
@@ -55,23 +98,6 @@ export default function AccountGroupCard({
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);
-  };
-
-  const getAccountBalance = (account: Account | SnapTradeAccount): number => {
-    if ('balance' in account && typeof account.balance === 'object') {
-      const acc = account as Account;
-      // For checking/savings accounts, prefer available balance
-      if (acc.type === 'depository' || 
-          acc.subtype === 'checking' || 
-          acc.subtype === 'savings') {
-        return acc.balance.available !== undefined && acc.balance.available !== null 
-          ? acc.balance.available 
-          : acc.balance.current ?? 0;
-      }
-      // For investment/credit/loan accounts, use current balance
-      return acc.balance.current ?? 0;
-    }
-    return (account as SnapTradeAccount).balance ?? 0;
   };
 
   const getAccountName = (account: Account | SnapTradeAccount): string => {
@@ -180,8 +206,13 @@ export default function AccountGroupCard({
         </div>
         <div className="text-right">
           <div className="text-white font-semibold text-xl">
-            {formatCurrency(totalBalance)}
+            {totalBalance === null ? 'Unavailable' : formatCurrency(totalBalance)}
           </div>
+          {unavailableBalanceCount > 0 && (
+            <div className="text-xs text-amber-300">
+              Partial total · {unavailableBalanceCount} unavailable
+            </div>
+          )}
         </div>
       </button>
 
@@ -255,7 +286,7 @@ export default function AccountGroupCard({
                   {!isEditing && (
                     <div className="text-right">
                       <div className="font-semibold text-white">
-                        {formatCurrency(balance)}
+                        {balance === null ? 'Unavailable' : formatCurrency(balance)}
                       </div>
                     </div>
                   )}
@@ -268,4 +299,3 @@ export default function AccountGroupCard({
     </div>
   );
 }
-

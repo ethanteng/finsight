@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowRight, BarChart3, Building2, Landmark, ShieldCheck, TrendingUp } from 'lucide-react';
 import NetWorthCard from '../../components/finances/NetWorthCard';
 import HomeValueCard from '../../components/finances/HomeValueCard';
-import AccountGroupCard from '../../components/finances/AccountGroupCard';
+import AccountGroupCard, { summarizeAccountBalances } from '../../components/finances/AccountGroupCard';
 import AccountDetailModal from '../../components/finances/AccountDetailModal';
 import FinancialMetricsChart, { HistoricalSnapshot } from '../../components/finances/FinancialMetricsChart';
 import IncomeExpenseOverrides from '../../components/finances/IncomeExpenseOverrides';
@@ -549,6 +549,8 @@ export default function FinancesPageClient() {
     return true;
   });
   const groupedAccounts = groupAccounts(accounts, snapTradeAccounts);
+  const cashBalanceSummary = summarizeAccountBalances(groupedAccounts.cash);
+  const debtBalanceSummary = summarizeAccountBalances(groupedAccounts.debt, true);
   
   // Helper to find account by ID (regular function, not a hook)
   const findAccountById = (accountId: string): Account | SnapTradeAccount | null => {
@@ -726,21 +728,8 @@ export default function FinancesPageClient() {
             <AccountGroupCard
               title="Cash Accounts"
               accounts={groupedAccounts.cash}
-              totalBalance={groupedAccounts.cash.reduce((sum, acc) => {
-                const account = acc as Account;
-                // Match profile page logic: use available for checking/savings, current for others
-                let balance: number;
-                if (account.type === 'depository' || 
-                    account.subtype === 'checking' || 
-                    account.subtype === 'savings') {
-                  balance = account.balance?.available !== undefined && account.balance?.available !== null 
-                    ? account.balance.available 
-                    : account.balance?.current ?? 0;
-                } else {
-                  balance = account.balance?.current ?? 0;
-                }
-                return sum + balance;
-              }, 0)}
+              totalBalance={cashBalanceSummary.totalBalance}
+              unavailableBalanceCount={cashBalanceSummary.unavailableBalanceCount}
               isExpanded={selectedAccountGroup === 'cash'}
               onToggle={() => setSelectedAccountGroup(selectedAccountGroup === 'cash' ? null : 'cash')}
               onAccountClick={(accountId) => {
@@ -778,10 +767,8 @@ export default function FinancesPageClient() {
             <AccountGroupCard
               title="Debt Accounts"
               accounts={groupedAccounts.debt}
-              totalBalance={groupedAccounts.debt.reduce((sum, acc) => {
-                const balance = (acc as Account).balance?.current ?? (acc as SnapTradeAccount).balance ?? 0;
-                return sum + Math.abs(balance);
-              }, 0)}
+              totalBalance={debtBalanceSummary.totalBalance}
+              unavailableBalanceCount={debtBalanceSummary.unavailableBalanceCount}
               isExpanded={selectedAccountGroup === 'debt'}
               onToggle={() => setSelectedAccountGroup(selectedAccountGroup === 'debt' ? null : 'debt')}
               onAccountClick={(accountId) => {

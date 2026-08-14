@@ -14,7 +14,7 @@ export interface AccountSummaryItem {
   name: string;
   type: string;
   subtype?: string;
-  balance: number;
+  balance: number | null;
   institution?: string;
   interestRate?: number;
 }

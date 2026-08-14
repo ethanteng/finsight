@@ -165,7 +165,8 @@ The API returns:
 
 | File | Purpose |
 |------|---------|
-| `src/openai/canonical-snapshot.ts` | Maps `FinancialContextSnapshot` to canonical format |
+| `src/services/canonical-financial-snapshot.ts` | Produces canonical financial metrics and source-quality metadata |
+| `src/openai/context-service.ts` | Loads persisted canonical values and assembles LLM context |
 | `src/openai/financial-reasoning-prompt.ts` | Structured reasoning prompt template |
 | `src/openai/structured-response.ts` | Response schema and JSON parser |
 | `src/openai/claude-client.ts` | Claude Sonnet integration |

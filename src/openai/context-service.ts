@@ -2,7 +2,8 @@ import { UserTier } from '../data/types';
 import { dataOrchestrator } from '../data/orchestrator';
 import { Account, Transaction, UnifiedFinancialData, HomeData } from '../services/financial-data-service';
 import { TokenStatus } from '../services/token-validation-service';
-import { QuestionNeeds, FinancialContextSnapshot, AccountSummaryItem, TransactionSummaryItem, InvestmentSnapshot } from './types';
+import { QuestionNeeds, FinancialContextSnapshot, TransactionSummaryItem, InvestmentSnapshot } from './types';
+import { buildAccountSummaries } from './account-summary';
 import type { DemoAccount, DemoTransaction } from '../demo-data';
 
 interface GatherContextArgs {
@@ -339,7 +340,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   // ✅ Use deduplicated accounts and sorted transactions directly (no anonymization)
   console.log(`📊 gatherContextSnapshot: Using ${deduplicatedAccounts.length} deduplicated accounts (from ${accounts.length} original)`);
 
-  const accountSummaries = buildAccountSummaries(deduplicatedAccounts, isDemo);
+  const accountSummaries = buildAccountSummaries(deduplicatedAccounts);
   // Create account map for quick lookup by account_id
   const accountMap = new Map<string, Account>();
   deduplicatedAccounts.forEach(account => {
@@ -956,29 +957,6 @@ async function fetchOrCreateRetirementAnalysis(args: {
 
 
 
-function buildAccountSummaries(accounts: Account[], isDemo: boolean): AccountSummaryItem[] {
-  return accounts.map(account => {
-    const subtype = account.subtype || account.type;
-    const balance =
-      typeof account.balance?.available === 'number' &&
-      (account.type === 'depository' || account.type === 'checking' || account.type === 'savings')
-        ? account.balance.available
-        : account.balance?.current ?? 0;
-
-    const summary: AccountSummaryItem = {
-      id: account.account_id || account.id,
-      name: account.name,
-      type: account.type,
-      subtype,
-      balance,
-      institution: account.institution,
-      interestRate: (account as any).interestRate
-    };
-
-    return summary;
-  });
-}
-
 /**
  * Deduplicate transactions by removing pending versions when settled versions exist.
  * 
@@ -1377,7 +1355,7 @@ function deriveInvestmentSnapshot(data: any): InvestmentSnapshot | undefined {
 }
 
 function buildHomeValueSummary(homeData: HomeData): string {
-  const formatCurrency = (value: number | undefined) => {
+  const formatCurrency = (value: number | null | undefined) => {
     if (typeof value !== 'number' || Number.isNaN(value)) {
       return 'Unknown';
     }

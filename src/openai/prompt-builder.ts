@@ -284,7 +284,9 @@ export function formatAccountSummary(accounts: AccountSummaryItem[]): string {
 
   return accounts
     .map(account => {
-      const amount = `$${account.balance.toFixed(2)}`;
+      const amount = account.balance === null
+        ? 'Balance unavailable'
+        : `$${account.balance.toFixed(2)}`;
       const institution = account.institution ? ` at ${account.institution}` : '';
       const interestRate = account.interestRate ? ` (Interest Rate: ${account.interestRate}%)` : '';
       return `- ${account.name} (${account.type}/${account.subtype || account.type}): ${amount}${institution}${interestRate}`;

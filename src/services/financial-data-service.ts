@@ -135,10 +135,10 @@ export interface PortfolioAnalysis {
 
 export interface HomeData {
   address: string;
-  valueLow: number;
-  valueMid: number;
-  valueHigh: number;
-  lastUpdated: string;
+  valueLow: number | null;
+  valueMid: number | null;
+  valueHigh: number | null;
+  lastUpdated: string | null;
 }
 
 export interface ErrorDetail {
@@ -2206,23 +2206,18 @@ export class FinancialDataService {
         return null;
       }
 
-      const value = parsed.value ?? 0;
-      const valueLow = parsed.valueLow ?? (value > 0 ? value * 0.9 : 0);
-      const valueHigh = parsed.valueHigh ?? (value > 0 ? value * 1.1 : 0);
-      const valueMid = value > 0 ? value : 0;
-
-      if (valueMid > 0) {
-        console.log(`🏠 Home value extracted - valueMid: $${valueMid.toLocaleString()}, isManual: ${parsed.isManualOverride}`);
+      if (parsed.value !== null) {
+        console.log(`🏠 Home value extracted - valueMid: $${parsed.value.toLocaleString()}, isManual: ${parsed.isManualOverride}`);
       } else {
-        console.warn(`⚠️ Home value is 0 or null despite having address: ${parsed.address}`);
+        console.warn(`⚠️ Home value is unavailable despite having address: ${parsed.address}`);
       }
 
       return {
         address: parsed.address,
-        valueLow: valueLow > 0 ? valueLow : 0,
-        valueMid,
-        valueHigh: valueHigh > 0 ? valueHigh : 0,
-        lastUpdated: parsed.lastUpdated?.toISOString() ?? new Date().toISOString()
+        valueLow: parsed.valueLow,
+        valueMid: parsed.value,
+        valueHigh: parsed.valueHigh,
+        lastUpdated: parsed.lastUpdated?.toISOString() ?? null
       };
     } catch (error: any) {
       console.error('Error fetching home value:', error);

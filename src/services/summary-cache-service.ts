@@ -4,7 +4,7 @@ import { BalanceService } from './balance-service';
 import { FinancialDataService } from './financial-data-service';
 import { buildTransactionSummary } from './transaction-summary-service';
 import { buildCanonicalSnapshotCore } from './canonical-financial-snapshot';
-import { FinancialHistoryService } from './financial-history-service';
+import { FinancialHistoryService, type CanonicalHistoryInput } from './financial-history-service';
 
 // Lazy Prisma to avoid multiple instances during different runtimes
 let prisma: PrismaClient | null = null;
@@ -135,7 +135,14 @@ export class SummaryCacheService {
     
     // Save historical snapshot for trend tracking
     try {
-      await FinancialHistoryService.saveHistoricalSnapshot(userId, payload);
+      const historySnapshot: CanonicalHistoryInput = {
+        computedAt,
+        asOf: canonical.asOf,
+        status: canonical.status,
+        reportingCurrency: canonical.reportingCurrency,
+        financialOverview: canonical.financialOverview,
+      };
+      await FinancialHistoryService.saveHistoricalSnapshot(userId, historySnapshot);
     } catch (error) {
       // Log but don't fail - historical snapshot is non-critical
       console.warn(`Failed to save historical snapshot for user ${userId}:`, error);
