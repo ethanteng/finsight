@@ -4,6 +4,7 @@ import { BalanceService } from './balance-service';
 import { FinancialDataService } from './financial-data-service';
 import { buildTransactionSummary } from './transaction-summary-service';
 import { buildCanonicalSnapshotCore } from './canonical-financial-snapshot';
+import { buildAccountDisplayBalances } from './finances-overview-service';
 import {
   FinancialHistoryService,
   type CanonicalHistoryInput,
@@ -17,7 +18,7 @@ const getPrisma = (): PrismaClient => {
   return prisma!;
 };
 
-type ViewMode = 'summary' | 'full';
+type ViewMode = 'summary' | 'finances' | 'full';
 
 export interface SummaryComputeOptions {
   categorize?: boolean;
@@ -129,7 +130,7 @@ export class SummaryCacheService {
         asOf: source.asOf instanceof Date ? source.asOf.toISOString() : source.asOf,
       })),
       meta: {
-        version: '2.0',
+        version: '2.1',
         source: 'SummaryCacheService',
         status: canonical.status,
         asOf: canonical.asOf?.toISOString() || null,
@@ -137,6 +138,21 @@ export class SummaryCacheService {
         transactionsWindowDays: txDays,
         investmentWindowYears: invYears,
         balanceRefreshHours: balanceHours || null,
+        accountDisplayBalances: buildAccountDisplayBalances(
+          data.accounts,
+          data.investments?.holdings,
+          canonical.reportingCurrency
+        ),
+        // Persist presentation metadata with the same revision as homeValue.
+        // A manual point value deliberately has no estimate range.
+        home: data.homeValue ? {
+          address: data.homeValue.address,
+          valueMid: data.homeValue.valueMid,
+          valueLow: data.homeValue.isManualOverride ? null : data.homeValue.valueLow,
+          valueHigh: data.homeValue.isManualOverride ? null : data.homeValue.valueHigh,
+          lastUpdated: data.homeValue.lastUpdated,
+          isManualOverride: data.homeValue.isManualOverride,
+        } : null,
       },
     };
 
@@ -219,6 +235,23 @@ export class SummaryCacheService {
 
   static async getLatestSnapshot(userId: string, view: ViewMode = 'summary') {
     const prisma = getPrisma();
+    if (view === 'finances') {
+      return prisma.financialSummarySnapshot.findUnique({
+        where: { userId },
+        select: {
+          computedAt: true,
+          asOf: true,
+          status: true,
+          reportingCurrency: true,
+          financialOverview: true,
+          investmentPortfolio: true,
+          accounts: true,
+          transactionsSummary: true,
+          meta: true,
+          quality: true,
+        },
+      });
+    }
     const snap = await prisma.financialSummarySnapshot.findUnique({
       where: { userId },
     });

@@ -139,6 +139,7 @@ export interface HomeData {
   valueMid: number | null;
   valueHigh: number | null;
   lastUpdated: string | null;
+  isManualOverride: boolean;
 }
 
 export interface ErrorDetail {
@@ -2217,7 +2218,8 @@ export class FinancialDataService {
         valueLow: parsed.valueLow,
         valueMid: parsed.value,
         valueHigh: parsed.valueHigh,
-        lastUpdated: parsed.lastUpdated?.toISOString() ?? null
+        lastUpdated: parsed.lastUpdated?.toISOString() ?? null,
+        isManualOverride: parsed.isManualOverride,
       };
     } catch (error: any) {
       console.error('Error fetching home value:', error);

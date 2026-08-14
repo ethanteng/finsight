@@ -216,6 +216,7 @@ describe('FinancialDataService investment persistence safeguards', () => {
       valueMid: null,
       valueHigh: null,
       lastUpdated: null,
+      isManualOverride: false,
     });
   });
 

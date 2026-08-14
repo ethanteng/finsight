@@ -5,8 +5,8 @@ import { useState, useEffect } from 'react';
 interface HomeData {
   address: string;
   value: number;
-  valueLow: number;
-  valueHigh: number;
+  valueLow: number | null;
+  valueHigh: number | null;
   lastUpdated: string;
   isManualOverride?: boolean;
 }
@@ -228,7 +228,11 @@ export default function HomeValueCard({
                   {formatCurrency(homeData.value)}
                 </div>
                 <div className="text-gray-400 text-sm mb-4">
-                  Range: {formatCurrency(homeData.valueLow)} - {formatCurrency(homeData.valueHigh)}
+                  {homeData.isManualOverride
+                    ? 'Manual point value (no estimate range)'
+                    : homeData.valueLow !== null && homeData.valueHigh !== null
+                      ? `Estimated range: ${formatCurrency(homeData.valueLow)} - ${formatCurrency(homeData.valueHigh)}`
+                      : 'Estimate range unavailable'}
                 </div>
                 <div className="text-gray-400 text-xs mb-4">
                   Updated {formatDate(homeData.lastUpdated)}
@@ -269,4 +273,3 @@ export default function HomeValueCard({
     </div>
   );
 }
-

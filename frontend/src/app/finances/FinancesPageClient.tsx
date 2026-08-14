@@ -5,12 +5,10 @@ import { useRouter } from 'next/navigation';
 import { ArrowRight, BarChart3, Building2, Landmark, ShieldCheck, TrendingUp } from 'lucide-react';
 import NetWorthCard from '../../components/finances/NetWorthCard';
 import HomeValueCard from '../../components/finances/HomeValueCard';
-import AccountGroupCard, { summarizeAccountBalances } from '../../components/finances/AccountGroupCard';
-import AccountDetailModal from '../../components/finances/AccountDetailModal';
+import AccountGroupCard from '../../components/finances/AccountGroupCard';
 import FinancialMetricsChart, { HistoricalSnapshot } from '../../components/finances/FinancialMetricsChart';
 import IncomeExpenseOverrides from '../../components/finances/IncomeExpenseOverrides';
-import { groupAccounts } from '../../components/finances/AccountGrouping';
-import type { ManualAccount } from '../../types/manual-account';
+import type { FinancesAccount, FinancesOverview } from '../../types/finances-overview';
 import { resetUserIdentity } from '../../lib/heycatch';
 import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
 import { mergeCanonicalCurrentWithHistory } from '../../lib/canonical-financial-history';
@@ -23,126 +21,7 @@ import {
 } from '../../lib/browser-time-zone';
 
 const ManualAccountList = lazy(() => import('../../components/ManualAccountList'));
-
-interface Account {
-  id: string;
-  account_id: string;
-  name: string;
-  type: string;
-  subtype: string;
-  balance: {
-    current: number;
-    available?: number;
-    limit?: number;
-    iso_currency_code: string;
-  };
-  institution?: string;
-  source?: 'plaid' | 'snaptrade';
-}
-
-interface SnapTradeAccount {
-  id: string;
-  name: string;
-  type: string;
-  institution: string;
-  balance: number;
-  accountNumber: string;
-}
-
-interface FinancialOverview {
-  netWorth: number;
-  totalCash: number;
-  totalInvestments: number;
-  totalDebt: number;
-  homeValue: number | null;
-}
-
-interface InvestmentPortfolio {
-  totalValue: number;
-  holdingsCount: number;
-  securityCount: number;
-  assetAllocation: Array<{
-    type: string;
-    value: number;
-    percentage: number;
-  }>;
-}
-
-interface HomeData {
-  address: string;
-  value: number;
-  valueLow: number;
-  valueHigh: number;
-  lastUpdated: string;
-  isManualOverride?: boolean;
-}
-
-interface Transaction {
-  id?: string;
-  transaction_id?: string;
-  account_id: string;
-  amount: number;
-  date: string;
-  name: string;
-  category?: string[] | string;
-  pending?: boolean;
-  merchant_name?: string;
-  enriched_data?: {
-    merchant_name?: string;
-    website?: string;
-    logo_url?: string;
-    category?: string[] | string;
-  };
-  transaction_type?: string;
-}
-
-interface Holding {
-  id: string;
-  account_id: string;
-  security_id: string;
-  institution_value: number | null;
-  institution_price: number | null;
-  institution_price_as_of: string;
-  cost_basis: number | null;
-  quantity: number | null;
-  iso_currency_code: string;
-  security_name?: string;
-  security_type?: string;
-  ticker_symbol?: string;
-}
-
-interface InvestmentTransaction {
-  id?: string;
-  transaction_id?: string;
-  account_id: string;
-  security_id: string;
-  amount: number;
-  date: string;
-  name?: string;
-  security_name?: string;
-  security_type?: string;
-  ticker_symbol?: string;
-  quantity: number;
-  type: string;
-  iso_currency_code: string;
-}
-
-interface Snapshot {
-  computedAt: string;
-  asOf?: string | null;
-  status?: 'current' | 'stale' | 'partial' | 'unavailable' | null;
-  reportingCurrency?: string;
-  financialOverview: FinancialOverview;
-  investmentPortfolio: InvestmentPortfolio;
-  accounts?: Account[];
-  transactions?: Transaction[];
-  holdings?: Holding[];
-  activities?: InvestmentTransaction[];
-  transactionsSummary?: {
-    byMonth: Record<string, { income: number; expense: number }>;
-    byCategory: Record<string, number>;
-  };
-}
+const AccountDetailModal = lazy(() => import('../../components/finances/AccountDetailModal'));
 
 function FinancesEmptyState({ onLogout }: { onLogout: () => void }) {
   return (
@@ -239,24 +118,43 @@ function FinancesEmptyState({ onLogout }: { onLogout: () => void }) {
 }
 
 export default function FinancesPageClient() {
-  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [freshAccounts, setFreshAccounts] = useState<Account[]>([]);
-  const [snapTradeAccounts, setSnapTradeAccounts] = useState<SnapTradeAccount[]>([]);
-  const [homeData, setHomeData] = useState<HomeData | null>(null);
+  const [overview, setOverview] = useState<FinancesOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedAccountGroup, setSelectedAccountGroup] = useState<string | null>(null);
-  const [selectedAccount, setSelectedAccount] = useState<Account | SnapTradeAccount | null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<FinancesAccount | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [isHomeValueExpanded, setIsHomeValueExpanded] = useState(false);
   const [historicalData, setHistoricalData] = useState<HistoricalSnapshot[]>([]);
   const [historicalDataLoading, setHistoricalDataLoading] = useState(true);
   const [chartTimeRange, setChartTimeRange] = useState<'1M' | '3M' | '6M' | '1Y' | 'All'>('All');
-  const [manualAccounts, setManualAccounts] = useState<ManualAccount[]>([]);
   const [refreshingSummary, setRefreshingSummary] = useState(false);
   const router = useRouter();
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
+  const loadOverview = useCallback(async () => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      router.push('/login');
+      return;
+    }
+    const response = await fetch(`${API_URL}/api/finances/overview`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (response.status === 204) {
+      setOverview(null);
+      return;
+    }
+    if (response.status === 401) {
+      router.push('/login');
+      return;
+    }
+    if (!response.ok) throw new Error('Failed to load financial data');
+    const data = await response.json() as FinancesOverview;
+    syncStoredUserTimeZoneFromAuthUser({ timeZone: data.userTimeZone });
+    setOverview(data);
+  }, [API_URL, router]);
 
   useEffect(() => {
     const loadFinancialData = async () => {
@@ -275,132 +173,21 @@ export default function FinancesPageClient() {
         }
         headers['Authorization'] = `Bearer ${token}`;
 
-        const verifyRes = await fetch(`${API_URL}/auth/verify`, { headers });
-        if (!verifyRes.ok) {
-          if (verifyRes.status === 401) {
-            router.push('/login');
-            return;
-          }
-        } else {
-          const verifyData = await verifyRes.json();
-          syncStoredUserTimeZoneFromAuthUser(verifyData.user);
-        }
-
-        // Load snapshot
-        let snapshotData: Snapshot | null = null;
-        const res = await fetch(`${API_URL}/api/summaries?view=full`, { headers });
-        if (res.status === 204) {
-          // A brand-new user has no summary yet. This is an expected empty state,
-          // and a 204 response intentionally has no JSON body to parse.
-          setSnapshot(null);
-        } else if (res.ok) {
-          snapshotData = await res.json();
-          setSnapshot(snapshotData);
-          
-          // Always try to get home data from profile endpoint (more reliable)
-          try {
-            const homeRes = await fetch(`${API_URL}/profile/home`, { headers });
-            if (homeRes.ok) {
-              const homeDataResponse = await homeRes.json();
-              console.log('🏠 FinancesPage: Profile home data response:', homeDataResponse);
-              if (homeDataResponse.hasHome && homeDataResponse.homeData && homeDataResponse.homeData.value > 0) {
-                console.log(`🏠 FinancesPage: Setting home data from profile: $${homeDataResponse.homeData.value}`);
-                setHomeData({
-                  address: homeDataResponse.homeData.address || '',
-                  value: homeDataResponse.homeData.value,
-                  valueLow: homeDataResponse.homeData.valueLow,
-                  valueHigh: homeDataResponse.homeData.valueHigh,
-                  lastUpdated: homeDataResponse.homeData.lastUpdated || snapshotData?.computedAt || new Date().toISOString(),
-                  isManualOverride: homeDataResponse.homeData.isManualOverride || false
-                });
-              } else {
-                console.log('🏠 FinancesPage: Profile endpoint returned no home data or invalid value');
-              }
-            } else {
-              console.log(`🏠 FinancesPage: Profile endpoint returned status ${homeRes.status}`);
+        setHistoricalDataLoading(true);
+        await Promise.all([
+          loadOverview(),
+          (async () => {
+            try {
+              const historyRes = await fetch(`${API_URL}/api/financial-history`, { headers });
+              const historyData = historyRes.ok ? await historyRes.json() : [];
+              setHistoricalData(Array.isArray(historyData) ? historyData : []);
+            } catch {
+              setHistoricalData([]);
+            } finally {
+              setHistoricalDataLoading(false);
             }
-          } catch (e) {
-            console.log('🏠 FinancesPage: Error fetching from profile endpoint:', e);
-            setHomeData(null);
-          }
-        } else {
-          if (res.status === 401) {
-            router.push('/login');
-            return;
-          }
-          setError('Failed to load financial data');
-        }
-
-        // Load fresh account data from /plaid/all-accounts (same as profile page)
-        try {
-          const accountsRes = await fetch(`${API_URL}/plaid/all-accounts`, { headers });
-          if (accountsRes.ok) {
-            const accountsData = await accountsRes.json();
-            const accounts = accountsData.accounts || [];
-            console.log(`📊 FinancesPage: Loaded ${accounts.length} fresh accounts from /plaid/all-accounts`);
-            setFreshAccounts(accounts);
-          } else {
-            console.log('Failed to load fresh accounts, falling back to snapshot');
-            // Fallback to snapshot accounts if fresh fetch fails
-            setFreshAccounts(snapshotData?.accounts || []);
-          }
-        } catch (accountsError) {
-          console.log('Error loading fresh accounts:', accountsError);
-          // Fallback to snapshot accounts
-          setFreshAccounts(snapshotData?.accounts || []);
-        }
-
-        // Load SnapTrade accounts
-        try {
-          const snapTradeRes = await fetch(`${API_URL}/snaptrade/accounts`, { headers });
-          if (snapTradeRes.ok) {
-            const snapTradeData = await snapTradeRes.json();
-            if (snapTradeData.success && snapTradeData.data?.accounts) {
-              // Normalize SnapTrade account IDs to match holdings format (snaptrade-{id})
-              const normalizedAccounts = snapTradeData.data.accounts.map((acc: SnapTradeAccount) => ({
-                ...acc,
-                id: acc.id.startsWith('snaptrade-') ? acc.id : `snaptrade-${acc.id}`,
-              }));
-              setSnapTradeAccounts(normalizedAccounts);
-            }
-          }
-        } catch (snapTradeError) {
-          console.log('Error loading SnapTrade accounts:', snapTradeError);
-        }
-
-        // Load manual accounts
-        try {
-          const manualAccountsRes = await fetch(`${API_URL}/api/manual-accounts`, { headers });
-          if (manualAccountsRes.ok) {
-            const manualAccountsData = await manualAccountsRes.json();
-            if (manualAccountsData.success && manualAccountsData.data) {
-              setManualAccounts(manualAccountsData.data);
-            }
-          }
-        } catch (manualAccountsError) {
-          console.log('Error loading manual accounts:', manualAccountsError);
-        }
-
-        // Load historical financial data
-        try {
-          setHistoricalDataLoading(true);
-          const historyRes = await fetch(`${API_URL}/api/financial-history`, { headers });
-          if (historyRes.ok) {
-            const historyData = await historyRes.json();
-            // Ensure we always have an array
-            const safeHistoryData = Array.isArray(historyData) ? historyData : [];
-            console.log(`📊 FinancesPage: Loaded ${safeHistoryData.length} historical snapshots`);
-            setHistoricalData(safeHistoryData);
-          } else {
-            console.log('Failed to load historical data, will show empty state');
-            setHistoricalData([]);
-          }
-        } catch (historyError) {
-          console.log('Error loading historical data:', historyError);
-          setHistoricalData([]);
-        } finally {
-          setHistoricalDataLoading(false);
-        }
+          })(),
+        ]);
       } catch (error) {
         console.error('Error loading financial data:', error);
         setError('Failed to load financial data');
@@ -409,85 +196,11 @@ export default function FinancesPageClient() {
       }
     };
 
-    loadFinancialData();
-  }, [API_URL, router]);
+    void loadFinancialData();
+  }, [API_URL, loadOverview, router]);
 
-  const refreshAccounts = useCallback(async () => {
-    try {
-      console.log('🔄 Refreshing accounts after rename...');
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        console.warn('No auth token found, skipping refresh');
-        return;
-      }
-      headers['Authorization'] = `Bearer ${token}`;
-
-      // Reload Plaid accounts
-      try {
-        const accountsRes = await fetch(`${API_URL}/plaid/all-accounts`, { headers });
-        if (accountsRes.ok) {
-          const accountsData = await accountsRes.json();
-          const accounts = accountsData.accounts || [];
-          console.log(`✅ Refreshed ${accounts.length} Plaid accounts`);
-          setFreshAccounts(accounts);
-        } else {
-          console.error(`❌ Failed to refresh accounts: ${accountsRes.status}`);
-        }
-      } catch (accountsError) {
-        console.error('Error refreshing accounts:', accountsError);
-      }
-
-      // Reload SnapTrade accounts
-      try {
-        const snapTradeRes = await fetch(`${API_URL}/snaptrade/accounts`, { headers });
-        if (snapTradeRes.ok) {
-          const snapTradeData = await snapTradeRes.json();
-          if (snapTradeData.success && snapTradeData.data?.accounts) {
-            const normalizedAccounts = snapTradeData.data.accounts.map((acc: SnapTradeAccount) => ({
-              ...acc,
-              id: acc.id.startsWith('snaptrade-') ? acc.id : `snaptrade-${acc.id}`,
-            }));
-            console.log(`✅ Refreshed ${normalizedAccounts.length} SnapTrade accounts`);
-            setSnapTradeAccounts(normalizedAccounts);
-          }
-        }
-      } catch (snapTradeError) {
-        console.error('Error refreshing SnapTrade accounts:', snapTradeError);
-      }
-    } catch (error) {
-      console.error('Error refreshing accounts:', error);
-    }
-  }, [API_URL]);
-
-  const refreshManualAccounts = useCallback(async () => {
-    try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      const token = localStorage.getItem('auth_token');
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-      const manualAccountsRes = await fetch(`${API_URL}/api/manual-accounts`, { headers });
-      if (manualAccountsRes.ok) {
-        const manualAccountsData = await manualAccountsRes.json();
-        if (manualAccountsData.success && manualAccountsData.data) {
-          setManualAccounts(manualAccountsData.data);
-        }
-      }
-      // Also refresh the main financial data to update totals
-      const res = await fetch(`${API_URL}/api/summaries?view=full`, { headers });
-      if (res.ok) {
-        const snapshotData = await res.json();
-        setSnapshot(snapshotData);
-      }
-    } catch (error) {
-      console.error('Error refreshing manual accounts:', error);
-    }
-  }, [API_URL]);
+  const refreshAccounts = loadOverview;
+  const refreshManualAccounts = loadOverview;
 
   const refreshSummary = useCallback(async () => {
     try {
@@ -501,13 +214,9 @@ export default function FinancesPageClient() {
         return;
       }
       headers['Authorization'] = `Bearer ${token}`;
-      const url = `${API_URL}/api/refresh-summary`;
-      console.log('🔄 Refresh totals →', url, '(same API base as /api/summaries)');
-      const res = await fetch(url, { method: 'POST', headers });
+      const res = await fetch(`${API_URL}/api/refresh-summary`, { method: 'POST', headers });
       if (res.ok) {
-        const data = await res.json();
-        console.log('✅ Summary refreshed:', data);
-        window.location.reload();
+        await loadOverview();
       } else {
         const err = await res.json().catch(() => ({}));
         console.error('Failed to refresh summary:', res.status, err);
@@ -517,7 +226,7 @@ export default function FinancesPageClient() {
     } finally {
       setRefreshingSummary(false);
     }
-  }, [API_URL]);
+  }, [API_URL, loadOverview]);
 
   const handleLogout = () => {
     localStorage.removeItem('auth_token');
@@ -553,34 +262,19 @@ export default function FinancesPageClient() {
     );
   }
 
-  if (!snapshot) {
+  if (!overview) {
     return <FinancesEmptyState onLogout={handleLogout} />;
   }
 
-  // Use fresh accounts if available, otherwise fall back to snapshot accounts
-  // Dedupe by account_id to avoid showing same account twice (e.g. manual account in both Account table and ManualAccount)
-  const rawAccounts = freshAccounts.length > 0 ? freshAccounts : (snapshot.accounts || []);
-  const accountIdSet = new Set<string>();
-  const accounts = rawAccounts.filter((acc) => {
-    const id = (acc as Account).account_id || (acc as Account).id;
-    if (!id || accountIdSet.has(id)) return false;
-    accountIdSet.add(id);
-    return true;
-  });
-  const groupedAccounts = groupAccounts(accounts, snapTradeAccounts);
-  const cashBalanceSummary = summarizeAccountBalances(groupedAccounts.cash);
-  const debtBalanceSummary = summarizeAccountBalances(groupedAccounts.debt, true);
-  
-  // Helper to find account by ID (regular function, not a hook)
-  const findAccountById = (accountId: string): Account | SnapTradeAccount | null => {
+  const findAccountById = (accountId: string): FinancesAccount | null => {
     const allAccounts = [
-      ...groupedAccounts.cash,
-      ...groupedAccounts.investments,
-      ...groupedAccounts.debt,
-      ...groupedAccounts.snapTrade
+      ...overview.accountGroups.cash.accounts,
+      ...overview.accountGroups.investments.accounts,
+      ...overview.accountGroups.debt.accounts,
+      ...overview.accountGroups.other.accounts,
     ];
     return allAccounts.find(acc => {
-      const accId = (acc as Account).account_id || (acc as Account).id || (acc as SnapTradeAccount).id;
+      const accId = acc.account_id || acc.id;
       return accId === accountId;
     }) || null;
   };
@@ -597,44 +291,48 @@ export default function FinancesPageClient() {
       <main className="mx-auto max-w-[1200px] space-y-6 p-5 py-10 sm:px-6 md:py-12">
         <div className="authenticated-intro mb-10"><h2>Your whole financial picture, in one place.</h2><p>A connected view of your net worth, trends, accounts, and the assumptions Ask Linc uses.</p></div>
         <div className="flex flex-wrap items-center gap-2 text-xs text-[#5e6b63]">
-          {snapshot.asOf && (
-            <span>Source data as of {new Date(snapshot.asOf).toLocaleString()}</span>
+          {overview.revision.asOf && (
+            <span>Source data as of {new Date(overview.revision.asOf).toLocaleString()}</span>
           )}
-          {snapshot.status && snapshot.status !== 'current' && (
-            <span className="rounded-full bg-[#fff3ce] px-2.5 py-1 font-semibold text-[#76510f]">
-              {snapshot.status === 'partial' ? 'Some data unavailable' :
-                snapshot.status === 'stale' ? 'Some data is stale' : 'Source data unavailable'}
-            </span>
-          )}
+          <span>Snapshot computed {new Date(overview.revision.computedAt).toLocaleString()}</span>
         </div>
+        {overview.warnings.length > 0 && (
+          <div className="space-y-2" role="status" aria-label="Financial data warnings">
+            {overview.warnings.map(warning => (
+              <div key={warning.code} className="rounded-xl border border-[#d4a72c]/30 bg-[#fff3ce] px-4 py-3 text-sm font-medium text-[#76510f]">
+                {warning.message}
+              </div>
+            ))}
+          </div>
+        )}
         {/* Net Worth Card */}
         <NetWorthCard 
-          netWorth={Math.round(snapshot.financialOverview.netWorth)}
-          totalCash={Math.round(snapshot.financialOverview.totalCash)}
-          totalInvestments={Math.round(snapshot.financialOverview.totalInvestments)}
-          totalDebt={Math.round(snapshot.financialOverview.totalDebt)}
-          homeValue={snapshot.financialOverview.homeValue}
+          netWorth={Math.round(overview.financialOverview.netWorth)}
+          totalCash={Math.round(overview.financialOverview.totalCash)}
+          totalInvestments={Math.round(overview.financialOverview.totalInvestments)}
+          totalDebt={Math.round(overview.financialOverview.totalDebt)}
+          homeValue={overview.financialOverview.homeValue}
         />
 
         {/* Financial Metrics Chart */}
-        {!historicalDataLoading && snapshot && (() => {
+        {!historicalDataLoading && (() => {
           // Preserve the canonical values and source time exactly. The chart
           // must not rewrite historical rows with today's home value.
           const safeHistoricalData = Array.isArray(historicalData) ? historicalData : [];
           const userTimeZone = getEffectiveUserTimeZone();
           const calendarDate = calendarDateInTimeZone(
-            new Date(snapshot.computedAt),
+            new Date(overview.revision.computedAt),
             userTimeZone
           );
           const currentSnapshot = {
-            computedAt: snapshot.computedAt,
+            computedAt: overview.revision.computedAt,
             observationDate: observationDateForCalendarDate(calendarDate),
             timeZone: userTimeZone,
-            netWorth: snapshot.financialOverview.netWorth,
-            totalCash: snapshot.financialOverview.totalCash,
-            totalInvestments: snapshot.financialOverview.totalInvestments,
-            totalDebt: snapshot.financialOverview.totalDebt,
-            homeValue: snapshot.financialOverview.homeValue,
+            netWorth: overview.financialOverview.netWorth,
+            totalCash: overview.financialOverview.totalCash,
+            totalInvestments: overview.financialOverview.totalInvestments,
+            totalDebt: overview.financialOverview.totalDebt,
+            homeValue: overview.financialOverview.homeValue,
           };
 
           const chartData = mergeCanonicalCurrentWithHistory(currentSnapshot, safeHistoricalData);
@@ -680,82 +378,60 @@ export default function FinancesPageClient() {
           <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
             <div className="text-gray-400 text-sm mb-1">Total Cash</div>
             <div className="text-white font-semibold text-xl">
-              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(snapshot.financialOverview.totalCash))}
+              {new Intl.NumberFormat('en-US', { style: 'currency', currency: overview.revision.reportingCurrency, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(overview.financialOverview.totalCash))}
             </div>
           </div>
           
           <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
             <div className="text-gray-400 text-sm mb-1">Total Debt</div>
             <div className="text-white font-semibold text-xl">
-              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(snapshot.financialOverview.totalDebt))}
+              {new Intl.NumberFormat('en-US', { style: 'currency', currency: overview.revision.reportingCurrency, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(overview.financialOverview.totalDebt))}
             </div>
           </div>
           
           <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
             <div className="text-gray-400 text-sm mb-1">Total Investments</div>
             <div className="text-white font-semibold text-xl">
-              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(snapshot.financialOverview.totalInvestments))}
+              {new Intl.NumberFormat('en-US', { style: 'currency', currency: overview.revision.reportingCurrency, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(overview.financialOverview.totalInvestments))}
             </div>
           </div>
 
           <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
             <div className="text-gray-400 text-sm mb-1">Home Value</div>
             <div className="text-white font-semibold text-xl">
-              {snapshot.financialOverview.homeValue === null
+              {overview.financialOverview.homeValue === null
                 ? 'Unavailable'
-                : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(snapshot.financialOverview.homeValue))}
+                : new Intl.NumberFormat('en-US', { style: 'currency', currency: overview.revision.reportingCurrency, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Math.round(overview.financialOverview.homeValue))}
             </div>
           </div>
         </div>
 
-        {/* Monthly Income/Expense Overrides */}
-        {snapshot && (
-          <IncomeExpenseOverrides
-            calculatedIncome={(() => {
-              if (snapshot.transactionsSummary?.byMonth) {
-                const months = Object.values(snapshot.transactionsSummary.byMonth);
-                if (months.length > 0) {
-                  const totalIncome = months.reduce((sum, month) => sum + (month.income || 0), 0);
-                  return totalIncome / months.length;
-                }
-              }
-              return undefined;
-            })()}
-            calculatedExpense={(() => {
-              if (snapshot.transactionsSummary?.byMonth) {
-                const months = Object.values(snapshot.transactionsSummary.byMonth);
-                if (months.length > 0) {
-                  const totalExpense = months.reduce((sum, month) => sum + (month.expense || 0), 0);
-                  return totalExpense / months.length;
-                }
-              }
-              return undefined;
-            })()}
-          />
-        )}
+        <IncomeExpenseOverrides
+          calculatedIncome={overview.cashFlow.calculatedMonthlyIncome}
+          calculatedExpense={overview.cashFlow.calculatedMonthlyExpense}
+          initialMonthlyIncome={overview.cashFlow.monthlyIncomeOverride}
+          initialMonthlyExpense={overview.cashFlow.monthlyExpenseOverride}
+        />
 
         {/* Home Value */}
-        {homeData && homeData.value > 0 && (
+        {overview.home && overview.home.value > 0 && (
           <HomeValueCard 
-            homeData={homeData} 
+            homeData={overview.home}
             isExpanded={isHomeValueExpanded}
             onToggle={() => setIsHomeValueExpanded(!isHomeValueExpanded)}
-            onValueUpdate={(updatedData) => {
-              setHomeData(updatedData);
-              // Optionally refresh the snapshot to get updated data
-            }}
+            onValueUpdate={() => { void loadOverview(); }}
           />
         )}
 
         {/* Account Groups */}
         <div className="space-y-4 mt-6">
           {/* Cash Accounts */}
-          {groupedAccounts.cash.length > 0 && (
+          {overview.accountGroups.cash.accounts.length > 0 && (
             <AccountGroupCard
               title="Cash Accounts"
-              accounts={groupedAccounts.cash}
-              totalBalance={cashBalanceSummary.totalBalance}
-              unavailableBalanceCount={cashBalanceSummary.unavailableBalanceCount}
+              accounts={overview.accountGroups.cash.accounts}
+              totalBalance={overview.accountGroups.cash.totalBalance}
+              unavailableBalanceCount={overview.accountGroups.cash.unavailableBalanceCount}
               isExpanded={selectedAccountGroup === 'cash'}
               onToggle={() => setSelectedAccountGroup(selectedAccountGroup === 'cash' ? null : 'cash')}
               onAccountClick={(accountId) => {
@@ -770,11 +446,12 @@ export default function FinancesPageClient() {
           )}
 
           {/* Investment Accounts */}
-          {(groupedAccounts.investments.length > 0 || groupedAccounts.snapTrade.length > 0) && (
+          {overview.accountGroups.investments.accounts.length > 0 && (
             <AccountGroupCard
               title="Investment Accounts"
-              accounts={[...groupedAccounts.investments, ...groupedAccounts.snapTrade]}
-              totalBalance={snapshot.financialOverview.totalInvestments}
+              accounts={overview.accountGroups.investments.accounts}
+              totalBalance={overview.accountGroups.investments.totalBalance}
+              unavailableBalanceCount={overview.accountGroups.investments.unavailableBalanceCount}
               isExpanded={selectedAccountGroup === 'investments'}
               onToggle={() => setSelectedAccountGroup(selectedAccountGroup === 'investments' ? null : 'investments')}
               onAccountClick={(accountId) => {
@@ -789,12 +466,12 @@ export default function FinancesPageClient() {
           )}
 
           {/* Debt Accounts */}
-          {groupedAccounts.debt.length > 0 && (
+          {overview.accountGroups.debt.accounts.length > 0 && (
             <AccountGroupCard
               title="Debt Accounts"
-              accounts={groupedAccounts.debt}
-              totalBalance={debtBalanceSummary.totalBalance}
-              unavailableBalanceCount={debtBalanceSummary.unavailableBalanceCount}
+              accounts={overview.accountGroups.debt.accounts}
+              totalBalance={overview.accountGroups.debt.totalBalance}
+              unavailableBalanceCount={overview.accountGroups.debt.unavailableBalanceCount}
               isExpanded={selectedAccountGroup === 'debt'}
               onToggle={() => setSelectedAccountGroup(selectedAccountGroup === 'debt' ? null : 'debt')}
               onAccountClick={(accountId) => {
@@ -808,36 +485,52 @@ export default function FinancesPageClient() {
             />
           )}
 
-          {/* Manual Accounts Management */}
-          {snapshot && (
-            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-              <Suspense fallback={<div className="text-gray-400">Loading manual accounts...</div>}>
-                <ManualAccountList
-                  accounts={manualAccounts}
-                  onRefresh={refreshManualAccounts}
-                  isDemo={false}
-                />
-              </Suspense>
-            </div>
+          {overview.accountGroups.other.accounts.length > 0 && (
+            <AccountGroupCard
+              title="Other Accounts"
+              accounts={overview.accountGroups.other.accounts}
+              totalBalance={overview.accountGroups.other.totalBalance}
+              unavailableBalanceCount={overview.accountGroups.other.unavailableBalanceCount}
+              isExpanded={selectedAccountGroup === 'other'}
+              onToggle={() => setSelectedAccountGroup(selectedAccountGroup === 'other' ? null : 'other')}
+              onAccountClick={(accountId) => {
+                const account = findAccountById(accountId);
+                if (account) {
+                  setSelectedAccount(account);
+                  setSelectedAccountId(accountId);
+                }
+              }}
+              onAccountRenamed={refreshAccounts}
+            />
           )}
+
+          {/* Manual Accounts Management */}
+          <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+            <Suspense fallback={<div className="text-gray-400">Loading manual accounts...</div>}>
+              <ManualAccountList
+                accounts={overview.manualAccounts}
+                onRefresh={refreshManualAccounts}
+              />
+            </Suspense>
+          </div>
         </div>
       </main>
 
 
       {/* Account Detail Modal */}
-      {selectedAccount && selectedAccountId && snapshot && (
-        <AccountDetailModal
-          account={selectedAccount}
-          accountId={selectedAccountId}
-          transactions={snapshot.transactions || []}
-          holdings={snapshot.holdings || []}
-          investmentTransactions={snapshot.activities || []}
-          onClose={() => {
-            setSelectedAccount(null);
-            setSelectedAccountId(null);
-          }}
-          onAccountRenamed={refreshAccounts}
-        />
+      {selectedAccount && selectedAccountId && (
+        <Suspense fallback={<div className="fixed inset-0 z-50 grid place-items-center bg-black/50 text-white">Loading account details...</div>}>
+          <AccountDetailModal
+            account={selectedAccount}
+            accountId={selectedAccountId}
+            revisionId={overview.revision.id}
+            onClose={() => {
+              setSelectedAccount(null);
+              setSelectedAccountId(null);
+            }}
+            onAccountRenamed={refreshAccounts}
+          />
+        </Suspense>
       )}
     </div>
   );

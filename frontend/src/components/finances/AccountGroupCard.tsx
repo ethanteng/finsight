@@ -1,34 +1,12 @@
 "use client";
 import { useState } from 'react';
+import type { FinancesAccount } from '../../types/finances-overview';
 
-export interface Account {
-  id: string;
-  account_id: string;
-  name: string;
-  type: string;
-  subtype: string;
-  balance: {
-    current: number | null;
-    available?: number | null;
-    limit?: number;
-    iso_currency_code: string;
-  };
-  institution?: string;
-  source?: 'plaid' | 'snaptrade';
-}
-
-export interface SnapTradeAccount {
-  id: string;
-  name: string;
-  type: string;
-  institution: string;
-  balance: number | null;
-  accountNumber: string;
-}
+export type Account = FinancesAccount;
 
 interface AccountGroupCardProps {
   title: string;
-  accounts: (Account | SnapTradeAccount)[];
+  accounts: FinancesAccount[];
   totalBalance: number | null;
   unavailableBalanceCount?: number;
   isExpanded: boolean;
@@ -37,45 +15,21 @@ interface AccountGroupCardProps {
   onAccountRenamed?: () => void;
 }
 
-export function getAccountBalance(account: Account | SnapTradeAccount): number | null {
-  let value: unknown;
-  if ('balance' in account && account.balance !== null && typeof account.balance === 'object') {
-    const acc = account as Account;
-    if (acc.type === 'depository' ||
-        acc.subtype === 'checking' ||
-        acc.subtype === 'savings') {
-      value = typeof acc.balance.available === 'number' && Number.isFinite(acc.balance.available)
-        ? acc.balance.available
-        : acc.balance.current;
-    } else {
-      value = acc.balance.current;
-    }
-  } else {
-    value = (account as SnapTradeAccount).balance;
+export function getAccountBalance(account: FinancesAccount): number | null {
+  if (Object.prototype.hasOwnProperty.call(account, 'displayBalance')) {
+    return typeof account.displayBalance === 'number' && Number.isFinite(account.displayBalance)
+      ? account.displayBalance
+      : null;
+  }
+  const balance = account.balance;
+  let value: unknown = balance;
+  if (balance !== null && typeof balance === 'object') {
+    // Match canonical metrics: current is authoritative, available is only a fallback.
+    value = typeof balance.current === 'number' && Number.isFinite(balance.current)
+      ? balance.current
+      : balance.available;
   }
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-export function summarizeAccountBalances(
-  accounts: (Account | SnapTradeAccount)[],
-  absoluteValues = false
-): { totalBalance: number | null; unavailableBalanceCount: number } {
-  let totalBalance = 0;
-  let unavailableBalanceCount = 0;
-  accounts.forEach(account => {
-    const balance = getAccountBalance(account);
-    if (balance === null) {
-      unavailableBalanceCount += 1;
-    } else {
-      totalBalance += absoluteValues ? Math.abs(balance) : balance;
-    }
-  });
-  return {
-    totalBalance: accounts.length > 0 && unavailableBalanceCount === accounts.length
-      ? null
-      : totalBalance,
-    unavailableBalanceCount,
-  };
 }
 
 export default function AccountGroupCard({
@@ -100,31 +54,19 @@ export default function AccountGroupCard({
     }).format(amount);
   };
 
-  const getAccountName = (account: Account | SnapTradeAccount): string => {
+  const getAccountName = (account: FinancesAccount): string => {
     return account.name || 'Unknown Account';
   };
 
-  const getAccountInstitution = (account: Account | SnapTradeAccount): string => {
-    if ('institution' in account && account.institution) {
-      return account.institution;
-    }
-    // Check if it's a SnapTradeAccount by looking for accountNumber property
-    if ('accountNumber' in account && 'institution' in account) {
-      return (account as SnapTradeAccount).institution || '';
-    }
-    return '';
+  const getAccountInstitution = (account: FinancesAccount): string => {
+    return account.institution || '';
   };
 
-  const getAccountId = (account: Account | SnapTradeAccount): string => {
-    // Check if it's an Account type
-    if ('account_id' in account) {
-      return (account as Account).account_id || (account as Account).id || '';
-    }
-    // Otherwise it's a SnapTradeAccount
-    return (account as SnapTradeAccount).id || '';
+  const getAccountId = (account: FinancesAccount): string => {
+    return account.account_id || account.id || '';
   };
 
-  const handleStartEdit = (account: Account | SnapTradeAccount, e: React.MouseEvent) => {
+  const handleStartEdit = (account: FinancesAccount, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent triggering onAccountClick
     const accountId = getAccountId(account);
     setEditingAccountId(accountId);
@@ -156,8 +98,6 @@ export default function AccountGroupCard({
         return;
       }
 
-      console.log(`🔄 Renaming account: accountId=${accountId}, newName=${editName.trim()}`);
-
       const response = await fetch(`${API_URL}/api/accounts/${encodeURIComponent(accountId)}`, {
         method: 'PUT',
         headers: {
@@ -168,8 +108,7 @@ export default function AccountGroupCard({
       });
 
       if (response.ok) {
-        const result = await response.json();
-        console.log('✅ Account renamed successfully:', result);
+        await response.json();
         setEditingAccountId(null);
         setEditName('');
         // Trigger refresh of accounts
@@ -270,13 +209,15 @@ export default function AccountGroupCard({
                     ) : (
                       <div className="flex items-center gap-2">
                         <div className="font-medium text-white">{name}</div>
-                        <button
-                          onClick={(e) => handleStartEdit(account, e)}
-                          className="text-gray-400 hover:text-white text-sm transition-opacity"
-                          title="Rename account"
-                        >
-                          ✏️
-                        </button>
+                        {account.source !== 'manual' && (
+                          <button
+                            onClick={(e) => handleStartEdit(account, e)}
+                            className="text-gray-400 hover:text-white text-sm transition-opacity"
+                            title="Rename account"
+                          >
+                            ✏️
+                          </button>
+                        )}
                       </div>
                     )}
                     {institution && !isEditing && (

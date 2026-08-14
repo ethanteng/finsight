@@ -3,17 +3,20 @@
 import { useState, useEffect } from 'react';
 
 interface IncomeExpenseOverridesProps {
-  calculatedIncome?: number;
-  calculatedExpense?: number;
+  calculatedIncome: number | null;
+  calculatedExpense: number | null;
+  initialMonthlyIncome: number | null;
+  initialMonthlyExpense: number | null;
 }
 
 export default function IncomeExpenseOverrides({
   calculatedIncome,
-  calculatedExpense
+  calculatedExpense,
+  initialMonthlyIncome,
+  initialMonthlyExpense,
 }: IncomeExpenseOverridesProps) {
-  const [monthlyIncome, setMonthlyIncome] = useState<number | null>(null);
-  const [monthlyExpense, setMonthlyExpense] = useState<number | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [monthlyIncome, setMonthlyIncome] = useState<number | null>(initialMonthlyIncome);
+  const [monthlyExpense, setMonthlyExpense] = useState<number | null>(initialMonthlyExpense);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isEditingIncome, setIsEditingIncome] = useState(false);
@@ -23,37 +26,8 @@ export default function IncomeExpenseOverrides({
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
-  useEffect(() => {
-    loadOverrides();
-  }, []);
-
-  const loadOverrides = async () => {
-    try {
-      setIsLoading(true);
-      const token = localStorage.getItem('auth_token');
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const response = await fetch(`${API_URL}/api/finances/overrides`, { headers });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setMonthlyIncome(data.monthlyIncome);
-        setMonthlyExpense(data.monthlyExpense);
-      } else {
-        console.error('Failed to load overrides');
-      }
-    } catch (error) {
-      console.error('Error loading overrides:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  useEffect(() => setMonthlyIncome(initialMonthlyIncome), [initialMonthlyIncome]);
+  useEffect(() => setMonthlyExpense(initialMonthlyExpense), [initialMonthlyExpense]);
 
   const formatCurrency = (amount: number | null | undefined) => {
     if (amount === null || amount === undefined) {
@@ -212,14 +186,6 @@ export default function IncomeExpenseOverrides({
     setIsEditingExpense(false);
     setError(null);
   };
-
-  if (isLoading) {
-    return (
-      <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-        <div className="text-gray-400">Loading overrides...</div>
-      </div>
-    );
-  }
 
   return (
     <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
