@@ -145,7 +145,13 @@ function requiredFinite(value: unknown, field: string): number {
 }
 
 function accountId(account: FinancesAccount): string {
-  return String(account.account_id || account.id || '');
+  return String(
+    account.account_id
+    || (account as FinancesAccount & { plaidAccountId?: string }).plaidAccountId
+    || (account as FinancesAccount & { persistentAccountId?: string }).persistentAccountId
+    || account.id
+    || ''
+  );
 }
 
 function accountBalance(account: FinancesAccount): number | null {

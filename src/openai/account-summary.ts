@@ -1,12 +1,22 @@
 import type { Account } from '../services/financial-data-service';
 import type { AccountSummaryItem } from './types';
 
+function resolveAccountId(account: Account): string {
+  return String(
+    account.account_id
+    || (account as Account & { plaidAccountId?: string }).plaidAccountId
+    || (account as Account & { persistentAccountId?: string }).persistentAccountId
+    || account.id
+    || ''
+  );
+}
+
 export function buildAccountSummaries(
   accounts: Account[],
   displayBalances: Record<string, unknown> = {}
 ): AccountSummaryItem[] {
   return accounts.map(account => {
-    const id = account.account_id || account.id;
+    const id = resolveAccountId(account);
     const storedDisplayBalance = Object.prototype.hasOwnProperty.call(displayBalances, id)
       ? displayBalances[id]
       : undefined;

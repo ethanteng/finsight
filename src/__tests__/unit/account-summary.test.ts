@@ -44,4 +44,17 @@ describe('account summaries', () => {
 
     expect(summary.balance).toBe(9000);
   });
+
+  it('resolves plaidAccountId when account_id is absent', () => {
+    const [summary] = buildAccountSummaries([
+      account({
+        account_id: undefined as unknown as string,
+        id: 'db-row-1',
+        plaidAccountId: 'plaid-abc',
+      } as Account & { plaidAccountId: string }),
+    ], { 'plaid-abc': 4200 });
+
+    expect(summary.id).toBe('plaid-abc');
+    expect(summary.balance).toBe(4200);
+  });
 });
