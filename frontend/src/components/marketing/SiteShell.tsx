@@ -51,6 +51,7 @@ export function SiteFooter() {
           <Link href="/vs/origin">vs Origin</Link>
           <Link href="/vs/portfoliopilot">vs PortfolioPilot</Link>
           <Link href="/vs/monarch">vs Monarch</Link>
+          <Link href="/vs/boldin">vs Boldin</Link>
         </div>
         <div className="footer-column">
           <b>COMPANY</b>

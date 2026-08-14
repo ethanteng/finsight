@@ -39,6 +39,7 @@ const STATIC_ROUTES: StaticRoute[] = [
   { path: '/vs/origin', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/vs/portfoliopilot', changeFrequency: 'monthly', priority: 0.8 },
   { path: '/vs/monarch', changeFrequency: 'monthly', priority: 0.8 },
+  { path: '/vs/boldin', changeFrequency: 'monthly', priority: 0.8 },
 
   // Top-of-funnel content hubs
   { path: '/use-cases', changeFrequency: 'monthly', priority: 0.9 },

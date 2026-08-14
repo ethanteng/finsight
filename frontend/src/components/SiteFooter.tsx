@@ -53,6 +53,9 @@ export default function SiteFooter({ variant = 'default' }: { variant?: 'default
             <Link href="/vs/monarch" className="hover:text-primary transition-colors">
               vs Monarch
             </Link>
+            <Link href="/vs/boldin" className="hover:text-primary transition-colors">
+              vs Boldin
+            </Link>
             <Link href="/privacy" className="hover:text-primary transition-colors">
               Privacy Policy
             </Link>
