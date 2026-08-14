@@ -490,6 +490,17 @@ function formatRetirementAnalysisInfoRequest(needsInfo: FinancialContextSnapshot
   const sections: string[] = [];
   sections.push('# Retirement Analysis - Missing Information');
 
+  if (needsInfo.unavailableReason) {
+    sections.push('## Instructions for Linc');
+    sections.push(
+      'The user asked a retirement-related question, but deterministic retirement analysis is unavailable.\n\n' +
+      `Reason: ${needsInfo.unavailableReason}\n\n` +
+      'Do not fabricate retirement projections, withdrawal rates, or survival probabilities from net-worth aggregates alone. ' +
+      'Explain the limitation clearly and tell the user what data or connection is needed before you can analyze retirement readiness.'
+    );
+    return sections.join('\n\n');
+  }
+
   const paramLabels: Record<string, string> = {
     currentAge: 'your current age',
     retirementAge: 'your planned retirement age',

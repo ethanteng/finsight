@@ -165,6 +165,8 @@ export interface FinancialContextSnapshot {
       annualWithdrawalAmount?: number;
       withdrawalStartAge?: number;
     };
+    /** When retirement analysis cannot run despite a retirement question (e.g. no holdings). */
+    unavailableReason?: string;
   };
   financialSummary?: {
     computedAt?: Date | string;

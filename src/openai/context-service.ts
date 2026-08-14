@@ -286,7 +286,9 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   }
   }
 
-  onProgress?.('Reviewing your transaction history');
+  onProgress?.(questionNeeds.needsTransactionDetails
+    ? 'Reviewing your transaction history'
+    : 'Preparing your financial context');
 
   // ✅ CRITICAL: Deduplicate accounts by account_id/plaidAccountId as a safety net
   // Even though the snapshot should already be deduplicated, we add this as a defensive check
@@ -383,11 +385,16 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   if (questionNeeds.needsMarketContext) onProgress?.('Fetching market context');
   if (questionNeeds.needsUserProfile) onProgress?.('Preparing your profile');
 
+  const tierContextAccounts = questionNeeds.needsAccountDetails ? deduplicatedAccounts : [];
+  const tierContextTransactions = questionNeeds.needsTransactionDetails
+    ? sortedTransactions.slice(0, MAX_PROMPT_TRANSACTIONS)
+    : [];
+
   const [tierContext, searchContext, marketContext, userOverrides, userProfile] = await Promise.all([
     dataOrchestrator.buildTierAwareContext(
       tier,
-      deduplicatedAccounts,
-      sortedTransactions.slice(0, MAX_PROMPT_TRANSACTIONS),
+      tierContextAccounts,
+      tierContextTransactions,
       isDemo,
       { includeMarketContext: false }
     ),
@@ -439,7 +446,12 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     } catch (error) {
       console.error('❌ Error fetching/creating retirement analysis:', error);
       console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-      // Don't fail the entire context gathering if retirement analysis fails
+      retirementAnalysisNeedsInfo = {
+        missingParams: [],
+        detectedParams: {},
+        unavailableReason:
+          'Retirement analysis could not be completed because the portfolio analysis service failed. Ask the user to try again later instead of estimating from aggregates alone.',
+      };
     }
   } else if (userId && !isDemo && questionNeeds.needsRetirement) {
     // Log why retirement analysis didn't trigger
@@ -450,6 +462,12 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       hasInvestmentsSnapshot: !!investmentsSnapshot,
       holdingsLength: investmentsSnapshot?.holdings?.length || 0
     });
+    retirementAnalysisNeedsInfo = {
+      missingParams: [],
+      detectedParams: {},
+      unavailableReason:
+        'No linked investment holdings are available for retirement analysis. Ask the user to connect investment accounts or provide portfolio details instead of estimating from net-worth aggregates alone.',
+    };
   }
 
   return {
@@ -582,8 +600,12 @@ async function fetchOrCreateRetirementAnalysis(args: {
       console.log('📦 Using cached retirement analysis from database');
       const cachedAnalysis = recentAnalysis.historicalImplications as any;
       if (cachedAnalysis && cachedAnalysis.summary) {
-        cachedAnalysis._storedInputParams = storedInput;
-        return { analysis: cachedAnalysis };
+        return {
+          analysis: {
+            ...cachedAnalysis,
+            _storedInputParams: storedInput,
+          },
+        };
       }
       const reconstructed: RetirementAnalysis = {
         summary: {
@@ -702,7 +724,14 @@ async function fetchOrCreateRetirementAnalysis(args: {
         'Check Tiingo API status and rate limits.');
     }
     
-    return {};
+    return {
+      needsInfo: {
+        missingParams: [],
+        detectedParams: {},
+        unavailableReason:
+          'Retirement analysis could not be completed because the portfolio analysis service failed. Ask the user to try again later instead of estimating from aggregates alone.',
+      },
+    };
   }
 }
 
