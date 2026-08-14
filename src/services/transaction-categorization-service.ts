@@ -6,22 +6,15 @@
  */
 
 import OpenAI from 'openai';
+import {
+  isCanonicalTransactionType,
+  type CanonicalTransactionType,
+} from '../domain/financial-truth';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
 
 // Transaction types that transactions can be categorized into
-export type TransactionType = 
-  | 'income' 
-  | 'expense' 
-  | 'transfer_in' 
-  | 'transfer_out' 
-  | 'buy' 
-  | 'sell' 
-  | 'deposit' 
-  | 'withdrawal' 
-  | 'fee' 
-  | 'refund' 
-  | 'adjustment';
+export type TransactionType = CanonicalTransactionType;
 
 export interface Transaction {
   transaction_id?: string;
@@ -96,7 +89,7 @@ export interface CategorizationBatchResult {
 }
 
 interface GPTCategorizationResponse {
-  transaction_type: TransactionType;
+  transaction_type: string;
   confidence: number;
   reason: string;
 }
@@ -106,19 +99,10 @@ export class TransactionCategorizationService {
   private readonly confidenceThreshold = 0.7;
 
   /**
-   * Valid transaction types
-   */
-  private readonly validTransactionTypes: TransactionType[] = [
-    'income', 'expense', 'transfer_in', 'transfer_out', 'buy', 'sell', 
-    'deposit', 'withdrawal', 'fee', 'refund', 'adjustment'
-  ];
-
-  /**
    * Check if a string is a valid TransactionType
    */
   private isValidTransactionType(value: any): value is TransactionType {
-    return typeof value === 'string' && 
-           this.validTransactionTypes.includes(value.toLowerCase() as TransactionType);
+    return typeof value === 'string' && isCanonicalTransactionType(value.toLowerCase());
   }
 
   /**
@@ -280,8 +264,7 @@ Respond with ONLY a valid JSON object in this exact format (no markdown, no expl
       const gptResult: GPTCategorizationResponse = JSON.parse(jsonContent);
       
       // Validate transaction_type
-      const validTypes: TransactionType[] = ['income', 'expense', 'transfer_in', 'transfer_out', 'buy', 'sell', 'deposit', 'withdrawal', 'fee', 'refund', 'adjustment'];
-      if (!validTypes.includes(gptResult.transaction_type)) {
+      if (!isCanonicalTransactionType(gptResult.transaction_type)) {
         throw new Error(`Invalid transaction_type from GPT: ${gptResult.transaction_type}`);
       }
 

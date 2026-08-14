@@ -3,6 +3,7 @@ import { requireAuth } from '../auth/middleware';
 import { getLatestGPTContext, getGPTContextById } from '../services/gpt-logger';
 import { getPrismaClient } from '../prisma-client';
 import { openai } from '../openai';
+import { isCanonicalTransactionType } from '../domain/financial-truth';
 
 function asString(v: string | string[] | undefined): string {
   return Array.isArray(v) ? v[0] ?? '' : v ?? '';
@@ -177,10 +178,6 @@ router.get('/transactions/comparison', requireAuth, async (req, res) => {
     const userId = (req as any).user.id;
     const { filter = 'all', limit = 100 } = req.query;
     
-    // Valid transaction types (used to filter out old category names like "Special", "Place")
-    const validTransactionTypes = ['income', 'expense', 'transfer_in', 'transfer_out', 'buy', 'sell', 
-                                   'deposit', 'withdrawal', 'fee', 'refund', 'adjustment'];
-    
     // Build filter conditions
     const whereClause: any = {
       account: { userId },
@@ -188,7 +185,7 @@ router.get('/transactions/comparison', requireAuth, async (req, res) => {
     
     // Check if filter is a valid transaction type
     const normalizedFilter = String(filter).toLowerCase().trim();
-    if (validTransactionTypes.includes(normalizedFilter)) {
+    if (isCanonicalTransactionType(normalizedFilter)) {
       // Filter by transaction type
       whereClause.aiCategory = normalizedFilter;
     } else if (filter === 'matched') {
@@ -231,7 +228,7 @@ router.get('/transactions/comparison', requireAuth, async (req, res) => {
       let transactionType = null;
       if (transaction.aiCategory) {
         const normalized = String(transaction.aiCategory).toLowerCase().trim();
-        if (validTransactionTypes.includes(normalized)) {
+        if (isCanonicalTransactionType(normalized)) {
           transactionType = normalized;
         }
         // If aiCategory contains an invalid value (like "special", "place", "groceries", etc.),
@@ -274,4 +271,3 @@ router.get('/transactions/comparison', requireAuth, async (req, res) => {
 });
 
 export default router;
-
