@@ -42,6 +42,11 @@ describe('canonical response facts', () => {
     expect(validateResponseFacts({ summary: 'You could reach this in 7 years.' }, pack).valid).toBe(false);
   });
 
+  it('does not treat account types or historical years as numeric claims', () => {
+    expect(validateResponseFacts({ summary: 'Consider your 401k allocation.' }, pack).valid).toBe(true);
+    expect(validateResponseFacts({ summary: 'In 2008 markets crashed.' }, pack).valid).toBe(true);
+  });
+
   it('does not allow internal calculation inputs to be displayed', () => {
     const internalPack = {
       ...pack,

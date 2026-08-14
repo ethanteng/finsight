@@ -111,11 +111,27 @@ export function validateResponseFacts(
   for (const match of prose.matchAll(genericNumberPattern)) {
     const index = match.index ?? 0;
     const prefix = prose.slice(Math.max(0, index - 3), index).trimEnd();
-    const suffix = prose.slice(index + match[0].length).trimStart();
+    const afterMatch = prose.slice(index + match[0].length);
+    const suffix = afterMatch.trimStart();
     // Currency and percentage claims were checked with their units above.
     if (prefix.endsWith('$') || /^%/.test(suffix) || /^(?:dollars?)\b/i.test(suffix)) continue;
     const parsed = match[0].match(/^(-?\d[\d,]*(?:\.\d+)?)\s*(thousand|million|billion|[kmb])?$/i);
     if (!parsed) continue;
+    const magnitude = parsed[2]?.toLowerCase();
+    if (magnitude && /^[kmb]$/.test(magnitude)) {
+      // Avoid treating account types (401k) or words like "markets" as magnitudes.
+      if (/^[a-z]/i.test(afterMatch)) continue;
+      const digits = parsed[1].replace(/,/g, '').replace(/^-/, '');
+      if (!/\s/.test(match[0])) {
+        if (/^(401|403|457)/.test(digits)) continue;
+        if (digits.length > 3) continue;
+      }
+    }
+    const bareValue = Number(parsed[1].replace(/,/g, ''));
+    if (!magnitude && Number.isInteger(bareValue) && bareValue >= 1900 && bareValue <= 2099) {
+      // Calendar years in historical context are not financial claims.
+      continue;
+    }
     const value = parseMagnitude(parsed[1], parsed[2]);
     const supported = pack.facts.some((fact) => fact.displayable !== false && approximatelyEqual(fact.value, value));
     if (!supported) {
