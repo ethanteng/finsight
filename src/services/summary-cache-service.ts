@@ -4,7 +4,11 @@ import { BalanceService } from './balance-service';
 import { FinancialDataService } from './financial-data-service';
 import { buildTransactionSummary } from './transaction-summary-service';
 import { buildCanonicalSnapshotCore } from './canonical-financial-snapshot';
-import { buildAccountDisplayBalances } from './finances-overview-service';
+import {
+  buildAccountDisplayBalances,
+  hasAccountDisplayBalances,
+  withAccountDisplayBalances,
+} from './finances-overview-service';
 import {
   FinancialHistoryService,
   type CanonicalHistoryInput,
@@ -236,21 +240,51 @@ export class SummaryCacheService {
   static async getLatestSnapshot(userId: string, view: ViewMode = 'summary') {
     const prisma = getPrisma();
     if (view === 'finances') {
-      return prisma.financialSummarySnapshot.findUnique({
+      const select = {
+        computedAt: true,
+        asOf: true,
+        status: true,
+        reportingCurrency: true,
+        financialOverview: true,
+        investmentPortfolio: true,
+        accounts: true,
+        transactionsSummary: true,
+        meta: true,
+        quality: true,
+      } as const;
+      const snapshot = await prisma.financialSummarySnapshot.findUnique({
         where: { userId },
-        select: {
-          computedAt: true,
-          asOf: true,
-          status: true,
-          reportingCurrency: true,
-          financialOverview: true,
-          investmentPortfolio: true,
-          accounts: true,
-          transactionsSummary: true,
-          meta: true,
-          quality: true,
-        },
+        select,
       });
+      if (!snapshot || hasAccountDisplayBalances(snapshot as any)) return snapshot;
+
+      // Version-2.0 snapshots predate canonical per-account display balances.
+      // Load their holdings once, derive the missing metadata, and persist it so
+      // subsequent Finances reads remain lightweight without calling providers.
+      const fullSnapshot = await prisma.financialSummarySnapshot.findUnique({ where: { userId } });
+      if (!fullSnapshot) return null;
+      const upgraded = withAccountDisplayBalances(fullSnapshot as any);
+      const update = await prisma.financialSummarySnapshot.updateMany({
+        where: { userId, computedAt: fullSnapshot.computedAt },
+        data: { meta: upgraded.meta as any },
+      });
+      if (update.count === 0) {
+        // A newer snapshot won the race; return that revision instead of
+        // overwriting its metadata with values derived from the older one.
+        return prisma.financialSummarySnapshot.findUnique({ where: { userId }, select });
+      }
+      return {
+        computedAt: fullSnapshot.computedAt,
+        asOf: fullSnapshot.asOf,
+        status: fullSnapshot.status,
+        reportingCurrency: fullSnapshot.reportingCurrency,
+        financialOverview: fullSnapshot.financialOverview,
+        investmentPortfolio: fullSnapshot.investmentPortfolio,
+        accounts: fullSnapshot.accounts,
+        transactionsSummary: fullSnapshot.transactionsSummary,
+        meta: upgraded.meta,
+        quality: fullSnapshot.quality,
+      };
     }
     const snap = await prisma.financialSummarySnapshot.findUnique({
       where: { userId },

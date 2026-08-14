@@ -18,6 +18,12 @@ interface HomeValueCardProps {
   onToggle?: () => void;
 }
 
+interface HomeValueMutationResponse {
+  homeData: HomeData;
+  snapshotRefreshed?: boolean;
+  warning?: string;
+}
+
 export default function HomeValueCard({ 
   homeData, 
   onValueUpdate,
@@ -28,6 +34,7 @@ export default function HomeValueCard({
   const [editValue, setEditValue] = useState(homeData.value.toString());
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   // Sync editValue with homeData.value when it changes (e.g., after save)
   useEffect(() => {
@@ -64,6 +71,7 @@ export default function HomeValueCard({
 
     setIsSaving(true);
     setError(null);
+    setWarning(null);
 
     try {
       const token = localStorage.getItem('auth_token');
@@ -83,7 +91,13 @@ export default function HomeValueCard({
         throw new Error(errorData.error || 'Failed to update home value');
       }
 
-      const data = await response.json();
+      const data = await response.json() as HomeValueMutationResponse;
+
+      if (data.snapshotRefreshed === false) {
+        setWarning(data.warning || 'Your home setting was saved, but totals could not be refreshed. Use Refresh totals to try again.');
+        setIsEditing(false);
+        return;
+      }
       
       if (onValueUpdate) {
         onValueUpdate(data.homeData);
@@ -100,6 +114,7 @@ export default function HomeValueCard({
   const handleReset = async () => {
     setIsSaving(true);
     setError(null);
+    setWarning(null);
 
     try {
       const token = localStorage.getItem('auth_token');
@@ -118,7 +133,13 @@ export default function HomeValueCard({
         throw new Error(errorData.error || 'Failed to reset home value');
       }
 
-      const data = await response.json();
+      const data = await response.json() as HomeValueMutationResponse;
+
+      if (data.snapshotRefreshed === false) {
+        setWarning(data.warning || 'Your home setting was saved, but totals could not be refreshed. Use Refresh totals to try again.');
+        setIsEditing(false);
+        return;
+      }
       
       if (onValueUpdate) {
         onValueUpdate(data.homeData);
@@ -169,6 +190,16 @@ export default function HomeValueCard({
 
       {isExpanded && (
         <div className="border-t border-gray-700 p-6 space-y-4">
+          {error && (
+            <div role="alert" className="rounded border border-red-700/50 bg-red-900/30 p-3 text-sm text-red-300">
+              {error}
+            </div>
+          )}
+          {warning && (
+            <div role="status" className="rounded border border-amber-700/40 bg-amber-900/20 p-3 text-sm text-amber-200">
+              {warning}
+            </div>
+          )}
           {homeData.address && (
             <div className="text-gray-400 text-sm">
               {homeData.address}
@@ -201,9 +232,6 @@ export default function HomeValueCard({
                     disabled={isSaving}
                     autoFocus
                   />
-                  {error && (
-                    <div className="text-red-400 text-sm mt-1">{error}</div>
-                  )}
                 </div>
                 <div className="flex gap-2">
                   <button

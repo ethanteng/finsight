@@ -202,6 +202,28 @@ export function buildAccountDisplayBalances(
   return balances;
 }
 
+export function hasAccountDisplayBalances(snapshot: FinancesSnapshotLike): boolean {
+  if (!snapshot.meta || typeof snapshot.meta !== 'object') return false;
+  const balances = (snapshot.meta as any).accountDisplayBalances;
+  return Boolean(balances && typeof balances === 'object' && !Array.isArray(balances));
+}
+
+export function withAccountDisplayBalances<T extends FinancesSnapshotLike>(snapshot: T): T {
+  if (hasAccountDisplayBalances(snapshot)) return snapshot;
+  const meta = snapshot.meta && typeof snapshot.meta === 'object' ? snapshot.meta as any : {};
+  return {
+    ...snapshot,
+    meta: {
+      ...meta,
+      accountDisplayBalances: buildAccountDisplayBalances(
+        snapshot.accounts,
+        snapshot.holdings,
+        snapshot.reportingCurrency
+      ),
+    },
+  };
+}
+
 function normalizeStatus(value: unknown): FinancesSnapshotStatus {
   return value === 'stale' || value === 'partial' || value === 'unavailable' ? value : 'current';
 }

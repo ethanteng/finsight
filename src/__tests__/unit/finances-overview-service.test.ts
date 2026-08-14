@@ -2,6 +2,8 @@ import {
   buildAccountDisplayBalances,
   buildFinancesAccountDetails,
   buildFinancesOverview,
+  hasAccountDisplayBalances,
+  withAccountDisplayBalances,
 } from '../../services/finances-overview-service';
 
 const snapshot = {
@@ -72,6 +74,23 @@ describe('finances overview contract', () => {
       [{ account_id: 'investment', institution_value: 9000, iso_currency_code: 'USD' }],
       'USD'
     )).toEqual({ investment: 9000, debt: 400 });
+  });
+
+  it('backfills display balances from holdings for a legacy snapshot', () => {
+    const legacySnapshot = {
+      ...snapshot,
+      accounts: snapshot.accounts.map(account => account.account_id === 'brokerage'
+        ? { ...account, balance: { current: 75000, iso_currency_code: 'USD' } }
+        : account),
+      meta: { version: '2.0' },
+    };
+
+    expect(hasAccountDisplayBalances(legacySnapshot)).toBe(false);
+    const upgraded = withAccountDisplayBalances(legacySnapshot);
+    expect(hasAccountDisplayBalances(upgraded)).toBe(true);
+    expect((upgraded.meta as any).accountDisplayBalances.brokerage).toBe(100000);
+    expect(buildFinancesOverview({ snapshot: upgraded }).accountGroups.investments.accounts[0])
+      .toMatchObject({ account_id: 'brokerage', displayBalance: 100000 });
   });
 
   it('uses canonical totals, groupings, and monthly aggregates without inventing a manual-home range', () => {

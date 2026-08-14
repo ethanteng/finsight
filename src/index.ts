@@ -3086,6 +3086,50 @@ app.post('/profile/home/refresh', requireAuth, async (req: Request, res: Respons
   }
 });
 
+interface PersistedHomeData {
+  address?: string | null;
+  value?: number | null;
+  valueLow?: number | null;
+  valueHigh?: number | null;
+  lastUpdated?: Date | null;
+  isManualOverride?: boolean;
+}
+
+function serializeHomeData(homeData: PersistedHomeData) {
+  const lastUpdated = homeData.lastUpdated && !Number.isNaN(homeData.lastUpdated.getTime())
+    ? homeData.lastUpdated.toISOString()
+    : new Date().toISOString();
+  return {
+    address: homeData.address || '',
+    value: homeData.value ?? 0,
+    valueLow: homeData.isManualOverride ? null : homeData.valueLow ?? null,
+    valueHigh: homeData.isManualOverride ? null : homeData.valueHigh ?? null,
+    lastUpdated,
+    isManualOverride: Boolean(homeData.isManualOverride),
+  };
+}
+
+async function refreshSnapshotAfterHomeMutation(
+  userId: string,
+  reason: 'home-value-override-set' | 'home-value-override-removed'
+): Promise<{ snapshotRefreshed: boolean; warning?: string }> {
+  try {
+    const { SummaryCacheService } = await import('./services/summary-cache-service');
+    await SummaryCacheService.computeForUser(userId, {
+      categorize: false,
+      history: { kind: 'material', reason },
+    });
+    return { snapshotRefreshed: true };
+  } catch (error) {
+    console.error(`Home setting was saved but financial snapshot refresh failed for user ${userId}:`, error);
+    Sentry.captureException(error);
+    return {
+      snapshotRefreshed: false,
+      warning: 'Your home setting was saved, but totals could not be refreshed. Use Refresh totals to try again.',
+    };
+  }
+}
+
 // Update manual home value override
 app.put('/profile/home/value', requireAuth, async (req: Request, res: Response) => {
   try {
@@ -3100,36 +3144,15 @@ app.put('/profile/home/value', requireAuth, async (req: Request, res: Response) 
     
     // Update manual override
     const homeData = await profileManager.updateManualHomeValue(req.user!.id, value);
-    
-    // Do not acknowledge the edit before the canonical snapshot reflects it;
-    // otherwise the home card and net worth can show different revisions.
-    const { SummaryCacheService } = await import('./services/summary-cache-service');
-    await SummaryCacheService.computeForUser(req.user!.id, {
-      categorize: false,
-      history: { kind: 'material', reason: 'home-value-override-set' },
-    });
-    
-    const valueLow = homeData.isManualOverride ? null : homeData.valueLow;
-    const valueHigh = homeData.isManualOverride ? null : homeData.valueHigh;
-    
-    // Safely convert lastUpdated to ISO string, checking if date is valid
-    let lastUpdatedISO: string;
-    if (homeData.lastUpdated && !isNaN(homeData.lastUpdated.getTime())) {
-      lastUpdatedISO = homeData.lastUpdated.toISOString();
-    } else {
-      lastUpdatedISO = new Date().toISOString();
-    }
-    
-    res.json({ 
+    const refresh = await refreshSnapshotAfterHomeMutation(
+      req.user!.id,
+      'home-value-override-set'
+    );
+
+    res.json({
       success: true,
-      homeData: {
-        address: homeData.address || '',
-        value: homeData.value ?? 0,
-        valueLow: valueLow,
-        valueHigh: valueHigh,
-        lastUpdated: lastUpdatedISO,
-        isManualOverride: homeData.isManualOverride
-      }
+      ...refresh,
+      homeData: serializeHomeData(homeData),
     });
   } catch (error) {
     console.error('Failed to update manual home value:', error);
@@ -3152,34 +3175,15 @@ app.delete('/profile/home/value', requireAuth, async (req: Request, res: Respons
     
     // Remove manual override
     const homeData = await profileManager.removeManualHomeValue(req.user!.id);
-    
-    const { SummaryCacheService } = await import('./services/summary-cache-service');
-    await SummaryCacheService.computeForUser(req.user!.id, {
-      categorize: false,
-      history: { kind: 'material', reason: 'home-value-override-removed' },
-    });
-    
-    const valueLow = homeData.isManualOverride ? null : homeData.valueLow;
-    const valueHigh = homeData.isManualOverride ? null : homeData.valueHigh;
-    
-    // Safely convert lastUpdated to ISO string, checking if date is valid
-    let lastUpdatedISO: string;
-    if (homeData.lastUpdated && !isNaN(homeData.lastUpdated.getTime())) {
-      lastUpdatedISO = homeData.lastUpdated.toISOString();
-    } else {
-      lastUpdatedISO = new Date().toISOString();
-    }
-    
-    res.json({ 
+    const refresh = await refreshSnapshotAfterHomeMutation(
+      req.user!.id,
+      'home-value-override-removed'
+    );
+
+    res.json({
       success: true,
-      homeData: {
-        address: homeData.address || '',
-        value: homeData.value ?? 0,
-        valueLow: valueLow,
-        valueHigh: valueHigh,
-        lastUpdated: lastUpdatedISO,
-        isManualOverride: homeData.isManualOverride
-      }
+      ...refresh,
+      homeData: serializeHomeData(homeData),
     });
   } catch (error) {
     console.error('Failed to remove manual home value:', error);
