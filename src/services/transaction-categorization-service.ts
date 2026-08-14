@@ -6,22 +6,12 @@
  */
 
 import OpenAI from 'openai';
+import type { CanonicalTransactionType } from '../domain/financial-truth';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || '' });
 
 // Transaction types that transactions can be categorized into
-export type TransactionType = 
-  | 'income' 
-  | 'expense' 
-  | 'transfer_in' 
-  | 'transfer_out' 
-  | 'buy' 
-  | 'sell' 
-  | 'deposit' 
-  | 'withdrawal' 
-  | 'fee' 
-  | 'refund' 
-  | 'adjustment';
+export type TransactionType = CanonicalTransactionType;
 
 export interface Transaction {
   transaction_id?: string;

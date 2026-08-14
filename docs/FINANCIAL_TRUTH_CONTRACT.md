@@ -1,0 +1,89 @@
+# Ask Linc financial truth contract
+
+Status: **accepted target for the authenticated app**
+
+Executable source: `src/domain/financial-truth.ts`
+
+Version: `1.0`
+
+This contract defines what user-facing financial numbers mean. Provider adapters, persistence, snapshots, API responses, the frontend, retirement analytics, and LLM context must consume these meanings instead of defining local variants. Demo behavior is intentionally excluded.
+
+## 1. Account identity and source ownership
+
+An account is identified by this immutable tuple:
+
+`(ownerId, source, sourceConnectionId, sourceAccountId)`
+
+- `source` is `plaid`, `snaptrade`, or `manual`.
+- `sourceConnectionId` is the Plaid Item/access-token record ID, SnapTrade connection ID, or the user's manual-account namespace.
+- `sourceAccountId` is the provider's stable account ID or the manual account's database ID.
+- Names, masks, institutions, types, subtypes, and balances are attributes—not identity.
+- A refresh for one connection may only read or update accounts belonging to that connection.
+- Cross-provider deduplication may create an explicit link between identities, but similarity of names or balances must never merge them automatically.
+
+The current `Account` schema does not persist its Plaid connection/Item relationship. Adding that relationship and using it in balance refresh is Step 2.
+
+## 2. Transaction semantics
+
+Raw provider amounts and canonical cash-flow amounts are different facts and must be stored separately.
+
+- `sourceAmount`: untouched provider value for reconciliation.
+- `cashFlowAmount`: user perspective; positive is money received, negative is money paid.
+- `type`: the canonical classification that controls aggregation.
+- Pending transactions are excluded from historical actuals.
+
+Income and expense totals are determined by `type`, never by amount sign alone:
+
+| Type | Income | Expenses | Notes |
+|---|---:|---:|---|
+| `income` | Included | — | Wages, interest, dividends, earned distributions |
+| `expense` | — | Included | Ordinary spending |
+| `fee` | — | Included | Included in spending |
+| `refund` | — | Subtracted | Reduces spending in its category |
+| transfers | — | — | Movement between accounts is not income or spending |
+| `buy` / `sell` | — | — | Portfolio activity is not operating cash flow |
+| `deposit` / `withdrawal` | — | — | Movement of existing cash, absent a more specific classification |
+| `adjustment` | — | — | Excluded until explicitly resolved |
+
+Canonical sign/type disagreements are errors; they must not be silently corrected during aggregation. All amounts in one aggregation must already be converted to one reporting currency.
+
+Reporting periods use an inclusive start and exclusive end. Monthly averages divide by every UTC calendar month in the requested window, including months with no activity.
+
+The current cached transaction summary reverses the normalized depository sign convention and treats investment activity as income/spending. Replacing it with this contract is Step 2.
+
+## 3. Core metric formulas
+
+All asset and liability inputs are non-negative magnitudes in the snapshot's reporting currency.
+
+- `totalCash`: cash accounts only; an overdraft is debt, not negative cash.
+- `totalInvestments`: current market value of deduplicated holdings plus manual investment assets. Do not also add the investment account's balance.
+- `homeValue`: the active user override or provider midpoint. `null` means unknown. A low/high range bound is not a substitute for the point estimate.
+- `totalAssets = totalCash + totalInvestments + known homeValue + otherAssets`.
+- `totalDebt`: positive outstanding principal, including credit, loans, mortgages, and overdrafts.
+- `totalLiabilities = totalDebt + otherLiabilities`.
+- `netWorth = totalAssets - totalLiabilities`.
+- `operatingCashFlow = incomeTotal - expenseTotal`.
+
+Amounts remain unrounded during calculation; formatting and rounding are presentation concerns. Metrics in API and LLM responses must carry an explicit unit/currency rather than infer one from a label.
+
+## 4. Snapshot time and completeness
+
+Three concepts must remain distinct:
+
+- `asOf`: the oldest underlying source observation used in a snapshot.
+- `computedAt`: when Ask Linc calculated the snapshot.
+- `status`: `current`, `stale`, `partial`, or `unavailable`.
+
+Recomputing a snapshot does not make its inputs fresher. Required unavailable sources make a snapshot `partial`; no available sources makes it `unavailable`; otherwise any source older than its declared maximum age makes it `stale`. Source errors and stale/unavailable source IDs remain attached to the snapshot for the UI and LLM.
+
+Optional sources do not make a snapshot partial when absent. If present but stale, they make the values that use them stale.
+
+## 5. Invariants for every consumer
+
+1. The backend computes financial metrics; the frontend only formats and displays them.
+2. Persisted history copies canonical snapshot values and their original `asOf`; it never reconstructs old values from today's data.
+3. The LLM receives canonical values, units, provenance, and snapshot status; it does not recalculate authoritative totals from raw arrays.
+4. Unknown is represented as `null`/unavailable, not zero. Zero is used only for a known zero.
+5. Provider errors and partial data are never erased by a successful cache write.
+
+Privacy and retention are not part of this version. They are deferred to an optional late-stage hardening phase.
