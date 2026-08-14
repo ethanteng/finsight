@@ -52,6 +52,83 @@ describe('buildTransactionSummary', () => {
 
     expect(transactionsSummary.incomeTotal).toBe(2500);
     expect(transactionsSummary.expenseTotal).toBe(80);
+    expect(transactionsSummary.byCategory).toEqual({ Restaurant: 80 });
+  });
+
+  it('normalizes a stale persisted cash-flow sign after a manual type correction', () => {
+    const { transactionsSummary } = buildTransactionSummary(
+      [
+        {
+          transaction_id: 'corrected-income',
+          account_id: 'checking',
+          date: '2026-05-10',
+          amount: -100,
+          source_amount: -100,
+          cash_flow_amount: -100,
+          aiCategory: 'income',
+          iso_currency_code: 'USD',
+        },
+      ],
+      start,
+      end
+    );
+
+    expect(transactionsSummary.incomeTotal).toBe(100);
+    expect(transactionsSummary.includedTransactionIds).toEqual(['corrected-income']);
+  });
+
+  it('maps provider investment activity without relying on LLM categorization', () => {
+    const { transactionsSummary } = buildTransactionSummary(
+      [
+        {
+          investment_transaction_id: 'plaid-dividend',
+          account_id: 'brokerage',
+          date: '2026-05-10',
+          amount: -40,
+          type: 'cash',
+          subtype: 'dividend',
+          iso_currency_code: 'USD',
+        },
+        {
+          id: 'snaptrade-dividend',
+          account_id: 'snaptrade-brokerage',
+          date: '2026-05-11',
+          amount: 30,
+          type: 'DIVIDEND',
+          iso_currency_code: 'USD',
+        },
+        {
+          id: 'snaptrade-fee',
+          account_id: 'snaptrade-brokerage',
+          date: '2026-05-12',
+          amount: -5,
+          type: 'FEE',
+          iso_currency_code: 'USD',
+        },
+        {
+          investment_transaction_id: 'reinvested-dividend',
+          account_id: 'brokerage',
+          date: '2026-05-13',
+          amount: 25,
+          type: 'buy',
+          subtype: 'dividend',
+          isInvestmentTransaction: true,
+          iso_currency_code: 'USD',
+        },
+      ],
+      start,
+      end
+    );
+
+    expect(transactionsSummary.incomeTotal).toBe(70);
+    expect(transactionsSummary.expenseTotal).toBe(5);
+    expect(transactionsSummary.includedTransactionIds).toEqual([
+      'plaid-dividend',
+      'snaptrade-dividend',
+      'snaptrade-fee',
+    ]);
+    expect(transactionsSummary.excludedTransactionIds).toEqual(['reinvested-dividend']);
+    expect(transactionsSummary.unclassifiedTransactionIds).toEqual([]);
   });
 
   it('reports rather than guesses unclassified and unconverted transactions', () => {
@@ -92,5 +169,28 @@ describe('buildTransactionSummary', () => {
 
     expect(transactionsSummary.expenseTotal).toBe(100);
     expect(transactionsSummary.excludedTransactionIds).toEqual(['card-payment']);
+  });
+
+  it('counts non-credit loan payments as household expenses', () => {
+    const { transactionsSummary } = buildTransactionSummary(
+      [
+        {
+          transaction_id: 'mortgage-payment',
+          account_id: 'checking',
+          date: '2026-05-12',
+          amount: 1800,
+          personal_finance_category: {
+            primary: 'LOAN_PAYMENTS',
+            detailed: 'LOAN_PAYMENTS_MORTGAGE_PAYMENT',
+          },
+          iso_currency_code: 'USD',
+        },
+      ],
+      start,
+      end
+    );
+
+    expect(transactionsSummary.expenseTotal).toBe(1800);
+    expect(transactionsSummary.byCategory).toEqual({ 'Mortgage Payment': 1800 });
   });
 });

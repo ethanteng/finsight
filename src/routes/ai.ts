@@ -3,7 +3,8 @@ import { requireAuth } from '../auth/middleware';
 import { getLatestGPTContext, getGPTContextById } from '../services/gpt-logger';
 import { getPrismaClient } from '../prisma-client';
 import { openai } from '../openai';
-import { isCanonicalTransactionType } from '../domain/financial-truth';
+import { CANONICAL_TRANSACTION_TYPES, isCanonicalTransactionType } from '../domain/financial-truth';
+import { canonicalCashFlowAmount } from '../services/canonical-transaction-adapter';
 
 function asString(v: string | string[] | undefined): string {
   return Array.isArray(v) ? v[0] ?? '' : v ?? '';
@@ -110,12 +111,10 @@ router.put('/transactions/:transactionId/transaction-type', requireAuth, async (
     const { transaction_type, reason } = req.body;
 
     // Validate transaction_type
-    const validTypes = ['income', 'expense', 'transfer_in', 'transfer_out', 'buy', 'sell', 
-                        'deposit', 'withdrawal', 'fee', 'refund', 'adjustment'];
-    
-    if (!transaction_type || !validTypes.includes(transaction_type.toLowerCase())) {
+    const normalizedTransactionType = String(transaction_type || '').toLowerCase();
+    if (!isCanonicalTransactionType(normalizedTransactionType)) {
       return res.status(400).json({ 
-        error: 'Invalid transaction_type. Must be one of: ' + validTypes.join(', ') 
+        error: 'Invalid transaction_type. Must be one of: ' + CANONICAL_TRANSACTION_TYPES.join(', ')
       });
     }
 
@@ -136,8 +135,12 @@ router.put('/transactions/:transactionId/transaction-type', requireAuth, async (
     const updatedTransaction = await prisma.transaction.update({
       where: { id: transactionId },
       data: {
-        aiCategory: transaction_type.toLowerCase(),
+        aiCategory: normalizedTransactionType,
         aiCategoryReason: reason || 'Manually corrected by user',
+        cashFlowAmount: canonicalCashFlowAmount(
+          transaction.cashFlowAmount ?? transaction.sourceAmount ?? transaction.amount,
+          normalizedTransactionType
+        ),
         categoryComparedAt: new Date()
       },
       include: {

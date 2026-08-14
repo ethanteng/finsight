@@ -9,6 +9,7 @@ import { persistTransactionsToDb, persistSnapTradeActivitiesToDb } from '../data
 import { cacheService } from '../data/cache';
 import { classifyAccount } from './account-classifier';
 import { financialAccountIdentityKey, isNewerAccountSnapshot } from './account-identity';
+import { resolveCanonicalTransactionType } from './canonical-transaction-adapter';
 
 const prisma = new PrismaClient();
 
@@ -398,25 +399,7 @@ export class FinancialDataService {
           };
           
       const inferInvestmentTransactionType = (tx: Record<string, any>): TransactionType => {
-        const amount = Number(tx.amount) || 0;
-        const rawType = `${tx.type || ''} ${tx.subtype || ''}`.toLowerCase();
-
-        if (rawType.includes('dividend') || rawType.includes('interest') || rawType.includes('distribution')) {
-          return 'income';
-        }
-        if (rawType.includes('sell') || rawType.includes('redemption') || rawType.includes('liquidation')) {
-          return 'sell';
-        }
-        if (rawType.includes('buy') || rawType.includes('purchase')) {
-          return 'buy';
-        }
-        if (amount > 0) {
-          return 'sell';
-        }
-        if (amount < 0) {
-          return 'buy';
-        }
-        return 'adjustment';
+        return resolveCanonicalTransactionType(tx) ?? 'adjustment';
       };
 
           const processTransactionGroup = async (
@@ -1051,8 +1034,8 @@ export class FinancialDataService {
         sourceConnectionId: record.accessTokenId || undefined,
         persisted: true,
         // Pass through persistentAccountId only when it's the real Plaid value (TAN institutions).
-        // When persistentAccountId === plaidAccountId it was likely our incorrect fallback - omit it
-        // so we use institution+name dedup and match fresh API data that has no persistent_account_id.
+        // When persistentAccountId === plaidAccountId it was likely our incorrect fallback. Omit it
+        // so identity falls back to the source connection plus the provider account ID.
         persistentAccountId:
           record.persistentAccountId &&
           record.persistentAccountId !== record.plaidAccountId
@@ -1385,8 +1368,8 @@ export class FinancialDataService {
               sourceConnectionId: tokenRecord.id,
               plaidAccountId: plaidAccountId, // ✅ Always set for Plaid accounts
               // Pass through persistentAccountId only when it differs from plaidAccountId (matches persisted logic).
-              // When Plaid returns persistent_account_id === account_id, both fresh and persisted must use
-              // institution+name dedup so getLogicalKey produces the same key for both.
+              // When Plaid returns persistent_account_id === account_id, omit the redundant value so both
+              // fresh and persisted data use the same source-connection + provider-account identity.
               persistentAccountId:
                 (account as any).persistent_account_id &&
                 (account as any).persistent_account_id !== plaidAccountId

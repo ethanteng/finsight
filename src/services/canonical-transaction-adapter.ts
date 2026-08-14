@@ -51,6 +51,37 @@ function getPersonalFinanceCategory(transaction: any): { primary: string; detail
   };
 }
 
+function resolveProviderInvestmentType(transaction: any): CanonicalTransactionType | null {
+  const rawType = String(
+    transaction?.type || transaction?.activity_type || transaction?.snapTradeData?.type || ''
+  )
+    .trim()
+    .toLowerCase();
+  const rawSubtype = String(
+    transaction?.subtype || transaction?.activity_subtype || transaction?.snapTradeData?.subtype || ''
+  )
+    .trim()
+    .toLowerCase();
+
+  // Preserve trades before looking at their subtype. For example, a dividend
+  // reinvestment can be reported as type=buy, subtype=dividend.
+  if (['buy', 'purchase', 'rei', 'reinvestment'].includes(rawType)) return 'buy';
+  if (['sell', 'redemption', 'liquidation'].includes(rawType)) return 'sell';
+  if (['fee', 'commission'].includes(rawType)) return 'fee';
+  if (['dividend', 'interest', 'distribution'].includes(rawType)) return 'income';
+  if (['contribution', 'deposit'].includes(rawType)) return 'deposit';
+  if (['withdrawal'].includes(rawType)) return 'withdrawal';
+
+  if (['dividend', 'interest', 'distribution'].some(value => rawSubtype.includes(value))) {
+    return 'income';
+  }
+  if (['fee', 'commission'].some(value => rawSubtype.includes(value))) return 'fee';
+  if (['contribution', 'deposit'].some(value => rawSubtype.includes(value))) return 'deposit';
+  if (rawSubtype.includes('withdrawal')) return 'withdrawal';
+
+  return null;
+}
+
 /** Resolve only deterministic classifications; unknown activity remains unknown. */
 export function resolveCanonicalTransactionType(transaction: any): CanonicalTransactionType | null {
   const explicitCandidates = [
@@ -67,6 +98,9 @@ export function resolveCanonicalTransactionType(transaction: any): CanonicalTran
     const investmentType = normalizeTypeCandidate(transaction?.type);
     if (investmentType) return investmentType;
   }
+
+  const providerInvestmentType = resolveProviderInvestmentType(transaction);
+  if (providerInvestmentType) return providerInvestmentType;
 
   const { primary, detailed } = getPersonalFinanceCategory(transaction);
   if (primary === 'income' || primary.startsWith('income_')) return 'income';
@@ -104,16 +138,45 @@ export function canonicalCashFlowAmount(
   return amount;
 }
 
+function humanizeCategory(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, character => character.toUpperCase());
+}
+
 function categoryLabel(transaction: any): string {
   const { detailed, primary } = getPersonalFinanceCategory(transaction);
-  if (detailed) return detailed;
-  if (primary) return primary;
+
   if (Array.isArray(transaction?.category)) {
-    return transaction.category.find((value: unknown) => typeof value === 'string' && value.trim()) || 'Uncategorized';
+    const categories = transaction.category.filter(
+      (value: unknown): value is string => typeof value === 'string' && Boolean(value.trim())
+    );
+    const category = categories[categories.length - 1];
+    if (category) {
+      const normalizedCategory = category.trim().toLowerCase();
+      if (primary && normalizedCategory === detailed) {
+        const detailedSuffix = detailed.startsWith(`${primary}_`)
+          ? detailed.slice(`${primary}_`.length)
+          : detailed;
+        return humanizeCategory(detailedSuffix);
+      }
+      return category.includes('_') ? humanizeCategory(category) : category.trim();
+    }
   }
   if (typeof transaction?.category === 'string' && transaction.category.trim()) {
-    return transaction.category.split(',')[0].trim();
+    const categories = transaction.category.split(',');
+    const category = categories[categories.length - 1]?.trim();
+    if (category) return category.includes('_') ? humanizeCategory(category) : category;
   }
+  if (detailed) {
+    const detailedSuffix = primary && detailed.startsWith(`${primary}_`)
+      ? detailed.slice(`${primary}_`.length)
+      : detailed;
+    return humanizeCategory(detailedSuffix);
+  }
+  if (primary) return humanizeCategory(primary);
   return 'Uncategorized';
 }
 
@@ -139,10 +202,10 @@ export function toCanonicalTransaction(transaction: any): CanonicalTransaction |
     transaction?.source_amount ?? transaction?.sourceAmount ?? transaction?.amount
   );
   const storedCashFlowAmount = transaction?.cash_flow_amount ?? transaction?.cashFlowAmount;
-  const cashFlowAmount =
-    storedCashFlowAmount == null
-      ? canonicalCashFlowAmount(Number(transaction?.amount), type)
-      : Number(storedCashFlowAmount);
+  const cashFlowAmount = canonicalCashFlowAmount(
+    Number(storedCashFlowAmount ?? sourceAmount),
+    type
+  );
   const currency = String(
     transaction?.iso_currency_code || transaction?.currency || 'USD'
   ).toUpperCase();

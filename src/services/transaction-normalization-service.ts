@@ -6,6 +6,11 @@
  * - Credit cards: New charges = positive (debt increases), payments = negative (debt decreases)
  */
 
+import {
+  canonicalCashFlowAmount,
+  resolveCanonicalTransactionType,
+} from './canonical-transaction-adapter';
+
 export interface Transaction {
   transaction_id?: string;
   account_id: string;
@@ -102,16 +107,10 @@ export class TransactionNormalizationService {
       }
     }
 
-    const transactionType = String((transaction as any).transaction_type || '').toLowerCase();
-    const inflowTypes = ['income', 'refund', 'transfer_in', 'deposit', 'sell'];
-    const outflowTypes = ['expense', 'fee', 'transfer_out', 'withdrawal', 'buy'];
-    normalized.cash_flow_amount = inflowTypes.includes(transactionType)
-      ? Math.abs(sourceAmount)
-      : outflowTypes.includes(transactionType)
-        ? -Math.abs(sourceAmount)
-        : accountType === 'credit'
-          ? -Math.abs(sourceAmount)
-          : normalized.amount;
+    const canonicalType = resolveCanonicalTransactionType(transaction);
+    normalized.cash_flow_amount = canonicalType
+      ? canonicalCashFlowAmount(sourceAmount, canonicalType)
+      : transaction.cash_flow_amount;
 
     return normalized;
   }
