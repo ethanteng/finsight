@@ -13,29 +13,19 @@ describe('FinancesPageClient', () => {
   });
 
   it('shows account setup guidance when a new user has no financial summary', async () => {
-    const parseEmptySummary = jest.fn();
+    const parseEmptyOverview = jest.fn();
+    const requestedUrls: string[] = [];
 
     global.fetch = jest.fn().mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
+      requestedUrls.push(url);
 
-      if (url.includes('/api/summaries')) {
+      if (url.includes('/api/finances/overview')) {
         return Promise.resolve({
           ok: true,
           status: 204,
-          json: parseEmptySummary,
+          json: parseEmptyOverview,
         });
-      }
-
-      if (url.includes('/plaid/all-accounts')) {
-        return Promise.resolve({ ok: true, status: 200, json: async () => ({ accounts: [] }) });
-      }
-
-      if (url.includes('/snaptrade/accounts')) {
-        return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true, data: { accounts: [] } }) });
-      }
-
-      if (url.includes('/api/manual-accounts')) {
-        return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true, data: [] }) });
       }
 
       if (url.includes('/api/financial-history')) {
@@ -52,6 +42,11 @@ describe('FinancesPageClient', () => {
     expect(screen.getByRole('link', { name: /Add your accounts/i })).toHaveAttribute('href', '/profile');
     expect(screen.getByText('What you’ll see after setup')).toBeInTheDocument();
     expect(screen.getByText('Secure, read-only connections')).toBeInTheDocument();
-    expect(parseEmptySummary).not.toHaveBeenCalled();
+    expect(parseEmptyOverview).not.toHaveBeenCalled();
+    expect(requestedUrls.some(url => url.includes('/plaid/all-accounts'))).toBe(false);
+    expect(requestedUrls.some(url => url.includes('/snaptrade/accounts'))).toBe(false);
+    expect(requestedUrls.some(url => url.includes('/api/manual-accounts'))).toBe(false);
+    expect(requestedUrls.some(url => url.includes('/api/summaries'))).toBe(false);
+    expect(requestedUrls.some(url => url.includes('/auth/verify'))).toBe(false);
   });
 });

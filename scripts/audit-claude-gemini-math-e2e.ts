@@ -452,9 +452,13 @@ async function main() {
   if (!plaidConnected && !snapTradeConnected) {
     await seedManualAccountsAndHoldings(token, userId);
   }
+  const overview = await api('/api/finances/overview', { token });
+  if (overview.status !== 200) {
+    throw new Error(`Finances overview fetch failed: ${overview.status} ${JSON.stringify(overview.body)}`);
+  }
   log('Snapshot refresh complete', {
-    netWorth: (refresh.body.financialOverview as Json | undefined)?.netWorth,
-    totalInvestments: (refresh.body.financialOverview as Json | undefined)?.totalInvestments,
+    netWorth: (overview.body.financialOverview as Json | undefined)?.netWorth,
+    totalInvestments: (overview.body.financialOverview as Json | undefined)?.totalInvestments,
   });
 
   const question =

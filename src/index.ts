@@ -9,6 +9,7 @@ import { isFeatureEnabled } from './config/features';
 import authRoutes from './auth/routes';
 import manualAccountsRoutes from './auth/manual-accounts-routes';
 import accountsRoutes from './auth/accounts-routes';
+import financesRoutes from './auth/finances-routes';
 import stripeRoutes from './routes/stripe';
 import aiRoutes from './routes/ai';
 import { optionalAuth, requireAuth, adminAuth } from './auth/middleware';
@@ -215,6 +216,9 @@ app.use('/api/manual-accounts', manualAccountsRoutes);
 
 // Setup Accounts routes (for Plaid and SnapTrade accounts)
 app.use('/api/accounts', accountsRoutes);
+
+// Setup the revisioned Finances overview and lazy account-detail routes
+app.use('/api/finances', financesRoutes);
 
 // Setup AI routes
 app.use('/api/ai', aiRoutes);
@@ -2887,9 +2891,8 @@ app.get('/profile/home', requireAuth, async (req: Request, res: Response) => {
       valueHigh: homeData.valueHigh
     });
     
-    // Ensure valueLow and valueHigh are always numbers (use value as fallback if null)
-    const valueLow = homeData.valueLow ?? homeData.value ?? 0;
-    const valueHigh = homeData.valueHigh ?? homeData.value ?? 0;
+    const valueLow = homeData.isManualOverride ? null : homeData.valueLow;
+    const valueHigh = homeData.isManualOverride ? null : homeData.valueHigh;
     
     // Safely convert lastUpdated to ISO string, checking if date is valid
     let lastUpdatedISO: string;
@@ -2971,9 +2974,8 @@ app.post('/profile/home', requireAuth, async (req: Request, res: Response) => {
     const profileText = await profileManager.getOriginalProfile(req.user!.id);
     const homeData = profileManager.extractHomeData(profileText);
     
-    // Ensure valueLow and valueHigh are always numbers (use value as fallback if null)
-    const valueLow = homeData.valueLow ?? homeData.value ?? 0;
-    const valueHigh = homeData.valueHigh ?? homeData.value ?? 0;
+    const valueLow = homeData.isManualOverride ? null : homeData.valueLow;
+    const valueHigh = homeData.isManualOverride ? null : homeData.valueHigh;
     
     // Safely convert lastUpdated to ISO string, checking if date is valid
     let lastUpdatedISO: string;
@@ -3049,9 +3051,8 @@ app.post('/profile/home/refresh', requireAuth, async (req: Request, res: Respons
     const updatedProfileText = await profileManager.getOriginalProfile(req.user!.id);
     const homeData = profileManager.extractHomeData(updatedProfileText);
     
-    // Ensure valueLow and valueHigh are always numbers (use value as fallback if null)
-    const valueLow = homeData.valueLow ?? homeData.value ?? 0;
-    const valueHigh = homeData.valueHigh ?? homeData.value ?? 0;
+    const valueLow = homeData.isManualOverride ? null : homeData.valueLow;
+    const valueHigh = homeData.isManualOverride ? null : homeData.valueHigh;
     
     // Safely convert lastUpdated to ISO string, checking if date is valid
     let lastUpdatedISO: string;
@@ -3085,6 +3086,50 @@ app.post('/profile/home/refresh', requireAuth, async (req: Request, res: Respons
   }
 });
 
+interface PersistedHomeData {
+  address?: string | null;
+  value?: number | null;
+  valueLow?: number | null;
+  valueHigh?: number | null;
+  lastUpdated?: Date | null;
+  isManualOverride?: boolean;
+}
+
+function serializeHomeData(homeData: PersistedHomeData) {
+  const lastUpdated = homeData.lastUpdated && !Number.isNaN(homeData.lastUpdated.getTime())
+    ? homeData.lastUpdated.toISOString()
+    : new Date().toISOString();
+  return {
+    address: homeData.address || '',
+    value: homeData.value ?? 0,
+    valueLow: homeData.isManualOverride ? null : homeData.valueLow ?? null,
+    valueHigh: homeData.isManualOverride ? null : homeData.valueHigh ?? null,
+    lastUpdated,
+    isManualOverride: Boolean(homeData.isManualOverride),
+  };
+}
+
+async function refreshSnapshotAfterHomeMutation(
+  userId: string,
+  reason: 'home-value-override-set' | 'home-value-override-removed'
+): Promise<{ snapshotRefreshed: boolean; warning?: string }> {
+  try {
+    const { SummaryCacheService } = await import('./services/summary-cache-service');
+    await SummaryCacheService.computeForUser(userId, {
+      categorize: false,
+      history: { kind: 'material', reason },
+    });
+    return { snapshotRefreshed: true };
+  } catch (error) {
+    console.error(`Home setting was saved but financial snapshot refresh failed for user ${userId}:`, error);
+    Sentry.captureException(error);
+    return {
+      snapshotRefreshed: false,
+      warning: 'Your home setting was saved, but totals could not be refreshed. Use Refresh totals to try again.',
+    };
+  }
+}
+
 // Update manual home value override
 app.put('/profile/home/value', requireAuth, async (req: Request, res: Response) => {
   try {
@@ -3099,45 +3144,15 @@ app.put('/profile/home/value', requireAuth, async (req: Request, res: Response) 
     
     // Update manual override
     const homeData = await profileManager.updateManualHomeValue(req.user!.id, value);
-    
-    // Refresh the canonical snapshot so every consumer sees the override.
-    try {
-      const { SummaryCacheService } = await import('./services/summary-cache-service');
-      setImmediate(() => {
-        SummaryCacheService.computeForUser(req.user!.id, {
-          categorize: false,
-          history: { kind: 'material', reason: 'home-value-override-set' },
-        }).catch(error => {
-          console.error(`Failed to refresh financial summaries after home value update:`, error);
-        });
-      });
-    } catch (error) {
-      console.error('Failed to trigger financial summary refresh:', error);
-      // Don't fail the request if cache refresh fails
-    }
-    
-    // Ensure valueLow and valueHigh are always numbers (use value as fallback if null)
-    const valueLow = homeData.valueLow ?? homeData.value ?? 0;
-    const valueHigh = homeData.valueHigh ?? homeData.value ?? 0;
-    
-    // Safely convert lastUpdated to ISO string, checking if date is valid
-    let lastUpdatedISO: string;
-    if (homeData.lastUpdated && !isNaN(homeData.lastUpdated.getTime())) {
-      lastUpdatedISO = homeData.lastUpdated.toISOString();
-    } else {
-      lastUpdatedISO = new Date().toISOString();
-    }
-    
-    res.json({ 
+    const refresh = await refreshSnapshotAfterHomeMutation(
+      req.user!.id,
+      'home-value-override-set'
+    );
+
+    res.json({
       success: true,
-      homeData: {
-        address: homeData.address || '',
-        value: homeData.value ?? 0,
-        valueLow: valueLow,
-        valueHigh: valueHigh,
-        lastUpdated: lastUpdatedISO,
-        isManualOverride: homeData.isManualOverride
-      }
+      ...refresh,
+      homeData: serializeHomeData(homeData),
     });
   } catch (error) {
     console.error('Failed to update manual home value:', error);
@@ -3160,45 +3175,15 @@ app.delete('/profile/home/value', requireAuth, async (req: Request, res: Respons
     
     // Remove manual override
     const homeData = await profileManager.removeManualHomeValue(req.user!.id);
-    
-    // Refresh the canonical snapshot so every consumer sees the removed override.
-    try {
-      const { SummaryCacheService } = await import('./services/summary-cache-service');
-      setImmediate(() => {
-        SummaryCacheService.computeForUser(req.user!.id, {
-          categorize: false,
-          history: { kind: 'material', reason: 'home-value-override-removed' },
-        }).catch(error => {
-          console.error(`Failed to refresh financial summaries after removing manual home value:`, error);
-        });
-      });
-    } catch (error) {
-      console.error('Failed to trigger financial summary refresh:', error);
-      // Don't fail the request if cache refresh fails
-    }
-    
-    // Ensure valueLow and valueHigh are always numbers (use value as fallback if null)
-    const valueLow = homeData.valueLow ?? homeData.value ?? 0;
-    const valueHigh = homeData.valueHigh ?? homeData.value ?? 0;
-    
-    // Safely convert lastUpdated to ISO string, checking if date is valid
-    let lastUpdatedISO: string;
-    if (homeData.lastUpdated && !isNaN(homeData.lastUpdated.getTime())) {
-      lastUpdatedISO = homeData.lastUpdated.toISOString();
-    } else {
-      lastUpdatedISO = new Date().toISOString();
-    }
-    
-    res.json({ 
+    const refresh = await refreshSnapshotAfterHomeMutation(
+      req.user!.id,
+      'home-value-override-removed'
+    );
+
+    res.json({
       success: true,
-      homeData: {
-        address: homeData.address || '',
-        value: homeData.value ?? 0,
-        valueLow: valueLow,
-        valueHigh: valueHigh,
-        lastUpdated: lastUpdatedISO,
-        isManualOverride: homeData.isManualOverride
-      }
+      ...refresh,
+      homeData: serializeHomeData(homeData),
     });
   } catch (error) {
     console.error('Failed to remove manual home value:', error);
@@ -3252,60 +3237,12 @@ app.get('/api/finances/overrides', requireAuth, async (req: Request, res: Respon
       return res.status(404).json({ error: 'User not found' });
     }
     
-    // Calculate current values from transactions for display
-    let calculatedIncome: number | undefined;
-    let calculatedExpense: number | undefined;
-    
-    try {
-      const { SummaryCacheService } = await import('./services/summary-cache-service');
-      const snapshot = await SummaryCacheService.getLatestSnapshot(req.user!.id, 'full');
-      
-      if (snapshot && snapshot.transactions) {
-        const transactions = Array.isArray(snapshot.transactions) ? snapshot.transactions : [];
-        
-        // Calculate income
-        const incomeTransactions = transactions.filter((tx: any) => {
-          const type = tx.transaction_type || tx.aiCategory;
-          const amount = Number(tx.amount) || 0;
-          return typeof type === 'string' && type.toLowerCase() === 'income' && amount > 0;
-        });
-        
-        if (incomeTransactions.length > 0) {
-          const monthlyTotals = new Map<string, number>();
-          for (const tx of incomeTransactions) {
-            const amount = Number(tx.amount) || 0;
-            const date = new Date(tx.date);
-            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-            monthlyTotals.set(monthKey, (monthlyTotals.get(monthKey) || 0) + amount);
-          }
-          const monthEntries = Array.from(monthlyTotals.entries());
-          const totalIncome = monthEntries.reduce((sum, [, value]) => sum + value, 0);
-          calculatedIncome = monthEntries.length > 0 ? totalIncome / monthEntries.length : 0;
-        }
-        
-        // Calculate expenses
-        const expenseTransactions = transactions.filter((tx: any) => {
-          const type = tx.transaction_type || tx.aiCategory;
-          return typeof type === 'string' && (type.toLowerCase() === 'expense' || type.toLowerCase() === 'fee');
-        });
-        
-        if (expenseTransactions.length > 0) {
-          const monthlyTotals = new Map<string, number>();
-          for (const tx of expenseTransactions) {
-            const amount = Math.abs(Number(tx.amount) || 0);
-            const date = new Date(tx.date);
-            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-            monthlyTotals.set(monthKey, (monthlyTotals.get(monthKey) || 0) + amount);
-          }
-          const monthEntries = Array.from(monthlyTotals.entries());
-          const totalExpense = monthEntries.reduce((sum, [, value]) => sum + value, 0);
-          calculatedExpense = monthEntries.length > 0 ? totalExpense / monthEntries.length : 0;
-        }
-      }
-    } catch (error) {
-      console.error('Failed to calculate current values:', error);
-      // Continue without calculated values
-    }
+    const { SummaryCacheService } = await import('./services/summary-cache-service');
+    const { averageCanonicalTransactionSummary } = await import('./services/finances-overview-service');
+    const snapshot = await SummaryCacheService.getLatestSnapshot(req.user!.id, 'summary');
+    const averages = averageCanonicalTransactionSummary(snapshot?.transactionsSummary);
+    const calculatedIncome = averages?.averageIncome;
+    const calculatedExpense = averages?.averageExpenses;
     
     res.json({
       monthlyIncome: user.monthlyIncomeOverride,
@@ -3694,7 +3631,13 @@ app.post('/api/refresh-summary', requireAuth, async (req: Request, res: Response
       categorize: false,
       history: { kind: 'material', reason: 'user-refresh' },
     });
-    res.json(payload);
+    // Recompute can materialize large detail arrays; callers only need an
+    // acknowledgement before requesting the lightweight view they consume.
+    res.json({
+      computedAt: payload.computedAt,
+      asOf: payload.asOf,
+      status: payload.status,
+    });
   } catch (error) {
     console.error('❌ Failed to refresh financial summary:', error);
     if (error instanceof Error) {

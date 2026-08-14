@@ -5,6 +5,11 @@ import { FinancialDataService } from './financial-data-service';
 import { buildTransactionSummary } from './transaction-summary-service';
 import { buildCanonicalSnapshotCore } from './canonical-financial-snapshot';
 import {
+  buildAccountDisplayBalances,
+  hasAccountDisplayBalances,
+  withAccountDisplayBalances,
+} from './finances-overview-service';
+import {
   FinancialHistoryService,
   type CanonicalHistoryInput,
   type HistoryWriteIntent,
@@ -17,7 +22,7 @@ const getPrisma = (): PrismaClient => {
   return prisma!;
 };
 
-type ViewMode = 'summary' | 'full';
+type ViewMode = 'summary' | 'finances' | 'full';
 
 export interface SummaryComputeOptions {
   categorize?: boolean;
@@ -129,7 +134,7 @@ export class SummaryCacheService {
         asOf: source.asOf instanceof Date ? source.asOf.toISOString() : source.asOf,
       })),
       meta: {
-        version: '2.0',
+        version: '2.1',
         source: 'SummaryCacheService',
         status: canonical.status,
         asOf: canonical.asOf?.toISOString() || null,
@@ -137,6 +142,21 @@ export class SummaryCacheService {
         transactionsWindowDays: txDays,
         investmentWindowYears: invYears,
         balanceRefreshHours: balanceHours || null,
+        accountDisplayBalances: buildAccountDisplayBalances(
+          data.accounts,
+          data.investments?.holdings,
+          canonical.reportingCurrency
+        ),
+        // Persist presentation metadata with the same revision as homeValue.
+        // A manual point value deliberately has no estimate range.
+        home: data.homeValue ? {
+          address: data.homeValue.address,
+          valueMid: data.homeValue.valueMid,
+          valueLow: data.homeValue.isManualOverride ? null : data.homeValue.valueLow,
+          valueHigh: data.homeValue.isManualOverride ? null : data.homeValue.valueHigh,
+          lastUpdated: data.homeValue.lastUpdated,
+          isManualOverride: data.homeValue.isManualOverride,
+        } : null,
       },
     };
 
@@ -219,6 +239,53 @@ export class SummaryCacheService {
 
   static async getLatestSnapshot(userId: string, view: ViewMode = 'summary') {
     const prisma = getPrisma();
+    if (view === 'finances') {
+      const select = {
+        computedAt: true,
+        asOf: true,
+        status: true,
+        reportingCurrency: true,
+        financialOverview: true,
+        investmentPortfolio: true,
+        accounts: true,
+        transactionsSummary: true,
+        meta: true,
+        quality: true,
+      } as const;
+      const snapshot = await prisma.financialSummarySnapshot.findUnique({
+        where: { userId },
+        select,
+      });
+      if (!snapshot || hasAccountDisplayBalances(snapshot as any)) return snapshot;
+
+      // Version-2.0 snapshots predate canonical per-account display balances.
+      // Load their holdings once, derive the missing metadata, and persist it so
+      // subsequent Finances reads remain lightweight without calling providers.
+      const fullSnapshot = await prisma.financialSummarySnapshot.findUnique({ where: { userId } });
+      if (!fullSnapshot) return null;
+      const upgraded = withAccountDisplayBalances(fullSnapshot as any);
+      const update = await prisma.financialSummarySnapshot.updateMany({
+        where: { userId, computedAt: fullSnapshot.computedAt },
+        data: { meta: upgraded.meta as any },
+      });
+      if (update.count === 0) {
+        // A newer snapshot won the race; return that revision instead of
+        // overwriting its metadata with values derived from the older one.
+        return prisma.financialSummarySnapshot.findUnique({ where: { userId }, select });
+      }
+      return {
+        computedAt: fullSnapshot.computedAt,
+        asOf: fullSnapshot.asOf,
+        status: fullSnapshot.status,
+        reportingCurrency: fullSnapshot.reportingCurrency,
+        financialOverview: fullSnapshot.financialOverview,
+        investmentPortfolio: fullSnapshot.investmentPortfolio,
+        accounts: fullSnapshot.accounts,
+        transactionsSummary: fullSnapshot.transactionsSummary,
+        meta: upgraded.meta,
+        quality: fullSnapshot.quality,
+      };
+    }
     const snap = await prisma.financialSummarySnapshot.findUnique({
       where: { userId },
     });
