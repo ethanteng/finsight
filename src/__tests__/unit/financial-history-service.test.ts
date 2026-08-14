@@ -151,6 +151,18 @@ describe('FinancialHistoryService', () => {
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
+  it('does not create a material observation when there is no prior snapshot', async () => {
+    mockFindFirst.mockResolvedValue(null as never);
+
+    await FinancialHistoryService.saveHistoricalSnapshot('user-1', snapshot, {
+      kind: 'material',
+      reason: 'account-sync',
+    });
+
+    expect(mockUpsert).toHaveBeenCalledTimes(1);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
   it('returns only daily observations by default', async () => {
     mockFindMany.mockResolvedValue([] as never);
 

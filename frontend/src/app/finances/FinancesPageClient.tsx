@@ -14,6 +14,11 @@ import type { ManualAccount } from '../../types/manual-account';
 import { resetUserIdentity } from '../../lib/heycatch';
 import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
 import { mergeCanonicalCurrentWithHistory } from '../../lib/canonical-financial-history';
+import {
+  calendarDateInTimeZone,
+  getBrowserTimeZone,
+  observationDateForCalendarDate,
+} from '../../lib/browser-time-zone';
 
 const ManualAccountList = lazy(() => import('../../components/ManualAccountList'));
 
@@ -601,8 +606,17 @@ export default function FinancesPageClient() {
         {!historicalDataLoading && snapshot && (() => {
           // Preserve the canonical values and source time exactly. The chart
           // must not rewrite historical rows with today's home value.
+          const safeHistoricalData = Array.isArray(historicalData) ? historicalData : [];
+          const userTimeZone =
+            safeHistoricalData.find(point => point.timeZone)?.timeZone ?? getBrowserTimeZone();
+          const calendarDate = calendarDateInTimeZone(
+            new Date(snapshot.computedAt),
+            userTimeZone
+          );
           const currentSnapshot = {
             computedAt: snapshot.computedAt,
+            observationDate: observationDateForCalendarDate(calendarDate),
+            timeZone: userTimeZone,
             netWorth: snapshot.financialOverview.netWorth,
             totalCash: snapshot.financialOverview.totalCash,
             totalInvestments: snapshot.financialOverview.totalInvestments,
@@ -610,7 +624,6 @@ export default function FinancesPageClient() {
             homeValue: snapshot.financialOverview.homeValue,
           };
 
-          const safeHistoricalData = Array.isArray(historicalData) ? historicalData : [];
           const chartData = mergeCanonicalCurrentWithHistory(currentSnapshot, safeHistoricalData);
 
           return (

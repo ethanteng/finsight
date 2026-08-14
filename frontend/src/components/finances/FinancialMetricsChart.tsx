@@ -41,6 +41,7 @@ ChartJS.register(
 export interface HistoricalSnapshot {
   computedAt: string;
   observationDate?: string | null;
+  timeZone?: string | null;
   netWorth: number;
   totalCash: number;
   totalInvestments: number;

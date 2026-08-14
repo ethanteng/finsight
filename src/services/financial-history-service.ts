@@ -176,7 +176,7 @@ export class FinancialHistoryService {
         });
       }
 
-      if (intent.kind === 'material' && !hasSameFinancialValues(latest, snapshot)) {
+      if (intent.kind === 'material' && latest && !hasSameFinancialValues(latest, snapshot)) {
         await prisma.financialSummaryHistory.create({
           data: canonicalHistoryData(userId, snapshot, {
             observationDate,
