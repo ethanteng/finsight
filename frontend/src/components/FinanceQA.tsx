@@ -367,7 +367,8 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
           claudeFirstCall: liveShowTheMathData.claudeFirstCall,
           databaseData: liveShowTheMathData.databaseData || {},
           ...(liveShowTheMathData.geminiValidation && { geminiValidation: liveShowTheMathData.geminiValidation }),
-          ...(liveShowTheMathData.claudeRetry && { claudeRetry: liveShowTheMathData.claudeRetry })
+          ...(liveShowTheMathData.claudeRetry && { claudeRetry: liveShowTheMathData.claudeRetry }),
+          ...(liveShowTheMathData.geminiRetryValidation && { geminiRetryValidation: liveShowTheMathData.geminiRetryValidation })
         }
       : null
   );

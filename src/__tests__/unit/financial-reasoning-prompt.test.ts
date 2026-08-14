@@ -20,16 +20,14 @@ describe('buildFinancialReasoningPrompt – system prompt safeguards', () => {
   });
 
   it('instructs the model to use authoritative totals and not recompute them', () => {
-    expect(systemPrompt).toMatch(/AUTHORITATIVE VALUES/);
+    expect(systemPrompt).toMatch(/Values labeled authoritative are exact/i);
     expect(systemPrompt).toMatch(/Do NOT recompute/i);
   });
 
   it('includes the (EXPENSE)/(FEE) transaction filtering rule', () => {
-    expect(systemPrompt).toMatch(/EXPENSE CALCULATIONS/);
     expect(systemPrompt).toContain('(EXPENSE)');
     expect(systemPrompt).toContain('(FEE)');
-    expect(systemPrompt).toContain('(TRANSFER_IN)');
-    expect(systemPrompt).toContain('(INCOME)');
+    expect(systemPrompt).toMatch(/Exclude transfers, income, trades, deposits, and withdrawals/i);
   });
 
   it('requires whole-number percentages and raw numbers in key_numbers', () => {
@@ -50,7 +48,7 @@ describe('buildFinancialReasoningPrompt – user message assembly', () => {
     expect(userMessage).toContain('## Retrieved Financial Knowledge');
   });
 
-  it('uses placeholders when context pieces are missing', () => {
+  it('omits unused context sections instead of spending prompt tokens on placeholders', () => {
     const { userMessage } = buildFinancialReasoningPrompt({
       ...baseInput,
       financialContext: '',
@@ -59,9 +57,9 @@ describe('buildFinancialReasoningPrompt – user message assembly', () => {
       ragKnowledge: ''
     });
     expect(userMessage).toContain('(No financial data available)');
-    expect(userMessage).toContain('(No profile available)');
-    expect(userMessage).toContain('(No market summary available)');
-    expect(userMessage).toContain('(No additional knowledge retrieved)');
+    expect(userMessage).not.toContain('## User Profile');
+    expect(userMessage).not.toContain('## Daily Market Summary');
+    expect(userMessage).not.toContain('## Retrieved Financial Knowledge');
   });
 
   it('prepends validation feedback when provided', () => {
@@ -74,16 +72,18 @@ describe('buildFinancialReasoningPrompt – user message assembly', () => {
     expect(userMessage).toContain('- Net worth invented');
   });
 
-  it('includes only the last 4 conversation history entries, labeled non-canonical', () => {
+  it('includes only the last 3 conversation history entries, labeled non-canonical', () => {
     const history = Array.from({ length: 6 }, (_, i) => ({
       question: `Q${i}`,
       answer: `A${i}`
     }));
     const { userMessage } = buildFinancialReasoningPrompt({ ...baseInput, conversationHistory: history });
     expect(userMessage).toContain('NOT canonical data');
-    // Oldest two should be dropped (only last 4 kept)
+    // Oldest three should be dropped (only last 3 kept)
     expect(userMessage).not.toContain('Q0');
     expect(userMessage).not.toContain('Q1');
+    expect(userMessage).not.toContain('Q2');
+    expect(userMessage).toContain('Q3');
     expect(userMessage).toContain('Q5');
   });
 });

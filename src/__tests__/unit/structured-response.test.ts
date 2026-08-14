@@ -73,11 +73,9 @@ describe('formatKeyNumberValue', () => {
     expect(formatKeyNumberValue('best_market_rate_apy', 4.26)).toBe('4.26%');
   });
 
-  it('scales down percentage values emitted 100x too large', () => {
-    expect(formatKeyNumberValue('vtip_allocation', 2000)).toBe('20%');
-    expect(formatKeyNumberValue('mortgage_fund_allocation', 2000)).toBe('20%');
-    expect(formatKeyNumberValue('retirement_fund_allocation', 1500)).toBe('15%');
-    expect(formatKeyNumberValue('treasury_allocation', 500)).toBe('5%');
+  it('does not silently rewrite percentage values', () => {
+    expect(formatKeyNumberValue('withdrawal_rate', 150)).toBe('150%');
+    expect(formatKeyNumberValue('vtip_allocation', 2000)).toBe('2,000%');
   });
 
   it('renders percentage keys that also contain "loss" as percentages (regression)', () => {

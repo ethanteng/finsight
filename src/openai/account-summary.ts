@@ -1,20 +1,36 @@
 import type { Account } from '../services/financial-data-service';
 import type { AccountSummaryItem } from './types';
 
-export function buildAccountSummaries(accounts: Account[]): AccountSummaryItem[] {
+function resolveAccountId(account: Account): string {
+  return String(
+    account.account_id
+    || (account as Account & { plaidAccountId?: string }).plaidAccountId
+    || (account as Account & { persistentAccountId?: string }).persistentAccountId
+    || account.id
+    || ''
+  );
+}
+
+export function buildAccountSummaries(
+  accounts: Account[],
+  displayBalances: Record<string, unknown> = {}
+): AccountSummaryItem[] {
   return accounts.map(account => {
-    const availableBalance = account.balance?.available;
-    const preferredBalance =
-      typeof availableBalance === 'number' && Number.isFinite(availableBalance) &&
-      (account.type === 'depository' || account.type === 'checking' || account.type === 'savings')
-        ? availableBalance
-        : account.balance?.current;
+    const id = resolveAccountId(account);
+    const storedDisplayBalance = Object.prototype.hasOwnProperty.call(displayBalances, id)
+      ? displayBalances[id]
+      : undefined;
+    const preferredBalance = typeof storedDisplayBalance === 'number' && Number.isFinite(storedDisplayBalance)
+      ? storedDisplayBalance
+      : typeof account.balance?.current === 'number' && Number.isFinite(account.balance.current)
+        ? account.balance.current
+        : account.balance?.available;
     const balance = typeof preferredBalance === 'number' && Number.isFinite(preferredBalance)
       ? preferredBalance
       : null;
 
     return {
-      id: account.account_id || account.id,
+      id,
       name: account.name,
       type: account.type,
       subtype: account.subtype || account.type,

@@ -113,15 +113,18 @@ function pctWholeFromFraction(v: number): number {
 
 function extractAuthoritativeFromDb(showTheMath: Json): AuthoritativeMetrics {
   const db = (showTheMath.databaseData || {}) as Json;
+  const analysisContext = (db.analysis_context_snapshot || {}) as Json;
+  const financialSummary = (analysisContext.financialSummary || {}) as Json;
+  const overview = (financialSummary.financialOverview || {}) as Json;
   const summary = (db.financial_summaries || {}) as Json;
-  const overview = (summary.financialOverview || summary.overview || {}) as Json;
+  const legacyOverview = (summary.financialOverview || summary.overview || {}) as Json;
   const snapshotOverview = ((db.financial_summary_snapshots as Json | undefined)?.financialOverview || {}) as Json;
   const metrics: AuthoritativeMetrics = {
-    netWorth: num(overview.netWorth ?? snapshotOverview.netWorth ?? summary.netWorth),
-    totalCash: num(overview.totalCash ?? snapshotOverview.totalCash ?? summary.totalCash),
-    totalInvestments: num(overview.totalInvestments ?? snapshotOverview.totalInvestments ?? summary.totalInvestments),
-    totalDebt: num(overview.totalDebt ?? snapshotOverview.totalDebt ?? summary.totalDebt),
-    homeValue: num(overview.homeValue ?? snapshotOverview.homeValue ?? summary.homeValue) ?? null,
+    netWorth: num(overview.netWorth ?? legacyOverview.netWorth ?? snapshotOverview.netWorth ?? summary.netWorth),
+    totalCash: num(overview.totalCash ?? legacyOverview.totalCash ?? snapshotOverview.totalCash ?? summary.totalCash),
+    totalInvestments: num(overview.totalInvestments ?? legacyOverview.totalInvestments ?? snapshotOverview.totalInvestments ?? summary.totalInvestments),
+    totalDebt: num(overview.totalDebt ?? legacyOverview.totalDebt ?? snapshotOverview.totalDebt ?? summary.totalDebt),
+    homeValue: num(overview.homeValue ?? legacyOverview.homeValue ?? snapshotOverview.homeValue ?? summary.homeValue) ?? null,
   };
 
   const analyses = db.retirement_analyses as Json[] | undefined;

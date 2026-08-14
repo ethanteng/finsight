@@ -16,6 +16,7 @@ export interface ShowTheMathGeminiValidation {
 }
 
 export interface ShowTheMathDatabaseData {
+  analysis_context_snapshot?: unknown;
   asset_price_history?: unknown[];
   financial_summaries?: unknown;
   financial_summary_snapshots?: unknown;
@@ -29,6 +30,7 @@ export interface ShowTheMathData {
   claudeFirstCall: ShowTheMathClaudeCall;
   geminiValidation?: ShowTheMathGeminiValidation;
   claudeRetry?: ShowTheMathClaudeCall;
+  geminiRetryValidation?: ShowTheMathGeminiValidation;
   databaseData: ShowTheMathDatabaseData;
 }
 
@@ -96,6 +98,35 @@ export function DatabaseSourceSection({
   );
 }
 
+function GeminiValidationSection({
+  title,
+  validation,
+}: {
+  title: string;
+  validation: ShowTheMathGeminiValidation;
+}) {
+  return (
+    <CollapsibleSection title={title}>
+      <div className="space-y-4">
+        <div>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[.08em] text-[#66736b]">Prompt sent to Gemini</p>
+          <TruncatablePre text={validation.prompt} />
+        </div>
+        <div>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[.08em] text-[#66736b]">Gemini raw response</p>
+          <TruncatablePre text={validation.rawResponse} />
+        </div>
+        <div>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-[.08em] text-[#66736b]">Parsed result</p>
+          <pre className="whitespace-pre-wrap rounded-xl border border-[#102319]/12 bg-[#102319] p-4 font-mono text-xs leading-5 text-[#e8eee8]">
+            {JSON.stringify(validation.parsedResult, null, 2)}
+          </pre>
+        </div>
+      </div>
+    </CollapsibleSection>
+  );
+}
+
 export function ShowTheMathContent({ data }: { data: Partial<ShowTheMathData> | null }) {
   if (!data) return null;
   return (
@@ -120,24 +151,7 @@ export function ShowTheMathContent({ data }: { data: Partial<ShowTheMathData> | 
         </>
       )}
       {data.geminiValidation && (
-        <CollapsibleSection title="Gemini validation">
-          <div className="space-y-4">
-            <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-[.08em] text-[#66736b]">Prompt sent to Gemini</p>
-              <TruncatablePre text={data.geminiValidation.prompt} />
-            </div>
-            <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-[.08em] text-[#66736b]">Gemini raw response</p>
-              <TruncatablePre text={data.geminiValidation.rawResponse} />
-            </div>
-            <div>
-              <p className="mb-1 text-xs font-semibold uppercase tracking-[.08em] text-[#66736b]">Parsed result</p>
-              <pre className="whitespace-pre-wrap rounded-xl border border-[#102319]/12 bg-[#102319] p-4 font-mono text-xs leading-5 text-[#e8eee8]">
-                {JSON.stringify(data.geminiValidation.parsedResult, null, 2)}
-              </pre>
-            </div>
-          </div>
-        </CollapsibleSection>
+        <GeminiValidationSection title="Gemini validation" validation={data.geminiValidation} />
       )}
       {data.claudeRetry && (
         <CollapsibleSection title="Claude retry (after validation feedback)">
@@ -156,6 +170,12 @@ export function ShowTheMathContent({ data }: { data: Partial<ShowTheMathData> | 
             </div>
           </div>
         </CollapsibleSection>
+      )}
+      {data.geminiRetryValidation && (
+        <GeminiValidationSection
+          title="Gemini validation of Claude retry"
+          validation={data.geminiRetryValidation}
+        />
       )}
       {data.databaseData && Object.keys(data.databaseData).length > 0 && (
         <CollapsibleSection title="Database data">
@@ -203,6 +223,16 @@ function formatDataAsText(data: Partial<ShowTheMathData>): string {
     sections.push(data.claudeRetry.userMessage);
     sections.push('\n\n[Retry raw response]\n');
     sections.push(data.claudeRetry.rawResponse);
+  }
+
+  if (data.geminiRetryValidation) {
+    sections.push('\n\n--- Gemini validation of Claude retry ---\n');
+    sections.push('\n[Prompt sent to Gemini]\n');
+    sections.push(data.geminiRetryValidation.prompt);
+    sections.push('\n\n[Gemini raw response]\n');
+    sections.push(data.geminiRetryValidation.rawResponse);
+    sections.push('\n\n[Parsed result]\n');
+    sections.push(JSON.stringify(data.geminiRetryValidation.parsedResult, null, 2));
   }
 
   if (data.databaseData && Object.keys(data.databaseData).length > 0) {

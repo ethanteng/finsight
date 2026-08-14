@@ -8,51 +8,31 @@ This document describes the **LLM-driven financial reasoning pipeline** for Ask 
 
 Ask Linc behaves like an **AI financial analyst**, not a generic chatbot. The system prioritizes:
 
-- **Transparency** — Show reasoning steps and formulas
-- **Explainable calculations** — Step-by-step with intermediate values
+- **Transparency** — Preserve the exact analysis context and model calls for Show the Math
+- **Explainable calculations** — Include concise formulas when new arithmetic materially helps
 - **Grounded financial reasoning** — No invented data; clearly state assumptions
 - **Clear guidance** — Practical, actionable insights for the user
+- **Low latency** — Retrieve and validate only what the question needs
 
 ---
 
 ## Architecture Overview
 
 ```mermaid
-flowchart TB
-    subgraph Endpoint [POST /ask/display-real]
-        A[User Question] --> B[Retrieve Context]
-    end
-    
-    subgraph ContextRetrieval [Step 1: Retrieve User Context]
-        B --> C[Financial Snapshot]
-        B --> D[User Profile]
-        B --> E[Market Summary]
-    end
-    
-    subgraph RAG [Step 2: RAG Retrieval]
-        B --> F[getSearchContext]
-    end
-    
-    subgraph LLM [Step 3: LLM Reasoning]
-        G[Claude Sonnet] --> H[Structured Reasoning Prompt]
-        H --> I[Raw Response]
-    end
-    
-    subgraph Validation [Step 4: Optional Validation]
-        I --> J{Gemini Validator}
-        J -->|Pass| K[Structured Response]
-        J -->|Fail| G
-    end
-    
-    subgraph Response [Step 5: Response Format]
-        K --> L[JSON: summary, key_numbers, insights, suggested_actions]
-    end
-    
-    C --> H
-    D --> H
-    E --> H
-    F --> H
-    I --> J
+flowchart LR
+    A[User question] --> B[Question-needs router]
+    B --> C[Canonical snapshot projection]
+    B -->|only when requested| D[Market or search context]
+    C --> E[Concise structured prompt]
+    D --> E
+    E --> F[Claude]
+    F --> G[Deterministic grounding]
+    G -->|valid, simple question| H[Structured response]
+    G -->|valid, complex question| I[Optional Gemini review]
+    G -->|invalid| J[One feedback retry]
+    I -->|invalid| J
+    I -->|valid| H
+    J --> H
 ```
 
 ---
@@ -60,13 +40,15 @@ flowchart TB
 ## System Flow
 
 1. **User question** → Input validation (security, off-topic rejection)
-2. **Retrieve financial snapshot** → `SummaryCacheService.getLatestSnapshot(userId, 'full')`
-3. **Retrieve persistent user profile** → `ProfileManager.getOriginalProfile(userId)`
-4. **Retrieve daily market summary** → `MarketNewsManager.getMarketContext(tier)` or `dataOrchestrator.getMarketContextSummary()`
-5. **Call RAG retrieval** → `dataOrchestrator.getSearchContext(question, tier, isDemo)` for question-specific financial knowledge
-6. **LLM financial reasoning** → Claude Sonnet 4.5 (`claude-sonnet-4-5`) with structured reasoning prompt
-7. **Optional validation** → Gemini 3 Flash (`gemini-3-flash-preview`) checks calculation consistency, logical reasoning, unsupported assumptions
-8. **Structured response** → JSON with `summary`, `key_numbers`, `insights`, `suggested_actions`
+2. **Classify question needs** → decide whether account rows, transaction rows, holdings, market context, search, retirement analysis, or secondary validation are relevant
+3. **Retrieve a canonical projection** → `SummaryCacheService.getSnapshotForAnalysis()` always loads aggregate truth and opts into large JSON columns only as needed
+4. **Retrieve optional context** → market and search providers run only for explicit external/current-market questions
+5. **Build a compact prompt** → persisted financial totals and cash-flow averages are authoritative; unused sections and older conversation turns are omitted
+6. **LLM analysis** → Claude returns one structured JSON object
+7. **Ground deterministically** → known `key_numbers` must match canonical snapshot values and percentages retain their true magnitude
+8. **Validate selectively** → Gemini is reserved for projections, retirement, comparisons, recommendations, and other complex calculations
+9. **Retry once when needed** → validation issues are fed back to Claude; any still-ungrounded key numbers are omitted
+10. **Structured response** → JSON with `summary`, `key_numbers`, `insights`, `suggested_actions`
 
 ---
 
@@ -78,56 +60,52 @@ The pipeline uses these existing systems as inputs:
 |--------|--------|---------|
 | Financial snapshot | Plaid, SnapTrade, CSV, manual entry | Normalized financial state |
 | User profile | `ProfileManager` | Goals, risk tolerance, retirement plans, inferred context |
-| Market summary | FRED, Alpha Vantage, Search | Interest rates, inflation, market trends |
-| RAG | `dataOrchestrator.getSearchContext` | Retirement rules, tax guidelines, mortgage rules, financial concepts |
+| Market summary | FRED, Alpha Vantage, Search | Interest rates, inflation, market trends when explicitly relevant |
+| RAG | `dataOrchestrator.getSearchContext` | Current rates, laws, limits, and external financial concepts when explicitly relevant |
 | Retirement analysis | `analyzeRetirementPortfolio` | Portfolio stress test, historical withdrawal rate percentiles |
 
 ---
 
 ## Canonical Financial Snapshot
 
-The pipeline transforms the raw snapshot into a **canonical format** for LLM consumption:
+The pipeline reads the same persisted canonical revision used by the application. A typical aggregate projection is:
 
 ```json
 {
-  "assets": {
-    "cash": 54000,
-    "brokerage": 240000,
-    "retirement": 780000
+  "financialOverview": {
+    "netWorth": 654000,
+    "totalCash": 54000,
+    "totalInvestments": 1020000,
+    "totalDebt": 420000,
+    "homeValue": null
   },
-  "liabilities": {
-    "mortgage": 420000
-  },
-  "income": 210000,
-  "expenses": 115000,
-  "age": 46,
-  "retirement_goal_age": 62
+  "transactionsSummary": {
+    "incomeTotal": 210000,
+    "expenseTotal": 115000,
+    "byMonth": {}
+  }
 }
 ```
 
-- **Assets** — Derived from account types (depository → cash, brokerage → brokerage, 401k/IRA → retirement)
-- **Liabilities** — Mortgage from account breakdown or `totalDebt` fallback
-- **Income/expenses** — Parsed from `incomeAnalysis` / `expenseAnalysis` strings (monthly × 12)
-- **Age/retirement_goal_age** — Extracted from profile via `extractAgeFromProfile` / `extractRetirementAgeFromProfile`
+- **Overview totals** come directly from `financialSummarySnapshot.financialOverview`; the LLM must not recompute them from detail rows.
+- **Monthly income and expenses** come from persisted `transactionsSummary.byMonth`, using the same canonical transaction classifications and exclusions as the app. Manual overrides replace only the displayed monthly average, not the persisted totals.
+- **Account balances** use the revision-aligned display balance persisted in snapshot metadata, falling back to current balance before available balance.
+- **Show the Math** captures the exact projected context used for the response, so a later snapshot refresh cannot make the displayed evidence disagree with the model input.
 
 ---
 
 ## Structured Reasoning Prompt
 
-The LLM follows a five-section format:
+The LLM receives one compact set of grounding and output rules. It reasons internally and returns only the structured response; the prompt does not request a second, contradictory five-section narrative.
 
-1. **Data Extraction** — Identify relevant financial values from snapshot or profile
-2. **Calculation Plan** — Explain which financial rules or formulas apply
-3. **Calculations** — Step-by-step with formulas and intermediate values
-4. **Interpretation** — What results mean for the user's situation
-5. **Guidance** — Clear, practical financial insights
-
-**Rules:**
+Rules:
 
 - Do not invent financial data that is not present
 - Clearly state assumptions
-- Show formulas when performing calculations
+- Use authoritative totals exactly and show a concise formula only for new arithmetic
 - Be conservative with estimates
+- Use whole-number percentage values in output (`4.15` means `4.15%`)
+- Include only `(EXPENSE)` and `(FEE)` records in spending detail
 
 ---
 
@@ -167,8 +145,12 @@ The API returns:
 |------|---------|
 | `src/services/canonical-financial-snapshot.ts` | Produces canonical financial metrics and source-quality metadata |
 | `src/openai/context-service.ts` | Loads persisted canonical values and assembles LLM context |
+| `src/openai/question-analysis.ts` | Selects question-specific data and validation needs |
+| `src/openai/cash-flow-context.ts` | Builds monthly income/expense context from the canonical summary |
+| `src/openai/retirement-inputs.ts` | Resolves explicit retirement assumptions and reports missing inputs |
 | `src/openai/financial-reasoning-prompt.ts` | Structured reasoning prompt template |
 | `src/openai/structured-response.ts` | Response schema and JSON parser |
+| `src/openai/response-grounding.ts` | Deterministic canonical-number validation |
 | `src/openai/claude-client.ts` | Claude Sonnet integration |
 | `src/openai/response-validator.ts` | Optional Gemini validation |
 | `src/openai/analysis-pipeline.ts` | Pipeline orchestrator |
@@ -186,6 +168,7 @@ The API returns:
 | `ENABLE_RESPONSE_VALIDATION` | No | Set to `true` for Gemini validation (default: `false`) |
 | `GOOGLE_AI_API_KEY` or `GEMINI_API_KEY` | No | For Gemini validation when enabled |
 | `GEMINI_VALIDATION_MODEL` | No | Override Gemini model (default: `gemini-3-flash-preview`) |
+| `ASK_LINC_MAX_OUTPUT_TOKENS` | No | Maximum Claude output tokens (default: `8192`) |
 
 ### Feature Flag
 
@@ -210,17 +193,6 @@ Fallback: uses `answer` (formatted display text) for backward compatibility.
 
 ---
 
-## Future Extensibility
-
-The architecture supports replacing LLM calculations with **deterministic financial engines**:
-
-- The pipeline accepts a `calculationEngine` abstraction
-- Canonical snapshot format is stable
-- Structured response format is stable
-- LLM can be swapped for rule-based or formula-driven engines without changing the API contract
-
----
-
 ## Retirement Analysis Context
 
 When the user asks retirement-related questions, the pipeline fetches or creates a **retirement portfolio analysis** and injects it into the LLM context. This includes:
@@ -228,6 +200,10 @@ When the user asks retirement-related questions, the pipeline fetches or creates
 - **Portfolio characteristics** — Growth potential, drawdown resistance, withdrawal fragility, inflation protection
 - **Historical withdrawal rate percentiles** — p10, p25, p50, p75, p90 derived from simulations over historical market sequences
 - **Stress test results** — Survival rate, depletion percentiles, worst-case sequences
+
+The analyzer never invents the user's current age, retirement age, or desired withdrawal amount. It resolves values from the current question, the user profile, or the explicit inputs stored with a recent matching analysis. If required values are still missing, Linc asks for them before running the analysis. The default life-expectancy assumption is 95 and is shown with the analysis parameters.
+
+Cached analysis is reused only when the portfolio fingerprint and the resolved current age, retirement age, annual withdrawal, withdrawal start age, and life-expectancy assumption match. This prevents unnecessary recomputation without applying results to a different portfolio or scenario.
 
 ### Stress Test Data and Methodology
 

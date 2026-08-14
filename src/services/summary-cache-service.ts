@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { FinancialSummarySnapshot, PrismaClient } from '@prisma/client';
 import { plaidClient } from '../plaid';
 import { BalanceService } from './balance-service';
 import { FinancialDataService } from './financial-data-service';
@@ -28,6 +28,26 @@ export interface SummaryComputeOptions {
   categorize?: boolean;
   history?: HistoryWriteIntent;
 }
+
+export interface AnalysisSnapshotOptions {
+  includeAccounts?: boolean;
+  includeTransactions?: boolean;
+  includeInvestments?: boolean;
+}
+
+type AnalysisFinancialSummarySnapshot = Pick<
+  FinancialSummarySnapshot,
+  | 'computedAt'
+  | 'asOf'
+  | 'status'
+  | 'reportingCurrency'
+  | 'financialOverview'
+  | 'investmentPortfolio'
+  | 'transactionsSummary'
+  | 'quality'
+  | 'sourceObservations'
+  | 'meta'
+> & Partial<Pick<FinancialSummarySnapshot, 'accounts' | 'transactions' | 'holdings' | 'securities'>>;
 
 export class SummaryCacheService {
   static getEnvWindows() {
@@ -294,6 +314,41 @@ export class SummaryCacheService {
     // summary view: strip heavy arrays
     const { accounts, holdings, securities, transactions, activities, ...rest } = snap as any;
     return rest;
+  }
+
+  /**
+   * Read the canonical snapshot for an LLM question without hydrating every
+   * large JSON column. Aggregate financial and transaction truth is always
+   * included; account, transaction, and holding detail is opt-in by question.
+   */
+  static async getSnapshotForAnalysis(
+    userId: string,
+    options: AnalysisSnapshotOptions = {}
+  ): Promise<AnalysisFinancialSummarySnapshot | null> {
+    const prisma = getPrisma();
+    const select: Record<string, boolean> = {
+      computedAt: true,
+      asOf: true,
+      status: true,
+      reportingCurrency: true,
+      financialOverview: true,
+      investmentPortfolio: true,
+      transactionsSummary: true,
+      quality: true,
+      sourceObservations: true,
+      meta: true,
+    };
+    if (options.includeAccounts) select.accounts = true;
+    if (options.includeTransactions) select.transactions = true;
+    if (options.includeInvestments) {
+      select.holdings = true;
+      select.securities = true;
+    }
+    const snapshot = await prisma.financialSummarySnapshot.findUnique({
+      where: { userId },
+      select: select as any,
+    });
+    return snapshot as unknown as AnalysisFinancialSummarySnapshot | null;
   }
 
   static async refreshAllUsers() {

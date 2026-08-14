@@ -28,22 +28,6 @@ function extractTickersFromSnapshot(snapshot: FinancialContextSnapshot): string[
     }
   }
 
-  // From retirementPortfolioSnapshot
-  const raHoldings = snapshot.retirementPortfolioSnapshot?.holdings || [];
-  const raSecurities = snapshot.retirementPortfolioSnapshot?.securities || [];
-  for (const h of raHoldings) {
-    const ticker = (h as { ticker_symbol?: string }).ticker_symbol?.toUpperCase();
-    if (ticker && ticker.length > 0 && ticker.length <= 10 && ticker !== 'CASH') {
-      tickers.add(ticker);
-    }
-  }
-  for (const s of raSecurities) {
-    const ticker = (s as { ticker_symbol?: string }).ticker_symbol?.toUpperCase();
-    if (ticker && ticker.length > 0 && ticker.length <= 10 && ticker !== 'CASH') {
-      tickers.add(ticker);
-    }
-  }
-
   return Array.from(tickers);
 }
 
@@ -51,35 +35,32 @@ export async function fetchShowTheMathDBData(
   userId: string | undefined,
   snapshot: FinancialContextSnapshot
 ): Promise<ShowTheMathDatabaseData> {
-  const prisma = getPrismaClient();
-  const result: ShowTheMathDatabaseData = {};
+  const result: ShowTheMathDatabaseData = {
+    analysis_context_snapshot: JSON.parse(JSON.stringify(snapshot))
+  };
 
   const tickers = extractTickersFromSnapshot(snapshot);
+  const needsUserRecords = Boolean(userId && (snapshot.retirementAnalysis || tickers.length > 0));
+  const needsMarketRecords = Boolean(snapshot.contextSelection?.marketContextRequested);
+  if (!needsUserRecords && !needsMarketRecords) return result;
+
+  const prisma = getPrismaClient();
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
   // User-scoped tables (skip for demo)
   if (userId) {
-    try {
-      const [financialSummary, financialSummarySnapshot, retirementAnalyses] = await Promise.all([
-        prisma.financialSummary.findUnique({ where: { userId } }),
-        prisma.financialSummarySnapshot.findUnique({ where: { userId } }),
-        prisma.retirementAnalysis.findMany({
+    if (snapshot.retirementAnalysis) {
+      try {
+        const retirementAnalyses = await prisma.retirementAnalysis.findMany({
           where: { userId },
           orderBy: { computedAt: 'desc' },
           take: 3
-        })
-      ]);
-
-      result.financial_summaries = financialSummary
-        ? JSON.parse(JSON.stringify(financialSummary))
-        : null;
-      result.financial_summary_snapshots = financialSummarySnapshot
-        ? JSON.parse(JSON.stringify(financialSummarySnapshot))
-        : null;
-      result.retirement_analyses = retirementAnalyses.map((r) => JSON.parse(JSON.stringify(r)));
-    } catch (err) {
-      console.warn('Show the math: failed to fetch user-scoped DB data:', err);
+        });
+        result.retirement_analyses = retirementAnalyses.map((record) => JSON.parse(JSON.stringify(record)));
+      } catch (err) {
+        console.warn('Show the math: failed to fetch retirement analysis records:', err);
+      }
     }
 
     // Asset price history and security metadata by tickers
@@ -110,22 +91,24 @@ export async function fetchShowTheMathDBData(
     }
   }
 
-  // Global tables (market news)
-  try {
-    const activeContext = await prisma.marketNewsContext.findFirst({
-      where: { isActive: true }
-    });
-    if (activeContext) {
-      result.market_news_context = JSON.parse(JSON.stringify(activeContext));
-      const history = await prisma.marketNewsHistory.findMany({
-        where: { contextId: activeContext.id },
-        orderBy: { createdAt: 'desc' },
-        take: 10
+  // Market-news records are relevant only when market context was part of the prompt.
+  if (snapshot.contextSelection?.marketContextRequested) {
+    try {
+      const activeContext = await prisma.marketNewsContext.findFirst({
+        where: { isActive: true }
       });
-      result.market_news_history = history.map((h) => JSON.parse(JSON.stringify(h)));
+      if (activeContext) {
+        result.market_news_context = JSON.parse(JSON.stringify(activeContext));
+        const history = await prisma.marketNewsHistory.findMany({
+          where: { contextId: activeContext.id },
+          orderBy: { createdAt: 'desc' },
+          take: 10
+        });
+        result.market_news_history = history.map((h) => JSON.parse(JSON.stringify(h)));
+      }
+    } catch (err) {
+      console.warn('Show the math: failed to fetch market news data:', err);
     }
-  } catch (err) {
-    console.warn('Show the math: failed to fetch market news data:', err);
   }
 
   return result;

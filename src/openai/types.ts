@@ -7,6 +7,11 @@ export interface QuestionNeeds {
   needsHomeValue: boolean;
   needsInvestments: boolean;
   needsRetirement?: boolean;
+  needsAccountDetails: boolean;
+  needsTransactionDetails: boolean;
+  needsMonthlyCashFlow: boolean;
+  needsUserProfile: boolean;
+  needsSecondaryValidation: boolean;
 }
 
 export interface AccountSummaryItem {
@@ -47,9 +52,29 @@ export interface FinancialContextSnapshot {
   tierContext: TierAwareContext;
   incomeAnalysis?: string;
   expenseAnalysis?: string;
+  monthlyCashFlowAnalysis?: string;
   /** Structured numeric values — use these instead of parsing incomeAnalysis/expenseAnalysis strings */
   averageMonthlyIncome?: number | null;
   averageMonthlyExpense?: number | null;
+  transactionSummary?: {
+    reportingCurrency?: string;
+    incomeTotal?: number;
+    expenseTotal?: number;
+    operatingCashFlow?: number;
+    byCategory?: Record<string, number>;
+    byMonth?: Record<string, { income?: number; expense?: number; operatingCashFlow?: number }>;
+    includedTransactionIds?: string[];
+    excludedTransactionIds?: string[];
+    unclassifiedTransactionIds?: string[];
+    currencyMismatchTransactionIds?: string[];
+  };
+  contextSelection?: {
+    accountsIncluded: boolean;
+    transactionDetailsIncluded: boolean;
+    investmentDetailsIncluded: boolean;
+    marketContextRequested: boolean;
+    searchContextRequested: boolean;
+  };
   searchContext?: string;
   marketContext?: string;
   userProfile?: string;
@@ -131,6 +156,7 @@ export interface FinancialContextSnapshot {
       retirementAge?: number | null;
       annualWithdrawalAmount?: number;
       withdrawalStartAge?: number;
+      lifeExpectancy?: number;
     };
   };
   retirementAnalysisNeedsInfo?: {
@@ -141,22 +167,10 @@ export interface FinancialContextSnapshot {
       annualWithdrawalAmount?: number;
       withdrawalStartAge?: number;
     };
+    confirmationRequiredParams?: Array<'annualWithdrawalAmount'>;
+    /** When retirement analysis cannot run despite a retirement question (e.g. no holdings). */
+    unavailableReason?: string;
   };
-  retirementPortfolioSnapshot?: {
-    holdings: any[];
-    securities: any[];
-  };
-  retirementSecurityMetadata?: Record<string, {
-    tickerSymbol: string;
-    securityName: string;
-    assetClass?: string;
-    fundCategory?: string;
-    expenseRatio?: number;
-    geographicFocus?: string;
-    isETF: boolean;
-    provider: 'fmp' | 'inferred';
-    lastUpdated: Date;
-  }>;
   financialSummary?: {
     computedAt?: Date | string;
     asOf?: Date | string | null;

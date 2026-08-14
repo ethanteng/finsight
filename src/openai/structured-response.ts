@@ -271,7 +271,7 @@ function normalizeResponse(obj: Record<string, unknown>): AskLincResponse {
   if (obj.key_numbers && typeof obj.key_numbers === 'object' && !Array.isArray(obj.key_numbers)) {
     for (const [k, v] of Object.entries(obj.key_numbers)) {
       const num = typeof v === 'number' ? v : parseFloat(String(v));
-      if (!Number.isNaN(num)) key_numbers[k] = num;
+      if (Number.isFinite(num)) key_numbers[k] = num;
     }
   }
   const insights = Array.isArray(obj.insights)
@@ -299,16 +299,6 @@ function isPercentageKey(keyLower: string): boolean {
   );
 }
 
-/**
- * Normalize percentage values that were emitted 100x too large (e.g. 2000 → 20 for 20%).
- */
-function normalizePercentageValue(value: number): number {
-  if (Math.abs(value) > 100) {
-    return value / 100;
-  }
-  return value;
-}
-
 /** Format a numeric value as a USD amount rounded to the nearest dollar. */
 function formatDollars(value: number): string {
   const rounded = Math.round(value);
@@ -327,13 +317,13 @@ function formatDollars(value: number): string {
  * 3. Dollar keys ("loss", "surplus", "buffer", "dollars") → dollar amount, e.g. $187,547.
  * 4. Default → dollar amount.
  *
- * Percentages are expected in whole-number form (e.g. 4.15 for 4.15%); values above 100 are
- * treated as 100x inflated and scaled down before display.
+ * Percentages are expected in whole-number form (e.g. 4.15 for 4.15%). Values
+ * are displayed exactly; grounding validation handles implausible model output.
  */
 export function formatKeyNumberValue(key: string, value: number): string {
   const keyLower = key.toLowerCase();
   if (isPercentageKey(keyLower)) {
-    return `${normalizePercentageValue(value)}%`;
+    return `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
   }
   if (keyLower.includes('months') || keyLower.includes('years')) {
     return value.toLocaleString();

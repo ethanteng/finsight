@@ -367,7 +367,8 @@ export class DataOrchestrator {
     tier: UserTier, 
     accounts: any[] = [], 
     transactions: any[] = [],
-    isDemo: boolean = false
+    isDemo: boolean = false,
+    options: { includeMarketContext?: boolean } = {}
   ): Promise<TierAwareContext> {
     console.log('DataOrchestrator: buildTierAwareContext called with tier:', tier, 'isDemo:', isDemo);
     
@@ -380,8 +381,11 @@ export class DataOrchestrator {
     console.log('DataOrchestrator: Available sources for tier', tier, ':', availableSources.map(s => s.name));
     console.log('DataOrchestrator: Unavailable sources for tier', tier, ':', unavailableSources.map(s => s.name));
 
-    // Fetch market context based on available sources
-    const marketContext = await this.getMarketContextForSources(availableSources, tier, isDemo);
+    // Some consumers only need tier entitlements. Avoid an implicit external
+    // market-data fetch when a question-specific context loader owns that work.
+    const marketContext = options.includeMarketContext === false
+      ? {}
+      : await this.getMarketContextForSources(availableSources, tier, isDemo);
 
     // Generate upgrade hints
     const upgradeHints = unavailableSources.map(source => ({
@@ -627,4 +631,4 @@ export const dataOrchestrator = new Proxy({} as DataOrchestrator, {
     const orchestrator = getDataOrchestrator();
     return (orchestrator as any)[prop];
   }
-}); 
+});

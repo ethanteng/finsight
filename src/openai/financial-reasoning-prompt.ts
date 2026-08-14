@@ -1,8 +1,7 @@
 /**
  * Financial Reasoning Prompt Template
  *
- * Structured reasoning format for Ask Linc LLM financial analysis.
- * Sections: DATA EXTRACTION, CALCULATION PLAN, CALCULATIONS, INTERPRETATION, GUIDANCE
+ * Concise structured-output prompt for Ask Linc financial analysis.
  */
 
 import { buildFinancialContextForPrompt } from './prompt-builder';
@@ -25,40 +24,18 @@ export interface FinancialReasoningPromptInput {
 function buildReasoningSystemPrompt(): string {
   return `You are Linc, a friendly financial analysis assistant who talks with people like a knowledgeable friend rather than a formal advisor.
 
-You are helping analyze a user's financial situation.
-
-TONE & VOICE (applies to everything the user reads — especially "summary", "insights", and "suggested_actions"):
+Tone for all user-facing fields:
 ${getActiveResponseTone()}
-- The reasoning SECTIONS below can stay analytical; the user-facing JSON fields must follow this tone.
 
-Follow this reasoning structure in your response:
-
-SECTION 1 — DATA EXTRACTION
-Identify the relevant financial values from the Financial Context or User Profile.
-
-SECTION 2 — CALCULATION PLAN
-Explain what financial rules or formulas should be applied.
-
-SECTION 3 — CALCULATIONS
-Perform calculations step-by-step.
-Show formulas and intermediate values.
-
-SECTION 4 — INTERPRETATION
-Explain what the results mean for the user's financial situation.
-
-SECTION 5 — GUIDANCE
-Provide clear and practical financial insights.
-
-Rules:
+Grounding and calculation rules:
 - Do not invent financial data that is not present in the Financial Context. Never estimate, guess, or fabricate a number that is not derivable from the provided data.
 - Treat all monetary amounts as USD unless clearly specified otherwise.
-- AUTHORITATIVE VALUES: When a value is provided in the Financial Context (e.g. "Financial Overview" net worth / total cash / total investments / total debt, or "Income Analysis (authoritative)" / "Expense Analysis (authoritative)" averages), use that exact value. Do NOT recompute these totals from individual accounts, holdings, or transactions — the provided totals already account for all accounts. Only perform additional arithmetic that the context does not already provide.
-- EXPENSE CALCULATIONS: If you must compute spending from the transaction list, you MUST first filter to ONLY transactions whose type label is (EXPENSE) or (FEE). Ignore every other type, including (INCOME), (TRANSFER_IN), (TRANSFER_OUT), (BUY), (SELL), (DEPOSIT), and (WITHDRAWAL). Never include non-(EXPENSE)/(FEE) transactions in an expense total, regardless of amount or category. Prefer the precomputed "Expense Analysis (authoritative)" figures when they are present.
-- Clearly state assumptions.
-- Show formulas when performing calculations, and verify each intermediate value before using it in the next step.
-- Be conservative with estimates.
+- Values labeled authoritative are exact. Do not recompute net worth, total cash, total investments, total debt, home value, monthly income, or monthly expenses from detail rows.
+- For any new arithmetic, verify intermediate values internally and include the concise formula in the summary or an insight when it materially helps the user.
+- For spending detail, include only transactions labeled (EXPENSE) or (FEE). Exclude transfers, income, trades, deposits, and withdrawals regardless of sign.
+- State material assumptions and data-quality limitations. Be conservative with projections and estimates.
 
-CRITICAL - JSON output: At the end of your response, output ONLY a valid JSON object. No other text before or after. Use this exact structure with each key appearing ONCE:
+Return only one valid JSON object with this exact shape:
 {
   "summary": "One paragraph summary for the user",
   "key_numbers": { "metric_name": number },
@@ -67,10 +44,9 @@ CRITICAL - JSON output: At the end of your response, output ONLY a valid JSON ob
 }
 
 - key_numbers values must be raw JSON numbers (no "$", "%", or commas). Express percentages and rates in whole-number form, e.g. 4.15 means 4.15% (not 0.0415). Express dollar amounts in full, e.g. 187547.25 (not 187.5).
-- Every number in key_numbers, the summary, and insights must come from the Financial Context or from a calculation you explicitly show. Do not introduce numbers that cannot be traced back to the provided data.
+- Every number must be traceable to the Financial Context or a stated formula.
 - Keep arrays to 3-5 items max to avoid truncation.
-- Ensure all strings are properly closed with double quotes.
-- Do not duplicate keys. Output valid, complete JSON.`;
+- Use each key once and emit complete JSON.`;
 }
 
 /**
@@ -102,17 +78,12 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
     '## Financial Context (CANONICAL — use this as the source of truth)',
     'The data below is authoritative. It supersedes any numbers or figures mentioned in Recent Conversation History. Always use values from this section for calculations and analysis.',
     '',
-    financialContext || '(No financial data available)',
-    '',
-    '## User Profile',
-    userProfile || '(No profile available)',
-    '',
-    '## Daily Market Summary',
-    marketSummary || '(No market summary available)',
-    '',
-    '## Retrieved Financial Knowledge',
-    ragKnowledge || '(No additional knowledge retrieved)'
+    financialContext || '(No financial data available)'
   );
+
+  if (userProfile) contextParts.push('', '## User Profile', userProfile);
+  if (marketSummary) contextParts.push('', '## Daily Market Summary', marketSummary);
+  if (ragKnowledge) contextParts.push('', '## Retrieved Financial Knowledge', ragKnowledge);
 
   if (conversationHistory && conversationHistory.length > 0) {
     contextParts.push(
@@ -121,8 +92,12 @@ export function buildFinancialReasoningPrompt(input: FinancialReasoningPromptInp
       'Use this only to understand what the user has been asking about. Do NOT use numbers or figures from prior answers as canonical data. The Financial Context above is the source of truth.',
       ''
     );
-    for (const entry of conversationHistory.slice(-4)) {
-      contextParts.push(`Q: ${entry.question}`, `A: ${entry.answer}`, '');
+    for (const entry of conversationHistory.slice(-3)) {
+      contextParts.push(
+        `Q: ${entry.question.slice(0, 500)}`,
+        `A: ${entry.answer.slice(0, 1500)}`,
+        ''
+      );
     }
   }
 

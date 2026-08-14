@@ -51,7 +51,7 @@ describe('prompt-config response tone', () => {
     setActiveResponseTone(CUSTOM_TONE);
     const { systemPrompt } = buildFinancialReasoningPrompt(baseInput);
     expect(systemPrompt).toContain('Speak like a formal financial advisor.');
-    expect(systemPrompt).toContain('TONE & VOICE');
+    expect(systemPrompt).toContain('Tone for all user-facing fields');
   });
 
   it('injects the active tone into the legacy OpenAI system prompt', () => {
