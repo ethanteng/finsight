@@ -38,6 +38,7 @@ describe('deterministic response grounding', () => {
 
     expect(result.valid).toBe(false);
     expect(result.invalidKeyNumbers).toEqual(['net_worth', 'target_allocation']);
+    expect(result.invalidSummary).toBe(true);
     expect(result.issues.join(' ')).toContain('canonical value 250000');
   });
 

@@ -194,6 +194,10 @@ export function validateResponseGrounding(
     }
   }
 
+  if (invalidKeyNumbers.length > 0) {
+    invalidSummary = true;
+  }
+
   return { valid: issues.length === 0, issues, invalidKeyNumbers, invalidSummary };
 }
 
