@@ -1,9 +1,33 @@
+export const USER_TIME_ZONE_KEY = 'user_time_zone';
+
 export function getBrowserTimeZone(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   } catch {
     return 'UTC';
   }
+}
+
+export function getStoredUserTimeZone(): string | null {
+  if (typeof window === 'undefined') return null;
+  const stored = localStorage.getItem(USER_TIME_ZONE_KEY);
+  return stored?.trim() ? stored : null;
+}
+
+export function setStoredUserTimeZone(timeZone: string): void {
+  if (typeof window === 'undefined') return;
+  if (timeZone?.trim()) {
+    localStorage.setItem(USER_TIME_ZONE_KEY, timeZone.trim());
+  }
+}
+
+export function clearStoredUserTimeZone(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(USER_TIME_ZONE_KEY);
+}
+
+export function getEffectiveUserTimeZone(): string {
+  return getStoredUserTimeZone() ?? getBrowserTimeZone();
 }
 
 export function calendarDateInTimeZone(date: Date, timeZone: string): string {

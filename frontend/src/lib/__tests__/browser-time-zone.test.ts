@@ -1,6 +1,9 @@
 import {
   calendarDateInTimeZone,
+  clearStoredUserTimeZone,
+  getEffectiveUserTimeZone,
   observationDateForCalendarDate,
+  USER_TIME_ZONE_KEY,
 } from '../browser-time-zone';
 
 describe('browser time-zone helpers', () => {
@@ -13,5 +16,12 @@ describe('browser time-zone helpers', () => {
 
   it('serializes a calendar date without shifting it', () => {
     expect(observationDateForCalendarDate('2026-08-14')).toBe('2026-08-14T00:00:00.000Z');
+  });
+
+  it('persists the authenticated user time zone for chart deduplication', () => {
+    localStorage.setItem(USER_TIME_ZONE_KEY, 'America/New_York');
+    expect(getEffectiveUserTimeZone()).toBe('America/New_York');
+    clearStoredUserTimeZone();
+    expect(localStorage.getItem(USER_TIME_ZONE_KEY)).toBeNull();
   });
 });

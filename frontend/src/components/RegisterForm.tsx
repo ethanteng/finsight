@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, Suspense } from 'react';
 import { identifyUser } from '@/lib/heycatch';
-import { getBrowserTimeZone } from '@/lib/browser-time-zone';
+import { getBrowserTimeZone, setStoredUserTimeZone } from '@/lib/browser-time-zone';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import SiteFooter from './SiteFooter';
@@ -120,6 +120,9 @@ function RegisterFormContent() {
       if (res.ok && data.token) {
         localStorage.setItem('auth_token', data.token);
         if (data.user) {
+          if (data.user.timeZone) {
+            setStoredUserTimeZone(data.user.timeZone);
+          }
           identifyUser(data.user);
         }
 

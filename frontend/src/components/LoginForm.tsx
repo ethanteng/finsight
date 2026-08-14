@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowRight, Brain, Check, CircleAlert, LoaderCircle, LockKeyhole, ShieldCheck } from 'lucide-react';
 import SiteFooter from './SiteFooter';
-import { getBrowserTimeZone } from '@/lib/browser-time-zone';
+import { getBrowserTimeZone, setStoredUserTimeZone } from '@/lib/browser-time-zone';
 
 interface SubscriptionContext {
   subscription: string;
@@ -195,6 +195,9 @@ function LoginFormContent() {
 
         localStorage.setItem('auth_token', data.token);
         if (data.user) {
+          if (data.user.timeZone) {
+            setStoredUserTimeZone(data.user.timeZone);
+          }
           identifyUser(data.user);
         }
         router.push('/app');
