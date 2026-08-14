@@ -1,6 +1,8 @@
 "use client";
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { ArrowRight, BarChart3, Building2, Landmark, ShieldCheck, TrendingUp } from 'lucide-react';
 import NetWorthCard from '../../components/finances/NetWorthCard';
 import HomeValueCard from '../../components/finances/HomeValueCard';
 import AccountGroupCard from '../../components/finances/AccountGroupCard';
@@ -131,6 +133,100 @@ interface Snapshot {
   };
 }
 
+function FinancesEmptyState({ onLogout }: { onLogout: () => void }) {
+  return (
+    <div className="authenticated-site min-h-screen">
+      <AuthenticatedPageHeader
+        activePage="finances"
+        eyebrow="Financial overview"
+        title="Your finances"
+        onLogout={onLogout}
+      />
+
+      <main className="mx-auto max-w-[1200px] px-5 py-10 sm:px-6 md:py-14">
+        <section className="overflow-hidden rounded-[2rem] border border-[#102319]/10 bg-[#fffdf5] shadow-[0_24px_70px_rgba(16,35,25,0.08)]">
+          <div className="grid lg:grid-cols-[0.9fr_1.1fr]">
+            <div className="flex flex-col justify-center p-7 sm:p-10 lg:p-14">
+              <div className="mb-6 grid h-12 w-12 place-items-center rounded-2xl bg-[#d9ff6f] text-[#102319]">
+                <Building2 size={24} aria-hidden="true" />
+              </div>
+              <p className="mb-3 text-xs font-extrabold uppercase tracking-[0.16em] text-[#49725a]">
+                Start with your accounts
+              </p>
+              <h2 className="max-w-lg text-3xl font-semibold leading-tight tracking-[-0.045em] text-[#102319] sm:text-4xl">
+                See your whole financial picture in one place.
+              </h2>
+              <p className="mt-5 max-w-lg text-sm leading-7 text-[#5e6b63] sm:text-base">
+                Add a bank, investment, loan, property, or manual account. Ask Linc will organize your balances into a clear view of your net worth and trends.
+              </p>
+
+              <div className="mt-8 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+                <Link
+                  href="/profile"
+                  className="inline-flex min-h-12 items-center gap-2 rounded-full bg-[#102319] px-6 py-3 text-sm font-bold text-white transition hover:bg-[#173c2c] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319] focus-visible:ring-offset-2"
+                >
+                  Add your accounts
+                  <ArrowRight size={17} aria-hidden="true" />
+                </Link>
+                <span className="inline-flex items-center gap-2 text-xs font-semibold text-[#5e6b63]">
+                  <ShieldCheck size={17} className="text-[#397052]" aria-hidden="true" />
+                  Secure, read-only connections
+                </span>
+              </div>
+            </div>
+
+            <div className="relative border-t border-[#102319]/10 bg-[#e8eee4] p-5 sm:p-8 lg:border-l lg:border-t-0 lg:p-10">
+              <div className="absolute inset-0 opacity-30 [background-image:radial-gradient(#397052_0.7px,transparent_0.7px)] [background-size:18px_18px]" aria-hidden="true" />
+              <div className="relative mx-auto max-w-xl rounded-[1.6rem] border border-[#102319]/10 bg-[#f8f7ef] p-5 shadow-[0_20px_50px_rgba(16,35,25,0.12)] sm:p-6">
+                <div className="mb-6 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-[0.65rem] font-extrabold uppercase tracking-[0.15em] text-[#49725a]">Example overview</p>
+                    <p className="mt-1 text-sm font-bold text-[#102319]">What you’ll see after setup</p>
+                  </div>
+                  <span className="rounded-full border border-[#102319]/10 bg-white/70 px-3 py-1 text-[0.65rem] font-bold text-[#66736b]">PREVIEW</span>
+                </div>
+
+                <div className="rounded-2xl bg-[#102319] p-5 text-white">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold text-white/60">Net worth</p>
+                      <p className="mt-1 text-3xl font-semibold tracking-[-0.04em]">$128,450</p>
+                    </div>
+                    <div className="grid h-10 w-10 place-items-center rounded-xl bg-white/10 text-[#d9ff6f]">
+                      <TrendingUp size={20} aria-hidden="true" />
+                    </div>
+                  </div>
+                  <div className="mt-6 flex h-14 items-end gap-2" aria-label="Example upward net worth trend">
+                    {[35, 43, 39, 52, 59, 66, 74, 82].map((height, index) => (
+                      <span key={index} className="flex-1 rounded-t bg-[#d9ff6f]/80" style={{ height: `${height}%` }} />
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-3 gap-3">
+                  {[
+                    { label: 'Cash', value: '$18.2k', icon: Landmark, color: 'bg-[#c9f2df]' },
+                    { label: 'Investments', value: '$124.8k', icon: BarChart3, color: 'bg-[#c6dbff]' },
+                    { label: 'Debt', value: '$14.6k', icon: Building2, color: 'bg-[#f4ead0]' },
+                  ].map(({ label, value, icon: Icon, color }) => (
+                    <div key={label} className="min-w-0 rounded-2xl border border-[#102319]/10 bg-white/65 p-3 sm:p-4">
+                      <span className={`mb-3 grid h-8 w-8 place-items-center rounded-lg text-[#102319] ${color}`}>
+                        <Icon size={16} aria-hidden="true" />
+                      </span>
+                      <p className="truncate text-[0.65rem] font-semibold text-[#66736b]">{label}</p>
+                      <p className="mt-0.5 truncate text-sm font-bold text-[#102319] sm:text-base">{value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
 export default function FinancesPageClient() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [freshAccounts, setFreshAccounts] = useState<Account[]>([]);
@@ -171,7 +267,11 @@ export default function FinancesPageClient() {
         // Load snapshot
         let snapshotData: Snapshot | null = null;
         const res = await fetch(`${API_URL}/api/summaries?view=full`, { headers });
-        if (res.ok) {
+        if (res.status === 204) {
+          // A brand-new user has no summary yet. This is an expected empty state,
+          // and a 204 response intentionally has no JSON body to parse.
+          setSnapshot(null);
+        } else if (res.ok) {
           snapshotData = await res.json();
           setSnapshot(snapshotData);
           
@@ -444,16 +544,7 @@ export default function FinancesPageClient() {
   }
 
   if (!snapshot) {
-    return (
-      <div className="min-h-screen bg-[#f3f2e9] text-[#102319] flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-[#5e6b63] mb-4">No financial data available</p>
-          <a href="/profile" className="text-[#397052] hover:underline">
-            Connect your accounts
-          </a>
-        </div>
-      </div>
-    );
+    return <FinancesEmptyState onLogout={handleLogout} />;
   }
 
   // Use fresh accounts if available, otherwise fall back to snapshot accounts
