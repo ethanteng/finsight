@@ -79,6 +79,12 @@ describe('buildCanonicalFactPack', () => {
     ]));
   });
 
+  it('does not treat retirement account abbreviations as magnitudes', () => {
+    const question = 'What is my 401k balance compared to my 403b and 457b?';
+    const pack = buildCanonicalFactPack(snapshot(), question, analyzeQuestionNeeds(question));
+    expect(pack.facts.some((fact) => fact.value === 401_000 || fact.value === 403_000_000_000 || fact.value === 457_000_000_000)).toBe(false);
+  });
+
   it('aggregates only expense and fee transactions with traceable inputs', () => {
     const question = 'Which merchant has my largest purchases?';
     const pack = buildCanonicalFactPack(snapshot(), question, analyzeQuestionNeeds(question));

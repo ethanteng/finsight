@@ -76,6 +76,16 @@ function parseMagnitude(value: string, magnitude?: string): number {
   return parsed;
 }
 
+/** Skip 401k / 403b / 457b style account labels that share a magnitude suffix. */
+function isAccountTypeAbbreviation(value: string, magnitude?: string): boolean {
+  const digits = value.replace(/,/g, '').replace(/^-/, '');
+  const mag = magnitude?.toLowerCase();
+  if (!mag || mag.length !== 1) return false;
+  if (mag === 'k' && /^(401|403|457)$/.test(digits)) return true;
+  if (mag === 'b' && /^(403|457)$/.test(digits)) return true;
+  return false;
+}
+
 /** Extract explicit, typed values without treating product names such as S&P 500 as facts. */
 function extractTrustedNumericValues(text: string): TrustedNumericValue[] {
   const values: TrustedNumericValue[] = [];
@@ -95,6 +105,7 @@ function extractTrustedNumericValues(text: string): TrustedNumericValue[] {
     add(parseMagnitude(match[1], match[2]), 'usd');
   }
   for (const match of text.matchAll(/\b(\d[\d,]*(?:\.\d+)?)\s*(thousand|million|billion|[kmb])\b/gi)) {
+    if (isAccountTypeAbbreviation(match[1], match[2])) continue;
     add(parseMagnitude(match[1], match[2]), 'usd');
   }
   for (const match of text.matchAll(/(-?\d[\d,]*(?:\.\d+)?)\s*%/gi)) {

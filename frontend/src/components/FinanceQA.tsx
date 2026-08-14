@@ -157,6 +157,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     setStructuredResponse(null);
     setShowTheMathData(null);
     setShowTheMathError(null);
+    setConversationId(null);
     setActiveView('answer');
     setSelectedSourceKey(null);
     
