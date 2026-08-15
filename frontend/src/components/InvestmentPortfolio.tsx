@@ -412,7 +412,7 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3 flex-1">
                     <div className="text-2xl">
-                      {getAssetTypeIcon(transaction.security_type || transaction.type || 'Unknown')}
+                      {getAssetTypeIcon(normalizeAssetType(transaction.security_type || transaction.type))}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-white truncate">
