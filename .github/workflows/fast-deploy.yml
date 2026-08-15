@@ -115,6 +115,10 @@ jobs:
     needs: [deploy-frontend]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || github.event.inputs.force_deploy == 'true'
+    # Same Render webhook as ci-cd.yml deploy — must not overlap that job.
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
     steps:
       - name: Restart Render backend
         run: |
