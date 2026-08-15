@@ -80,6 +80,64 @@ describe('question-aware LLM context routing', () => {
     });
   });
 
+  it('recognizes every form of the word "retire"', () => {
+    // "retiring" contains neither "retire" nor "retirement", so the substring
+    // checks this replaced withheld the retirement analysis from the question
+    // that reported this bug.
+    for (const question of [
+      'What is my goal of retiring by age 62 or sooner?',
+      'I retired last year — how am I doing?',
+      'As a retiree, what should I watch?',
+      'When can I stop working?',
+      'Is my nest egg big enough?',
+    ]) {
+      expect(analyzeQuestionNeeds(question)).toMatchObject({
+        needsRetirement: true,
+        needsUserProfile: true,
+        needsSecondaryValidation: true,
+      });
+    }
+  });
+
+  it('loads the spending breakdown when asked to evaluate spending', () => {
+    const question = 'Evaluate my entire financial portfolio, including my income and spending. ' +
+      'Give me your assessment of its strengths and weaknesses, especially as it relates to ' +
+      'my goal of retiring by age 62 or sooner.';
+    expect(analyzeQuestionNeeds(question)).toMatchObject({
+      needsTransactionDetails: true,
+      needsRetirement: true,
+      needsInvestments: true,
+    });
+
+    expect(analyzeQuestionNeeds('Where is my money going?')).toMatchObject({ needsTransactionDetails: true });
+    expect(analyzeQuestionNeeds('Where does all my money go?')).toMatchObject({ needsTransactionDetails: true });
+    expect(analyzeQuestionNeeds('How can I reduce my expenses?')).toMatchObject({ needsTransactionDetails: true });
+    // A plain total is still answered from the monthly summary.
+    expect(analyzeQuestionNeeds('How much do I spend each month?')).toMatchObject({ needsTransactionDetails: false });
+  });
+
+  it('does not load transactions for questions that merely say "money"', () => {
+    // "money" plus a review verb is not a spending question; loading the raw
+    // rows for these costs latency and puts unrelated detail in the prompt.
+    for (const question of [
+      'Review where my money is invested.',
+      'Assess how much money I need to retire.',
+      'Where is my money?',
+    ]) {
+      expect(analyzeQuestionNeeds(question)).toMatchObject({ needsTransactionDetails: false });
+    }
+  });
+
+  it('separates retiring a debt from retiring from work', () => {
+    expect(analyzeQuestionNeeds('Should I retire my mortgage early?')).toMatchObject({
+      needsRetirement: false,
+    });
+    // Both senses in one question still routes as retirement.
+    expect(analyzeQuestionNeeds('Should I retire my mortgage early so I can retire at 62?')).toMatchObject({
+      needsRetirement: true,
+    });
+  });
+
   it('does not load holdings for general stock-market questions', () => {
     expect(analyzeQuestionNeeds('How is the stock market doing today?')).toMatchObject({
       needsMarketContext: true,

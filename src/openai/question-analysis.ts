@@ -39,23 +39,43 @@ function analyzeSingleQuestion(question: string): QuestionNeeds {
       /\b(401k|403b|ira|brokerage)\b/.test(qLower)
     );
 
+  // Match the word family, not two fixed spellings: substring checks for
+  // "retire"/"retirement" miss "retiring", "retires", "retired", and "retiree",
+  // which silently withheld the retirement analysis from questions that were
+  // plainly about retiring.
+  // "Retiring a mortgage" is debt payoff. Drop that sense before testing, so a
+  // question that means both ("retire my mortgage so I can retire at 62") still
+  // routes as retirement.
+  const withoutDebtPayoff = qLower.replace(
+    /\bretir\w+\s+(?:my|our|the|this|that|their)\s+(?:mortgage|loans?|debts?|note|card|balance)\b/g,
+    ' '
+  );
   const needsRetirement =
-    qLower.includes('retirement') ||
-    qLower.includes('retire') ||
-    qLower.includes('withdrawal') ||
-    qLower.includes('retirement planning') ||
-    qLower.includes('retirement readiness') ||
-    qLower.includes('sustainable withdrawal') ||
-    qLower.includes('retirement portfolio');
+    /\bretir\w*/.test(withoutDebtPayoff) ||
+    /\b(withdrawals?|drawdown|draw\s+down|nest\s+egg|financial\s+independence)\b/.test(qLower) ||
+    /\b(stop|quit)\s+working\b/.test(qLower);
 
   const needsAccountDetails =
     /\b(account|accounts|balance|balances|checking|savings|loan|credit card|mortgage)\b/.test(qLower) ||
     needsInvestments;
 
+  // "How much do I spend each month?" is answered by the monthly totals, but
+  // "evaluate my spending" is not — that asks what the averages are made of.
+  // "money" on its own is too generic to route on — "review where my money is
+  // invested" is an investments question — so the money phrasing has to name
+  // the outflow explicitly.
+  const evaluatesSpending =
+    (/\b(spending|expenses|budget|cash[ -]?flow)\b/.test(qLower) &&
+      (/\b(evaluate|evaluating|assess|assessment|analy[sz]e|analy[sz]ing|analysis|review|reviewing|breakdown|optimi[sz]e|improve|reduce|cut|trim)\b/.test(qLower) ||
+        /\bbreak\s+down\b/.test(qLower) ||
+        /\bstrengths?\s+and\s+weakness/.test(qLower))) ||
+    /\bwhere\s+(?:is|are|does|do)\s+(?:all\s+)?(?:my|our|the)\s+money\s+(?:go|goes|going)\b/.test(qLower);
+
   const needsTransactionDetails =
     /\b(transaction|transactions|purchase|purchases|merchant|merchants|category|categories|paycheck|salary|subscription|subscriptions|fee|fees)\b/.test(qLower) ||
     /\b(recent|latest|largest|individual|specific)\s+(spend|spending|expense|expenses|income)\b/.test(qLower) ||
-    /\bspend(?:ing)?\s+(?:at|with|from)\b/.test(qLower);
+    /\bspend(?:ing)?\s+(?:at|with|from)\b/.test(qLower) ||
+    evaluatesSpending;
 
   const needsMonthlyCashFlow =
     /\b(spend|spending|expense|expenses|income|cash[ -]?flow)\b/.test(qLower) &&

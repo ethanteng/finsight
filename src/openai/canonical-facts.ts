@@ -293,17 +293,32 @@ export function buildCanonicalFactPack(
         aggregate.inputFactIds
       );
     }
+  }
+
+  // Category totals come from the transaction summary, which is persisted with
+  // every snapshot and loaded for every question. Gating them behind the raw
+  // transaction rows left cash-flow questions with two monthly averages and no
+  // grounded way to say what those averages are made of.
+  if (includeCashFlow || needs.needsTransactionDetails) {
     // Sum before emitting: the fact id is case-folded, so categories that differ
     // only in spelling map to one id and the last one written would replace the rest.
     const mergedCategories = mergeLabelKeyedTotals(
       snapshot.transactionSummary?.byCategory,
       'Uncategorized'
     );
+    // These are totals across the snapshot's transaction window (a year by
+    // default), while the income and expense facts beside them are monthly
+    // averages. Name the period, or the model has no way to tell the two apart
+    // and can report a year of dining as a monthly figure.
+    const windowMonths = Object.keys(snapshot.transactionSummary?.byMonth || {}).length;
+    const period = windowMonths > 0
+      ? `over the last ${windowMonths} month${windowMonths === 1 ? '' : 's'}`
+      : 'over the full transaction window';
     for (const [category, amount] of Object.entries(mergedCategories)) {
       const categoryId = safeFactId(category) || 'uncategorized';
       addSnapshotFact(
         `category_spending_${categoryId}`,
-        `${category} spending`,
+        `${category} spending ${period} (total, not a monthly average)`,
         amount,
         'usd',
         `transactionSummary.byCategory.${categoryId}`
