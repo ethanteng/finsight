@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 const prisma = {
   account: { findFirst: jest.fn<() => Promise<any>>() },
   accessToken: { findMany: jest.fn<() => Promise<any[]>>() },
+  transactionCategoryOverride: { findMany: jest.fn<() => Promise<any[]>>() },
 };
 const getAccountBalances = jest.fn<(..._args: any[]) => Promise<any[]>>();
 const getUserFinancialData = jest.fn<(..._args: any[]) => Promise<any>>();
@@ -28,6 +29,32 @@ describe('financial ingestion balance refresh semantics', () => {
     ]);
     getAccountBalances.mockResolvedValue([]);
     getUserFinancialData.mockResolvedValue({ accounts: [] });
+    prisma.transactionCategoryOverride.findMany.mockResolvedValue([]);
+  });
+
+  it('stamps user-chosen categories back onto freshly ingested provider data', async () => {
+    prisma.transactionCategoryOverride.findMany.mockResolvedValue([
+      { transactionId: 'txn-1', category: ['MEDICAL', 'MEDICAL_DENTAL_CARE'] },
+    ]);
+    getUserFinancialData.mockResolvedValue({
+      accounts: [],
+      bankingTransactions: [
+        { transaction_id: 'txn-1', category: ['FOOD_AND_DRINK'] },
+        { transaction_id: 'txn-2', category: ['FOOD_AND_DRINK'] },
+      ],
+    });
+
+    const data = await ingestFinancialData('user-1', {
+      balanceMaxAgeHours: 24,
+      categorize: false,
+    });
+
+    expect(data.bankingTransactions[0]).toMatchObject({
+      category: ['MEDICAL', 'MEDICAL_DENTAL_CARE'],
+      category_source: 'user',
+    });
+    expect(data.bankingTransactions[1].category).toEqual(['FOOD_AND_DRINK']);
+    expect(data.bankingTransactions[1].category_source).toBeUndefined();
   });
 
   it('bypasses freshness and refreshes every active Plaid connection when forced', async () => {

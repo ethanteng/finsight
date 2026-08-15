@@ -8,6 +8,7 @@ import { dataOrchestrator } from './data/orchestrator';
 import authRoutes from './auth/routes';
 import manualAccountsRoutes from './auth/manual-accounts-routes';
 import accountsRoutes from './auth/accounts-routes';
+import transactionCategoriesRoutes from './auth/transaction-categories-routes';
 import financesRoutes from './auth/finances-routes';
 import stripeRoutes from './routes/stripe';
 import aiRoutes from './routes/ai';
@@ -215,6 +216,9 @@ app.use('/api/manual-accounts', manualAccountsRoutes);
 
 // Setup Accounts routes (for Plaid and SnapTrade accounts)
 app.use('/api/accounts', accountsRoutes);
+
+// Setup user-chosen transaction category routes
+app.use('/api/transaction-categories', transactionCategoriesRoutes);
 
 // Setup the revisioned Finances overview and lazy account-detail routes
 app.use('/api/finances', financesRoutes);

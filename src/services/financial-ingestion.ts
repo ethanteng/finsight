@@ -2,6 +2,7 @@ import { getPrismaClient } from '../prisma-client';
 import { plaidClient } from '../plaid';
 import { BalanceService } from './balance-service';
 import { FinancialDataService, type UnifiedFinancialData } from './financial-data-service';
+import { applyCategoryOverrides } from './transaction-category-override-service';
 
 export interface FinancialIngestionOptions {
   balanceMaxAgeHours: number;
@@ -54,11 +55,22 @@ export async function ingestFinancialData(
     }
   }
 
-  return new FinancialDataService().getUserFinancialData(userId, {
+  const data = await new FinancialDataService().getUserFinancialData(userId, {
     includeTransactions: true,
     includeInvestments: true,
     includeHomeValue: true,
     skipCategorization: !options.categorize,
     shouldPersistTransactions: options.categorize,
   });
+
+  // Provider payloads are re-read on every revision, so a category the user chose has to
+  // be stamped back on here — otherwise each recompute would restore Plaid's category.
+  // A failure here must not sink the whole revision; the provider category is still valid.
+  try {
+    await applyCategoryOverrides(userId, data);
+  } catch (error) {
+    console.warn('Failed to apply transaction category overrides (non-fatal):', error);
+  }
+
+  return data;
 }

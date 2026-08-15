@@ -38,8 +38,29 @@ model User {
   financialSummarySnapshot FinancialSummarySnapshot?
   financialSummaryHistory FinancialSummaryHistory[]
   retirementAnalyses     RetirementAnalysis[]
+  transactionCategoryOverrides TransactionCategoryOverride[]
 
   @@map("users")
+}
+
+/// A user-chosen category that replaces the provider category for one transaction.
+/// Keyed by the provider transaction id rather than by `Transaction.id` because the
+/// snapshot the UI reads is rebuilt from provider payloads on every revision.
+model TransactionCategoryOverride {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactionId    String
+  /// Ordered `[primary]` or `[primary, detailed]` personal-finance-category values.
+  category         String[]
+  /// Provider category at the time of the override, so it can be restored.
+  originalCategory String[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([userId, transactionId])
+  @@index([userId])
+  @@map("transaction_category_overrides")
 }
 
 model Account {
