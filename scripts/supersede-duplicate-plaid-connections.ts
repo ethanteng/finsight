@@ -131,8 +131,12 @@ async function main() {
   for (const { userId, institution, tokens: group } of duplicateGroups) {
     console.log(`🏦 ${institution} (user ${userId}) - ${group.length} active connections`);
 
-    // Keep the most recently refreshed connection, falling back to the newest.
+    // Keep the most recently refreshed connection that actually has accounts. An empty active
+    // token (failed link, in-progress exchange) must not win over a populated duplicate.
     const sorted = [...group].sort((a, b) => {
+      const aHasAccounts = a.accounts.length > 0 ? 1 : 0;
+      const bHasAccounts = b.accounts.length > 0 ? 1 : 0;
+      if (aHasAccounts !== bHasAccounts) return bHasAccounts - aHasAccounts;
       const aTime = (a.lastRefreshed ?? a.createdAt).getTime();
       const bTime = (b.lastRefreshed ?? b.createdAt).getTime();
       return bTime - aTime;
