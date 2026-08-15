@@ -176,6 +176,7 @@ export type SupersedeReport = {
 };
 
 type PrismaLike = {
+  $transaction?: <T>(fn: (tx: PrismaLike) => Promise<T>) => Promise<T>;
   account: {
     findMany: (args: any) => Promise<any[]>;
     delete: (args: any) => Promise<any>;
@@ -295,20 +296,28 @@ export async function supersedeDuplicateInstitutionConnections(options: {
 
     let transactionsMigrated = 0;
     if (!dryRun) {
-      for (const match of result.matches) {
-        const migrated = await prisma.transaction.updateMany({
-          where: { accountId: match.previous.id },
-          data: { accountId: match.current.id }
+      const applySupersede = async (db: PrismaLike) => {
+        for (const match of result.matches) {
+          const migrated = await db.transaction.updateMany({
+            where: { accountId: match.previous.id },
+            data: { accountId: match.current.id }
+          });
+          transactionsMigrated += migrated.count;
+        }
+        for (const match of result.matches) {
+          await db.account.delete({ where: { id: match.previous.id } });
+        }
+        await db.accessToken.update({
+          where: { id: token.id },
+          data: { isActive: false, lastError: SUPERSEDED_ERROR_CODE }
         });
-        transactionsMigrated += migrated.count;
+      };
+
+      if (prisma.$transaction) {
+        await prisma.$transaction(applySupersede);
+      } else {
+        await applySupersede(prisma);
       }
-      for (const match of result.matches) {
-        await prisma.account.delete({ where: { id: match.previous.id } });
-      }
-      await prisma.accessToken.update({
-        where: { id: token.id },
-        data: { isActive: false, lastError: SUPERSEDED_ERROR_CODE }
-      });
     }
 
     const strategies = [...new Set(result.matches.map(match => match.strategy))];
