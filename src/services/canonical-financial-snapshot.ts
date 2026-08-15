@@ -6,6 +6,7 @@ import {
   type SnapshotSourceObservation,
 } from '../domain/financial-truth';
 import { classifyAccount, type AccountLike } from './account-classifier';
+import { normalizeAssetType } from './asset-class';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -150,7 +151,7 @@ export function buildCanonicalInvestmentPortfolio(
   const securityTypes = new Map(
     securities
       .filter(security => Boolean(security.security_id))
-      .map(security => [String(security.security_id), security.type || 'Unknown'])
+      .map(security => [String(security.security_id), security.type || null])
   );
   const allocation = new Map<string, number>();
   const includedSecurityIds = new Set<string>();
@@ -173,8 +174,10 @@ export function buildCanonicalInvestmentPortfolio(
     totalValue += value;
     holdingCount += 1;
     if (holding.security_id) includedSecurityIds.add(String(holding.security_id));
-    const assetType = String(
-      securityTypes.get(String(holding.security_id || '')) || holding.security_type || 'Unknown'
+    // Normalize so the same asset class from different providers (Plaid's "etf"
+    // vs SnapTrade's "ETF") lands in one bucket instead of several.
+    const assetType = normalizeAssetType(
+      securityTypes.get(String(holding.security_id || '')) || holding.security_type
     );
     allocation.set(assetType, (allocation.get(assetType) || 0) + value);
   });

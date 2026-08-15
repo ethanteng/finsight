@@ -121,4 +121,64 @@ describe('buildCanonicalFactPack', () => {
     });
     expect(validateCanonicalFactPack(pack)).toEqual([]);
   });
+
+  it('reports one allocation fact per asset class when a snapshot has split buckets', () => {
+    // A snapshot persisted before asset types were normalized: Plaid's "etf" and
+    // SnapTrade's "ETF" as separate rows. The fact id is case-folded, so without a
+    // merge the second row would silently overwrite the first and the model would
+    // be told ETF = 2.6% instead of 44.8%.
+    const data = snapshot();
+    data.financialSummary.investmentPortfolio = {
+      totalValue: 1_000_000,
+      holdingCount: 12,
+      assetAllocation: [
+        { type: 'ETF', value: 400_000, percentage: 40 },
+        { type: 'etf', value: 48_000, percentage: 4.8 },
+        { type: 'mutual fund', value: 200_000, percentage: 20 },
+        { type: 'Mutual Fund', value: 50_000, percentage: 5 },
+      ],
+    };
+    const question = 'What is my asset allocation?';
+    const pack = buildCanonicalFactPack(data, question, analyzeQuestionNeeds(question));
+    const allocationFacts = pack.facts.filter((fact) => fact.id.startsWith('allocation'));
+
+    expect(allocationFacts.map((fact) => fact.id).sort()).toEqual([
+      'allocation_etf',
+      'allocation_mutual_fund',
+      'allocation_value_etf',
+      'allocation_value_mutual_fund',
+    ]);
+    expect(allocationFacts.find((fact) => fact.id === 'allocation_value_etf')?.value).toBe(448_000);
+    expect(allocationFacts.find((fact) => fact.id === 'allocation_etf')?.value).toBeCloseTo(44.8);
+    expect(allocationFacts.find((fact) => fact.id === 'allocation_value_mutual_fund')?.value).toBe(250_000);
+    expect(allocationFacts.find((fact) => fact.id === 'allocation_mutual_fund')?.value).toBe(25);
+  });
+
+  it('sums spending categories that differ only in spelling into one fact', () => {
+    // Plaid's legacy taxonomy and personal_finance_category describe the same
+    // category with different casing. The fact id is case-folded, so without a
+    // merge one of these totals would silently replace the other.
+    const data = snapshot();
+    data.transactionSummary = {
+      byCategory: {
+        'Food and Drink': 1_200,
+        'Food And Drink': 800,
+        Travel: 500,
+        travel: 300,
+        Rent: 2_000,
+      },
+    };
+    const question = 'How much am I spending by category?';
+    const pack = buildCanonicalFactPack(data, question, analyzeQuestionNeeds(question));
+    const categoryFacts = pack.facts.filter((fact) => fact.id.startsWith('category_spending'));
+
+    expect(categoryFacts.map((fact) => fact.id).sort()).toEqual([
+      'category_spending_food_and_drink',
+      'category_spending_rent',
+      'category_spending_travel',
+    ]);
+    expect(categoryFacts.find((fact) => fact.id === 'category_spending_food_and_drink')?.value).toBe(2_000);
+    expect(categoryFacts.find((fact) => fact.id === 'category_spending_travel')?.value).toBe(800);
+    expect(categoryFacts.find((fact) => fact.id === 'category_spending_rent')?.value).toBe(2_000);
+  });
 });

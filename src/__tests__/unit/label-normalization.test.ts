@@ -1,0 +1,55 @@
+import { describe, expect, it } from '@jest/globals';
+import { labelKey, mergeLabelKeyedTotals, normalizeLabel } from '../../services/label-normalization';
+
+describe('normalizeLabel', () => {
+  it('gives one label to values differing only by case or separator', () => {
+    // Plaid investment transaction types are lowercase, SnapTrade activity types
+    // uppercase, and provider taxonomies mix snake_case with spaced words.
+    expect(normalizeLabel('buy')).toBe('Buy');
+    expect(normalizeLabel('BUY')).toBe('Buy');
+    expect(normalizeLabel('Buy')).toBe('Buy');
+    expect(normalizeLabel('cash_dividend')).toBe('Cash Dividend');
+    expect(normalizeLabel('CASH DIVIDEND')).toBe('Cash Dividend');
+    expect(normalizeLabel('cash-dividend')).toBe('Cash Dividend');
+    expect(normalizeLabel('  cash   dividend  ')).toBe('Cash Dividend');
+  });
+
+  it('falls back for missing values, with an overridable label', () => {
+    expect(normalizeLabel(undefined)).toBe('Unknown');
+    expect(normalizeLabel(null)).toBe('Unknown');
+    expect(normalizeLabel('   ')).toBe('Unknown');
+    expect(normalizeLabel('', 'Uncategorized')).toBe('Uncategorized');
+  });
+
+  it('treats a separator-only placeholder as missing', () => {
+    // Separators fold to spaces, so trimming has to happen after that fold or
+    // "-" survives as a truthy " " key and becomes a blank bucket.
+    expect(labelKey('-')).toBe('');
+    expect(labelKey('__')).toBe('');
+    expect(labelKey(' - ')).toBe('');
+    expect(normalizeLabel('-')).toBe('Unknown');
+    expect(normalizeLabel('__', 'Uncategorized')).toBe('Uncategorized');
+  });
+
+  it('exposes the folded grouping key', () => {
+    expect(labelKey('FOOD_AND_DRINK')).toBe('food and drink');
+    expect(labelKey('Food and Drink')).toBe(labelKey('FOOD_AND_DRINK'));
+    expect(labelKey(undefined)).toBe('');
+  });
+});
+
+describe('mergeLabelKeyedTotals', () => {
+  it('sums totals that differ only in spelling', () => {
+    expect(
+      mergeLabelKeyedTotals({
+        'Food and Drink': 1_200,
+        'Food And Drink': 800,
+        Travel: 500,
+        travel: 300,
+      })
+    ).toEqual({
+      'Food And Drink': 2_000,
+      Travel: 800,
+    });
+  });
+});
