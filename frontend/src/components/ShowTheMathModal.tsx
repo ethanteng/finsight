@@ -37,7 +37,12 @@ export interface EvidenceManifest {
     totalMs: number;
   };
   validation: {
-    deterministic: { valid: boolean; issues: string[] };
+    deterministic: {
+      valid: boolean;
+      issues: string[];
+      /** Absent on manifests generated before salvage was introduced. */
+      outcome?: 'passed' | 'salvaged' | 'replaced';
+    };
     secondary?: Array<{ phase: 'initial' | 'retry'; valid: boolean; issues: string[] }>;
   };
   evidenceRefs: {

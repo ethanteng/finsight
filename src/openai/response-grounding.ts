@@ -1,6 +1,10 @@
 import type { AskLincResponse } from './structured-response';
 import type { FinancialContextSnapshot } from './types';
 
+/** Shown only when no part of the answer could be verified. */
+export const UNVERIFIABLE_SUMMARY =
+  'I could not verify the generated answer against your current financial snapshot. Please try the question again.';
+
 export interface ResponseGroundingResult {
   valid: boolean;
   issues: string[];
@@ -209,7 +213,7 @@ export function sanitizeUngroundedResponse(
   const withoutInvalidNumbers = omitInvalidKeyNumbers(response, result.invalidKeyNumbers);
   if (!result.invalidSummary && result.invalidKeyNumbers.length === 0) return withoutInvalidNumbers;
   return {
-    summary: 'I could not verify the generated answer against your current financial snapshot. Please try the question again.',
+    summary: UNVERIFIABLE_SUMMARY,
     key_numbers: withoutInvalidNumbers.key_numbers,
     insights: [],
     suggested_actions: [],

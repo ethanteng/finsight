@@ -43,7 +43,15 @@ export interface EvidenceManifest {
     totalMs: number;
   };
   validation: {
-    deterministic: { valid: boolean; issues: string[] };
+    deterministic: {
+      valid: boolean;
+      issues: string[];
+      /**
+       * What the pipeline did with a failed check: kept the grounded part of the
+       * answer, or replaced it with the placeholder. Absent on older manifests.
+       */
+      outcome?: 'passed' | 'salvaged' | 'replaced';
+    };
     secondary?: Array<{ phase: 'initial' | 'retry'; valid: boolean; issues: string[] }>;
   };
   evidenceRefs: {
