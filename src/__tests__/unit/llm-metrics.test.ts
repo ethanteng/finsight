@@ -87,6 +87,9 @@ describe('LLM stage metrics', () => {
     const routing = getLlmMetricsSnapshot().routing;
     expect(routing.investmentDetailsIncluded.withheld).toEqual({ samples: 1, missRate: 1 });
     expect(routing.investmentDetailsIncluded.supplied.samples).toBe(0);
+    // Escalation never widens market or search context, so it is not evidence
+    // about them even though they were withheld on this request.
+    expect(routing.marketContextRequested.withheld).toEqual({ samples: 1, missRate: 0 });
   });
 
   it('separates model grounding from what the user actually received', () => {

@@ -9,6 +9,40 @@ export interface ShowTheMathDatabaseData {
   market_news_history?: unknown[];
 }
 
+/**
+ * Context tiers still decided by question routing. Everything else is loaded on
+ * every request, so only these can be withheld from an answer.
+ */
+export const ROUTED_CONTEXT_TIERS = [
+  'accountsIncluded',
+  'transactionDetailsIncluded',
+  'investmentDetailsIncluded',
+  'marketContextRequested',
+  'searchContextRequested',
+] as const;
+
+export type RoutedContextTier = (typeof ROUTED_CONTEXT_TIERS)[number];
+
+export type ContextSelection = Record<RoutedContextTier, boolean>;
+
+/**
+ * Which tiers a retry's widening actually switched on.
+ *
+ * Escalation only reaches for the tiers that carry canonical facts, so an
+ * escalated request is evidence about those tiers alone. Market and search
+ * context are withheld from most questions and are never widened; charging them
+ * with every escalation would invent a routing signal that isn't there.
+ */
+export function widenedContextTiers(manifest: {
+  contextSelection?: ContextSelection;
+  routedContextSelection?: ContextSelection;
+}): RoutedContextTier[] {
+  const routed = manifest.routedContextSelection;
+  const final = manifest.contextSelection;
+  if (!routed || !final) return [];
+  return ROUTED_CONTEXT_TIERS.filter((tier) => routed[tier] === false && final[tier] === true);
+}
+
 export interface EvidenceManifest {
   version: 1;
   generatedAt: string;
@@ -18,13 +52,7 @@ export interface EvidenceManifest {
     status?: string;
   };
   facts: CanonicalFact[];
-  contextSelection?: {
-    accountsIncluded: boolean;
-    transactionDetailsIncluded: boolean;
-    investmentDetailsIncluded: boolean;
-    marketContextRequested: boolean;
-    searchContextRequested: boolean;
-  };
+  contextSelection?: ContextSelection;
   /**
    * The first answer cited numbers the fact pack did not contain, so the retry
    * was given a wider context than routing selected. contextSelection above
@@ -36,13 +64,7 @@ export interface EvidenceManifest {
    * happened; routing metrics score this, since contextSelection above records
    * the correction rather than the prediction that needed correcting.
    */
-  routedContextSelection?: {
-    accountsIncluded: boolean;
-    transactionDetailsIncluded: boolean;
-    investmentDetailsIncluded: boolean;
-    marketContextRequested: boolean;
-    searchContextRequested: boolean;
-  };
+  routedContextSelection?: ContextSelection;
   modelCalls: Array<{
     phase: 'initial' | 'retry';
     provider: 'claude' | 'openai';
