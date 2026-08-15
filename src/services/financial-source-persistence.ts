@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { getPrismaClient } from '../prisma-client';
+import { SUPERSEDED_ERROR_CODE } from './plaid-connection-supersede';
 
 const prisma = getPrismaClient();
 
@@ -46,8 +47,20 @@ export async function loadPersistedPlaidData(
         };
       }>>;
 
+      // Accounts left behind by a connection that was superseded by a re-link must not surface.
+      // Scoped to SUPERSEDED_BY_RELINK specifically: tokens that are merely erroring (e.g.
+      // ITEM_LOGIN_REQUIRED) must still yield their last known balances here.
+      const supersededTokens = await prisma.accessToken.findMany({
+        where: { userId, isActive: false, lastError: SUPERSEDED_ERROR_CODE },
+        select: { id: true }
+      });
+      const supersededTokenIds = new Set(supersededTokens.map(token => token.id));
+
       const accountRecords = accountRecordsRaw.filter(record => {
         if (!record.plaidAccountId) {
+          return false;
+        }
+        if (record.accessTokenId && supersededTokenIds.has(record.accessTokenId)) {
           return false;
         }
         if (record.plaidAccountId.startsWith('snaptrade-')) {
