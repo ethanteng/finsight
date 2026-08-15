@@ -212,14 +212,14 @@ A comprehensive CI/CD safety system that prevents production data loss through m
 
 #### **3. Production Migration Job** 🔒
 - **New Job**: `migrate-prod` runs before deployment
-- **Manual Approval**: Requires human review via GitHub environment
-- **Safety Timer**: 1-minute countdown after approval (safety buffer)
+- **Gated on CI**: Runs only after the full test and build suite passes on `main`
+- **Safety Timer**: 1-minute countdown before migrations apply (cancellation buffer)
 - **Guardrails**: Timeouts, destructive operation detection
-- **Result**: Complete control over when migrations run
+- **Result**: Migrations are automatic, but never unguarded
 
 #### **4. Automated Safety Checks** 🤖
 - **Build Verification**: Ensures no migration commands in build scripts
-- **Test Validation**: All tests must pass before migration approval
+- **Test Validation**: All tests must pass before migrations run
 - **Migration Safety**: Script blocks destructive operations
 - **Timeout Controls**: Prevents migrations from hanging indefinitely
 
@@ -234,9 +234,9 @@ A comprehensive CI/CD safety system that prevents production data loss through m
    ↓
 4. Build Verification (with migration guard)
    ↓
-5. Production Migration Job (requires approval)
+5. Production Migration Job (starts automatically)
    ↓
-6. Manual Approval + 1-minute safety timer
+6. 1-minute safety timer (cancellation window)
    ↓
 7. Migrations Applied with Safety Guards
    ↓
@@ -245,15 +245,15 @@ A comprehensive CI/CD safety system that prevents production data loss through m
 
 ### **Production Migration Safety Features:**
 
-#### **Manual Approval Required** ✅
-- GitHub environment protection rules
-- Human review before any database changes
-- No automatic migrations
+#### **Full CI Suite Required** ✅
+- Lint, backend tests, frontend build, integration tests, and security tests must all pass
+- `migrate-prod` only runs on `main` — feature branches never touch production
+- Migrations start automatically once those checks are green
 
 #### **Safety Timer** ⏰
-- 1-minute countdown after approval
-- Gives you time to cancel if needed
-- Prevents forgotten deployments
+- 1-minute countdown before migrations apply
+- Gives you time to cancel the workflow if needed
+- Runs as an explicit step in the `migrate-prod` job
 
 #### **Migration Guards** 🛡️
 - **Timeout Controls**: 30s lock timeout, 5min statement timeout
@@ -263,7 +263,7 @@ A comprehensive CI/CD safety system that prevents production data loss through m
 
 #### **Complete Isolation** 🔒
 - **Render**: Build-only (never touches database)
-- **CI/CD**: Handles migrations with approval gates
+- **CI/CD**: Handles migrations behind the full test suite and safety guards
 - **Build Scripts**: Never contain migration commands
 - **Tests**: Use real migrations to catch issues early
 
@@ -325,7 +325,7 @@ git push origin main
 2. **Complete Control**: You decide when migrations run
 3. **Early Detection**: Migration issues caught in CI
 4. **Automated Safety**: Multiple layers of protection
-5. **Audit Trail**: All migrations require approval and are logged
+5. **Audit Trail**: All migrations are logged in the GitHub Actions run history
 6. **Fast Recovery**: Easy to cancel or fix issues
 
 **🎉 RESULT: Your production database is now completely protected from accidental data loss! 🎉**

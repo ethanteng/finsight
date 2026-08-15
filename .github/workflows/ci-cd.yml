@@ -604,6 +604,15 @@ jobs:
             sleep $((i * 10))
           done
 
+      # Cancellation buffer. This used to be a wait-timer protection rule on the
+      # GitHub "production" environment; it lives here now that the environment
+      # binding is gone, so there is still a window to hit "Cancel workflow"
+      # before anything touches the production database.
+      - name: Safety delay before touching production
+        run: |
+          echo "Waiting 60s before applying migrations — cancel the workflow now to abort."
+          sleep 60
+
       - name: Apply migrations with guards
         run: bash scripts/migrate-with-guards.sh
         env:
