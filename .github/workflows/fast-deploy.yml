@@ -1,8 +1,12 @@
-name: Fast Deploy - Website Pages, Blog & Finances
+name: Fast Deploy - Website Pages & Blog
 
 on:
   push:
     branches: [ main ]
+    # Marketing and content pages only. This pipeline skips the backend, integration
+    # and security suites, so nothing that can affect the authenticated app belongs
+    # here — application routes, build config and dependency manifests go through
+    # ci-cd.yml instead. Keep this list in sync with that workflow's `paths-ignore`.
     paths:
       - 'frontend/src/app/page.tsx'
       - 'frontend/src/app/contact/**'
@@ -10,13 +14,11 @@ on:
       - 'frontend/src/app/privacy/**'
       - 'frontend/src/app/terms/**'
       - 'frontend/src/app/blog/**'
-      - 'frontend/src/app/finances/**'
       - 'frontend/src/app/use-cases/**'
       - 'frontend/src/app/prompts/**'
       - 'frontend/src/app/buying-a-house/**'
       - 'frontend/src/app/retirement-readiness/**'
       - 'frontend/src/app/features/**'
-      - 'frontend/src/components/finances/**'
       - 'frontend/src/components/NewHomepage.tsx'
       - 'frontend/src/components/UseCasesPage.tsx'
       - 'frontend/src/components/RetirementUseCasePage.tsx'
@@ -28,21 +30,22 @@ on:
       - 'frontend/src/components/BuyingAHousePage.tsx'
       - 'frontend/src/components/FeaturesPage.tsx'
       - 'frontend/src/components/StructuredData.tsx'
-      - 'frontend/src/app/app/AppPageClient.tsx'
       - 'frontend/src/lib/ghost.ts'
       - 'frontend/src/lib/promptExamples.ts'
-      - 'frontend/next.config.ts'
       - 'frontend/src/app/globals.css'
       - 'frontend/tailwind.config.js'
-      - 'frontend/package.json'
       - 'frontend/public/sitemap.xml'
       - 'frontend/public/robots.txt'
   workflow_dispatch:
     inputs:
       force_deploy:
-        description: 'Force deploy even if no website/finances page changes'
+        description: 'Force deploy even if no website page changes'
         required: false
         default: 'false'
+
+concurrency:
+  group: fast-deploy-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   # Quick validation for website pages and blog
@@ -67,12 +70,18 @@ jobs:
         run: |
           cd frontend
           # Basic TypeScript check (exclude tests for fast deployment)
-          # Skip linting and tests for fast deployment
           npm run type-check
           # Basic ESLint check (only critical errors, exclude tests)
           # Using --quiet to only show errors, warnings are ignored for fast deploy
           # Use locally installed ESLint via npm script to ensure dependencies are available
           npm run lint -- --quiet --ignore-pattern "**/__tests__/**" --ignore-pattern "**/*.test.*" --ignore-pattern "**/*.spec.*" || echo "ESLint warnings found but continuing..."
+
+      # The whole frontend suite is ~4s, so this pipeline stays fast while no longer
+      # shipping to production with zero tests.
+      - name: Run frontend tests
+        run: |
+          cd frontend
+          npm test -- --ci
 
       - name: Verify frontend build
         run: |
@@ -84,6 +93,10 @@ jobs:
     needs: [validate-website]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || github.event.inputs.force_deploy == 'true'
+    # Shared with ci-cd.yml's deploy job — see the note there.
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

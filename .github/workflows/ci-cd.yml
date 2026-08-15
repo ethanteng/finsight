@@ -3,6 +3,11 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [ main ]
+    # Marketing/content-only paths are handled by fast-deploy.yml. Keep this list in
+    # sync with the `paths` list there: any path in one must be in the other, or a
+    # change either runs both pipelines (racing two production deploys) or neither.
+    # Application code, build config and dependency manifests deliberately are NOT
+    # here — they must go through the full test suite before shipping.
     paths-ignore:
       - 'frontend/src/app/page.tsx'
       - 'frontend/src/app/contact/**'
@@ -10,13 +15,11 @@ on:
       - 'frontend/src/app/privacy/**'
       - 'frontend/src/app/terms/**'
       - 'frontend/src/app/blog/**'
-      - 'frontend/src/app/finances/**'
       - 'frontend/src/app/use-cases/**'
       - 'frontend/src/app/prompts/**'
       - 'frontend/src/app/buying-a-house/**'
       - 'frontend/src/app/retirement-readiness/**'
       - 'frontend/src/app/features/**'
-      - 'frontend/src/components/finances/**'
       - 'frontend/src/components/NewHomepage.tsx'
       - 'frontend/src/components/UseCasesPage.tsx'
       - 'frontend/src/components/RetirementUseCasePage.tsx'
@@ -28,18 +31,21 @@ on:
       - 'frontend/src/components/BuyingAHousePage.tsx'
       - 'frontend/src/components/FeaturesPage.tsx'
       - 'frontend/src/components/StructuredData.tsx'
-      - 'frontend/src/app/app/AppPageClient.tsx'
       - 'frontend/src/lib/ghost.ts'
       - 'frontend/src/lib/promptExamples.ts'
-      - 'frontend/next.config.ts'
       - 'frontend/src/app/globals.css'
       - 'frontend/tailwind.config.js'
-      - 'frontend/package.json'
       - 'frontend/public/sitemap.xml'
       - 'frontend/public/robots.txt'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+
+# Supersede in-flight runs for a branch that gets pushed again. PR runs are safe to
+# cancel; runs on main are not, because they can be mid-deploy.
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Code Quality & Security
@@ -274,15 +280,22 @@ jobs:
             sleep $((i * 10))
           done
 
+      - name: Run frontend tests
+        run: |
+          cd frontend
+          npm test -- --ci
+
       - name: Build frontend
         run: |
           cd frontend
           npm run build
 
   # Integration Tests
+  # No `needs`: this job does its own checkout, install and database setup, so it
+  # shares no artifact with the unit-test or frontend jobs. Running it in parallel
+  # keeps a frontend build failure from masking integration results.
   integration-tests:
     runs-on: ubuntu-latest
-    needs: [backend-tests, frontend-build]
     services:
       postgres:
         image: postgres:15
@@ -390,9 +403,10 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   # 🔒 Security Testing (NEW - January 2025)
+  # No `needs`: like integration-tests, this job is self-contained. build-verification
+  # still gates on it, so nothing deploys until security tests pass.
   security-tests:
     runs-on: ubuntu-latest
-    needs: [backend-tests, frontend-build, integration-tests]
     services:
       postgres:
         image: postgres:15
@@ -615,6 +629,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: [migrate-prod]
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    # Shared with fast-deploy.yml's deploy job: both target the same Vercel project
+    # and Render service, so they must queue rather than overlap. Never cancelled —
+    # aborting mid-deploy is worse than waiting.
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
