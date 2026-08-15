@@ -43,23 +43,6 @@ Ask Linc is an AI-powered financial analysis platform designed to help you under
 2. **Email Verification**: Verify your email address using the 6-digit code sent to your inbox
 3. **Login**: Access your account and begin connecting your financial institutions
 
-### Demo Mode
-
-Before connecting real accounts, explore Ask Linc's capabilities through Demo Mode:
-
-- **Access**: Available without account creation
-- **Realistic Data**: Experience the platform with a comprehensive demo financial profile
-- **Full Functionality**: All features work identically to production mode
-- **No Risk**: No real financial data required
-
-Demo Mode includes:
-- Sample banking accounts (checking, savings, credit cards)
-- Investment portfolio with realistic holdings
-- Transaction history
-- Financial profile demonstrating personalization capabilities
-
----
-
 ## Core Features
 
 ### AI Conversation Interface
@@ -302,7 +285,7 @@ For accounts that can't be connected automatically:
 
 **Privacy:**
 - Address encrypted at rest
-- Only production users (excludes demo data)
+- Available to authenticated users
 - Secure API integration
 
 ---
@@ -888,7 +871,6 @@ Ask Linc is built with privacy as a fundamental design principle:
 ### Admin Dashboard (For Administrators)
 
 **Monitoring Capabilities:**
-- Demo user activity
 - Production user statistics
 - Conversation analysis
 - Question categorization

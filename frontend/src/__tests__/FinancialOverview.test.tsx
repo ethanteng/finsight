@@ -64,41 +64,34 @@ describe('FinancialOverview', () => {
   beforeEach(() => {
     (global.fetch as jest.Mock).mockClear();
     (global.fetch as jest.Mock).mockReset();
-    localStorageMock.getItem.mockClear();
+    localStorageMock.getItem.mockImplementation((key) =>
+      key === 'auth_token' ? 'mock-auth-token' : null
+    );
     localStorageMock.removeItem.mockClear();
   });
 
-  afterEach(() => {
-    (global.fetch as jest.Mock).mockRestore();
-  });
-
   beforeAll(() => {
-    // Set up localStorage mock to return auth token
-    localStorageMock.getItem.mockImplementation((key) => {
-      console.log('localStorage.getItem called with key:', key);
-      if (key === 'auth_token') {
-        console.log('Returning mock-auth-token for auth_token');
-        return 'mock-auth-token';
-      }
-      console.log('Returning null for key:', key);
-      return null;
+    Object.defineProperty(window, 'localStorage', {
+      value: localStorageMock,
+      writable: true,
     });
   });
 
-  it('renders without crashing', () => {
+  it('renders without crashing', async () => {
+    mockFinancialOverviewFetch({ accounts: [], summaryOk: false });
     render(<FinancialOverview />);
-    // The component should render something (either loading skeleton or add accounts message)
-    expect(document.body).not.toBeEmptyDOMElement();
+    expect(await screen.findByText('Your Financial Overview')).toBeInTheDocument();
   });
 
-  it('shows add accounts message when no accounts exist', () => {
+  it('shows add accounts message when no accounts exist', async () => {
+    mockFinancialOverviewFetch({ accounts: [], summaryOk: false });
     render(<FinancialOverview />);
-    expect(screen.getByText('Your Financial Overview')).toBeInTheDocument();
+    expect(await screen.findByText('Your Financial Overview')).toBeInTheDocument();
     expect(screen.getByText('Add your accounts to start seeing your financial overview')).toBeInTheDocument();
     expect(screen.getByText('Add Your Accounts')).toBeInTheDocument();
   });
 
-  it('shows financial overview when accounts exist (demo mode)', async () => {
+  it('shows financial overview when accounts exist', async () => {
     const mockAccounts = [
       {
         id: 'checking_1',
@@ -153,7 +146,7 @@ describe('FinancialOverview', () => {
       },
     });
 
-    render(<FinancialOverview isDemo={true} />);
+    render(<FinancialOverview />);
 
     // Wait for the component to finish loading and show the overview
     await waitFor(() => {
@@ -169,11 +162,11 @@ describe('FinancialOverview', () => {
     expect(screen.getByText('15')).toBeInTheDocument(); // Securities count
   });
 
-  it('handles demo mode correctly', async () => {
-    const mockDemoAccounts = [
+  it('uses canonical snapshot values', async () => {
+    const mockAccounts = [
       {
-        id: 'demo_checking',
-        name: 'Demo Checking',
+        id: 'checking_1',
+        name: 'Checking',
         type: 'depository',
         subtype: 'checking',
         balance: {
@@ -185,11 +178,12 @@ describe('FinancialOverview', () => {
     ];
 
     mockFinancialOverviewFetch({
-      accounts: mockDemoAccounts,
+      accounts: mockAccounts,
       financialOverview: {
-        totalCash: 0,
+        netWorth: 60000,
+        totalCash: 10000,
         totalDebt: 0,
-        totalInvestments: 0,
+        totalInvestments: 50000,
         homeValue: null,
       },
       investmentPortfolio: {
@@ -200,7 +194,7 @@ describe('FinancialOverview', () => {
       },
     });
 
-    render(<FinancialOverview isDemo={true} />);
+    render(<FinancialOverview />);
 
     // Wait for the component to finish loading and show the overview
     await waitFor(() => {
@@ -208,12 +202,13 @@ describe('FinancialOverview', () => {
     }, { timeout: 3000 });
 
     // Now check all the other values
-    expect(screen.getAllByText('$0')).toHaveLength(2); // Total Debt and Home Value
+    expect(screen.getByText('$0')).toBeInTheDocument(); // Total Debt
+    expect(screen.getByText('Unavailable')).toBeInTheDocument(); // Home Value
     expect(screen.getByText('$50,000')).toBeInTheDocument(); // Total Investments
     expect(screen.getByText('$60,000')).toBeInTheDocument(); // Net Worth
   });
 
-  it('calculates totals correctly for different account types (demo mode)', async () => {
+  it('calculates totals correctly for different account types', async () => {
     const mockAccounts = [
       // Cash accounts
       {
@@ -258,9 +253,10 @@ describe('FinancialOverview', () => {
     mockFinancialOverviewFetch({
       accounts: mockAccounts,
       financialOverview: {
-        totalCash: 0,
-        totalDebt: 0,
-        totalInvestments: 0,
+        netWorth: -113000,
+        totalCash: 15000,
+        totalDebt: 203000,
+        totalInvestments: 75000,
         homeValue: null,
       },
       investmentPortfolio: {
@@ -271,7 +267,7 @@ describe('FinancialOverview', () => {
       },
     });
 
-    render(<FinancialOverview isDemo={true} />);
+    render(<FinancialOverview />);
 
     // Wait for the component to finish loading and show the overview
     await waitFor(() => {
@@ -284,7 +280,7 @@ describe('FinancialOverview', () => {
     expect(screen.getByText('-$113,000')).toBeInTheDocument(); // Net Worth (15000 + 75000 - 203000)
   });
 
-  it('uses investment portfolio value when available (demo mode)', async () => {
+  it('uses investment portfolio value when available', async () => {
     const mockAccounts = [
       {
         id: 'investment_1',
@@ -298,9 +294,10 @@ describe('FinancialOverview', () => {
     mockFinancialOverviewFetch({
       accounts: mockAccounts,
       financialOverview: {
+        netWorth: 75000,
         totalCash: 0,
         totalDebt: 0,
-        totalInvestments: 0,
+        totalInvestments: 75000,
         homeValue: null,
       },
       investmentPortfolio: {
@@ -311,7 +308,7 @@ describe('FinancialOverview', () => {
       },
     });
 
-    render(<FinancialOverview isDemo={true} />);
+    render(<FinancialOverview />);
 
     // Wait for the component to finish loading and show the overview
     await waitFor(() => {

@@ -20,15 +20,6 @@ describe('Admin Endpoints', () => {
       next();
     };
 
-    // Add the admin endpoints directly
-    app.get('/admin/demo-sessions', mockAdminAuth, async (req, res) => {
-      res.json({ sessions: [] });
-    });
-
-    app.get('/admin/demo-conversations', mockAdminAuth, async (req, res) => {
-      res.json({ conversations: [] });
-    });
-
     // Production admin endpoints
     app.get('/admin/production-sessions', mockAdminAuth, async (req, res) => {
       res.json({ users: [] });
@@ -47,7 +38,7 @@ describe('Admin Endpoints', () => {
     });
 
     app.get('/admin/user-financial-data/:userId', mockAdminAuth, async (req, res) => {
-      res.json({ 
+      res.json({
         profile: { text: 'Test profile', lastUpdated: '2025-01-01T00:00:00Z' },
         institutions: [],
         accessTokens: 0,
@@ -60,8 +51,8 @@ describe('Admin Endpoints', () => {
     app.put('/admin/revoke-user-access/:userId', mockAdminAuth, async (req, res) => {
       const { userId } = req.params;
       const mockUser = { id: userId, email: 'test@example.com', isActive: false };
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         message: `Access revoked for user ${mockUser.email}`,
         user: mockUser
       });
@@ -70,8 +61,8 @@ describe('Admin Endpoints', () => {
     app.put('/admin/restore-user-access/:userId', mockAdminAuth, async (req, res) => {
       const { userId } = req.params;
       const mockUser = { id: userId, email: 'test@example.com', isActive: true };
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         message: `Access restored for user ${mockUser.email}`,
         user: mockUser
       });
@@ -80,8 +71,8 @@ describe('Admin Endpoints', () => {
     app.delete('/admin/delete-user-account/:userId', mockAdminAuth, async (req, res) => {
       const { userId } = req.params;
       const mockUser = { id: userId, email: 'test@example.com' };
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         message: `Account completely deleted for user ${mockUser.email}`,
         deletedUser: mockUser
       });
@@ -95,45 +86,25 @@ describe('Admin Endpoints', () => {
       // Create a separate app without the mock auth middleware
       const appWithoutAuth = express();
       appWithoutAuth.use(express.json());
-      
-      appWithoutAuth.get('/admin/demo-sessions', adminAuth, async (req, res) => {
-        res.json({ sessions: [] });
+
+      appWithoutAuth.get('/admin/production-sessions', adminAuth, async (req, res) => {
+        res.json({ users: [] });
       });
 
       const response = await request(appWithoutAuth)
-        .get('/admin/demo-sessions')
+        .get('/admin/production-sessions')
         .expect(401);
-      
+
       expect(response.body.error).toBe('Authentication required for admin access');
     });
 
     it('should allow access with valid admin credentials', async () => {
       // Test with mock admin auth (already set up in beforeEach)
       const response = await request(app)
-        .get('/admin/demo-sessions')
-        .expect(200);
-      
-      expect(response.body).toHaveProperty('sessions');
-    });
-  });
-
-  describe('Demo Endpoints', () => {
-    it('should return demo sessions', async () => {
-      const response = await request(app)
-        .get('/admin/demo-sessions')
+        .get('/admin/production-sessions')
         .expect(200);
 
-      expect(response.body).toHaveProperty('sessions');
-      expect(Array.isArray(response.body.sessions)).toBe(true);
-    });
-
-    it('should return demo conversations', async () => {
-      const response = await request(app)
-        .get('/admin/demo-conversations')
-        .expect(200);
-
-      expect(response.body).toHaveProperty('conversations');
-      expect(Array.isArray(response.body.conversations)).toBe(true);
+      expect(response.body).toHaveProperty('users');
     });
   });
 
@@ -206,7 +177,7 @@ describe('Admin Endpoints', () => {
         // Create a separate app without the mock auth middleware
         const appWithoutAuth = express();
         appWithoutAuth.use(express.json());
-        
+
         appWithoutAuth.put('/admin/revoke-user-access/:userId', adminAuth, async (req, res) => {
           res.json({ success: true });
         });
@@ -233,7 +204,7 @@ describe('Admin Endpoints', () => {
         // Create a separate app without the mock auth middleware
         const appWithoutAuth = express();
         appWithoutAuth.use(express.json());
-        
+
         appWithoutAuth.put('/admin/restore-user-access/:userId', adminAuth, async (req, res) => {
           res.json({ success: true });
         });
@@ -260,7 +231,7 @@ describe('Admin Endpoints', () => {
         // Create a separate app without the mock auth middleware
         const appWithoutAuth = express();
         appWithoutAuth.use(express.json());
-        
+
         appWithoutAuth.delete('/admin/delete-user-account/:userId', adminAuth, async (req, res) => {
           res.json({ success: true });
         });

@@ -573,82 +573,6 @@ npx prisma migrate deploy --preview-feature
 
 **💡 Pro Tip**: Running `npm run test:like-cicd` before merging catches 95%+ of CI/CD issues locally in 2-3 minutes, saving you from the frustrating "push → wait → fail → fix → repeat" cycle.
 
-## 🎭 DEMO Mode Development - SEPARATE FROM CORE APP
-
-### ⚠️ CRITICAL: DEMO Mode is Completely Separate
-
-**DEMO mode should NEVER be mixed with core app development or debugging. When developing features, focus ONLY on the core application.**
-
-#### ✅ Correct Development Approach:
-```bash
-# For core app development (production mode)
-npm run dev:production
-
-# Focus ONLY on:
-# - Core app functionality
-# - Production features
-# - Real user workflows
-# - Production data handling
-# - Core app testing
-
-# DO NOT:
-# - Compare DEMO vs production behavior
-# - "Fix" DEMO mode during core development
-# - Mix DEMO and production logic
-# - Update DEMO data structures
-```
-
-#### ❌ Never Do This During Core Development:
-```bash
-# DON'T: Try to "fix" DEMO mode while developing core features
-# DON'T: Compare DEMO behavior with production behavior
-# DON'T: Update DEMO data or components during core development
-# DON'T: Mix DEMO and production debugging
-# DON'T: Use DEMO mode to test production features
-```
-
-#### 🔄 DEMO Mode Development Workflow:
-```bash
-# 1. Complete core app development FIRST
-# 2. Test core functionality thoroughly
-# 3. Commit and merge core changes
-# 4. ONLY THEN: Switch to DEMO mode development
-
-# For DEMO mode development (separate task):
-npm run dev:sandbox  # or appropriate DEMO mode command
-
-# Focus ONLY on:
-# - DEMO data structures
-# - DEMO user experience
-# - DEMO testing scenarios
-# - DEMO mode specific features
-```
-
-#### 📋 Development Priority Order:
-1. **Core App Development** (production mode)
-   - Implement new features
-   - Fix production bugs
-   - Test core functionality
-   - Deploy to production
-
-2. **DEMO Mode Updates** (separate task)
-   - Update DEMO data structures
-   - Enhance DEMO user experience
-   - Test DEMO scenarios
-   - Deploy DEMO improvements
-
-#### 🚫 Common Anti-Patterns to Avoid:
-- **"Let me check if this works in DEMO mode too"** - NO! Focus on core app first
-- **"I need to fix DEMO mode while I'm here"** - NO! Separate task
-- **"Let me compare DEMO vs production behavior"** - NO! One at a time
-- **"I'll update DEMO data while developing this feature"** - NO! Sequential development
-
-#### 💡 Why This Separation Matters:
-- **Prevents confusion** between DEMO and production logic
-- **Faster development** by focusing on one thing at a time
-- **Cleaner commits** with clear separation of concerns
-- **Easier debugging** without cross-contamination
-- **Better testing** of each mode independently
 
 ## 🗄️ Database Schema Management
 
@@ -686,8 +610,8 @@ If schema drift occurs (like the 2025-08-05 incident):
    DO $$
    BEGIN
        IF NOT EXISTS (
-           SELECT 1 FROM information_schema.columns 
-           WHERE table_name = 'user_profiles' 
+           SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'user_profiles'
            AND column_name = 'email'
        ) THEN
            ALTER TABLE "user_profiles" ADD COLUMN "email" TEXT;
@@ -754,7 +678,7 @@ npm run test:complete-security      # Complete security suite
 # Integration tests with CI environment
 npm run test:integration:ci
 
-# Security tests with CI environment  
+# Security tests with CI environment
 npm run test:security:ci
 
 # NEW: Dedicated security testing
@@ -812,7 +736,7 @@ git push                   # ← Confident it will pass CI/CD
 
 #### **Why Security Tests Must Be Included:**
 1. **Authentication/Authorization**: Tests user isolation and access control
-2. **Data Encryption**: Validates sensitive data protection  
+2. **Data Encryption**: Validates sensitive data protection
 3. **Cross-User Security**: Ensures users can't access each other's data
 4. **Privacy Protection**: Tests data deletion and anonymization
 5. **API Security**: Validates endpoint security and rate limiting
@@ -857,7 +781,7 @@ git push  # ← Now confident it will pass CI/CD
    ```bash
    # Check PostgreSQL is running
    brew services start postgresql
-   
+
    # Verify test database exists
    createdb finsight_test
    ```
@@ -881,8 +805,7 @@ git push  # ← Now confident it will pass CI/CD
 ### **📚 Related Documentation**
 
 - **[TESTING.md](./TESTING.md)** - Complete testing guide
-- **[SECURITY_TESTING_IMPROVEMENT_PLAN.md](./SECURITY_TESTING_IMPROVEMENT_PLAN.md)** - Security testing strategy
-- **[CI_CD_SECURITY_INTEGRATION.md](./CI_CD_SECURITY_INTEGRATION.md)** - CI/CD security integration
+- **[CI/CD security integration](./ci-cd/CI_CD_SECURITY_INTEGRATION.md)** - CI/CD security integration
 - **[scripts/test-cicd-security.sh](../scripts/test-cicd-security.sh)** - Main local CI/CD security testing script
 
 ---
@@ -1075,4 +998,4 @@ npm run build
 5. **✅ Clear Choice**: Production sync vs local reset based on your needs
 6. **✅ Integration**: Seamlessly fits into your development workflow
 
-**These scripts ensure your local development environment is always production-identical, preventing the schema drift issues that cause deployment failures.** 
+**These scripts ensure your local development environment is always production-identical, preventing the schema drift issues that cause deployment failures.**

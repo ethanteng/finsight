@@ -94,20 +94,6 @@ export function createEnhancedMockDatabase() {
       deleteMany: async () => ({ count: 1 })
     },
 
-    demoSession: {
-      findMany: async () => [],
-      create: async (data: any) => ({ id: 'mock-demo-session-1', ...data.data }),
-      update: async (data: any) => ({ id: 'mock-demo-session-1', ...data.data }),
-      deleteMany: async () => ({ count: 0 })
-    },
-
-    demoConversation: {
-      findMany: async () => [],
-      create: async (data: any) => ({ id: 'mock-demo-conversation-1', ...data.data }),
-      update: async (data: any) => ({ id: 'mock-demo-conversation-1', ...data.data }),
-      deleteMany: async () => ({ count: 0 })
-    },
-
     encrypted_profile_data: {
       findMany: async (where?: any) => {
         if (where?.userId) {

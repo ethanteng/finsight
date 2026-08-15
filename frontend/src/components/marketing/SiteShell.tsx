@@ -36,7 +36,7 @@ export function SiteFooter() {
             <span>Ask Linc</span>
           </Link>
           <p>Plan a home, a growing family, a career change, and retirement using your real numbers.</p>
-          <MarketingGetStartedButton className="footer-demo" trackingLocation="footer" />
+          <MarketingGetStartedButton className="footer-cta-link" trackingLocation="footer" />
         </div>
         <div className="footer-column">
           <b>PRODUCT</b>

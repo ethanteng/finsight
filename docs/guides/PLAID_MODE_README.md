@@ -44,8 +44,6 @@ The system automatically detects the mode based on the `PLAID_MODE` environment 
 - When `PLAID_MODE=production`, it uses the `*_PROD` environment variables
 - When `PLAID_MODE=sandbox` or undefined, it uses the regular environment variables
 
-**Important**: Demo mode ALWAYS uses the Plaid sandbox environment and sandbox credentials, regardless of the `PLAID_MODE` setting. This ensures demo functionality works consistently and safely.
-
 ## Example Usage
 
 1. **Test in Sandbox Mode:**
@@ -67,16 +65,6 @@ The system automatically detects the mode based on the `PLAID_MODE` environment 
 - Easy switching between environments
 - Consistent credential management across all Plaid integrations
 - Clear logging of which mode is active
-- Demo mode always uses sandbox for safety and consistency
-
-## Demo Mode Behavior
-
-Demo mode is completely independent of the `PLAID_MODE` setting:
-
-- **Always uses Plaid sandbox environment**
-- **Always uses sandbox credentials** (`PLAID_CLIENT_ID`, `PLAID_SECRET`)
-- **Ignores production mode settings** for safety
-- **Provides consistent demo experience** regardless of environment configuration
 
 ## Logging
 

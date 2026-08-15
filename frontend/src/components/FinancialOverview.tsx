@@ -62,7 +62,6 @@ interface FinancialSummaryData {
 }
 
 interface FinancialOverviewProps {
-  isDemo?: boolean;
   tier?: string;
 }
 
@@ -74,7 +73,7 @@ interface HomeData {
   lastUpdated: string;
 }
 
-export default function FinancialOverview({ isDemo = false, tier }: FinancialOverviewProps) {
+export default function FinancialOverview({ tier }: FinancialOverviewProps) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [snapTradeAccounts, setSnapTradeAccounts] = useState<SnapTradeAccount[]>([]);
   const [mobileExpanded, setMobileExpanded] = useState(false);
@@ -97,17 +96,12 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
           'Content-Type': 'application/json',
         };
 
-        if (isDemo) {
-          headers['x-demo-mode'] = 'true';
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
         } else {
-          const token = localStorage.getItem('auth_token');
-          if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
-          } else {
-            // No token means user is not authenticated
-            setLoading(false);
-            return;
-          }
+          setLoading(false);
+          return;
         }
 
         // Load single-source snapshot (summary view)
@@ -130,8 +124,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
             // Only display a range when the provider supplied both bounds. The
             // canonical midpoint remains the authoritative overview value.
             let profileHomeData: { address: string; value: number; valueLow: number; valueHigh: number; lastUpdated: string } | null = null;
-            if (!isDemo) {
-              try {
+            try {
                 const homeRes = await fetch(`${API_URL}/profile/home`, { headers });
                 if (homeRes.ok) {
                   const homeDataResponse = await homeRes.json();
@@ -148,9 +141,8 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
                     }
                   }
                 }
-              } catch (homeError) {
-                console.log('Error loading home data from /profile/home:', homeError);
-              }
+            } catch (homeError) {
+              console.log('Error loading home data from /profile/home:', homeError);
             }
             if (profileHomeData) {
               setHomeData(profileHomeData);
@@ -179,9 +171,8 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
           setAccounts([]);
         }
 
-        // Load SnapTrade accounts (only for authenticated users, not demo)
-        if (!isDemo) {
-          try {
+        // Load SnapTrade accounts.
+        try {
             const snapTradeRes = await fetch(`${API_URL}/snaptrade/accounts`, {
               headers,
             });
@@ -212,9 +203,8 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
                 // But we can store them for display if needed
               }
             }
-          } catch (manualAccountsError) {
-            console.log('Error loading manual accounts:', manualAccountsError);
-          }
+        } catch (manualAccountsError) {
+          console.log('Error loading manual accounts:', manualAccountsError);
         }
       } catch (error) {
         console.error('Error loading financial data:', error);
@@ -226,7 +216,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
     };
 
     loadFinancialData();
-  }, [API_URL, isDemo]);
+  }, [API_URL]);
 
   // Canonical metrics come only from the backend snapshot. A known zero remains
   // zero; unavailable values are not reconstructed from raw account arrays.
@@ -293,9 +283,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
   };
 
   const handleOverviewClick = () => {
-    if (!isDemo) {
-      router.push('/finances');
-    }
+    router.push('/finances');
   };
 
   if (loading) {
@@ -313,9 +301,9 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
     );
   }
 
-  if (!hasAccounts && !isDemo) {
+  if (!hasAccounts) {
     return (
-      <div 
+      <div
         className="cursor-pointer rounded-[22px] border border-[#102319]/12 bg-[#fffdf5] p-5 shadow-[0_16px_40px_rgba(18,60,47,.06)] transition hover:border-[#102319]/25"
         onClick={handleOverviewClick}
         title="Click to view full financial dashboard"
@@ -351,7 +339,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
 
   return (
     <>
-      <div 
+      <div
         className="cursor-pointer overflow-hidden rounded-[22px] border border-[#102319]/12 bg-[#fffdf5] p-4 text-[#102319] shadow-[0_18px_40px_rgba(18,60,47,.08)] transition hover:-translate-y-0.5"
         onClick={handleOverviewClick}
         title="Click to view full financial dashboard"
@@ -369,7 +357,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
             <div className="h-2 w-2 animate-pulse rounded-full bg-[#49725a]"></div>
             <h3 className="text-base font-semibold text-[#102319]">Your Financial Overview</h3>
           </div>
-          
+
           {/* Add More Accounts link - only show when user has accounts */}
           {hasAccounts && (
             <button
@@ -397,7 +385,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
             )}
           </div>
         )}
-      
+
       {/* Net Worth - Featured Card */}
       <div className="mb-3 rounded-2xl border border-[#397052]/12 bg-[#e2edff] p-4">
         <div className="mb-1 text-xs font-semibold text-[#486b91]">Net Worth</div>
@@ -428,7 +416,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
           </>
         )}
       </button>
-      
+
       {/* Financial Metrics Row - collapsible on mobile */}
       <div className={`${!mobileExpanded ? 'hidden' : ''} md:block`}>
       <div className="grid grid-cols-2 gap-2 mb-3">
@@ -438,14 +426,14 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
             {formatMetric(totalCash)}
           </div>
         </div>
-        
+
         <div className="min-w-0 rounded-xl bg-[#f3eee4] p-3">
           <div className="mb-1 text-[11px] leading-4 text-[#5e6b63]">Total Debt</div>
           <div className="break-words text-sm font-semibold text-[#102319] sm:text-base">
             {formatMetric(totalDebt)}
           </div>
         </div>
-        
+
         <div className="min-w-0 rounded-xl bg-[#f3eee4] p-3">
           <div className="mb-1 text-[11px] leading-4 text-[#5e6b63]">Total Investments</div>
           <div className="break-words text-sm font-semibold text-[#102319] sm:text-base">
@@ -473,7 +461,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
             <div className="mb-1 text-[11px] leading-4 text-[#526e45]">Accounts</div>
             <div className="break-words text-sm font-semibold text-[#102319] sm:text-base">{totalAccountCount}</div>
           </div>
-          
+
           {investmentData?.portfolio && (
             <>
               <div className="min-w-0 rounded-xl bg-[#e6f3c8] p-3">
@@ -486,7 +474,7 @@ export default function FinancialOverview({ isDemo = false, tier }: FinancialOve
               </div>
             </>
           )}
-          
+
         </div>
       )}
       </div>

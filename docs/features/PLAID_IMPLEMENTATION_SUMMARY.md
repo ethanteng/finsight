@@ -56,8 +56,8 @@ if (account.type === 'depository') {
 5. Verify automatic data detection
 
 ### Documentation
-- **Full guide**: `docs/SEAMLESS_PLAID_INTEGRATION.md`
-- **This summary**: `docs/PLAID_IMPLEMENTATION_SUMMARY.md`
+- **This summary**: `docs/features/PLAID_IMPLEMENTATION_SUMMARY.md`
+- **Environment modes**: `docs/guides/PLAID_MODE_README.md`
 
 ---
 

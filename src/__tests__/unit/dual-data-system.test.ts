@@ -1,6 +1,6 @@
-import { 
-  tokenizeAccount, 
-  tokenizeInstitution, 
+import {
+  tokenizeAccount,
+  tokenizeInstitution,
   tokenizeMerchant,
   getRealAccountName,
   getRealInstitutionName,
@@ -35,9 +35,14 @@ describe('Context Builder User Isolation', () => {
     const user1Accounts = await prisma.account.findMany({
       where: { userId: user1.id }
     });
-    
-    const context1 = await orchestrator.buildTierAwareContext(UserTier.STARTER, user1Accounts, [], false);
-    
+
+    const context1 = await orchestrator.buildTierAwareContext(
+      UserTier.STARTER,
+      user1Accounts,
+      [],
+      { includeMarketContext: false }
+    );
+
     // Should include user1's accounts
     expect(context1.accounts.some(a => a.name === 'User1 Checking')).toBe(true);
     expect(context1.accounts.some(a => a.name === 'User1 Savings')).toBe(true);
@@ -73,11 +78,11 @@ describe('Dual-Data System Unit Tests', () => {
         // Arrange
         const accountName = 'Chase Checking Account';
         const institution = 'Chase Bank';
-        
+
         // Act
         const token1 = tokenizeAccount(accountName, institution);
         const token2 = tokenizeAccount(accountName, institution);
-        
+
         // Assert
         expect(token1).toBe(token2);
         expect(token1).toMatch(/^Account_\d+$/);
@@ -88,11 +93,11 @@ describe('Dual-Data System Unit Tests', () => {
         const accountName = 'Checking Account';
         const institution1 = 'Chase';
         const institution2 = 'Wells Fargo';
-        
+
         // Act
         const token1 = tokenizeAccount(accountName, institution1);
         const token2 = tokenizeAccount(accountName, institution2);
-        
+
         // Assert
         expect(token1).not.toBe(token2);
         expect(token1).toMatch(/^Account_\d+$/);
@@ -103,10 +108,10 @@ describe('Dual-Data System Unit Tests', () => {
         // Arrange
         const accountName = '';
         const institution = 'Test Bank';
-        
+
         // Act
         const token = tokenizeAccount(accountName, institution);
-        
+
         // Assert
         expect(token).toMatch(/^Account_\d+$/);
       });
@@ -115,10 +120,10 @@ describe('Dual-Data System Unit Tests', () => {
         // Arrange
         const accountName = 'Account & Co. (LLC)';
         const institution = 'Bank & Trust';
-        
+
         // Act
         const token = tokenizeAccount(accountName, institution);
-        
+
         // Assert
         expect(token).toMatch(/^Account_\d+$/);
         expect(getRealAccountName(token)).toBe(accountName);
@@ -129,11 +134,11 @@ describe('Dual-Data System Unit Tests', () => {
       test('should tokenize institution names consistently', () => {
         // Arrange
         const institution = 'Wells Fargo';
-        
+
         // Act
         const token1 = tokenizeInstitution(institution);
         const token2 = tokenizeInstitution(institution);
-        
+
         // Assert
         expect(token1).toBe(token2);
         expect(token1).toMatch(/^Institution_\d+$/);
@@ -142,10 +147,10 @@ describe('Dual-Data System Unit Tests', () => {
       test('should handle empty institution name', () => {
         // Arrange
         const institution = '';
-        
+
         // Act
         const token = tokenizeInstitution(institution);
-        
+
         // Assert
         expect(token).toMatch(/^Institution_\d+$/);
       });
@@ -155,11 +160,11 @@ describe('Dual-Data System Unit Tests', () => {
       test('should tokenize merchant names consistently', () => {
         // Arrange
         const merchant = 'Amazon.com';
-        
+
         // Act
         const token1 = tokenizeMerchant(merchant);
         const token2 = tokenizeMerchant(merchant);
-        
+
         // Assert
         expect(token1).toBe(token2);
         expect(token1).toMatch(/^Merchant_\d+$/);
@@ -168,10 +173,10 @@ describe('Dual-Data System Unit Tests', () => {
       test('should handle very long merchant names', () => {
         // Arrange
         const longMerchant = 'A'.repeat(1000);
-        
+
         // Act
         const token = tokenizeMerchant(longMerchant);
-        
+
         // Assert
         expect(token).toMatch(/^Merchant_\d+$/);
         expect(getRealMerchantName(token)).toBe(longMerchant);
@@ -186,10 +191,10 @@ describe('Dual-Data System Unit Tests', () => {
         const accountName = 'Savings Account';
         const institution = 'Ally Bank';
         const token = tokenizeAccount(accountName, institution);
-        
+
         // Act
         const realName = getRealAccountName(token);
-        
+
         // Assert
         expect(realName).toBe(accountName);
       });
@@ -197,10 +202,10 @@ describe('Dual-Data System Unit Tests', () => {
       test('should return token if no real data mapping exists', () => {
         // Arrange
         const unknownToken = 'Unknown_Token_123';
-        
+
         // Act
         const result = getRealAccountName(unknownToken);
-        
+
         // Assert
         expect(result).toBe(unknownToken);
       });
@@ -211,10 +216,10 @@ describe('Dual-Data System Unit Tests', () => {
         // Arrange
         const institution = 'Bank of America';
         const token = tokenizeInstitution(institution);
-        
+
         // Act
         const realName = getRealInstitutionName(token);
-        
+
         // Assert
         expect(realName).toBe(institution);
       });
@@ -225,10 +230,10 @@ describe('Dual-Data System Unit Tests', () => {
         // Arrange
         const merchant = 'Netflix';
         const token = tokenizeMerchant(merchant);
-        
+
         // Act
         const realName = getRealMerchantName(token);
-        
+
         // Assert
         expect(realName).toBe(merchant);
       });
@@ -243,10 +248,10 @@ describe('Dual-Data System Unit Tests', () => {
         const institution = 'Chase Bank';
         const token = tokenizeAccount(accountName, institution);
         const aiResponse = `Your ${token} has a balance of $1,000.`;
-        
+
         // Act
         const userFriendly = convertResponseToUserFriendly(aiResponse);
-        
+
         // Assert
         expect(userFriendly).toBe(`Your Chase Checking at Chase Bank has a balance of $1,000.`);
       });
@@ -256,10 +261,10 @@ describe('Dual-Data System Unit Tests', () => {
         const merchant = 'Amazon.com';
         const token = tokenizeMerchant(merchant);
         const aiResponse = `You spent $50 at ${token} yesterday.`;
-        
+
         // Act
         const userFriendly = convertResponseToUserFriendly(aiResponse);
-        
+
         // Assert
         expect(userFriendly).toBe(`You spent $50 at Amazon.com yesterday.`);
       });
@@ -269,10 +274,10 @@ describe('Dual-Data System Unit Tests', () => {
         const institution = 'Wells Fargo';
         const token = tokenizeInstitution(institution);
         const aiResponse = `Your mortgage is with ${token}.`;
-        
+
         // Act
         const userFriendly = convertResponseToUserFriendly(aiResponse);
-        
+
         // Assert
         expect(userFriendly).toBe(`Your mortgage is with Wells Fargo.`);
       });
@@ -283,10 +288,10 @@ describe('Dual-Data System Unit Tests', () => {
         const merchantToken = tokenizeMerchant('Netflix');
         const institutionToken = tokenizeInstitution('Chase');
         const aiResponse = `Your ${accountToken} has money from ${merchantToken} subscription, and your checking is at ${institutionToken}.`;
-        
+
         // Act
         const userFriendly = convertResponseToUserFriendly(aiResponse);
-        
+
         // Assert
         expect(userFriendly).toBe(`Your Savings at Ally Bank has money from Netflix subscription, and your checking is at Chase.`);
       });
@@ -294,10 +299,10 @@ describe('Dual-Data System Unit Tests', () => {
       test('should leave unknown tokens unchanged', () => {
         // Arrange
         const aiResponse = `Your Account_Unknown has a balance.`;
-        
+
         // Act
         const userFriendly = convertResponseToUserFriendly(aiResponse);
-        
+
         // Assert
         expect(userFriendly).toBe(`Your Account_Unknown has a balance.`);
       });
@@ -305,10 +310,10 @@ describe('Dual-Data System Unit Tests', () => {
       test('should handle response with no tokens', () => {
         // Arrange
         const aiResponse = `Your account balance is $1,000.`;
-        
+
         // Act
         const userFriendly = convertResponseToUserFriendly(aiResponse);
-        
+
         // Assert
         expect(userFriendly).toBe(`Your account balance is $1,000.`);
       });
@@ -316,10 +321,10 @@ describe('Dual-Data System Unit Tests', () => {
       test('should handle empty response', () => {
         // Arrange
         const aiResponse = '';
-        
+
         // Act
         const userFriendly = convertResponseToUserFriendly(aiResponse);
-        
+
         // Assert
         expect(userFriendly).toBe('');
       });
@@ -333,10 +338,10 @@ describe('Dual-Data System Unit Tests', () => {
         tokenizeAccount('Test Account', 'Test Bank');
         tokenizeInstitution('Test Institution');
         tokenizeMerchant('Test Merchant');
-        
+
         // Act
         clearTokenizationMaps();
-        
+
         // Assert
         expect(getRealAccountName('Account_1')).toBe('Account_1');
         expect(getRealInstitutionName('Institution_1')).toBe('Institution_1');
@@ -347,13 +352,13 @@ describe('Dual-Data System Unit Tests', () => {
         // Arrange
         const accountName = 'Test Account';
         const institution = 'Test Bank';
-        
+
         // Act
         const token1 = tokenizeAccount(accountName, institution);
         const realName1 = getRealAccountName(token1);
         const token2 = tokenizeAccount(accountName, institution);
         const realName2 = getRealAccountName(token2);
-        
+
         // Assert
         expect(token1).toBe(token2);
         expect(realName1).toBe(realName2);
@@ -367,7 +372,7 @@ describe('Dual-Data System Unit Tests', () => {
       // Arrange
       const nullAccount = null as any;
       const undefinedInstitution = undefined as any;
-      
+
       // Act & Assert
       expect(() => tokenizeAccount(nullAccount, undefinedInstitution)).not.toThrow();
       expect(() => getRealAccountName(nullAccount)).not.toThrow();
@@ -377,10 +382,10 @@ describe('Dual-Data System Unit Tests', () => {
       // Arrange
       const numberInput = 123 as any;
       const objectInput = {} as any;
-      
+
       // Act & Assert
       expect(() => tokenizeAccount(numberInput, objectInput)).not.toThrow();
       expect(() => convertResponseToUserFriendly(numberInput)).not.toThrow();
     });
   });
-}); 
+});

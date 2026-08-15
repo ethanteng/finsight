@@ -113,7 +113,7 @@ describe('Scheduled Market Context Updates', () => {
         keys: ['fred_MORTGAGE30US', 'fred_FEDFUNDS', 'fred_CPIAUCSL', 'economic_indicators', 'live_market_data'],
         marketContextCache: {
           size: 3,
-          keys: ['market_context_starter_true', 'market_context_standard_true', 'market_context_premium_true'],
+          keys: ['market_context_starter', 'market_context_standard', 'market_context_premium'],
           lastRefresh: new Date('2025-08-01T05:57:41.405Z')
         }
       });
@@ -213,7 +213,7 @@ describe('Scheduled Market Context Updates', () => {
         keys: ['fred_MORTGAGE30US', 'fred_FEDFUNDS', 'fred_CPIAUCSL', 'economic_indicators', 'live_market_data'],
         marketContextCache: {
           size: 3,
-          keys: ['market_context_starter_true', 'market_context_standard_true', 'market_context_premium_true'],
+          keys: ['market_context_starter', 'market_context_standard', 'market_context_premium'],
           lastRefresh: new Date('2025-08-01T05:57:41.405Z')
         }
       });
@@ -257,7 +257,7 @@ describe('Scheduled Market Context Updates', () => {
         keys: ['fred_MORTGAGE30US', 'fred_FEDFUNDS', 'fred_CPIAUCSL', 'economic_indicators', 'live_market_data'],
         marketContextCache: {
           size: 3,
-          keys: ['market_context_starter_true', 'market_context_standard_true', 'market_context_premium_true'],
+          keys: ['market_context_starter', 'market_context_standard', 'market_context_premium'],
           lastRefresh: new Date('2025-08-01T05:57:41.405Z')
         }
       });
@@ -290,7 +290,7 @@ describe('Scheduled Market Context Updates', () => {
         keys: ['fred_MORTGAGE30US', 'fred_FEDFUNDS', 'fred_CPIAUCSL', 'economic_indicators', 'live_market_data'],
         marketContextCache: {
           size: 3,
-          keys: ['market_context_starter_true', 'market_context_standard_true', 'market_context_premium_true'],
+          keys: ['market_context_starter', 'market_context_standard', 'market_context_premium'],
           lastRefresh: new Date('2025-08-01T05:57:41.405Z')
         }
       });
@@ -337,4 +337,4 @@ describe('Scheduled Market Context Updates', () => {
       expect(marketContextJob).not.toBe(dailySyncJob);
     });
   });
-}); 
+});

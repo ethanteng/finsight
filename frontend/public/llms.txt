@@ -8,7 +8,7 @@ Ask Linc connects to your financial accounts and answers real questions about re
 
 - 1 month free, then $9/month flat — ~98% cheaper than a 1% advisor fee
 - Cancel anytime
-- See a real answer free in the interactive demo (sample data, no credit card needed): https://asklinc.com/demo
+- Create an account to connect your financial data and ask Linc questions: https://asklinc.com/signup
 
 ## Who it's for
 
@@ -20,7 +20,7 @@ Households planning retirement and major money decisions who are tired of dashbo
 - Product / features: https://asklinc.com/features
 - Pricing: https://asklinc.com/pricing
 - FAQ: https://asklinc.com/faq
-- Interactive demo: https://asklinc.com/demo
+- Get started: https://asklinc.com/signup
 - Use cases: https://asklinc.com/use-cases
 - Retirement answers hub: https://asklinc.com/retirement-answers
 - Retirement answer — Can I retire with $1 million?: https://asklinc.com/can-i-retire-with-1-million

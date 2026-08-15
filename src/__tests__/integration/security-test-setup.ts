@@ -44,22 +44,22 @@ let prisma: PrismaClient | any;
 beforeAll(async () => {
   // ✅ Setup test environment
   process.env.NODE_ENV = 'test';
-  
+
   // ✅ Force test API keys for integration tests to avoid hitting live APIs
   process.env.FRED_API_KEY = 'test_fred_key';
   process.env.ALPHA_VANTAGE_API_KEY = 'test_alpha_vantage_key';
   process.env.SEARCH_API_KEY = 'test_search_key';
-  
+
   // ✅ Verify API keys are available for integration tests
   const requiredKeys = [
     'OPENAI_API_KEY',
-    'FRED_API_KEY', 
+    'FRED_API_KEY',
     'ALPHA_VANTAGE_API_KEY',
     'SEARCH_API_KEY'
   ];
-  
+
   const missingKeys = requiredKeys.filter(key => !process.env[key]);
-  
+
   if (missingKeys.length > 0) {
     console.error(`❌ Missing API keys for security tests: ${missingKeys.join(', ')}`);
     console.error('Security tests require API keys to be set (even test keys)');
@@ -111,11 +111,9 @@ beforeEach(async () => {
     await prisma.encryptedEmailVerificationCode.deleteMany();
     await prisma.encryptedUserData.deleteMany();
     await prisma.encrypted_profile_data.deleteMany(); // Clean encrypted profile data first
-    await prisma.demoConversation.deleteMany();  // Clean demo conversations first
-    await prisma.demoSession.deleteMany();       // Clean demo sessions
     await prisma.accessToken.deleteMany();
     await prisma.user.deleteMany();
-    
+
     console.log('🧹 Security test data cleaned up');
   } catch (error: any) {
     // Log errors but don't fail the test setup

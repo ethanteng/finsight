@@ -43,7 +43,7 @@ export async function fetchShowTheMathDBData(
   const ninetyDaysBeforeEvidence = new Date(evidenceAt);
   ninetyDaysBeforeEvidence.setDate(ninetyDaysBeforeEvidence.getDate() - 90);
 
-  // User-scoped tables (skip for demo)
+  // Load user-scoped evidence only when the manifest references it.
   if (userId) {
     if (manifest.evidenceRefs.retirementAnalysis) {
       try {

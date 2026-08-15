@@ -3,6 +3,14 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import ProfilePage from '../app/profile/page';
 
+jest.mock('snaptrade-react', () => ({
+  SnapTradeReact: () => null,
+}));
+
+jest.mock('snaptrade-react/hooks/useWindowMessage', () => ({
+  useWindowMessage: jest.fn(),
+}));
+
 // Mock fetch globally
 global.fetch = jest.fn();
 
@@ -32,6 +40,9 @@ function mockFetchForDisconnect({ ok = true, status = 200 } = {}) {
       lastDisconnectOptions = options as MockOptions;
       return Promise.resolve({ ok, status, json: async () => ({ success: ok }) });
     }
+    if (url && typeof url === 'string' && url.endsWith('/snaptrade/delete') && options?.method === 'DELETE') {
+      return Promise.resolve({ ok, status, json: async () => ({ success: ok }) });
+    }
     return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
   });
 }
@@ -41,6 +52,9 @@ function mockFetchForDelete({ ok = true, status = 200 } = {}) {
   (global.fetch as jest.Mock).mockImplementation((url, options) => {
     if (url && typeof url === 'string' && url.endsWith('/privacy/delete-all-data') && options?.method === 'DELETE') {
       lastDeleteOptions = options as MockOptions;
+      return Promise.resolve({ ok, status, json: async () => ({ success: ok }) });
+    }
+    if (url && typeof url === 'string' && url.endsWith('/snaptrade/delete') && options?.method === 'DELETE') {
       return Promise.resolve({ ok, status, json: async () => ({ success: ok }) });
     }
     return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
@@ -95,77 +109,14 @@ describe('ProfilePage', () => {
 
     it('should show helpful context for each button', () => {
       render(<ProfilePage />);
-      
+
       // Check disconnect context
-      expect(screen.getByText(/Remove all Plaid connections and clear your financial data/)).toBeInTheDocument();
-      expect(screen.getByText(/This will disconnect all linked bank accounts but keep your conversation history/)).toBeInTheDocument();
-      
+      expect(screen.getByText(/Remove all Plaid and SnapTrade connections and clear your financial data/)).toBeInTheDocument();
+      expect(screen.getByText(/This will disconnect all linked financial accounts but keep your conversation history/)).toBeInTheDocument();
+
       // Check delete context
       expect(screen.getByText(/Permanently delete all your data including accounts, transactions/)).toBeInTheDocument();
       expect(screen.getByText(/This action cannot be undone/)).toBeInTheDocument();
-    });
-  });
-
-  describe('Demo Mode Handling', () => {
-    it('should show demo message when disconnecting accounts in demo mode', async () => {
-      // Mock demo mode by setting URL search params and referrer
-      (window.location as unknown as Record<string, unknown>).search = '?demo=true';
-      Object.defineProperty(document, 'referrer', {
-        value: 'http://localhost:3001/demo',
-        writable: true,
-      });
-      render(<ProfilePage />);
-      const disconnectButton = screen.getByText('Disconnect All Accounts');
-      fireEvent.click(disconnectButton);
-      await waitFor(() => {
-        expect(screen.getByText('This is a demo only. In the real app, your accounts would have been disconnected.')).toBeInTheDocument();
-        // Demo message should be red
-        expect(screen.getByText('This is a demo only. In the real app, your accounts would have been disconnected.')).toHaveClass('bg-red-900');
-      });
-    });
-
-    it('should show demo message when deleting data in demo mode', async () => {
-      // Mock demo mode by setting URL search params and referrer
-      (window.location as unknown as Record<string, unknown>).search = '?demo=true';
-      Object.defineProperty(document, 'referrer', {
-        value: 'http://localhost:3001/demo',
-        writable: true,
-      });
-      render(<ProfilePage />);
-      const deleteButton = screen.getByText('Delete All Data');
-      fireEvent.click(deleteButton);
-      // Should show confirmation modal
-      await waitFor(() => {
-        expect(screen.getByText('Confirm Data Deletion')).toBeInTheDocument();
-      });
-      const confirmButton = screen.getByText('Yes, Delete Everything');
-      fireEvent.click(confirmButton);
-      await waitFor(() => {
-        expect(screen.getByText('This is a demo only. In the real app, your account data would have been deleted.')).toBeInTheDocument();
-        // Demo message should be red
-        expect(screen.getByText('This is a demo only. In the real app, your account data would have been deleted.')).toHaveClass('bg-red-900');
-      });
-    });
-
-    it('should make API calls with demo headers in demo mode', async () => {
-      // Mock demo mode by setting URL search params and referrer
-      (window.location as unknown as Record<string, unknown>).search = '?demo=true';
-      Object.defineProperty(document, 'referrer', {
-        value: 'http://localhost:3001/demo',
-        writable: true,
-      });
-
-      render(<ProfilePage />);
-
-      // Verify API calls were made with demo headers
-      await waitFor(() => {
-        const calls = (global.fetch as jest.Mock).mock.calls;
-        const demoCalls = calls.filter(([url, options]: [string, MockOptions]) => 
-          url.includes('/plaid/all-accounts') && 
-          options.headers?.['x-demo-mode'] === 'true'
-        );
-        expect(demoCalls.length).toBeGreaterThan(0);
-      });
     });
   });
 
@@ -181,8 +132,8 @@ describe('ProfilePage', () => {
       });
     });
 
-    it('should call disconnect API when not in demo mode', async () => {
-      // Ensure not in demo mode
+    it('should call disconnect API when as an authenticated user', async () => {
+      // Ensure as an authenticated user
       (window.location as unknown as Record<string, unknown>).search = '';
       Object.defineProperty(document, 'referrer', {
         value: '',
@@ -197,8 +148,8 @@ describe('ProfilePage', () => {
       });
       expect(lastDisconnectOptions?.headers?.['Authorization']).toBe('Bearer mock-auth-token');
     });
-    it('should call delete API when not in demo mode', async () => {
-      // Ensure not in demo mode
+    it('should call delete API when as an authenticated user', async () => {
+      // Ensure as an authenticated user
       (window.location as unknown as Record<string, unknown>).search = '';
       Object.defineProperty(document, 'referrer', {
         value: '',
@@ -216,7 +167,7 @@ describe('ProfilePage', () => {
       expect(lastDeleteOptions?.headers?.['Authorization']).toBe('Bearer mock-auth-token');
     });
     it('should show success message after successful deletion', async () => {
-      // Ensure not in demo mode
+      // Ensure as an authenticated user
       (window.location as unknown as Record<string, unknown>).search = '';
       Object.defineProperty(document, 'referrer', {
         value: '',
@@ -231,7 +182,7 @@ describe('ProfilePage', () => {
       fireEvent.click(confirmButton);
       // Wait for the success message to appear
       await waitFor(() => {
-        expect(screen.getByText('All your data has been successfully deleted.')).toBeInTheDocument();
+        expect(screen.getByText('All your data (Plaid and SnapTrade) has been successfully deleted.')).toBeInTheDocument();
       });
       // Verify localStorage.removeItem was called
       expect(localStorageMock.removeItem).toHaveBeenCalledWith('auth_token');
@@ -245,7 +196,7 @@ describe('ProfilePage', () => {
     });
 
     it('should handle missing auth token gracefully', async () => {
-      // Ensure not in demo mode
+      // Ensure as an authenticated user
       (window.location as unknown as Record<string, unknown>).search = '';
       Object.defineProperty(document, 'referrer', {
         value: '',
@@ -257,8 +208,8 @@ describe('ProfilePage', () => {
       const disconnectButton = screen.getByText('Disconnect All Accounts');
       fireEvent.click(disconnectButton);
       await waitFor(() => {
-        expect(screen.getByText('Failed to disconnect accounts. Please try again.')).toBeInTheDocument();
-        expect(screen.getByText('Failed to disconnect accounts. Please try again.')).toHaveClass('bg-red-900');
+        expect(screen.getByText('Failed to disconnect some accounts. Please try again.')).toBeInTheDocument();
+        expect(screen.getByText('Failed to disconnect some accounts. Please try again.')).toHaveClass('bg-red-900');
       });
       await waitFor(() => {
         expect(lastDisconnectOptions).not.toBeNull();
@@ -267,7 +218,7 @@ describe('ProfilePage', () => {
     });
 
     it('should include auth token in API calls when available', async () => {
-      // Ensure not in demo mode
+      // Ensure as an authenticated user
       (window.location as unknown as Record<string, unknown>).search = '';
       Object.defineProperty(document, 'referrer', {
         value: '',
@@ -291,7 +242,7 @@ describe('ProfilePage', () => {
 
   describe('Error Message Display', () => {
     it('should show success messages in green', async () => {
-      // Ensure not in demo mode
+      // Ensure as an authenticated user
       (window.location as unknown as Record<string, unknown>).search = '';
       Object.defineProperty(document, 'referrer', {
         value: '',
@@ -306,12 +257,12 @@ describe('ProfilePage', () => {
       const disconnectButton = screen.getByText('Disconnect All Accounts');
       fireEvent.click(disconnectButton);
       await waitFor(() => {
-        const successMessage = screen.getByText('Your accounts have been successfully disconnected.');
+        const successMessage = screen.getByText('All your accounts (Plaid and SnapTrade) have been successfully disconnected.');
         expect(successMessage).toHaveClass('bg-green-900');
       });
     });
     it('should show error messages in red', async () => {
-      // Ensure not in demo mode
+      // Ensure as an authenticated user
       (window.location as unknown as Record<string, unknown>).search = '';
       Object.defineProperty(document, 'referrer', {
         value: '',
@@ -326,9 +277,9 @@ describe('ProfilePage', () => {
       const disconnectButton = screen.getByText('Disconnect All Accounts');
       fireEvent.click(disconnectButton);
       await waitFor(() => {
-        const errorMessage = screen.getByText('Failed to disconnect accounts. Please try again.');
+        const errorMessage = screen.getByText('Failed to disconnect some accounts. Please try again.');
         expect(errorMessage).toHaveClass('bg-red-900');
       });
     });
   });
-}); 
+});

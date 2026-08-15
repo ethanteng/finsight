@@ -18,21 +18,21 @@ describe('PlaidProfileEnhancer Unit Tests', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Mock OpenAI
     const { openai } = require('../../openai');
     mockOpenAI = openai;
     mockOpenAI.chat.completions.create.mockResolvedValue({
       choices: [{ message: { content: 'Enhanced profile with Plaid insights' } }]
     });
-    
+
     enhancer = new PlaidProfileEnhancer();
   });
 
   describe('enhanceProfileFromPlaidData', () => {
     it('should return existing profile when no Plaid data is available', async () => {
       const existingProfile = 'Existing user profile';
-      
+
       const result = await enhancer.enhanceProfileFromPlaidData(
         'test-user-id',
         [],
@@ -179,7 +179,7 @@ describe('PlaidProfileEnhancer Unit Tests', () => {
 
     it('should handle OpenAI API errors gracefully', async () => {
       mockOpenAI.chat.completions.create.mockRejectedValue(new Error('API Error'));
-      
+
       const accounts = [
         {
           id: 'account-1',
@@ -206,7 +206,7 @@ describe('PlaidProfileEnhancer Unit Tests', () => {
       mockOpenAI.chat.completions.create.mockResolvedValue({
         choices: [{ message: { content: null } }]
       });
-      
+
       const accounts = [
         {
           id: 'account-1',
@@ -675,7 +675,7 @@ describe('PlaidProfileEnhancer Unit Tests', () => {
 
     it('should handle network errors gracefully', async () => {
       mockOpenAI.chat.completions.create.mockRejectedValue(new Error('Network Error'));
-      
+
       const accounts = [
         {
           id: 'account-1',
@@ -699,8 +699,8 @@ describe('PlaidProfileEnhancer Unit Tests', () => {
     });
   });
 
-  describe('Integration with Demo Data', () => {
-    it('should work with realistic demo data', async () => {
+  describe('Integration with deterministic fixtures', () => {
+    it('should work with realistic account and transaction data', async () => {
       const accounts = [
         {
           id: 'checking_1',
@@ -747,7 +747,7 @@ describe('PlaidProfileEnhancer Unit Tests', () => {
       ];
 
       const result = await enhancer.enhanceProfileFromPlaidData(
-        'demo-user-id',
+        'test-user-id',
         accounts,
         transactions,
         'Sarah Chen, 32, Software Engineer in Austin, TX'
@@ -765,4 +765,4 @@ describe('PlaidProfileEnhancer Unit Tests', () => {
       );
     });
   });
-}); 
+});

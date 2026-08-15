@@ -23,13 +23,13 @@ describe('Plaid Security Tests', () => {
 
     // Create access tokens for each user in database
     user1Token = await prisma.accessToken.create({
-      data: createTestAccessToken({ 
+      data: createTestAccessToken({
         userId: user1.id,
         token: 'user1-test-access-token'
       })
     });
     user2Token = await prisma.accessToken.create({
-      data: createTestAccessToken({ 
+      data: createTestAccessToken({
         userId: user2.id,
         token: 'user2-test-access-token'
       })
@@ -67,17 +67,17 @@ describe('Plaid Security Tests', () => {
       // This test simulates the old bug where we fetched all tokens without user filtering
       // In the old implementation, this would return user2's tokens even when user1 was requesting
       const allTokens = await prisma.accessToken.findMany();
-      
+
       // Verify that user1's tokens are separate from user2's tokens
       const user1Tokens = allTokens.filter((t: any) => t.userId === user1.id);
       const user2Tokens = allTokens.filter((t: any) => t.userId === user2.id);
-      
+
       // Each user should only have their own tokens
       expect(user1Tokens).toHaveLength(1);
       expect(user2Tokens).toHaveLength(1);
       expect(user1Tokens[0].userId).toBe(user1.id);
       expect(user2Tokens[0].userId).toBe(user2.id);
-      
+
       // Verify no cross-contamination
       expect(user1Tokens[0].id).not.toBe(user2Tokens[0].id);
     });
@@ -85,14 +85,14 @@ describe('Plaid Security Tests', () => {
     it('should maintain user isolation when fetching all tokens', async () => {
       // This simulates the old bug where we fetched all tokens
       const allTokens = await prisma.accessToken.findMany();
-      
+
       // Should have exactly 2 tokens (one for each user)
       expect(allTokens).toHaveLength(2);
-      
+
       // Verify each token belongs to the correct user
       const user1TokenIds = allTokens.filter((t: any) => t.userId === user1.id).map((t: any) => t.id);
       const user2TokenIds = allTokens.filter((t: any) => t.userId === user2.id).map((t: any) => t.id);
-      
+
       expect(user1TokenIds).toContain(user1Token.id);
       expect(user2TokenIds).toContain(user2Token.id);
     });
@@ -135,32 +135,27 @@ describe('Plaid Security Tests', () => {
     });
   });
 
-  describe('Demo Mode Security Tests', () => {
-    it('should not expose real user data in demo mode', async () => {
-      const isDemoMode = true;
-      const userId = 'demo-user-id';
+  describe('Unknown user isolation', () => {
+    it('does not expose token data for an unknown user', async () => {
+      const userId = 'unknown-user-id';
 
-      // In demo mode, should not query real user tokens
-      const demoModeTokens = await prisma.accessToken.findMany({
+      const unknownUserTokens = await prisma.accessToken.findMany({
         where: { userId }
       });
 
-      // Should return empty array in demo mode
-      expect(demoModeTokens).toHaveLength(0);
+      expect(unknownUserTokens).toHaveLength(0);
     });
 
-    it('should maintain demo mode isolation', async () => {
-      const demoUserId = 'demo-user-id';
+    it('does not cross user token boundaries', async () => {
+      const unknownUserId = 'unknown-user-id';
       const realUserId = user1.id;
 
-      // Demo user should not have access to real user tokens
-      const demoUserTokens = await prisma.accessToken.findMany({
-        where: { userId: demoUserId }
+      const unknownUserTokens = await prisma.accessToken.findMany({
+        where: { userId: unknownUserId }
       });
 
-      expect(demoUserTokens).toHaveLength(0);
+      expect(unknownUserTokens).toHaveLength(0);
 
-      // Real user should not have access to demo tokens
       const realUserTokens = await prisma.accessToken.findMany({
         where: { userId: realUserId }
       });
@@ -277,4 +272,4 @@ describe('Plaid Security Tests', () => {
       expect(user2Tokens).toHaveLength(1);
     });
   });
-}); 
+});

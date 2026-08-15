@@ -24,7 +24,7 @@ describe('Authentication Tests', () => {
         }
       }
     });
-    
+
     await prisma.user.deleteMany({
       where: {
         email: {
@@ -201,49 +201,6 @@ describe('Authentication Tests', () => {
     });
   });
 
-  describe('Demo Mode Tests', () => {
-    it('should allow demo API requests without authentication', async () => {
-      const response = await request(app)
-        .post('/ask')
-        .set('x-session-id', 'test-session-id')
-        .send({
-          question: 'What is my balance?',
-          isDemo: true
-        });
-
-      expect([200, 500]).toContain(response.status);
-      if (response.status === 200) {
-        expect(response.body).toHaveProperty('answer');
-      }
-    });
-
-    it('should allow demo API requests without authentication', async () => {
-      const response = await request(app)
-        .post('/ask')
-        .set('x-session-id', 'test-session-id')
-        .send({
-          question: 'What is my balance?',
-          isDemo: true
-        });
-
-      expect([200, 500]).toContain(response.status);
-      if (response.status === 200) {
-        expect(response.body).toHaveProperty('answer');
-      }
-    });
-
-    it('should reject demo API requests without session ID', async () => {
-      const response = await request(app)
-        .post('/ask')
-        .send({
-          question: 'What is my balance?',
-          isDemo: true
-        });
-
-      expect(response.status).toBe(400);
-    });
-  });
-
   describe('Session Management', () => {
     let authToken: string;
 
@@ -327,24 +284,5 @@ describe('Authentication Tests', () => {
       // This would need to be verified based on the actual response structure
     });
 
-    it('should allow demo users to access demo data without affecting real users', async () => {
-      // Demo request
-      const demoResponse = await request(app)
-        .post('/ask')
-        .set('x-session-id', 'test-session-id')
-        .send({
-          question: 'What is my balance?',
-          isDemo: true
-        });
-
-      expect([200, 500]).toContain(demoResponse.status);
-
-      // Real user request should still work
-      const userResponse = await request(app)
-        .get('/auth/profile')
-        .set('Authorization', `Bearer ${user1Token}`);
-
-      expect(userResponse.status).toBe(200);
-    });
   });
-}); 
+});

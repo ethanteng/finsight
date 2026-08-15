@@ -91,11 +91,11 @@ export class DataOrchestrator {
 
     this.fredProvider = new FREDProvider(fredApiKey || '');
     this.alphaVantageProvider = new AlphaVantageProvider(alphaVantageApiKey || '');
-    
+
     // Make search provider configurable
     const searchProviderType = process.env.SEARCH_PROVIDER || 'brave';
     this.searchProvider = new SearchProvider(searchApiKey || '', searchProviderType as 'bing' | 'google' | 'brave' | 'serpapi');
-    
+
     console.log('DataOrchestrator: Search provider initialized with key:', searchApiKey ? 'PRESENT' : 'MISSING');
     console.log('DataOrchestrator: Search provider type:', process.env.SEARCH_PROVIDER || 'brave');
   }
@@ -110,7 +110,7 @@ export class DataOrchestrator {
           hasScenarioPlanning: false,
           hasSearchContext: false
         };
-      
+
       case UserTier.STANDARD:
         return {
           tier: UserTier.STANDARD,
@@ -119,7 +119,7 @@ export class DataOrchestrator {
           hasScenarioPlanning: false,
           hasSearchContext: true
         };
-      
+
       case UserTier.PREMIUM:
         return {
           tier: UserTier.PREMIUM,
@@ -128,7 +128,7 @@ export class DataOrchestrator {
           hasScenarioPlanning: true,
           hasSearchContext: true
         };
-      
+
       default:
         return {
           tier: UserTier.STARTER,
@@ -143,9 +143,9 @@ export class DataOrchestrator {
   /**
    * Enhanced market context manager with proactive caching
    */
-  async getMarketContextSummary(tier: UserTier, isDemo: boolean = false): Promise<string> {
-    const cacheKey = `market_context_${tier}_${isDemo}`;
-    
+  async getMarketContextSummary(tier: UserTier): Promise<string> {
+    const cacheKey = `market_context_${tier}`;
+
     // Check if we have a recent cached context
     const cached = this.marketContextCache.get(cacheKey);
     if (cached && this.isContextFresh(cached.lastUpdate)) {
@@ -155,8 +155,8 @@ export class DataOrchestrator {
 
     // Refresh context if needed
     console.log('DataOrchestrator: Refreshing market context for tier:', tier);
-    await this.refreshMarketContext(tier, isDemo);
-    
+    await this.refreshMarketContext(tier);
+
     const updatedCache = this.marketContextCache.get(cacheKey);
     return updatedCache ? this.formatContextForGPT(updatedCache) : '';
   }
@@ -164,12 +164,12 @@ export class DataOrchestrator {
   /**
    * Proactively refresh market context
    */
-  async refreshMarketContext(tier: UserTier, isDemo: boolean = false): Promise<void> {
-    const cacheKey = `market_context_${tier}_${isDemo}`;
+  async refreshMarketContext(tier: UserTier): Promise<void> {
+    const cacheKey = `market_context_${tier}`;
     const access = this.getTierAccess(tier);
-    
+
     console.log('DataOrchestrator: Refreshing market context for tier:', tier);
-    
+
     try {
       const context: MarketContextSummary = {
         lastUpdate: new Date(),
@@ -216,7 +216,7 @@ export class DataOrchestrator {
       // Cache the processed context
       this.marketContextCache.set(cacheKey, context);
       console.log('DataOrchestrator: Market context refreshed and cached for tier:', tier);
-      
+
     } catch (error) {
       console.error('DataOrchestrator: Error refreshing market context:', error);
     }
@@ -236,21 +236,21 @@ export class DataOrchestrator {
    */
   private formatContextForGPT(context: MarketContextSummary): string {
     let formatted = `CURRENT MARKET CONTEXT (Updated: ${context.lastUpdate.toLocaleString()}):\n\n`;
-    
+
     if (context.economicSummary) {
       formatted += `ECONOMIC INDICATORS:\n${context.economicSummary}\n\n`;
     }
-    
+
     if (context.marketSummary) {
       formatted += `LIVE MARKET DATA:\n${context.marketSummary}\n\n`;
     }
-    
+
     if (context.insights.length > 0) {
       formatted += `KEY INSIGHTS:\n${context.insights.join('\n')}\n\n`;
     }
-    
+
     formatted += `Use this current market context to provide informed financial advice. Always reference specific data points when making recommendations.`;
-    
+
     return formatted;
   }
 
@@ -259,7 +259,7 @@ export class DataOrchestrator {
    */
   private processEconomicData(data: EconomicIndicator): string {
     const summary = [];
-    
+
     if (data.fedRate) {
       summary.push(`• Fed Funds Rate: ${data.fedRate.value}%`);
     }
@@ -275,7 +275,7 @@ export class DataOrchestrator {
     if (data.unemployment) {
       summary.push(`• Unemployment Rate: ${data.unemployment.value}%`);
     }
-    
+
     return summary.join('\n');
   }
 
@@ -284,7 +284,7 @@ export class DataOrchestrator {
    */
   private processLiveMarketData(data: LiveMarketData): string {
     const summary = [];
-    
+
     if (data.cdRates && data.cdRates.length > 0) {
       summary.push(`• CD Rates: ${data.cdRates.slice(0, 3).map(cd => `${cd.term}: ${cd.rate}%`).join(', ')}`);
     }
@@ -294,7 +294,7 @@ export class DataOrchestrator {
     if (data.mortgageRates && data.mortgageRates.length > 0) {
       summary.push(`• Mortgage Rates: ${data.mortgageRates.slice(0, 2).map(m => `${m.type}: ${m.rate}%`).join(', ')}`);
     }
-    
+
     return summary.join('\n');
   }
 
@@ -316,25 +316,25 @@ export class DataOrchestrator {
    */
   private generateEconomicInsights(data: EconomicIndicator): string[] {
     const insights = [];
-    
+
     if (data.fedRate && data.fedRate.value > 5) {
       insights.push('• High interest rates favor savers - consider high-yield savings accounts and CDs');
     }
-    
+
     if (data.cpi && data.cpi.value > 3) {
       insights.push('• Elevated inflation suggests TIPS and inflation-protected investments may be beneficial');
     }
-    
+
     if (data.mortgageRate && data.mortgageRate.value > 6) {
       insights.push('• High mortgage rates suggest waiting for refinancing opportunities');
     }
-    
+
     if (data.unemployment && data.unemployment.value < 5) {
       insights.push('• Low unemployment suggests a strong job market - good time to negotiate salary or seek new opportunities');
     } else if (data.unemployment && data.unemployment.value > 6) {
       insights.push('• Elevated unemployment suggests building emergency savings and maintaining job security');
     }
-    
+
     return insights;
   }
 
@@ -343,7 +343,7 @@ export class DataOrchestrator {
    */
   private generateMarketInsights(data: LiveMarketData): string[] {
     const insights = [];
-    
+
     // Check CD rates for savings opportunities
     if (data.cdRates && data.cdRates.length > 0) {
       const highYieldCDs = data.cdRates.filter(cd => cd.rate > 4);
@@ -351,7 +351,7 @@ export class DataOrchestrator {
         insights.push('• High-yield CD rates available - consider laddering CDs for steady income');
       }
     }
-    
+
     // Check Treasury yields for safe investment opportunities
     if (data.treasuryYields && data.treasuryYields.length > 0) {
       const highYieldTreasuries = data.treasuryYields.filter(t => t.yield > 4);
@@ -359,19 +359,18 @@ export class DataOrchestrator {
         insights.push('• Attractive Treasury yields available for conservative investors');
       }
     }
-    
+
     return insights;
   }
 
   async buildTierAwareContext(
-    tier: UserTier, 
-    accounts: any[] = [], 
+    tier: UserTier,
+    accounts: any[] = [],
     transactions: any[] = [],
-    isDemo: boolean = false,
     options: { includeMarketContext?: boolean } = {}
   ): Promise<TierAwareContext> {
-    console.log('DataOrchestrator: buildTierAwareContext called with tier:', tier, 'isDemo:', isDemo);
-    
+    console.log('DataOrchestrator: buildTierAwareContext called with tier:', tier);
+
     // Get available and unavailable sources for this tier
     const availableSources = DataSourceManager.getSourcesForTier(tier);
     const unavailableSources = DataSourceManager.getUnavailableSourcesForTier(tier);
@@ -385,7 +384,7 @@ export class DataOrchestrator {
     // market-data fetch when a question-specific context loader owns that work.
     const marketContext = options.includeMarketContext === false
       ? {}
-      : await this.getMarketContextForSources(availableSources, tier, isDemo);
+      : await this.getMarketContextForSources(availableSources, tier);
 
     // Generate upgrade hints
     const upgradeHints = unavailableSources.map(source => ({
@@ -419,19 +418,18 @@ export class DataOrchestrator {
   }
 
   private async getMarketContextForSources(
-    availableSources: any[], 
-    tier: UserTier, 
-    isDemo: boolean
+    availableSources: any[],
+    tier: UserTier
   ): Promise<{ economicIndicators?: EconomicIndicator; liveMarketData?: LiveMarketData }> {
     const context: { economicIndicators?: EconomicIndicator; liveMarketData?: LiveMarketData } = {};
 
     // Check if economic indicators are available
-    const hasEconomicSources = availableSources.some(source => 
+    const hasEconomicSources = availableSources.some(source =>
       source.category === 'economic' && source.provider === 'fred'
     );
 
     // Check if live market data is available
-    const hasLiveDataSources = availableSources.some(source => 
+    const hasLiveDataSources = availableSources.some(source =>
       source.category === 'external' && source.provider === 'alpha-vantage'
     );
 
@@ -466,11 +464,11 @@ export class DataOrchestrator {
     return context;
   }
 
-  async getMarketContext(tier: UserTier, isDemo: boolean = false): Promise<{
+  async getMarketContext(tier: UserTier): Promise<{
     economicIndicators?: EconomicIndicator;
     liveMarketData?: LiveMarketData;
   }> {
-    console.log('DataOrchestrator: getMarketContext called with tier:', tier, 'isDemo:', isDemo);
+    console.log('DataOrchestrator: getMarketContext called with tier:', tier);
     const access = this.getTierAccess(tier);
     console.log('DataOrchestrator: Tier access:', access);
     const context: {
@@ -513,20 +511,20 @@ export class DataOrchestrator {
     }
   }
 
-  async getSearchContext(query: string, tier: UserTier, isDemo: boolean = false): Promise<SearchContext | null> {
-    console.log('DataOrchestrator: getSearchContext called with query:', query, 'tier:', tier, 'isDemo:', isDemo);
-    
+  async getSearchContext(query: string, tier: UserTier): Promise<SearchContext | null> {
+    console.log('DataOrchestrator: getSearchContext called with query:', query, 'tier:', tier);
+
     const tierAccess = this.getTierAccess(tier);
     console.log('DataOrchestrator: Tier access hasSearchContext:', tierAccess.hasSearchContext);
-    
+
     if (!tierAccess.hasSearchContext) {
       console.log('DataOrchestrator: No search context access for tier:', tier);
       return null;
     }
 
-    const cacheKey = `search_${tier}_${isDemo}_${this.hashQuery(query)}`;
+    const cacheKey = `search_${tier}_${this.hashQuery(query)}`;
     const cached = this.searchCache.get(cacheKey);
-    
+
     if (cached && this.isSearchFresh(cached.lastUpdate)) {
       console.log('DataOrchestrator: Using cached search results');
       return cached;
@@ -536,9 +534,9 @@ export class DataOrchestrator {
     try {
       const results = await this.searchProvider.search(query);
       console.log('DataOrchestrator: Search completed, found', results.length, 'results');
-      
+
       const summary = await this.generateSearchSummary(results, query);
-      
+
       const searchContext: SearchContext = {
         query,
         results,
@@ -604,12 +602,11 @@ export class DataOrchestrator {
   async forceRefreshAllContext() {
     console.log('DataOrchestrator: Force refreshing all market context...');
     const tiers = [UserTier.STARTER, UserTier.STANDARD, UserTier.PREMIUM];
-    
+
     for (const tier of tiers) {
-      await this.refreshMarketContext(tier, false);
-      await this.refreshMarketContext(tier, true);
+      await this.refreshMarketContext(tier);
     }
-    
+
     this.lastContextRefresh = new Date();
     console.log('DataOrchestrator: All market context refreshed');
   }

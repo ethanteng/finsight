@@ -11,13 +11,6 @@ describe('Feature Flags', () => {
     process.env = originalEnv;
   });
 
-  describe('DEMO_MODE', () => {
-    test('demo mode is always enabled', () => {
-      expect(getFeatures().DEMO_MODE).toBe(true);
-      expect(isFeatureEnabled('DEMO_MODE')).toBe(true);
-    });
-  });
-
   describe('USER_AUTH', () => {
     test('user auth is disabled by default', () => {
       delete process.env.ENABLE_USER_AUTH;
@@ -58,4 +51,4 @@ describe('Feature Flags', () => {
       expect(() => requireFeature('USER_AUTH')).not.toThrow();
     });
   });
-}); 
+});

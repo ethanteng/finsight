@@ -52,19 +52,11 @@ export class MailerLiteSyncService {
 
     try {
       console.log('🔄 Starting MailerLite user sync...');
-      
+
       const prisma = getPrismaClient();
-      
-      // Get all production users (excluding demo sessions)
+
+      // Sync every registered user.
       const users = await prisma.user.findMany({
-        where: {
-          // Only include real users, not demo sessions
-          email: {
-            not: {
-              contains: 'demo'
-            }
-          }
-        },
         select: {
           id: true,
           email: true,
@@ -99,11 +91,11 @@ export class MailerLiteSyncService {
       for (const user of users) {
         try {
           result.usersProcessed++;
-          
+
           // Determine if user has active subscription using the SAME logic as admin dashboard
           // This ensures consistency between admin view and MailerLite sync
           let hasActiveSubscription = false;
-          
+
           if (user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing') {
             // Active or trialing subscription - full access
             hasActiveSubscription = true;
@@ -116,18 +108,18 @@ export class MailerLiteSyncService {
               sub.status === 'active' || sub.status === 'trialing'
             );
           }
-          
+
           // Get current tier (from subscription or user default)
           const currentTier = hasActiveSubscription && user.subscriptions.length > 0
-            ? user.subscriptions[0].tier 
+            ? user.subscriptions[0].tier
             : user.tier;
-          
+
           // Get conversation count
           const conversationCount = user.conversations.length;
-          
+
           // Active user = logged in within the past 1 month
           const isActiveUser = user.lastLoginAt ? user.lastLoginAt >= oneMonthAgo : false;
-          
+
           // Prepare subscriber data
           const subscriber: MailerLiteSubscriber = {
             email: user.email,
@@ -144,10 +136,10 @@ export class MailerLiteSyncService {
           // Sync to MailerLite
           await this.syncSubscriber(subscriber);
           result.usersSynced++;
-          
+
           // Add small delay to avoid rate limiting
           await new Promise(resolve => setTimeout(resolve, 100));
-          
+
         } catch (error) {
           const errorMessage = `Failed to sync user ${user.email}: ${error instanceof Error ? error.message : 'Unknown error'}`;
           console.error(errorMessage);
@@ -156,11 +148,11 @@ export class MailerLiteSyncService {
       }
 
       result.success = result.errors.length === 0;
-      
+
       const duration = Date.now() - startTime.getTime();
       console.log(`✅ MailerLite sync completed in ${duration}ms`);
       console.log(`📊 Sync Results: ${result.usersSynced}/${result.usersProcessed} users synced, ${result.errors.length} errors`);
-      
+
       return result;
 
     } catch (error) {
@@ -204,10 +196,10 @@ export class MailerLiteSyncService {
   async syncSingleUser(userIdentifier: string): Promise<boolean> {
     try {
       const prisma = getPrismaClient();
-      
+
       // Determine if the identifier is an email or user ID
       const isEmail = userIdentifier.includes('@');
-      
+
       const user = await prisma.user.findFirst({
         where: isEmail ? { email: userIdentifier } : { id: userIdentifier },
         select: {
@@ -245,7 +237,7 @@ export class MailerLiteSyncService {
       const hasActiveSubscription = ['active', 'trialing'].includes(user.subscriptionStatus) ||
         user.subscriptions.some((sub: any) => sub.status === 'active' || sub.status === 'trialing');
       const currentTier = hasActiveSubscription && user.subscriptions.length > 0
-        ? user.subscriptions[0].tier 
+        ? user.subscriptions[0].tier
         : user.tier;
       const conversationCount = user.conversations.length;
 

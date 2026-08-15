@@ -164,7 +164,6 @@ The GPT-5 failures would have been caught by:
 
 - **Testing Overview**: `docs/TESTING.md`
 - **Development Workflow**: `docs/DEVELOPMENT_WORKFLOW.md`
-- **Project Summary**: `docs/PROJECT_SUMMARY.md`
 - **README**: `README.md` (GPT Model Smoke Testing section)
 
 ## 🎉 Success Metrics

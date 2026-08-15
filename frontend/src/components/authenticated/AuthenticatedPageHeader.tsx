@@ -41,7 +41,7 @@ export default function AuthenticatedPageHeader({
             {links.map(({ href, label, page, icon: Icon }) => (
               <Link
                 key={href}
-                href={homeHref === '/demo' && page === 'app' ? '/demo' : href}
+                href={href}
                 aria-current={activePage === page ? 'page' : undefined}
                 className={`authenticated-nav-link ${activePage === page ? 'is-active' : ''}`}
               >
@@ -68,7 +68,7 @@ export default function AuthenticatedPageHeader({
             {links.map(({ href, label, page, icon: Icon }) => (
               <Link
                 key={href}
-                href={homeHref === '/demo' && page === 'app' ? '/demo' : href}
+                href={href}
                 aria-current={activePage === page ? 'page' : undefined}
                 className={`authenticated-nav-link ${activePage === page ? 'is-active' : ''}`}
               >

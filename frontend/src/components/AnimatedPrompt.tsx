@@ -25,7 +25,7 @@ interface AnimatedPromptProps {
   questions?: string[];
   /** When true, uses 20% larger font for the carousel text */
   largerText?: boolean;
-  /** Optional click handler (e.g. to navigate to demo with current question) */
+  /** Optional click handler for a prefilled question. */
   onClick?: () => void;
 }
 
@@ -151,4 +151,4 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef, questions
   );
 };
 
-export default AnimatedPrompt; 
+export default AnimatedPrompt;

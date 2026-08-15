@@ -19,7 +19,7 @@ describe('Enhanced Market Context System', () => {
   beforeEach(() => {
     // Clear all mocks
     jest.clearAllMocks();
-    
+
     // Create mock instances
     const mockFredInstance = {
       getEconomicIndicators: jest.fn(),
@@ -38,12 +38,12 @@ describe('Enhanced Market Context System', () => {
       enhanceFinancialQuery: jest.fn(),
       filterFinancialResults: jest.fn()
     };
-    
+
     // Mock the constructor calls to return our mock instances
     MockFREDProvider.mockImplementation(() => mockFredInstance as any);
     MockAlphaVantageProvider.mockImplementation(() => mockAlphaVantageInstance as any);
     MockSearchProvider.mockImplementation(() => mockSearchInstance as any);
-    
+
     // Create the orchestrator
     dataOrchestrator = new DataOrchestrator();
   });
@@ -71,8 +71,7 @@ describe('Enhanced Market Context System', () => {
 
       const searchContext = await dataOrchestrator.getSearchContext(
         'What are current mortgage rates?',
-        UserTier.STANDARD,
-        false
+        UserTier.STANDARD
       );
 
       expect(searchContext).toBeDefined();
@@ -85,8 +84,7 @@ describe('Enhanced Market Context System', () => {
     test('should not get search context for Starter tier', async () => {
       const searchContext = await dataOrchestrator.getSearchContext(
         'What are current mortgage rates?',
-        UserTier.STARTER,
-        false
+        UserTier.STARTER
       );
 
       expect(searchContext).toBeNull();
@@ -108,21 +106,19 @@ describe('Enhanced Market Context System', () => {
       // First call
       const firstResult = await dataOrchestrator.getSearchContext(
         'investment advice',
-        UserTier.PREMIUM,
-        false
+        UserTier.PREMIUM
       );
 
       // Second call with same query
       const secondResult = await dataOrchestrator.getSearchContext(
         'investment advice',
-        UserTier.PREMIUM,
-        false
+        UserTier.PREMIUM
       );
 
       expect(firstResult).toBeDefined();
       expect(secondResult).toBeDefined();
       expect(firstResult?.results).toEqual(secondResult?.results);
-      
+
       // Should only call search once due to caching
       expect(MockSearchProvider.mock.results[0].value.search).toHaveBeenCalledTimes(1);
     });
@@ -132,8 +128,7 @@ describe('Enhanced Market Context System', () => {
 
       const searchContext = await dataOrchestrator.getSearchContext(
         'What are current mortgage rates?',
-        UserTier.STANDARD,
-        false
+        UserTier.STANDARD
       );
 
       expect(searchContext).toBeNull();
@@ -161,8 +156,7 @@ describe('Enhanced Market Context System', () => {
 
       const searchContext = await dataOrchestrator.getSearchContext(
         'savings rates',
-        UserTier.STANDARD,
-        false
+        UserTier.STANDARD
       );
 
       expect(searchContext?.summary).toContain('Latest real-time information for "savings rates"');
@@ -175,8 +169,7 @@ describe('Enhanced Market Context System', () => {
 
       const searchContext = await dataOrchestrator.getSearchContext(
         'nonexistent query',
-        UserTier.STANDARD,
-        false
+        UserTier.STANDARD
       );
 
       expect(searchContext).toBeDefined();
@@ -225,20 +218,20 @@ describe('Enhanced Market Context System', () => {
       });
 
       // Get context for starter tier
-      const starterContext = await dataOrchestrator.getMarketContextSummary(UserTier.STARTER, true);
+      const starterContext = await dataOrchestrator.getMarketContextSummary(UserTier.STARTER);
       expect(starterContext).toContain('CURRENT MARKET CONTEXT');
       expect(starterContext).toContain('Use this current market context');
 
       // Get context for standard tier
-      const standardContext = await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD, true);
+      const standardContext = await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD);
       expect(standardContext).toContain('ECONOMIC INDICATORS');
       expect(standardContext).toContain('Fed Funds Rate: 5.25%');
 
       // Check cache stats
       const cacheStats = await dataOrchestrator.getCacheStats();
       expect(cacheStats.marketContextCache.size).toBe(2);
-      expect(cacheStats.marketContextCache.keys).toContain('market_context_starter_true');
-      expect(cacheStats.marketContextCache.keys).toContain('market_context_standard_true');
+      expect(cacheStats.marketContextCache.keys).toContain('market_context_starter');
+      expect(cacheStats.marketContextCache.keys).toContain('market_context_standard');
     });
 
     it('should use cached context when fresh', async () => {
@@ -251,11 +244,11 @@ describe('Enhanced Market Context System', () => {
       });
 
       // First call should fetch data
-      await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD, true);
+      await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD);
       expect(MockFREDProvider.mock.results[0].value.getEconomicIndicators).toHaveBeenCalledTimes(1);
 
       // Second call should use cache
-      await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD, true);
+      await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD);
       expect(MockFREDProvider.mock.results[0].value.getEconomicIndicators).toHaveBeenCalledTimes(1); // Still 1, not 2
     });
 
@@ -269,22 +262,22 @@ describe('Enhanced Market Context System', () => {
       });
 
       // First call
-      await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD, true);
+      await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD);
       expect(MockFREDProvider.mock.results[0].value.getEconomicIndicators).toHaveBeenCalledTimes(1);
 
       // Manually invalidate cache to simulate stale data
       await dataOrchestrator.invalidateCache('market');
 
       // Second call should refresh
-      await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD, true);
+      await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD);
       expect(MockFREDProvider.mock.results[0].value.getEconomicIndicators).toHaveBeenCalledTimes(2);
     });
   });
 
   describe('Tier-Specific Context', () => {
     it('should provide minimal context for starter tier', async () => {
-      const context = await dataOrchestrator.getMarketContextSummary(UserTier.STARTER, true);
-      
+      const context = await dataOrchestrator.getMarketContextSummary(UserTier.STARTER);
+
       expect(context).toContain('CURRENT MARKET CONTEXT');
       expect(context).not.toContain('ECONOMIC INDICATORS');
       expect(context).not.toContain('LIVE MARKET DATA');
@@ -299,8 +292,8 @@ describe('Enhanced Market Context System', () => {
         creditCardAPR: { value: 24.59, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' }
       });
 
-      const context = await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD, true);
-      
+      const context = await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD);
+
       expect(context).toContain('ECONOMIC INDICATORS');
       expect(context).toContain('Fed Funds Rate: 5.25%');
       expect(context).toContain('CPI (YoY): 3.1%');
@@ -330,8 +323,8 @@ describe('Enhanced Market Context System', () => {
         ]
       });
 
-      const context = await dataOrchestrator.getMarketContextSummary(UserTier.PREMIUM, true);
-      
+      const context = await dataOrchestrator.getMarketContextSummary(UserTier.PREMIUM);
+
       expect(context).toContain('ECONOMIC INDICATORS');
       expect(context).toContain('LIVE MARKET DATA');
       expect(context).toContain('CD Rates: 3-month: 5.25%, 6-month: 5.35%');
@@ -349,8 +342,8 @@ describe('Enhanced Market Context System', () => {
         creditCardAPR: { value: 24.59, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' }
       });
 
-      const context = await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD, true);
-      
+      const context = await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD);
+
       expect(context).toContain('High interest rates favor savers');
       expect(context).toContain('consider high-yield savings accounts and CDs');
     });
@@ -363,8 +356,8 @@ describe('Enhanced Market Context System', () => {
         creditCardAPR: { value: 24.59, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' }
       });
 
-      const context = await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD, true);
-      
+      const context = await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD);
+
       expect(context).toContain('Elevated inflation suggests TIPS');
       expect(context).toContain('inflation-protected investments may be beneficial');
     });
@@ -377,8 +370,8 @@ describe('Enhanced Market Context System', () => {
         creditCardAPR: { value: 24.59, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' }
       });
 
-      const context = await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD, true);
-      
+      const context = await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD);
+
       expect(context).toContain('High mortgage rates suggest waiting');
       expect(context).toContain('refinancing opportunities');
     });
@@ -400,8 +393,8 @@ describe('Enhanced Market Context System', () => {
         mortgageRates: []
       });
 
-      const context = await dataOrchestrator.getMarketContextSummary(UserTier.PREMIUM, true);
-      
+      const context = await dataOrchestrator.getMarketContextSummary(UserTier.PREMIUM);
+
       expect(context).toContain('High-yield CD rates available');
       expect(context).toContain('consider laddering CDs for steady income');
     });
@@ -417,8 +410,8 @@ describe('Enhanced Market Context System', () => {
         creditCardAPR: { value: 24.59, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' }
       });
 
-      await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD, true);
-      
+      await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD);
+
       // Check cache is populated
       let cacheStats = await dataOrchestrator.getCacheStats();
       expect(cacheStats.marketContextCache.size).toBeGreaterThan(0);
@@ -447,11 +440,11 @@ describe('Enhanced Market Context System', () => {
 
       await dataOrchestrator.forceRefreshAllContext();
 
-      // Should have called getEconomicIndicators for each tier (4 calls: 2 tiers × 2 modes, since starter doesn't need economic data)
-      expect(MockFREDProvider.mock.results[0].value.getEconomicIndicators).toHaveBeenCalledTimes(4);
-      
-      // Should have called getLiveMarketData for premium tier (2 calls: 2 modes)
-      expect(MockAlphaVantageProvider.mock.results[0].value.getLiveMarketData).toHaveBeenCalledTimes(2);
+      // Standard and Premium tiers each load economic indicators once.
+      expect(MockFREDProvider.mock.results[0].value.getEconomicIndicators).toHaveBeenCalledTimes(2);
+
+      // Premium loads live market data once.
+      expect(MockAlphaVantageProvider.mock.results[0].value.getLiveMarketData).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -459,8 +452,8 @@ describe('Enhanced Market Context System', () => {
     it('should handle FRED API errors gracefully', async () => {
       MockFREDProvider.mock.results[0].value.getEconomicIndicators.mockRejectedValue(new Error('FRED API error'));
 
-      const context = await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD, true);
-      
+      const context = await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD);
+
       // Should still return a context, just without economic indicators
       expect(context).toContain('CURRENT MARKET CONTEXT');
       expect(context).not.toContain('ECONOMIC INDICATORS');
@@ -476,8 +469,8 @@ describe('Enhanced Market Context System', () => {
 
       MockAlphaVantageProvider.mock.results[0].value.getLiveMarketData.mockRejectedValue(new Error('Alpha Vantage API error'));
 
-      const context = await dataOrchestrator.getMarketContextSummary(UserTier.PREMIUM, true);
-      
+      const context = await dataOrchestrator.getMarketContextSummary(UserTier.PREMIUM);
+
       // Should still return context with economic indicators, but no live market data
       expect(context).toContain('ECONOMIC INDICATORS');
       expect(context).not.toContain('LIVE MARKET DATA');
@@ -493,8 +486,8 @@ describe('Enhanced Market Context System', () => {
         creditCardAPR: { value: 24.59, date: '2025-07-31', source: 'FRED', lastUpdated: '2025-08-01T05:57:37.801Z' }
       });
 
-      const context = await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD, true);
-      
+      const context = await dataOrchestrator.getMarketContextSummary(UserTier.STANDARD);
+
       // Check structure
       expect(context).toMatch(/CURRENT MARKET CONTEXT \(Updated: .+\):/);
       expect(context).toContain('ECONOMIC INDICATORS:');
@@ -503,10 +496,10 @@ describe('Enhanced Market Context System', () => {
     });
 
     it('should include timestamp in context', async () => {
-      const context = await dataOrchestrator.getMarketContextSummary(UserTier.STARTER, true);
-      
+      const context = await dataOrchestrator.getMarketContextSummary(UserTier.STARTER);
+
       // Should include a timestamp
       expect(context).toMatch(/Updated: \d{1,2}\/\d{1,2}\/\d{4}, \d{1,2}:\d{2}:\d{2} [AP]M/);
     });
   });
-}); 
+});

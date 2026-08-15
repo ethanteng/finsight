@@ -81,13 +81,10 @@ async function checkDatabaseClean() {
     const transactions = await prisma.transaction.findMany();
     const accessTokens = await prisma.accessToken.findMany();
     const conversations = await prisma.conversation.findMany();
-    const demoSessions = await prisma.demoSession.findMany();
-    const demoConversations = await prisma.demoConversation.findMany();
-    
-    const totalRecords = users.length + accounts.length + transactions.length + 
-                        accessTokens.length + conversations.length + 
-                        demoSessions.length + demoConversations.length;
-    
+
+    const totalRecords = users.length + accounts.length + transactions.length +
+                        accessTokens.length + conversations.length;
+
     if (totalRecords === 0) {
       console.log('✅ Database is clean - all user data cleared');
       process.exit(0);
@@ -130,4 +127,4 @@ echo "      npm run dev"
 echo ""
 echo "   3. Test with a fresh browser session"
 echo ""
-print_success "Ready for fresh testing! 🚀" 
+print_success "Ready for fresh testing! 🚀"

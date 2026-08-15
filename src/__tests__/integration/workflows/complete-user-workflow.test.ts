@@ -13,14 +13,14 @@ const getApp = async () => {
 describe('Complete User Workflow Tests', () => {
   // Check if we're actually in GitHub Actions (not just CI=true set locally)
   // Even if CI=true is set locally, we're still on macOS which has permission issues
-  const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' && 
+  const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' &&
                                      process.env.GITHUB_RUN_ID !== undefined;
-  
+
   /**
    * Skip network tests locally - these require special permissions on macOS
    */
   const shouldSkipNetworkTests = !isActuallyInGitHubActions;
-  
+
   // Helper to skip network tests locally
   const skipIfLocal = () => {
     if (shouldSkipNetworkTests) {
@@ -29,7 +29,7 @@ describe('Complete User Workflow Tests', () => {
     }
     return false;
   };
-  
+
   // Use the enhanced mock database from the CI setup
   // This ensures we're testing the real security implementation with mock data
   const { getMockPrisma } = require('../../setup/test-database-ci');
@@ -38,22 +38,22 @@ describe('Complete User Workflow Tests', () => {
   beforeEach(async () => {
     // In CI environment, we're using the enhanced mock database
     // No need to test real database connection
-    
+
     // Clean up test data - delete related records first
     await prisma.privacySettings.deleteMany({
       where: {
         user: {
           email: {
-            in: ['workflow-test@example.com', 'demo-test@example.com', 'mixed-test@example.com']
+            in: ['workflow-test@example.com']
           }
         }
       }
     });
-    
+
     await prisma.user.deleteMany({
       where: {
         email: {
-          in: ['workflow-test@example.com', 'demo-test@example.com', 'mixed-test@example.com']
+          in: ['workflow-test@example.com']
         }
       }
     });
@@ -69,7 +69,7 @@ describe('Complete User Workflow Tests', () => {
     it.skip('should complete full user workflow: register → login → connect accounts → ask questions', async () => {
       // Step 1: Register new user
       if (skipIfLocal()) return;
-      
+
       const testApp = await getApp();
       const registerResponse = await request(testApp)
         .post('/auth/register')
@@ -90,7 +90,7 @@ describe('Complete User Workflow Tests', () => {
       const createdUser = await prisma.user.findUnique({
         where: { id: userId }
       });
-      
+
       if (!createdUser) {
         // console.log('User not found in database, skipping account creation');
         return; // Skip the rest of the test if user creation failed
@@ -129,19 +129,19 @@ describe('Complete User Workflow Tests', () => {
       let uniqueToken: string;
       if (plaidResponse.status === 500) {
         // console.log('Plaid API call failed (expected in test environment)');
-        
+
         // Verify user still exists before creating access token
         const userForToken = await prisma.user.findUnique({
           where: { id: userId }
         });
-        
+
         if (!userForToken) {
           // console.log('User not found before access token creation, skipping');
           return; // Skip the rest of the test if user doesn't exist
         }
-        
+
         // console.log('User verified before access token creation:', { id: userForToken.id, email: userForToken.email });
-        
+
         // Create mock access token for testing
         uniqueToken = `test-access-token-${Date.now()}-${Math.random()}`;
         await prisma.accessToken.create({
@@ -219,7 +219,7 @@ describe('Complete User Workflow Tests', () => {
     it.skip('should maintain session persistence across multiple requests', async () => {
       // Register user
       if (skipIfLocal()) return;
-      
+
       const testApp = await getApp();
       const registerResponse = await request(testApp)
         .post('/auth/register')
@@ -249,328 +249,6 @@ describe('Complete User Workflow Tests', () => {
     });
   });
 
-  describe('Complete Demo User Workflow', () => {
-    // TODO: Re-enable these tests once CI database transaction isolation issues are resolved
-    // These tests pass locally but fail in CI due to database transaction isolation
-    // Demo conversations are stored successfully but not visible to test queries in CI
-    it.skip('should complete full demo workflow: ask questions → check persistence', async () => {
-      // Step 1: Ask questions in demo mode
-
-      // Step 4: Ask questions in demo mode
-      const sessionId = `demo-workflow-session-${Date.now()}`;
-      const questions = [
-        'What is my current balance?',
-        'How much did I spend this month?',
-        'What are my investment accounts?'
-      ];
-
-      const testApp = await getApp();
-      for (const question of questions) {
-        const response = await request(testApp)
-          .post('/ask')
-          .set('x-session-id', sessionId)
-          .send({
-            question,
-            isDemo: true
-          });
-
-        expect([200, 500]).toContain(response.status);
-        if (response.status === 200) {
-          expect(response.body).toHaveProperty('answer');
-        }
-      }
-
-      // Step 5: Verify demo conversations are stored
-      // First find the demo session
-      const demoSession = await prisma.demoSession.findUnique({
-        where: { sessionId: sessionId }
-      });
-      
-      expect(demoSession).toBeTruthy();
-      
-      // Then find conversations for this session
-      const demoConversations = await prisma.demoConversation.findMany({
-        where: {
-          sessionId: demoSession!.id
-        }
-      });
-
-      // Should have at least the questions we asked
-      // console.log('Demo conversations check:', { 
-      //   expected: questions.length, 
-      //   actual: demoConversations.length,
-      //   questions: questions,
-      //   conversations: demoConversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
-      // });
-      
-      // Add retry mechanism for CI environment
-      let retryCount = 0;
-      let finalDemoConversations = demoConversations;
-      
-      while (finalDemoConversations.length === 0 && retryCount < 3) {
-        // console.log(`Retry ${retryCount + 1}: Waiting for demo conversations to be available...`);
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-        
-        // Re-query the demo conversations
-        finalDemoConversations = await prisma.demoConversation.findMany({
-          where: { sessionId: demoSession.id },
-          orderBy: { createdAt: 'asc' }
-        });
-        
-        // console.log(`Retry ${retryCount + 1} result:`, { 
-        //   count: finalDemoConversations.length,
-        //   conversations: finalDemoConversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
-        // });
-        
-        retryCount++;
-      }
-      
-      expect(finalDemoConversations.length).toBeGreaterThanOrEqual(questions.length);
-
-      // Step 6: Verify demo data doesn't affect real users
-      const realUser = await prisma.user.create({
-        data: {
-          email: 'demo-test@example.com',
-          passwordHash: 'hashedpassword', // This should be properly hashed in a real scenario
-          tier: 'starter'
-        }
-      });
-
-      // Real user should have no data initially
-      const userAccounts = await prisma.account.findMany({
-        where: { userId: realUser.id }
-      });
-
-      expect(userAccounts.length).toBe(0);
-
-      // Demo conversations should not belong to real user
-      const userConversations = await prisma.conversation.findMany({
-        where: { userId: realUser.id }
-      });
-
-      expect(userConversations.length).toBe(0);
-    });
-
-    // TODO: Re-enable these tests once CI database transaction isolation issues are resolved
-    it.skip('should maintain demo session persistence', async () => {
-      if (skipIfLocal()) return;
-      
-      const testApp = await getApp();
-      const sessionId = `persistent-demo-session-${Date.now()}`;
-
-      // Ask first question
-      const response1 = await request(testApp)
-        .post('/ask')
-        .set('x-session-id', sessionId)
-        .send({
-          question: 'What is my balance?',
-          isDemo: true
-        });
-
-      expect([200, 500]).toContain(response1.status);
-
-      // Ask follow-up question (should have context)
-      const response2 = await request(testApp)
-        .post('/ask')
-        .set('x-session-id', sessionId)
-        .send({
-          question: 'How much did I spend on groceries?',
-          isDemo: true
-        });
-
-      expect([200, 500]).toContain(response2.status);
-
-      // Verify both conversations are stored
-      // First find the demo session
-      const demoSession = await prisma.demoSession.findUnique({
-        where: { sessionId: sessionId }
-      });
-      
-      // console.log('Demo session lookup result:', { 
-      //   found: !!demoSession, 
-      //   sessionId: sessionId,
-      //   demoSessionId: demoSession?.id 
-      // });
-      
-      expect(demoSession).toBeTruthy();
-      
-      // Then find conversations for this session
-      const conversations = await prisma.demoConversation.findMany({
-        where: { sessionId: demoSession!.id },
-        orderBy: { createdAt: 'asc' }
-      });
-
-      // console.log('Demo conversations lookup result:', { 
-      //   count: conversations.length, 
-      //   sessionId: demoSession!.id,
-      //   conversations: conversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
-      // });
-
-      // Add retry mechanism for CI environment
-      let retryCount = 0;
-      let finalConversations = conversations;
-      
-      while (finalConversations.length === 0 && retryCount < 3) {
-        // console.log(`Retry ${retryCount + 1}: Waiting for demo conversations to be available...`);
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-        
-        // Re-query the demo conversations
-        finalConversations = await prisma.demoConversation.findMany({
-          where: { sessionId: demoSession!.id },
-          orderBy: { createdAt: 'asc' }
-        });
-        
-        // console.log(`Retry ${retryCount + 1} result:`, { 
-        //   count: finalConversations.length,
-        //   conversations: finalConversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
-        // });
-        
-        retryCount++;
-      }
-
-      expect(finalConversations.length).toBeGreaterThanOrEqual(2);
-    });
-  });
-
-  describe('Mixed Mode Tests', () => {
-    let authToken: string;
-
-    beforeEach(async () => {
-      // Create a real user
-      if (skipIfLocal()) return;
-      
-      const testApp = await getApp();
-      const registerResponse = await request(testApp)
-        .post('/auth/register')
-        .send({
-          email: 'mixed-test@example.com',
-          password: 'TestPassword123',
-          tier: 'starter'
-        });
-
-      expect(registerResponse.status).toBe(201);
-      expect(registerResponse.body).toHaveProperty('token');
-      authToken = registerResponse.body.token;
-    });
-
-    it.skip('should allow switching between demo and logged-in modes', async () => {
-      if (skipIfLocal()) return;
-      
-      const testApp = await getApp();
-      const sessionId = `mixed-session-${Date.now()}`;
-      // Demo request
-      const demoResponse = await request(testApp)
-        .post('/ask')
-        .set('x-session-id', sessionId)
-        .send({
-          question: 'What is my balance?',
-          isDemo: true
-        });
-
-      expect([200, 500]).toContain(demoResponse.status);
-
-      // Logged-in request
-      const loggedInResponse = await request(testApp)
-        .post('/ask')
-        .set('Authorization', `Bearer ${authToken}`)
-        .send({
-          question: 'What is my balance?'
-        });
-
-      expect([200, 500]).toContain(loggedInResponse.status);
-
-      // Demo request again
-      const demoResponse2 = await request(testApp)
-        .post('/ask')
-        .set('x-session-id', sessionId)
-        .send({
-          question: 'How much did I spend?',
-          isDemo: true
-        });
-
-      expect([200, 500]).toContain(demoResponse2.status);
-
-      // Verify data isolation
-      // First find the demo session
-      const demoSession = await prisma.demoSession.findUnique({
-        where: { sessionId: sessionId }
-      });
-      
-      expect(demoSession).toBeTruthy();
-      
-      // Then find conversations for this session
-      const demoConversations = await prisma.demoConversation.findMany({
-        where: { sessionId: demoSession!.id }
-      });
-
-      const userConversations = await prisma.conversation.findMany({
-        where: { userId: (await prisma.user.findFirst({ where: { email: 'mixed-test@example.com' } }))?.id }
-      });
-
-      // Demo and user conversations should be separate
-      // console.log('Mixed mode demo conversations check:', { 
-      //   demoConversationsCount: demoConversations.length,
-      //   userConversationsCount: userConversations.length,
-      //   demoSessionId: demoSession?.id,
-      //   userId: (await prisma.user.findFirst({ where: { email: 'mixed-test@example.com' } }))?.id
-      // });
-      
-      // Add retry mechanism for CI environment
-      let retryCount = 0;
-      let finalDemoConversations = demoConversations;
-      
-      while (finalDemoConversations.length === 0 && retryCount < 3) {
-        // console.log(`Retry ${retryCount + 1}: Waiting for demo conversations to be available...`);
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
-        
-        // Re-query the demo conversations
-        finalDemoConversations = await prisma.demoConversation.findMany({
-          where: { sessionId: demoSession!.id }
-        });
-        
-        // console.log(`Retry ${retryCount + 1} result:`, { 
-        //   count: finalDemoConversations.length,
-        //   conversations: finalDemoConversations.map((c: any) => ({ id: c.id, question: c.question.substring(0, 50) }))
-        // });
-        
-        retryCount++;
-      }
-      
-      expect(finalDemoConversations.length).toBeGreaterThan(0);
-      // User conversations might be 0 if no real data, but that's okay
-    });
-
-    it.skip('should handle concurrent demo and logged-in requests', async () => {
-      const sessionId = `concurrent-demo-${Date.now()}`;
-      const testApp = await getApp();
-      const requests = [
-        // Demo requests
-        request(testApp).post('/ask').set('x-session-id', sessionId).send({
-          question: 'Demo question 1',
-          isDemo: true
-        }),
-        request(testApp).post('/ask').set('x-session-id', sessionId).send({
-          question: 'Demo question 2',
-          isDemo: true
-        }),
-        // Logged-in requests
-        request(testApp).post('/ask').set('Authorization', `Bearer ${authToken}`).send({
-          question: 'Logged-in question 1'
-        }),
-        request(testApp).post('/ask').set('Authorization', `Bearer ${authToken}`).send({
-          question: 'Logged-in question 2'
-        })
-      ];
-
-      const responses = await Promise.all(requests);
-
-      // All requests should succeed (demo requests might fail with 500 due to API issues)
-      responses.forEach(response => {
-        expect([200, 500]).toContain(response.status);
-      });
-    });
-  });
-
   describe('Error Handling and Edge Cases', () => {
     it('should handle invalid tokens gracefully', async () => {
       const testApp = await getApp();
@@ -582,20 +260,6 @@ describe('Complete User Workflow Tests', () => {
       expect(response.status).toBe(401);
     });
 
-    it('should handle missing session ID for demo requests', async () => {
-      const testApp = await getApp();
-      const response = await request(testApp)
-        .post('/ask')
-        .send({
-          question: 'What is my balance?',
-          isDemo: true
-        });
-
-      // In CI environment, may get 500 due to database connection issues in demo mode
-      // In local environment, should get 400 for missing session ID
-      // Both are acceptable as the request is properly rejected
-      expect([400, 500]).toContain(response.status);
-    });
 
     it('should handle malformed requests', async () => {
       const testApp = await getApp();
@@ -608,27 +272,5 @@ describe('Complete User Workflow Tests', () => {
       expect(response.status).toBe(400);
     });
 
-    // TODO: Re-enable these tests once CI database transaction isolation issues are resolved
-    it.skip('should handle rate limiting gracefully', async () => {
-      const sessionId = `rate-limit-test-${Date.now()}`;
-      // Make multiple rapid requests
-      const testApp = await getApp();
-      const requests = Array(10).fill(null).map(() =>
-        request(testApp)
-          .post('/ask')
-          .set('x-session-id', sessionId)
-          .send({
-            question: 'Test question',
-            isDemo: true
-          })
-      );
-
-      const responses = await Promise.all(requests);
-
-      // All should either succeed or fail gracefully
-      responses.forEach(response => {
-        expect([200, 400, 429, 500]).toContain(response.status);
-      });
-    });
   });
 });

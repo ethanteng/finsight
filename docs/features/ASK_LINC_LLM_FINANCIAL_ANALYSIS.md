@@ -256,6 +256,5 @@ The LLM is instructed to compare the user's withdrawal rate to these percentiles
 - [Stress Test Approach](STRESS_TEST_APPROACH.md) — Sequence generation, simulation, and data sources
 - [Historical Withdrawal Rate Solver](HISTORICAL_WITHDRAWAL_RATE_SOLVER.md) — Algorithm and percentile semantics
 - [Retirement Analytics Integration](../RETIREMENT_ANALYTICS_INTEGRATION.md) — How retirement analysis is triggered and stored
-- [RAG System](RAG_SYSTEM.md) — RAG retrieval used by the pipeline
 - [GPT Prompt Construction](GPT_PROMPT_CONSTRUCTION.md) — Legacy OpenAI prompt structure
-- [AI Performance Monitoring](../monitoring/AI_PERFORMANCE_MONITORING.md) — Monitoring and observability
+- [AI Context Optimizations](AI_CONTEXT_OPTIMIZATIONS.md) — Context selection and performance

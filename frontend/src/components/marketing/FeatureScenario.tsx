@@ -36,7 +36,7 @@ export function FeatureScenario() {
         <h2>Change the assumption, not the spreadsheet.</h2>
         <p>Move the retirement date and watch the recommendation change. Linc keeps the rest of the financial picture connected while you explore the tradeoff.</p>
       </div>
-      <div className="feature-scenario-demo">
+      <div className="feature-scenario-panel">
         <div className="scenario-pills" role="group" aria-label="Choose a retirement age">
           {([58, 60, 62] as const).map((option) => (
             <button

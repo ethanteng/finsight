@@ -6,7 +6,7 @@ Executable source: `src/domain/financial-truth.ts`
 
 Version: `1.0`
 
-This contract defines what user-facing financial numbers mean. Provider adapters, persistence, snapshots, API responses, the frontend, retirement analytics, and LLM context must consume these meanings instead of defining local variants. Demo behavior is intentionally excluded.
+This contract defines what user-facing financial numbers mean. Provider adapters, persistence, snapshots, API responses, the frontend, retirement analytics, and LLM context must consume these meanings instead of defining local variants.
 
 ## 1. Account identity and source ownership
 

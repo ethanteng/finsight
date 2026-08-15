@@ -8,7 +8,7 @@ The MailerLite User Sync System automatically synchronizes all production users 
 
 - **Automatic Daily Sync**: Runs every day at 3 AM EST
 - **Non-destructive Updates**: Uses MailerLite's upsert API to safely update existing subscribers
-- **Production Users Only**: Excludes demo sessions and test data
+- **Registered Users**: Synchronizes registered user records
 - **Comprehensive User Data**: Syncs email, subscription status, tier, and conversation count
 - **Error Handling**: Robust error handling with detailed logging and Sentry integration
 - **Rate Limiting**: Built-in delays to respect MailerLite API limits
@@ -187,7 +187,7 @@ const success = await service.syncSingleUser('user@example.com');
 
 - **API Key Protection**: API keys are stored in environment variables
 - **User Data Privacy**: Only necessary user data is synced
-- **Demo Data Exclusion**: Demo sessions and test data are automatically filtered out
+- **Registered User Source**: Sync reads directly from registered user records
 - **Rate Limiting**: Built-in delays prevent API abuse
 
 ## Performance

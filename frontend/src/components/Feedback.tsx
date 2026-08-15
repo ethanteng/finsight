@@ -27,11 +27,10 @@ function markConversationFeedbackSubmitted(conversationId: string) {
 
 interface FeedbackProps {
   conversationId: string;
-  isDemo: boolean;
   onFeedbackSubmitted?: (score: number) => void;
 }
 
-export default function Feedback({ conversationId, isDemo, onFeedbackSubmitted }: FeedbackProps) {
+export default function Feedback({ conversationId, onFeedbackSubmitted }: FeedbackProps) {
   const [rating, setRating] = useState<number | null>(null);
   const [submitted, setSubmitted] = useState(() => getSubmittedConversations().has(conversationId));
   const [submittedThisSession, setSubmittedThisSession] = useState(false);
@@ -47,21 +46,22 @@ export default function Feedback({ conversationId, isDemo, onFeedbackSubmitted }
 
   const handleRatingClick = async (score: number) => {
     if (submitted || submitting) return;
-    
+
     setRating(score);
     setSubmitting(true);
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL;
+      const token = localStorage.getItem('auth_token');
       const response = await fetch(`${API_URL}/feedback`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           conversationId,
           score,
-          isDemo,
         }),
       });
 

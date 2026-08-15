@@ -11,7 +11,7 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
 - **Database**: PostgreSQL with Prisma ORM
 - **Authentication**: JWT-based with optional auth middleware
 - **AI Integration**: OpenAI GPT-4 for financial analysis
-- **External APIs**: 
+- **External APIs**:
   - Plaid (banking data)
   - SnapTrade (investment data)
   - FRED (economic indicators)
@@ -40,7 +40,6 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
     - Real data tokenization for AI
     - User-friendly display with real names
     - Session-consistent tokenization maps
-    - Demo mode optimization
 
 ### **2. Enhanced Market Context System**
 - **Purpose**: Provides real-time market data for informed financial advice
@@ -70,16 +69,7 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
     - Source attribution for data transparency
     - Cache management and performance optimization
 
-### **5. Demo System**
-- **Purpose**: Risk-free user experience with realistic data
-- **Features**:
-    - Comprehensive mock financial data
-    - Realistic rates and financial profiles
-    - Full AI analysis with demo data + RAG system
-    - Market context integration
-    - No tokenization needed for fake data
-
-### **6. Seamless Plaid Integration**
+### **5. Seamless Plaid Integration**
 - **Purpose**: Maximum institution coverage with intelligent data detection
 - **Features**:
     - Minimal products array (`["transactions"]`) for maximum FI coverage
@@ -88,7 +78,7 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
     - Smart endpoint usage (`/transactions/sync`, conditional real-time balance)
     - No upfront user choice required - truly seamless experience
 
-### **7. AI Conversation Context Enhancement**
+### **6. AI Conversation Context Enhancement**
 - **Purpose**: Enables AI to build context across multiple conversation turns
 - **Features**:
     - Intelligent conversation history analysis
@@ -97,13 +87,13 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
     - Seamless multi-turn financial conversations
     - Enhanced user experience with contextual memory
 
-### **8. MailerLite User Sync System**
+### **7. MailerLite User Sync System**
 - **Purpose**: Automatically synchronizes user data to MailerLite for email marketing
 - **Features**:
     - Daily automated sync at 3 AM EST
     - Non-destructive upsert operations
 
-### **9. Home Value Tracking System**
+### **8. Home Value Tracking System**
 - **Purpose**: Track and include home values in Net Worth calculations
 - **Data Source**: RentCast API for real-time property valuations
 - **Features**:
@@ -114,7 +104,7 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
     - Manual refresh capability
     - Integrated into Financial Overview Net Worth calculation
     - Encrypted storage in user profile
-    - Production users only (excludes demo data)
+    - Available to authenticated users
 
 ## 🚀 **Quick Start**
 
@@ -127,14 +117,11 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
 ```
 finsight/
 ├── 📁 docs/                    # 📚 Documentation
-│   ├── PROJECT_SUMMARY.md      # Complete project overview (main context)
+│   ├── README.md               # Documentation index
 │   ├── TESTING.md              # Comprehensive testing documentation
-│   ├── FEATURES.md             # Platform features documentation
-│   ├── RAG_VS_INDIVIDUAL_SOURCES.md
-│   ├── TIER_TESTING.md         # Tier-specific testing guide
-│   ├── SEAMLESS_PLAID_INTEGRATION.md  # Plaid integration best practices
-│   ├── MAILERLITE_SYNC_README.md      # MailerLite sync system documentation
-│   └── MAILERLITE_ENV_TEMPLATE.md     # MailerLite environment setup guide
+│   ├── FINANCIAL_TRUTH_CONTRACT.md
+│   ├── DETERMINISTIC_LLM_CALCULATIONS.md
+│   └── features/               # Feature-specific references
 ├── 📁 scripts/                 # 🔧 Utility scripts
 │   ├── test-*.js/ts           # Testing scripts
 │   ├── test-mailerlite-sync.js # MailerLite sync testing
@@ -265,7 +252,7 @@ ENABLE_PLAID_ENRICH="false"             # Use Plaid enrich for categorization (d
 
 # AI Rate Limiting
 AI_RATE_LIMIT_AUTHENTICATED="30"        # Requests per minute for authenticated users (default: 30)
-AI_RATE_LIMIT_DEMO="20"                 # Requests per minute for demo users (default: 20)
+AI_RATE_LIMIT_UNAUTHENTICATED="20"      # Requests per minute before authentication (default: 20)
 
 # Caching & Performance (optional)
 MAX_PROMPT_TRANSACTIONS="75"            # Max transactions in AI prompt (default: 75)
@@ -314,8 +301,6 @@ npx prisma generate
 # Run migrations
 npx prisma db push
 
-# (Optional) Seed with demo data
-npm run seed
 ```
 
 5. **Start Development Servers**
@@ -364,14 +349,14 @@ npm run test:gpt-smoke
 
 ### **Data Protection**
 - **Tokenization**: Real account names never sent to AI
-- **Session Management**: Secure demo and user sessions
+- **Session Management**: Secure authenticated user sessions
 - **API Security**: Rate limiting and error handling
 - **Database Security**: Prisma with connection pooling
 - **RAG Security**: Secure search API integration
 
 ### **Authentication**
 - **JWT Tokens**: Secure user authentication
-- **Optional Auth**: Demo mode without authentication
+- **Required Auth**: Financial data and analysis endpoints require a valid user token
 - **Session Persistence**: Cross-request context maintenance
 
 ## 📈 **Performance & Optimization**
@@ -380,7 +365,7 @@ npm run test:gpt-smoke
 
 To optimize costs, we use different OpenAI models for different environments:
 
-- **Production (`/app`, `/demo`)**: Uses `gpt-4o` for best quality
+- **Production (`/app`)**: Uses the configured primary and fallback models
 - **Tests**: Uses `gpt-3.5-turbo` for cost efficiency
 
 ### **Environment Variables for Model Selection**
@@ -463,11 +448,10 @@ The project uses GitHub Actions for automated testing and deployment:
 ```http
 POST /ask/display-real
 Content-Type: application/json
+Authorization: Bearer <token>
 
 {
-  "question": "How can I improve my savings?",
-  "sessionId": "demo-session-123",
-  "isDemo": true
+  "question": "How can I improve my savings?"
 }
 ```
 
@@ -480,7 +464,7 @@ GET /plaid/transactions
 
 #### **Market Data**
 ```http
-GET /test/enhanced-market-context?tier=premium&isDemo=true
+GET /test/enhanced-market-context?tier=premium
 POST /test/refresh-market-context
 ```
 
@@ -509,7 +493,6 @@ GET /auth/profile
 
 ### **User Experience**
 - Seamless account connection via Plaid
-- Demo mode for testing without real data
 - Responsive web interface
 - Mobile-friendly design
 - **Holistic financial advice** for any institution or product
@@ -550,12 +533,11 @@ GET /auth/profile
 ```
 finsight/
 ├── 📁 docs/                    # 📚 Documentation
-│   ├── PROJECT_SUMMARY.md      # Complete project overview (main context)
+│   ├── README.md               # Documentation index
 │   ├── TESTING.md              # Comprehensive testing documentation
-│   ├── FEATURES.md             # Platform features documentation
-│   ├── RAG_VS_INDIVIDUAL_SOURCES.md
-│   ├── TIER_TESTING.md         # Tier-specific testing guide
-│   └── SEAMLESS_PLAID_INTEGRATION.md  # Plaid integration best practices
+│   ├── FINANCIAL_TRUTH_CONTRACT.md
+│   ├── DETERMINISTIC_LLM_CALCULATIONS.md
+│   └── features/               # Feature-specific references
 ├── 📁 scripts/                 # 🔧 Utility scripts
 │   ├── test-*.js/ts           # Testing scripts
 │   ├── check-db.js            # Database utilities
@@ -581,11 +563,10 @@ finsight/
 
 ### **📚 Documentation**
 - **`docs/`** - Comprehensive project documentation
-- **`docs/PROJECT_SUMMARY.md`** - Start here for complete project overview (main context)
+- **`docs/README.md`** - Documentation index
 - **`docs/TESTING.md`** - Comprehensive testing documentation and best practices
-- **`docs/FEATURES.md`** - Platform features including tier system and market context
-- **`docs/SEAMLESS_PLAID_INTEGRATION.md`** - Plaid integration best practices and implementation guide
-- **Feature-specific docs** - RAG, Tier Testing, etc.
+- **`docs/FINANCIAL_TRUTH_CONTRACT.md`** - Canonical financial data and calculation rules
+- **Feature-specific docs** - Current implementation references under `docs/features/`
 
 ### **🔧 Scripts**
 - **`scripts/`** - Utility scripts for development and deployment

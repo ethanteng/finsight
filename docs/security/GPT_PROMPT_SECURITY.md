@@ -85,7 +85,7 @@ The response is replaced with: "I'm sorry, I cannot provide that information."
 **File:** `src/security/ai-rate-limiter.ts`
 
 - **Authenticated users:** 30 requests/minute (configurable via `AI_RATE_LIMIT_AUTHENTICATED`)
-- **Demo/session:** 20 requests/minute (configurable via `AI_RATE_LIMIT_DEMO`)
+- **Unauthenticated requests:** 20 requests/minute (configurable via `AI_RATE_LIMIT_UNAUTHENTICATED`)
 - Uses `userId`, `sessionId`, or IP for identification
 - Returns 429 when exceeded
 
@@ -110,7 +110,7 @@ Logs are individual JSON files (one per incident). Do not expose them to the LLM
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `AI_RATE_LIMIT_AUTHENTICATED` | 30 | Requests per minute for authenticated users |
-| `AI_RATE_LIMIT_DEMO` | 20 | Requests per minute for demo/session |
+| `AI_RATE_LIMIT_UNAUTHENTICATED` | 20 | Requests per minute before authentication |
 | Log directory | Same as GPT logger | `./logs` locally, `/opt/render/project/src/logs` in production |
 
 ## Adding New Patterns
