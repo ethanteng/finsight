@@ -343,6 +343,67 @@ describe('FinancesPageClient', () => {
     }
   });
 
+  it('starts polling even when the reload right after the edit fails', async () => {
+    const overviewAt = (computedAt: string, netWorth: number) => ({
+      userTimeZone: 'America/Los_Angeles',
+      revision: { id: computedAt, computedAt, asOf: null, status: 'current', reportingCurrency: 'USD', rebuildPending: false },
+      warnings: [],
+      financialOverview: { netWorth, totalCash: netWorth, totalInvestments: 0, totalDebt: 0, homeValue: null },
+      investmentPortfolio: { holdingCount: 0, securityCount: 0, assetAllocation: [] },
+      accountGroups: {
+        cash: { accounts: [], totalBalance: netWorth, unavailableBalanceCount: 0 },
+        investments: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+        debt: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+        other: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+      },
+      cashFlow: {},
+      home: null,
+      manualAccounts: [{
+        id: 'manual-1', name: 'Wallet', amount: 100, type: 'cash',
+        createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
+      }],
+    });
+
+    let overviewRequests = 0;
+
+    global.fetch = jest.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/manual-accounts/manual-1') && init?.method === 'DELETE') {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true }) });
+      }
+      if (url.includes('/api/finances/overview')) {
+        overviewRequests += 1;
+        // 1: initial load, 2: the reload right after the delete fails, 3: rebuilt.
+        if (overviewRequests === 2) return Promise.reject(new Error('network blip'));
+        const body = overviewRequests >= 3
+          ? overviewAt('2026-08-14T12:00:30.000Z', 9_900)
+          : overviewAt('2026-08-14T12:00:00.000Z', 10_000);
+        return Promise.resolve({ ok: true, status: 200, json: async () => body });
+      }
+      if (url.includes('/api/financial-history')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => [] });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true, data: [] }) });
+    }) as jest.Mock;
+
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
+
+    try {
+      render(<FinancesPageClient />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+
+      // The failed reload must not leave the edit unreconciled and unexplained.
+      await waitFor(() => expect(screen.getByText('Updating totals with your change…')).toBeInTheDocument());
+
+      await act(async () => { await jest.advanceTimersByTimeAsync(2000); });
+      await waitFor(() => expect(screen.getAllByText('$9,900').length).toBeGreaterThan(0));
+      expect(screen.queryByText('Updating totals with your change…')).not.toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('holds a saved home value over reloads until the rebuilt snapshot carries it', async () => {
     const home = {
       address: '1 Main St',
