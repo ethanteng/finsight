@@ -268,7 +268,12 @@ describe('supersedeDuplicateInstitutionConnections', () => {
     expect(droppedTransactionsFor).toEqual(['p1']);
     expect(prisma.transaction.deleteMany).toHaveBeenCalledWith({ where: { accountId: 'p1' } });
     expect(deleted).toEqual(['p1']);
-    expect(tokenUpdates).toEqual([{ id: 'stale-token', data: { isActive: false, lastError: SUPERSEDED_ERROR_CODE } }]);
+    expect(tokenUpdates).toHaveLength(1);
+    expect(tokenUpdates[0].id).toBe('stale-token');
+    expect(tokenUpdates[0].data).toMatchObject({ isActive: false, lastError: SUPERSEDED_ERROR_CODE });
+    // supersededAt is the durable marker: token revalidation clears lastError and flips isActive
+    // back to true on any successful Plaid call, and a superseded Item still works at Plaid.
+    expect(tokenUpdates[0].data.supersededAt).toBeInstanceOf(Date);
     expect(report.superseded).toHaveLength(1);
     expect(report.superseded[0].transactionsDropped).toBe(3);
     expect(report.skipped).toHaveLength(0);
@@ -375,6 +380,23 @@ describe('supersedeDuplicateInstitutionConnections', () => {
     expect(tokenUpdates).toEqual([]);
     expect(report.superseded).toHaveLength(1);
     expect(report.superseded[0].accountsRemoved).toBe(1);
+  });
+
+  it('never re-considers an already-superseded connection', async () => {
+    const { prisma } = buildPrisma({ currentAccounts, otherTokens: [] });
+
+    await supersedeDuplicateInstitutionConnections({
+      prisma: prisma as any,
+      userId: 'user-1',
+      keepTokenId: 'keep-token',
+      institutionName: 'Betterment'
+    });
+
+    expect(prisma.accessToken.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ isActive: true, supersededAt: null })
+      })
+    );
   });
 
   it('does not treat an untagged token as belonging to the institution', async () => {
