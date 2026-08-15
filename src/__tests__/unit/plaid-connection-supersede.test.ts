@@ -2,7 +2,8 @@ import {
   matchAccountsAcrossConnections,
   normalizeAccountName,
   supersedeDuplicateInstitutionConnections,
-  SUPERSEDED_ERROR_CODE
+  SUPERSEDED_ERROR_CODE,
+  toConnectionAccount
 } from '../../services/plaid-connection-supersede';
 
 const account = (overrides: Partial<any> & { id: string }) => ({
@@ -175,6 +176,25 @@ describe('matchAccountsAcrossConnections', () => {
     const current = [account({ id: 'c1', name: 'Goal B', currentBalance: 250 })];
 
     expect(matchAccountsAcrossConnections(previous, current).fullyCovered).toBe(true);
+  });
+
+  it('omits persisted observation times during exchange-time reconciliation', () => {
+    const previous = [{ ...account({ id: 'p1', name: 'Goal A', currentBalance: 250 }), balanceObservedAt: '2026-07-01T00:00:00Z' }];
+    const current = [{ ...account({ id: 'c1', name: 'Goal B', currentBalance: 250 }), balanceObservedAt: '2026-08-15T00:00:00Z' }];
+
+    const asPersisted = (row: (typeof previous)[0]) =>
+      toConnectionAccount(
+        { ...row, balanceLastFetched: row.balanceObservedAt, lastSynced: row.balanceObservedAt },
+        { omitBalanceObservationTime: true }
+      );
+
+    const result = matchAccountsAcrossConnections(
+      previous.map(asPersisted),
+      current.map(asPersisted)
+    );
+
+    expect(result.fullyCovered).toBe(true);
+    expect(result.matches[0].strategy).toBe('balance');
   });
 
   it('still matches when only one side reports a mask', () => {

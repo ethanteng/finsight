@@ -259,7 +259,10 @@ type PrismaLike = {
  * passing rows through untyped - it is what carries `balanceObservedAt`, without which the balance
  * pass silently trusts stale balances.
  */
-export function toConnectionAccount(record: any): ConnectionAccount {
+export function toConnectionAccount(
+  record: any,
+  options?: { omitBalanceObservationTime?: boolean }
+): ConnectionAccount {
   return {
     id: record.id,
     plaidAccountId: record.plaidAccountId,
@@ -269,7 +272,9 @@ export function toConnectionAccount(record: any): ConnectionAccount {
     subtype: record.subtype,
     mask: record.mask,
     currentBalance: record.currentBalance,
-    balanceObservedAt: record.balanceLastFetched ?? record.lastSynced ?? null
+    balanceObservedAt: options?.omitBalanceObservationTime
+      ? null
+      : record.balanceLastFetched ?? record.lastSynced ?? null
   };
 }
 
@@ -285,9 +290,11 @@ export async function supersedeDuplicateInstitutionConnections(options: {
   keepTokenId: string;
   institutionName: string;
   dryRun?: boolean;
+  /** Both Items were just fetched during exchange; trust balance equality without timestamps. */
+  exchangeTimeMatch?: boolean;
   log?: (message: string) => void;
 }): Promise<SupersedeReport> {
-  const { prisma, userId, keepTokenId, institutionName, dryRun = false } = options;
+  const { prisma, userId, keepTokenId, institutionName, dryRun = false, exchangeTimeMatch = false } = options;
   const log = options.log ?? (() => {});
   const report: SupersedeReport = { superseded: [], skipped: [] };
 
@@ -303,7 +310,9 @@ export async function supersedeDuplicateInstitutionConnections(options: {
     log(`   ⏭️  No persisted accounts for the surviving connection yet - skipping supersede check`);
     return report;
   }
-  const current = currentRecords.map(toConnectionAccount);
+  const mapAccount = (record: any) =>
+    toConnectionAccount(record, { omitBalanceObservationTime: exchangeTimeMatch });
+  const current = currentRecords.map(mapAccount);
 
   // Candidate stale connections: other active tokens for this user at the same institution.
   // AccessToken.institutionName is backfilled lazily, so also match via the institution recorded
@@ -352,7 +361,7 @@ export async function supersedeDuplicateInstitutionConnections(options: {
       continue;
     }
 
-    const previous = previousRecords.map(toConnectionAccount);
+    const previous = previousRecords.map(mapAccount);
     const result = matchAccountsAcrossConnections(previous, current);
 
     if (!result.fullyCovered) {

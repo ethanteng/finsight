@@ -736,9 +736,11 @@ export const setupPlaidRoutes = (app: any) => {
                       balanceLastFetched: true, lastSynced: true
                     }
                   });
+                  const exchangeAccount = (record: any) =>
+                    toConnectionAccount(record, { omitBalanceObservationTime: true });
                   const { matches, unmatchedPrevious } = matchAccountsAcrossConnections(
-                    staleOwnAccounts.map(toConnectionAccount),
-                    currentOwnAccounts.map(toConnectionAccount)
+                    staleOwnAccounts.map(exchangeAccount),
+                    currentOwnAccounts.map(exchangeAccount)
                   );
                   console.log(`Reconciling ${staleOwnAccounts.length} stale account(s) from the previous ${institutionName || 'unknown institution'} Item`);
                   if (matches.length > 0) {
@@ -773,6 +775,7 @@ export const setupPlaidRoutes = (app: any) => {
                   userId: req.user.id,
                   keepTokenId: storedToken.id,
                   institutionName,
+                  exchangeTimeMatch: true,
                   log: message => console.log(message)
                 });
                 if (supersedeReport.superseded.length > 0) {
