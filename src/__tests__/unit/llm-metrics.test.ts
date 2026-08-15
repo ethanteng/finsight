@@ -65,7 +65,34 @@ describe('LLM stage metrics', () => {
 
     const metrics = getLlmMetricsSnapshot();
     expect(metrics.baselineCandidate.ready).toBe(true);
+    expect(metrics.baselineCandidate.timeToFirstTokenReady).toBe(true);
     expect(metrics.baselineCandidate.stages.timeToFirstToken.samples).toBe(100);
     expect(metrics.baselineCandidate.stages.total.p95Ms).toBe(240);
+  });
+
+  it('does not let optional first-token timing block a representative core baseline', () => {
+    for (let index = 0; index < 100; index += 1) {
+      recordLlmAnalysis({
+        version: 1,
+        generatedAt: new Date(Date.UTC(2026, 7, 14, 12, index)).toISOString(),
+        snapshot: {},
+        facts: [],
+        modelCalls: [{
+          phase: 'initial', provider: 'openai', outcome: 'success',
+          promptCharacters: 100, responseCharacters: 50, durationMs: 200,
+        }],
+        timings: {
+          contextGatherMs: 20, promptBuildMs: 5, modelMs: 200,
+          validationMs: 10, totalMs: 240,
+        },
+        validation: { deterministic: { valid: true, issues: [] } },
+        evidenceRefs: { tickers: [], retirementAnalysis: false, marketContext: false },
+      });
+    }
+
+    const metrics = getLlmMetricsSnapshot();
+    expect(metrics.baselineCandidate.ready).toBe(true);
+    expect(metrics.baselineCandidate.timeToFirstTokenReady).toBe(false);
+    expect(metrics.baselineCandidate.stages.timeToFirstToken.remainingSamples).toBe(100);
   });
 });

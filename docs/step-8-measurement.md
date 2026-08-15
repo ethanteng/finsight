@@ -30,11 +30,14 @@ the non-streaming fallback do not claim a first-token measurement.
 
 Do not use local timings as a production baseline. After deploying a release:
 
-1. Let normal production traffic collect at least 100 observations for every
-   stage, including streamed first-token latency.
+1. Let normal production traffic collect at least 100 observations for the
+   core request stages. Streamed first-token latency has its own 100-sample gate
+   because buffered and fallback responses cannot supply that measurement.
 2. Fetch the admin-only `GET /ai/performance` endpoint. Confirm
-   `baselineCandidate.ready` is `true` and save the `observationWindow`, stage
-   p50/p95 values, and quality rates with the release notes.
+   `baselineCandidate.ready` is `true` and save the `observationWindow`, core
+   stage p50/p95 values, and quality rates with the release notes. Record the
+   first-token baseline only when `baselineCandidate.timeToFirstTokenReady` is
+   also `true`.
 3. Cross-check the same window in Sentry before changing a target. The endpoint
    is process-local and intentionally resets on each deployment; Sentry is the
    durable source for comparisons across releases and instances.
@@ -43,7 +46,8 @@ Do not use local timings as a production baseline. After deploying a release:
    supports revising them.
 
 `baselineCandidate` reports the remaining samples per stage and never labels an
-undersized window ready. A restart or deployment starts a new candidate window.
+undersized core window ready. First-token readiness remains independently
+visible. A restart or deployment starts a new candidate window.
 
 ## Correctness evaluation
 

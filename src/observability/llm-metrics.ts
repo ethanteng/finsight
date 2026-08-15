@@ -113,7 +113,16 @@ export function getLlmMetricsSnapshot() {
     timeToFirstToken: baselineStage(stages.timeToFirstToken.samples, stages.timeToFirstToken.p50Ms, stages.timeToFirstToken.p95Ms),
     total: baselineStage(stages.total.samples, stages.total.p50Ms, stages.total.p95Ms),
   };
-  const baselineReady = Object.values(baselineStages).every(stage => stage.ready);
+  // Buffered and fallback responses cannot report a genuine first-token time.
+  // Keep that baseline independently gated so it cannot block otherwise
+  // representative request/stage latency baselines forever.
+  const coreBaselineReady = [
+    baselineStages.contextGather,
+    baselineStages.promptBuild,
+    baselineStages.model,
+    baselineStages.validation,
+    baselineStages.total,
+  ].every(stage => stage.ready);
 
   return {
     processStartedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(),
@@ -131,9 +140,12 @@ export function getLlmMetricsSnapshot() {
       retryRate: rate(sample => sample.retryUsed),
     },
     baselineCandidate: {
-      ready: baselineReady,
-      note: baselineReady
-        ? 'Representative sample threshold met. Record these deployed p50/p95 values as the release baseline.'
+      ready: coreBaselineReady,
+      timeToFirstTokenReady: baselineStages.timeToFirstToken.ready,
+      note: coreBaselineReady
+        ? baselineStages.timeToFirstToken.ready
+          ? 'Representative sample thresholds met, including streamed first-token latency.'
+          : 'Core latency baseline is ready; collect more streamed responses before recording first-token latency.'
         : 'Collect more deployed samples before treating these values as a latency baseline.',
       stages: baselineStages,
       quality: {

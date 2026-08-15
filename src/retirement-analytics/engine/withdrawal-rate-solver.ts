@@ -53,7 +53,7 @@ export function evaluateSurvival(
   rate: number,
   sequences: HistoricalSequence[],
   portfolioMapping: PortfolioMapping,
-  totalValue: number,
+  portfolioValueAtWithdrawalStart: number,
   cache?: Map<number, number>
 ): number {
   const key = cacheKey(rate);
@@ -62,13 +62,17 @@ export function evaluateSurvival(
     return cached;
   }
 
-  const annualWithdrawal = rate * totalValue;
+  // Withdrawal survival is scale-invariant: multiplying both the starting
+  // portfolio and withdrawal by the same amount produces the same outcome.
+  // These withdrawal-only sequences can therefore use one normalized starting
+  // value even when their preceding accumulation paths ended at different values.
+  const annualWithdrawal = rate * portfolioValueAtWithdrawalStart;
   let survivors = 0;
 
   for (const sequence of sequences) {
     const outcome = simulateWithdrawals(
       portfolioMapping,
-      totalValue,
+      portfolioValueAtWithdrawalStart,
       sequence,
       annualWithdrawal
     );
@@ -89,7 +93,7 @@ export function findWithdrawalForSurvival(
   targetSurvival: number,
   sequences: HistoricalSequence[],
   portfolioMapping: PortfolioMapping,
-  totalValue: number,
+  portfolioValueAtWithdrawalStart: number,
   cache: Map<number, number>
 ): number {
   // Pre-check for unreachable targets
@@ -97,14 +101,14 @@ export function findWithdrawalForSurvival(
     MAX_WITHDRAWAL,
     sequences,
     portfolioMapping,
-    totalValue,
+    portfolioValueAtWithdrawalStart,
     cache
   );
   const maxSurvival = evaluateSurvival(
     MIN_WITHDRAWAL,
     sequences,
     portfolioMapping,
-    totalValue,
+    portfolioValueAtWithdrawalStart,
     cache
   );
 
@@ -120,7 +124,7 @@ export function findWithdrawalForSurvival(
       rate,
       sequences,
       portfolioMapping,
-      totalValue,
+      portfolioValueAtWithdrawalStart,
       cache
     );
 
@@ -144,7 +148,7 @@ export function findWithdrawalForSurvival(
 export function computeHistoricalWithdrawalRates(
   sequences: HistoricalSequence[],
   portfolioMapping: PortfolioMapping,
-  totalValue: number
+  normalizedPortfolioValueAtWithdrawalStart: number
 ): WithdrawalDistribution {
   if (sequences.length === 0) {
     return {
@@ -163,7 +167,7 @@ export function computeHistoricalWithdrawalRates(
     TARGET_SURVIVAL.p50,
     sequences,
     portfolioMapping,
-    totalValue,
+    normalizedPortfolioValueAtWithdrawalStart,
     cache
   );
 
@@ -172,14 +176,14 @@ export function computeHistoricalWithdrawalRates(
     TARGET_SURVIVAL.p25,
     sequences,
     portfolioMapping,
-    totalValue,
+    normalizedPortfolioValueAtWithdrawalStart,
     cache
   );
   const p75 = findWithdrawalForSurvival(
     TARGET_SURVIVAL.p75,
     sequences,
     portfolioMapping,
-    totalValue,
+    normalizedPortfolioValueAtWithdrawalStart,
     cache
   );
 
@@ -188,14 +192,14 @@ export function computeHistoricalWithdrawalRates(
     TARGET_SURVIVAL.p10,
     sequences,
     portfolioMapping,
-    totalValue,
+    normalizedPortfolioValueAtWithdrawalStart,
     cache
   );
   const p90 = findWithdrawalForSurvival(
     TARGET_SURVIVAL.p90,
     sequences,
     portfolioMapping,
-    totalValue,
+    normalizedPortfolioValueAtWithdrawalStart,
     cache
   );
 

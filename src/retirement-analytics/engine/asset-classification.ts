@@ -23,8 +23,12 @@ export function isInternationalEquityTicker(ticker: string): boolean {
 export function isGlobalEquity(geographicFocus: string, securityName: string): boolean {
   const geography = geographicFocus.toLowerCase();
   const name = securityName.toLowerCase();
-  return geography === 'global' || geography === 'world' ||
-    name.includes('global') || name.includes('all-world') || name.includes('world stock');
+  if (geography === 'global' || geography === 'world') return true;
+  if (geography === 'us' || geography === 'international' || geography === 'ex-us') return false;
+  // An explicit ex-US/international name is more specific than a generic
+  // "global" token (for example, "Global ex-US Equity").
+  if (name.includes('international') || name.includes('ex-us')) return false;
+  return name.includes('global') || name.includes('all-world') || name.includes('world stock');
 }
 
 export function isInternationalEquity(
@@ -34,7 +38,8 @@ export function isInternationalEquity(
 ): boolean {
   const geography = geographicFocus.toLowerCase();
   const name = securityName.toLowerCase();
-  return geography === 'international' || geography === 'ex-us' ||
-    name.includes('international') || name.includes('ex-us') ||
+  if (geography === 'international' || geography === 'ex-us') return true;
+  if (geography === 'us') return false;
+  return name.includes('international') || name.includes('ex-us') ||
     isInternationalEquityTicker(ticker);
 }

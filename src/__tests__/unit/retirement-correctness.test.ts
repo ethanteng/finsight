@@ -7,6 +7,7 @@ import { analyzePortfolio } from '../../retirement-analytics/engine/portfolio-an
 import { simulateWithdrawals } from '../../retirement-analytics/engine/withdrawal-simulator';
 import { calculateHistoricalPriceCoverage } from '../../retirement-analytics/engine/stress-tester';
 import { loadHistoricalReturns } from '../../retirement-analytics/engine/historical-data-loader';
+import { computeHistoricalWithdrawalRates } from '../../retirement-analytics/engine/withdrawal-rate-solver';
 import { buildRetirementTimeline } from '../../retirement-analytics';
 import { calculateDataQuality } from '../../retirement-analytics/interpretation/uncertainty-quantifier';
 import type { HistoricalSequence, PortfolioMapping } from '../../retirement-analytics/types';
@@ -73,6 +74,19 @@ describe('retirement correctness contracts', () => {
     expect(metrics.internationalAllocation).toBeCloseTo(30);
   });
 
+  it('honors explicit international geography over a generic global name', async () => {
+    const holdings = [holding('global-ex-us', 'GXUS')];
+    const securities = [security('global-ex-us', 'GXUS', 'Global ex-US Equity Fund', 'equity')];
+    const metadata = new Map([['GXUS', { assetClass: 'equity', geographicFocus: 'international' }]]);
+
+    const mapping = await mapPortfolioToAssetBasket(holdings, securities, 100, undefined, metadata);
+    const metrics = await analyzePortfolio(holdings, securities, undefined, metadata);
+
+    expect(mapping.usEquityWeight).toBeCloseTo(0);
+    expect(mapping.internationalEquityWeight).toBeCloseTo(1);
+    expect(metrics.internationalAllocation).toBeCloseTo(100);
+  });
+
   it.each(['BND', 'AGG', 'SHY'])('classifies %s as bonds when metadata is generic', async ticker => {
     const holdings = [holding(ticker, ticker)];
     const securities = [security(ticker, ticker, ticker)];
@@ -132,6 +146,14 @@ describe('retirement correctness contracts', () => {
 
   it('computes coverage from the checked historical proxy dataset', () => {
     expect(calculateHistoricalPriceCoverage(balancedMapping)).toBe(1);
+  });
+
+  it('keeps historical withdrawal-rate percentiles invariant to normalized start value', () => {
+    const sequences = [flatSequence(24)];
+
+    expect(computeHistoricalWithdrawalRates(sequences, balancedMapping, 1_000)).toEqual(
+      computeHistoricalWithdrawalRates(sequences, balancedMapping, 25_000)
+    );
   });
 
   it('describes the actual international historical proxy instead of claiming VXUS coverage', () => {
