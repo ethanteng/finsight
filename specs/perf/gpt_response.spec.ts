@@ -161,7 +161,6 @@ describe('askOpenAIWithEnhancedContext performance safeguards', () => {
       'How is my spending trending?',
       [],
       'starter',
-      false,
       'user-123'
     );
     const duration = Date.now() - start;
@@ -177,4 +176,3 @@ describe('askOpenAIWithEnhancedContext performance safeguards', () => {
     expect(systemPrompt.length).toBeGreaterThan(0);
   });
 });
-

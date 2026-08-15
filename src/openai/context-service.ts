@@ -259,10 +259,10 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
         errors: { plaid: [], snaptrade: [], homeValue: { error: 'No snapshot available', timestamp: new Date() } },
         partialData: true,
       };
-    if (questionNeeds.needsHomeValue) {
-      homeValueSummary = 'Home value data is not estimated yet.';
+      if (questionNeeds.needsHomeValue) {
+        homeValueSummary = 'Home value data is not estimated yet.';
+      }
     }
-  }
   }
 
   onProgress?.(questionNeeds.needsTransactionDetails

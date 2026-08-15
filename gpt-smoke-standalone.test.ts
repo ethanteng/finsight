@@ -21,7 +21,7 @@ describe('GPT Model Smoke Test (Standalone)', () => {
     console.log('🔑 API Key:', process.env.OPENAI_API_KEY ? 'SET' : 'NOT SET');
     console.log('🌍 Environment:', process.env.NODE_ENV || 'undefined');
 
-    const response = await askOpenAI('What is 2+2?', [], 'starter', true);
+    const response = await askOpenAI('What is 2+2?', [], 'starter');
     
     // Basic validation that we got a coherent response
     expect(response).toBeDefined();
@@ -44,7 +44,7 @@ describe('GPT Model Smoke Test (Standalone)', () => {
     }
 
     // Test that we can get a response with a simple financial question
-    const response = await askOpenAI('What is a good savings rate?', [], 'starter', true);
+    const response = await askOpenAI('What is a good savings rate?', [], 'starter');
     
     expect(response).toBeDefined();
     expect(response.length).toBeGreaterThan(20);
