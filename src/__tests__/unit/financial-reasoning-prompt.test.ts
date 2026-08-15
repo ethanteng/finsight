@@ -36,7 +36,12 @@ describe('buildFinancialReasoningPrompt – system prompt safeguards', () => {
     expect(systemPrompt).toContain('"unit"');
     expect(systemPrompt).toContain('"provenance"');
     expect(systemPrompt).toMatch(/copy value, unit, and provenance exactly/i);
-    expect(systemPrompt).toMatch(/Every numeric value mentioned anywhere/i);
+    expect(systemPrompt).toMatch(/Every dollar amount and percentage in your prose must come from a supplied canonical fact/i);
+  });
+
+  it('allows rounding for readability and non-monetary integers', () => {
+    expect(systemPrompt).toMatch(/round one for readability/i);
+    expect(systemPrompt).toMatch(/Ages, time horizons, counts, and allocation splits/i);
   });
 });
 

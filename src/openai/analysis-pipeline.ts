@@ -23,8 +23,8 @@ import { validateLLMResponse } from '../security/output-validation';
 import { logRejectedPrompt, logFlaggedOutput } from '../security/security-logger';
 import { PromptValidationError } from './errors';
 import type { EvidenceManifest, ShowTheMathData } from './show-the-math-types';
-import { sanitizeUngroundedResponse } from './response-grounding';
-import { canonicalizeResponseNumbers, validateResponseFacts } from './response-facts';
+import { sanitizeUngroundedResponse, UNVERIFIABLE_SUMMARY } from './response-grounding';
+import { canonicalizeResponseNumbers, salvageUngroundedResponse, validateResponseFacts } from './response-facts';
 import { validateCanonicalFactPack } from './canonical-facts';
 import { askOpenAIWithPreparedPrompt } from './openai-fallback-client';
 import { createHash } from 'crypto';
@@ -107,6 +107,39 @@ function evidenceTickers(
 
 function contextDigest(value: string | undefined): string | undefined {
   return value ? createHash('sha256').update(value).digest('hex') : undefined;
+}
+
+/**
+ * Pick retry feedback that covers every kind of failure rather than the first N
+ * of one kind. Sending eight "usd value X is not present" lines teaches nothing
+ * about the percentage and bare-number failures further down the list, and the
+ * retry reproduces them.
+ */
+export function selectValidationFeedback(issues: string[], limit = 12): string[] {
+  const byKind = new Map<string, string[]>();
+  for (const issue of issues) {
+    const kind = issue.replace(/-?[\d,]+(?:\.\d+)?/g, 'N');
+    const group = byKind.get(kind);
+    if (group) group.push(issue);
+    else byKind.set(kind, [issue]);
+  }
+
+  const selected: string[] = [];
+  const groups = Array.from(byKind.values());
+  for (let round = 0; selected.length < limit; round++) {
+    const before = selected.length;
+    for (const group of groups) {
+      if (selected.length >= limit) break;
+      if (round < group.length) selected.push(group[round]);
+    }
+    if (selected.length === before) break;
+  }
+
+  const omitted = issues.length - selected.length;
+  if (omitted > 0) {
+    selected.push(`${omitted} further issue(s) of the same kinds were omitted — fix the whole class, not just the examples above.`);
+  }
+  return selected;
 }
 
 /**
@@ -259,6 +292,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   const validationStartedAt = Date.now();
   let structuredResponse = canonicalizeResponseNumbers(parseStructuredResponse(rawResponse), factPack);
   let groundingResult = validateResponseFacts(structuredResponse, factPack);
+  let deterministicOutcome: 'passed' | 'salvaged' | 'replaced' = 'passed';
 
   let validationIssues = groundingResult.issues;
 
@@ -289,7 +323,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     console.warn('Ask Linc: Response validation failed, regenerating with feedback:', validationIssues);
     const retryPrompt = buildFinancialReasoningPrompt({
       ...promptInput,
-      validationFeedback: validationIssues.slice(0, 8),
+      validationFeedback: selectValidationFeedback(validationIssues),
     });
     onAnswerReset?.();
     firstAnswerTokenAt = undefined;
@@ -300,17 +334,22 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     groundingResult = validateResponseFacts(structuredResponse, factPack);
     if (!groundingResult.valid) {
       console.error('Ask Linc: Retry was still not grounded:', groundingResult.issues);
-      structuredResponse = sanitizeUngroundedResponse(structuredResponse, groundingResult);
+      // Keep the grounded part of the answer; the placeholder is the last resort.
+      structuredResponse = salvageUngroundedResponse(structuredResponse, factPack, groundingResult);
+      deterministicOutcome = structuredResponse.summary === UNVERIFIABLE_SUMMARY ? 'replaced' : 'salvaged';
     } else {
       const postRetryIssues = await runSecondaryValidation('retry');
       if (postRetryIssues.length > 0) {
         console.error('Ask Linc: Retry passed grounding but secondary validation still flagged issues:', postRetryIssues);
+        // Secondary validation reports prose, not claims, so there is nothing
+        // specific to strip — the whole answer has to go.
         structuredResponse = sanitizeUngroundedResponse(structuredResponse, {
           valid: false,
           issues: postRetryIssues,
           invalidKeyNumbers: [],
           invalidSummary: true,
         });
+        deterministicOutcome = 'replaced';
       }
     }
   }
@@ -352,7 +391,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         totalMs: Date.now() - pipelineStartedAt,
       },
       validation: {
-        deterministic: { valid: groundingResult.valid, issues: groundingResult.issues },
+        deterministic: { valid: groundingResult.valid, issues: groundingResult.issues, outcome: deterministicOutcome },
         ...(secondaryValidations.length > 0 && { secondary: secondaryValidations }),
       },
       evidenceRefs: {

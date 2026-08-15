@@ -49,15 +49,17 @@ function financialDecisionQuestion(question: string): boolean {
 
 function broadFinancialQuestion(question: string, needs: QuestionNeeds): boolean {
   if (/\b(overall|financial picture|how am i doing|finances|financial health)\b/i.test(question)) return true;
+  // A whole-position review reads as specific ("portfolio", "retirement") while
+  // needing the same balance-sheet and cash-flow breadth as "how am I doing".
+  if (/\b(entire|whole|overall|full)\s+(?:\w+\s+){0,2}(portfolio|picture|position|situation|finances)\b/i.test(question)) return true;
+  if (/\bstrengths and weaknesses\b/i.test(question)) return true;
+  if (/\b(evaluate|assess|assessment of|review|critique)\b/i.test(question) &&
+    /\b(portfolio|finances|financial|position|situation|everything)\b/i.test(question)) return true;
   const hasSpecificContext = needs.needsAccountDetails || needs.needsTransactionDetails ||
     needs.needsInvestments || needs.needsRetirement || needs.needsHomeValue ||
     needs.needsMarketContext || needs.needsSearchContext;
   const namesSpecificMetric = /\b(net worth|cash|liquidity|income|pay|spend|spending|expense|expenses|cash[ -]?flow|budget|saving|savings|debt|loan|mortgage|portfolio|investment)\b/i.test(question);
   return !hasSpecificContext && !namesSpecificMetric;
-}
-
-function includesAny(question: string, pattern: RegExp): boolean {
-  return pattern.test(question);
 }
 
 function safeFactId(value: string): string {
@@ -200,23 +202,16 @@ export function buildCanonicalFactPack(
 
   const overview = snapshot.financialSummary?.financialOverview;
   if (overview) {
-    const broad = broadFinancialQuestion(question, needs);
-    const decision = financialDecisionQuestion(question);
-    if (broad || decision || includesAny(question, /\b(net worth|assets?|liabilities|financial position)\b/i)) {
-      addSnapshotFact('net_worth', 'Net worth', overview.netWorth, 'usd', 'financialSummary.financialOverview.netWorth');
-    }
-    if (broad || decision || includesAny(question, /\b(cash|liquid|liquidity|emergency fund)\b/i)) {
-      addSnapshotFact('total_cash', 'Total cash', overview.totalCash, 'usd', 'financialSummary.financialOverview.totalCash');
-    }
-    if (broad || needs.needsInvestments || needs.needsRetirement) {
-      addSnapshotFact('total_investments', 'Total investments', overview.totalInvestments, 'usd', 'financialSummary.financialOverview.totalInvestments');
-    }
-    if (broad || decision || includesAny(question, /\b(debt|debts|loan|loans|mortgage|credit card|liabilities)\b/i)) {
-      addSnapshotFact('total_debt', 'Total debt', overview.totalDebt, 'usd', 'financialSummary.financialOverview.totalDebt');
-    }
-    if (overview.homeValue !== null && (needs.needsHomeValue || broadFinancialQuestion(question, needs))) {
-      addSnapshotFact('home_value', 'Home value', overview.homeValue, 'usd', 'financialSummary.financialOverview.homeValue');
-    }
+    // The five overview totals are always in scope. Keyword gating used to hide
+    // net worth, cash, debt, and home value from questions that never name them
+    // ("evaluate my entire financial portfolio"), while the underlying account
+    // rows were still in context — so any total the model summarized from them
+    // was ungrounded by construction.
+    addSnapshotFact('net_worth', 'Net worth', overview.netWorth, 'usd', 'financialSummary.financialOverview.netWorth');
+    addSnapshotFact('total_cash', 'Total cash', overview.totalCash, 'usd', 'financialSummary.financialOverview.totalCash');
+    addSnapshotFact('total_investments', 'Total investments', overview.totalInvestments, 'usd', 'financialSummary.financialOverview.totalInvestments');
+    addSnapshotFact('total_debt', 'Total debt', overview.totalDebt, 'usd', 'financialSummary.financialOverview.totalDebt');
+    addSnapshotFact('home_value', 'Home value', overview.homeValue, 'usd', 'financialSummary.financialOverview.homeValue');
   }
 
   const includeCashFlow = cashFlowQuestion(question) || financialDecisionQuestion(question) || broadFinancialQuestion(question, needs);

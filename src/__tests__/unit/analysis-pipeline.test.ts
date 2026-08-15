@@ -1,4 +1,5 @@
-import { runAskLincAnalysis } from '../../openai/analysis-pipeline';
+import { runAskLincAnalysis, selectValidationFeedback } from '../../openai/analysis-pipeline';
+import { UNVERIFIED_PROSE_NOTICE } from '../../openai/response-facts';
 import { gatherContextSnapshot } from '../../openai/context-service';
 import { askClaude } from '../../openai/claude-client';
 import { validateWithGemini } from '../../openai/response-validator';
@@ -151,6 +152,40 @@ describe('runAskLincAnalysis validation routing', () => {
     });
   });
 
+  it('keeps the verified part of an answer when the retry is only partly wrong', async () => {
+    mockedAskClaude.mockResolvedValue(JSON.stringify({
+      summary: 'Your net worth is $100. You should also expect $999 next year.',
+      insights: ['Cash is $80.'],
+      suggested_actions: ['Move $999 into savings.'],
+    }));
+
+    const result = await runAskLincAnalysis({
+      question: 'What is my net worth?',
+      userId: 'user-1',
+      enableValidation: true,
+    });
+
+    expect(result.structuredResponse.summary).toBe(`Your net worth is $100.\n\n${UNVERIFIED_PROSE_NOTICE}`);
+    expect(result.structuredResponse.insights).toEqual(['Cash is $80.']);
+    expect(result.structuredResponse.suggested_actions).toEqual([]);
+    expect(result.showTheMathData?.evidenceManifest.validation.deterministic.outcome).toBe('salvaged');
+  });
+
+  it('sends one example of every failure kind back to the retry', async () => {
+    mockedAskClaude.mockResolvedValue(JSON.stringify({
+      summary: 'Your net worth is $999. Growth was 47%. You could add 250,000 to savings.',
+      insights: [],
+      suggested_actions: [],
+    }));
+
+    await runAskLincAnalysis({ question: 'What is my net worth?', userId: 'user-1' });
+
+    const retryMessage = mockedAskClaude.mock.calls[1][1];
+    expect(retryMessage).toContain('usd value 999');
+    expect(retryMessage).toContain('percent value 47');
+    expect(retryMessage).toContain('numeric value 250000');
+  });
+
   it('re-runs secondary validation after a retry for complex questions', async () => {
     mockedAskClaude
       .mockResolvedValueOnce(JSON.stringify({
@@ -260,5 +295,29 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(userMessage).not.toContain('Question 2');
     expect(userMessage.indexOf('Question 3')).toBeLessThan(userMessage.indexOf('Question 4'));
     expect(userMessage.indexOf('Question 4')).toBeLessThan(userMessage.indexOf('Question 5'));
+  });
+});
+
+describe('selectValidationFeedback', () => {
+  const issues = [
+    ...Array.from({ length: 20 }, (_, i) => `User-facing usd value ${i} is not present in the canonical fact pack.`),
+    'User-facing percent value 68 is not present in the canonical fact pack.',
+    'User-facing numeric value 250000 is not present in the canonical fact pack.',
+    'net_worth does not cite a canonical fact.',
+  ];
+
+  it('covers every kind of failure before repeating one', () => {
+    const selected = selectValidationFeedback(issues, 6);
+    expect(selected.slice(0, 4)).toEqual([
+      'User-facing usd value 0 is not present in the canonical fact pack.',
+      'User-facing percent value 68 is not present in the canonical fact pack.',
+      'User-facing numeric value 250000 is not present in the canonical fact pack.',
+      'net_worth does not cite a canonical fact.',
+    ]);
+    expect(selected[selected.length - 1]).toContain('17 further issue(s)');
+  });
+
+  it('returns every issue unchanged when they all fit', () => {
+    expect(selectValidationFeedback(issues.slice(20), 12)).toEqual(issues.slice(20));
   });
 });

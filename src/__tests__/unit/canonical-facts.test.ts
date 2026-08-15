@@ -22,9 +22,49 @@ function snapshot() {
 }
 
 describe('buildCanonicalFactPack', () => {
-  it('selects overview facts according to question intent', () => {
+  it('always supplies the overview totals, whatever the question names', () => {
     const pack = buildCanonicalFactPack(snapshot(), 'What is my net worth?', analyzeQuestionNeeds('What is my net worth?'));
-    expect(pack.facts.map((fact) => fact.id)).toEqual(['net_worth']);
+    expect(pack.facts.map((fact) => fact.id)).toEqual([
+      'net_worth',
+      'total_cash',
+      'total_investments',
+      'total_debt',
+    ]);
+  });
+
+  it('supplies the overview totals for a portfolio review that never names them', () => {
+    // The reported failure: this question matched no balance-sheet keyword, so
+    // net worth, cash, and debt were withheld while every account row was in
+    // context — leaving the model no grounded way to summarize them.
+    const question = 'Evaluate my entire financial portfolio, including my income and spending. ' +
+      'Give me your assessment of its strengths and weaknesses, especially as it relates to ' +
+      'my goal of retiring by age 62 or sooner.';
+    const pack = buildCanonicalFactPack(snapshot(), question, analyzeQuestionNeeds(question));
+
+    expect(pack.facts.map((fact) => fact.id)).toEqual(expect.arrayContaining([
+      'net_worth',
+      'total_cash',
+      'total_investments',
+      'total_debt',
+      'average_monthly_income',
+      'average_monthly_expenses',
+      'average_monthly_operating_cash_flow',
+      'savings_rate',
+    ]));
+  });
+
+  it('treats a whole-position review as a broad question', () => {
+    const data = snapshot();
+    // Nothing here names income or spending, so only breadth detection can pull
+    // the cash-flow facts in.
+    for (const question of [
+      'Assess my overall financial position.',
+      'What are the strengths and weaknesses here?',
+      'Review my portfolio for me.',
+    ]) {
+      const pack = buildCanonicalFactPack(data, question, analyzeQuestionNeeds(question));
+      expect(pack.facts.map((fact) => fact.id)).toContain('average_monthly_operating_cash_flow');
+    }
   });
 
   it('supplies and validates deterministic cash-flow calculations', () => {
