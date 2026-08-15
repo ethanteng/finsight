@@ -640,6 +640,7 @@ export const setupPlaidRoutes = (app: any) => {
         //   2. New Item - a separate active token exists for the same institution.
         // Both use the same matcher, which only supersedes when the new Item fully covers the old.
         if (req.user?.id && accounts.length > 0) {
+          let reconciliationChanged = false;
           try {
             const itemResponse = await plaidClient.itemGet({ access_token: access_token });
             const institutionId = itemResponse.data.item.institution_id;
@@ -691,9 +692,11 @@ export const setupPlaidRoutes = (app: any) => {
                     console.warn(`   Skipping account ${account.account_id} - belongs to another user`);
                     continue;
                   }
+                  // Preserve user-customized names on update (same as other Plaid sync paths).
+                  const { name: _plaidName, ...accountFields } = accountData(account);
                   await getPrismaClient().account.update({
                     where: { id: existing.id },
-                    data: accountData(account)
+                    data: accountFields
                   });
                 } else {
                   await getPrismaClient().account.create({
@@ -743,6 +746,7 @@ export const setupPlaidRoutes = (app: any) => {
                       console.log(`   Migrated ${migrated.count} transactions from ${match.previous.name} (matched by ${match.strategy})`);
                     }
                     await getPrismaClient().account.delete({ where: { id: match.previous.id } });
+                    reconciliationChanged = true;
                   }
                   for (const orphan of unmatchedPrevious) {
                     console.warn(`   Keeping ${orphan.name} (${orphan.type}/${orphan.subtype}) - no match in the new Item, preserving to avoid transaction loss`);
@@ -752,13 +756,28 @@ export const setupPlaidRoutes = (app: any) => {
 
               // Case 2: a separate active token for the same institution (fresh-Link re-connect).
               const { supersedeDuplicateInstitutionConnections } = await import('./services/plaid-connection-supersede');
-              await supersedeDuplicateInstitutionConnections({
+              const supersedeReport = await supersedeDuplicateInstitutionConnections({
                 prisma: getPrismaClient() as any,
                 userId: req.user.id,
                 keepTokenId: storedToken.id,
                 institutionName,
                 log: message => console.log(message)
               });
+              if (supersedeReport.superseded.length > 0) {
+                reconciliationChanged = true;
+              }
+            }
+
+            if (reconciliationChanged) {
+              const { FinancialRevisionService } = await import('./services/financial-revision-service');
+              FinancialRevisionService.schedule(
+                req.user.id,
+                {
+                  categorize: false,
+                  history: { kind: 'material', reason: 'account-sync' },
+                },
+                'exchange_public_token'
+              );
             }
           } catch (cleanupErr: any) {
             console.warn('Relink reconciliation failed (non-critical):', cleanupErr?.message);
