@@ -186,6 +186,34 @@ describe('snapshot patching', () => {
     });
   });
 
+  it('clears the classification a restore cannot re-derive', async () => {
+    // The provider never categorized this one, so there is nothing to derive a type from;
+    // leaving the user's would show a chip contradicting the now-empty category.
+    prisma.financialSummarySnapshot.findUnique.mockResolvedValue({
+      computedAt: new Date('2026-08-15T00:00:00.000Z'),
+      transactions: [{
+        transaction_id: 'txn-1',
+        category: ['FOOD_AND_DRINK'],
+        category_source: 'user',
+        personal_finance_category: { primary: 'FOOD_AND_DRINK', detailed: '' },
+        aiCategory: 'expense',
+        canonicalTransactionType: 'expense',
+        transaction_type: 'expense',
+        name: 'Corey Head',
+      }],
+    });
+    prisma.financialSummarySnapshot.updateMany.mockResolvedValue({ count: 1 });
+
+    await patchSnapshotTransactionCategory('user-1', 'txn-1', [], 'provider');
+
+    const call = prisma.financialSummarySnapshot.updateMany.mock.calls[0][0] as any;
+    expect(call.data.transactions[0]).toEqual({
+      transaction_id: 'txn-1',
+      category: [],
+      name: 'Corey Head',
+    });
+  });
+
   it('reports failure without writing when the id is not in the snapshot', async () => {
     prisma.financialSummarySnapshot.findUnique.mockResolvedValue({
       computedAt: new Date(),

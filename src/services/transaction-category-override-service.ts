@@ -28,7 +28,17 @@ export function resolveProviderTransactionId(transaction: any): string | null {
   return typeof id === 'string' && id.length > 0 ? id : null;
 }
 
-/** Applies category + classification fields the same way ingestion does. */
+/**
+ * Applies category + classification fields the same way ingestion does.
+ *
+ * Restoring is not symmetric with overriding: the provider's own classification cannot be
+ * reconstructed from its category, so a restore re-derives what it can and clears what it
+ * cannot, rather than leaving the user's values stamped on a row whose category has gone
+ * back to the provider's — a chip reading "Expense" over a transfer category. Inside a
+ * stored snapshot these fields are display-only (cash-flow totals are computed from
+ * ingested data at revision time), and the revision scheduled alongside the restore
+ * rebuilds them from the provider.
+ */
 export function stampCategoryFieldsOnTransaction(
   transaction: any,
   category: string[],
@@ -47,6 +57,8 @@ export function stampCategoryFieldsOnTransaction(
       primary,
       detailed: category[1] || '',
     };
+  } else if (source === 'provider') {
+    delete transaction.personal_finance_category;
   }
 
   const canonicalType = canonicalTypeForCategory(category);
@@ -56,6 +68,12 @@ export function stampCategoryFieldsOnTransaction(
     transaction.aiCategory = canonicalType;
     transaction.canonicalTransactionType = canonicalType;
     transaction.transaction_type = canonicalType;
+  } else if (source === 'provider') {
+    // An override on a transaction the provider never categorized: show no type rather
+    // than the one the user's since-removed choice implied.
+    delete transaction.aiCategory;
+    delete transaction.canonicalTransactionType;
+    delete transaction.transaction_type;
   }
 }
 
