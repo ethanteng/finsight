@@ -79,6 +79,7 @@ describe('SummaryCacheService.refreshAllUsers', () => {
     await expect(SummaryCacheService.refreshAllUsers()).resolves.toEqual({
       success: true,
       usersProcessed: 3,
+      processedUserIds: ['snaptrade-holdings-user', 'manual-only-user', 'home-only-user'],
     });
     expect(computeForUser).toHaveBeenCalledWith('snaptrade-holdings-user', { categorize: true });
     expect(computeForUser).toHaveBeenCalledWith('manual-only-user', { categorize: true });
@@ -93,6 +94,7 @@ describe('SummaryCacheService.refreshAllUsers', () => {
     await expect(SummaryCacheService.refreshAllUsers()).resolves.toEqual({
       success: true,
       usersProcessed: 1,
+      processedUserIds: ['b'],
     });
     expect(computeForUser).toHaveBeenCalledTimes(2);
     consoleError.mockRestore();
