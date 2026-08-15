@@ -91,6 +91,42 @@ export function normalizeAssetType(rawType: unknown): string {
   return ASSET_TYPE_ALIASES[key] || normalizeLabel(key, UNKNOWN_ASSET_TYPE);
 }
 
+/**
+ * Map a SnapTrade security-type description to a canonical asset class.
+ *
+ * Substring heuristics (e.g. any type containing "fund" -> Mutual Fund) are only
+ * applied when the raw value has no alias entry. Otherwise "Money Market Fund"
+ * would be mis-bucketed as Mutual Fund instead of Cash.
+ */
+export function resolveAssetTypeWithHeuristics(rawType: unknown): string {
+  const direct = normalizeAssetType(rawType);
+  const titleCaseOnly = normalizeLabel(rawType, UNKNOWN_ASSET_TYPE);
+  if (direct !== titleCaseOnly) {
+    return direct;
+  }
+
+  let refined = String(rawType ?? '');
+  const typeNormalized = refined.toLowerCase();
+  if (typeNormalized.includes('stock') || typeNormalized.includes('equity')) {
+    refined = 'Equity';
+  } else if (
+    typeNormalized.includes('bond') ||
+    typeNormalized.includes('treasury') ||
+    typeNormalized.includes('fixed income')
+  ) {
+    refined = 'Fixed Income';
+  } else if (typeNormalized.includes('etf')) {
+    refined = 'ETF';
+  } else if (typeNormalized.includes('mutual fund') || typeNormalized.includes('fund')) {
+    refined = 'Mutual Fund';
+  } else if (typeNormalized.includes('option')) {
+    refined = 'Options';
+  } else if (typeNormalized.includes('crypto')) {
+    refined = 'Cryptocurrency';
+  }
+  return normalizeAssetType(refined);
+}
+
 export interface AssetAllocationRow {
   type: string;
   value: number;

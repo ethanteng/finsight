@@ -1,5 +1,9 @@
 import { describe, expect, it } from '@jest/globals';
-import { mergeAssetAllocation, normalizeAssetType } from '../../services/asset-class';
+import {
+  mergeAssetAllocation,
+  normalizeAssetType,
+  resolveAssetTypeWithHeuristics,
+} from '../../services/asset-class';
 
 describe('normalizeAssetType', () => {
   it('collapses provider casing differences onto one label', () => {
@@ -47,6 +51,18 @@ describe('normalizeAssetType', () => {
 
   it('leaves the manual investments bucket untouched', () => {
     expect(normalizeAssetType('Manual Investments')).toBe('Manual Investments');
+  });
+});
+
+describe('resolveAssetTypeWithHeuristics', () => {
+  it('uses alias mappings before substring heuristics', () => {
+    expect(resolveAssetTypeWithHeuristics('Money Market Fund')).toBe('Cash');
+    expect(resolveAssetTypeWithHeuristics('Common Stock')).toBe('Equity');
+  });
+
+  it('falls back to substring heuristics for unmapped descriptions', () => {
+    expect(resolveAssetTypeWithHeuristics('Growth ETF')).toBe('ETF');
+    expect(resolveAssetTypeWithHeuristics('US Treasury Bond')).toBe('Fixed Income');
   });
 });
 
