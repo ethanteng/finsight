@@ -4,10 +4,6 @@ import type { ReactNode } from 'react';
 
 interface NetWorthCardProps {
   netWorth: number;
-  totalCash: number;
-  totalInvestments: number;
-  totalDebt: number;
-  homeValue: number | null;
   footer?: ReactNode;
 }
 

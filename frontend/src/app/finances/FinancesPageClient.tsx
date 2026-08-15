@@ -424,10 +424,6 @@ export default function FinancesPageClient() {
         {/* Net Worth Card — snapshot timing sits inside the card, warnings below it */}
         <NetWorthCard
           netWorth={Math.round(overview.financialOverview.netWorth)}
-          totalCash={Math.round(overview.financialOverview.totalCash)}
-          totalInvestments={Math.round(overview.financialOverview.totalInvestments)}
-          totalDebt={Math.round(overview.financialOverview.totalDebt)}
-          homeValue={overview.financialOverview.homeValue}
           footer={
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white/55">
               {overview.revision.asOf && (
