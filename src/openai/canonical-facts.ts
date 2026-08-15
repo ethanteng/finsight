@@ -1,5 +1,6 @@
 import type { FinancialContextSnapshot, QuestionNeeds } from './types';
 import { mergeAssetAllocation } from '../services/asset-class';
+import { mergeLabelKeyedTotals } from '../services/label-normalization';
 
 export type CanonicalFactUnit = 'usd' | 'percent' | 'months' | 'years' | 'age' | 'count' | 'ratio';
 
@@ -298,25 +299,19 @@ export function buildCanonicalFactPack(
       );
     }
     // Sum before emitting: the fact id is case-folded, so categories that differ
-    // only in spelling ("Food and Drink" from Plaid's legacy taxonomy vs
-    // "Food And Drink" derived from personal_finance_category) map to one id and
-    // the last one written would replace the rest.
-    const categoryTotals = new Map<string, { label: string; source: string; total: number }>();
-    for (const [category, amount] of Object.entries(snapshot.transactionSummary?.byCategory || {})) {
-      if (!finite(amount)) continue;
+    // only in spelling map to one id and the last one written would replace the rest.
+    const mergedCategories = mergeLabelKeyedTotals(
+      snapshot.transactionSummary?.byCategory,
+      'Uncategorized'
+    );
+    for (const [category, amount] of Object.entries(mergedCategories)) {
       const categoryId = safeFactId(category) || 'uncategorized';
-      const current = categoryTotals.get(categoryId)
-        || { label: category, source: `transactionSummary.byCategory.${category}`, total: 0 };
-      current.total += amount as number;
-      categoryTotals.set(categoryId, current);
-    }
-    for (const [categoryId, aggregate] of categoryTotals) {
       addSnapshotFact(
         `category_spending_${categoryId}`,
-        `${aggregate.label} spending`,
-        aggregate.total,
+        `${category} spending`,
+        amount,
         'usd',
-        aggregate.source
+        `transactionSummary.byCategory.${categoryId}`
       );
     }
   }
