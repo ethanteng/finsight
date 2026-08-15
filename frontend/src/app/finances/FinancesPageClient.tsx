@@ -29,6 +29,29 @@ const AccountDetailModal = lazy(() => import('../../components/finances/AccountD
 const REVISION_POLL_INTERVAL_MS = 2000;
 const REVISION_POLL_ATTEMPTS = 30;
 
+type SavedHomeValue = {
+  address: string;
+  value: number;
+  valueLow: number | null;
+  valueHigh: number | null;
+  lastUpdated: string;
+  isManualOverride?: boolean;
+};
+
+type PendingHome = {
+  baselineRevision: string | null;
+  home: FinancesOverview['home'];
+};
+
+// An edit is settled once the snapshot has moved past the revision it was made against and
+// the server has no further rebuild scheduled. `rebuildPending` is process-local, so an
+// older backend or a request served by another instance simply falls back to the revision
+// check rather than polling forever.
+function isReconciled(overview: FinancesOverview, baselineRevision: string | null): boolean {
+  if (overview.revision.rebuildPending) return false;
+  return overview.revision.computedAt !== baselineRevision;
+}
+
 function FinancesEmptyState({ onLogout }: { onLogout: () => void }) {
   return (
     <div className="authenticated-site min-h-screen">
@@ -140,9 +163,11 @@ export default function FinancesPageClient() {
     text: string;
   } | null>(null);
   const [awaitingRevision, setAwaitingRevision] = useState(false);
+  const [revisionStalled, setRevisionStalled] = useState(false);
   const router = useRouter();
   const revisionRef = useRef<string | null>(null);
   const mountedRef = useRef(true);
+  const pendingHomeRef = useRef<PendingHome | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -173,7 +198,14 @@ export default function FinancesPageClient() {
     if (!response.ok) throw new Error('Failed to load financial data');
     const data = await response.json() as FinancesOverview;
     syncStoredUserTimeZoneFromAuthUser({ timeZone: data.userTimeZone });
-    setOverview(data);
+
+    const pendingHome = pendingHomeRef.current;
+    const resolved = pendingHome && !isReconciled(data, pendingHome.baselineRevision)
+      ? { ...data, home: pendingHome.home }
+      : data;
+    if (pendingHome && resolved === data) pendingHomeRef.current = null;
+
+    setOverview(resolved);
     revisionRef.current = data.revision.computedAt;
     return data;
   }, [API_URL, router]);
@@ -226,24 +258,52 @@ export default function FinancesPageClient() {
   // revision so the derived totals and account groups line up too.
   const refreshAfterAccountEdit = useCallback(async () => {
     const baselineRevision = revisionRef.current;
+    setRevisionStalled(false);
     const immediate = await loadOverview().catch(() => null);
-    if (!immediate || immediate.revision.computedAt !== baselineRevision) return;
-
-    setAwaitingRevision(true);
-    try {
-      for (let attempt = 0; attempt < REVISION_POLL_ATTEMPTS; attempt += 1) {
-        await new Promise(resolve => setTimeout(resolve, REVISION_POLL_INTERVAL_MS));
-        if (!mountedRef.current) return;
-        const next = await loadOverview().catch(() => null);
-        if (!next || next.revision.computedAt !== baselineRevision) return;
+    // A revision that already moved past the baseline settles this edit only if the server
+    // has nothing further queued. Back-to-back edits land in separate rebuilds, so the
+    // first one publishing is not the end of the story.
+    if (immediate && !isReconciled(immediate, baselineRevision)) {
+      setAwaitingRevision(true);
+      try {
+        for (let attempt = 0; attempt < REVISION_POLL_ATTEMPTS; attempt += 1) {
+          await new Promise(resolve => setTimeout(resolve, REVISION_POLL_INTERVAL_MS));
+          if (!mountedRef.current) return;
+          // A transient failure costs an attempt; it is not a reason to stop watching for
+          // a rebuild that is still on its way.
+          const next = await loadOverview().catch(() => null);
+          if (next && isReconciled(next, baselineRevision)) return;
+        }
+        // The rebuild never published. Say so rather than leaving stale totals unexplained.
+        if (mountedRef.current) setRevisionStalled(true);
+      } finally {
+        if (mountedRef.current) setAwaitingRevision(false);
       }
-    } finally {
-      if (mountedRef.current) setAwaitingRevision(false);
     }
   }, [loadOverview]);
 
   const refreshAccounts = refreshAfterAccountEdit;
   const refreshManualAccounts = refreshAfterAccountEdit;
+
+  // Unlike manual accounts, the home card is fed by the snapshot rather than read live, so
+  // reloading before the rebuild lands would snap the value back to the old one. Hold the
+  // value the server just saved — flagged as not yet reflected in the snapshot — over every
+  // reload until a new revision arrives, then reconcile like any other edit.
+  const refreshAfterHomeEdit = useCallback(async (savedHome: SavedHomeValue) => {
+    pendingHomeRef.current = {
+      baselineRevision: revisionRef.current,
+      home: {
+        address: savedHome.address,
+        value: savedHome.value,
+        valueLow: savedHome.valueLow,
+        valueHigh: savedHome.valueHigh,
+        lastUpdated: savedHome.lastUpdated,
+        isManualOverride: Boolean(savedHome.isManualOverride),
+        isSnapshotAligned: false,
+      },
+    };
+    await refreshAfterAccountEdit();
+  }, [refreshAfterAccountEdit]);
 
   const refreshSummary = useCallback(async () => {
     try {
@@ -263,6 +323,7 @@ export default function FinancesPageClient() {
       const body = await res.json().catch(() => ({}));
       if (res.ok) {
         await loadOverview();
+        setRevisionStalled(false);
         setRefreshSummaryMessage(body.status === 'current'
           ? { kind: 'success', text: 'Totals refreshed from your connected providers.' }
           : { kind: 'warning', text: 'Refresh completed, but some connected-source data is stale or unavailable.' });
@@ -361,6 +422,11 @@ export default function FinancesPageClient() {
             </span>
           )}
         </div>
+        {revisionStalled && !awaitingRevision && (
+          <div role="status" className="rounded-xl border border-[#d4a72c]/30 bg-[#fff3ce] px-4 py-3 text-sm font-medium text-[#76510f]">
+            Your change was saved, but totals have not caught up yet. Use Refresh totals to try again.
+          </div>
+        )}
         {visibleWarnings.length > 0 && (
           <div className="space-y-2" role="status" aria-label="Financial data warnings">
             {visibleWarnings.map(warning => (
@@ -504,7 +570,7 @@ export default function FinancesPageClient() {
             homeData={overview.home}
             isExpanded={isHomeValueExpanded}
             onToggle={() => setIsHomeValueExpanded(!isHomeValueExpanded)}
-            onValueUpdate={() => { void loadOverview(); }}
+            onValueUpdate={(savedHome) => { void refreshAfterHomeEdit(savedHome); }}
           />
         )}
 

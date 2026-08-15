@@ -73,6 +73,8 @@ export interface FinancesOverviewInput {
   };
   currentHome?: FinancesHomeData | null;
   userTimeZone?: string | null;
+  /** True when a newer revision is already scheduled, running, or queued for this user. */
+  rebuildPending?: boolean;
 }
 
 export interface FinancesAccountGroup {
@@ -89,6 +91,11 @@ export interface FinancesOverview {
     asOf: string | null;
     status: FinancesSnapshotStatus;
     reportingCurrency: string;
+    /**
+     * A newer revision is already on its way, so these values are not the final word for
+     * the edits made so far. Process-local on the server: false means "none known here".
+     */
+    rebuildPending: boolean;
   };
   warnings: Array<{ code: string; message: string }>;
   financialOverview: {
@@ -368,6 +375,7 @@ export function buildFinancesOverview(input: FinancesOverviewInput): FinancesOve
       reportingCurrency: typeof snapshot.reportingCurrency === 'string'
         ? snapshot.reportingCurrency
         : 'USD',
+      rebuildPending: Boolean(input.rebuildPending),
     },
     warnings,
     financialOverview: {

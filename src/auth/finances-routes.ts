@@ -3,6 +3,7 @@ import { requireAuth, type AuthenticatedRequest } from './middleware';
 import { getPrismaClient } from '../prisma-client';
 import { ProfileManager } from '../profile/manager';
 import { getLatestFinancialSnapshot } from '../services/financial-snapshot-persistence';
+import { FinancialRevisionService } from '../services/financial-revision-service';
 import {
   buildFinancesAccountDetails,
   buildFinancesOverview,
@@ -58,6 +59,7 @@ router.get('/overview', requireAuth, async (req: AuthenticatedRequest, res) => {
       },
       currentHome,
       userTimeZone: user.timeZone,
+      rebuildPending: FinancialRevisionService.isPending(userId),
     }));
   } catch (error) {
     console.error('Failed to build finances overview:', error);

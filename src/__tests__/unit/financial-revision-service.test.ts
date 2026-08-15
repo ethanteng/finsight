@@ -98,6 +98,61 @@ describe('FinancialRevisionService', () => {
       });
     });
 
+    it('keeps the strongest queued history intent when collapsing a burst', async () => {
+      let release: () => void = () => {};
+      computeForUser.mockImplementationOnce(
+        () => new Promise(resolve => {
+          release = () => resolve({ computedAt: new Date() });
+        })
+      );
+
+      FinancialRevisionService.schedule('user-1', { history: { kind: 'none' } }, 'first');
+      await new Promise(resolve => setImmediate(resolve));
+
+      // A material balance-sheet change queues behind the running revision...
+      FinancialRevisionService.schedule(
+        'user-1',
+        { history: { kind: 'material', reason: 'manual-account-updated' } },
+        'material'
+      );
+      // ...and a later rename must not downgrade it out of financial history.
+      FinancialRevisionService.schedule('user-1', { history: { kind: 'none' } }, 'rename');
+
+      release();
+      await FinancialRevisionService.whenIdle('user-1');
+
+      expect(computeForUser).toHaveBeenLastCalledWith('user-1', {
+        history: { kind: 'material', reason: 'manual-account-updated' },
+      });
+    });
+
+    it('reports a revision as pending from the moment it is scheduled until nothing is left', async () => {
+      let release: () => void = () => {};
+      computeForUser.mockImplementationOnce(
+        () => new Promise(resolve => {
+          release = () => resolve({ computedAt: new Date() });
+        })
+      );
+
+      expect(FinancialRevisionService.isPending('user-1')).toBe(false);
+
+      // Pending before the deferred dispatch even runs, so an overview request served in
+      // between still learns that newer numbers are coming.
+      FinancialRevisionService.schedule('user-1', { history: { kind: 'none' } }, 'first');
+      expect(FinancialRevisionService.isPending('user-1')).toBe(true);
+
+      await new Promise(resolve => setImmediate(resolve));
+      expect(FinancialRevisionService.isPending('user-1')).toBe(true);
+
+      // Still pending across the handoff to the queued follow-up run.
+      FinancialRevisionService.schedule('user-1', { history: { kind: 'none' } }, 'second');
+      release();
+      await FinancialRevisionService.whenIdle('user-1');
+
+      expect(computeForUser).toHaveBeenCalledTimes(2);
+      expect(FinancialRevisionService.isPending('user-1')).toBe(false);
+    });
+
     it('keeps a failed background revision from rejecting into the request path', async () => {
       const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
       computeForUser.mockRejectedValueOnce(new Error('provider unavailable'));

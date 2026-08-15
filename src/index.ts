@@ -1616,24 +1616,25 @@ function serializeHomeData(homeData: PersistedHomeData) {
   };
 }
 
+// The setting itself is already durable when this runs. Rebuilding the canonical snapshot
+// re-reads every connected provider and takes tens of seconds, so it happens in the
+// background — the same as POST /profile/home and /profile/home/refresh. Clients see the
+// saved value immediately from the mutation response and reconcile totals against the next
+// snapshot revision.
 async function refreshSnapshotAfterHomeMutation(
   userId: string,
   reason: 'home-value-override-set' | 'home-value-override-removed' | 'home-value-removed'
-): Promise<{ snapshotRefreshed: boolean; warning?: string }> {
+): Promise<void> {
   try {
     const { FinancialRevisionService } = await import('./services/financial-revision-service');
-    await FinancialRevisionService.recompute(userId, {
-      categorize: false,
-      history: { kind: 'material', reason },
-    });
-    return { snapshotRefreshed: true };
+    FinancialRevisionService.schedule(
+      userId,
+      { categorize: false, history: { kind: 'material', reason } },
+      reason
+    );
   } catch (error) {
-    console.error(`Home setting was saved but financial snapshot refresh failed for user ${userId}:`, error);
+    console.error(`Home setting was saved but the snapshot refresh could not be scheduled for user ${userId}:`, error);
     Sentry.captureException(error);
-    return {
-      snapshotRefreshed: false,
-      warning: 'Your home setting was saved, but totals could not be refreshed. Use Refresh totals to try again.',
-    };
   }
 }
 
@@ -1651,14 +1652,10 @@ app.put('/profile/home/value', requireAuth, async (req: Request, res: Response) 
 
     // Update manual override
     const homeData = await profileManager.updateManualHomeValue(req.user!.id, value);
-    const refresh = await refreshSnapshotAfterHomeMutation(
-      req.user!.id,
-      'home-value-override-set'
-    );
+    await refreshSnapshotAfterHomeMutation(req.user!.id, 'home-value-override-set');
 
     res.json({
       success: true,
-      ...refresh,
       homeData: serializeHomeData(homeData),
     });
   } catch (error) {
@@ -1682,14 +1679,10 @@ app.delete('/profile/home/value', requireAuth, async (req: Request, res: Respons
 
     // Remove manual override
     const homeData = await profileManager.removeManualHomeValue(req.user!.id);
-    const refresh = await refreshSnapshotAfterHomeMutation(
-      req.user!.id,
-      'home-value-override-removed'
-    );
+    await refreshSnapshotAfterHomeMutation(req.user!.id, 'home-value-override-removed');
 
     res.json({
       success: true,
-      ...refresh,
       homeData: serializeHomeData(homeData),
     });
   } catch (error) {
@@ -1711,9 +1704,9 @@ app.delete('/profile/home', requireAuth, async (req: Request, res: Response) => 
     const profileManager = new ProfileManager();
 
     await profileManager.removeHomeData(req.user!.id);
-    const refresh = await refreshSnapshotAfterHomeMutation(req.user!.id, 'home-value-removed');
+    await refreshSnapshotAfterHomeMutation(req.user!.id, 'home-value-removed');
 
-    res.json({ success: true, ...refresh });
+    res.json({ success: true });
   } catch (error) {
     console.error('Failed to remove home data:', error);
 
