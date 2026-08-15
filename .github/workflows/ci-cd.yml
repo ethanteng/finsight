@@ -584,7 +584,6 @@ jobs:
     needs: [build-verification]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment: production   # requires manual approval in GitHub
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

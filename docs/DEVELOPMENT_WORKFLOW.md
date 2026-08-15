@@ -285,17 +285,16 @@ git push origin main
 
 # 4. CI/CD handles the rest safely
 # - Tests run with real migrations
-# - Migration job requires your approval
+# - Migration job runs automatically after all checks pass
 # - Deployment only happens after safe migration
 ```
 
 #### **For Production Migrations:**
 1. **Push to main** triggers the pipeline
-2. **Wait for migrate-prod job** to reach production environment
-3. **Click "Review deployments"** when prompted
-4. **Approve the migration** (starts 1-minute timer)
-5. **Monitor migration execution** with safety guards
-6. **Deployment proceeds** after successful migration
+2. **All test and build jobs must pass** before `migrate-prod` starts
+3. **Migration runs automatically** — no manual approval step
+4. **Monitor migration execution** with safety guards
+5. **Deployment proceeds** after successful migration
 
 ### **Emergency Procedures:**
 
@@ -304,10 +303,9 @@ git push origin main
 2. **Identify the issue** (usually syntax or constraint problems)
 3. **Fix locally** and test with `npx prisma migrate reset`
 4. **Push fix** to trigger new pipeline run
-5. **Approve migration** again
 
 #### **If You Need to Cancel:**
-1. **During approval**: Don't approve, job will wait indefinitely
+1. **During tests/build**: Click "Cancel workflow" in GitHub Actions
 2. **During timer**: Click "Cancel workflow" in GitHub Actions
 3. **During execution**: Use "Cancel workflow" button
 
@@ -315,7 +313,7 @@ git push origin main
 
 - [ ] **Migration guard script** prevents build script migrations ✅
 - [ ] **Tests use real migrations** instead of `db push` ✅
-- [ ] **Production migration job** requires manual approval ✅
+- [ ] **Production migration job** gated on full test + build suite ✅
 - [ ] **Safety timer** provides cancellation window ✅
 - [ ] **Migration guards** block destructive operations ✅
 - [ ] **Render configuration** is build-only ✅
