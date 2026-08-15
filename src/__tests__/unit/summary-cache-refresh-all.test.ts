@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 const findMany = jest.fn<(..._args: any[]) => Promise<Array<{ id: string }>>>();
 
@@ -30,7 +30,8 @@ describe('SummaryCacheService.refreshAllUsers', () => {
       where: {
         OR: [
           { accessTokens: { some: { isActive: true } } },
-          { snapTradeUser: { isNot: null } },
+          { accounts: { some: { plaidAccountId: { startsWith: 'snaptrade-' } } } },
+          { snapTradeUser: { activities: { some: {} } } },
         ],
       },
       select: { id: true },

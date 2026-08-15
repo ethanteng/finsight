@@ -143,11 +143,16 @@ export class SummaryCacheService {
     const prisma = getPrismaClient();
     // Refresh every user with a connected provider, not just Plaid. A SnapTrade-only
     // user has no AccessToken row, so gating on accessTokens alone skipped them entirely.
+    // SnapTrade auto-init can create a registration row before a brokerage is linked, so
+    // require persisted brokerage accounts or activities rather than registration alone.
     const userIds = await prisma.user.findMany({
       where: {
         OR: [
           { accessTokens: { some: { isActive: true } } },
-          { snapTradeUser: { isNot: null } },
+          // SnapTrade auto-init creates a registration row before a brokerage is linked.
+          // Require persisted brokerage evidence so nightly refresh skips unconnected users.
+          { accounts: { some: { plaidAccountId: { startsWith: 'snaptrade-' } } } },
+          { snapTradeUser: { activities: { some: {} } } },
         ],
       },
       select: { id: true },
