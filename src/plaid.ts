@@ -104,35 +104,6 @@ if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
   };
 }
 
-// Enhanced data processing for production Plaid data
-const processAccountData = (account: any) => {
-  // Ensure we have valid balance data
-  const balances = account.balances || {};
-
-  return {
-    id: account.account_id,
-    name: account.name,
-    type: account.type,
-    subtype: account.subtype,
-    mask: account.mask,
-    balance: {
-      available: balances.available ?? 0,
-      current: balances.current ?? 0,
-      limit: balances.limit ?? null,
-      iso_currency_code: balances.iso_currency_code ?? 'USD',
-      unofficial_currency_code: balances.unofficial_currency_code ?? null
-    },
-    // Enhanced metadata for production
-    verification_status: account.verification_status,
-    last_updated_datetime: account.last_updated_datetime,
-    // Investment-specific data
-    securities: account.securities || [],
-    holdings: account.holdings || [],
-    // Income-specific data
-    income_verification: account.income_verification || null
-  };
-};
-
 export const processTransactionData = (transaction: any) => {
   // ✅ Extract basic categories from personal_finance_category if legacy category is empty
   let basicCategory = transaction.category || [];
