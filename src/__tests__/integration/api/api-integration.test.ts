@@ -18,7 +18,13 @@ describe('API Integration Tests', () => {
   // assertion — so a test that never ran still counted as a passing test.
   const itNetwork = shouldSkipNetworkTests ? it.skip : it;
 
-  beforeAll(async () => {
+  // Seeded per test, not once: the shared setup in test-database-ci.ts runs a
+  // beforeEach that deletes every row from `user` and 14 other tables. That was a
+  // no-op against the mock database (deleteMany returned a fake count), so a user
+  // created in beforeAll survived. Against the real database it does not, and the
+  // token then references a deleted user — which the auth layer correctly rejects
+  // with 401. Creating the fixture after the cleanup keeps it valid.
+  beforeEach(async () => {
     if (shouldSkipNetworkTests) return;
 
     const user = await prisma.user.upsert({

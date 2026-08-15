@@ -383,24 +383,23 @@ beforeAll(async () => {
   console.log('  GITHUB_ACTIONS:', process.env.GITHUB_ACTIONS);
   console.log('  Is CI/CD Environment:', isCI);
 
-  // In CI/CD, we might not have a database ready yet
-  if (isCI) {
-    console.log('🔧 CI/CD Environment Detected - Using Mock Database');
-
-    // Create a mock Prisma client for CI/CD tests
-    // This mock supports encryption operations while maintaining security testing principles
-    testPrisma = createEnhancedMockDatabase();
-
-    console.log('✅ Mock database setup complete for CI/CD');
-    return;
-  }
-
-  // For local development, try to connect to real database
+  // CI used to short-circuit to the mock database here, which meant the workflow
+  // booted a PostgreSQL service container, ran `prisma migrate deploy` against it,
+  // and then never used it. That is not a neutral substitution: the mock's
+  // findMany returns rows built from the `where` clause, so it filters by user by
+  // construction and a data-isolation test cannot fail against it. CI now uses the
+  // database it builds.
   const databaseUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 
   if (!databaseUrl) {
+    if (isCI) {
+      throw new Error(
+        'No TEST_DATABASE_URL/DATABASE_URL in CI. These suites must run against the ' +
+        'real database; falling back to a mock would report false confidence.'
+      );
+    }
     console.log('⚠️ No database URL found - using mock database');
-    // Use the enhanced mock setup for security testing
+    // Local convenience only: lets contributors run the suite without a database.
     testPrisma = createEnhancedMockDatabase();
 
     console.log('✅ Enhanced mock database setup complete for local development');
@@ -439,9 +438,15 @@ beforeAll(async () => {
       if (attempts < maxAttempts) {
         console.log(`⏳ Waiting 2 seconds before retry...`);
         await new Promise(resolve => setTimeout(resolve, 2000));
+      } else if (isCI) {
+        // Never silently degrade to a mock in CI — an unreachable database must
+        // fail the run, not turn it green against fabricated data.
+        throw new Error(
+          `Could not reach the test database after ${maxAttempts} attempts: ${error.message}`
+        );
       } else {
         console.error('❌ Failed to connect to database after all attempts - falling back to enhanced mock');
-        // Fall back to enhanced mock database for security testing
+        // Local convenience only; see the note above.
         testPrisma = createEnhancedMockDatabase();
 
         console.log('✅ Fallback to enhanced mock database complete');
