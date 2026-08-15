@@ -157,8 +157,7 @@ export default forwardRef<{ refresh: () => void }, object>(function TransactionH
     });
   }, [transactions]);
 
-  // Filter transactions based on date range and always show pending,
-  // newest transaction date first.
+  // Filter transactions based on date range, newest transaction date first.
   const filteredTransactions = useMemo(() => {
     const daysAgo = new Date();
     daysAgo.setDate(daysAgo.getDate() - parseInt(dateRange));
