@@ -13,17 +13,17 @@
  * calls this on every question.
  */
 
+import { matchesCategory } from '../openai/routing-vocabulary';
+
 /** "retire the mortgage" is debt payoff, not retirement planning. */
 const DEBT_PAYOFF =
   /\bretir\w+\s+(?:my|our|the|this|that|their)\s+(?:mortgage|loans?|debts?|note|card|balance)\b/gi;
 
-/** retire, retires, retired, retiring, retirement, retiree. */
-const RETIREMENT_WORD = /\bretir\w*/i;
-
-const RETIREMENT_SYNONYM =
-  /\b(?:withdrawals?|drawdown|draw\s+down|nest\s+egg|financial\s+independence)\b/i;
-
-const STOPS_WORKING = /\b(?:stop|quit)\s+working\b/i;
+/**
+ * The words themselves are admin-configurable (routing-vocabulary), because
+ * every gap in them has cost an answer. This module owns how they are applied:
+ * the debt-payoff exclusion, and the age patterns below.
+ */
 
 /**
  * Connectors people put between the verb and the age, in any combination:
@@ -57,9 +57,7 @@ function withoutDebtPayoff(text: string): string {
 /** Does this text talk about retiring, in any of the ways people phrase it? */
 export function mentionsRetirement(text: string): boolean {
   if (!text) return false;
-  return RETIREMENT_WORD.test(withoutDebtPayoff(text)) ||
-    RETIREMENT_SYNONYM.test(text) ||
-    STOPS_WORKING.test(text);
+  return matchesCategory('retirement', withoutDebtPayoff(text));
 }
 
 function firstMatchInRange(

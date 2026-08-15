@@ -1,4 +1,5 @@
 import { mentionsRetirement } from '../retirement-analytics/retirement-language';
+import { matchesCategory } from './routing-vocabulary';
 import { QuestionNeeds } from './types';
 
 function analyzeSingleQuestion(question: string): QuestionNeeds {
@@ -7,38 +8,24 @@ function analyzeSingleQuestion(question: string): QuestionNeeds {
   // External context is intentionally narrow. Personal balance, portfolio, and
   // retirement questions should use the persisted financial snapshot unless the
   // user explicitly asks about current markets, rates, or outside rules.
+  // Vocabulary lives in the admin-configurable routing terms; the shapes that
+  // are not word lists stay here.
   const needsMarketContext =
-    /\b(market|markets|inflation|economy|economic|recession|fed|federal reserve)\b/.test(qLower) ||
+    matchesCategory('marketContext', qLower) ||
     /\b(stock|bond|treasury) market\b/.test(qLower) ||
     /\bmarket (outlook|conditions|performance|trend|forecast)\b/.test(qLower);
 
   const needsSearchContext =
-    /\b(apr|apy|refinance|yield|tax law|tax limit|contribution limit)\b/.test(qLower) ||
+    matchesCategory('searchContext', qLower) ||
     /\b(current|latest|today(?:'s)?)\s+(rate|rates|price|prices|yield|law|limit|limits)\b/.test(qLower) ||
     /\b(mortgage|cd|treasury|savings)\s+(rate|rates|yield|yields)\b/.test(qLower) ||
-    /\b(tax|capital gains?)\s+(rate|rates|bracket|brackets|deduction|deductions)\b/.test(qLower) ||
-    /\b(standard deduction|required minimum distribution|rmd)\b/.test(qLower);
+    /\b(tax|capital gains?)\s+(rate|rates|bracket|brackets|deduction|deductions)\b/.test(qLower);
 
-  const needsHomeValue =
-    qLower.includes('home') ||
-    qLower.includes('house') ||
-    qLower.includes('property') ||
-    qLower.includes('real estate') ||
-    qLower.includes('mortgage');
+  const needsHomeValue = matchesCategory('home', qLower);
 
   const mentionsStockMarket = /\b(stock|bond|treasury) market\b/.test(qLower);
 
-  const needsInvestments =
-    !mentionsStockMarket && (
-      qLower.includes('portfolio') ||
-      qLower.includes('holding') ||
-      qLower.includes('investment') ||
-      qLower.includes('stock') ||
-      qLower.includes('securities') ||
-      qLower.includes('asset allocation') ||
-      qLower.includes('diversif') ||
-      /\b(401k|403b|ira|brokerage)\b/.test(qLower)
-    );
+  const needsInvestments = !mentionsStockMarket && matchesCategory('investments', qLower);
 
   // Match the word family, not two fixed spellings: substring checks for
   // "retire"/"retirement" miss "retiring", "retires", "retired", and "retiree",
@@ -48,9 +35,7 @@ function analyzeSingleQuestion(question: string): QuestionNeeds {
   // question and reading its parameters can never disagree about the phrasing.
   const needsRetirement = mentionsRetirement(qLower);
 
-  const needsAccountDetails =
-    /\b(account|accounts|balance|balances|checking|savings|loan|credit card|mortgage)\b/.test(qLower) ||
-    needsInvestments;
+  const needsAccountDetails = matchesCategory('accounts', qLower) || needsInvestments;
 
   // "How much do I spend each month?" is answered by the monthly totals, but
   // "evaluate my spending" is not — that asks what the averages are made of.
@@ -59,13 +44,12 @@ function analyzeSingleQuestion(question: string): QuestionNeeds {
   // the outflow explicitly.
   const evaluatesSpending =
     (/\b(spending|expenses|budget|cash[ -]?flow)\b/.test(qLower) &&
-      (/\b(evaluate|evaluating|assess|assessment|analy[sz]e|analy[sz]ing|analysis|review|reviewing|breakdown|optimi[sz]e|improve|reduce|cut|trim)\b/.test(qLower) ||
-        /\bbreak\s+down\b/.test(qLower) ||
+      (matchesCategory('spendingReview', qLower) ||
         /\bstrengths?\s+and\s+weakness/.test(qLower))) ||
     /\bwhere\s+(?:is|are|does|do)\s+(?:all\s+)?(?:my|our|the)\s+money\s+(?:go|goes|going)\b/.test(qLower);
 
   const needsTransactionDetails =
-    /\b(transaction|transactions|purchase|purchases|merchant|merchants|category|categories|paycheck|salary|subscription|subscriptions|fee|fees)\b/.test(qLower) ||
+    matchesCategory('transactions', qLower) ||
     /\b(recent|latest|largest|individual|specific)\s+(spend|spending|expense|expenses|income)\b/.test(qLower) ||
     /\bspend(?:ing)?\s+(?:at|with|from)\b/.test(qLower) ||
     evaluatesSpending;

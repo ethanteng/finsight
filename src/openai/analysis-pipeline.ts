@@ -37,6 +37,7 @@ import {
 } from './response-facts';
 import { validateCanonicalFactPack } from './canonical-facts';
 import { describeMissingInputs } from './missing-inputs';
+import { loadRoutingVocabulary } from './routing-vocabulary';
 import { askOpenAIWithPreparedPrompt } from './openai-fallback-client';
 import { createHash } from 'crypto';
 import { recordLlmAnalysisFailure } from '../observability/llm-metrics';
@@ -196,6 +197,9 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     .slice()
     .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
     .map((entry) => entry.question);
+  // Routing vocabulary is admin-editable, so refresh it before matching. Never
+  // throws; a stale or default vocabulary still routes.
+  if (!evaluation) await loadRoutingVocabulary();
   const questionNeeds = analyzeQuestionNeeds(question, recentQuestions);
 
   // Step 1: Retrieve context (snapshot, profile, market summary, RAG)
