@@ -18,22 +18,14 @@ export interface RetirementQuestionParams {
 export function parseRetirementQuestion(question: string): RetirementQuestionParams {
   const qLower = question.toLowerCase();
   
-  // Check if question is retirement-related
-  const retirementKeywords = [
-    'retirement',
-    'retire',
-    'withdrawal',
-    'retirement planning',
-    'retirement readiness',
-    'sustainable withdrawal',
-    'retirement portfolio',
-    'retirement analysis',
-    'retirement withdrawal',
-    'withdraw in retirement'
-  ];
-  
-  const hasRetirementIntent = retirementKeywords.some(keyword => qLower.includes(keyword));
-  
+  // Match the whole word family. Substring checks for "retire"/"retirement"
+  // miss "retiring", "retires", and "retired", and this returns early on a
+  // miss — so a question about retiring by 62 arrived with no parameters at
+  // all and the analysis reported the retirement age as missing.
+  const hasRetirementIntent =
+    /\bretir\w*/.test(qLower) ||
+    /\b(?:withdrawals?|drawdown|draw\s+down|nest\s+egg|financial\s+independence)\b/.test(qLower);
+
   if (!hasRetirementIntent) {
     return { hasRetirementIntent: false };
   }
@@ -55,10 +47,14 @@ export function parseRetirementQuestion(question: string): RetirementQuestionPar
 
   // Extract retirement age patterns
   // "retire at 65" or "retirement age 65" or "planning to retire at 68" or "retiring by 68"
+  // The prepositions repeat and "age" can follow one of them: "retiring by age
+  // 62" is the way people write this, and matching only a single connector
+  // missed it entirely, leaving the retirement age unknown for a question that
+  // stated it plainly.
   const retirementAgePatterns = [
-    /retir(?:e|ing|ement)(?:\s+(?:at|by|age))?\s+(\d+)/i, // Matches "retire at 65", "retiring by 68", "retirement age 65"
-    /retirement\s+age\s+(\d+)/i,
-    /planning\s+to\s+retire\s+(?:at|by)\s+(\d+)/i
+    /retir\w*(?:\s+(?:at|by|around|about|near|before|no\s+later\s+than))*(?:\s+age)?\s+(\d{2,3})\b/i,
+    /retirement\s+age\s+(?:of\s+)?(\d{2,3})\b/i,
+    /planning\s+to\s+retire\s+(?:at|by)\s+(?:age\s+)?(\d{2,3})\b/i
   ];
   
   let retirementAge: number | undefined;

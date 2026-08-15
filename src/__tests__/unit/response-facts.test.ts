@@ -213,6 +213,32 @@ describe('rounded canonical values', () => {
     expect(salvaged.insights).toEqual(['Cash is $75,038.94. It could cover more months than that.']);
   });
 
+  it('carries removal across adjacent list items', () => {
+    // A claim and the sentence depending on it are as often two bullets as two
+    // sentences, and each bullet is stripped separately.
+    const response = {
+      summary: 'Your portfolio is worth $1.92 million.',
+      insights: ['Equities are 59% of the portfolio.', 'That is risky this close to retirement.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+  });
+
+  it('keeps self-contained sentences that merely start with a demonstrative', () => {
+    // "This year" is a date, not a reference to the sentence before it, and
+    // "It is prudent" is a dummy subject — neither should be collateral.
+    const response = {
+      summary: 'Your portfolio is worth $1.92 million. Equities are 59% of it. This year, review your beneficiaries.',
+      insights: ['Equities are 15% overweight.', 'It is prudent to rebalance.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.summary).toContain('This year, review your beneficiaries.');
+    expect(salvaged.summary).not.toContain('59%');
+    expect(salvaged.insights).toEqual(['It is prudent to rebalance.']);
+  });
+
   it('does not pass an abbreviation off as a surviving summary', () => {
     // "U.S." must not read as a complete sentence that outlived the strip.
     const response = { summary: 'U.S. stocks could lose $999,999 next year.' };

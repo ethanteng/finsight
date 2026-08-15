@@ -5,6 +5,21 @@ import type { FinancialContextSnapshot } from './types';
 export const UNVERIFIABLE_SUMMARY =
   'I could not verify the generated answer against your current financial snapshot. Please try the question again.';
 
+/**
+ * Attached when a second model reviewed the answer and took issue with its
+ * reasoning. Every figure has still been checked against the snapshot, so the
+ * answer is worth showing — but not without saying that a reviewer objected.
+ */
+export const SECONDARY_REVIEW_CAVEAT =
+  'Note: an automated review flagged part of the reasoning in this answer. The figures above were each checked against your financial snapshot, but treat the interpretation as a starting point and confirm anything you plan to act on.';
+
+/** Append a notice as its own paragraph, without duplicating one already there. */
+export function appendNotice(response: AskLincResponse, notice: string): AskLincResponse {
+  const summary = response.summary?.trim() || '';
+  if (summary.includes(notice)) return response;
+  return { ...response, summary: summary ? `${summary}\n\n${notice}` : notice };
+}
+
 export interface ResponseGroundingResult {
   valid: boolean;
   issues: string[];

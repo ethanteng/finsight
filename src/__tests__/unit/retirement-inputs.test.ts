@@ -128,3 +128,31 @@ describe('retirementPortfolioFingerprint', () => {
     );
   });
 });
+
+describe('retirement age phrasing', () => {
+  it('reads the retirement age from the way people actually write it', () => {
+    // "retiring by age 62" matched nothing, so a question that stated the
+    // retirement age plainly was reported as missing it.
+    const { parseRetirementQuestion } = require('../../retirement-analytics/retirement-question-parser');
+    for (const [question, expected] of [
+      ['my goal of retiring by age 62 or sooner', 62],
+      ['can I retire at 65?', 65],
+      ['planning to retire by age 60', 60],
+      ['what is my retirement age of 67 worth?', 67],
+      ['I want to retire around age 58', 58],
+    ] as Array<[string, number]>) {
+      expect(parseRetirementQuestion(question).retirementAge).toBe(expected);
+    }
+  });
+
+  it('reads the same phrasing out of the profile', () => {
+    const {
+      extractAgeFromProfile,
+      extractRetirementAgeFromProfile,
+    } = require('../../retirement-analytics/profile-age-extractor');
+    const profile = 'The user is a 48-year-old individual married to a 50-year-old husband. They plan on retiring by age 62.';
+
+    expect(extractAgeFromProfile(profile)).toBe(48);
+    expect(extractRetirementAgeFromProfile(profile)).toBe(62);
+  });
+});

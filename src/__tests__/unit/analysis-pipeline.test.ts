@@ -1,5 +1,6 @@
 import { runAskLincAnalysis, selectValidationFeedback } from '../../openai/analysis-pipeline';
 import { UNVERIFIED_PROSE_NOTICE } from '../../openai/response-facts';
+import { SECONDARY_REVIEW_CAVEAT } from '../../openai/response-grounding';
 import { gatherContextSnapshot } from '../../openai/context-service';
 import { askClaude } from '../../openai/claude-client';
 import { validateWithGemini } from '../../openai/response-validator';
@@ -190,10 +191,13 @@ describe('runAskLincAnalysis validation routing', () => {
     });
 
     expect(mockedValidateWithGemini).toHaveBeenCalledTimes(2);
+    // Salvaged and then objected to: the verified sentence survives carrying
+    // both notices, rather than the user getting nothing after two model calls.
     expect(result.structuredResponse.summary).toBe(
-      'I could not verify the generated answer against your current financial snapshot. Please try the question again.'
+      `Your retirement plan is on track.\n\n${UNVERIFIED_PROSE_NOTICE}\n\n${SECONDARY_REVIEW_CAVEAT}`
     );
-    expect(result.showTheMathData?.evidenceManifest.validation.deterministic.outcome).toBe('replaced');
+    expect(result.showTheMathData?.evidenceManifest.validation.deterministic.outcome).toBe('salvaged');
+    expect(result.showTheMathData?.evidenceManifest.secondaryCaveat).toBe(true);
   });
 
   it('widens the context when the first answer reached for a number it was not given', async () => {
@@ -324,7 +328,60 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(mockedValidateWithGemini).toHaveBeenCalledTimes(2);
   });
 
-  it('returns a safe response when Gemini also rejects the Claude retry', async () => {
+  it('ships a grounded answer with a caveat when Gemini objects to the retry', async () => {
+    // Every figure has been checked; the objection is about reasoning. Spending
+    // 80 seconds and returning nothing was the worse outcome.
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({ summary: 'Initial retirement answer.' }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $100.',
+        insights: ['Cash is $80.'],
+        suggested_actions: ['Review your allocation.'],
+      }));
+    mockedValidateWithGemini
+      .mockResolvedValueOnce({ valid: false, issues: ['Initial answer is unsupported.'] })
+      .mockResolvedValueOnce({ valid: false, issues: ['The recommendation ignores the cash position.'] });
+
+    const result = await runAskLincAnalysis({
+      question: 'Am I on track for retirement?',
+      userId: 'user-1',
+      enableValidation: true,
+    });
+
+    expect(result.structuredResponse.summary).toBe(`Your net worth is $100.\n\n${SECONDARY_REVIEW_CAVEAT}`);
+    expect(result.structuredResponse.insights).toEqual(['Cash is $80.']);
+    expect(result.structuredResponse.suggested_actions).toEqual(['Review your allocation.']);
+    expect(result.showTheMathData?.evidenceManifest.secondaryCaveat).toBe(true);
+    // The objection itself stays in the evidence, not in the user's answer.
+    expect(result.structuredResponse.summary).not.toContain('ignores the cash position');
+    expect(result.showTheMathData?.evidenceManifest.validation.secondary).toEqual([
+      { phase: 'initial', valid: false, issues: ['Initial answer is unsupported.'] },
+      { phase: 'retry', valid: false, issues: ['The recommendation ignores the cash position.'] },
+    ]);
+  });
+
+  it('still replaces an answer that could not be grounded at all', async () => {
+    // The caveat is for verified figures with contested reasoning. Nothing
+    // verified survives here, so the placeholder is still correct.
+    mockedAskClaude.mockResolvedValue(JSON.stringify({
+      summary: 'Your net worth is $999.',
+      insights: ['This is also based on $999.'],
+      suggested_actions: ['Act on the incorrect result.'],
+    }));
+
+    const result = await runAskLincAnalysis({
+      question: 'What is my net worth?',
+      userId: 'user-1',
+      enableValidation: true,
+    });
+
+    expect(result.structuredResponse.summary).toBe(
+      'I could not verify the generated answer against your current financial snapshot. Please try the question again.'
+    );
+    expect(result.showTheMathData?.evidenceManifest.validation.deterministic.outcome).toBe('replaced');
+  });
+
+  it('keeps the secondary validator prompt and raw output out of the evidence', async () => {
     mockedAskClaude
       .mockResolvedValueOnce(JSON.stringify({
         summary: 'Initial retirement answer.',
@@ -356,12 +413,7 @@ describe('runAskLincAnalysis validation routing', () => {
       enableValidation: true,
     });
 
-    expect(result.structuredResponse).toEqual({
-      summary: 'I could not verify the generated answer against your current financial snapshot. Please try the question again.',
-      key_numbers: undefined,
-      insights: [],
-      suggested_actions: [],
-    });
+    expect(result.structuredResponse.summary).toContain(SECONDARY_REVIEW_CAVEAT);
     expect(result.showTheMathData?.evidenceManifest.validation.secondary).toEqual([
       { phase: 'initial', valid: false, issues: ['Initial answer is unsupported.'] },
       { phase: 'retry', valid: false, issues: ['Retry is still unsupported.'] },

@@ -36,11 +36,12 @@ export function extractAgeFromProfile(profileText: string): number | null {
 export function extractRetirementAgeFromProfile(profileText: string): number | null {
   if (!profileText) return null;
 
+  // Same phrasing spread as the question parser: "retiring by age 62" has to
+  // match, not just "retire at 62".
   const retirementPatterns = [
-    /retir(?:e|ement)(?:\s+at|\s+age)?\s+(\d+)/i,
-    /retirement\s+age\s+(\d+)/i,
-    /planning\s+to\s+retire\s+at\s+(\d+)/i,
-    /retire\s+at\s+age\s+(\d+)/i
+    /retir\w*(?:\s+(?:at|by|around|about|near|before|no\s+later\s+than))*(?:\s+age)?\s+(\d{2,3})\b/i,
+    /retirement\s+age\s+(?:of\s+)?(\d{2,3})\b/i,
+    /planning\s+to\s+retire\s+(?:at|by)\s+(?:age\s+)?(\d{2,3})\b/i
   ];
 
   for (const pattern of retirementPatterns) {

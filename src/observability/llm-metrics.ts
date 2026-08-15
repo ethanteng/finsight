@@ -29,6 +29,7 @@ type Sample = {
   outcome?: 'passed' | 'salvaged' | 'replaced';
   contextSelection?: Partial<Record<RoutedContextTier, boolean>>;
   contextEscalated?: boolean;
+  secondaryCaveat?: boolean;
   widenedContext?: RoutedContextTier[];
   fallbackUsed: boolean;
   retryUsed: boolean;
@@ -83,6 +84,7 @@ export function recordLlmAnalysis(manifest: EvidenceManifest, success = true): v
     // Score what routing predicted, not the widened read that corrected it.
     contextSelection: manifest.routedContextSelection ?? manifest.contextSelection,
     contextEscalated: manifest.contextEscalated,
+    secondaryCaveat: manifest.secondaryCaveat,
     widenedContext: widenedContextTiers(manifest),
     fallbackUsed: manifest.modelCalls.some(call => call.provider === 'openai'),
     retryUsed: manifest.modelCalls.some(call => call.phase === 'retry'),
@@ -202,6 +204,8 @@ export function getLlmMetricsSnapshot() {
       answerDeliveredRate: rate(sample => sample.success && (sample.outcome ?? 'passed') !== 'replaced'),
       salvageRate: rate(sample => sample.outcome === 'salvaged'),
       contextEscalationRate: rate(sample => sample.contextEscalated === true),
+      // Delivered, but with a reviewer's objection attached.
+      secondaryCaveatRate: rate(sample => sample.secondaryCaveat === true),
     },
     routing: routingSignals(),
     baselineCandidate: {
