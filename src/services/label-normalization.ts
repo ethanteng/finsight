@@ -16,9 +16,12 @@
 /** Case-folded grouping key: lowercase, separators and whitespace collapsed. */
 export function labelKey(value: unknown): string {
   return String(value ?? '')
-    .trim()
     .replace(/[_-]+/g, ' ')
     .replace(/\s+/g, ' ')
+    // Trim last: separators become spaces, so a placeholder like "-" or "__"
+    // would otherwise fold to a truthy " " and produce a blank bucket instead of
+    // taking the Unknown fallback.
+    .trim()
     .toLowerCase();
 }
 

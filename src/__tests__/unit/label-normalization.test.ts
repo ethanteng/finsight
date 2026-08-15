@@ -21,6 +21,16 @@ describe('normalizeLabel', () => {
     expect(normalizeLabel('', 'Uncategorized')).toBe('Uncategorized');
   });
 
+  it('treats a separator-only placeholder as missing', () => {
+    // Separators fold to spaces, so trimming has to happen after that fold or
+    // "-" survives as a truthy " " key and becomes a blank bucket.
+    expect(labelKey('-')).toBe('');
+    expect(labelKey('__')).toBe('');
+    expect(labelKey(' - ')).toBe('');
+    expect(normalizeLabel('-')).toBe('Unknown');
+    expect(normalizeLabel('__', 'Uncategorized')).toBe('Uncategorized');
+  });
+
   it('exposes the folded grouping key', () => {
     expect(labelKey('FOOD_AND_DRINK')).toBe('food and drink');
     expect(labelKey('Food and Drink')).toBe(labelKey('FOOD_AND_DRINK'));

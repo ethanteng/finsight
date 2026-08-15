@@ -28,6 +28,15 @@ describe('normalizeAssetType', () => {
     expect(normalizeAssetType('   ')).toBe('Unknown');
     expect(normalizeAssetType('Unknown')).toBe('Unknown');
     expect(normalizeAssetType('Security type is not defined')).toBe('Unknown');
+    // A separator-only placeholder must not become its own blank bucket.
+    expect(normalizeAssetType('-')).toBe('Unknown');
+    expect(normalizeAssetType('__')).toBe('Unknown');
+  });
+
+  it('matches the alias table through snake_case and hyphenated spellings', () => {
+    expect(normalizeAssetType('FIXED_INCOME')).toBe('Fixed Income');
+    expect(normalizeAssetType('mutual-fund')).toBe('Mutual Fund');
+    expect(normalizeAssetType('COMMON_STOCK')).toBe('Equity');
   });
 
   it('ignores extra whitespace and keeps unmapped types stable across spellings', () => {

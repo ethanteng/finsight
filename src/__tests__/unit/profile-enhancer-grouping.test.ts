@@ -15,6 +15,7 @@ jest.mock('../../prisma-client', () => ({
 }));
 
 import {
+  enhanceProfileWithEnrichmentData,
   enhanceProfileWithInvestmentData,
   enhanceProfileWithLiabilityData,
 } from '../../profile/enhancer';
@@ -47,6 +48,19 @@ describe('profile enhancer grouping', () => {
     );
 
     expect(text).toContain('Asset Allocation: ETF: 80.0%, Equity: 20.0%');
+  });
+
+  it('reports one spending total per category, under a normalized label', async () => {
+    const text = await profileTextFrom(() =>
+      enhanceProfileWithEnrichmentData('user-1', [
+        { transaction_type: 'expense', amount: 120, category: ['FOOD_AND_DRINK'] },
+        { transaction_type: 'expense', amount: 80, category: ['Food and Drink'] },
+        { transaction_type: 'expense', amount: 50, category: ['Travel'] },
+      ])
+    );
+
+    expect(text).toContain('Top Spending Categories: Food And Drink: $200, Travel: $50');
+    expect(text).not.toContain('FOOD_AND_DRINK');
   });
 
   it('reports one debt total per liability type however it is spelled', async () => {

@@ -1067,7 +1067,7 @@ export class FinancialDataService {
                     quantity: holding.quantity,
                     iso_currency_code: holding.iso_currency_code,
                     security_name: security?.name || 'Unknown Security',
-                    security_type: normalizeAssetType(security?.type),
+                    security_type: normalizeAssetType(security?.type || (holding as any).security_type),
                     ticker_symbol: security?.ticker_symbol || undefined
                   });
                 }
