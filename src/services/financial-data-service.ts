@@ -10,6 +10,7 @@ import { cacheService } from '../data/cache';
 import { resolveCanonicalTransactionType } from './canonical-transaction-adapter';
 import { mergeFinancialSources } from './financial-calculations';
 import { loadPersistedPlaidData } from './financial-source-persistence';
+import { normalizeAssetType } from './asset-class';
 
 const prisma = new PrismaClient();
 
@@ -1066,7 +1067,7 @@ export class FinancialDataService {
                     quantity: holding.quantity,
                     iso_currency_code: holding.iso_currency_code,
                     security_name: security?.name || 'Unknown Security',
-                    security_type: security?.type || 'Unknown',
+                    security_type: normalizeAssetType(security?.type),
                     ticker_symbol: security?.ticker_symbol || undefined
                   });
                 }
@@ -1507,8 +1508,11 @@ export class FinancialDataService {
                   } else if (typeNormalized.includes('crypto')) {
                     securityType = 'Cryptocurrency';
                   }
-                  // If still Unknown after all checks, keep it as Unknown
-                  
+                  // Fold everything else (e.g. "Security type is not defined") into the
+                  // shared asset-class labels so allocation buckets match Plaid's.
+                  securityType = normalizeAssetType(securityType);
+
+
                   const positionPrice = typeof position.price === 'number' && Number.isFinite(position.price)
                     ? position.price
                     : null;

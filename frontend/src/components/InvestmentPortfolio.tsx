@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { normalizeAssetType } from '../lib/asset-class';
 
 interface Security {
   id: string;
@@ -127,8 +128,21 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
   const getAssetAllocationArray = () => {
     if (!portfolio.assetAllocation) return [];
 
-    return portfolio.assetAllocation
-      .sort((a, b) => b.value - a.value);
+    // Defensive merge: if a producer still sends the same asset class under
+    // different spellings ("etf" and "ETF"), show one row instead of two.
+    const merged = new Map<string, { type: string; value: number; percentage: number }>();
+    portfolio.assetAllocation.forEach(allocation => {
+      const type = normalizeAssetType(allocation.type);
+      const existing = merged.get(type);
+      if (existing) {
+        existing.value += allocation.value;
+        existing.percentage += allocation.percentage;
+      } else {
+        merged.set(type, { type, value: allocation.value, percentage: allocation.percentage });
+      }
+    });
+
+    return Array.from(merged.values()).sort((a, b) => b.value - a.value);
   };
 
   // Bar chart data for holdings

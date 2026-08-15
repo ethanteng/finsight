@@ -10,6 +10,7 @@ import PageMeta from '../../components/PageMeta';
 import type { ManualAccount } from '../../types/manual-account';
 import { resetUserIdentity } from '../../lib/heycatch';
 import { resolveAccountBalance } from '../../lib/account-balance';
+import { normalizeAssetType } from '../../lib/asset-class';
 import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
 
 // (removed) local InvestmentHolding type - no longer used after snapshot refactor
@@ -556,10 +557,12 @@ export default function ProfilePage() {
 
     console.log('Calculated metrics:', { totalValue, holdingCount, securityCount });
 
-    // Group by security type for asset allocation
+    // Group by security type for asset allocation. Types are normalized first so
+    // the same asset class from different providers ("etf" from Plaid, "ETF" from
+    // SnapTrade) collapses into a single bucket.
     const assetAllocationMap = new Map<string, number>();
     combinedHoldings.forEach(holding => {
-      const type = holding.security_type || holding.type || 'Unknown';
+      const type = normalizeAssetType(holding.security_type || holding.type);
       const value = holding.institution_value || holding.value || 0;
       assetAllocationMap.set(type, (assetAllocationMap.get(type) || 0) + value);
     });

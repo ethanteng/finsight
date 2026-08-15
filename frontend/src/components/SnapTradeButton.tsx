@@ -33,6 +33,16 @@ interface SnapTradeButtonProps {
   snapTradeStatus?: SnapTradeTokenStatus | null;
 }
 
+// Balances are money: always two decimals. Number.toLocaleString() defaults to
+// three fraction digits, which rendered balances like "$123.456".
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+
 export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: snapTradeTokenStatus }: SnapTradeButtonProps) {
   const [status, setStatus] = useState<string>('loading');
   const [snapTradeStatus, setSnapTradeStatus] = useState<SnapTradeStatus | null>(null);
@@ -416,10 +426,10 @@ export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: sn
                         </div>
                       )}
                     </div>
-                    {account.balance && (
+                    {typeof account.balance === 'number' && (
                       <div className="text-right">
                         <div className="font-semibold text-white text-base">
-                          ${account.balance.toLocaleString()}
+                          {formatCurrency(account.balance)}
                         </div>
                       </div>
                     )}

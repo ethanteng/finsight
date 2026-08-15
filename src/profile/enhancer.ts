@@ -1,5 +1,6 @@
 import { getPrismaClient } from '../prisma-client';
 import { ProfileManager } from './manager';
+import { normalizeAssetType } from '../services/asset-class';
 
 export interface InvestmentProfile {
   totalPortfolioValue: number;
@@ -174,7 +175,7 @@ const analyzePortfolio = (holdings: any[]) => {
   }, 0);
 
   const assetAllocation = holdings.reduce((allocation, holding) => {
-    const assetType = holding.security?.type || 'Unknown';
+    const assetType = normalizeAssetType(holding.security?.type || holding.security_type);
     if (!allocation[assetType]) {
       allocation[assetType] = 0;
     }

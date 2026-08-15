@@ -188,6 +188,47 @@ describe('canonical financial snapshot', () => {
     expect(portfolio.unavailableValueIds).toEqual(['holding:missing']);
   });
 
+  it('groups one asset class into a single bucket regardless of provider casing', () => {
+    const portfolio = buildCanonicalInvestmentPortfolio(
+      [
+        { id: 'plaid-etf', security_id: 'plaid-etf', institution_value: 100, iso_currency_code: 'USD' },
+        { id: 'snaptrade-etf', security_id: 'snaptrade-etf', institution_value: 300, iso_currency_code: 'USD' },
+        { id: 'plaid-fund', security_id: 'plaid-fund', institution_value: 200, iso_currency_code: 'USD' },
+        { id: 'snaptrade-fund', security_id: 'snaptrade-fund', institution_value: 200, iso_currency_code: 'USD' },
+        { id: 'undefined-type', security_id: 'undefined-type', institution_value: 200, iso_currency_code: 'USD' },
+      ],
+      [
+        { security_id: 'plaid-etf', type: 'etf' },
+        { security_id: 'snaptrade-etf', type: 'ETF' },
+        { security_id: 'plaid-fund', type: 'mutual fund' },
+        { security_id: 'snaptrade-fund', type: 'Mutual Fund' },
+        { security_id: 'undefined-type', type: 'Security type is not defined' },
+      ],
+      [],
+      'USD'
+    );
+
+    expect(portfolio.assetAllocation).toEqual([
+      { type: 'ETF', value: 400, percentage: 40 },
+      { type: 'Mutual Fund', value: 400, percentage: 40 },
+      { type: 'Unknown', value: 200, percentage: 20 },
+    ]);
+  });
+
+  it('falls back to the holding security type when the security record has none', () => {
+    const portfolio = buildCanonicalInvestmentPortfolio(
+      [
+        { id: 'h1', security_id: 'sec-1', institution_value: 100, iso_currency_code: 'USD', security_type: 'cash' },
+        { id: 'h2', security_id: 'sec-2', institution_value: 100, iso_currency_code: 'USD', security_type: 'Cash' },
+      ],
+      [{ security_id: 'sec-1' }, { security_id: 'sec-2', type: null }],
+      [],
+      'USD'
+    );
+
+    expect(portfolio.assetAllocation).toEqual([{ type: 'Cash', value: 200, percentage: 100 }]);
+  });
+
   it('keeps a months-old manual account current while a bank balance goes stale', () => {
     const snapshot = buildCanonicalSnapshotCore(
       {
