@@ -134,6 +134,7 @@ if (!distPath) {
 
 const { TransactionSyncService } = require(path.join(distPath, 'services/transaction-sync-service'));
 const { SummaryCacheService } = require(path.join(distPath, 'services/summary-cache-service'));
+const { HomeValueRefreshService } = require(path.join(distPath, 'services/home-value-refresh'));
 require('dotenv').config({ path: '.env.local' });
 
 async function refreshTransactions() {
@@ -185,6 +186,25 @@ async function refreshTransactions() {
     process.exit(1);
   }
   
+  // Refresh home values before the summary rebuild below, so a new estimate
+  // lands in the same snapshot rather than waiting a day to show up. The
+  // service skips manual overrides and anything valued within 25 days, so
+  // this only reaches RentCast for estimates that have aged out.
+  try {
+    const homeTimestamp = new Date().toISOString();
+    console.log(`[${homeTimestamp}] 🏠 Refreshing home values...`);
+    const results = await new HomeValueRefreshService().refreshAllHomeValues();
+    const homeEndTimestamp = new Date().toISOString();
+    console.log(`[${homeEndTimestamp}] ✅ Home value refresh completed. Users: ${results.successful}/${results.total}, failed: ${results.failed}`);
+    if (results.errors.length > 0) {
+      console.error(`[${homeEndTimestamp}] ⚠️ Home value refresh errors:`, results.errors);
+    }
+  } catch (error) {
+    const errorTimestamp = new Date().toISOString();
+    console.error(`[${errorTimestamp}] ⚠️ Home value refresh failed:`, error);
+    // Do not fail the entire cron; the summary rebuild is still worth running
+  }
+
   // After transactions sync, refresh cached summaries for all users
   try {
     const summaryTimestamp = new Date().toISOString();
