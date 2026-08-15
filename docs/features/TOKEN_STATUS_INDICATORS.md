@@ -49,7 +49,13 @@ This feature displays real-time connection status for linked Plaid and SnapTrade
 Plaid stops returning an account once it is closed at the institution. The Finances page is built from the canonical snapshot, which is always produced from a live provider fetch, so closed accounts drop off it on their own. The profile list is allowed to serve persisted Plaid rows (`loadPersistedPlaidData`), and those rows outlive the account — without this indicator a closed account looks identical to an active one.
 
 **How it is detected** (`src/services/account-closure-service.ts`):
-An account is reported closed only when the latest snapshot exists, was built without a Plaid provider error, and does not contain the account, *and* the account has a persisted row that predates the snapshot. Those guards keep a missing, degraded, or simply older snapshot from mislabelling a live account; manual accounts and newly linked accounts are never flagged.
+An account is reported closed only when every one of these holds:
+
+1. A snapshot exists, and it does not contain the account under any of its provider ids.
+2. That snapshot was built without a Plaid provider error (`plaid:error:*` / `financial-data:partial` observations) — otherwise an unreachable connection is indistinguishable from closure.
+3. The account has a persisted `Account` row (manual accounts have none) whose `createdAt` predates the snapshot, so the snapshot had a chance to include it.
+4. No provider refreshed that row after the snapshot was computed. `balanceLastFetched` / `lastSynced` move without a snapshot rebuild (the balance refresh endpoint does exactly that), and a sighting that recent outranks the snapshot's silence. `updatedAt` is deliberately *not* consulted — it also moves for local edits such as a rename.
+5. The row's connection is still active. A snapshot rebuild only queries `AccessToken` rows with `isActive: true`, so an account behind an expired connection is missing from the snapshot **without** any error observation — flagging it would tell a user their accounts were closed when the connection merely needs re-authentication. Legacy rows stored without an `accessTokenId` are placed by institution name; a row with neither is never flagged.
 
 `GET /plaid/all-accounts` returns `isClosed` and `lastSeenAt` per account. Detection failures are logged and fall back to treating every account as open.
 

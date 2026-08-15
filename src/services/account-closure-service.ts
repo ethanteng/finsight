@@ -29,6 +29,16 @@ export interface PersistedAccountRecord {
   persistentAccountId?: string | null;
   createdAt: Date;
   lastSeenAt: Date | null;
+  /** Connection the row belongs to. Legacy rows were stored without one. */
+  accessTokenId?: string | null;
+  institution?: string | null;
+}
+
+/** The Plaid connections a snapshot rebuild would actually have queried. */
+export interface ActiveConnections {
+  ids: string[];
+  /** Institution names, for legacy rows stored without a connection id. */
+  institutions: string[];
 }
 
 export interface AccountClosure {
@@ -49,6 +59,12 @@ export interface ResolveAccountClosuresInput {
    * nothing to do with closure.
    */
   snapshotHasProviderGap?: boolean;
+  /**
+   * Connections that were active when the snapshot was built. An account whose
+   * connection is inactive was never queried, so its absence from the snapshot
+   * proves nothing.
+   */
+  activeConnections?: ActiveConnections;
 }
 
 /** Every provider-side identifier an account can be recognised by. */
@@ -73,7 +89,10 @@ function providerIds(account: ClosureAccountLike): string[] {
  *    once (manual accounts and freshly fetched rows have none);
  *  - that row predates the snapshot, so the snapshot had a chance to include
  *    it. An account linked after the last refresh is not closed, just newer
- *    than the snapshot.
+ *    than the snapshot;
+ *  - the row's connection is still active. A snapshot rebuild only queries
+ *    active connections, so an account behind an expired one is absent from
+ *    the snapshot no matter what the institution did with it.
  */
 export function resolveAccountClosures(input: ResolveAccountClosuresInput): Map<string, AccountClosure> {
   const closures = new Map<string, AccountClosure>();
@@ -83,6 +102,7 @@ export function resolveAccountClosures(input: ResolveAccountClosuresInput): Map<
     snapshotComputedAt,
     persistedRecords,
     snapshotHasProviderGap,
+    activeConnections,
   } = input;
 
   const open = (account: ClosureAccountLike) => {
@@ -106,6 +126,18 @@ export function resolveAccountClosures(input: ResolveAccountClosuresInput): Map<
     for (const id of providerIds(record)) recordsById.set(id, record);
   }
 
+  const activeConnectionIds = new Set((activeConnections?.ids || []).map(id => id.trim()).filter(Boolean));
+  const activeInstitutions = new Set(
+    (activeConnections?.institutions || []).map(name => name.trim().toLowerCase()).filter(Boolean)
+  );
+  // A row stored before accounts carried a connection id can still be placed by
+  // institution; without either, the connection behind it is unknown.
+  const hasActiveConnection = (record: PersistedAccountRecord): boolean => {
+    if (record.accessTokenId) return activeConnectionIds.has(record.accessTokenId.trim());
+    const institution = (record.institution || '').trim().toLowerCase();
+    return institution ? activeInstitutions.has(institution) : false;
+  };
+
   for (const account of accounts) {
     const ids = providerIds(account);
     if (ids.length === 0) continue;
@@ -117,6 +149,19 @@ export function resolveAccountClosures(input: ResolveAccountClosuresInput): Map<
 
     const record = ids.map(id => recordsById.get(id)).find(Boolean);
     if (!record || record.createdAt >= snapshotComputedAt) {
+      open(account);
+      continue;
+    }
+
+    // A provider refresh can touch a row without rebuilding the snapshot (the
+    // balance refresh endpoint does exactly that), and a sighting that recent
+    // outranks the snapshot's silence.
+    if (record.lastSeenAt && record.lastSeenAt > snapshotComputedAt) {
+      open(account);
+      continue;
+    }
+
+    if (!hasActiveConnection(record)) {
       open(account);
       continue;
     }
@@ -153,7 +198,7 @@ export async function getAccountClosures(
   accounts: ClosureAccountLike[]
 ): Promise<Map<string, AccountClosure>> {
   const prisma = getPrismaClient();
-  const [snapshot, records] = await Promise.all([
+  const [snapshot, records, activeTokens] = await Promise.all([
     getFinancialSnapshotForAnalysis(userId, { includeAccounts: true }),
     prisma.account.findMany({
       where: { userId },
@@ -163,8 +208,14 @@ export async function getAccountClosures(
         createdAt: true,
         balanceLastFetched: true,
         lastSynced: true,
-        updatedAt: true,
+        accessTokenId: true,
+        institution: true,
       },
+    }),
+    // The same filter a snapshot rebuild applies when it queries Plaid.
+    prisma.accessToken.findMany({
+      where: { userId, isActive: true },
+      select: { id: true, institutionName: true },
     }),
   ]);
 
@@ -177,11 +228,21 @@ export async function getAccountClosures(
     snapshotAccounts,
     snapshotComputedAt: snapshot?.computedAt ? new Date(snapshot.computedAt) : null,
     snapshotHasProviderGap: snapshotHasProviderGap(snapshot?.sourceObservations),
+    activeConnections: {
+      ids: activeTokens.map(token => token.id),
+      institutions: activeTokens
+        .map(token => token.institutionName)
+        .filter((name): name is string => Boolean(name)),
+    },
     persistedRecords: records.map(record => ({
       plaidAccountId: record.plaidAccountId,
       persistentAccountId: record.persistentAccountId,
       createdAt: record.createdAt,
-      lastSeenAt: record.balanceLastFetched || record.lastSynced || record.updatedAt || null,
+      // Provider-backed timestamps only. `updatedAt` also moves for local edits
+      // such as a rename, which is no evidence that the account still exists.
+      lastSeenAt: record.balanceLastFetched || record.lastSynced || null,
+      accessTokenId: record.accessTokenId,
+      institution: record.institution,
     })),
   });
 }
