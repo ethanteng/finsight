@@ -859,6 +859,41 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
+    // Answer quality joined to context routing and user ratings. Reads the
+    // persisted evidence manifests rather than the process-local metrics, so it
+    // survives deploys and can be read against the questions that produced it.
+    app.get('/admin/answer-quality', adminAuth, async (req: Request, res: Response) => {
+      try {
+        const { getPrismaClient } = await import('./prisma-client');
+        const { buildAnswerQualityReport } = await import('./services/answer-quality');
+        const prisma = getPrismaClient();
+
+        const limit = Math.min(Math.max(Number(req.query.limit) || 500, 1), 2000);
+        const conversations = await prisma.conversation.findMany({
+          where: { userId: { not: null } },
+          select: {
+            id: true,
+            question: true,
+            createdAt: true,
+            showTheMathData: true,
+            feedback: { select: { score: true, createdAt: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+        });
+
+        res.json(buildAnswerQualityReport(conversations as any));
+      } catch (error) {
+        console.error('Error building answer quality report:', error);
+        if (error instanceof Error) {
+          Sentry.captureException(error);
+        } else {
+          Sentry.captureMessage('Unknown error in admin answer quality endpoint', 'error');
+        }
+        res.status(500).json({ error: 'Failed to build answer quality report' });
+      }
+    });
+
     app.get('/admin/production-conversations', adminAuth, async (req: Request, res: Response) => {
       try {
         const { getPrismaClient } = await import('./prisma-client');

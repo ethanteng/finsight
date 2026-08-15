@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import MarkdownRenderer from '../../components/MarkdownRenderer';
 import PageMeta from '../../components/PageMeta';
 import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
+import AnswerQualityPanel from '../../components/admin/AnswerQualityPanel';
 
 interface ProductionUser {
   userId: string;
@@ -799,6 +800,8 @@ export default function AdminPage() {
             All Conversations
           </button>
         </div>
+
+        <AnswerQualityPanel apiUrl={API_URL} getAuthHeaders={getAuthHeaders} />
 
         {/* Users View */}
         {viewMode === 'sessions' && (
