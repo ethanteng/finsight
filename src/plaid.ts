@@ -104,35 +104,6 @@ if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
   };
 }
 
-// Enhanced data processing for production Plaid data
-const processAccountData = (account: any) => {
-  // Ensure we have valid balance data
-  const balances = account.balances || {};
-
-  return {
-    id: account.account_id,
-    name: account.name,
-    type: account.type,
-    subtype: account.subtype,
-    mask: account.mask,
-    balance: {
-      available: balances.available ?? 0,
-      current: balances.current ?? 0,
-      limit: balances.limit ?? null,
-      iso_currency_code: balances.iso_currency_code ?? 'USD',
-      unofficial_currency_code: balances.unofficial_currency_code ?? null
-    },
-    // Enhanced metadata for production
-    verification_status: account.verification_status,
-    last_updated_datetime: account.last_updated_datetime,
-    // Investment-specific data
-    securities: account.securities || [],
-    holdings: account.holdings || [],
-    // Income-specific data
-    income_verification: account.income_verification || null
-  };
-};
-
 export const processTransactionData = (transaction: any) => {
   // ✅ Extract basic categories from personal_finance_category if legacy category is empty
   let basicCategory = transaction.category || [];
@@ -551,8 +522,11 @@ export const setupPlaidRoutes = (app: any) => {
           subtype: account.subtype,
           mask: mask,
           balance: {
-            available: account.balance?.available ?? 0,
-            current: account.balance?.current ?? 0,
+            // Never coerce a missing balance to 0: an account the provider did not
+            // report a balance for is unknown, not empty, and 0 both reads as a real
+            // balance and shadows the current/available fallback on the client.
+            available: account.balance?.available ?? null,
+            current: account.balance?.current ?? null,
             limit: account.balance?.limit ?? null,
             iso_currency_code: account.balance?.iso_currency_code ?? 'USD',
             unofficial_currency_code: account.balance?.unofficial_currency_code ?? null

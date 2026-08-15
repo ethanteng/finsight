@@ -7,6 +7,7 @@ import type {
   FinancesAccount,
   FinancesAccountDetails,
 } from '../../types/finances-overview';
+import { resolveAccountBalance } from '../../lib/account-balance';
 
 interface AccountDetailModalProps {
   account: FinancesAccount;
@@ -17,19 +18,7 @@ interface AccountDetailModalProps {
 }
 
 function finiteBalance(account: FinancesAccount): number | null {
-  if (Object.prototype.hasOwnProperty.call(account, 'displayBalance')) {
-    return typeof account.displayBalance === 'number' && Number.isFinite(account.displayBalance)
-      ? account.displayBalance
-      : null;
-  }
-  if (typeof account.balance === 'number' && Number.isFinite(account.balance)) return account.balance;
-  if (!account.balance || typeof account.balance !== 'object') return null;
-  if (typeof account.balance.current === 'number' && Number.isFinite(account.balance.current)) {
-    return account.balance.current;
-  }
-  return typeof account.balance.available === 'number' && Number.isFinite(account.balance.available)
-    ? account.balance.available
-    : null;
+  return resolveAccountBalance(account);
 }
 
 function transactionId(transaction: Record<string, unknown>, index: number): string {

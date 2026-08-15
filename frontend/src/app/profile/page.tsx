@@ -9,6 +9,7 @@ import ManualAccountList from '../../components/ManualAccountList';
 import PageMeta from '../../components/PageMeta';
 import type { ManualAccount } from '../../types/manual-account';
 import { resetUserIdentity } from '../../lib/heycatch';
+import { resolveAccountBalance } from '../../lib/account-balance';
 import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
 
 // (removed) local InvestmentHolding type - no longer used after snapshot refactor
@@ -19,8 +20,9 @@ interface Account {
   type: string;
   subtype: string;
   balance: {
-    current: number;
-    available: number;
+    // Null when the provider reported no balance — rendered as "—", never as $0.
+    current: number | null;
+    available: number | null;
     iso_currency_code: string;
   };
   institution?: string;
@@ -1292,21 +1294,13 @@ export default function ProfilePage() {
                           </div>
                           <div className="text-right">
                             <div className="font-semibold text-white">
-                              {/* ✅ FIX: Use the correct balance field based on account type */}
+                              {/* Same rule as the Finances page: current is authoritative,
+                                  available is only a fallback. Preferring available for
+                                  depository accounts reported holds instead of the balance
+                                  and disagreed with the Finances totals. */}
                               {(() => {
-                                let balance;
-                                if (account.type === 'depository' ||
-                                    account.subtype === 'checking' ||
-                                    account.subtype === 'savings') {
-                                  // For checking/savings accounts, use available balance
-                                  balance = account.balance?.available !== undefined && account.balance?.available !== null
-                                    ? account.balance.available
-                                    : account.balance?.current || 0;
-                                } else {
-                                  // For investment/credit accounts, use current balance
-                                  balance = account.balance?.current || 0;
-                                }
-                                return formatCurrency(balance);
+                                const balance = resolveAccountBalance(account);
+                                return balance === null ? '—' : formatCurrency(balance);
                               })()}
                             </div>
                             {isClosed && (
