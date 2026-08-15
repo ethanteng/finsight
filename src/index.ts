@@ -1471,15 +1471,11 @@ app.post('/profile/home', requireAuth, async (req: Request, res: Response) => {
 
     // Refresh the canonical snapshot so every consumer sees the new home value.
     try {
-      const { SummaryCacheService } = await import('./services/summary-cache-service');
-      setImmediate(() => {
-        SummaryCacheService.computeForUser(req.user!.id, {
-          categorize: false,
-          history: { kind: 'material', reason: 'home-value-updated' },
-        }).catch(error => {
-          console.error(`Failed to refresh financial summaries after home value update:`, error);
-        });
-      });
+      const { FinancialRevisionService } = await import('./services/financial-revision-service');
+      FinancialRevisionService.schedule(req.user!.id, {
+        categorize: false,
+        history: { kind: 'material', reason: 'home-value-updated' },
+      }, 'Home value update');
     } catch (error) {
       console.error('Failed to trigger financial summary refresh:', error);
       // Don't fail the request if cache refresh fails
@@ -1548,15 +1544,11 @@ app.post('/profile/home/refresh', requireAuth, async (req: Request, res: Respons
 
     // Refresh the canonical snapshot so every consumer sees the refreshed value.
     try {
-      const { SummaryCacheService } = await import('./services/summary-cache-service');
-      setImmediate(() => {
-        SummaryCacheService.computeForUser(req.user!.id, {
-          categorize: false,
-          history: { kind: 'material', reason: 'home-value-refreshed' },
-        }).catch(error => {
-          console.error(`Failed to refresh financial summaries after home value refresh:`, error);
-        });
-      });
+      const { FinancialRevisionService } = await import('./services/financial-revision-service');
+      FinancialRevisionService.schedule(req.user!.id, {
+        categorize: false,
+        history: { kind: 'material', reason: 'home-value-refreshed' },
+      }, 'Home value refresh');
     } catch (error) {
       console.error('Failed to trigger financial summary refresh:', error);
       // Don't fail the request if cache refresh fails
@@ -1626,11 +1618,11 @@ function serializeHomeData(homeData: PersistedHomeData) {
 
 async function refreshSnapshotAfterHomeMutation(
   userId: string,
-  reason: 'home-value-override-set' | 'home-value-override-removed'
+  reason: 'home-value-override-set' | 'home-value-override-removed' | 'home-value-removed'
 ): Promise<{ snapshotRefreshed: boolean; warning?: string }> {
   try {
-    const { SummaryCacheService } = await import('./services/summary-cache-service');
-    await SummaryCacheService.computeForUser(userId, {
+    const { FinancialRevisionService } = await import('./services/financial-revision-service');
+    await FinancialRevisionService.recompute(userId, {
       categorize: false,
       history: { kind: 'material', reason },
     });
@@ -1719,8 +1711,9 @@ app.delete('/profile/home', requireAuth, async (req: Request, res: Response) => 
     const profileManager = new ProfileManager();
 
     await profileManager.removeHomeData(req.user!.id);
+    const refresh = await refreshSnapshotAfterHomeMutation(req.user!.id, 'home-value-removed');
 
-    res.json({ success: true });
+    res.json({ success: true, ...refresh });
   } catch (error) {
     console.error('Failed to remove home data:', error);
 
@@ -2135,13 +2128,13 @@ app.get('/api/financial-history', requireAuth, async (req: Request, res: Respons
 app.post('/api/refresh-summary', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    // Invalidate financial-data cache so we fetch fresh data (avoids stale totals after dedupe/cache fixes)
-    const { cacheService } = await import('./data/cache');
-    await cacheService.invalidate(`financial-data:${userId}`);
-    const { SummaryCacheService } = await import('./services/summary-cache-service');
+    // A user-initiated refresh means live provider balances, not merely a new
+    // snapshot over values still inside the normal freshness window.
+    const { FinancialRevisionService } = await import('./services/financial-revision-service');
     // Fast path: skip heavy categorization to avoid request timeouts
-    const payload = await SummaryCacheService.computeForUser(userId, {
+    const payload = await FinancialRevisionService.recompute(userId, {
       categorize: false,
+      forceBalanceRefresh: true,
       history: { kind: 'material', reason: 'user-refresh' },
     });
     // Recompute can materialize large detail arrays; callers only need an
@@ -2594,11 +2587,8 @@ app.post('/admin/refresh-user-snapshot/:userId', adminAuth, async (req: Request,
 
     console.log('Admin: Refreshing financial snapshot for user:', userId, user.email);
 
-    const { cacheService } = await import('./data/cache');
-    await cacheService.invalidate(`financial-data:${userId}`);
-
-    const { SummaryCacheService } = await import('./services/summary-cache-service');
-    const payload = await SummaryCacheService.computeForUser(userId, { categorize: false });
+    const { FinancialRevisionService } = await import('./services/financial-revision-service');
+    const payload = await FinancialRevisionService.recompute(userId, { categorize: false });
 
     res.json({
       success: true,

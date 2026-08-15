@@ -6,6 +6,8 @@ import { FinancialDataService, type UnifiedFinancialData } from './financial-dat
 export interface FinancialIngestionOptions {
   balanceMaxAgeHours: number;
   categorize: boolean;
+  /** User-initiated refreshes bypass Plaid's balance cache and freshness window. */
+  forceBalanceRefresh?: boolean;
 }
 
 /** Provider I/O boundary used by canonical snapshot production. */
@@ -23,17 +25,32 @@ export async function ingestFinancialData(
     select: { plaidAccountId: true },
   });
 
-  if (staleAccount) {
+  if (staleAccount || options.forceBalanceRefresh) {
     const tokens = await prisma.accessToken.findMany({
       where: { userId, isActive: true },
       select: { token: true, id: true },
     });
+    const refreshErrors: Error[] = [];
     for (const token of tokens) {
       try {
-        await BalanceService.getAccountBalances(token.token, plaidClient, false);
+        await BalanceService.getAccountBalances(
+          token.token,
+          plaidClient,
+          Boolean(options.forceBalanceRefresh)
+        );
       } catch (error) {
-        console.warn(`Balance refresh skipped for token ${token.id}:`, error);
+        console.warn(`Balance refresh failed for token ${token.id}:`, error);
+        if (options.forceBalanceRefresh) {
+          refreshErrors.push(error instanceof Error ? error : new Error(String(error)));
+        }
       }
+    }
+    if (refreshErrors.length > 0) {
+      const refreshError = new Error(
+        `Live balance refresh failed for ${refreshErrors.length} Plaid connection${refreshErrors.length === 1 ? '' : 's'}`
+      );
+      (refreshError as Error & { causes?: Error[] }).causes = refreshErrors;
+      throw refreshError;
     }
   }
 

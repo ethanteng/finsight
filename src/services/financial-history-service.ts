@@ -28,6 +28,7 @@ export type MaterialHistoryReason =
   | 'manual-account-deleted'
   | 'snaptrade-account-deleted'
   | 'home-value-updated'
+  | 'home-value-removed'
   | 'home-value-refreshed'
   | 'home-value-override-set'
   | 'home-value-override-removed'

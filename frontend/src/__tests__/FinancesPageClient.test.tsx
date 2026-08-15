@@ -1,6 +1,13 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import FinancesPageClient from '@/app/finances/FinancesPageClient';
+
+const mockRouter = { push: jest.fn() };
+jest.mock('next/navigation', () => ({ useRouter: () => mockRouter }));
+jest.mock('@/components/finances/FinancialMetricsChart', () => ({
+  __esModule: true,
+  default: () => <div data-testid="financial-metrics-chart" />,
+}));
 
 describe('FinancesPageClient', () => {
   beforeEach(() => {
@@ -48,5 +55,55 @@ describe('FinancesPageClient', () => {
     expect(requestedUrls.some(url => url.includes('/api/manual-accounts'))).toBe(false);
     expect(requestedUrls.some(url => url.includes('/api/summaries'))).toBe(false);
     expect(requestedUrls.some(url => url.includes('/auth/verify'))).toBe(false);
+  });
+
+  it('shows an actionable message when live totals cannot be refreshed', async () => {
+    const overview = {
+      userTimeZone: 'America/Los_Angeles',
+      revision: {
+        id: 'revision-1',
+        computedAt: '2026-08-14T12:00:00.000Z',
+        asOf: '2026-08-14T11:59:00.000Z',
+        status: 'current',
+        reportingCurrency: 'USD',
+      },
+      warnings: [],
+      financialOverview: {
+        netWorth: 10_000,
+        totalCash: 10_000,
+        totalInvestments: 0,
+        totalDebt: 0,
+        homeValue: null,
+      },
+      investmentPortfolio: { holdingCount: 0, securityCount: 0, assetAllocation: [] },
+      accountGroups: {
+        cash: { accounts: [{ id: 'checking-1', name: 'Checking' }], totalBalance: 10_000, unavailableBalanceCount: 0 },
+        investments: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+        debt: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+        other: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+      },
+      cashFlow: {},
+      home: null,
+      manualAccounts: [],
+    };
+
+    global.fetch = jest.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/finances/overview')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => overview });
+      }
+      if (url.includes('/api/financial-history')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => [] });
+      }
+      if (url.includes('/api/refresh-summary')) {
+        return Promise.resolve({ ok: false, status: 500, json: async () => ({ error: 'Connected provider unavailable' }) });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true, data: [] }) });
+    }) as jest.Mock;
+
+    render(<FinancesPageClient />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Refresh totals' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Connected provider unavailable');
   });
 });

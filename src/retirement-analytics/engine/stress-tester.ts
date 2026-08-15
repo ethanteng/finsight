@@ -4,7 +4,7 @@
 // Uses local historical data from data/historical_market_returns.csv.
 // Fully deterministic and offline. No ETF or FRED API calls for sequence data.
 
-import { HistoricalSequence, TimelineBucket } from '../types';
+import { HistoricalSequence, PortfolioMapping, TimelineBucket } from '../types';
 import { DataProviderFactory } from '../data/data-provider-factory';
 import { FREDProvider } from '../../data/providers/fred';
 import { loadHistoricalReturns } from './historical-data-loader';
@@ -78,4 +78,57 @@ export async function generateRollingSequences(
   );
 
   return { sequences, missingData };
+}
+
+/**
+ * Weighted coverage of the active historical proxy sleeves. The loader rejects
+ * malformed values, so coverage reflects the actual number of usable monthly
+ * observations rather than a persisted placeholder.
+ */
+export function calculateHistoricalPriceCoverage(
+  mapping: PortfolioMapping,
+  minimumMonths = 120
+): number {
+  if (minimumMonths <= 0) throw new Error('minimumMonths must be positive');
+  const data = loadHistoricalReturns();
+  const sleeves: Array<[number, number[]]> = [
+    [mapping.usEquityWeight, data.usEquityReturns],
+    [mapping.internationalEquityWeight, data.intlEquityReturns],
+    [mapping.nominalBondsWeight, data.bondReturns],
+    [mapping.cashWeight, data.cashReturns],
+  ];
+  const activeWeight = sleeves.reduce((total, [weight]) => total + weight, 0);
+  if (activeWeight <= 0) return 0;
+
+  const weightedCoverage = sleeves.reduce((total, [weight, observations]) => {
+    if (weight <= 0) return total;
+    const usable = observations.filter(Number.isFinite).length;
+    return total + weight * Math.min(1, usable / minimumMonths);
+  }, 0);
+  return weightedCoverage / activeWeight;
+}
+
+/** Return the withdrawal-period portion of a full accumulation + withdrawal sequence. */
+export function sliceHistoricalSequence(
+  sequence: HistoricalSequence,
+  startMonth: number
+): HistoricalSequence {
+  const offset = Math.max(0, Math.round(startMonth));
+  const dates = sequence.assetBasketReturns.usEquity.length;
+  if (offset >= dates) throw new Error('Withdrawal start must fall inside the historical sequence');
+  const startDate = new Date(sequence.startDate);
+  startDate.setMonth(startDate.getMonth() + offset);
+  return {
+    ...sequence,
+    startDate,
+    sequenceId: `${sequence.sequenceId}:withdrawal-month-${offset}`,
+    assetBasketReturns: {
+      usEquity: sequence.assetBasketReturns.usEquity.slice(offset),
+      internationalEquity: sequence.assetBasketReturns.internationalEquity.slice(offset),
+      nominalBonds: sequence.assetBasketReturns.nominalBonds.slice(offset),
+      cash: sequence.assetBasketReturns.cash.slice(offset),
+    },
+    inflationRates: sequence.inflationRates.slice(offset),
+    portfolioOutcome: undefined,
+  };
 }

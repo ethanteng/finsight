@@ -4,6 +4,12 @@
 import { Holding, Security } from '../../services/financial-data-service';
 import { PortfolioMapping } from '../types';
 import { DataProviderFactory } from '../data/data-provider-factory';
+import {
+  hasBondNameSignal,
+  isGlobalEquity,
+  isInternationalEquity,
+  isKnownBondTicker,
+} from './asset-classification';
 
 /**
  * Map portfolio holdings to asset basket (US equity, international equity, bonds, cash)
@@ -84,10 +90,14 @@ export async function mapPortfolioToAssetBasket(
           (!assetType && (securityName.includes('equity') || securityName.includes('stock')))) {
         
         // Use FMP geographic focus if available, otherwise use heuristics
-        if (geographicFocus === 'international' || geographicFocus === 'global' ||
-            securityName.includes('international') || securityName.includes('ex-us') ||
-            (securityName.includes('global') && !securityName.includes('us')) ||
-            ticker.includes('VXUS') || ticker.includes('EFA') || ticker.includes('IXUS')) {
+        if (isGlobalEquity(geographicFocus, securityName)) {
+          // A global fund contains both US and non-US exposure. Use the same
+          // explicit broad-market split used for otherwise unclassified equity.
+          mapping.usEquityWeight += weight * 0.7;
+          mapping.internationalEquityWeight += weight * 0.3;
+          mappedValue += holdingValue;
+          mapped = true;
+        } else if (isInternationalEquity(geographicFocus, securityName, ticker)) {
           mapping.internationalEquityWeight += weight;
           mappedValue += holdingValue;
           mapped = true;
@@ -125,19 +135,20 @@ export async function mapPortfolioToAssetBasket(
       const holdingType = holding.security_type?.toLowerCase() || '';
 
       // Inference heuristics
-      if (holdingType.includes('equity') || holdingType.includes('stock') ||
-          securityName.includes('equity') || securityName.includes('stock') ||
-          ticker.match(/^[A-Z]{1,5}$/)) { // Common stock ticker pattern
-        // Infer equity - assume 70% US, 30% international (will be documented in assumptions)
-        mapping.usEquityWeight += weight * 0.7;
-        mapping.internationalEquityWeight += weight * 0.3;
+      if (holdingType.includes('bond') || holdingType.includes('fixed income') ||
+          hasBondNameSignal(securityName) || isKnownBondTicker(ticker)) {
+        mapping.nominalBondsWeight += weight;
         mapping.mappingMethod = 'inferred';
         mapping.mappingConfidence = 'medium';
         inferredCount++;
         mappedValue += holdingValue;
         mapped = true;
-      } else if (holdingType.includes('bond') || securityName.includes('bond')) {
-        mapping.nominalBondsWeight += weight;
+      } else if (holdingType.includes('equity') || holdingType.includes('stock') ||
+          securityName.includes('equity') || securityName.includes('stock') ||
+          ticker.match(/^[A-Z]{1,5}$/)) { // Common stock ticker pattern
+        // Infer equity - assume 70% US, 30% international (will be documented in assumptions)
+        mapping.usEquityWeight += weight * 0.7;
+        mapping.internationalEquityWeight += weight * 0.3;
         mapping.mappingMethod = 'inferred';
         mapping.mappingConfidence = 'medium';
         inferredCount++;
@@ -231,11 +242,15 @@ export function populateAssumptions(
   }
 
   if (mapping.usEquityWeight > 0 || mapping.internationalEquityWeight > 0) {
-    assumptions.push('Equity exposure modeled using broad market index proxies (VTI for US equity, VXUS for international equity)');
+    assumptions.push('US equity exposure uses the Shiller US equity total-return history');
+  }
+
+  if (mapping.internationalEquityWeight > 0) {
+    assumptions.push('International equity currently uses the same US equity return history, so international diversification effects are not modeled');
   }
 
   if (mapping.nominalBondsWeight > 0) {
-    assumptions.push('Bond exposure modeled using nominal bond index proxy (AGG)');
+    assumptions.push('Bond exposure uses the Shiller historical bond-return series');
   }
 
   if (mapping.cashWeight > 0) {

@@ -20,6 +20,7 @@ function compactRetirementAnalysis(snapshot: FinancialContextSnapshot): unknown 
       tradeoffs: analysis.summary.tradeoffs,
       primaryObservation: analysis.summary.primaryObservation,
       confidence: analysis.summary.confidence,
+      timelineBucketNote: analysis.summary.timelineBucketNote,
     },
     historicalImplications: analysis.historicalImplications,
     dataQuality: {

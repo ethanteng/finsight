@@ -51,19 +51,28 @@ export function loadHistoricalReturns(csvPath: string = DEFAULT_CSV_PATH): Histo
 
   for (let i = 1; i < lines.length; i++) {
     const parts = lines[i].split(',');
-    if (parts.length < 6) continue;
+    if (parts.length !== 6) {
+      throw new Error(`Invalid historical return row ${i + 1}: ${lines[i]}`);
+    }
 
     const [dateStr, usStr, intlStr, bondsStr, cashStr, inflationStr] = parts;
     const [yearStr, monthStr] = dateStr.split('-');
     const year = parseInt(yearStr, 10);
     const month = parseInt(monthStr || '1', 10) - 1;
 
+    const rawValues = [usStr, intlStr, bondsStr, cashStr, inflationStr];
+    const values = rawValues.map(Number);
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(dateStr) || !Number.isInteger(year) || month < 0 || month > 11 ||
+        rawValues.some(value => value.trim() === '') ||
+        values.some(value => !Number.isFinite(value))) {
+      throw new Error(`Invalid historical return row ${i + 1}: ${lines[i]}`);
+    }
     dates.push(new Date(year, month, 1));
-    usEquityReturns.push(parseFloat(usStr) || 0);
-    intlEquityReturns.push(parseFloat(intlStr) || 0);
-    bondReturns.push(parseFloat(bondsStr) || 0);
-    cashReturns.push(parseFloat(cashStr) || 0);
-    inflationRates.push(parseFloat(inflationStr) || 0);
+    usEquityReturns.push(values[0]);
+    intlEquityReturns.push(values[1]);
+    bondReturns.push(values[2]);
+    cashReturns.push(values[3]);
+    inflationRates.push(values[4]);
   }
 
   const n = dates.length;

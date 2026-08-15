@@ -100,6 +100,8 @@ export interface FinancialContextSnapshot {
       equityAllocation: number;
       withdrawalRate: number;
       yearsOfExpenses: number;
+      projectedPortfolioAtWithdrawalStart?: number;
+      yearsToWithdrawalStart?: number;
       historicalWithdrawalRates: {
         p10: number;
         p25: number;

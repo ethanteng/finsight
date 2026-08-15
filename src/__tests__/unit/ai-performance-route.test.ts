@@ -32,5 +32,7 @@ describe('AI performance route', () => {
     expect(response.status).toBe(200);
     expect(response.body).toHaveProperty('stages');
     expect(response.body).toHaveProperty('quality');
+    expect(response.body).toHaveProperty('observationWindow');
+    expect(response.body).toHaveProperty('baselineCandidate');
   });
 });

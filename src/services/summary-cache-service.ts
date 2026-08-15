@@ -16,6 +16,7 @@ import {
 export interface SummaryComputeOptions {
   categorize?: boolean;
   history?: HistoryWriteIntent;
+  forceBalanceRefresh?: boolean;
 }
 
 export class SummaryCacheService {
@@ -42,6 +43,7 @@ export class SummaryCacheService {
     const data = await ingestFinancialData(userId, {
       balanceMaxAgeHours: balanceHours,
       categorize: Boolean(opts.categorize),
+      forceBalanceRefresh: Boolean(opts.forceBalanceRefresh),
     });
 
     // Build every user-facing metric and quality field through the canonical producer.

@@ -40,21 +40,35 @@ function mockFinancialOverviewFetch({
   summaryOk?: boolean;
 }) {
   (global.fetch as jest.Mock).mockImplementation((url: string) => {
-    if (url.includes('/api/summaries')) {
+    if (url.includes('/api/finances/overview')) {
       if (!summaryOk) {
-        return Promise.resolve({ ok: false, status: 404, json: async () => ({}) });
+        return Promise.resolve({ ok: true, status: 204, json: async () => ({}) });
       }
       return Promise.resolve({
         ok: true,
+        status: 200,
         json: async () => ({
+          revision: {
+            id: 'revision-1',
+            computedAt: new Date().toISOString(),
+            asOf: new Date().toISOString(),
+            status: 'current',
+            reportingCurrency: 'USD',
+          },
+          warnings: [],
           financialOverview,
           investmentPortfolio,
-          computedAt: new Date().toISOString(),
+          accountGroups: {
+            cash: { accounts, totalBalance: 0, unavailableBalanceCount: 0 },
+            investments: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+            debt: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+            other: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+          },
+          cashFlow: {},
+          home: null,
+          manualAccounts: [],
         }),
       });
-    }
-    if (url.includes('/plaid/all-accounts')) {
-      return Promise.resolve({ ok: true, json: async () => ({ accounts }) });
     }
     return Promise.resolve({ ok: false, status: 404, json: async () => ({ error: 'Not found' }) });
   });

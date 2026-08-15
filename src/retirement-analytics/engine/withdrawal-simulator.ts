@@ -30,7 +30,8 @@ export function simulateWithdrawals(
   portfolioMapping: PortfolioMapping,
   initialPortfolioValue: number,
   sequence: HistoricalSequence,
-  annualWithdrawal: number
+  annualWithdrawal: number,
+  options: { withdrawalDelayMonths?: number } = {}
 ): PortfolioOutcome {
   const w = portfolioMapping;
   let usEquity = initialPortfolioValue * w.usEquityWeight;
@@ -40,6 +41,10 @@ export function simulateWithdrawals(
 
   let monthlyWithdrawal = annualWithdrawal / 12;
   const months = sequence.assetBasketReturns.usEquity.length;
+  const withdrawalDelayMonths = Math.max(0, Math.round(options.withdrawalDelayMonths || 0));
+  let cumulativeInflation = 1;
+  let portfolioValueAtWithdrawalStart = initialPortfolioValue;
+  let realPortfolioValueAtWithdrawalStart = initialPortfolioValue;
 
   const portfolioValues: number[] = [initialPortfolioValue];
   let peakValue = initialPortfolioValue;
@@ -62,13 +67,24 @@ export function simulateWithdrawals(
 
     // inflationRates[] are monthly (CPI_t/CPI_(t-1) - 1 from build-market-dataset). Not annual.
     const monthlyInflation = sequence.inflationRates[month] ?? 0;
+    cumulativeInflation *= 1 + monthlyInflation;
     monthlyWithdrawal *= 1 + monthlyInflation;
-    portfolioValue = Math.max(0, portfolioValue - monthlyWithdrawal);
+    const withdrawing = month >= withdrawalDelayMonths;
+    if (month + 1 === withdrawalDelayMonths) {
+      portfolioValueAtWithdrawalStart = portfolioValue;
+      realPortfolioValueAtWithdrawalStart = cumulativeInflation > 0
+        ? portfolioValue / cumulativeInflation
+        : portfolioValue;
+    }
+    const withdrawalThisMonth = withdrawing ? monthlyWithdrawal : 0;
+    portfolioValue = Math.max(0, portfolioValue - withdrawalThisMonth);
 
     if (portfolioValue <= 0) {
       return {
         withdrawalSustainability: false,
-        yearsUntilDepletion: month / 12,
+        yearsUntilDepletion: Math.max(0, month - withdrawalDelayMonths) / 12,
+        portfolioValueAtWithdrawalStart,
+        realPortfolioValueAtWithdrawalStart,
         finalValue: 0,
         maximumDrawdown: maxDrawdown,
         timeToRecovery: recoveryMonth != null ? recoveryMonth - (drawdownStartMonth ?? 0) : null,
@@ -98,7 +114,7 @@ export function simulateWithdrawals(
       cash = portfolioValue * w.cashWeight;
     } else {
       // Withdrawal applied to total; scale sleeves proportionally to match new total
-      const scale = portfolioValue / (portfolioValue + monthlyWithdrawal);
+      const scale = portfolioValue / (portfolioValue + withdrawalThisMonth);
       usEquity *= scale;
       intlEquity *= scale;
       bonds *= scale;
@@ -109,6 +125,8 @@ export function simulateWithdrawals(
   return {
     withdrawalSustainability: true,
     yearsUntilDepletion: null,
+    portfolioValueAtWithdrawalStart,
+    realPortfolioValueAtWithdrawalStart,
     finalValue: usEquity + intlEquity + bonds + cash,
     maximumDrawdown: maxDrawdown,
     timeToRecovery: recoveryMonth != null ? recoveryMonth - (drawdownStartMonth ?? 0) : null,
