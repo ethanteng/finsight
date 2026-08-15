@@ -551,8 +551,11 @@ export const setupPlaidRoutes = (app: any) => {
           subtype: account.subtype,
           mask: mask,
           balance: {
-            available: account.balance?.available ?? 0,
-            current: account.balance?.current ?? 0,
+            // Never coerce a missing balance to 0: an account the provider did not
+            // report a balance for is unknown, not empty, and 0 both reads as a real
+            // balance and shadows the current/available fallback on the client.
+            available: account.balance?.available ?? null,
+            current: account.balance?.current ?? null,
             limit: account.balance?.limit ?? null,
             iso_currency_code: account.balance?.iso_currency_code ?? 'USD',
             unofficial_currency_code: account.balance?.unofficial_currency_code ?? null

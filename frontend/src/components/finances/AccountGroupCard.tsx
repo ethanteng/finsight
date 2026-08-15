@@ -1,6 +1,7 @@
 "use client";
 import { useState } from 'react';
 import type { FinancesAccount } from '../../types/finances-overview';
+import { resolveAccountBalance } from '../../lib/account-balance';
 import { useDialog } from '../ui/dialog';
 
 export type Account = FinancesAccount;
@@ -16,21 +17,9 @@ interface AccountGroupCardProps {
   onAccountRenamed?: () => void;
 }
 
+// Match canonical metrics: current is authoritative, available is only a fallback.
 export function getAccountBalance(account: FinancesAccount): number | null {
-  if (Object.prototype.hasOwnProperty.call(account, 'displayBalance')) {
-    return typeof account.displayBalance === 'number' && Number.isFinite(account.displayBalance)
-      ? account.displayBalance
-      : null;
-  }
-  const balance = account.balance;
-  let value: unknown = balance;
-  if (balance !== null && typeof balance === 'object') {
-    // Match canonical metrics: current is authoritative, available is only a fallback.
-    value = typeof balance.current === 'number' && Number.isFinite(balance.current)
-      ? balance.current
-      : balance.available;
-  }
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  return resolveAccountBalance(account);
 }
 
 export default function AccountGroupCard({
