@@ -87,6 +87,12 @@ model AccessToken {
   institutionName      String?
   transactionSyncCursor String?  // Cursor for Plaid transactionsSync API
   lastTransactionSync  DateTime? // Timestamp of last successful transaction sync
+  // Set when a re-link replaced this connection. Permanent, unlike isActive/lastError, which
+  // token revalidation resets on a successful Plaid call. A superseded Item usually still works
+  // at Plaid, so only this flag distinguishes "replaced" from "temporarily broken".
+  supersededAt         DateTime?
+
+  @@index([userId, supersededAt])
 }
 
 model SyncStatus {

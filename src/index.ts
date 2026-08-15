@@ -1829,8 +1829,12 @@ app.get('/profile/tokens', requireAuth, async (req: Request, res: Response) => {
     const prisma = getPrismaClient();
     const { plaidClient } = await import('./plaid');
 
+    // Superseded connections are excluded outright. They are still valid at Plaid - the user
+    // replaced them by re-linking, they were never removed there - so revalidation below would
+    // succeed, flip isActive back to true, clear lastError, and then re-create every duplicate
+    // account because the cleanup had deleted them. Filtering here is what makes the cleanup stick.
     const tokens = await prisma.accessToken.findMany({
-      where: { userId: req.user!.id },
+      where: { userId: req.user!.id, supersededAt: null },
       select: {
         id: true,
         token: true,

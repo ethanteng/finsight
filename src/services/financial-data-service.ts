@@ -886,7 +886,7 @@ export class FinancialDataService {
 
     try {
       const accessTokens = await prisma.accessToken.findMany({
-        where: { userId, isActive: true }
+        where: { userId, isActive: true, supersededAt: null }
       });
 
       if (accessTokens.length === 0) {

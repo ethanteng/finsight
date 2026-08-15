@@ -583,12 +583,17 @@ export const setupPlaidRoutes = (app: any) => {
 
       // Only include userId when authenticated - passing undefined would overwrite existing
       // user association to NULL (optionalAuth allows unauthenticated requests)
+      // Clearing supersededAt is deliberate: reaching here means the user just linked this Item
+      // again, so the connection is live rather than replaced. Without it, an update-mode re-auth
+      // of a superseded row would come back active but stay invisible to every consumer that now
+      // filters on supersededAt.
       const tokenData = {
         token: access_token,
         lastRefreshed: new Date(),
         ...(req.user?.id && { userId: req.user.id }),
         isActive: true,
-        lastError: null
+        lastError: null,
+        supersededAt: null
       };
 
       let storedToken;

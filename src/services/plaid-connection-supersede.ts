@@ -216,7 +216,11 @@ export function matchAccountsAcrossConnections(
   };
 }
 
-/** Marker written to AccessToken.lastError so superseded connections are distinguishable from failures. */
+/**
+ * Written to AccessToken.lastError alongside supersededAt, for operator readability only.
+ * Never branch on it: token revalidation clears lastError on any successful Plaid call, and a
+ * superseded Item usually still works at Plaid. `supersededAt` is the durable marker.
+ */
 export const SUPERSEDED_ERROR_CODE = 'SUPERSEDED_BY_RELINK';
 
 export type SupersededConnection = {
@@ -315,7 +319,7 @@ export async function supersedeDuplicateInstitutionConnections(options: {
   // AccessToken.institutionName is backfilled lazily, so also match via the institution recorded
   // on the token's accounts.
   const otherTokens = await prisma.accessToken.findMany({
-    where: { userId, isActive: true, NOT: { id: keepTokenId } },
+    where: { userId, isActive: true, supersededAt: null, NOT: { id: keepTokenId } },
     select: {
       id: true,
       itemId: true,
@@ -348,7 +352,7 @@ export async function supersedeDuplicateInstitutionConnections(options: {
       if (!dryRun) {
         await prisma.accessToken.update({
           where: { id: token.id },
-          data: { isActive: false, lastError: SUPERSEDED_ERROR_CODE }
+          data: { isActive: false, lastError: SUPERSEDED_ERROR_CODE, supersededAt: new Date() }
         });
       }
       report.superseded.push({
@@ -392,7 +396,7 @@ export async function supersedeDuplicateInstitutionConnections(options: {
         }
         await db.accessToken.update({
           where: { id: token.id },
-          data: { isActive: false, lastError: SUPERSEDED_ERROR_CODE }
+          data: { isActive: false, lastError: SUPERSEDED_ERROR_CODE, supersededAt: new Date() }
         });
       };
 

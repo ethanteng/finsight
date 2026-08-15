@@ -1,6 +1,5 @@
 import { Prisma } from '@prisma/client';
 import { getPrismaClient } from '../prisma-client';
-import { SUPERSEDED_ERROR_CODE } from './plaid-connection-supersede';
 
 const prisma = getPrismaClient();
 
@@ -48,10 +47,11 @@ export async function loadPersistedPlaidData(
       }>>;
 
       // Accounts left behind by a connection that was superseded by a re-link must not surface.
-      // Scoped to SUPERSEDED_BY_RELINK specifically: tokens that are merely erroring (e.g.
-      // ITEM_LOGIN_REQUIRED) must still yield their last known balances here.
+      // Keyed on supersededAt, not lastError: token revalidation clears lastError on any successful
+      // Plaid call, and a superseded Item usually still works at Plaid. Tokens that are merely
+      // erroring (e.g. ITEM_LOGIN_REQUIRED) are untouched and still yield last known balances.
       const supersededTokens = await prisma.accessToken.findMany({
-        where: { userId, isActive: false, lastError: SUPERSEDED_ERROR_CODE },
+        where: { userId, supersededAt: { not: null } },
         select: { id: true }
       });
       const supersededTokenIds = new Set(supersededTokens.map(token => token.id));

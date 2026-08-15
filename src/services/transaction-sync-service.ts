@@ -336,7 +336,7 @@ export class TransactionSyncService {
     }>;
   }> {
     const activeTokens = await prisma.accessToken.findMany({
-      where: { isActive: true },
+      where: { isActive: true, supersededAt: null },
       select: {
         id: true,
         token: true,

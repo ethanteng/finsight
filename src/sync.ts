@@ -58,8 +58,12 @@ export async function syncAllAccounts(userId?: string): Promise<SyncResult> {
   const startTime = new Date();
   
   try {
-    // Get access tokens for the specific user or all tokens if no user specified
-    const whereClause = userId ? { userId } : {};
+    // Get access tokens for the specific user or all tokens if no user specified.
+    // Superseded and inactive connections are excluded: re-syncing them re-creates the duplicate
+    // accounts a re-link replaced.
+    const whereClause = userId
+      ? { userId, isActive: true, supersededAt: null }
+      : { isActive: true, supersededAt: null };
     const accessTokens = await getPrismaClient().accessToken.findMany({
       where: whereClause,
       select: { token: true }

@@ -120,7 +120,7 @@ export class BalanceService {
    */
   static async refreshAllUserBalances(userId: string, plaidClient: PlaidApi): Promise<void> {
     const accessTokens = await getPrismaClient().accessToken.findMany({
-      where: { userId, isActive: true }
+      where: { userId, isActive: true, supersededAt: null }
     });
 
     for (const tokenRecord of accessTokens) {
