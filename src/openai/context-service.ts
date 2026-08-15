@@ -361,6 +361,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
         detectedParams: {},
         unavailableReason:
           'Retirement analysis could not be completed because the portfolio analysis service failed. Ask the user to try again later instead of estimating from aggregates alone.',
+        unavailableCode: 'service_error',
       };
     }
   } else if (userId && questionNeeds.needsRetirement) {
@@ -377,6 +378,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       detectedParams: {},
       unavailableReason:
         'No linked investment holdings are available for retirement analysis. Ask the user to connect investment accounts or provide portfolio details instead of estimating from net-worth aggregates alone.',
+      unavailableCode: 'no_holdings',
     };
   }
 
@@ -663,6 +665,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
         detectedParams: {},
         unavailableReason:
           'Retirement analysis could not be completed because the portfolio analysis service failed. Ask the user to try again later instead of estimating from aggregates alone.',
+        unavailableCode: 'service_error',
       },
     };
   }
