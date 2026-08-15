@@ -1,7 +1,6 @@
 import { jest } from '@jest/globals';
 import { ProfileManager } from '../../profile/manager';
 import { ProfileExtractor } from '../../profile/extractor';
-import { ProfileAnonymizer } from '../../profile/anonymizer';
 
 // Mock the ProfileExtractor
 jest.mock('../../profile/extractor');
@@ -48,7 +47,7 @@ describe('Profile Functionality Preservation', () => {
     // Set up environment variable for testing
     process.env.PROFILE_ENCRYPTION_KEY = 'test-encryption-key-32-bytes-long-here';
     
-    profileManager = new ProfileManager('test-session');
+    profileManager = new ProfileManager();
   });
 
   afterEach(() => {
@@ -321,65 +320,4 @@ describe('Profile Functionality Preservation', () => {
     });
   });
 
-  describe.skip('Anonymization Integration', () => {
-    test.skip('AI requests must receive anonymized profiles', async () => {
-      const testProfile = 'I am Sarah Chen, earning $100,000 in New York, NY';
-      
-      // Mock user and profile with encrypted data
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
-        id: 'profile1',
-        profileHash: 'hash1',
-        profileText: '',
-        encrypted_profile_data: {
-          encryptedData: 'encrypted-data',
-          iv: 'iv',
-          tag: 'tag'
-        }
-      });
-      
-      // Mock encryption service
-      const mockDecrypt = jest.fn().mockReturnValue(testProfile);
-      jest.spyOn(profileManager['encryptionService'], 'decrypt').mockImplementation(mockDecrypt as any);
-      
-      const aiProfile = await profileManager.getOrCreateProfile('test-user');
-      
-      // Should return anonymized profile for AI (using new token format)
-      expect(aiProfile).not.toContain('Sarah Chen');
-      expect(aiProfile).not.toContain('$100,000');
-      expect(aiProfile).not.toContain('New York, NY');
-      expect(aiProfile).toContain('Person_');
-      expect(aiProfile).toContain('Income_');
-      expect(aiProfile).toContain('Location_');
-    });
-
-    test('User display must receive original profiles', async () => {
-      const testProfile = 'I am Sarah Chen, earning $100,000 in New York, NY';
-      
-      // Mock user and profile with encrypted data
-      mockPrisma.user.findUnique.mockResolvedValue({ id: 'test-user', email: 'test@example.com' });
-      mockPrisma.userProfile.findUnique.mockResolvedValue({
-        id: 'profile1',
-        profileHash: 'hash1',
-        profileText: '',
-        encrypted_profile_data: {
-          encryptedData: 'encrypted-data',
-          iv: 'iv',
-          tag: 'tag'
-        }
-      });
-      
-      // Mock encryption service
-      const mockDecrypt = jest.fn().mockReturnValue(testProfile);
-      jest.spyOn(profileManager['encryptionService'], 'decrypt').mockImplementation(mockDecrypt as any);
-      
-      const userProfile = await profileManager.getOriginalProfile('test-user');
-      
-      // Should return original profile for user display
-      expect(userProfile).toBe(testProfile);
-      expect(userProfile).toContain('Sarah Chen');
-      expect(userProfile).toContain('$100,000');
-      expect(userProfile).toContain('New York, NY');
-    });
-  });
 });

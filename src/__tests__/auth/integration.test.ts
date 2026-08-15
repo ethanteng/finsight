@@ -3,8 +3,12 @@ import { app } from '../../index';
 import { PrismaClient } from '@prisma/client';
 
 // Mock external dependencies
-jest.mock('../../openai', () => ({
-  askOpenAI: jest.fn().mockResolvedValue('Mocked AI response'),
+jest.mock('../../openai/analysis-pipeline', () => ({
+  runAskLincAnalysis: jest.fn().mockResolvedValue({
+    displayText: 'Mocked AI response',
+    structuredResponse: { summary: 'Mocked AI response' },
+    showTheMathData: undefined,
+  }),
 }));
 
 jest.mock('../../data/orchestrator', () => ({
@@ -182,7 +186,7 @@ describe('Authentication Integration', () => {
       }
 
       const response = await request(app)
-        .post('/ask')
+        .post('/ask/display-real')
         .set('Authorization', `Bearer ${token}`)
         .send({
           question: 'What is my account balance?'
@@ -194,25 +198,25 @@ describe('Authentication Integration', () => {
 
     it('should reject access without token', async () => {
       const response = await request(app)
-        .post('/ask')
+        .post('/ask/display-real')
         .send({
           question: 'What is my account balance?'
         });
 
       expect(response.status).toBe(401);
-      expect(response.body).toHaveProperty('error', 'Authentication required');
+      expect(response.body).toHaveProperty('error', 'No token provided');
     });
 
     it('should reject access with invalid token', async () => {
       const response = await request(app)
-        .post('/ask')
+        .post('/ask/display-real')
         .set('Authorization', 'Bearer invalid.token.here')
         .send({
           question: 'What is my account balance?'
         });
 
       expect(response.status).toBe(401);
-      expect(response.body).toHaveProperty('error', 'Authentication required');
+      expect(response.body).toHaveProperty('error', 'Invalid or expired token');
     });
   });
 

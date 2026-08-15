@@ -33,13 +33,13 @@ Ask Linc is a comprehensive financial analysis platform that combines AI-powered
 
 ## 🧠 **Core Systems**
 
-### **1. Dual-Data Privacy System**
-- **Purpose**: Protects user privacy while maintaining AI functionality
-- **Implementation**: Tokenizes real account/merchant names for AI processing
+### **1. Canonical Financial Context System**
+- **Purpose**: Gives AI responses a single, traceable source of financial truth
+- **Implementation**: Builds question-specific context from persisted canonical snapshots
 - **Features**:
-    - Real data tokenization for AI
-    - User-friendly display with real names
-    - Session-consistent tokenization maps
+    - Deterministic financial calculations
+    - Explicit value, unit, and provenance metadata
+    - Locally validated authoritative numbers
 
 ### **2. Enhanced Market Context System**
 - **Purpose**: Provides real-time market data for informed financial advice
@@ -233,8 +233,7 @@ PERSIST_TRANSACTIONS="false"            # Toggle transaction persistence to data
 PERSIST_GPT_CONTEXT="false"             # Toggle GPT context logging to /opt/render/project/src/logs
 
 # Ask Linc canonical-facts pipeline (Claude primary, OpenAI provider fallback)
-USE_ASK_LINC_PIPELINE="false"           # Enable Claude-based analysis pipeline (requires ANTHROPIC_API_KEY)
-ANTHROPIC_API_KEY="your_anthropic_api_key"  # Required when USE_ASK_LINC_PIPELINE=true
+ANTHROPIC_API_KEY="your_anthropic_api_key"  # Required for Ask Linc analysis
 ENABLE_RESPONSE_VALIDATION="false"      # Optional: validate Claude responses with Gemini
 ASK_LINC_MAX_OUTPUT_TOKENS="8192"       # Optional: maximum primary/fallback output tokens (default: 8192)
 OPENAI_FALLBACK_MODEL="gpt-4o"          # Optional: fallback model; reuses the prepared context pack
@@ -328,11 +327,11 @@ npm run test:unit
 # Integration tests
 npm run test:integration
 
-# Dual-data system tests
-npm run test:dual-data
-
 # Enhanced market context tests
 npm run test:enhanced-market-context
+
+# Deterministic Ask Linc quality evaluation
+npm run eval:llm
 
 # GPT Model Smoke Test (Real API validation)
 npm run test:gpt-smoke

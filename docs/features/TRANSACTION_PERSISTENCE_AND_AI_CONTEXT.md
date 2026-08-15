@@ -244,7 +244,7 @@ cat gpt-context-[userId]-[timestamp].json | jq .
 ## Security Considerations
 
 1. **GPT Context Logs:**
-   - Contain tokenized data (not real names)
+   - May contain the real financial context selected for a question
    - Should only be enabled for debugging
    - Automatically rotate to prevent disk space issues
    - Only accessible to authenticated users via API

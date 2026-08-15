@@ -1,53 +1,22 @@
-import { FinancialSummarySnapshot, PrismaClient } from '@prisma/client';
-import { plaidClient } from '../plaid';
-import { BalanceService } from './balance-service';
-import { FinancialDataService } from './financial-data-service';
 import { buildTransactionSummary } from './transaction-summary-service';
 import { buildCanonicalSnapshotCore } from './canonical-financial-snapshot';
 import {
   buildAccountDisplayBalances,
-  hasAccountDisplayBalances,
-  withAccountDisplayBalances,
 } from './finances-overview-service';
+import { getPrismaClient } from '../prisma-client';
+import { upsertFinancialSnapshot } from './financial-snapshot-persistence';
+import { ingestFinancialData } from './financial-ingestion';
+import { extractWindowedInvestmentActivities } from './financial-calculations';
 import {
   FinancialHistoryService,
   type CanonicalHistoryInput,
   type HistoryWriteIntent,
 } from './financial-history-service';
 
-// Lazy Prisma to avoid multiple instances during different runtimes
-let prisma: PrismaClient | null = null;
-const getPrisma = (): PrismaClient => {
-  if (!prisma) prisma = new PrismaClient();
-  return prisma!;
-};
-
-type ViewMode = 'summary' | 'finances' | 'full';
-
 export interface SummaryComputeOptions {
   categorize?: boolean;
   history?: HistoryWriteIntent;
 }
-
-export interface AnalysisSnapshotOptions {
-  includeAccounts?: boolean;
-  includeTransactions?: boolean;
-  includeInvestments?: boolean;
-}
-
-type AnalysisFinancialSummarySnapshot = Pick<
-  FinancialSummarySnapshot,
-  | 'computedAt'
-  | 'asOf'
-  | 'status'
-  | 'reportingCurrency'
-  | 'financialOverview'
-  | 'investmentPortfolio'
-  | 'transactionsSummary'
-  | 'quality'
-  | 'sourceObservations'
-  | 'meta'
-> & Partial<Pick<FinancialSummarySnapshot, 'accounts' | 'transactions' | 'holdings' | 'securities'>>;
 
 export class SummaryCacheService {
   static getEnvWindows() {
@@ -63,7 +32,6 @@ export class SummaryCacheService {
    * opts.categorize: when true, runs heavier categorization; when false, skips for faster completion.
    */
   static async computeForUser(userId: string, opts: SummaryComputeOptions = {}) {
-    const prisma = getPrisma();
     const { txDays, invYears, balanceHours } = this.getEnvWindows();
 
     // Determine date ranges
@@ -71,45 +39,9 @@ export class SummaryCacheService {
     const invSince = new Date();
     invSince.setFullYear(invSince.getFullYear() - invYears);
 
-    // Ensure balances are fresh (token-scoped; throttle by BALANCE_REFRESH_HOURS)
-    // Strategy: if any account for the user has stale balanceLastFetched, refresh all tokens' balances once.
-    const oldestRecentAllowed = new Date(Date.now() - balanceHours * 60 * 60 * 1000);
-    const anyStale = await prisma.account.findFirst({
-      where: {
-        userId,
-        OR: [
-          { balanceLastFetched: null },
-          { balanceLastFetched: { lt: oldestRecentAllowed } },
-        ],
-      },
-      select: { plaidAccountId: true },
-    });
-
-    if (anyStale) {
-      // Refresh balances for all access tokens of this user (throttled via BalanceService internals)
-      const tokens = await prisma.accessToken.findMany({
-        where: { userId, isActive: true },
-        select: { token: true, id: true },
-      });
-      for (const t of tokens) {
-        try {
-          await BalanceService.getAccountBalances(t.token, plaidClient, false);
-        } catch (err) {
-          console.warn(`SummaryCacheService: Balance refresh skipped/failed for token ${t.id}:`, err);
-        }
-      }
-    }
-
-    // Fetch unified financial data using existing service
-    const fds = new FinancialDataService();
-    const data = await fds.getUserFinancialData(userId, {
-      includeTransactions: true,
-      includeInvestments: true,
-      includeHomeValue: true,
-      // Fast path by default for on-demand refresh; cron can request categorize=true
-      skipCategorization: opts.categorize ? false : true,
-      // Persist categorized transactions to database when categorization is enabled
-      shouldPersistTransactions: opts.categorize ? true : false,
+    const data = await ingestFinancialData(userId, {
+      balanceMaxAgeHours: balanceHours,
+      categorize: Boolean(opts.categorize),
     });
 
     // Build every user-facing metric and quality field through the canonical producer.
@@ -129,7 +61,7 @@ export class SummaryCacheService {
       computedAt,
       'USD'
     );
-    const activities = SummaryCacheService.extractWindowedInvestmentActivities(data, invSince);
+    const activities = extractWindowedInvestmentActivities(data, invSince);
 
     const payload: any = {
       computedAt,
@@ -154,7 +86,7 @@ export class SummaryCacheService {
         asOf: source.asOf instanceof Date ? source.asOf.toISOString() : source.asOf,
       })),
       meta: {
-        version: '2.1',
+        version: '2.2',
         source: 'SummaryCacheService',
         status: canonical.status,
         asOf: canonical.asOf?.toISOString() || null,
@@ -180,7 +112,7 @@ export class SummaryCacheService {
       },
     };
 
-    await this.upsertSnapshot(userId, payload);
+    await upsertFinancialSnapshot(userId, payload);
     
     // Save historical snapshot for trend tracking
     try {
@@ -204,155 +136,9 @@ export class SummaryCacheService {
     return payload;
   }
 
-  static async upsertSnapshot(userId: string, payload: any) {
-    const prisma = getPrisma();
-    const snapshotData = {
-      computedAt: payload.computedAt,
-      asOf: payload.asOf,
-      status: payload.status,
-      reportingCurrency: payload.reportingCurrency,
-      financialOverview: payload.financialOverview,
-      investmentPortfolio: payload.investmentPortfolio,
-      accounts: payload.accounts,
-      holdings: payload.holdings,
-      securities: payload.securities,
-      transactions: payload.transactions,
-      transactionsSummary: payload.transactionsSummary,
-      activities: payload.activities,
-      quality: payload.quality,
-      sourceObservations: payload.sourceObservations,
-      meta: payload.meta,
-    };
-    const overview = payload.financialOverview;
-    await prisma.$transaction([
-      prisma.financialSummarySnapshot.upsert({
-        where: { userId },
-        update: snapshotData,
-        create: { userId, ...snapshotData },
-      }),
-      // Keep the legacy table synchronized from the same canonical values while
-      // older callers are migrated. It no longer fetches or calculates data.
-      prisma.financialSummary.upsert({
-        where: { userId },
-        update: {
-          netWorth: overview.netWorth,
-          totalCash: overview.totalCash,
-          totalInvestments: overview.totalInvestments,
-          totalDebt: overview.totalDebt,
-          homeValue: overview.homeValue,
-          investmentPortfolio: payload.investmentPortfolio,
-          lastUpdated: payload.computedAt,
-        },
-        create: {
-          userId,
-          netWorth: overview.netWorth,
-          totalCash: overview.totalCash,
-          totalInvestments: overview.totalInvestments,
-          totalDebt: overview.totalDebt,
-          homeValue: overview.homeValue,
-          investmentPortfolio: payload.investmentPortfolio,
-          lastUpdated: payload.computedAt,
-        },
-      }),
-    ]);
-  }
-
-  static async getLatestSnapshot(userId: string, view: ViewMode = 'summary') {
-    const prisma = getPrisma();
-    if (view === 'finances') {
-      const select = {
-        computedAt: true,
-        asOf: true,
-        status: true,
-        reportingCurrency: true,
-        financialOverview: true,
-        investmentPortfolio: true,
-        accounts: true,
-        transactionsSummary: true,
-        meta: true,
-        quality: true,
-      } as const;
-      const snapshot = await prisma.financialSummarySnapshot.findUnique({
-        where: { userId },
-        select,
-      });
-      if (!snapshot || hasAccountDisplayBalances(snapshot as any)) return snapshot;
-
-      // Version-2.0 snapshots predate canonical per-account display balances.
-      // Load their holdings once, derive the missing metadata, and persist it so
-      // subsequent Finances reads remain lightweight without calling providers.
-      const fullSnapshot = await prisma.financialSummarySnapshot.findUnique({ where: { userId } });
-      if (!fullSnapshot) return null;
-      const upgraded = withAccountDisplayBalances(fullSnapshot as any);
-      const update = await prisma.financialSummarySnapshot.updateMany({
-        where: { userId, computedAt: fullSnapshot.computedAt },
-        data: { meta: upgraded.meta as any },
-      });
-      if (update.count === 0) {
-        // A newer snapshot won the race; return that revision instead of
-        // overwriting its metadata with values derived from the older one.
-        return prisma.financialSummarySnapshot.findUnique({ where: { userId }, select });
-      }
-      return {
-        computedAt: fullSnapshot.computedAt,
-        asOf: fullSnapshot.asOf,
-        status: fullSnapshot.status,
-        reportingCurrency: fullSnapshot.reportingCurrency,
-        financialOverview: fullSnapshot.financialOverview,
-        investmentPortfolio: fullSnapshot.investmentPortfolio,
-        accounts: fullSnapshot.accounts,
-        transactionsSummary: fullSnapshot.transactionsSummary,
-        meta: upgraded.meta,
-        quality: fullSnapshot.quality,
-      };
-    }
-    const snap = await prisma.financialSummarySnapshot.findUnique({
-      where: { userId },
-    });
-    if (!snap) return null;
-    if (view === 'full') return snap;
-    // summary view: strip heavy arrays
-    const { accounts, holdings, securities, transactions, activities, ...rest } = snap as any;
-    return rest;
-  }
-
-  /**
-   * Read the canonical snapshot for an LLM question without hydrating every
-   * large JSON column. Aggregate financial and transaction truth is always
-   * included; account, transaction, and holding detail is opt-in by question.
-   */
-  static async getSnapshotForAnalysis(
-    userId: string,
-    options: AnalysisSnapshotOptions = {}
-  ): Promise<AnalysisFinancialSummarySnapshot | null> {
-    const prisma = getPrisma();
-    const select: Record<string, boolean> = {
-      computedAt: true,
-      asOf: true,
-      status: true,
-      reportingCurrency: true,
-      financialOverview: true,
-      investmentPortfolio: true,
-      transactionsSummary: true,
-      quality: true,
-      sourceObservations: true,
-      meta: true,
-    };
-    if (options.includeAccounts) select.accounts = true;
-    if (options.includeTransactions) select.transactions = true;
-    if (options.includeInvestments) {
-      select.holdings = true;
-      select.securities = true;
-    }
-    const snapshot = await prisma.financialSummarySnapshot.findUnique({
-      where: { userId },
-      select: select as any,
-    });
-    return snapshot as unknown as AnalysisFinancialSummarySnapshot | null;
-  }
 
   static async refreshAllUsers() {
-    const prisma = getPrisma();
+    const prisma = getPrismaClient();
     const userIds = await prisma.user.findMany({
       where: {
         accessTokens: { some: { isActive: true } },
@@ -373,13 +159,6 @@ export class SummaryCacheService {
     return { success: true, usersProcessed: processed };
   }
 
-  private static extractWindowedInvestmentActivities(data: any, invSince: Date) {
-    const acts = Array.isArray(data?.investments?.transactions) ? data.investments.transactions : [];
-    return acts.filter((a: any) => {
-      const d = new Date(a.tradeDate || a.settlementDate || a.date || a.createdAt);
-      return !isNaN(d.getTime()) && d >= invSince;
-    });
-  }
 }
 
 export default SummaryCacheService;

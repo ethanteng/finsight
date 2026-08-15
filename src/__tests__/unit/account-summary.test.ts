@@ -1,5 +1,4 @@
 import { buildAccountSummaries } from '../../openai/account-summary';
-import { formatAccountSummary } from '../../openai/prompt-builder';
 import type { Account } from '../../services/financial-data-service';
 
 function account(overrides: Partial<Account> = {}): Account {
@@ -25,8 +24,6 @@ describe('account summaries', () => {
     ]);
 
     expect(summary.balance).toBeNull();
-    expect(formatAccountSummary([summary])).toContain('Balance unavailable');
-    expect(formatAccountSummary([summary])).not.toContain('$0.00');
   });
 
   it('uses current balance before available balance for cash accounts', () => {

@@ -7,8 +7,7 @@ module.exports = {
   ],
   testPathIgnorePatterns: [
     'comprehensive-security.test.ts', // Exclude comprehensive security tests - they have their own setup
-    'complete-security-suite.test.ts', // Exclude complete security suite - it has their own setup
-    'profile-anonymization-encryption-preservation.test.ts' // Exclude profile encryption tests - TypeScript issues to be resolved in Phase 5
+    'complete-security-suite.test.ts' // Exclude complete security suite - it has their own setup
   ],
   setupFilesAfterEnv: [
     '<rootDir>/src/__tests__/integration/setup.ts',
@@ -46,4 +45,4 @@ module.exports = {
   testLocationInResults: true,
   detectOpenHandles: true,
   forceExit: true,
-}; 
+};

@@ -5,19 +5,12 @@ import { PrismaClient } from '@prisma/client';
 // as required by our security testing improvement plan
 
 // Mock external dependencies that are NOT security-related
-jest.mock('../../openai', () => ({
-  askOpenAI: jest.fn().mockResolvedValue('Mocked AI response for security tests'),
-  askOpenAIWithEnhancedContext: jest.fn().mockResolvedValue('Mocked enhanced AI response for security tests'),
-  askOpenAIForTests: jest.fn().mockResolvedValue('Mocked AI response for security tests'),
-  openai: {
-    chat: {
-      completions: {
-        create: jest.fn().mockResolvedValue({
-          choices: [{ message: { content: 'Mocked OpenAI response' } }]
-        })
-      }
-    }
-  }
+jest.mock('../../openai/analysis-pipeline', () => ({
+  runAskLincAnalysis: jest.fn().mockResolvedValue({
+    displayText: 'Mocked AI response for security tests',
+    structuredResponse: { summary: 'Mocked AI response for security tests' },
+    showTheMathData: undefined,
+  }),
 }));
 
 // Mock market news (not security-related)

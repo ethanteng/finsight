@@ -55,7 +55,7 @@ Financial signals (balance, invest, save, budget, etc.) allow the question even 
 
 ## 2. System Prompt Hardening
 
-**File:** `src/openai/prompt-builder.ts`
+**File:** `src/openai/financial-reasoning-prompt.ts`
 
 A Security Rules section is prepended to every system prompt:
 

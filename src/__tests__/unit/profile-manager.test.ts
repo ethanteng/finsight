@@ -69,61 +69,6 @@ describe('ProfileManager Unit Tests', () => {
     });
   });
 
-  describe('getOrCreateProfile', () => {
-    it('should return empty string when user not found', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(null);
-      
-      const result = await profileManager.getOrCreateProfile('nonexistent-user');
-      
-      expect(result).toBe('');
-      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
-        where: { id: 'nonexistent-user' }
-      });
-    });
-
-    it('should create new profile when none exists', async () => {
-      const mockUser = { id: 'user1', email: 'test@example.com' };
-      const mockProfile = { 
-        id: 'profile1', 
-        profileHash: 'hash1', 
-        profileText: '', 
-        encrypted_profile_data: null 
-      };
-      
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
-      mockPrisma.userProfile.findUnique
-        .mockResolvedValueOnce(null) // First call for userId
-        .mockResolvedValueOnce(null); // Second call for email
-      mockPrisma.userProfile.create.mockResolvedValue(mockProfile);
-      
-      const result = await profileManager.getOrCreateProfile('user1');
-      
-      expect(result).toBe('');
-      expect(mockPrisma.userProfile.create).toHaveBeenCalled();
-    });
-
-    it('should return decrypted profile when encrypted data exists', async () => {
-      const mockUser = { id: 'user1', email: 'test@example.com' };
-      const mockProfile = {
-        id: 'profile1',
-        profileHash: 'hash1',
-        profileText: 'old text',
-        encrypted_profile_data: {
-          encryptedData: 'encrypted-data',
-          iv: 'test-iv',
-          tag: 'test-tag'
-        }
-      };
-      
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
-      mockPrisma.userProfile.findUnique.mockResolvedValue(mockProfile);
-      
-      const result = await profileManager.getOrCreateProfile('user1');
-      
-      // Should return decrypted data (or fallback to profileText if decryption fails)
-      expect(result).toBeDefined();
-    });
-  });
 
   describe('updateProfile', () => {
     it('should update existing profile with encryption', async () => {

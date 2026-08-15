@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@jest/globals';
-import { analyzeConversationContext } from '../../openai';
+import { analyzeConversationContext } from '../../openai/conversation-context';
 
 describe('analyzeConversationContext', () => {
   const mockConversation = (question: string, answer: string = 'Mock answer') => ({

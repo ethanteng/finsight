@@ -258,7 +258,7 @@ describe('Plaid Security Integration Tests', () => {
     // it('should not allow cross-user token access in API responses', async () => {
     //   // Test that API responses don't leak token information
     //   const response = await request(testApp)
-    //     .post('/ask')
+    //     .post('/ask/display-real')
     //     .set('Authorization', `Bearer ${user1JWT}`)
     //     .send({
     //       question: 'Show me my accounts'
@@ -363,7 +363,7 @@ describe('Error Handling Security Tests', () => {
     testPrisma.accessToken.findMany = jest.fn().mockRejectedValue(mockError);
 
     const response = await request(testApp)
-      .post('/ask')
+      .post('/ask/display-real')
       .set('Authorization', 'Bearer invalid-token')
       .send({
         question: 'Show me my accounts'
@@ -423,7 +423,7 @@ describe('GPT Context User Isolation Integration', () => {
 
   it.skip('should not leak user1 data to user2 in /ask response', async () => {
     const response = await request(testApp)
-      .post('/ask')
+      .post('/ask/display-real')
       .set('Authorization', `Bearer ${user2JWT}`)
       .send({ question: 'What accounts do I have?' });
     expect(response.status).toBe(200);

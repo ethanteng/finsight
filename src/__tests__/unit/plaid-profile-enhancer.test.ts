@@ -2,7 +2,7 @@ import { jest } from '@jest/globals';
 import { PlaidProfileEnhancer } from '../../profile/plaid-enhancer';
 
 // Mock OpenAI
-jest.mock('../../openai', () => ({
+jest.mock('../../openai/client', () => ({
   openai: {
     chat: {
       completions: {
@@ -20,7 +20,7 @@ describe('PlaidProfileEnhancer Unit Tests', () => {
     jest.clearAllMocks();
 
     // Mock OpenAI
-    const { openai } = require('../../openai');
+    const { openai } = require('../../openai/client');
     mockOpenAI = openai;
     mockOpenAI.chat.completions.create.mockResolvedValue({
       choices: [{ message: { content: 'Enhanced profile with Plaid insights' } }]

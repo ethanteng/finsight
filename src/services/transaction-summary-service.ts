@@ -84,15 +84,21 @@ export function buildTransactionSummary(
   endExclusive: Date,
   reportingCurrency = 'USD'
 ): TransactionSummaryResult {
-  const windowedTransactions = transactions.filter((transaction) => {
+  const transactionsInWindow = transactions.filter((transaction) => {
     const date = transactionDate(transaction);
     return date !== null && date >= start && date < endExclusive;
   });
+  // Persist only posted observations in the canonical snapshot. The raw
+  // pending observation remains represented in excludedTransactionIds below,
+  // while a later posted replacement is retained as the authoritative detail.
+  const windowedTransactions = transactionsInWindow.filter(
+    transaction => transaction?.pending !== true && String(transaction?.pending || '').toLowerCase() !== 'true'
+  );
 
   const canonicalTransactions = [];
   const unclassifiedTransactionIds: string[] = [];
   const currencyMismatchTransactionIds: string[] = [];
-  for (const transaction of windowedTransactions) {
+  for (const transaction of transactionsInWindow) {
     const canonical = toCanonicalTransaction(transaction);
     if (!canonical) {
       unclassifiedTransactionIds.push(transactionId(transaction));

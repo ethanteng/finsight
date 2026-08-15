@@ -17,13 +17,12 @@
  * 2. Fallback: keep most recently synced account
  * 3. Migrate transactions from duplicates to the kept account
  * 4. Delete duplicate records
- * 5. Refresh financial caches (FinancialSummarySnapshot, FinancialSummary) for affected users
+ * 5. Refresh the canonical FinancialSummarySnapshot for affected users
  */
 
 import { getPrismaClient } from '../src/prisma-client';
 import { plaidClient } from '../src/plaid';
 import { SummaryCacheService } from '../src/services/summary-cache-service';
-import { FinancialSummaryService } from '../src/services/financial-summary-service';
 
 const prisma = getPrismaClient();
 
@@ -249,11 +248,9 @@ async function fixDuplicateAccounts() {
     // Refresh financial caches for affected users so /profile and /finances show correct data
     if (affectedUserIds.size > 0) {
       console.log(`\n🔄 Refreshing financial caches for ${affectedUserIds.size} affected user(s)...`);
-      const summaryService = new FinancialSummaryService();
       for (const userId of affectedUserIds) {
         try {
           await SummaryCacheService.computeForUser(userId, { categorize: false });
-          await summaryService.refreshUserSummary(userId);
           console.log(`   ✅ Refreshed caches for user ${userId}`);
         } catch (err) {
           console.error(`   ❌ Failed to refresh caches for user ${userId}:`, (err as Error).message);

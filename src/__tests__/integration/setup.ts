@@ -1,19 +1,12 @@
 import { PrismaClient } from '@prisma/client';
 
 // Mock external dependencies for integration tests to prevent real API calls
-jest.mock('../../openai', () => ({
-  askOpenAI: jest.fn().mockResolvedValue('Mocked AI response for integration tests'),
-  askOpenAIWithEnhancedContext: jest.fn().mockResolvedValue('Mocked enhanced AI response for integration tests'),
-  askOpenAIForTests: jest.fn().mockResolvedValue('Mocked AI response for integration tests'),
-  openai: {
-    chat: {
-      completions: {
-        create: jest.fn().mockResolvedValue({
-          choices: [{ message: { content: 'Mocked OpenAI response' } }]
-        })
-      }
-    }
-  }
+jest.mock('../../openai/analysis-pipeline', () => ({
+  runAskLincAnalysis: jest.fn().mockResolvedValue({
+    displayText: 'Mocked AI response for integration tests',
+    structuredResponse: { summary: 'Mocked AI response for integration tests' },
+    showTheMathData: undefined,
+  }),
 }));
 
 // 🔒 CRITICAL: Don't mock Plaid routes for security tests
@@ -143,4 +136,4 @@ export const createTestConversation = async (sessionId: string, question: string
 };
 
 // Export prisma instance for tests
-export { PrismaClient }; 
+export { PrismaClient };

@@ -1,7 +1,7 @@
 import express from 'express';
 import { dataOrchestrator } from '../../data/orchestrator';
 import { UserTier } from '../../data/types';
-import { askOpenAIWithEnhancedContext } from '../../openai';
+import { runAskLincAnalysis } from '../../openai/analysis-pipeline';
 import { verifyToken, extractTokenFromHeader } from '../../auth/utils';
 
 // Create a test app instance that doesn't depend on ANY external modules or database connections
@@ -333,34 +333,6 @@ export function createTestApp() {
   });
 
   // Add mock ask endpoint for testing
-  app.post('/ask', testAuthMiddleware, async (req, res) => {
-    try {
-      const { question } = req.body;
-
-      if (!question) {
-        return res.status(400).json({ error: 'Question is required' });
-      }
-
-      // Call the actual askOpenAIWithEnhancedContext function (which is mocked in tests)
-      const answer = await askOpenAIWithEnhancedContext(question, [], 'starter' as UserTier);
-
-      // ✅ No conversion needed - AI response already contains real data (no anonymization)
-      const finalAnswer = answer;
-
-      res.json({
-        answer: finalAnswer,
-        sources: []
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      res.status(500).json({
-        error: 'Failed to process question',
-        message: errorMessage
-      });
-    }
-  });
-
-  // Add mock ask/display-real endpoint for testing
   app.post('/ask/display-real', testAuthMiddleware, async (req, res) => {
     try {
       const { question } = req.body;
@@ -369,8 +341,11 @@ export function createTestApp() {
         return res.status(400).json({ error: 'Question is required' });
       }
 
-      // Call the actual askOpenAIWithEnhancedContext function (which is mocked in tests)
-      const answer = await askOpenAIWithEnhancedContext(question, [], 'starter' as UserTier);
+      const answer = (await runAskLincAnalysis({
+        question,
+        conversationHistory: [],
+        userTier: UserTier.STARTER,
+      })).displayText;
 
       // ✅ No conversion needed - AI response already contains real data (no anonymization)
       const finalAnswer = answer;

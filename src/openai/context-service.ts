@@ -68,8 +68,8 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   if (userId) {
     // Fetch the canonical snapshot with only the large JSON columns this
     // question needs. Aggregate financial and cash-flow truth is always loaded.
-    const { SummaryCacheService } = await import('../services/summary-cache-service');
-    const snapshot = await SummaryCacheService.getSnapshotForAnalysis(userId, {
+    const { getFinancialSnapshotForAnalysis } = await import('../services/financial-snapshot-persistence');
+    const snapshot = await getFinancialSnapshotForAnalysis(userId, {
       includeAccounts: questionNeeds.needsAccountDetails,
       includeTransactions: questionNeeds.needsTransactionDetails,
       includeInvestments: questionNeeds.needsInvestments || Boolean(questionNeeds.needsRetirement),
@@ -96,26 +96,6 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       // Log account count and check for duplicates in snapshot
       console.log(`📊 gatherContextSnapshot: Retrieved ${accounts.length} accounts from snapshot for user ${userId}`);
 
-      // Check for duplicates in the snapshot itself (before defensive deduplication)
-      const snapshotAccountIds = new Set<string>();
-      const snapshotDuplicates: string[] = [];
-      accounts.forEach(account => {
-        const accountId = account.account_id || (account as any).plaidAccountId || (account as any).persistentAccountId;
-        if (accountId) {
-          if (snapshotAccountIds.has(accountId)) {
-            snapshotDuplicates.push(accountId);
-          } else {
-            snapshotAccountIds.add(accountId);
-          }
-        }
-      });
-      if (snapshotDuplicates.length > 0) {
-        console.error(`❌ gatherContextSnapshot: Snapshot contains ${snapshotDuplicates.length} duplicate account_ids in JSON! This indicates the snapshot was created before deduplication fix or has corrupted data.`);
-        console.error(`   Duplicate account_ids in snapshot: ${snapshotDuplicates.slice(0, 10).join(', ')}${snapshotDuplicates.length > 10 ? '...' : ''}`);
-        console.error(`   Snapshot computedAt: ${(snapshot as any).computedAt}`);
-      } else {
-        console.log(`✅ gatherContextSnapshot: Snapshot contains ${accounts.length} unique accounts (no duplicates in JSON)`);
-      }
 
       // ✅ CRITICAL: snapshot.transactions is stored as JSON in the database
       // When retrieved, Prisma parses it, but we need to ensure it's an array
@@ -269,66 +249,17 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     ? 'Reviewing your transaction history'
     : 'Preparing your financial context');
 
-  // ✅ CRITICAL: Deduplicate accounts by account_id/plaidAccountId as a safety net
-  // Even though the snapshot should already be deduplicated, we add this as a defensive check
-  // in case corrupted database records slip through with duplicate account_id values
-  // IMPORTANT: Use the same deduplication key logic as SummaryCacheService to ensure consistency
-  const accountIdMap = new Map<string, Account>();
-  const duplicateAccountIds: string[] = [];
-
-  accounts.forEach(account => {
-    // ✅ Use the same key logic as SummaryCacheService: account_id || plaidAccountId || persistentAccountId
-    // Do NOT use account.id (database ID) as it's unique per record and won't catch duplicates
-    const accountId = account.account_id || (account as any).plaidAccountId || (account as any).persistentAccountId;
-    if (accountId) {
-      if (accountIdMap.has(accountId)) {
-        duplicateAccountIds.push(accountId);
-        console.warn(`⚠️ gatherContextSnapshot: Duplicate account_id detected: ${accountId} (${account.name}). Snapshot should have deduplicated this!`);
-        // Keep the most recent account based on timestamp
-        const existing = accountIdMap.get(accountId)!;
-        const existingTimestamp = existing.lastSyncedAt || existing.snapshotTimestamp || (existing as any).updatedAt;
-        const newTimestamp = account.lastSyncedAt || account.snapshotTimestamp || (account as any).updatedAt;
-        if (newTimestamp && (!existingTimestamp || new Date(newTimestamp) > new Date(existingTimestamp))) {
-          accountIdMap.set(accountId, account);
-        }
-      } else {
-        accountIdMap.set(accountId, account);
-      }
-    } else {
-      console.warn(`⚠️ gatherContextSnapshot: Account without account_id/plaidAccountId: ${account.name}, skipping`);
-    }
-  });
-
-  const deduplicatedAccounts = Array.from(accountIdMap.values());
-
-  if (duplicateAccountIds.length > 0) {
-    console.error(`❌ gatherContextSnapshot: Snapshot returned ${duplicateAccountIds.length} duplicate accounts! This indicates corrupted database records or a bug in snapshot deduplication.`);
-    console.error(`   Duplicate account_ids: ${duplicateAccountIds.join(', ')}`);
-  }
-
-  if (accounts.length !== deduplicatedAccounts.length) {
-    console.warn(`⚠️ gatherContextSnapshot: Deduplicated ${accounts.length} accounts → ${deduplicatedAccounts.length} unique accounts (removed ${accounts.length - deduplicatedAccounts.length} duplicates)`);
-  }
-
-  // Filter out pending transactions and deduplicate pending/settled pairs
-  // This prevents inflated expense/income calculations in GPT context
-  const filteredTransactions = deduplicateTransactions(bankingTransactions);
-
-  const sortedTransactions = filteredTransactions
+  // Canonical snapshot persistence owns account identity and pending/posted
+  // transaction resolution. Context assembly only selects and orders facts.
+  const sortedTransactions = bankingTransactions
     .slice()
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  // ✅ Use deduplicated accounts and sorted transactions directly (no anonymization)
-  console.log(`📊 gatherContextSnapshot: Using ${deduplicatedAccounts.length} deduplicated accounts (from ${accounts.length} original)`);
-
-  const accountSummaries = buildAccountSummaries(deduplicatedAccounts, accountDisplayBalances);
-  // Create account map for quick lookup by account_id
+  const accountSummaries = buildAccountSummaries(accounts, accountDisplayBalances);
   const accountMap = new Map<string, Account>();
-  deduplicatedAccounts.forEach(account => {
-    const accountId = account.account_id || (account as any).plaidAccountId || (account as any).persistentAccountId || account.id;
-    if (accountId) {
-      accountMap.set(accountId, account);
-    }
+  accounts.forEach(account => {
+    const accountId = account.account_id || (account as any).plaidAccountId || account.persistentAccountId || account.id;
+    if (accountId) accountMap.set(accountId, account);
   });
   const transactionSummaries = buildTransactionSummaries(sortedTransactions, accountMap).slice(
     0,
@@ -364,7 +295,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   if (questionNeeds.needsMarketContext) onProgress?.('Fetching market context');
   if (questionNeeds.needsUserProfile) onProgress?.('Preparing your profile');
 
-  const tierContextAccounts = questionNeeds.needsAccountDetails ? deduplicatedAccounts : [];
+  const tierContextAccounts = questionNeeds.needsAccountDetails ? accounts : [];
   const tierContextTransactions = questionNeeds.needsTransactionDetails
     ? sortedTransactions.slice(0, MAX_PROMPT_TRANSACTIONS)
     : [];
@@ -734,146 +665,6 @@ async function fetchOrCreateRetirementAnalysis(args: {
     };
   }
 }
-
-
-
-/**
- * Deduplicate transactions by removing pending versions when settled versions exist.
- *
- * Plaid Transaction Behavior:
- * - pending: true → Transaction is pending (authorization hold, not yet settled)
- * - pending: false → Posted/settled transaction
- * - pending_transaction_id: Present on a posted transaction, points to transaction_id of earlier pending version
- *
- * Strategy:
- * 1. Always filter out pending transactions (pending: true) from GPT context
- * 2. If a settled transaction has pending_transaction_id, it replaces the pending version
- * 3. Keep only settled transactions (pending: false or undefined/null treated as settled)
- */
-function deduplicateTransactions(transactions: Transaction[]): Transaction[] {
-  // ✅ Defensive check: handle null/undefined/not-array inputs
-  if (!transactions || !Array.isArray(transactions)) {
-    console.warn('⚠️ deduplicateTransactions: Received invalid transactions input, returning empty array');
-    return [];
-  }
-
-  if (transactions.length === 0) {
-    return transactions;
-  }
-
-  // Build a map of transaction_id -> transaction for quick lookup
-  const txById = new Map<string, Transaction>();
-  const pendingTxIds = new Set<string>();
-
-  // First pass: identify all transactions and mark pending ones
-  for (const transaction of transactions) {
-    const txId = transaction.transaction_id ||
-                 (transaction as any).id ||
-                 (transaction as any).plaidTransactionId;
-
-    if (txId) {
-      txById.set(txId, transaction);
-      // Plaid uses boolean pending field: true = pending, false = settled
-      // Also handle edge cases where it might be stored as string
-      const isPending = transaction.pending === true ||
-                        (transaction as any).pending === true ||
-                        String((transaction as any).pending || '').toLowerCase() === 'true';
-      if (isPending) {
-        pendingTxIds.add(txId);
-      }
-    }
-  }
-
-  const transactionsToKeep = new Set<string>();
-  const transactionsToSkip = new Set<string>();
-
-  // Second pass: process each transaction according to Plaid's linking pattern
-  for (const transaction of transactions) {
-    const txId = transaction.transaction_id ||
-                 (transaction as any).id ||
-                 (transaction as any).plaidTransactionId;
-
-    if (!txId) {
-      // Skip transactions without IDs (shouldn't happen, but be safe)
-      continue;
-    }
-
-    // Check pending status (Plaid uses boolean: true = pending, false = settled)
-    const isPending = transaction.pending === true ||
-                      (transaction as any).pending === true ||
-                      String((transaction as any).pending || '').toLowerCase() === 'true';
-
-    // Get pending_transaction_id if present (on settled transactions, points to earlier pending version)
-    const pendingTxId = (transaction as any).pendingTransactionId ||
-                        (transaction as any).pending_transaction_id;
-
-    if (isPending) {
-      // This is a pending transaction (pending: true)
-      // Always skip pending transactions - they should not appear in GPT context
-      // If a settled version exists (with pending_transaction_id pointing here), it will be kept instead
-      transactionsToSkip.add(txId);
-    } else {
-      // This is a settled transaction (pending: false or undefined/null)
-      if (pendingTxId && pendingTxIds.has(pendingTxId)) {
-        // This settled transaction replaces a pending one (per Plaid's linking pattern)
-        // Keep the settled version, skip the pending version
-        transactionsToKeep.add(txId);
-        transactionsToSkip.add(pendingTxId);
-      } else {
-        // No related pending transaction, keep this settled one
-        transactionsToKeep.add(txId);
-      }
-    }
-  }
-
-  // Build the final deduplicated array
-  const deduplicated = transactions.filter(tx => {
-    const txId = tx.transaction_id ||
-                 (tx as any).id ||
-                 (tx as any).plaidTransactionId;
-
-    if (!txId) {
-      return false; // Skip transactions without IDs
-    }
-
-    // Skip if explicitly marked to skip
-    if (transactionsToSkip.has(txId)) {
-      return false;
-    }
-
-    // Keep if explicitly marked to keep
-    if (transactionsToKeep.has(txId)) {
-      return true;
-    }
-
-    // Safety check: filter out any remaining pending transactions
-    // Check multiple possible field names and be strict about pending status
-    const isPending = tx.pending === true ||
-                      (tx as any).pending === true ||
-                      (tx as any).pending === 'true' ||
-                      String((tx as any).pending || '').toLowerCase() === 'true';
-
-    if (isPending) {
-      return false; // Explicitly skip pending transactions
-    }
-
-    return true;
-  });
-
-  if (transactions.length !== deduplicated.length) {
-    const pendingCount = transactions.filter(tx => {
-      const isPending = tx.pending === true ||
-                        (tx as any).pending === true ||
-                        (tx as any).pending === 'true' ||
-                        String((tx as any).pending || '').toLowerCase() === 'true';
-      return isPending;
-    }).length;
-    console.log(`✅ Filtered transactions: ${transactions.length} → ${deduplicated.length} (removed ${transactions.length - deduplicated.length} transactions, ${pendingCount} were pending)`);
-  }
-
-  return deduplicated;
-}
-
 function buildTransactionSummaries(transactions: Transaction[], accountMap?: Map<string, Account>): TransactionSummaryItem[] {
   return transactions.map(transaction => {
     const id =
@@ -1157,7 +948,7 @@ async function loadUserProfile(userId?: string): Promise<string | undefined> {
 
   try {
     const { ProfileManager } = await import('../profile/manager');
-    const profileManager = new ProfileManager(userId);
+    const profileManager = new ProfileManager();
 
     const profile = await profileManager.getOriginalProfile(userId);
     if (profile) {

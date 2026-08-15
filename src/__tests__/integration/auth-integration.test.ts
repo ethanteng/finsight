@@ -12,19 +12,14 @@ const getApp = async () => {
 };
 
 // Mock external dependencies used by the application entry point.
-jest.mock('../../openai', () => {
+jest.mock('../../openai/analysis-pipeline', () => {
   const mockResponse = 'Mocked AI response';
   return {
-    askOpenAI: jest.fn().mockResolvedValue(mockResponse),
-    askOpenAIWithEnhancedContext: jest.fn().mockResolvedValue(mockResponse),
-    askOpenAIForTests: jest.fn().mockResolvedValue(mockResponse),
-    PromptValidationError: class PromptValidationError extends Error {
-      constructor(message: string, _reason?: string, public userMessage = message) {
-        super(message);
-        this.name = 'PromptValidationError';
-      }
-    },
-    openai: { chat: { completions: { create: jest.fn() } } },
+    runAskLincAnalysis: jest.fn().mockResolvedValue({
+      displayText: mockResponse,
+      structuredResponse: { summary: mockResponse },
+      showTheMathData: undefined,
+    }),
   };
 });
 
@@ -275,7 +270,7 @@ describe('Authentication Integration', () => {
 
       const testApp = await getApp();
       const response = await request(testApp)
-        .post('/ask')
+        .post('/ask/display-real')
         .set('Authorization', `Bearer ${token}`)
         .send({
           question: 'What is my account balance?'
@@ -296,13 +291,13 @@ describe('Authentication Integration', () => {
 
       const testApp = await getApp();
       const response = await request(testApp)
-        .post('/ask')
+        .post('/ask/display-real')
         .send({
           question: 'What is my account balance?'
         });
 
       expect(response.status).toBe(401);
-      expect(response.body).toHaveProperty('error', 'Authentication required');
+      expect(response.body).toHaveProperty('error', 'No token provided');
     });
 
     it('should reject access with invalid token', async () => {
@@ -310,14 +305,14 @@ describe('Authentication Integration', () => {
 
       const testApp = await getApp();
       const response = await request(testApp)
-        .post('/ask')
+        .post('/ask/display-real')
         .set('Authorization', 'Bearer invalid.token.here')
         .send({
           question: 'What is my account balance?'
         });
 
       expect(response.status).toBe(401);
-      expect(response.body).toHaveProperty('error', 'Authentication required');
+      expect(response.body).toHaveProperty('error', 'Invalid or expired token');
     });
   });
 
