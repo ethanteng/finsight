@@ -168,13 +168,20 @@ export class BalanceService {
 
   private static async getRecentBalancesFromDB(accessTokenId: string): Promise<BalanceData[]> {
     const accounts = await getPrismaClient().account.findMany({
-      where: {
-        accessTokenId,
-        balanceLastFetched: {
-          gte: new Date(Date.now() - this.CACHE_TTL) // Within last 24 hours
-        }
-      }
+      where: { accessTokenId }
     });
+
+    // Freshness is a property of the whole connection, not of individual rows.
+    // Returning only the fresh subset would both drop accounts from the caller's
+    // view and cache that partial set, so an account that stopped updating would
+    // never trigger the live Plaid fetch that would repair it.
+    const freshAfter = new Date(Date.now() - this.CACHE_TTL);
+    const isFresh = (account: any) =>
+      account.balanceLastFetched instanceof Date && account.balanceLastFetched >= freshAfter;
+
+    if (accounts.length === 0 || !accounts.every(isFresh)) {
+      return [];
+    }
 
     return accounts.map((account: any) => ({
       account_id: account.plaidAccountId,
