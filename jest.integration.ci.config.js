@@ -5,9 +5,17 @@ module.exports = {
     '<rootDir>/src/__tests__/integration/**/*.test.ts',
     '<rootDir>/src/__tests__/integration/**/*.spec.ts'
   ],
+  // Security suites are owned by the security-tests job, which runs them without
+  // this config's plaidClient stub. Running them here as well executed the same
+  // files a second (and for plaid-security-integration, a third) time per
+  // pipeline without testing anything the security job does not already cover.
   testPathIgnorePatterns: [
-    'comprehensive-security.test.ts', // Exclude comprehensive security tests - they have their own setup
-    'complete-security-suite.test.ts' // Exclude complete security suite - it has their own setup
+    'comprehensive-security.test.ts', // -> jest.security.config.js
+    'complete-security-suite.test.ts', // has its own setup; see jest.complete-security.config.js
+    'plaid-security-integration.test.ts', // -> jest.real-security.config.js
+    'privacy-security-integration.test.ts', // -> jest.real-security.config.js
+    'profile-encryption-security.test.ts', // -> jest.real-security.config.js
+    'snaptrade-security.test.ts' // -> jest.real-security.config.js
   ],
   setupFilesAfterEnv: [
     '<rootDir>/src/__tests__/integration/setup.ts',

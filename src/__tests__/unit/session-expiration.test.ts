@@ -55,11 +55,13 @@ describe('Session Expiration Unit Tests', () => {
   describe('Authentication Logic', () => {
     it('should require authentication header for protected endpoints', () => {
       // Simulate the logic from /ask/display-real endpoint
-      const authHeader = undefined;
-      
-      if (!authHeader) {
-        expect(true).toBe(true); // This should trigger a 401 response
-      }
+      const authHeader: string | undefined = undefined;
+
+      // Follow the same extract-then-verify path the route takes. The previous
+      // version asserted expect(true).toBe(true) inside an `if (!authHeader)`
+      // branch, so it passed without touching verifyToken at all.
+      const token = authHeader ? String(authHeader).replace('Bearer ', '') : '';
+      expect(verifyToken(token)).toBeNull();
     });
 
     it('should validate token format before processing', () => {

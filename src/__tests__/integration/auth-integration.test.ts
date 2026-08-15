@@ -51,14 +51,12 @@ describe('Authentication Integration', () => {
    */
   const shouldSkipNetworkTests = !isActuallyInGitHubActions;
 
-  // Helper to skip network tests locally
-  const skipIfLocal = () => {
-    if (shouldSkipNetworkTests) {
-      console.log('⏭️ Skipping network test locally - will run in CI/CD');
-      return true;
-    }
-    return false;
-  };
+  // Network-gated tests are registered through this alias so they report as
+  // SKIPPED rather than PASSED when they cannot run. The previous pattern was an
+  // `if (skipIfLocal()) return;` guard inside the body, which exited before any
+  // assertion — so a test that never ran still counted as a passing test.
+  const itNetwork = shouldSkipNetworkTests ? it.skip : it;
+
 
   const testUser = {
     email: 'test@example.com',
@@ -117,9 +115,7 @@ describe('Authentication Integration', () => {
   });
 
   describe('User Registration', () => {
-    it('should register a new user successfully', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should register a new user successfully', async () => {
       const testApp = await getApp();
       const response = await request(testApp)
         .post('/auth/register')
@@ -137,9 +133,7 @@ describe('Authentication Integration', () => {
       userId = response.body.user.id;
     });
 
-    it('should reject duplicate email registration', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should reject duplicate email registration', async () => {
       const testApp = await getApp();
       const response = await request(testApp)
         .post('/auth/register')
@@ -149,9 +143,7 @@ describe('Authentication Integration', () => {
       expect(response.body).toHaveProperty('error', 'User with this email already exists');
     });
 
-    it('should reject invalid email format', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should reject invalid email format', async () => {
       const testApp = await getApp();
       const response = await request(testApp)
         .post('/auth/register')
@@ -164,9 +156,7 @@ describe('Authentication Integration', () => {
       expect(response.body).toHaveProperty('error', 'Invalid email format');
     });
 
-    it('should reject weak password', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should reject weak password', async () => {
       const testApp = await getApp();
       const response = await request(testApp)
         .post('/auth/register')
@@ -182,9 +172,7 @@ describe('Authentication Integration', () => {
   });
 
   describe('User Login', () => {
-    it('should login with correct credentials', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should login with correct credentials', async () => {
       // First ensure the user exists by registering
       const registerResponse = await request(app)
         .post('/auth/register')
@@ -211,9 +199,7 @@ describe('Authentication Integration', () => {
       expect(response.body.user.email).toBe(testUser.email);
     });
 
-    it('should reject incorrect password', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should reject incorrect password', async () => {
       const testApp = await getApp();
       const response = await request(testApp)
         .post('/auth/login')
@@ -226,9 +212,7 @@ describe('Authentication Integration', () => {
       expect(response.body).toHaveProperty('error', 'Invalid email or password');
     });
 
-    it('should reject non-existent email', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should reject non-existent email', async () => {
       const testApp = await getApp();
       const response = await request(testApp)
         .post('/auth/login')
@@ -243,9 +227,7 @@ describe('Authentication Integration', () => {
   });
 
   describe('Protected Endpoints', () => {
-    it('should access protected endpoint with valid token', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should access protected endpoint with valid token', async () => {
       // First ensure we have a valid token by registering and logging in
       const registerResponse = await request(app)
         .post('/auth/register')
@@ -276,19 +258,15 @@ describe('Authentication Integration', () => {
           question: 'What is my account balance?'
         });
 
-      // Accept both 200 (success) and 500 (AI/API error) for authentication test
-      // The key is that we got past authentication (not 401)
-      expect([200, 500]).toContain(response.status);
-      if (response.status === 200) {
-        expect(response.body).toHaveProperty('answer');
-      } else {
-        expect(response.body).toHaveProperty('error');
-      }
+      // The AI pipeline is mocked in this config, so the request should succeed
+      // outright. Asserting 200 also proves we got past authentication, which is
+      // what this test is really about — a 500 would have satisfied the old
+      // assertion just as well and told us nothing.
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('answer');
     });
 
-    it('should reject access without token', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should reject access without token', async () => {
       const testApp = await getApp();
       const response = await request(testApp)
         .post('/ask/display-real')
@@ -300,9 +278,7 @@ describe('Authentication Integration', () => {
       expect(response.body).toHaveProperty('error', 'No token provided');
     });
 
-    it('should reject access with invalid token', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should reject access with invalid token', async () => {
       const testApp = await getApp();
       const response = await request(testApp)
         .post('/ask/display-real')
@@ -317,9 +293,7 @@ describe('Authentication Integration', () => {
   });
 
   describe('User Profile', () => {
-    it('should get user profile with valid token', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should get user profile with valid token', async () => {
       // First ensure we have a valid token by registering and logging in
       const registerResponse = await request(app)
         .post('/auth/register')
@@ -353,9 +327,7 @@ describe('Authentication Integration', () => {
       expect(response.body.user.tier).toBe(testUser.tier);
     });
 
-    it('should update user profile', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should update user profile', async () => {
       // First ensure we have a valid token by registering and logging in
       const registerResponse = await request(app)
         .post('/auth/register')
