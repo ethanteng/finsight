@@ -290,6 +290,7 @@ const analyzeSpendingPatterns = (enrichedTransactions: any[]) => {
     return total + Math.abs(transaction.amount || 0);
   }, 0);
 
+  const categoryLabels = new Map<string, string>();
   const spendingByCategory = expenseTransactions.reduce((categories, transaction) => {
     // ✅ FIXED: Handle category arrays properly
     let category = 'Unknown';
@@ -305,10 +306,17 @@ const analyzeSpendingPatterns = (enrichedTransactions: any[]) => {
       }
     }
     
-    if (!categories[category]) {
+    // Group case-insensitively: the same category reaches us as "Food and Drink"
+    // (Plaid's legacy taxonomy) and "FOOD_AND_DRINK" (personal_finance_category),
+    // and grouping on the raw string split one category across two entries — each
+    // with a partial total — in the top-categories list written to the profile.
+    const categoryKey = category.trim().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').toLowerCase();
+    const existingLabel = categoryLabels.get(categoryKey);
+    if (!existingLabel) {
+      categoryLabels.set(categoryKey, category);
       categories[category] = 0;
     }
-    categories[category] += Math.abs(transaction.amount || 0);
+    categories[existingLabel || category] += Math.abs(transaction.amount || 0);
     return categories;
   }, {} as Record<string, number>);
 

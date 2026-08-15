@@ -297,13 +297,26 @@ export function buildCanonicalFactPack(
         aggregate.inputFactIds
       );
     }
+    // Sum before emitting: the fact id is case-folded, so categories that differ
+    // only in spelling ("Food and Drink" from Plaid's legacy taxonomy vs
+    // "Food And Drink" derived from personal_finance_category) map to one id and
+    // the last one written would replace the rest.
+    const categoryTotals = new Map<string, { label: string; source: string; total: number }>();
     for (const [category, amount] of Object.entries(snapshot.transactionSummary?.byCategory || {})) {
+      if (!finite(amount)) continue;
+      const categoryId = safeFactId(category) || 'uncategorized';
+      const current = categoryTotals.get(categoryId)
+        || { label: category, source: `transactionSummary.byCategory.${category}`, total: 0 };
+      current.total += amount as number;
+      categoryTotals.set(categoryId, current);
+    }
+    for (const [categoryId, aggregate] of categoryTotals) {
       addSnapshotFact(
-        `category_spending_${safeFactId(category)}`,
-        `${category} spending`,
-        amount,
+        `category_spending_${categoryId}`,
+        `${aggregate.label} spending`,
+        aggregate.total,
         'usd',
-        `transactionSummary.byCategory.${category}`
+        aggregate.source
       );
     }
   }

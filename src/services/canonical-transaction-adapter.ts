@@ -162,13 +162,18 @@ function categoryLabel(transaction: any): string {
           : detailed;
         return humanizeCategory(detailedSuffix);
       }
-      return category.includes('_') ? humanizeCategory(category) : category.trim();
+      // Humanize every label, not just the underscore forms. Plaid's legacy
+      // taxonomy ("Food and Drink") and personal_finance_category
+      // ("FOOD_AND_DRINK") describe the same category and can both appear in one
+      // account's history, so returning the legacy spelling verbatim split the
+      // category into two buckets that consumers then keyed case-insensitively.
+      return humanizeCategory(category);
     }
   }
   if (typeof transaction?.category === 'string' && transaction.category.trim()) {
     const categories = transaction.category.split(',');
     const category = categories[categories.length - 1]?.trim();
-    if (category) return category.includes('_') ? humanizeCategory(category) : category;
+    if (category) return humanizeCategory(category);
   }
   if (detailed) {
     const detailedSuffix = primary && detailed.startsWith(`${primary}_`)
