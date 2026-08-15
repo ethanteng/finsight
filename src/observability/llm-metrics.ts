@@ -11,6 +11,17 @@ export const LLM_PERFORMANCE_TARGETS = {
   deterministicGroundingRate: 1,
 } as const;
 
+/** Context tiers that are still decided by question routing rather than always loaded. */
+const ROUTED_CONTEXT = [
+  'accountsIncluded',
+  'transactionDetailsIncluded',
+  'investmentDetailsIncluded',
+  'marketContextRequested',
+  'searchContextRequested',
+] as const;
+
+type RoutedContext = (typeof ROUTED_CONTEXT)[number];
+
 type Sample = {
   at: string;
   success: boolean;
@@ -21,6 +32,9 @@ type Sample = {
   timeToFirstTokenMs?: number;
   totalMs?: number;
   grounded?: boolean;
+  outcome?: 'passed' | 'salvaged' | 'replaced';
+  contextSelection?: Partial<Record<RoutedContext, boolean>>;
+  contextEscalated?: boolean;
   fallbackUsed: boolean;
   retryUsed: boolean;
 };
@@ -70,6 +84,10 @@ export function recordLlmAnalysis(manifest: EvidenceManifest, success = true): v
     timeToFirstTokenMs: manifest.timings.timeToFirstAnswerTokenMs,
     totalMs: manifest.timings.totalMs,
     grounded: manifest.validation.deterministic.valid,
+    outcome: manifest.validation.deterministic.outcome,
+    // Score what routing predicted, not the widened read that corrected it.
+    contextSelection: manifest.routedContextSelection ?? manifest.contextSelection,
+    contextEscalated: manifest.contextEscalated,
     fallbackUsed: manifest.modelCalls.some(call => call.provider === 'openai'),
     retryUsed: manifest.modelCalls.some(call => call.phase === 'retry'),
   };
@@ -86,6 +104,47 @@ export function recordLlmAnalysisFailure(totalMs: number): void {
     retryUsed: false,
   });
   if (samples.length > MAX_SAMPLES) samples.splice(0, samples.length - MAX_SAMPLES);
+}
+
+/**
+ * Did answers fail to ground more often when a context tier was withheld than
+ * when it was supplied?
+ *
+ * A routing miss is otherwise invisible: the question is answered, the model
+ * fills the gap with a number nobody supplied, and it surfaces as a grounding
+ * error with no indication that the cause was upstream. Both bugs behind #62 and
+ * #63 would have shown up here as a positive `excessWhenWithheld` on
+ * `transactionDetailsIncluded` and `investmentDetailsIncluded` long before a
+ * user reported one.
+ *
+ * A miss is scored against the selection routing made, so an escalated request
+ * counts as a miss even when the widened retry went on to succeed — the recovery
+ * is the evidence that the prediction was wrong, and letting a successful
+ * recovery erase it would hide exactly what this measures.
+ *
+ * This is a correlation, not a diagnosis — a tier can be withheld correctly and
+ * still sit next to failures. Treat a persistent positive gap as a prompt to go
+ * read those questions, not as proof the router is wrong.
+ */
+function routingSignals() {
+  const scored = samples.filter((sample) => sample.contextSelection && sample.grounded !== undefined);
+  const missed = (sample: Sample) => !sample.grounded || sample.contextEscalated === true;
+  const missRate = (subset: Sample[]) =>
+    subset.length === 0 ? null : subset.filter(missed).length / subset.length;
+
+  return Object.fromEntries(ROUTED_CONTEXT.map((flag) => {
+    const withheld = scored.filter((sample) => sample.contextSelection![flag] === false);
+    const supplied = scored.filter((sample) => sample.contextSelection![flag] === true);
+    const withheldRate = missRate(withheld);
+    const suppliedRate = missRate(supplied);
+    return [flag, {
+      withheld: { samples: withheld.length, missRate: withheldRate },
+      supplied: { samples: supplied.length, missRate: suppliedRate },
+      excessWhenWithheld: withheldRate === null || suppliedRate === null
+        ? null
+        : withheldRate - suppliedRate,
+    }];
+  }));
 }
 
 export function getLlmMetricsSnapshot() {
@@ -138,7 +197,14 @@ export function getLlmMetricsSnapshot() {
       deterministicGroundingRate: groundingRate,
       fallbackRate: rate(sample => sample.fallbackUsed),
       retryRate: rate(sample => sample.retryUsed),
+      // deterministicGroundingRate measures the model: any ungrounded figure
+      // counts against it, even when the user still got a usable answer. These
+      // two measure what reached the user.
+      answerDeliveredRate: rate(sample => sample.success && (sample.outcome ?? 'passed') !== 'replaced'),
+      salvageRate: rate(sample => sample.outcome === 'salvaged'),
+      contextEscalationRate: rate(sample => sample.contextEscalated === true),
     },
+    routing: routingSignals(),
     baselineCandidate: {
       ready: coreBaselineReady,
       timeToFirstTokenReady: baselineStages.timeToFirstToken.ready,

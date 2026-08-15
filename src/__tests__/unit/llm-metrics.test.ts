@@ -1,6 +1,7 @@
 import {
   getLlmMetricsSnapshot,
   recordLlmAnalysis,
+  recordLlmAnalysisFailure,
   resetLlmMetricsForTests,
 } from '../../observability/llm-metrics';
 import type { EvidenceManifest } from '../../openai/show-the-math-types';
@@ -15,6 +16,101 @@ describe('LLM stage metrics', () => {
     expect(metrics.targetStatus.deterministicGrounding).toBeNull();
     expect(metrics.baselineCandidate.ready).toBe(false);
     expect(metrics.observationWindow).toEqual({ from: null, to: null });
+  });
+
+  it('surfaces grounding failures that cluster on a withheld context tier', () => {
+    // The shape both routing bugs had: questions that were given the
+    // transaction rows stayed grounded, questions that were not did not.
+    const sample = (transactionDetailsIncluded: boolean, valid: boolean): EvidenceManifest => ({
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      snapshot: {},
+      facts: [],
+      contextSelection: {
+        accountsIncluded: true,
+        transactionDetailsIncluded,
+        investmentDetailsIncluded: true,
+        marketContextRequested: false,
+        searchContextRequested: false,
+      },
+      modelCalls: [],
+      timings: { contextGatherMs: 1, promptBuildMs: 1, totalMs: 2 },
+      validation: { deterministic: { valid, issues: [] } },
+      evidenceRefs: { tickers: [], retirementAnalysis: false, marketContext: false },
+    });
+
+    recordLlmAnalysis(sample(false, false));
+    recordLlmAnalysis(sample(false, false));
+    recordLlmAnalysis(sample(false, true));
+    recordLlmAnalysis(sample(true, true));
+    recordLlmAnalysis(sample(true, true));
+
+    const routing = getLlmMetricsSnapshot().routing;
+    expect(routing.transactionDetailsIncluded).toEqual({
+      withheld: { samples: 3, missRate: 2 / 3 },
+      supplied: { samples: 2, missRate: 0 },
+      excessWhenWithheld: 2 / 3,
+    });
+    // A tier that was never withheld has nothing to compare.
+    expect(routing.accountsIncluded.excessWhenWithheld).toBeNull();
+  });
+
+  it('scores routing on what it predicted, not on the widening that rescued it', () => {
+    // An escalated request ends with every tier loaded and a grounded answer.
+    // Scoring the final state would erase the miss that caused the escalation.
+    recordLlmAnalysis({
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      snapshot: {},
+      facts: [],
+      contextSelection: {
+        accountsIncluded: true,
+        transactionDetailsIncluded: true,
+        investmentDetailsIncluded: true,
+        marketContextRequested: false,
+        searchContextRequested: false,
+      },
+      contextEscalated: true,
+      routedContextSelection: {
+        accountsIncluded: false,
+        transactionDetailsIncluded: false,
+        investmentDetailsIncluded: false,
+        marketContextRequested: false,
+        searchContextRequested: false,
+      },
+      modelCalls: [],
+      timings: { contextGatherMs: 1, promptBuildMs: 1, totalMs: 2 },
+      validation: { deterministic: { valid: true, issues: [] } },
+      evidenceRefs: { tickers: [], retirementAnalysis: false, marketContext: false },
+    });
+
+    const routing = getLlmMetricsSnapshot().routing;
+    expect(routing.investmentDetailsIncluded.withheld).toEqual({ samples: 1, missRate: 1 });
+    expect(routing.investmentDetailsIncluded.supplied.samples).toBe(0);
+  });
+
+  it('separates model grounding from what the user actually received', () => {
+    const manifest = (outcome: 'passed' | 'salvaged' | 'replaced', valid: boolean): EvidenceManifest => ({
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      snapshot: {},
+      facts: [],
+      modelCalls: [],
+      timings: { contextGatherMs: 1, promptBuildMs: 1, totalMs: 2 },
+      validation: { deterministic: { valid, issues: [], outcome } },
+      evidenceRefs: { tickers: [], retirementAnalysis: false, marketContext: false },
+    });
+
+    recordLlmAnalysis(manifest('passed', true));
+    recordLlmAnalysis(manifest('salvaged', false));
+    recordLlmAnalysis(manifest('replaced', false));
+    recordLlmAnalysisFailure(50);
+
+    const quality = getLlmMetricsSnapshot().quality;
+    // One of four requests was fully grounded; two of four reached the user.
+    expect(quality.deterministicGroundingRate).toBeCloseTo(1 / 3);
+    expect(quality.answerDeliveredRate).toBeCloseTo(2 / 4);
+    expect(quality.salvageRate).toBeCloseTo(1 / 4);
   });
 
   it('reports stage percentiles and quality rates', () => {

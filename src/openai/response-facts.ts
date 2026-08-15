@@ -249,9 +249,19 @@ function unsupportedClaims(prose: string, pack: CanonicalFactPack): ProseClaim[]
     .filter((claim) => !claimIsSupported(claim, pack));
 }
 
+const UNSUPPORTED_VALUE_SUFFIX = 'is not present in the canonical fact pack.';
+
 function claimIssue(claim: ProseClaim): string {
   const kind = claim.unit ?? 'numeric';
-  return `User-facing ${kind} value ${claim.value} is not present in the canonical fact pack.`;
+  return `User-facing ${kind} value ${claim.value} ${UNSUPPORTED_VALUE_SUFFIX}`;
+}
+
+/**
+ * True when the model reached for a number nobody supplied — the signature of a
+ * missing fact, as opposed to a miscited or malformed one.
+ */
+export function hasUnsupportedValueIssue(issues: readonly string[]): boolean {
+  return issues.some((issue) => issue.endsWith(UNSUPPORTED_VALUE_SUFFIX));
 }
 
 function proseFields(response: AskLincResponse): string[] {

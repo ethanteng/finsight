@@ -25,6 +25,24 @@ export interface EvidenceManifest {
     marketContextRequested: boolean;
     searchContextRequested: boolean;
   };
+  /**
+   * The first answer cited numbers the fact pack did not contain, so the retry
+   * was given a wider context than routing selected. contextSelection above
+   * describes the widened read.
+   */
+  contextEscalated?: boolean;
+  /**
+   * What routing selected before that widening. Present only when escalation
+   * happened; routing metrics score this, since contextSelection above records
+   * the correction rather than the prediction that needed correcting.
+   */
+  routedContextSelection?: {
+    accountsIncluded: boolean;
+    transactionDetailsIncluded: boolean;
+    investmentDetailsIncluded: boolean;
+    marketContextRequested: boolean;
+    searchContextRequested: boolean;
+  };
   modelCalls: Array<{
     phase: 'initial' | 'retry';
     provider: 'claude' | 'openai';

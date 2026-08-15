@@ -22,14 +22,34 @@ function snapshot() {
 }
 
 describe('buildCanonicalFactPack', () => {
-  it('always supplies the overview totals, whatever the question names', () => {
+  it('supplies every always-loaded fact, whatever the question names', () => {
+    // These all come from snapshot columns that are read on every request, so
+    // withholding them buys nothing and only decides whether the model can cite
+    // a number it can already see.
     const pack = buildCanonicalFactPack(snapshot(), 'What is my net worth?', analyzeQuestionNeeds('What is my net worth?'));
     expect(pack.facts.map((fact) => fact.id)).toEqual([
       'net_worth',
       'total_cash',
       'total_investments',
       'total_debt',
+      'average_monthly_income',
+      'average_monthly_expenses',
+      'average_monthly_operating_cash_flow',
+      'savings_rate',
+      'category_spending_dining',
     ]);
+  });
+
+  it('does not supply facts that need an unloaded column', () => {
+    // Accounts, transactions, and holdings are extra JSON columns fetched only
+    // when the question routes to them; those facts stay routed.
+    const question = 'What is my net worth?';
+    const pack = buildCanonicalFactPack(snapshot(), question, analyzeQuestionNeeds(question));
+    const ids = pack.facts.map((fact) => fact.id);
+
+    expect(ids.some((id) => id.startsWith('account_balance_'))).toBe(false);
+    expect(ids.some((id) => id.startsWith('expense_transaction_'))).toBe(false);
+    expect(ids.some((id) => id.startsWith('holding_value_'))).toBe(false);
   });
 
   it('supplies the overview totals for a portfolio review that never names them', () => {
@@ -85,17 +105,24 @@ describe('buildCanonicalFactPack', () => {
       .toBe('Dining spending over the last 3 months (total, not a monthly average)');
   });
 
-  it('treats a whole-position review as a broad question', () => {
+  it('needs no phrasing heuristic to reach the cash-flow facts', () => {
+    // This used to depend on a "is this a broad question?" matcher. Whatever a
+    // question is phrased like, the always-loaded facts are there.
     const data = snapshot();
-    // Nothing here names income or spending, so only breadth detection can pull
-    // the cash-flow facts in.
     for (const question of [
       'Assess my overall financial position.',
       'What are the strengths and weaknesses here?',
       'Review my portfolio for me.',
+      'Anything I should know?',
+      'hi',
     ]) {
       const pack = buildCanonicalFactPack(data, question, analyzeQuestionNeeds(question));
-      expect(pack.facts.map((fact) => fact.id)).toContain('average_monthly_operating_cash_flow');
+      expect(pack.facts.map((fact) => fact.id)).toEqual(expect.arrayContaining([
+        'net_worth',
+        'average_monthly_operating_cash_flow',
+        'savings_rate',
+        'category_spending_dining',
+      ]));
     }
   });
 
