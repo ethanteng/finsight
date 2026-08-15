@@ -1,4 +1,4 @@
-import { openai } from '../openai';
+import { openai } from '../openai/client';
 
 interface PlaidAccount {
   id: string;
@@ -486,4 +486,4 @@ export class PlaidProfileEnhancer {
     console.log('PlaidProfileEnhancer: Real-time analysis complete');
     return enhancedProfile;
   }
-} 
+}

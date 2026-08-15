@@ -23,7 +23,7 @@ describe('fetchShowTheMathDBData', () => {
       provenance: { kind: 'snapshot', source: 'financialSummary.financialOverview.netWorth' },
     }],
     modelCalls: [],
-    timings: { contextGatherMs: 1, promptBuildMs: 1, totalMs: 2 },
+    timings: { contextGatherMs: 1, promptBuildMs: 1, modelMs: 1, validationMs: 1, totalMs: 2 },
     validation: { deterministic: { valid: true, issues: [] } },
     evidenceRefs: { tickers: [], retirementAnalysis: false, marketContext: false },
   };

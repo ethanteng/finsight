@@ -23,7 +23,7 @@ Ask Linc is an AI-powered financial analysis platform designed to help you under
 
 ### What Makes Ask Linc Different
 
-**Privacy-First Architecture**: Your sensitive financial data is never exposed to AI services. All account names, merchant information, and investment holdings are anonymized before analysis, ensuring your privacy while maintaining full analytical capabilities.
+**Traceable Financial Analysis**: Financial answers are grounded in canonical snapshots and deterministic calculations, so displayed values can be traced to their source data and as-of time.
 
 **Intelligent Context Building**: Unlike traditional financial apps that treat each question in isolation, Ask Linc builds context across conversations. The AI remembers your previous questions and proactively connects new information to provide comprehensive analysis.
 
@@ -120,8 +120,8 @@ The AI automatically:
 ### How It Works
 
 1. **Data Collection**: Ask Linc securely connects to your financial accounts
-2. **Privacy Protection**: All sensitive data is anonymized before AI processing
-3. **Context Building**: The AI analyzes your accounts, transactions, investments, and market conditions
+2. **Context Building**: Ask Linc selects the financial facts relevant to your question
+3. **Grounded Analysis**: The AI explains deterministic calculations and relevant market conditions
 4. **Personalized Response**: Linc provides tailored financial advice based on your complete financial picture
 5. **Real-Time Updates**: Responses incorporate current market data and economic indicators
 
@@ -138,7 +138,7 @@ The AI automatically:
 - Category-based expense analysis
 - Income vs. expense tracking
 - Anomaly detection
-- Merchant analysis (anonymized)
+- Merchant and category analysis
 
 **Investment Analysis:**
 - Portfolio composition and allocation
@@ -363,13 +363,13 @@ Visualize your financial trends over time:
 - All transactions across connected accounts
 - Search and filter capabilities
 - Category-based organization
-- Merchant information (anonymized for privacy)
+- Merchant information
 
 **Transaction Details:**
 - Date and time
 - Amount
 - Category
-- Merchant (anonymized)
+- Merchant
 - Account source
 - Notes and tags
 
@@ -438,7 +438,7 @@ Visual breakdown of portfolio composition:
 
 **Transaction Details:**
 - Date and time
-- Security name (anonymized for privacy)
+- Security name
 - Transaction type
 - Quantity and price
 - Total value
@@ -685,27 +685,9 @@ Upgrade suggestions are contextual and non-intrusive, appearing only when releva
 
 ## Privacy & Security
 
-### Privacy-First Architecture
+### Data Handling
 
-Ask Linc is built with privacy as a fundamental design principle:
-
-**Data Anonymization:**
-- **Account Names**: Tokenized before AI processing (e.g., "Chase Checking" → "Account_1")
-- **Merchant Names**: Anonymized in transactions (e.g., "Amazon" → "Merchant_1")
-- **Investment Holdings**: Security names tokenized (e.g., "AAPL" → "Security_1")
-- **Institution Names**: Financial institutions anonymized
-- **Real Names Never Sent to AI**: Your actual account and merchant names are never exposed to AI services
-
-**How It Works:**
-1. Real data stored securely in database
-2. Data anonymized before AI analysis
-3. AI provides analysis using anonymized data
-4. Responses converted back to real names for display
-5. You see your actual account names; AI never does
-
-**Benefits:**
-- Complete privacy protection
-- Full analytical capabilities maintained
+Ask Linc stores connected financial data and profile information so it can build authenticated, question-specific analysis context. Profile data is encrypted at rest. AI requests receive the context needed to answer the question; review the current privacy policy before connecting accounts or submitting sensitive information.
 - Seamless user experience
 - Industry-leading security
 

@@ -179,8 +179,7 @@ The API returns:
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `USE_ASK_LINC_PIPELINE` | No | Set to `true` to enable the Claude pipeline (default: `false`) |
-| `ANTHROPIC_API_KEY` | Yes (when enabled) | Claude Sonnet API key |
+| `ANTHROPIC_API_KEY` | Yes | Claude Sonnet API key |
 | `OPENAI_API_KEY` | Yes for provider fallback | OpenAI fallback API key |
 | `OPENAI_FALLBACK_MODEL` | No | Override OpenAI fallback model (default: `gpt-4o`) |
 | `ENABLE_RESPONSE_VALIDATION` | No | Set to `true` for Gemini validation (default: `false`) |
@@ -188,13 +187,12 @@ The API returns:
 | `GEMINI_VALIDATION_MODEL` | No | Override Gemini model (default: `gemini-3-flash-preview`) |
 | `ASK_LINC_MAX_OUTPUT_TOKENS` | No | Maximum primary and fallback output tokens (default: `8192`) |
 
-### Feature Flag
+### Production path
 
-When `USE_ASK_LINC_PIPELINE=true`:
-
-- `/ask/display-real` calls `runAskLincAnalysis` instead of `askOpenAIWithEnhancedContext`
+- `/ask/display-real` always calls `runAskLincAnalysis`
 - If Claude is unavailable, the pipeline calls OpenAI with the same prepared prompt and does not reload the snapshot, RAG, or market context
 - Response includes `structuredResponse` when available
+- `/ai/performance` reports process-local stage percentiles and quality rates
 
 ---
 

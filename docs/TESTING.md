@@ -71,12 +71,12 @@ This document provides comprehensive documentation for the testing implementatio
 
 #### ✅ Security & Privacy Tests
 - **Plaid Security**: `plaid-security.test.ts` (20 tests)
-- **Privacy Logic**: `privacy-logic.test.ts` (10 tests)
+- **Privacy Endpoints**: `privacy-security.test.ts`
 
 #### ✅ API & Integration Tests
 - **Admin Endpoints**: `admin-endpoints.test.ts` (12 tests)
 - **Enhanced Market Context**: `enhanced-market-context-simple.test.ts` (15 tests)
-- **Dual Data System**: `dual-data-system.test.ts` (8 tests)
+- **Ask Linc Quality Gate**: `ask-linc-eval.test.ts`
 
 ## Tier System Testing
 
@@ -247,7 +247,7 @@ npm run test:security:ci
 
 # Specific test suites
 npm run test:enhanced-market-context
-npm run test:dual-data
+npm run eval:llm
 ```
 
 ## Test Data Management

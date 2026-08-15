@@ -2,7 +2,7 @@ import express from 'express';
 import { requireAuth, type AuthenticatedRequest } from './middleware';
 import { getPrismaClient } from '../prisma-client';
 import { ProfileManager } from '../profile/manager';
-import { SummaryCacheService } from '../services/summary-cache-service';
+import { getLatestFinancialSnapshot } from '../services/financial-snapshot-persistence';
 import {
   buildFinancesAccountDetails,
   buildFinancesOverview,
@@ -34,7 +34,7 @@ router.get('/overview', requireAuth, async (req: AuthenticatedRequest, res) => {
     const userId = req.user!.id;
     const prisma = getPrismaClient();
     const [snapshot, manualAccounts, user] = await Promise.all([
-      SummaryCacheService.getLatestSnapshot(userId, 'finances'),
+      getLatestFinancialSnapshot(userId, 'finances'),
       prisma.manualAccount.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } }),
       prisma.user.findUnique({
         where: { id: userId },
@@ -69,7 +69,7 @@ router.get('/accounts/:id/details', requireAuth, async (req: AuthenticatedReques
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     if (!id) return res.status(400).json({ error: 'Account id is required' });
-    const snapshot = await SummaryCacheService.getLatestSnapshot(req.user!.id, 'full');
+    const snapshot = await getLatestFinancialSnapshot(req.user!.id, 'full');
     if (!snapshot) return res.status(404).json({ error: 'Financial snapshot not found' });
     const details = buildFinancesAccountDetails(snapshot as any, decodeURIComponent(id));
     if (!details) return res.status(404).json({ error: 'Account not found in current snapshot' });

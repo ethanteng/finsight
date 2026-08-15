@@ -738,7 +738,7 @@ git push                   # ← Confident it will pass CI/CD
 1. **Authentication/Authorization**: Tests user isolation and access control
 2. **Data Encryption**: Validates sensitive data protection
 3. **Cross-User Security**: Ensures users can't access each other's data
-4. **Privacy Protection**: Tests data deletion and anonymization
+4. **Privacy Protection**: Tests authenticated data access and deletion
 5. **API Security**: Validates endpoint security and rate limiting
 
 #### **What We've Caught Locally:**

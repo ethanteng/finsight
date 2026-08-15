@@ -1,4 +1,4 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { Configuration, PlaidApi, PlaidEnvironments, CountryCode } from 'plaid';
 import { SnapTradeService } from '../snaptrade';
 import { BalanceService } from './balance-service';
@@ -7,9 +7,9 @@ import { TransactionNormalizationService } from './transaction-normalization-ser
 import { TransactionCategorizationService, CategorizationDetail, TransactionType } from './transaction-categorization-service';
 import { persistTransactionsToDb, persistSnapTradeActivitiesToDb } from '../data/persistence';
 import { cacheService } from '../data/cache';
-import { financialAccountIdentityKey, isNewerAccountSnapshot } from './account-identity';
 import { resolveCanonicalTransactionType } from './canonical-transaction-adapter';
-import { buildCanonicalInvestmentPortfolio } from './canonical-financial-snapshot';
+import { mergeFinancialSources } from './financial-calculations';
+import { loadPersistedPlaidData } from './financial-source-persistence';
 
 const prisma = new PrismaClient();
 
@@ -160,10 +160,6 @@ export interface UnifiedFinancialData {
   };
   bankingTransactions: Transaction[];
   homeValue: HomeData | null;
-  transactionAggregates?: {
-    income: Array<[string, number]>;
-    expense: Array<[string, number]>;
-  };
   categorizationDetails?: {
     transactions: CategorizationDetail[];
     summary: {
@@ -193,10 +189,6 @@ export interface UnifiedFinancialData {
     dataSources: {
       plaid: string;
       snaptrade: string;
-    };
-    transactionAggregates?: {
-      income: Array<[string, number]>;
-      expense: Array<[string, number]>;
     };
     persistedAsOf: Date | null;
   };
@@ -257,7 +249,7 @@ export class FinancialDataService {
     }
 
     let usingPersistedPlaidData = false;
-    const persistedPlaidSnapshot = await this.tryLoadPersistedPlaidData(userId, opts);
+    const persistedPlaidSnapshot = await loadPersistedPlaidData(userId, opts);
 
     let plaidPromise: Promise<any>;
     if (persistedPlaidSnapshot?.isFresh) {
@@ -290,7 +282,7 @@ export class FinancialDataService {
     }
 
     // Merge data
-    const mergedData = this.mergeFinancialData(plaidData, snapTradeData, manualAccountsData, homeValue);
+    const mergedData = mergeFinancialSources(plaidData, snapTradeData, manualAccountsData, homeValue);
 
     // ✅ STEP 1: Categorize transactions BEFORE normalization (skip for UI-only requests)
     // This ensures we have transaction_type available for normalization and filtering
@@ -871,7 +863,6 @@ export class FinancialDataService {
           plaid: usingPersistedPlaidData ? 'persisted' : 'live',
           snaptrade: (snapTradeData?.performance?.source as string) || 'live'
         },
-        transactionAggregates: mergedData.transactionAggregates,
         persistedAsOf: usingPersistedPlaidData && persistedPlaidSnapshot?.lastSynced
           ? persistedPlaidSnapshot.lastSynced
           : null
@@ -889,301 +880,6 @@ export class FinancialDataService {
   /**
    * Fetch data from Plaid
    */
-  private async tryLoadPersistedPlaidData(
-    userId: string,
-    options: { includeTransactions: boolean; includeInvestments: boolean }
-  ): Promise<{ data: any; lastSynced: Date | null; isFresh: boolean } | null> {
-    // Persisted snapshots currently store only account/core balance data. When
-    // investment holdings are requested we must force a live Plaid fetch to keep
-    // portfolio analytics accurate.
-    if (options.includeInvestments) {
-      return null;
-    }
-
-    try {
-      const historyDays = parseInt(process.env.TRANSACTION_HISTORY_DAYS || '90', 10);
-      const startDate = new Date(Date.now() - historyDays * 24 * 60 * 60 * 1000);
-      const accountInclude = options.includeTransactions
-        ? {
-            transactions: {
-              orderBy: { date: Prisma.SortOrder.desc },
-              where: {
-                date: {
-                  gte: startDate
-                }
-              }
-            }
-          }
-        : undefined;
-
-      const accountRecordsRaw = await prisma.account.findMany({
-        where: { userId },
-        include: accountInclude
-      }) as Array<Prisma.AccountGetPayload<{
-        include: {
-          transactions: true;
-        };
-      }>>;
-
-      const accountRecords = accountRecordsRaw.filter(record => {
-        if (!record.plaidAccountId) {
-          return false;
-        }
-        if (record.plaidAccountId.startsWith('snaptrade-')) {
-          return false;
-        }
-        // Exclude manual accounts - they come from ManualAccount table via fetchManualAccounts.
-        // If Account table has legacy manual records, including them would duplicate with fetchManualAccounts.
-        if (record.plaidAccountId.startsWith('manual-')) {
-          return false;
-        }
-        return true;
-      });
-
-      if (accountRecords.length === 0) {
-        return null;
-      }
-
-      // ✅ CRITICAL: Filter out corrupted records where plaidAccountId points to another account's database id
-      // This is a safety measure to prevent corrupted data from being used
-      // Note: Deduplication is handled by mergeFinancialData() - this is just data quality filtering
-      const accountIdSet = new Set(accountRecords.map(r => r.id));
-      
-      // Helper to check if plaidAccountId looks like a database ID (cuid format: 25 chars, starts with 'c')
-      const isDatabaseId = (id: string) => id.length === 25 && id.startsWith('c');
-      
-      // Filter out corrupted records only (deduplication happens in mergeFinancialData)
-      const validRecords = accountRecords.filter(record => {
-        // If plaidAccountId matches another account's database id, it's corrupted
-        if (isDatabaseId(record.plaidAccountId) && accountIdSet.has(record.plaidAccountId) && record.plaidAccountId !== record.id) {
-          console.warn(`⚠️ tryLoadPersistedPlaidData: Skipping corrupted account ${record.id} (${record.name}) - plaidAccountId points to another account's id: ${record.plaidAccountId}`);
-          return false;
-        }
-        return true;
-      });
-
-      // ✅ Trust mergeFinancialData() for deduplication - don't deduplicate here
-      // This ensures a single source of truth for deduplication logic
-      const uniqueRecords = validRecords;
-      
-      if (accountRecords.length !== validRecords.length) {
-        const corruptedCount = accountRecords.length - validRecords.length;
-        console.warn(`⚠️ tryLoadPersistedPlaidData: Filtered out ${corruptedCount} corrupted accounts (${accountRecords.length} → ${validRecords.length}). Deduplication will be handled by mergeFinancialData().`);
-      }
-
-      // ✅ FIX: Sort validRecords (not accountRecords) and use them for timestamp calculation
-      // This ensures corrupted records (which were filtered out) don't affect the lastSynced calculation
-      const sortedValidRecords = validRecords
-        .slice()
-        .sort((a, b) => {
-          const aTimestamp = (a.lastSynced || a.updatedAt)?.getTime?.() ?? 0;
-          const bTimestamp = (b.lastSynced || b.updatedAt)?.getTime?.() ?? 0;
-          return bTimestamp - aTimestamp;
-        });
-
-      const lastSyncedTimestamps = sortedValidRecords
-        .map(record => record.lastSynced || record.updatedAt)
-        .filter((value): value is Date => Boolean(value))
-        .map(value => value.getTime());
-
-      const lastSynced =
-        lastSyncedTimestamps.length > 0
-          ? new Date(Math.max(...lastSyncedTimestamps))
-          : null;
-
-      const maxAgeMinutes = parseInt(process.env.PERSISTED_DATA_MAX_AGE_MINUTES || '120', 10);
-      const isFresh = lastSynced
-        ? Date.now() - lastSynced.getTime() <= maxAgeMinutes * 60 * 1000
-        : false;
-
-      // Infer institution for records missing it - ensures consistent getLogicalKey() deduplication
-      // so persisted accounts match fresh API accounts with the same identity.
-      const institutionsInBatch = [...new Set(uniqueRecords.map(r => r.institution).filter(Boolean))] as string[];
-      const singleInstitution = institutionsInBatch.length === 1 ? institutionsInBatch[0] : null;
-      // When multiple institutions: infer per-account by matching name+type+subtype to records that have institution
-      const keyToInstitutions = new Map<string, Set<string>>();
-      for (const r of uniqueRecords) {
-        if (r.institution) {
-          const k = `${(r.name || '').trim()}|${(r.type || '').trim()}|${(r.subtype || '').trim()}`;
-          if (!keyToInstitutions.has(k)) keyToInstitutions.set(k, new Set());
-          keyToInstitutions.get(k)!.add(r.institution);
-        }
-      }
-      const inferInstitution = (record: (typeof uniqueRecords)[0]): string | undefined => {
-        if (record.institution) return record.institution;
-        if (singleInstitution) return singleInstitution;
-        const k = `${(record.name || '').trim()}|${(record.type || '').trim()}|${(record.subtype || '').trim()}`;
-        const insts = keyToInstitutions.get(k);
-        return insts?.size === 1 ? [...insts][0] : undefined;
-      };
-
-      const accounts = uniqueRecords.map(record => ({
-        account_id: record.plaidAccountId,
-        id: record.plaidAccountId,
-        name: record.name,
-        type: record.type,
-        subtype: record.subtype || undefined,
-        balance: {
-          current: record.currentBalance,
-          available: record.availableBalance ?? undefined,
-          limit: record.limit ?? undefined,
-          iso_currency_code: record.currency || 'USD',
-          unofficial_currency_code: undefined
-        },
-        institution: inferInstitution(record),
-        institution_id: undefined,
-        institution_logo: undefined,
-        institution_url: undefined,
-        source: 'plaid',
-        sourceConnectionId: record.accessTokenId || undefined,
-        persisted: true,
-        // Pass through persistentAccountId only when it's the real Plaid value (TAN institutions).
-        // When persistentAccountId === plaidAccountId it was likely our incorrect fallback. Omit it
-        // so identity falls back to the source connection plus the provider account ID.
-        persistentAccountId:
-          record.persistentAccountId &&
-          record.persistentAccountId !== record.plaidAccountId
-            ? record.persistentAccountId
-            : undefined,
-        snapshotTimestamp: (
-          record.balanceLastFetched || record.lastSynced || record.updatedAt
-        )?.toISOString?.(),
-        lastSyncedAt: record.lastSynced?.toISOString?.()
-      }));
-
-      const balances: Record<string, Balance> = {};
-      accounts.forEach(account => {
-        balances[account.account_id] = {
-          current: account.balance.current,
-          available: account.balance.available,
-          limit: account.balance.limit,
-          iso_currency_code: account.balance.iso_currency_code
-        };
-      });
-
-      const transactions: any[] = [];
-      const aggregateTotals = {
-        income: new Map<string, number>(),
-        expense: new Map<string, number>()
-      };
-      if (options.includeTransactions) {
-        uniqueRecords.forEach(record => {
-          const plaidAccountId = record.plaidAccountId;
-          record.transactions?.forEach((dbTx: any) => {
-            const categoryArray =
-              typeof dbTx.category === 'string'
-                ? dbTx.category.split(',').map((item: string) => item.trim()).filter(Boolean)
-                : undefined;
-
-            const normalizedType = dbTx.aiCategory ? dbTx.aiCategory.toLowerCase() : undefined;
-            
-            // ✅ CRITICAL: Only include settled (non-pending) transactions in income/expense calculations
-            if (dbTx.pending === true) {
-              // Skip pending transactions - they should not be included in income or expense calculations
-              // They will still be included in the transactions array for display purposes
-            } else {
-              // ✅ CRITICAL: Explicitly exclude transfers from expense/income calculations
-              // Prioritize aiCategory first (respects manual user corrections), then fall back to other indicators
-              
-              // Check enriched_data for personal_finance_category (stored as JSONB) as fallback
-              let pfcPrimary = '';
-              let pfcDetailed = '';
-              if (dbTx.enriched_data && typeof dbTx.enriched_data === 'object') {
-                const enriched = dbTx.enriched_data as any;
-                if (enriched.personal_finance_category) {
-                  pfcPrimary = (enriched.personal_finance_category.primary || '').toLowerCase();
-                  pfcDetailed = (enriched.personal_finance_category.detailed || '').toLowerCase();
-                }
-              }
-              
-              // ✅ PRIMARY: Check aiCategory first (respects manual corrections and our categorization)
-              // ✅ SECONDARY: Check personal_finance_category (Plaid's source of truth)
-              // ✅ FALLBACK: Check categoryId, category array, and transaction name (including common transfer keywords)
-              // Note: Prisma returns camelCase, but check both for safety
-              const categoryId = ((dbTx.categoryId || dbTx.category_id || '') as string).toLowerCase();
-              const transactionName = (dbTx.name || '').toLowerCase();
-              const isTransfer = 
-                normalizedType === 'transfer_in' || 
-                normalizedType === 'transfer_out' ||
-                pfcPrimary.includes('transfer') ||
-                pfcDetailed.includes('transfer') ||
-                categoryId.includes('transfer') ||
-                categoryArray?.some((cat: string) => cat?.toLowerCase().includes('transfer')) ||
-                transactionName.includes('transfer') ||
-                transactionName.includes('zelle') ||
-                transactionName.includes('ach') ||
-                transactionName.includes('wire transfer') ||
-                transactionName.includes('account transfer');
-              
-              // Only aggregate income/expense if it's NOT a transfer
-              if (!isTransfer) {
-                if (normalizedType === 'income') {
-                  const label = (categoryArray?.[0] || normalizedType || 'uncategorized').toLowerCase();
-                  aggregateTotals.income.set(
-                    label,
-                    (aggregateTotals.income.get(label) || 0) + (dbTx.amount || 0)
-                  );
-                } else if (normalizedType === 'expense' || normalizedType === 'fee') {
-                  const label = (categoryArray?.[0] || normalizedType || 'uncategorized').toLowerCase();
-                  aggregateTotals.expense.set(
-                    label,
-                    (aggregateTotals.expense.get(label) || 0) + Math.abs(dbTx.amount || 0)
-                  );
-                }
-              }
-            }
-
-            transactions.push({
-              id: dbTx.plaidTransactionId,
-              transaction_id: dbTx.plaidTransactionId,
-              account_id: plaidAccountId,
-              amount: dbTx.amount,
-              source_amount: dbTx.sourceAmount ?? dbTx.amount,
-              cash_flow_amount: dbTx.cashFlowAmount ?? undefined,
-              date: dbTx.date.toISOString().split('T')[0],
-              name: dbTx.name,
-              category: categoryArray,
-              pending: dbTx.pending,
-              iso_currency_code: dbTx.currency || 'USD',
-              merchant_name: dbTx.merchantName || undefined,
-              payment_channel: dbTx.paymentChannel || undefined,
-              enriched_data: dbTx.enriched_data || undefined,
-              aiCategory: dbTx.aiCategory || undefined,
-              aiCategoryReason: dbTx.aiCategoryReason || undefined,
-              transaction_type: dbTx.aiCategory || undefined,
-              categoryComparedAt: dbTx.categoryComparedAt || undefined,
-              persisted: true
-            });
-          });
-        });
-      }
-
-      return {
-        data: {
-          accounts,
-          balances,
-          holdings: [],
-          securities: [],
-          transactions,
-          transactionAggregates: {
-            income: Array.from(aggregateTotals.income.entries()),
-            expense: Array.from(aggregateTotals.expense.entries())
-          },
-          errors: [],
-          performance: {
-            duration: 0,
-            source: 'persisted',
-            lastSynced: lastSynced ? lastSynced.toISOString() : undefined
-          }
-        },
-        lastSynced,
-        isFresh
-      };
-    } catch (error) {
-      console.error('FinancialDataService: Failed to load persisted Plaid data:', error);
-      return null;
-    }
-  }
 
   private async fetchPlaidData(userId: string, options: any): Promise<any> {
     const startTime = Date.now();
@@ -1210,71 +906,6 @@ export class FinancialDataService {
       const holdings: any[] = [];
       const securities: any[] = [];
       const transactions: any[] = [];
-      const aggregateTotals = {
-        income: new Map<string, number>(),
-        expense: new Map<string, number>()
-      };
-      const deriveCategoryLabel = (tx: any): string => {
-        const detailed = tx.personal_finance_category?.detailed;
-        if (detailed) {
-          return detailed;
-        }
-        if (Array.isArray(tx.category) && tx.category.length > 0) {
-          return tx.category[0];
-        }
-        if (typeof tx.category === 'string' && tx.category.trim() !== '') {
-          return tx.category;
-        }
-        return 'uncategorized';
-      };
-      const addToAggregates = (tx: any) => {
-        // ✅ CRITICAL: Only include settled (non-pending) transactions in income/expense calculations
-        if (tx.pending === true) {
-          return; // Skip pending transactions - they should not be included in income or expense calculations
-        }
-        
-        const amount = Number(tx.amount) || 0;
-        const absAmount = Math.abs(amount);
-        if (absAmount === 0) {
-          return;
-        }
-        const label = deriveCategoryLabel(tx).toLowerCase();
-        const primaryCategory = (tx.personal_finance_category?.primary || '').toLowerCase();
-        if (primaryCategory === 'income') {
-          aggregateTotals.income.set(label, (aggregateTotals.income.get(label) || 0) + absAmount);
-          return;
-        }
-        // ✅ CRITICAL: Explicitly exclude transfers from expense/income calculations
-        // Check multiple sources to catch any miscategorized transfers
-        const transactionName = (tx.name?.toLowerCase() || '');
-        const categoryId = ((tx as any).category_id || '').toLowerCase();
-        const categoryArray = tx.category || [];
-        const isTransfer = 
-          primaryCategory.includes('transfer') ||
-          (tx as any).transaction_type === 'transfer_in' ||
-          (tx as any).transaction_type === 'transfer_out' ||
-          categoryId.includes('transfer') ||
-          categoryArray.some((cat: any) => String(cat || '').toLowerCase().includes('transfer')) ||
-          transactionName.includes('transfer') ||
-          transactionName.includes('zelle') ||
-          transactionName.includes('ach') ||
-          transactionName.includes('wire transfer') ||
-          transactionName.includes('account transfer');
-        
-        if (isTransfer) {
-          return; // Skip transfers - they should not be included in income or expense calculations
-        }
-        
-        if (primaryCategory) {
-          aggregateTotals.expense.set(label, (aggregateTotals.expense.get(label) || 0) + absAmount);
-          return;
-        }
-        if (amount < 0) {
-          aggregateTotals.income.set(label, (aggregateTotals.income.get(label) || 0) + absAmount);
-        } else {
-          aggregateTotals.expense.set(label, (aggregateTotals.expense.get(label) || 0) + absAmount);
-        }
-      };
       const errors: ErrorDetail[] = [];
 
       // ✅ Merge with database accounts to get custom names for Plaid accounts
@@ -1505,15 +1136,11 @@ export class FinancialDataService {
               const transactionHistoryDays = parseInt(process.env.TRANSACTION_HISTORY_DAYS || '90', 10);
               const startDate = new Date(Date.now() - transactionHistoryDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
               
-                const mapTransaction = (tx: any) => {
-                  const normalized = {
+                const mapTransaction = (tx: any) => ({
                     ...tx,
                     id: tx.transaction_id,
                     transaction_id: tx.transaction_id
-                  };
-                  addToAggregates(normalized);
-                  return normalized;
-                };
+                });
 
               const transactionsResponse = await plaidClient.transactionsGet({
                 access_token: tokenRecord.token,
@@ -1578,10 +1205,6 @@ export class FinancialDataService {
         holdings,
         securities,
         transactions,
-        transactionAggregates: {
-          income: Array.from(aggregateTotals.income.entries()),
-          expense: Array.from(aggregateTotals.expense.entries())
-        },
         errors,
         performance: { duration }
       };
@@ -2258,200 +1881,6 @@ export class FinancialDataService {
       lastUpdated,
       isManualOverride: !!manualMatch
     };
-  }
-
-  /**
-   * Merge data from all sources
-   */
-  private mergeFinancialData(
-    plaidData: any | null,
-    snapTradeData: any | null,
-    manualAccountsData: any | null,
-    homeValue: HomeData | null
-  ): Omit<UnifiedFinancialData, 'metadata'> {
-    // Merge accounts with deduplication
-    const rawAccounts = [
-      ...(plaidData?.accounts || []),
-      ...(snapTradeData?.accounts || []),
-      ...(manualAccountsData?.accounts || [])
-    ];
-
-    // Deduplicate only on provider identity. Names, balances, and account types
-    // are mutable attributes and cannot prove that two accounts are identical.
-
-    const accountMap = new Map<string, any>();
-
-    // ✅ SINGLE SOURCE OF TRUTH: This is the ONLY place where account deduplication happens
-    // All other code should trust this function to return deduplicated accounts
-    // - tryLoadPersistedPlaidData: Only filters corrupted records (safety), no deduplication
-    // - /plaid/all-accounts: Only verification/logging, no deduplication
-    // - Frontend: No deduplication (trusts backend)
-
-    for (const account of rawAccounts) {
-      const accountId = account.account_id ||
-                       (account as any).plaidAccountId ||
-                       (account as any).persistentAccountId;
-
-      if (!accountId) {
-        console.warn(`⚠️ Account without ID found: ${account.name} (${account.type}/${account.subtype}), skipping`);
-        continue;
-      }
-
-      const baseKey = financialAccountIdentityKey(account);
-      if (!baseKey) {
-        console.warn(`⚠️ Account without logical key: ${account.name} (${account.type}/${account.subtype}), skipping`);
-        continue;
-      }
-
-      const existing = accountMap.get(baseKey);
-      if (!existing) {
-        accountMap.set(baseKey, account);
-        continue;
-      }
-
-      if (isNewerAccountSnapshot(existing, account)) accountMap.set(baseKey, account);
-    }
-
-    const finalAccounts = Array.from(accountMap.values());
-    const duplicatesRemoved = rawAccounts.length - finalAccounts.length;
-    
-    // ✅ Always log account deduplication for debugging
-    console.log(`📊 mergeFinancialData: ${rawAccounts.length} raw accounts → ${finalAccounts.length} unique accounts (removed ${duplicatesRemoved} duplicates)`);
-    
-    // ✅ Log duplicate account IDs if any were found
-    if (duplicatesRemoved > 0) {
-      const accountIdCounts = new Map<string, number>();
-      rawAccounts.forEach(acc => {
-        const accountId = acc.account_id || (acc as any).plaidAccountId || (acc as any).persistentAccountId;
-        if (accountId) {
-          accountIdCounts.set(accountId, (accountIdCounts.get(accountId) || 0) + 1);
-        }
-      });
-      
-      const duplicateIds = Array.from(accountIdCounts.entries())
-        .filter(([_, count]) => count > 1)
-        .map(([id, count]) => ({ id, count }));
-      
-      if (duplicateIds.length > 0) {
-        console.warn(`⚠️ Found duplicate account IDs:`, duplicateIds);
-      }
-    }
-
-    // Merge balances
-    const balances = {
-      ...(plaidData?.balances || {}),
-      // SnapTrade balances are already in account objects
-    };
-
-    // Build account_id → provider identity map for holding replacement.
-    const accountIdToLogicalKey = new Map<string, string>();
-    for (const account of rawAccounts) {
-      const accountId = account.account_id || (account as any).plaidAccountId || (account as any).persistentAccountId;
-      if (accountId) {
-        const logicalKey = financialAccountIdentityKey(account);
-        if (logicalKey) {
-          accountIdToLogicalKey.set(accountId, logicalKey);
-        }
-      }
-    }
-
-    // A holding is one security position inside one account. Quantity changes
-    // over time and therefore cannot be part of the position's identity.
-    const rawHoldings = [
-      ...(plaidData?.holdings || []),
-      ...(snapTradeData?.holdings || [])
-    ];
-
-    console.log(`📊 mergeFinancialData: Merging ${plaidData?.holdings?.length || 0} Plaid holdings + ${snapTradeData?.holdings?.length || 0} SnapTrade holdings = ${rawHoldings.length} total raw holdings`);
-
-    const holdingMap = new Map<string, any>();
-    let duplicatesSkipped = 0;
-    for (const holding of rawHoldings) {
-      const logicalKey = accountIdToLogicalKey.get(holding.account_id) ?? `id:${holding.account_id}`;
-      const holdingLogicalId = `${logicalKey}|${holding.security_id}`;
-      const existing = holdingMap.get(holdingLogicalId);
-      if (!existing) {
-        holdingMap.set(holdingLogicalId, holding);
-      } else {
-        duplicatesSkipped++;
-        const existingTimestamp = Date.parse(existing.institution_price_as_of || existing.snapshotTimestamp || '');
-        const candidateTimestamp = Date.parse(holding.institution_price_as_of || holding.snapshotTimestamp || '');
-        if (!Number.isNaN(candidateTimestamp) && (Number.isNaN(existingTimestamp) || candidateTimestamp >= existingTimestamp)) {
-          holdingMap.set(holdingLogicalId, holding);
-        }
-      }
-    }
-    const holdings = Array.from(holdingMap.values());
-    
-    console.log(`📊 mergeFinancialData: After deduplication: ${holdings.length} unique holdings (removed ${duplicatesSkipped} duplicates)`);
-
-    // Merge securities with deduplication by security_id
-    const rawSecurities = [
-      ...(plaidData?.securities || []),
-      ...(snapTradeData?.securities || [])
-    ];
-
-    const securityMap = new Map<string, any>();
-    for (const security of rawSecurities) {
-      if (security.security_id && !securityMap.has(security.security_id)) {
-        securityMap.set(security.security_id, security);
-      }
-    }
-    const securities = Array.from(securityMap.values());
-
-
-    // Calculate portfolio analysis - include manual investment accounts
-    const portfolio = this.analyzePortfolio(holdings, securities, finalAccounts);
-
-    // ✅ Merge transactions and separate investment from banking transactions
-    const allPlaidTransactions = plaidData?.transactions || [];
-    const snapTradeTransactions = snapTradeData?.transactions || [];
-    
-    // Separate Plaid transactions into investment and banking
-    const plaidInvestmentTransactions = allPlaidTransactions.filter((txn: any) => txn.isInvestmentTransaction);
-    const plaidBankingTransactions = allPlaidTransactions.filter((txn: any) => !txn.isInvestmentTransaction);
-    
-    // Combine all investment transactions (Plaid + SnapTrade)
-    const investmentTransactions: Transaction[] = [
-      ...plaidInvestmentTransactions,
-      ...snapTradeTransactions
-    ];
-    
-    // Banking transactions are only from Plaid
-    const bankingTransactions: Transaction[] = plaidBankingTransactions;
-
-    const transactionAggregates = plaidData?.transactionAggregates;
-    
-
-    return {
-      accounts: finalAccounts,
-      balances,
-      investments: {
-        holdings,
-        securities,
-        portfolio,
-        transactions: investmentTransactions
-      },
-      bankingTransactions,
-      homeValue,
-      transactionAggregates
-    };
-  }
-
-  /**
-   * Analyze portfolio
-   */
-  private analyzePortfolio(holdings: Holding[], securities: Security[], accounts?: Account[]): PortfolioAnalysis {
-    const portfolio = buildCanonicalInvestmentPortfolio(
-      holdings,
-      securities,
-      accounts || [],
-      'USD'
-    );
-
-    console.log(`📊 analyzePortfolio: Analyzing ${portfolio.holdingCount} holdings, ${portfolio.securityCount} unique securities, total value: $${portfolio.totalValue.toFixed(2)}`);
-
-    return portfolio;
   }
 
   /**

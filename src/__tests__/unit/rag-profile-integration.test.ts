@@ -42,7 +42,7 @@ describe('RAG & Intelligent Profile System Unit Tests', () => {
     
     // Create mock instances
     mockProfileManager = {
-      getOrCreateProfile: jest.fn(),
+      getOriginalProfile: jest.fn(),
       updateProfile: jest.fn(),
       updateProfileFromConversation: jest.fn()
     };
@@ -135,7 +135,7 @@ describe('RAG & Intelligent Profile System Unit Tests', () => {
           'I want to save for retirement and have $50,000 in my 401k'
         ];
         
-        mockProfileManager.getOrCreateProfile.mockResolvedValue('A software engineer');
+        mockProfileManager.getOriginalProfile.mockResolvedValue('A software engineer');
         mockProfileManager.updateProfile.mockResolvedValue();
         mockExtractor.extractAndUpdateProfile.mockResolvedValue('A 30-year-old software engineer making $120,000 per year');
         
@@ -220,10 +220,10 @@ describe('RAG & Intelligent Profile System Unit Tests', () => {
         lastUpdate: new Date()
       });
 
-      mockProfileManager.getOrCreateProfile.mockResolvedValue('A 35-year-old with a mortgage');
+      mockProfileManager.getOriginalProfile.mockResolvedValue('A 35-year-old with a mortgage');
 
       const ragResult = await MockDataOrchestrator.getSearchContext('What are current refinance rates?', 'premium' as UserTier);
-      const profileResult = await mockProfileManager.getOrCreateProfile('test-user-id');
+      const profileResult = await mockProfileManager.getOriginalProfile('test-user-id');
 
       expect(ragResult).toBeDefined();
       expect(ragResult?.results[0].snippet).toContain('6.57%');
@@ -273,7 +273,7 @@ describe('RAG & Intelligent Profile System Unit Tests', () => {
 
   describe('Profile Building Over Time', () => {
     it('should build comprehensive profile over multiple interactions', async () => {
-      mockProfileManager.getOrCreateProfile.mockResolvedValue('Initial profile');
+      mockProfileManager.getOriginalProfile.mockResolvedValue('Initial profile');
       mockExtractor.extractAndUpdateProfile.mockResolvedValue('Enhanced profile with new information');
       
       const conversations = [
@@ -338,4 +338,4 @@ describe('RAG & Intelligent Profile System Unit Tests', () => {
       ).rejects.toThrow('Plaid API error');
     });
   });
-}); 
+});

@@ -1,12 +1,9 @@
-import { FinancialDataService } from '../../services/financial-data-service';
+import { mergeFinancialSources } from '../../services/financial-calculations';
+
+const mergeForTest = (plaidData: any, snapTradeData: any, manualAccountsData: any) =>
+  mergeFinancialSources(plaidData, snapTradeData, manualAccountsData, null);
 
 describe('Account Identity Standardization', () => {
-  let financialDataService: FinancialDataService;
-
-  beforeEach(() => {
-    financialDataService = new FinancialDataService();
-  });
-
   describe('mergeFinancialData - Account Deduplication', () => {
     it('should deduplicate Plaid accounts by account_id (plaidAccountId)', () => {
       const plaidData = {
@@ -44,7 +41,7 @@ describe('Account Identity Standardization', () => {
         transactions: []
       };
 
-      const result = (financialDataService as any).mergeFinancialData(plaidData, null, null);
+      const result = mergeForTest(plaidData, null, null);
 
       expect(result.accounts).toHaveLength(1);
       expect(result.accounts[0].account_id).toBe('plaid-123');
@@ -85,7 +82,7 @@ describe('Account Identity Standardization', () => {
         transactions: []
       };
 
-      const result = (financialDataService as any).mergeFinancialData(null, snapTradeData, null);
+      const result = mergeForTest(null, snapTradeData, null);
 
       expect(result.accounts).toHaveLength(1);
       expect(result.accounts[0].account_id).toBe('snaptrade-456');
@@ -135,7 +132,7 @@ describe('Account Identity Standardization', () => {
         transactions: []
       };
 
-      const result = (financialDataService as any).mergeFinancialData(plaidData, snapTradeData, null);
+      const result = mergeForTest(plaidData, snapTradeData, null);
 
       expect(result.accounts).toHaveLength(2);
       expect(result.accounts.find((a: any) => a.account_id === 'plaid-123')).toBeDefined();
@@ -178,7 +175,7 @@ describe('Account Identity Standardization', () => {
         transactions: []
       };
 
-      const result = (financialDataService as any).mergeFinancialData(plaidData, null, null);
+      const result = mergeForTest(plaidData, null, null);
 
       expect(result.accounts).toHaveLength(1);
       expect(result.accounts[0].balance.current).toBe(2000);
@@ -219,7 +216,7 @@ describe('Account Identity Standardization', () => {
         transactions: []
       };
 
-      const result = (financialDataService as any).mergeFinancialData(plaidData, null, null);
+      const result = mergeForTest(plaidData, null, null);
 
       expect(result.accounts).toHaveLength(1);
       expect(result.accounts[0].balance.current).toBe(2000);
@@ -260,7 +257,7 @@ describe('Account Identity Standardization', () => {
         transactions: []
       };
 
-      const result = (financialDataService as any).mergeFinancialData(plaidData, null, null);
+      const result = mergeForTest(plaidData, null, null);
 
       expect(result.accounts).toHaveLength(1);
       expect(result.accounts[0].balance.current).toBe(1000);
@@ -297,12 +294,12 @@ describe('Account Identity Standardization', () => {
       };
 
       const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
-      const result = (financialDataService as any).mergeFinancialData(plaidData, null, null);
+      const result = mergeForTest(plaidData, null, null);
 
       expect(result.accounts).toHaveLength(1);
       expect(result.accounts[0].account_id).toBe('plaid-123');
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Account without ID found')
+        expect.stringContaining('Account without provider identity skipped')
       );
       consoleSpy.mockRestore();
     });

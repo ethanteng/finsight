@@ -36,6 +36,9 @@ export interface EvidenceManifest {
   timings: {
     contextGatherMs: number;
     promptBuildMs: number;
+    /** Added in Step 8; absent on older persisted evidence manifests. */
+    modelMs?: number;
+    validationMs?: number;
     timeToFirstAnswerTokenMs?: number;
     totalMs: number;
   };

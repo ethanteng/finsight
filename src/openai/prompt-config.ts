@@ -2,9 +2,7 @@
  * Admin-configurable AI prompt settings.
  *
  * Currently exposes the "response tone" guidance that is injected into every
- * user-facing system prompt (both the legacy OpenAI pipeline in
- * `prompt-builder.ts` and the Claude reasoning pipeline in
- * `financial-reasoning-prompt.ts`).
+ * user-facing system prompt built by the canonical reasoning pipeline.
  *
  * The value is stored as a single row in the `ai_prompt_config` table and
  * cached in memory so the synchronous prompt builders can read it without an

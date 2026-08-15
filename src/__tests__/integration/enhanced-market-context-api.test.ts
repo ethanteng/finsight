@@ -1,6 +1,5 @@
 import request from 'supertest';
 import { dataOrchestrator } from '../../data/orchestrator';
-import { UserTier } from '../../data/types';
 
 // Lazy import testApp to avoid EPERM errors on macOS when tests are skipped
 let testApp: any;
@@ -342,32 +341,6 @@ describe('Enhanced Market Context API Integration', () => {
 
       expect(response.body.message).toBe('Cache invalidated for pattern: economic_indicators');
       expect(MockDataOrchestrator.invalidateCache).toHaveBeenCalledWith('economic_indicators');
-    });
-  });
-
-  describe('Enhanced OpenAI Integration', () => {
-    it('should use enhanced context in askOpenAIWithEnhancedContext', async () => {
-      // Import the function to check it exists
-      const { askOpenAIWithEnhancedContext } = require('../../openai');
-
-      // Verify the function exists and is callable
-      expect(typeof askOpenAIWithEnhancedContext).toBe('function');
-
-      // Test that the function can be called with basic parameters
-      // We'll use a simple test without complex mocking
-      try {
-        // This should not throw an error even if it fails due to missing API keys
-        // The function should handle errors gracefully
-        await askOpenAIWithEnhancedContext(
-          'Test question',
-          [],
-          UserTier.STARTER
-        );
-      } catch (error) {
-        // It's okay if it fails due to missing API keys or other external dependencies
-        // The important thing is that the function exists and is callable
-        expect(error).toBeDefined();
-      }
     });
   });
 

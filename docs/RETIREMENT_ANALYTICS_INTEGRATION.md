@@ -173,7 +173,7 @@ To test the integration:
 ## Files Already Implemented (from previous work)
 
 - ✅ `src/retirement-analytics/index.ts` - Main analysis function
-- ✅ `src/openai/prompt-builder.ts` - LLM formatting
+- ✅ `src/openai/financial-reasoning-prompt.ts` - LLM formatting
 - ✅ `prisma/schema.prisma` - Database schema
 - ✅ All analytics engine modules
 

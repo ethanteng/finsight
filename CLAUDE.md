@@ -28,8 +28,8 @@ npm run test:integration         # Integration tests
 npm run test:security            # Security tests
 npm run test:coverage            # Coverage report
 npm run test:like-cicd           # Full CI/CD test suite
-npm run test:dual-data           # Privacy/tokenization system tests
 npm run test:enhanced-market-context  # Market context tests
+npm run eval:llm                 # Deterministic Ask Linc quality evaluation
 ```
 
 Run a single test file:
@@ -58,22 +58,21 @@ npx prisma studio                # Open Prisma Studio UI
 
 ### Backend (`/src/`)
 
-The main entry point is `src/index.ts` (~4,200 lines) — a monolithic Express server containing most route definitions. Key subdirectories:
+The main entry point is `src/index.ts`; user-facing Ask routes are isolated in `src/routes/ask.ts`. Key subdirectories:
 
 - **`auth/`** — JWT auth, middleware (`optionalAuth`, `requireAuth`, `adminAuth`), encrypted user service, Resend email, SnapTrade auth, manual accounts
 - **`data/`** — Data orchestration (`orchestrator.ts`), caching, persistence, and external data providers: FRED economic indicators (`providers/fred.ts`), Alpha Vantage market data, Brave Search API for RAG (`providers/search.ts`)
-- **`openai/`** — AI pipeline: `context-service.ts` manages conversation context, `prompt-builder.ts` (76KB) constructs prompts, `analysis-pipeline.ts` runs Claude-based analysis, `claude-client.ts` wraps the Anthropic SDK
-- **`services/`** — Business logic: `financial-data-service.ts` (116KB, core financial calculations), `anonymization-service.ts` / `deanonymization-service.ts` (privacy tokenization), `stripe.ts`, `mailerlite-sync.ts`, `rentcast.ts`
-- **`profile/`** — User profile orchestration, anonymization, enrichment, encryption
+- **`openai/`** — Canonical AI pipeline: question-specific context selection, canonical facts, structured prompting, provider fallback, deterministic grounding, and lazy evidence
+- **`services/`** — Business logic split into financial ingestion, calculations, snapshot/source persistence, profile/market services, billing, and integrations
+- **`profile/`** — User profile orchestration, enrichment, and encryption
 - **`security/`** — AI rate limiting, prompt validation, output validation, security logging
-- **`routes/`** — Additional route modules: `ai.ts`, `stripe.ts`
+- **`routes/`** — Ask, AI diagnostics, performance, and Stripe routes
 - **`retirement-analytics/`** — Retirement planning calculations
 - **`market-news/`** — Financial news aggregation
 
 Key standalone files in `src/`:
 - `plaid.ts` (139KB) — Plaid banking API integration (all Plaid routes)
 - `snaptrade.ts` (25KB) — SnapTrade investment API
-- `privacy.ts` (28KB) — Core privacy/tokenization logic
 
 ### Frontend (`/frontend/src/`)
 
@@ -86,15 +85,17 @@ Next.js App Router structure:
 ### Data Flow
 
 ```
-Plaid/SnapTrade → data/orchestrator.ts → services/financial-data-service.ts
-                                       → openai/context-service.ts
-                                         → openai/prompt-builder.ts
-                                         → Claude/GPT → response-validator.ts → user
+Plaid/SnapTrade → financial-ingestion.ts → financial-calculations.ts
+                                      → financial-snapshot-persistence.ts
+                                      → openai/context-service.ts
+                                      → financial-reasoning-prompt.ts
+                                      → Claude/OpenAI fallback
+                                      → deterministic response validation → user
 ```
 
-### Privacy (Dual-Data System)
+### Profile protection
 
-A core architectural concern: real user data is **tokenized** before being sent to AI models. `privacy.ts` and `services/anonymization-service.ts` replace real names/values with tokens; `services/deanonymization-service.ts` reverses this for display. This tokenization is pervasive — any AI-facing code goes through anonymization.
+User profiles are encrypted at rest. The removed tokenization/de-tokenization stack is not part of the current analysis path; context selection limits model input to what each question requires.
 
 ### Tier System
 

@@ -1,15 +1,6 @@
-import { FinancialDataService } from '../../services/financial-data-service';
-import { FinancialSummaryService } from '../../services/financial-summary-service';
+import { mergeFinancialSources } from '../../services/financial-calculations';
 
 describe('Deduplication Integration', () => {
-  let financialDataService: FinancialDataService;
-  let financialSummaryService: FinancialSummaryService;
-
-  beforeEach(() => {
-    financialDataService = new FinancialDataService();
-    financialSummaryService = new FinancialSummaryService();
-  });
-
   it('should deduplicate accounts consistently across all services', () => {
     // Simulate accounts from multiple syncs with different balances
     const plaidAccounts = [
@@ -69,7 +60,7 @@ describe('Deduplication Integration', () => {
     const plaidData = { accounts: plaidAccounts, balances: {}, holdings: [], securities: [], transactions: [] };
     const snapTradeData = { accounts: snapTradeAccounts, balances: {}, holdings: [], securities: [], transactions: [] };
 
-    const merged = (financialDataService as any).mergeFinancialData(plaidData, snapTradeData, null);
+    const merged = mergeFinancialSources(plaidData as any, snapTradeData as any, null, null);
 
     // Should have 3 unique accounts (plaid-123 deduplicated, plaid-456, snaptrade-789)
     expect(merged.accounts).toHaveLength(3);
@@ -77,8 +68,8 @@ describe('Deduplication Integration', () => {
     // plaid-123 should be the more recent one (1500 balance)
     const checkingAccount = merged.accounts.find((a: any) => a.account_id === 'plaid-123');
     expect(checkingAccount).toBeDefined();
-    expect(checkingAccount.balance.current).toBe(1500);
-    expect(checkingAccount.snapshotTimestamp).toBe('2025-01-02T00:00:00Z');
+    expect(checkingAccount!.balance.current).toBe(1500);
+    expect(checkingAccount!.snapshotTimestamp).toBe('2025-01-02T00:00:00Z');
 
     // All accounts should have account_id set
     merged.accounts.forEach((account: any) => {
@@ -122,7 +113,7 @@ describe('Deduplication Integration', () => {
     ];
 
     const plaidData = { accounts: plaidAccounts, balances: {}, holdings: [], securities: [], transactions: [] };
-    const merged = (financialDataService as any).mergeFinancialData(plaidData, null, null);
+    const merged = mergeFinancialSources(plaidData as any, null, null, null);
 
     expect(merged.accounts).toHaveLength(2);
   });
@@ -160,15 +151,15 @@ describe('Deduplication Integration', () => {
     ];
 
     const plaidData = { accounts: plaidAccounts, balances: {}, holdings: [], securities: [], transactions: [] };
-    const merged = (financialDataService as any).mergeFinancialData(plaidData, null, null);
+    const merged = mergeFinancialSources(plaidData as any, null, null, null);
 
     expect(merged.accounts).toHaveLength(2);
     const cd2026 = merged.accounts.find((a: any) => a.account_id === 'pwnJObQNp5uvKN6kaqjBT7480a5ozOIL1prKAd');
     const cd2027 = merged.accounts.find((a: any) => a.account_id === 'XY4AbpKqadteBwk9PRXQt1MP4wvzDqHjwYQJzp');
     expect(cd2026).toBeDefined();
     expect(cd2027).toBeDefined();
-    expect(cd2026.balance.current).toBe(78914.49);
-    expect(cd2027.balance.current).toBe(107115.7);
+    expect(cd2026!.balance.current).toBe(78914.49);
+    expect(cd2027!.balance.current).toBe(107115.7);
   });
 
   it('should handle accounts without timestamps correctly', () => {
@@ -200,7 +191,7 @@ describe('Deduplication Integration', () => {
     ];
 
     const plaidData = { accounts, balances: {}, holdings: [], securities: [], transactions: [] };
-    const merged = (financialDataService as any).mergeFinancialData(plaidData, null, null);
+    const merged = mergeFinancialSources(plaidData as any, null, null, null);
 
     expect(merged.accounts).toHaveLength(1);
     // Balance magnitude is not a freshness signal; preserve deterministic source order.
@@ -229,7 +220,7 @@ describe('Deduplication Integration', () => {
       transactions: [],
     };
 
-    const merged = (financialDataService as any).mergeFinancialData(plaidData, null, null);
+    const merged = mergeFinancialSources(plaidData as any, null, null, null);
 
     expect(merged.investments.holdings).toHaveLength(1);
     expect(merged.investments.holdings[0].quantity).toBe(12);

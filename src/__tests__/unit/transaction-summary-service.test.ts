@@ -5,7 +5,7 @@ describe('buildTransactionSummary', () => {
   const end = new Date('2026-06-01T00:00:00.000Z');
 
   it('aggregates typed cash flow and excludes transfers and investment trades', () => {
-    const { transactionsSummary } = buildTransactionSummary(
+    const { transactionsSummary, windowedTransactions } = buildTransactionSummary(
       [
         { transaction_id: 'salary', account_id: 'checking', date: '2026-05-02', amount: 3000, source_amount: -3000, transaction_type: 'income', iso_currency_code: 'USD' },
         { transaction_id: 'groceries', account_id: 'checking', date: '2026-05-03', amount: -125, source_amount: 125, transaction_type: 'expense', category: ['Groceries'], iso_currency_code: 'USD' },
@@ -24,6 +24,8 @@ describe('buildTransactionSummary', () => {
     expect(transactionsSummary.byCategory).toEqual({ Groceries: 100 });
     expect(transactionsSummary.includedTransactionIds).toEqual(['salary', 'groceries', 'refund']);
     expect(transactionsSummary.excludedTransactionIds).toEqual(['transfer', 'sale', 'pending']);
+    expect(windowedTransactions.map(transaction => transaction.transaction_id || transaction.investment_transaction_id))
+      .not.toContain('pending');
   });
 
   it('uses deterministic Plaid categories when on-demand snapshots skip LLM categorization', () => {

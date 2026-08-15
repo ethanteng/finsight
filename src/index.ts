@@ -5,13 +5,14 @@ import cron from 'node-cron';
 // Removed syncAllAccounts import - keeping transactions real-time only
 import { PrismaClient } from '@prisma/client';
 import { dataOrchestrator } from './data/orchestrator';
-import { isFeatureEnabled } from './config/features';
 import authRoutes from './auth/routes';
 import manualAccountsRoutes from './auth/manual-accounts-routes';
 import accountsRoutes from './auth/accounts-routes';
 import financesRoutes from './auth/finances-routes';
 import stripeRoutes from './routes/stripe';
 import aiRoutes from './routes/ai';
+import aiPerformanceRoutes from './routes/ai-performance';
+import askRoutes from './routes/ask';
 import { optionalAuth, requireAuth, adminAuth } from './auth/middleware';
 import { UserTier } from './data/types';
 import * as Sentry from '@sentry/node';
@@ -53,11 +54,7 @@ console.log('  SNAPTRADE_CONSUMER_KEY_PROD:', process.env.SNAPTRADE_CONSUMER_KEY
 
 // Now import Plaid after environment variables are loaded
 import { setupPlaidRoutes } from './plaid';
-import { askOpenAI, askOpenAIWithEnhancedContext, PromptValidationError } from './openai';
-import { runAskLincAnalysis } from './openai/analysis-pipeline';
-import { loadShowTheMathEvidence } from './openai/show-the-math-db-service';
-import type { AskLincResponse } from './openai/structured-response';
-import { aiRateLimitMiddleware } from './security/ai-rate-limiter';
+import { getLatestFinancialSnapshot } from './services/financial-snapshot-persistence';
 
 // Import SnapTrade configuration
 import './snaptrade';
@@ -224,577 +221,11 @@ app.use('/api/finances', financesRoutes);
 
 // Setup AI routes
 app.use('/api/ai', aiRoutes);
+app.use('/ai/performance', aiPerformanceRoutes);
+app.use(askRoutes);
 
 // Setup Stripe routes (webhook route already registered above)
 app.use('/api/stripe', stripeRoutes);
-
-// OpenAI Q&A endpoint with tier-aware system
-app.post('/ask', aiRateLimitMiddleware, async (req: Request, res: Response) => {
-  const startTime = Date.now();
-
-  try {
-    const { question, userTier = 'starter' } = req.body;
-    if (!question) {
-      return res.status(400).json({ error: 'Question is required' });
-    }
-
-    // Debug authentication
-    console.log('Ask endpoint - headers:', req.headers);
-    console.log('Ask endpoint - user:', req.user);
-
-    // User mode requires auth when enabled
-    if (isFeatureEnabled('USER_AUTH') && !req.user) {
-      console.log('Ask endpoint - Authentication required, user not found');
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    // Create Sentry performance span for AI request and handle user request within it
-    // Must await so PromptValidationError and other rejections are caught
-    await Sentry.startSpan({
-      op: 'ai.request',
-      name: 'AI Financial Advice Request - User Mode',
-    }, async (span: any) => {
-      // Set span attributes for detailed monitoring and filtering
-      span.setAttribute('ai.question_length', question.length);
-      span.setAttribute('ai.mode', 'production');
-      span.setAttribute('ai.user_tier', userTier);
-      span.setAttribute('ai.endpoint', '/ask');
-      span.setAttribute('ai.user_id', req.user?.id || 'unknown');
-
-      // Keep console logging for immediate visibility
-      console.log(`📊 AI Response Time - User Mode: ${Date.now() - startTime}ms | Question Length: ${question.length} | User Tier: ${userTier} | User ID: ${req.user?.id}`);
-
-      // Handle user request within the span context
-      await handleUserRequest(req, res);
-
-      // Set final response time
-      span.setAttribute('ai.response_time_ms', Date.now() - startTime);
-    });
-
-  } catch (err) {
-    const totalTime = Date.now() - startTime;
-
-    // Create Sentry performance span for AI request error
-    Sentry.startSpan({
-      op: 'ai.request',
-      name: 'AI Financial Advice Request - Error',
-    }, (span: any) => {
-      // Set span attributes for detailed monitoring and filtering
-      span.setAttribute('ai.question_length', req.body?.question?.length || 0);
-      span.setAttribute('ai.response_time_ms', totalTime);
-      span.setAttribute('ai.mode', 'production');
-      span.setAttribute('ai.user_tier', req.body?.userTier || 'unknown');
-      span.setAttribute('ai.endpoint', '/ask');
-      span.setAttribute('ai.error', err instanceof Error ? err.message : 'Unknown error');
-      span.setAttribute('ai.status', 'error');
-    });
-
-    // Log AI response time for error cases
-    console.error(`📊 AI Response Time - Error: ${totalTime}ms | Question Length: ${req.body?.question?.length || 0} | Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
-
-    // Add response time to response headers even for errors
-    res.set('X-AI-Response-Time', totalTime.toString());
-    res.set('X-AI-Mode', 'error');
-
-    if (err instanceof PromptValidationError) {
-      res.status(400).json({ error: err.userMessage });
-    } else if (err instanceof Error) {
-      // Capture error in Sentry
-      Sentry.captureException(err);
-      res.status(500).json({ error: err.message });
-    } else {
-      // Capture unknown error in Sentry
-      Sentry.captureMessage('Unknown error in AI endpoint', 'error');
-      res.status(500).json({ error: 'Unknown error' });
-    }
-  }
-});
-
-// New tier-aware endpoint for enhanced context
-app.post('/ask/tier-aware', aiRateLimitMiddleware, async (req: Request, res: Response) => {
-  const startTime = Date.now();
-
-  try {
-    const { question } = req.body;
-    if (!question) {
-      return res.status(400).json({ error: 'Question is required' });
-    }
-
-    console.log('Tier-aware ask endpoint - user:', req.user);
-
-    // User mode requires auth when enabled
-    if (isFeatureEnabled('USER_AUTH') && !req.user) {
-      console.log('Tier-aware ask endpoint - Authentication required, user not found');
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-        // Create Sentry performance span for AI request and handle user request within it
-        // Must await so PromptValidationError and other rejections are caught
-        await Sentry.startSpan({
-          op: 'ai.request',
-          name: 'AI Financial Advice Request - Tier-Aware User',
-        }, async (span: any) => {
-          // Set span attributes for detailed monitoring and filtering
-          span.setAttribute('ai.question_length', question.length);
-          span.setAttribute('ai.mode', 'production');
-          span.setAttribute('ai.endpoint', '/ask/tier-aware');
-          span.setAttribute('ai.user_id', req.user?.id || 'unknown');
-
-          // Keep console logging for immediate visibility
-          console.log(`📊 AI Response Time - Tier-Aware User: ${Date.now() - startTime}ms | Question Length: ${question.length} | User ID: ${req.user?.id}`);
-
-          // Handle user request within the span context
-          await handleTierAwareUserRequest(req, res);
-
-          // Set final response time
-          span.setAttribute('ai.response_time_ms', Date.now() - startTime);
-        });
-
-  } catch (err) {
-    const totalTime = Date.now() - startTime;
-
-    // Create Sentry performance span for AI request error
-    Sentry.startSpan({
-      op: 'ai.request',
-      name: 'AI Financial Advice Request - Tier-Aware Error',
-    }, (span: any) => {
-      // Set span attributes for detailed monitoring and filtering
-      span.setAttribute('ai.question_length', req.body?.question?.length || 0);
-      span.setAttribute('ai.response_time_ms', totalTime);
-      span.setAttribute('ai.mode', 'production');
-      span.setAttribute('ai.endpoint', '/ask/tier-aware');
-      span.setAttribute('ai.error', err instanceof Error ? err.message : 'Unknown error');
-      span.setAttribute('ai.status', 'error');
-    });
-
-    // Log AI response time for error cases
-    console.error(`📊 AI Response Time - Tier-Aware Error: ${totalTime}ms | Question Length: ${req.body?.question?.length || 0} | Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
-
-    // Add response time to response headers even for errors
-    res.set('X-AI-Response-Time', totalTime.toString());
-    res.set('X-AI-Mode', 'tier-aware-error');
-
-    if (err instanceof PromptValidationError) {
-      res.status(400).json({ error: err.userMessage });
-    } else if (err instanceof Error) {
-      // Capture error in Sentry
-      Sentry.captureException(err);
-      res.status(500).json({ error: err.message });
-    } else {
-      // Capture unknown error in Sentry
-      Sentry.captureMessage('Unknown error in tier-aware AI endpoint', 'error');
-      res.status(500).json({ error: 'Unknown error' });
-    }
-  }
-});
-
-/** Write an SSE event to the response */
-function writeSSE(res: Response, event: string, data: object): void {
-  res.write(`event: ${event}\n`);
-  res.write(`data: ${JSON.stringify(data)}\n\n`);
-}
-
-// New endpoint for AI responses with real data display
-// ✅ AI now receives real data directly (no anonymization)
-// User sees real data in responses
-app.post('/ask/display-real', aiRateLimitMiddleware, async (req: Request, res: Response) => {
-  const startTime = Date.now();
-  const wantsStreaming = req.headers.accept?.includes('text/event-stream');
-  const useAskLincPipeline = process.env.USE_ASK_LINC_PIPELINE === 'true';
-  const useStreaming = wantsStreaming && useAskLincPipeline;
-
-  try {
-    const { question } = req.body;
-
-    if (!question) {
-      return res.status(400).json({ error: 'Question is required' });
-    }
-
-    console.log('Ask endpoint called with:', { question });
-
-    // Get user info for tier-aware responses
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    const { verifyToken } = await import('./auth/utils');
-    const token = authHeader.replace('Bearer ', '');
-    const payload = verifyToken(token);
-    if (!payload) {
-      return res.status(401).json({ error: 'Invalid or expired token' });
-    }
-
-    const userId = payload.userId;
-    const userTier = payload.tier as UserTier || UserTier.STARTER;
-    console.log('Authenticated user:', { userId, userTier });
-
-    // Set SSE headers early if streaming
-    if (useStreaming) {
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
-      res.flushHeaders?.();
-    }
-
-    // Create Sentry performance span for AI request BEFORE processing
-    // Must await so PromptValidationError and other rejections are caught by the outer try/catch
-    const totalTime = Date.now() - startTime;
-    await Sentry.startSpan({
-      op: 'ai.request',
-      name: 'AI Financial Advice Request - Display Real Production',
-    }, async (span: any) => {
-      // Set span attributes for detailed monitoring and filtering
-      span.setAttribute('ai.question_length', question.length);
-      span.setAttribute('ai.mode', 'production');
-      span.setAttribute('ai.endpoint', '/ask/display-real');
-      span.setAttribute('ai.user_tier', userTier);
-      span.setAttribute('ai.user_id', userId);
-
-      // Get conversation history for authenticated users to provide context
-      let conversationHistory: any[] = [];
-      if (userId) {
-        try {
-          const { getPrismaClient } = await import('./prisma-client');
-          const prisma = getPrismaClient();
-
-          // Get recent conversation history (last 10 Q&A pairs for better context)
-          conversationHistory = await prisma.conversation.findMany({
-            where: { userId },
-            orderBy: { createdAt: 'desc' },
-            take: 10,
-          });
-
-          console.log(`Retrieved ${conversationHistory.length} conversations for user ${userId}`);
-          console.log('Recent conversation questions:', conversationHistory.slice(0, 3).map(c => c.question.substring(0, 50) + '...'));
-
-        } catch (error) {
-          console.error('Error retrieving conversation history:', error);
-          // Continue without conversation history if retrieval fails
-          conversationHistory = [];
-        }
-      }
-
-      // Validate conversation history format
-      if (conversationHistory.length > 0) {
-        console.log('Conversation history validation:', {
-          firstConversation: {
-            hasId: !!conversationHistory[0].id,
-            hasQuestion: !!conversationHistory[0].question,
-            hasAnswer: !!conversationHistory[0].answer,
-            hasCreatedAt: !!conversationHistory[0].createdAt
-          },
-          totalConversations: conversationHistory.length
-        });
-      }
-
-      // Get AI response - use Ask Linc pipeline when enabled, else OpenAI
-      let aiResponse: string;
-      let structuredResponse: AskLincResponse | undefined;
-
-      const onProgress = useStreaming
-        ? (message: string) => writeSSE(res, 'progress', { message })
-        : undefined;
-
-      const onAnswerDelta = useStreaming
-        ? (delta: string) => writeSSE(res, 'answerDelta', { delta })
-        : undefined;
-
-      const onAnswerReset = useStreaming
-        ? () => writeSSE(res, 'answerReset', {})
-        : undefined;
-
-      let showTheMathData: object | undefined;
-
-      if (useAskLincPipeline) {
-        try {
-          const result = await runAskLincAnalysis({
-            question,
-            userId,
-            userTier,
-            conversationHistory,
-            enableValidation: process.env.ENABLE_RESPONSE_VALIDATION === 'true',
-            onProgress,
-            onAnswerDelta,
-            onAnswerReset
-          });
-          aiResponse = result.displayText;
-          structuredResponse = result.structuredResponse;
-          showTheMathData = result.showTheMathData;
-          const manifest = result.showTheMathData?.evidenceManifest;
-          if (manifest) {
-            span.setAttribute('ai.context_gather_ms', manifest.timings.contextGatherMs);
-            span.setAttribute('ai.prompt_build_ms', manifest.timings.promptBuildMs);
-            span.setAttribute('ai.prompt_characters', manifest.modelCalls[0]?.promptCharacters || 0);
-            if (manifest.timings.timeToFirstAnswerTokenMs !== undefined) {
-              span.setAttribute('ai.time_to_first_answer_token_ms', manifest.timings.timeToFirstAnswerTokenMs);
-            }
-          }
-        } catch (err) {
-          if (err instanceof PromptValidationError) {
-            throw err;
-          }
-          console.error('Ask Linc pipeline failed after provider fallback:', err);
-          throw err;
-        }
-      } else {
-        aiResponse = await askOpenAIWithEnhancedContext(question, conversationHistory, userTier, userId);
-      }
-
-      // ✅ Production mode: AI response already contains real data (no anonymization)
-      // No conversion needed since we're using real data directly
-      const displayResponse = aiResponse;
-
-      console.log('Production mode: AI response contains real data (no anonymization)');
-
-      // Save conversation for authenticated users
-      if (userId) {
-        try {
-          const { getPrismaClient } = await import('./prisma-client');
-          const prisma = getPrismaClient();
-
-          const conversation = await prisma.conversation.create({
-            data: {
-              userId,
-              question,
-              answer: displayResponse,
-              createdAt: new Date(),
-              ...(showTheMathData && { showTheMathData: showTheMathData as object })
-            }
-          });
-          console.log('Conversation saved for user:', userId);
-
-          // Set response time after processing completes
-          span.setAttribute('ai.response_time_ms', Date.now() - startTime);
-
-          // Keep console logging for immediate visibility
-          console.log(`📊 AI Response Time - Display Real Production: ${Date.now() - startTime}ms | Question Length: ${question.length} | User Tier: ${userTier} | User ID: ${userId || 'none'}`);
-
-          if (useStreaming) {
-            writeSSE(res, 'result', {
-              answer: displayResponse,
-              conversationId: conversation.id,
-              ...(structuredResponse && { structuredResponse })
-            });
-            return res.end();
-          }
-          return res.json({
-            answer: displayResponse,
-            conversationId: conversation.id,
-            ...(structuredResponse && { structuredResponse })
-          });
-        } catch (error) {
-          console.error('Error saving conversation:', error);
-        }
-      }
-
-      // Set response time after processing completes
-      span.setAttribute('ai.response_time_ms', Date.now() - startTime);
-
-      // Keep console logging for immediate visibility
-      console.log(`📊 AI Response Time - Display Real Production: ${Date.now() - startTime}ms | Question Length: ${question.length} | User Tier: ${userTier} | User ID: ${userId || 'none'}`);
-
-      if (useStreaming) {
-        writeSSE(res, 'result', {
-          answer: displayResponse,
-          conversationId: null,
-          ...(structuredResponse && { structuredResponse })
-        });
-        return res.end();
-      }
-      return res.json({
-        answer: displayResponse,
-        conversationId: null,
-        ...(structuredResponse && { structuredResponse })
-      });
-    });
-  } catch (error) {
-    console.error('Error in ask endpoint:', error);
-
-    // Create Sentry performance span for AI request error
-    const totalTime = Date.now() - startTime;
-    Sentry.startSpan({
-      op: 'ai.request',
-      name: 'AI Financial Advice Request - Display Real Error',
-    }, (span: any) => {
-      // Set span attributes for detailed monitoring and filtering
-      span.setAttribute('ai.question_length', req.body?.question?.length || 0);
-      span.setAttribute('ai.response_time_ms', totalTime);
-      span.setAttribute('ai.mode', 'production');
-      span.setAttribute('ai.endpoint', '/ask/display-real');
-      span.setAttribute('ai.error', error instanceof Error ? error.message : 'Unknown error');
-      span.setAttribute('ai.status', 'error');
-    });
-
-    const errorMessage = error instanceof PromptValidationError
-      ? error.userMessage
-      : error instanceof Error
-        ? error.message
-        : 'Failed to process question';
-
-    if (error instanceof Error && !(error instanceof PromptValidationError)) {
-      Sentry.captureException(error);
-    } else if (!(error instanceof PromptValidationError)) {
-      Sentry.captureMessage('Unknown error in display-real AI endpoint', 'error');
-    }
-
-    if (useStreaming) {
-      writeSSE(res, 'error', { error: errorMessage });
-      res.end();
-    } else {
-      if (error instanceof PromptValidationError) {
-        res.status(400).json({ error: error.userMessage });
-      } else {
-        res.status(500).json({ error: errorMessage });
-      }
-    }
-  }
-});
-
-// Feedback is accepted only for conversations owned by the authenticated user.
-app.post('/feedback', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const { conversationId, score } = req.body;
-
-    if (!conversationId || !Number.isInteger(score)) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    if (score < 1 || score > 5) {
-      return res.status(400).json({ error: 'Score must be between 1 and 5' });
-    }
-
-    const { getPrismaClient } = await import('./prisma-client');
-    const prisma = getPrismaClient();
-
-    const conversation = await prisma.conversation.findFirst({
-      where: { id: conversationId, userId: req.user!.id },
-      select: { id: true }
-    });
-    if (!conversation) {
-      return res.status(404).json({ error: 'Conversation not found' });
-    }
-
-    const feedback = await prisma.feedback.create({
-      data: { score, conversationId }
-    });
-
-    console.log('Feedback saved:', { id: feedback.id, score, conversationId });
-    res.json({ success: true, feedbackId: feedback.id });
-
-  } catch (error) {
-    console.error('Error saving feedback:', error);
-
-    // Capture error in Sentry
-    if (error instanceof Error) {
-      Sentry.captureException(error);
-    } else {
-      Sentry.captureMessage('Unknown error in feedback endpoint', 'error');
-    }
-
-    res.status(500).json({ error: 'Failed to save feedback' });
-  }
-});
-
-// User request handler (feature flagged)
-const handleUserRequest = async (req: Request, res: Response) => {
-  try {
-    const { question } = req.body;
-
-    // Get user from request (set by optionalAuth middleware)
-    const user = req.user;
-
-    if (!user) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    // Get recent conversation history for this user (last 10 Q&A pairs for better context)
-    const recentConversations = await getPrismaClient().conversation.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-    });
-
-    // Use user's tier
-    const userTier = user.tier;
-
-    console.log('Ask endpoint - calling askOpenAIWithEnhancedContext with userId:', user.id);
-    console.log('Ask endpoint - user.id type:', typeof user.id, 'length:', user.id.length, 'contains dlf:', user.id.includes('dlf'), 'contains d1f:', user.id.includes('d1f'));
-    const answer = await askOpenAIWithEnhancedContext(question, recentConversations, userTier as any, user.id);
-    console.log('Ask endpoint - received answer from OpenAI');
-
-    // Store the new Q&A pair with user association
-    await getPrismaClient().conversation.create({
-      data: {
-        question,
-        answer,
-        userId: user.id,
-      },
-    });
-
-    res.json({ answer });
-  } catch (err) {
-    if (err instanceof PromptValidationError) {
-      res.status(400).json({ error: err.userMessage });
-    } else if (err instanceof Error) {
-      Sentry.captureException(err);
-      res.status(500).json({ error: err.message });
-    } else {
-      Sentry.captureMessage('Unknown error in handleUserRequest', 'error');
-      res.status(500).json({ error: 'Unknown error' });
-    }
-  }
-};
-
-// Tier-aware user request handler
-const handleTierAwareUserRequest = async (req: Request, res: Response) => {
-  try {
-    const { question } = req.body;
-
-    // Get user from request (set by optionalAuth middleware)
-    const user = req.user;
-
-    if (!user) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    // Get recent conversation history for this user (last 10 Q&A pairs for better context)
-    const recentConversations = await getPrismaClient().conversation.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-    });
-
-    // Use user's tier
-    const userTier = user.tier;
-
-    console.log('Tier-aware ask endpoint - calling askOpenAIWithEnhancedContext with userId:', user.id, 'tier:', userTier);
-    const answer = await askOpenAIWithEnhancedContext(question, recentConversations, userTier as any, user.id);
-    console.log('Tier-aware ask endpoint - received answer from OpenAI');
-
-    // Store the new Q&A pair with user association
-    await getPrismaClient().conversation.create({
-      data: {
-        question,
-        answer,
-        userId: user.id,
-      },
-    });
-
-    res.json({ answer });
-  } catch (err) {
-    if (err instanceof PromptValidationError) {
-      res.status(400).json({ error: err.userMessage });
-    } else if (err instanceof Error) {
-      Sentry.captureException(err);
-      res.status(500).json({ error: err.message });
-    } else {
-      Sentry.captureMessage('Unknown error in handleTierAwareUserRequest', 'error');
-      res.status(500).json({ error: 'Unknown error' });
-    }
-  }
-};
 
 // Get tier information and upgrade suggestions
 app.get('/tier-info', async (req: Request, res: Response) => {
@@ -840,74 +271,6 @@ app.get('/tier-info', async (req: Request, res: Response) => {
   }
 });
 
-// Get user conversation history
-app.get('/conversations', async (req: Request, res: Response) => {
-  try {
-    // Require user authentication
-    const user = req.user;
-    if (!user) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    const userId = user.id;
-    if (!userId) {
-      console.error('Conversations: user.id is missing', { user });
-      return res.status(500).json({ error: 'Invalid user session' });
-    }
-
-    // Get user's conversations from the database
-    const conversations = await getPrismaClient().conversation.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-      take: 50, // Get last 50 conversations
-    });
-
-    console.log(`Found ${conversations.length} conversations for user ${userId}`);
-
-    res.json({
-      conversations: conversations.map((conv: any) => ({
-        id: conv.id,
-        question: conv.question,
-        answer: conv.answer,
-        timestamp: conv.createdAt instanceof Date ? conv.createdAt.getTime() : new Date(conv.createdAt).getTime()
-      }))
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    console.error('Conversations endpoint error:', message, err);
-    Sentry.captureException(err);
-    res.status(500).json({ error: message });
-  }
-});
-
-// Get Show the Math data for a production conversation
-app.get('/conversations/:id/show-the-math', async (req: Request, res: Response) => {
-  try {
-    const user = req.user;
-    if (!user) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const conversation = await getPrismaClient().conversation.findUnique({
-      where: { id }
-    });
-    if (!conversation || conversation.userId !== user.id) {
-      return res.status(404).json({ error: 'Conversation not found' });
-    }
-    if (!conversation.showTheMathData) {
-      return res.status(404).json({ error: 'No pipeline data available for this conversation' });
-    }
-    res.json(await loadShowTheMathEvidence(conversation.showTheMathData, user.id));
-  } catch (err) {
-    if (err instanceof Error) {
-      Sentry.captureException(err);
-      res.status(500).json({ error: err.message });
-    } else {
-      Sentry.captureMessage('Unknown error in show-the-math endpoint', 'error');
-      res.status(500).json({ error: 'Unknown error' });
-    }
-  }
-});
 
 // Test endpoint for market data (development only)
 app.get('/test/market-data/:tier', async (req: Request, res: Response) => {
@@ -965,6 +328,36 @@ app.get('/user/tier', async (req: Request, res: Response) => {
   }
 });
 
+// Test endpoint to check current tier setting
+app.get('/test/current-tier', async (req: Request, res: Response) => {
+  try {
+    const testTier = process.env.TEST_USER_TIER;
+    const tierMap: Record<string, string> = {
+      'starter': 'starter',
+      'standard': 'standard',
+      'premium': 'premium'
+    };
+
+    const backendTier = testTier ? tierMap[testTier] || 'starter' : 'none (using request tier)';
+
+    res.json({
+      testTier: testTier || 'none',
+      backendTier,
+      message: testTier ? `Testing with ${testTier} tier` : 'Using tier from request'
+    });
+  } catch (err) {
+    // Capture error in Sentry
+    if (err instanceof Error) {
+      Sentry.captureException(err);
+      res.status(500).json({ error: err.message });
+    } else {
+      Sentry.captureMessage('Unknown error in test current tier endpoint', 'error');
+      res.status(500).json({ error: 'Unknown error' });
+    }
+  }
+});
+
+// Test endpoint to get cache statistics
 // Test endpoint to check current tier setting
 app.get('/test/current-tier', async (req: Request, res: Response) => {
   try {
@@ -1904,46 +1297,6 @@ app.get('/sync/status', async (req: Request, res: Response) => {
       }
     });
 
-    // AI Performance Monitoring Endpoint
-app.get('/ai/performance', async (req: Request, res: Response) => {
-  try {
-    // This endpoint provides AI performance metrics
-    // You can use this with Sentry uptime monitoring to track AI system health
-    res.json({
-      status: 'OK',
-      message: 'AI Performance monitoring endpoint is active',
-      timestamp: new Date().toISOString(),
-      features: [
-        'Response time tracking on all AI endpoints',
-        'Performance logging with question length and user tier',
-        'Response headers with timing data',
-        'Error tracking with timing information'
-      ],
-      endpoints: [
-        '/ask - Main AI endpoint with timing',
-        '/ask/tier-aware - Tier-aware AI endpoint with timing',
-        '/ask/display-real - Real data AI endpoint with timing'
-      ],
-      monitoring: {
-        responseTimeHeaders: 'X-AI-Response-Time, X-AI-Mode',
-        consoleLogging: '📊 AI Response Time logs for all requests',
-        errorTracking: 'Timing data included even for failed requests'
-      }
-    });
-  } catch (error) {
-    console.error('AI Performance endpoint error:', error);
-
-    // Capture error in Sentry
-    if (error instanceof Error) {
-      Sentry.captureException(error);
-    } else {
-      Sentry.captureMessage('Unknown error in AI performance endpoint', 'error');
-    }
-
-    res.status(500).json({ error: 'Failed to get AI performance info' });
-  }
-});
-
 // Test database connection
 app.get('/test-db', async (req: Request, res: Response) => {
       try {
@@ -2399,9 +1752,8 @@ app.get('/api/finances/overrides', requireAuth, async (req: Request, res: Respon
       return res.status(404).json({ error: 'User not found' });
     }
 
-    const { SummaryCacheService } = await import('./services/summary-cache-service');
     const { averageCanonicalTransactionSummary } = await import('./services/finances-overview-service');
-    const snapshot = await SummaryCacheService.getLatestSnapshot(req.user!.id, 'summary');
+    const snapshot = await getLatestFinancialSnapshot(req.user!.id, 'summary');
     const averages = averageCanonicalTransactionSummary(snapshot?.transactionsSummary);
     const calculatedIncome = averages?.averageIncome;
     const calculatedExpense = averages?.averageExpenses;
@@ -2692,9 +2044,8 @@ app.get('/profile/tokens', requireAuth, async (req: Request, res: Response) => {
 // Get SnapTrade connection status
 app.get('/api/summaries', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { SummaryCacheService } = await import('./services/summary-cache-service');
     const view = (req.query.view as string) === 'full' ? 'full' : 'summary';
-    const snapshot = await SummaryCacheService.getLatestSnapshot(req.user!.id, view as any);
+    const snapshot = await getLatestFinancialSnapshot(req.user!.id, view as any);
     if (!snapshot) {
       return res.status(204).json({ computedAt: null });
     }

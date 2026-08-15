@@ -3,7 +3,7 @@
  * cash / investment / debt buckets.
  *
  * Historically several places classified accounts independently
- * (FinancialSummaryService, SummaryCacheService, the canonical snapshot
+ * (SummaryCacheService, the canonical snapshot
  * transformer, and the manual-investment branch of analyzePortfolio) using
  * slightly different type/subtype lists and precedence. They drifted: e.g. a
  * depository account carrying a retirement-style subtype — an HSA holding a

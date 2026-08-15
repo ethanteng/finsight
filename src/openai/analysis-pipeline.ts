@@ -21,13 +21,14 @@ import { parseStructuredResponse, toDisplayText, extractPartialSummary, AskLincR
 import { validateUserPrompt, getRejectionMessage } from '../security/prompt-validation';
 import { validateLLMResponse } from '../security/output-validation';
 import { logRejectedPrompt, logFlaggedOutput } from '../security/security-logger';
-import { PromptValidationError } from '../openai';
+import { PromptValidationError } from './errors';
 import type { EvidenceManifest, ShowTheMathData } from './show-the-math-types';
 import { sanitizeUngroundedResponse } from './response-grounding';
 import { canonicalizeResponseNumbers, validateResponseFacts } from './response-facts';
 import { validateCanonicalFactPack } from './canonical-facts';
 import { askOpenAIWithPreparedPrompt } from './openai-fallback-client';
 import { createHash } from 'crypto';
+import { recordLlmAnalysis, recordLlmAnalysisFailure } from '../observability/llm-metrics';
 
 export interface RunAskLincAnalysisOptions {
   question: string;
@@ -178,7 +179,6 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     if (preferredProvider === 'openai') {
       const startedAt = Date.now();
       const rawResponse = await askOpenAIWithPreparedPrompt(prompt.systemPrompt, prompt.userMessage);
-      firstAnswerTokenAt ??= Date.now();
       modelCalls.push({
         phase,
         provider: 'openai',
@@ -199,7 +199,6 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
             firstAnswerTokenAt ??= Date.now();
           }))
         : await askClaude(prompt.systemPrompt, prompt.userMessage);
-      firstAnswerTokenAt ??= Date.now();
       modelCalls.push({
         phase,
         provider: 'claude',
@@ -227,7 +226,8 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   };
   let { rawResponse, provider } = await callAnalysisModel({ systemPrompt, userMessage }, 'initial');
 
-  // Step 4: Parse structured response
+  // Step 4: Parse and validate the structured response locally.
+  const validationStartedAt = Date.now();
   let structuredResponse = canonicalizeResponseNumbers(parseStructuredResponse(rawResponse), factPack);
   let groundingResult = validateResponseFacts(structuredResponse, factPack);
 
@@ -293,6 +293,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   const outputValidation = validateLLMResponse(displayText);
   if (!outputValidation.safe) {
     logFlaggedOutput(displayText, outputValidation.flagged || 'unknown', { userId });
+    recordLlmAnalysisFailure(Date.now() - pipelineStartedAt);
     return {
       structuredResponse: { summary: outputValidation.sanitized, insights: [], suggested_actions: [] },
       displayText: outputValidation.sanitized
@@ -316,6 +317,8 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       timings: {
         contextGatherMs,
         promptBuildMs,
+        modelMs: modelCalls.reduce((total, call) => total + call.durationMs, 0),
+        validationMs: Date.now() - validationStartedAt,
         ...(firstAnswerTokenAt && { timeToFirstAnswerTokenMs: firstAnswerTokenAt - pipelineStartedAt }),
         totalMs: Date.now() - pipelineStartedAt,
       },
@@ -335,6 +338,8 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       },
     },
   };
+
+  recordLlmAnalysis(showTheMathData.evidenceManifest);
 
   return {
     structuredResponse,

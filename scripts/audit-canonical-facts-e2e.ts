@@ -7,7 +7,7 @@
  *
  * Prerequisites:
  *   - Backend running on BASE_URL (default http://localhost:3000)
- *   - USE_ASK_LINC_PIPELINE=true, ENABLE_RESPONSE_VALIDATION=true
+ *   - ANTHROPIC_API_KEY configured; optionally ENABLE_RESPONSE_VALIDATION=true
  *   - SnapTrade connected for user (or run with computer/browser flow first)
  */
 
@@ -186,31 +186,6 @@ async function seedManualAccountsAndHoldings(token: string, userId: string): Pro
         data: { userId, ...payload },
       });
     }
-    await prisma.financialSummary.upsert({
-      where: { userId },
-      create: {
-        userId,
-        netWorth: overview.netWorth,
-        totalCash: overview.totalCash,
-        totalInvestments: overview.totalInvestments,
-        totalDebt: overview.totalDebt,
-        homeValue: null,
-        investmentPortfolio,
-        lastUpdated: new Date(),
-      },
-      update: {
-        netWorth: overview.netWorth,
-        totalCash: overview.totalCash,
-        totalInvestments: overview.totalInvestments,
-        totalDebt: overview.totalDebt,
-        investmentPortfolio,
-        lastUpdated: new Date(),
-      },
-    });
-    log('Seeded manual accounts + ticker holdings snapshot (Plaid/SnapTrade fallback)', overview);
-  } finally {
-    await prisma.$disconnect();
-  }
 }
 
 function verifyKeyNumbersAgainstManifest(keyNumbers: Record<string, unknown> | undefined, showTheMath: Json): AuditIssue[] {

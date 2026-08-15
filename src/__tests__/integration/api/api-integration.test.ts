@@ -148,7 +148,7 @@ describe('API Integration Tests', () => {
 
       for (const question of questions) {
         const response = await request(app)
-          .post('/ask')
+          .post('/ask/display-real')
           .set('Authorization', `Bearer ${authToken}`)
           .send({
             question
@@ -263,7 +263,7 @@ describe('API Integration Tests', () => {
 
       for (const question of questions) {
         const response = await request(app)
-          .post('/ask')
+          .post('/ask/display-real')
           .set('Authorization', `Bearer ${authToken}`)
           .send({
             question
@@ -385,7 +385,7 @@ describe('API Integration Tests', () => {
 
     //   for (const question of marketDataQuestions) {
     //     const response = await request(app)
-    //       .post('/ask')
+    //       .post('/ask/display-real')
     //       .send({
     //         question,
     //         userTier: 'starter',
@@ -428,7 +428,7 @@ describe('API Integration Tests', () => {
 
     //   for (const question of marketDataQuestions) {
     //     const response = await request(app)
-    //       .post('/ask')
+    //       .post('/ask/display-real')
     //       .send({
     //         question,
     //         userTier: 'premium',
@@ -472,7 +472,7 @@ describe('API Integration Tests', () => {
 
     //   for (const question of economicQuestions) {
     //     const response = await request(app)
-    //       .post('/ask')
+    //       .post('/ask/display-real')
     //       .send({
     //         question,
     //         userTier: 'standard',
@@ -516,7 +516,7 @@ describe('API Integration Tests', () => {
 
     //   for (const question of liveMarketQuestions) {
     //     const response = await request(app)
-    //       .post('/ask')
+    //       .post('/ask/display-real')
     //       .send({
     //         question,
     //         userTier: 'standard',
@@ -555,7 +555,7 @@ describe('API Integration Tests', () => {
       if (skipIfLocal()) return;
 
       const response = await request(app)
-        .post('/ask')
+        .post('/ask/display-real')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           question: 'What is the current Fed rate?'
@@ -584,7 +584,7 @@ describe('API Integration Tests', () => {
       if (skipIfLocal()) return;
 
       const response = await request(app)
-        .post('/ask')
+        .post('/ask/display-real')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           question: 'What are the current CD rates?'
@@ -612,7 +612,7 @@ describe('API Integration Tests', () => {
     // TIER ENFORCEMENT DISABLED - Test disabled since AI now provides data instead of upgrade suggestions
     // it('should NOT include source attribution for upgrade suggestions', async () => {
     //   const response = await request(app)
-    //     .post('/ask')
+    //     .post('/ask/display-real')
     //     .send({
     //       question: 'What are the current CD rates?',
     //       userTier: 'starter',
@@ -649,7 +649,7 @@ describe('API Integration Tests', () => {
       if (skipIfLocal()) return;
 
       const response = await request(app)
-        .post('/ask')
+        .post('/ask/display-real')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           question: 'What is the Fed rate and CD rates?'

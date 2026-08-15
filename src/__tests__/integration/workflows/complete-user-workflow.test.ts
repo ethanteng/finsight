@@ -185,7 +185,7 @@ describe('Complete User Workflow Tests', () => {
 
       // Step 6: Ask questions (authenticated)
       const questionResponse = await request(testApp)
-        .post('/ask')
+        .post('/ask/display-real')
         .set('Authorization', `Bearer ${authToken}`)
         .send({
           question: 'What is my current balance?'
@@ -235,7 +235,7 @@ describe('Complete User Workflow Tests', () => {
       // Make multiple requests with same token
       const requests = [
         request(testApp).get('/auth/profile').set('Authorization', `Bearer ${authToken}`),
-        request(testApp).post('/ask').set('Authorization', `Bearer ${authToken}`).send({
+        request(testApp).post('/ask/display-real').set('Authorization', `Bearer ${authToken}`).send({
           question: 'What is my balance?'
         })
       ];
@@ -261,15 +261,15 @@ describe('Complete User Workflow Tests', () => {
     });
 
 
-    it('should handle malformed requests', async () => {
+    it('should require authentication before validating an Ask request', async () => {
       const testApp = await getApp();
       const response = await request(testApp)
-        .post('/ask')
+        .post('/ask/display-real')
         .send({
           // Missing required fields
         });
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(401);
     });
 
   });

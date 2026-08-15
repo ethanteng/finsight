@@ -8,9 +8,9 @@ This document describes the **deterministic** (non-AI) mathematical calculations
 
 | LLM | Use Case | Input Data Source |
 |-----|----------|-------------------|
-| **Claude** | Ask Linc financial analysis | `buildFinancialContextForPrompt()` + `buildFinancialReasoningPrompt()` |
+| **Claude** | Ask Linc financial analysis | Canonical fact/context pack + `buildFinancialReasoningPrompt()` |
 | **Gemini** | Response validation (optional) | `buildSnapshotSummaryForValidation()` — subset of same snapshot |
-| **OpenAI** | Legacy Ask endpoint | `buildPromptPayload()` via `formatAccountSummary`, `formatTransactionSummary`, `formatInvestmentSummary` |
+| **OpenAI** | Provider fallback | The exact prepared system and user prompt used for the primary call |
 
 All three receive data derived from the same underlying deterministic calculations.
 
@@ -18,8 +18,8 @@ All three receive data derived from the same underlying deterministic calculatio
 
 ## 2. Financial Overview (Net Worth, Cash, Debt, Investments)
 
-**Source:** `FinancialSummaryService.calculateFinancialOverview()`
-**File:** `src/services/financial-summary-service.ts`
+**Source:** `buildCanonicalSnapshotCore()`
+**File:** `src/services/canonical-financial-snapshot.ts`
 
 ### Formulas
 
@@ -32,7 +32,7 @@ homeValue = valueMid ?? valueHigh ?? valueLow  (first non-null, > 0)
 netWorth = totalCash + totalInvestments + (homeValue ?? 0) - totalDebt
 ```
 
-**Note:** Cash uses `Math.max(0, balance)` for consistency across FinancialSummaryService, SummaryCacheService, and canonical snapshot. Overdraft (negative cash balance) is added to totalDebt to preserve net worth correctness.
+**Note:** The canonical snapshot is the sole producer of these user-facing totals. Overdraft (negative cash balance) is added to totalDebt to preserve net worth correctness.
 
 ### Account Classification Rules
 
@@ -42,14 +42,14 @@ netWorth = totalCash + totalInvestments + (homeValue ?? 0) - totalDebt
 
 ### Duplicate Handling
 
-Accounts are deduplicated by `plaidAccountId || persistentAccountId || account_id || id` before summing.
+Provider identity is resolved once by `mergeFinancialSources()` in `financial-calculations.ts`; names, balances, and account types are not identity signals.
 
 ---
 
 ## 3. Investment Portfolio
 
-**Source:** `FinancialDataService.analyzePortfolio()`
-**File:** `src/services/financial-data-service.ts`
+**Source:** `analyzePortfolio()`
+**File:** `src/services/financial-calculations.ts`
 
 ### Portfolio Value
 
@@ -65,17 +65,6 @@ assetAllocation[assetType] = Σ holding.institution_value  (grouped by security.
 percentage = portfolioValue > 0 ? (value / portfolioValue) * 100 : 0  (guard against NaN when portfolioValue = 0)
 allocationPercentages[type] = { type, value, percentage }
 ```
-
-### Holdings Gain/Loss (in prompt formatting)
-
-**Source:** `prompt-builder.ts` — `formatInvestmentSummary`, `buildSystemPrompt`
-
-```
-gainLoss = currentValue - costBasis
-gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0
-```
-
----
 
 ## 4. Income and Expense Analysis
 
@@ -272,12 +261,12 @@ metadataConfidence = completeness < 0.5 ? 'low' : completeness < 0.8 ? 'medium' 
 
 ---
 
-## 8. Summary Cache Service (Alternative Path)
+## 8. Summary Cache Orchestration
 
 **Source:** `SummaryCacheService.computeFinancialOverview()`
 **File:** `src/services/summary-cache-service.ts`
 
-Uses the same logic as `FinancialSummaryService` for consistency:
+Delegates provider ingestion, deterministic calculation, and canonical snapshot persistence to their dedicated modules:
 
 ```
 totalCash = Σ Math.max(0, balance)  (depository, checking, savings, cd, money market, prepaid; exclude investment)
@@ -289,32 +278,7 @@ netWorth = totalCash + totalInvestments + (homeValue ?? 0) - totalDebt
 
 ---
 
-## 9. Expense Ratio Formatting (Prompt)
-
-**Source:** `formatRetirementSecurityMetadata()`
-**File:** `src/openai/prompt-builder.ts`
-
-```
-// Most financial datasets store as decimals (0.0075 = 0.75%). Heuristic (data-model dependent):
-expenseRatioDisplay = value < 1 ? value * 100 : value
-  (if value < 1 → decimal format → multiply by 100; else → already percent)
-// Handles 0.065 = 6.5% (decimal). Edge case: 0.65 could mean 0.65% or 65% — depends on source.
-```
-
----
-
-## 10. Transaction Summary Formatting
-
-**Source:** `formatTransactionSummary()`
-**File:** `src/openai/prompt-builder.ts`
-
-```
-amountDisplay = amount >= 0 ? `$${amount.toFixed(2)}` : `-$${Math.abs(amount).toFixed(2)}`
-```
-
----
-
-## 11. Percentile Calculation (Outcome Analyzer)
+## 9. Percentile Calculation (Outcome Analyzer)
 
 **Source:** `calculatePercentiles()`
 **File:** `src/retirement-analytics/engine/outcome-analyzer.ts`
@@ -326,7 +290,7 @@ index = (p/100) * (n-1); interpolate between sortedValues[floor(index)] and sort
 
 ---
 
-## 12. What the LLMs Do vs. What Is Pre-Computed
+## 10. What the LLMs Do vs. What Is Pre-Computed
 
 | Pre-computed (deterministic) | LLM responsibility |
 |-----------------------------|--------------------|
@@ -340,7 +304,7 @@ The LLMs are instructed to **use the provided values as authoritative** and not 
 
 ---
 
-## 13. File Reference
+## 11. File Reference
 
 | Calculation | Primary File |
 |-------------|---------------|
@@ -354,5 +318,5 @@ The LLMs are instructed to **use the provided values as authoritative** and not 
 | Historical withdrawal rates | `src/retirement-analytics/engine/withdrawal-rate-solver.ts` |
 | Stress test / percentiles | `src/retirement-analytics/engine/outcome-analyzer.ts` |
 | Data quality | `src/retirement-analytics/interpretation/uncertainty-quantifier.ts` |
-| Prompt building | `src/openai/prompt-builder.ts`, `src/openai/financial-reasoning-prompt.ts` |
+| Prompt building | `src/openai/context-pack.ts`, `src/openai/financial-reasoning-prompt.ts` |
 | Gemini validation context | `src/openai/response-validator.ts` |

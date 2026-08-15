@@ -1,5 +1,6 @@
 import { describe, expect, beforeEach, it, jest } from '@jest/globals';
 import { FinancialDataService } from '../../services/financial-data-service';
+import { loadPersistedPlaidData } from '../../services/financial-source-persistence';
 
 const mockGetOriginalProfile = jest.fn<() => Promise<string>>();
 
@@ -143,9 +144,7 @@ describe('FinancialDataService investment persistence safeguards', () => {
   });
 
   it('skips persisted Plaid snapshot when investments are requested', async () => {
-    const service = new FinancialDataService();
-
-    const result = await (service as any).tryLoadPersistedPlaidData('user-123', {
+    const result = await loadPersistedPlaidData('user-123', {
       includeTransactions: false,
       includeInvestments: true,
     });

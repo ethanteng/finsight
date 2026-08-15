@@ -1,16 +1,12 @@
 import { PrismaClient } from '@prisma/client';
 import { ProfileEncryptionService } from './encryption';
 import { ProfileExtractor } from './extractor';
-import { ProfileAnonymizer } from './anonymizer';
-import { AnonymizationService } from '../services/anonymization-service';
 
 export class ProfileManager {
   private encryptionService: ProfileEncryptionService;
   private profileExtractor: ProfileExtractor;
-  private anonymizationService?: AnonymizationService;
-  private anonymizer?: ProfileAnonymizer;
 
-  constructor(sessionId?: string, anonymizationService?: AnonymizationService) {
+  constructor() {
     const encryptionKey = process.env.PROFILE_ENCRYPTION_KEY;
     if (!encryptionKey) {
       throw new Error('PROFILE_ENCRYPTION_KEY environment variable is required');
@@ -23,79 +19,6 @@ export class ProfileManager {
     
     this.encryptionService = new ProfileEncryptionService(encryptionKey);
     this.profileExtractor = new ProfileExtractor();
-    this.anonymizationService = anonymizationService;
-    // ProfileAnonymizer will be created on-demand when needed with userId
-  }
-
-  async getOrCreateProfile(userId: string): Promise<string> {
-    const prisma = new PrismaClient();
-    
-    try {
-      // First check if the user exists
-      const user = await prisma.user.findUnique({
-        where: { id: userId }
-      });
-      
-      if (!user) {
-        console.log('User not found, cannot create profile for userId:', userId);
-        return '';
-      }
-      
-      // Try to find profile by userId first, then by email
-      let profile = await prisma.userProfile.findUnique({
-        where: { userId },
-        include: { encrypted_profile_data: true }
-      });
-      
-      if (!profile) {
-        // Try to find by email as fallback
-        profile = await prisma.userProfile.findUnique({
-          where: { email: user.email },
-          include: { encrypted_profile_data: true }
-        });
-      }
-      
-      if (!profile) {
-        // Generate a unique profile hash
-        const profileHash = `profile_${userId}_${Date.now()}`;
-        
-        profile = await prisma.userProfile.create({
-          data: {
-            email: user.email,
-            profileHash,
-            userId,
-            profileText: '', // Keep for backward compatibility
-            isActive: true,
-            conversationCount: 0
-          },
-          include: { encrypted_profile_data: true }
-        });
-      }
-      
-      // Get decrypted profile text if available
-      let profileText = '';
-      if (profile.encrypted_profile_data) {
-        try {
-          profileText = this.encryptionService.decrypt(
-            profile.encrypted_profile_data.encryptedData,
-            profile.encrypted_profile_data.iv,
-            profile.encrypted_profile_data.tag
-          );
-        } catch (error) {
-          console.error('Failed to decrypt profile data:', error);
-          // Fallback to plain text if decryption fails
-          profileText = profile.profileText || '';
-        }
-      } else {
-        // Fallback to plain text for backward compatibility
-        profileText = profile.profileText || '';
-      }
-      
-      // ✅ Return original profile (no anonymization)
-      return profileText;
-    } finally {
-      await prisma.$disconnect();
-    }
   }
 
   // Method to get original (non-anonymized) profile for user display
@@ -135,13 +58,6 @@ export class ProfileManager {
     } finally {
       await prisma.$disconnect();
     }
-  }
-
-  // Method to get anonymized profile for AI services
-  // ✅ NOTE: Now returns original profile (no anonymization)
-  async getAnonymizedProfile(userId: string): Promise<string> {
-    const profile = await this.getOriginalProfile(userId);
-    return this.deduplicateHomeValueManual(profile);
   }
 
   /**

@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { requireAuth } from '../auth/middleware';
 import { getLatestGPTContext, getGPTContextById } from '../services/gpt-logger';
 import { getPrismaClient } from '../prisma-client';
-import { openai } from '../openai';
 import { CANONICAL_TRANSACTION_TYPES, isCanonicalTransactionType } from '../domain/financial-truth';
 import { canonicalCashFlowAmount } from '../services/canonical-transaction-adapter';
 
