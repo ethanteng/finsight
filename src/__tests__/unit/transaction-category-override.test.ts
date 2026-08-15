@@ -17,7 +17,11 @@ import {
   providerCategoryFromTransaction,
   resolveProviderTransactionId,
 } from '../../services/transaction-category-override-service';
-import { resolveCategorySelection } from '../../services/transaction-category-taxonomy';
+import {
+  canonicalTypeForCategory,
+  resolveCategorySelection,
+} from '../../services/transaction-category-taxonomy';
+import { resolveCanonicalTransactionType } from '../../services/canonical-transaction-adapter';
 
 describe('transaction category selection validation', () => {
   it('accepts a primary category on its own', () => {
@@ -33,6 +37,28 @@ describe('transaction category selection validation', () => {
   it('rejects unknown categories and mismatched pairs', () => {
     expect(resolveCategorySelection({ primary: 'NOT_A_CATEGORY' })).toBeNull();
     expect(resolveCategorySelection({ primary: 'MEDICAL', detailed: 'TRAVEL_FLIGHTS' })).toBeNull();
+  });
+});
+
+describe('cash-flow type implied by a chosen category', () => {
+  it('classifies each primary, with or without a subcategory', () => {
+    expect(canonicalTypeForCategory(['FOOD_AND_DRINK'])).toBe('expense');
+    expect(canonicalTypeForCategory(['FOOD_AND_DRINK', 'FOOD_AND_DRINK_COFFEE'])).toBe('expense');
+    expect(canonicalTypeForCategory(['INCOME', 'INCOME_WAGES'])).toBe('income');
+    expect(canonicalTypeForCategory(['TRANSFER_IN'])).toBe('transfer_in');
+    expect(canonicalTypeForCategory(['TRANSFER_OUT', 'TRANSFER_OUT_SAVINGS'])).toBe('transfer_out');
+    expect(canonicalTypeForCategory(['BANK_FEES', 'BANK_FEES_ATM_FEES'])).toBe('fee');
+  });
+
+  it('keeps a credit-card payment a transfer so spending is not double-counted', () => {
+    expect(canonicalTypeForCategory(['LOAN_PAYMENTS', 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT']))
+      .toBe('transfer_out');
+    expect(canonicalTypeForCategory(['LOAN_PAYMENTS', 'LOAN_PAYMENTS_CAR_PAYMENT'])).toBe('expense');
+  });
+
+  it('declines to classify a category with no cash-flow meaning', () => {
+    expect(canonicalTypeForCategory(['OTHER', 'OTHER_OTHER'])).toBeNull();
+    expect(canonicalTypeForCategory([])).toBeNull();
   });
 });
 
@@ -63,6 +89,50 @@ describe('applying overrides to in-memory transactions', () => {
       category_source: 'user',
     });
     expect(transactions[1].category).toEqual(['TRAVEL']);
+  });
+
+  it('restates the classification fields so cash-flow totals follow the edit', () => {
+    // Provider called this a transfer; the user says it was groceries. Every field the
+    // canonical resolver checks ahead of the category has to move with it.
+    const transactions = [{
+      transaction_id: 'txn-1',
+      category: ['TRANSFER_OUT'],
+      aiCategory: 'transfer_out',
+      transaction_type: 'transfer_out',
+      canonicalTransactionType: 'transfer_out',
+      personal_finance_category: { primary: 'TRANSFER_OUT', detailed: 'TRANSFER_OUT_WITHDRAWAL' },
+    }];
+
+    applyOverridesToTransactions(
+      transactions,
+      new Map([['txn-1', ['FOOD_AND_DRINK', 'FOOD_AND_DRINK_GROCERIES']]])
+    );
+
+    expect(transactions[0]).toMatchObject({
+      category: ['FOOD_AND_DRINK', 'FOOD_AND_DRINK_GROCERIES'],
+      aiCategory: 'expense',
+      transaction_type: 'expense',
+      canonicalTransactionType: 'expense',
+      personal_finance_category: { primary: 'FOOD_AND_DRINK', detailed: 'FOOD_AND_DRINK_GROCERIES' },
+    });
+    expect(resolveCanonicalTransactionType(transactions[0])).toBe('expense');
+  });
+
+  it('leaves an existing classification alone when the category implies none', () => {
+    const transactions = [{
+      transaction_id: 'txn-1',
+      category: ['FOOD_AND_DRINK'],
+      aiCategory: 'expense',
+      transaction_type: 'expense',
+    }];
+
+    applyOverridesToTransactions(transactions, new Map([['txn-1', ['OTHER', 'OTHER_OTHER']]]));
+
+    expect(transactions[0]).toMatchObject({
+      category: ['OTHER', 'OTHER_OTHER'],
+      aiCategory: 'expense',
+      transaction_type: 'expense',
+    });
   });
 });
 

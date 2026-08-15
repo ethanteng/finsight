@@ -8,6 +8,9 @@
  * anything Plaid produced.
  */
 
+import { resolveCanonicalTransactionType } from './canonical-transaction-adapter';
+import type { CanonicalTransactionType } from '../domain/financial-truth';
+
 export const TRANSACTION_CATEGORY_TAXONOMY: Record<string, string[]> = {
   INCOME: [
     'INCOME_DIVIDENDS',
@@ -169,6 +172,51 @@ export function listTransactionCategoryOptions(): TransactionCategoryOption[] {
     label: humanizeCategory(primary),
     detailed: detailed.map(value => ({ value, label: humanizeCategory(value) })),
   }));
+}
+
+/**
+ * Canonical cash-flow type implied by a chosen category.
+ *
+ * `resolveCanonicalTransactionType` never looks at `transaction.category` — it reads
+ * `aiCategory`/`transaction_type`/`personal_finance_category` — so a category edit that
+ * only rewrote the chip would leave a corrected transfer still excluded from spending.
+ * The shared resolver is asked first, so special cases it already encodes (a credit-card
+ * payment is a transfer, not an expense) keep applying; the table below only covers
+ * bare primaries, which the resolver leaves unclassified because a provider payload
+ * always carries a detailed value alongside them.
+ */
+const PRIMARY_CANONICAL_TYPES: Record<string, CanonicalTransactionType> = {
+  INCOME: 'income',
+  TRANSFER_IN: 'transfer_in',
+  TRANSFER_OUT: 'transfer_out',
+  BANK_FEES: 'fee',
+  LOAN_PAYMENTS: 'expense',
+  ENTERTAINMENT: 'expense',
+  FOOD_AND_DRINK: 'expense',
+  GENERAL_MERCHANDISE: 'expense',
+  HOME_IMPROVEMENT: 'expense',
+  MEDICAL: 'expense',
+  PERSONAL_CARE: 'expense',
+  GENERAL_SERVICES: 'expense',
+  GOVERNMENT_AND_NON_PROFIT: 'expense',
+  TRANSPORTATION: 'expense',
+  TRAVEL: 'expense',
+  RENT_AND_UTILITIES: 'expense',
+};
+
+/**
+ * Returns null for a selection with no deterministic cash-flow meaning (`OTHER`), which
+ * callers treat as "leave the existing classification alone" rather than as unclassified.
+ */
+export function canonicalTypeForCategory(category: string[]): CanonicalTransactionType | null {
+  const primary = (category[0] || '').toUpperCase();
+  if (!primary) return null;
+  const detailed = (category[1] || '').toUpperCase();
+
+  const resolved = resolveCanonicalTransactionType({
+    personal_finance_category: { primary, detailed },
+  });
+  return resolved ?? PRIMARY_CANONICAL_TYPES[primary] ?? null;
 }
 
 export interface CategorySelection {

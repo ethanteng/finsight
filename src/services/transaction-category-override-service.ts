@@ -1,4 +1,5 @@
 import { getPrismaClient } from '../prisma-client';
+import { canonicalTypeForCategory } from './transaction-category-taxonomy';
 
 /**
  * User-chosen transaction categories.
@@ -12,6 +13,10 @@ import { getPrismaClient } from '../prisma-client';
  * So a save does both: it patches the stored snapshot in place for an immediate
  * read-back, and `applyCategoryOverrides` re-applies the override during ingestion
  * so the choice sticks across recomputes.
+ *
+ * The in-place patch is display-only — it cannot recompute `transactionsSummary`, whose
+ * totals are produced from the ingested data at revision time. Callers therefore schedule
+ * a background revision so the cash-flow rollups catch up with the edit.
  */
 
 /** Same resolution order the snapshot builder uses, so ids line up on both sides. */
@@ -49,6 +54,15 @@ export async function getCategoryOverrides(userId: string): Promise<Map<string, 
 /**
  * Stamps user categories onto in-memory transactions. `category_source` lets the UI
  * label the chip as the user's own choice rather than the provider's.
+ *
+ * Rewriting `category` alone would only change the chip: cash-flow classification reads
+ * `aiCategory`/`transaction_type`/`personal_finance_category`, so a transfer corrected to
+ * groceries would still be excluded from spending. The provider's classification fields
+ * are therefore restated from the user's choice, which is safe here because this runs on
+ * the ingestion copy — after persistence, and rebuilt from the provider on every run.
+ *
+ * A selection with no deterministic cash-flow meaning leaves the existing classification
+ * alone rather than blanking it, which would push the transaction into `unclassified`.
  */
 export function applyOverridesToTransactions(
   transactions: any[] | undefined,
@@ -63,6 +77,19 @@ export function applyOverridesToTransactions(
     if (!category) continue;
     transaction.category = [...category];
     transaction.category_source = 'user';
+    transaction.personal_finance_category = {
+      primary: category[0],
+      detailed: category[1] || '',
+    };
+
+    const canonicalType = canonicalTypeForCategory(category);
+    if (canonicalType) {
+      // All three are consulted ahead of the category, in this order, so a stale value
+      // left in any of them would outrank the user's choice.
+      transaction.aiCategory = canonicalType;
+      transaction.canonicalTransactionType = canonicalType;
+      transaction.transaction_type = canonicalType;
+    }
     applied += 1;
   }
   return applied;

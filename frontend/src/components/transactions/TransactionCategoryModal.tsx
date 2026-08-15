@@ -81,12 +81,55 @@ export default function TransactionCategoryModal({
     return () => { cancelled = true; };
   }, [API_URL, options]);
 
+  // Snapshot categories are not guaranteed to be taxonomy values — older rows can carry
+  // free-text labels like "Food and Drink". Uppercasing one of those yields a value no
+  // option has, which renders an empty select while still arming Save for a 400. Drop
+  // anything the loaded menu does not recognise so the user makes a deliberate choice.
+  useEffect(() => {
+    if (!options) return;
+    setPrimary(current => {
+      if (!current) return current;
+      const match = options.find(option => option.primary === current);
+      if (!match) {
+        setDetailed('');
+        return '';
+      }
+      setDetailed(value => (match.detailed.some(entry => entry.value === value) ? value : ''));
+      return current;
+    });
+  }, [options]);
+
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.stopPropagation();
         onClose();
+        return;
+      }
+
+      // Keep Tab inside the dialog so focus never lands on the list behind it.
+      if (event.key !== 'Tab') return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const focusable = Array.from(
+        panel.querySelectorAll<HTMLElement>('button:not([disabled]), select:not([disabled]), a[href]')
+      );
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+
+      if (!panel.contains(active)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
       }
     };
     document.addEventListener('keydown', handleKeyDown);

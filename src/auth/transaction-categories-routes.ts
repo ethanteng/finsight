@@ -10,6 +10,7 @@ import {
   patchSnapshotTransactionCategory,
   providerCategoryFromTransaction,
 } from '../services/transaction-category-override-service';
+import { FinancialRevisionService } from '../services/financial-revision-service';
 
 const router = express.Router();
 
@@ -18,23 +19,19 @@ function transactionIdParam(req: AuthenticatedRequest): string {
   return (Array.isArray(raw) ? raw[0] : raw ?? '').trim();
 }
 
+/**
+ * The in-place snapshot patch fixes what the list shows, but `transactionsSummary` is
+ * only produced at revision time — so until one runs, a transaction recategorized across
+ * a cash-flow boundary is displayed one way and counted another. A category edit moves
+ * no money, so it records no balance-sheet observation.
+ */
+function scheduleCashFlowCatchUp(userId: string, label: string): void {
+  FinancialRevisionService.schedule(userId, { history: { kind: 'none' } }, label);
+}
+
 // GET /api/transaction-categories/options - Category menu for the edit modal
 router.get('/options', requireAuth, async (_req: AuthenticatedRequest, res) => {
   res.json({ success: true, data: listTransactionCategoryOptions() });
-});
-
-// GET /api/transaction-categories/overrides - Every category the user has changed
-router.get('/overrides', requireAuth, async (req: AuthenticatedRequest, res) => {
-  try {
-    const overrides = await getPrismaClient().transactionCategoryOverride.findMany({
-      where: { userId: req.user!.id },
-      select: { transactionId: true, category: true, updatedAt: true },
-    });
-    res.json({ success: true, data: overrides });
-  } catch (error) {
-    console.error('Failed to load transaction category overrides:', error);
-    res.status(500).json({ success: false, error: 'Failed to load category overrides' });
-  }
 });
 
 // PUT /api/transaction-categories/:transactionId - Set the category for one transaction
@@ -85,6 +82,8 @@ router.put('/:transactionId', requireAuth, async (req: AuthenticatedRequest, res
       return res.status(404).json({ success: false, error: 'Transaction not found' });
     }
 
+    scheduleCashFlowCatchUp(userId, 'transaction-category-updated');
+
     res.json({ success: true, data: override });
   } catch (error) {
     console.error('Failed to save transaction category:', error);
@@ -109,19 +108,28 @@ router.delete('/:transactionId', requireAuth, async (req: AuthenticatedRequest, 
       return res.status(404).json({ success: false, error: 'No category override to remove' });
     }
 
-    const restored = await patchSnapshotTransactionCategory(
-      userId,
-      transactionId,
-      existing.originalCategory,
-      'provider'
-    );
-    if (!restored) {
-      return res.status(500).json({ success: false, error: 'Failed to restore category in snapshot' });
+    // Restore the snapshot before dropping the row, so a failed patch cannot strand a
+    // user category on screen with the provider value already thrown away. A transaction
+    // that has since left the snapshot window has nothing to restore and must not be
+    // held hostage to that patch — otherwise its override could never be removed.
+    const stillInSnapshot = Boolean(await findSnapshotTransaction(userId, transactionId));
+    if (stillInSnapshot) {
+      const restored = await patchSnapshotTransactionCategory(
+        userId,
+        transactionId,
+        existing.originalCategory,
+        'provider'
+      );
+      if (!restored) {
+        return res.status(500).json({ success: false, error: 'Failed to restore category in snapshot' });
+      }
     }
 
     await getPrismaClient().transactionCategoryOverride.delete({
       where: { userId_transactionId: { userId, transactionId } },
     });
+
+    scheduleCashFlowCatchUp(userId, 'transaction-category-restored');
 
     res.json({ success: true, data: { transactionId, category: existing.originalCategory } });
   } catch (error) {
