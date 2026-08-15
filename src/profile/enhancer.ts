@@ -1,6 +1,7 @@
 import { getPrismaClient } from '../prisma-client';
 import { ProfileManager } from './manager';
 import { normalizeAssetType, mergeAssetAllocation } from '../services/asset-class';
+import { normalizeLabel } from '../services/label-normalization';
 
 export interface InvestmentProfile {
   totalPortfolioValue: number;
@@ -199,7 +200,9 @@ const analyzePortfolio = (holdings: any[]) => {
 
 const analyzeInvestmentActivity = (transactions: any[]) => {
   const activityByType = transactions.reduce((activity, transaction) => {
-    const type = transaction.type || 'Unknown';
+    // Plaid types are lowercase ("buy"), SnapTrade activity types uppercase
+    // ("BUY") — group on one label so a merged feed reports one bucket per type.
+    const type = normalizeLabel(transaction.type);
     if (!activity[type]) {
       activity[type] = { count: 0, totalAmount: 0 };
     }
@@ -238,7 +241,9 @@ const analyzeDebtObligations = (liabilities: any[]) => {
   const averageInterestRate = totalDebt > 0 ? totalInterest / totalDebt : 0;
 
   const debtTypes = liabilities.reduce((types, liability) => {
-    const type = liability.type || 'Unknown';
+    // This map is written into the profile text the model reads, so a liability
+    // type spelled two ways would be reported as two partial debt totals.
+    const type = normalizeLabel(liability.type);
     if (!types[type]) {
       types[type] = 0;
     }

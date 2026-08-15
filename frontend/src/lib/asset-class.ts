@@ -11,6 +11,8 @@
  * Keep this table in sync with the backend module.
  */
 
+import { labelKey, normalizeLabel } from './label-normalization';
+
 const ASSET_TYPE_ALIASES: Record<string, string> = {
   // Cash
   'cash': 'Cash',
@@ -71,18 +73,9 @@ const ASSET_TYPE_ALIASES: Record<string, string> = {
 export const UNKNOWN_ASSET_TYPE = 'Unknown';
 
 function caseFoldKey(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .replace(/\s+/g, ' ')
-    .toLowerCase();
-}
-
-/** Title-case a case-folded key so unmapped types still render consistently. */
-function labelFromKey(key: string): string {
-  return key
-    .split(' ')
-    .map(word => (word ? word.charAt(0).toUpperCase() + word.slice(1) : word))
-    .join(' ');
+  // Separators fold too, so a provider sending "FIXED_INCOME" or "mutual-fund"
+  // still matches the alias table rather than becoming its own bucket.
+  return labelKey(value);
 }
 
 /**
@@ -93,5 +86,5 @@ function labelFromKey(key: string): string {
 export function normalizeAssetType(rawType: unknown): string {
   const key = caseFoldKey(rawType);
   if (!key) return UNKNOWN_ASSET_TYPE;
-  return ASSET_TYPE_ALIASES[key] || labelFromKey(key);
+  return ASSET_TYPE_ALIASES[key] || normalizeLabel(key, UNKNOWN_ASSET_TYPE);
 }

@@ -7,6 +7,7 @@ import { SnapTradeService } from './snaptrade';
 import { TransactionSyncService } from './services/transaction-sync-service';
 import { matchAccountsAcrossConnections, toConnectionAccount } from './services/plaid-connection-supersede';
 import { normalizeAssetType } from './services/asset-class';
+import { normalizeLabel } from './services/label-normalization';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
@@ -288,7 +289,9 @@ const analyzePortfolio = (holdings: any[], securities: any[]) => {
 
 const analyzeInvestmentActivity = (transactions: any[]) => {
   const activityByType = transactions.reduce((activity, transaction) => {
-    const type = transaction.type || 'Unknown';
+    // Plaid types are lowercase ("buy"), SnapTrade activity types uppercase
+    // ("BUY") — group on one label so a merged feed reports one bucket per type.
+    const type = normalizeLabel(transaction.type);
     if (!activity[type]) {
       activity[type] = { count: 0, totalAmount: 0 };
     }

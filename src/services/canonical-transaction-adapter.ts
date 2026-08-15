@@ -3,6 +3,7 @@ import {
   type CanonicalTransaction,
   type CanonicalTransactionType,
 } from '../domain/financial-truth';
+import { normalizeLabel } from './label-normalization';
 
 const EXPENSE_PRIMARY_CATEGORIES = new Set([
   'entertainment',
@@ -139,11 +140,7 @@ export function canonicalCashFlowAmount(
 }
 
 function humanizeCategory(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[_-]+/g, ' ')
-    .replace(/\b\w/g, character => character.toUpperCase());
+  return normalizeLabel(value, 'Uncategorized');
 }
 
 function categoryLabel(transaction: any): string {
