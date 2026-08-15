@@ -52,6 +52,8 @@ export function formatAnalysisOutput(
       equityAllocation: portfolioMetrics.equityAllocation,
       withdrawalRate: withdrawalMetrics.withdrawalRate,
       yearsOfExpenses: withdrawalMetrics.yearsOfExpenses,
+      projectedPortfolioAtWithdrawalStart: withdrawalMetrics.projectedPortfolioAtWithdrawalStart,
+      yearsToWithdrawalStart: withdrawalMetrics.yearsToWithdrawalStart,
       historicalWithdrawalRates: withdrawalMetrics.historicalWithdrawalRates
     },
     stressTest: {
@@ -131,4 +133,3 @@ function generateHistoricalImplications(
 
   return implications;
 }
-

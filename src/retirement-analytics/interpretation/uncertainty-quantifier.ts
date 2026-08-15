@@ -50,6 +50,11 @@ export function calculateDataQuality(
   
   const proxiedValuePercentage = totalValue > 0 ? proxiedValue / totalValue : 0;
 
+  const missingData = [...portfolioMapping.unmappedHoldings, ...stressTestMissingData];
+  if (portfolioMapping.internationalEquityWeight > 0) {
+    missingData.push('Independent international equity return history is unavailable; US equity returns are used as its proxy');
+  }
+
   return {
     completeness,
     priceHistoryCoverage,
@@ -57,14 +62,14 @@ export function calculateDataQuality(
     portfolioMappingConfidence: portfolioMapping.mappingConfidence,
     proxiedValuePercentage,
     proxyUsage: {
-      usEquityProxy: 'VTI',
-      internationalEquityProxy: 'VXUS',
-      bondsProxy: 'AGG',
+      usEquityProxy: 'Shiller US equity total-return history',
+      internationalEquityProxy: 'Shiller US equity history (international proxy)',
+      bondsProxy: 'Shiller historical bond-return series',
       unmappedHoldings: portfolioMapping.unmappedHoldings,
       mappingMethod: portfolioMapping.mappingMethod
     },
     assumptions,
-    missingData: [...portfolioMapping.unmappedHoldings, ...stressTestMissingData]
+    missingData
   };
 }
 
@@ -124,12 +129,11 @@ export function generateDisclaimers(
   }
 
   // Add disclaimers for missing stress test data
-  const stressTestMissing = dataQuality.missingData.filter(m => 
-    m.includes('International Equity') || m.includes('US Equity') || m.includes('Bonds')
+  const stressTestMissing = dataQuality.missingData.filter(m =>
+    /international equity|us equity|bonds/i.test(m)
   );
   if (stressTestMissing.length > 0) {
-    disclaimers.push(`⚠️ Analysis uses partial historical data. ${stressTestMissing.join('; ')}. ` +
-      `Missing asset classes use zero returns (conservative assumption). Results may be less accurate.`);
+    disclaimers.push(`Analysis uses proxy or partial historical data. ${stressTestMissing.join('; ')}. Results may be less accurate.`);
   }
 
   if (timelineBucketNote) {

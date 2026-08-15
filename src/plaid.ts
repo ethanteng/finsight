@@ -1234,9 +1234,9 @@ export const setupPlaidRoutes = (app: any) => {
         let snapshot: any = null;
         try {
           if (req.user?.id) {
-            const { SummaryCacheService } = await import('./services/summary-cache-service');
+            const { FinancialRevisionService } = await import('./services/financial-revision-service');
             // Fast path to avoid long request times; cron will run full categorization
-            snapshot = await SummaryCacheService.computeForUser(req.user.id, {
+            snapshot = await FinancialRevisionService.recompute(req.user.id, {
               categorize: false,
               history: { kind: 'material', reason: 'account-sync' },
             });

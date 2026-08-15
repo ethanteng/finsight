@@ -57,6 +57,8 @@ export interface HistoricalPerformanceMetrics {
 export interface WithdrawalSustainabilityMetrics {
   withdrawalRate: number; // annualWithdrawalAmount / portfolioValue (descriptive, not prescriptive)
   yearsOfExpenses: number; // naive ratio: portfolioValue / annualWithdrawalAmount. Ignores returns, inflation, sequence risk. Not a longevity estimate.
+  projectedPortfolioAtWithdrawalStart: number; // median real value across historical accumulation sequences
+  yearsToWithdrawalStart: number;
   historicalWithdrawalRates: {
     p10: number;
     p25: number;
@@ -74,7 +76,7 @@ export interface WithdrawalSustainabilityMetrics {
 
 export interface AssetBasket {
   usEquity: string; // e.g., "VTI" or "SPY" as proxy
-  internationalEquity: string; // e.g., "VXUS" or "EFA" as proxy
+  internationalEquity: string; // historical return series used for international exposure
   nominalBonds: string; // e.g., "AGG" or "BND" as proxy
   cash: string; // "CASHX" or use treasury bill rate
 }
@@ -109,7 +111,9 @@ export interface HistoricalSequence {
 
 export interface PortfolioOutcome {
   withdrawalSustainability: boolean;
-  yearsUntilDepletion: number | null;
+  yearsUntilDepletion: number | null; // measured from withdrawal start, not current age
+  portfolioValueAtWithdrawalStart: number;
+  realPortfolioValueAtWithdrawalStart: number;
   finalValue: number; // inflation-adjusted
   maximumDrawdown: number; // peak-to-trough decline
   timeToRecovery: number | null; // months until recovery from worst drawdown
@@ -184,7 +188,7 @@ export interface DataQualityReport {
   proxiedValuePercentage: number; // 0-1 (percentage of portfolio value mapped via proxies/inference)
   proxyUsage: {
     usEquityProxy: string; // e.g., "VTI"
-    internationalEquityProxy: string; // e.g., "VXUS"
+    internationalEquityProxy: string; // exact historical series/proxy used
     bondsProxy: string; // e.g., "AGG"
     unmappedHoldings: string[];
     mappingMethod: string;
@@ -213,8 +217,10 @@ export interface RetirementAnalysisOutput {
   
   metrics: {
     equityAllocation: number;
-    withdrawalRate: number; // Descriptive only
-    yearsOfExpenses: number;
+    withdrawalRate: number; // annual withdrawal / median real portfolio at withdrawal start
+    yearsOfExpenses: number; // median real portfolio at withdrawal start / annual withdrawal
+    projectedPortfolioAtWithdrawalStart: number;
+    yearsToWithdrawalStart: number;
     historicalWithdrawalRates: {
       p10: number;
       p25: number;

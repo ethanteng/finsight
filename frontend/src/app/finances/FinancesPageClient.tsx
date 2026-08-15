@@ -129,6 +129,10 @@ export default function FinancesPageClient() {
   const [historicalDataLoading, setHistoricalDataLoading] = useState(true);
   const [chartTimeRange, setChartTimeRange] = useState<'1M' | '3M' | '6M' | '1Y' | 'All'>('All');
   const [refreshingSummary, setRefreshingSummary] = useState(false);
+  const [refreshSummaryMessage, setRefreshSummaryMessage] = useState<{
+    kind: 'success' | 'warning' | 'error';
+    text: string;
+  } | null>(null);
   const router = useRouter();
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -205,24 +209,34 @@ export default function FinancesPageClient() {
   const refreshSummary = useCallback(async () => {
     try {
       setRefreshingSummary(true);
+      setRefreshSummaryMessage(null);
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
       const token = localStorage.getItem('auth_token');
       if (!token) {
         console.warn('No auth token found, skipping refresh');
+        setRefreshSummaryMessage({ kind: 'error', text: 'Please sign in again before refreshing totals.' });
         return;
       }
       headers['Authorization'] = `Bearer ${token}`;
       const res = await fetch(`${API_URL}/api/refresh-summary`, { method: 'POST', headers });
+      const body = await res.json().catch(() => ({}));
       if (res.ok) {
         await loadOverview();
+        setRefreshSummaryMessage(body.status === 'current'
+          ? { kind: 'success', text: 'Totals refreshed from your connected providers.' }
+          : { kind: 'warning', text: 'Refresh completed, but some connected-source data is stale or unavailable.' });
       } else {
-        const err = await res.json().catch(() => ({}));
-        console.error('Failed to refresh summary:', res.status, err);
+        console.error('Failed to refresh summary:', res.status, body);
+        setRefreshSummaryMessage({
+          kind: 'error',
+          text: body.error || 'Live totals could not be refreshed. Please try again.',
+        });
       }
     } catch (error) {
       console.error('Error refreshing summary:', error);
+      setRefreshSummaryMessage({ kind: 'error', text: 'Live totals could not be refreshed. Please try again.' });
     } finally {
       setRefreshingSummary(false);
     }
@@ -363,6 +377,18 @@ export default function FinancesPageClient() {
                   >
                     {refreshingSummary ? 'Refreshing...' : 'Refresh totals'}
                   </button>
+                  {refreshSummaryMessage && (
+                    <span
+                      role={refreshSummaryMessage.kind === 'error' ? 'alert' : 'status'}
+                      className={refreshSummaryMessage.kind === 'success'
+                        ? 'text-[#b9e890]'
+                        : refreshSummaryMessage.kind === 'warning'
+                          ? 'text-[#f4d77c]'
+                          : 'text-[#ffaaa0]'}
+                    >
+                      {refreshSummaryMessage.text}
+                    </span>
+                  )}
                 </div>
               </div>
               <FinancialMetricsChart 

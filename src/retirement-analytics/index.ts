@@ -6,13 +6,37 @@ import { analyzePortfolio } from './engine/portfolio-analyzer';
 import { mapPortfolioToAssetBasket, populateAssumptions } from './engine/portfolio-mapper';
 import { DataProviderFactory } from './data/data-provider-factory';
 import { FREDProvider } from '../data/providers/fred';
-import { generateRollingSequences, snapToHorizonBucket } from './engine/stress-tester';
+import {
+  calculateHistoricalPriceCoverage,
+  generateRollingSequences,
+  sliceHistoricalSequence,
+  snapToHorizonBucket,
+} from './engine/stress-tester';
 import { computeHistoricalWithdrawalRates } from './engine/withdrawal-rate-solver';
 import { simulateWithdrawals } from './engine/withdrawal-simulator';
 import { analyzeOutcomes } from './engine/outcome-analyzer';
 import { assessPortfolioCharacteristics } from './engine/characteristics-assessor';
 import { formatAnalysisOutput } from './interpretation/analysis-formatter';
 import { calculateDataQuality } from './interpretation/uncertainty-quantifier';
+
+export function buildRetirementTimeline(input: Pick<
+  RetirementAnalysisInput,
+  'currentAge' | 'retirementAge' | 'withdrawalStartAge' | 'lifeExpectancy'
+>) {
+  const yearsToWithdrawalStart = Math.max(0, input.withdrawalStartAge - input.currentAge);
+  const withdrawalYears = input.lifeExpectancy - input.withdrawalStartAge;
+  const totalAnalysisYears = yearsToWithdrawalStart + withdrawalYears;
+  if (withdrawalYears <= 0 || totalAnalysisYears <= 0) {
+    throw new Error('Withdrawal start age must be before life expectancy');
+  }
+  return {
+    yearsToRetirement: input.retirementAge ? input.retirementAge - input.currentAge : -1,
+    yearsToWithdrawalStart,
+    withdrawalYears,
+    totalAnalysisYears,
+    withdrawalDelayMonths: Math.round(yearsToWithdrawalStart * 12),
+  };
+}
 
 /**
  * Main entry point for retirement portfolio analysis
@@ -69,25 +93,37 @@ export async function analyzeRetirementPortfolio(
   const portfolioMapping = await mapPortfolioToAssetBasket(input.holdings, input.securities, totalValue, dataProviderFactory, tickerToMetadata);
   const assumptions = populateAssumptions(portfolioMapping, input.holdings, input.securities);
 
-  // Calculate timeline metrics (exact horizon, no bucketing)
-  const withdrawalYears = input.lifeExpectancy - input.withdrawalStartAge;
+  // Model the full path from today through life expectancy. Contributions are
+  // not an input today, so the accumulation phase deliberately assumes zero.
+  const timeline = buildRetirementTimeline(input);
+  const { yearsToWithdrawalStart, withdrawalYears, totalAnalysisYears, withdrawalDelayMonths } = timeline;
+  if (yearsToWithdrawalStart > 0) {
+    assumptions.push(
+      `Portfolio grows for ${yearsToWithdrawalStart} years before withdrawals begin; no additional contributions are assumed`
+    );
+  }
   const timelineBucket = snapToHorizonBucket(withdrawalYears);
-  const timelineBucketNote = '';
+  const timelineBucketNote = yearsToWithdrawalStart > 0
+    ? `Historical sequences include ${yearsToWithdrawalStart} years of pre-withdrawal growth with no additional contributions before the ${withdrawalYears}-year withdrawal period.`
+    : 'Withdrawals begin immediately; no pre-withdrawal accumulation period is modeled.';
 
   const fredApiKey = process.env.FRED_API_KEY || 'test_fred_key';
   const fredProvider = new FREDProvider(fredApiKey);
 
   // Phase 3: Generate rolling sequences (with graceful degradation)
   const { sequences, missingData: stressTestMissingData } = await generateRollingSequences(
-    withdrawalYears,
+    totalAnalysisYears,
     dataProviderFactory,
     fredProvider,
     50 // minHistoryYears
   );
 
   // Phase 3b: Compute historical withdrawal rate distribution (before user scenario)
+  const withdrawalSequences = withdrawalDelayMonths > 0
+    ? sequences.map(sequence => sliceHistoricalSequence(sequence, withdrawalDelayMonths))
+    : sequences;
   const historicalWithdrawalRates = computeHistoricalWithdrawalRates(
-    sequences,
+    withdrawalSequences,
     portfolioMapping,
     totalValue
   );
@@ -98,7 +134,8 @@ export async function analyzeRetirementPortfolio(
       portfolioMapping,
       totalValue,
       sequence,
-      input.annualWithdrawalAmount
+      input.annualWithdrawalAmount,
+      { withdrawalDelayMonths }
     )
   );
 
@@ -122,15 +159,24 @@ export async function analyzeRetirementPortfolio(
   );
 
   // Calculate withdrawal sustainability metrics
-  const withdrawalRate = totalValue > 0 ? input.annualWithdrawalAmount / totalValue : 0;
-  const yearsOfExpenses = input.annualWithdrawalAmount > 0 ? totalValue / input.annualWithdrawalAmount : 0;
-  
-  // Calculate price history coverage (simplified - would check actual coverage in production)
-  const priceHistoryCoverage = 0.8; // Placeholder - would calculate from actual data availability
+  const projectedStartValues = outcomes
+    .map(outcome => outcome.realPortfolioValueAtWithdrawalStart)
+    .filter(value => Number.isFinite(value))
+    .sort((left, right) => left - right);
+  const medianProjectedStartValue = projectedStartValues.length === 0
+    ? totalValue
+    : projectedStartValues[Math.floor(projectedStartValues.length / 2)];
+  const withdrawalRate = medianProjectedStartValue > 0
+    ? input.annualWithdrawalAmount / medianProjectedStartValue
+    : 0;
+  const yearsOfExpenses = input.annualWithdrawalAmount > 0
+    ? medianProjectedStartValue / input.annualWithdrawalAmount
+    : 0;
+
+  const priceHistoryCoverage = calculateHistoricalPriceCoverage(portfolioMapping);
 
   // Phase 6: Calculate data quality and format output
   // Include missing data from stress test in data quality report
-  const allMissingData = [...(portfolioMapping.unmappedHoldings || []), ...stressTestMissingData];
   const dataQuality = calculateDataQuality(
     input.holdings,
     input.securities,
@@ -143,13 +189,15 @@ export async function analyzeRetirementPortfolio(
   const withdrawalMetrics = {
     withdrawalRate,
     yearsOfExpenses,
+    projectedPortfolioAtWithdrawalStart: medianProjectedStartValue,
+    yearsToWithdrawalStart,
     historicalWithdrawalRates: stressTestResults.historicalWithdrawalRates,
     withdrawalFailureRate: 1 - stressTestResults.survivalRate,
     worstCaseDepletionYear: stressTestResults.depletionPercentiles.p10
   };
 
   const timelineMetrics = {
-    yearsToRetirement: input.retirementAge ? input.retirementAge - input.currentAge : -1,
+    yearsToRetirement: timeline.yearsToRetirement,
     withdrawalYears,
     withdrawalYearsOriginal: withdrawalYears,
     withdrawalMonths: withdrawalYears * 12,

@@ -1,6 +1,7 @@
 import express from 'express';
 import { requireAuth, AuthenticatedRequest } from './middleware';
 import { getPrismaClient } from '../prisma-client';
+import { FinancialRevisionService } from '../services/financial-revision-service';
 
 const router = express.Router();
 const prisma = getPrismaClient();
@@ -33,13 +34,7 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
       },
     });
 
-    // Invalidate financial data cache for this user
-    const { cacheService } = await import('../data/cache');
-    await cacheService.invalidate(`financial-data:${userId}`);
-    
-    // Trigger snapshot refresh
-    const { SummaryCacheService } = await import('../services/summary-cache-service');
-    await SummaryCacheService.computeForUser(userId, {
+    await FinancialRevisionService.recompute(userId, {
       history: { kind: 'material', reason: 'manual-account-created' },
     }).catch(err => {
       console.error('Failed to refresh snapshot after creating manual account:', err);
@@ -126,13 +121,7 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
       data: updateData,
     });
 
-    // Invalidate financial data cache for this user
-    const { cacheService } = await import('../data/cache');
-    await cacheService.invalidate(`financial-data:${userId}`);
-    
-    // Trigger snapshot refresh
-    const { SummaryCacheService } = await import('../services/summary-cache-service');
-    await SummaryCacheService.computeForUser(userId, {
+    await FinancialRevisionService.recompute(userId, {
       history: { kind: 'material', reason: 'manual-account-updated' },
     }).catch(err => {
       console.error('Failed to refresh snapshot after updating manual account:', err);
@@ -209,13 +198,7 @@ router.delete('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
       where: { id },
     });
 
-    // Invalidate financial data cache for this user
-    const { cacheService } = await import('../data/cache');
-    await cacheService.invalidate(`financial-data:${userId}`);
-    
-    // Trigger snapshot refresh
-    const { SummaryCacheService } = await import('../services/summary-cache-service');
-    await SummaryCacheService.computeForUser(userId, {
+    await FinancialRevisionService.recompute(userId, {
       history: { kind: 'material', reason: 'manual-account-deleted' },
     }).catch(err => {
       console.error('Failed to refresh snapshot after deleting manual account:', err);

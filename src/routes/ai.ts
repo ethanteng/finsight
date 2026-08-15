@@ -152,15 +152,11 @@ router.put('/transactions/:transactionId/transaction-type', requireAuth, async (
       },
     });
 
-    const { cacheService } = await import('../data/cache');
-    await cacheService.invalidate(`financial-data:${userId}`);
-    const { SummaryCacheService } = await import('../services/summary-cache-service');
-    void SummaryCacheService.computeForUser(userId, {
+    const { FinancialRevisionService } = await import('../services/financial-revision-service');
+    FinancialRevisionService.schedule(userId, {
       categorize: false,
       history: { kind: 'none' },
-    }).catch((err) => {
-      console.warn('Manual transaction-type correction: snapshot refresh failed (non-fatal):', err);
-    });
+    }, 'Manual transaction-type correction');
 
     res.json({
       id: updatedTransaction.id,

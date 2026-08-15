@@ -4,6 +4,12 @@
 import { Holding, Security } from '../../services/financial-data-service';
 import { PortfolioCompositionMetrics } from '../types';
 import { DataProviderFactory } from '../data/data-provider-factory';
+import {
+  hasBondNameSignal,
+  isGlobalEquity,
+  isInternationalEquity,
+  isKnownBondTicker,
+} from './asset-classification';
 
 /**
  * Calculate portfolio composition metrics including allocations, concentration, and expense ratios
@@ -98,9 +104,9 @@ export async function analyzePortfolio(
       equityValue += holdingValue;
       
       // Check if international (use FMP geographic focus if available)
-      if (geographicFocus === 'international' || geographicFocus === 'global' ||
-          securityName.includes('international') || securityName.includes('ex-us') || 
-          (securityName.includes('global') && !securityName.includes('us'))) {
+      if (isGlobalEquity(geographicFocus, securityName)) {
+        internationalValue += holdingValue * 0.3;
+      } else if (isInternationalEquity(geographicFocus, securityName, ticker)) {
         internationalValue += holdingValue;
       }
     } else if (assetType.includes('bond') || assetType.includes('fixed income') ||
@@ -113,9 +119,7 @@ export async function analyzePortfolio(
       // Default classification: when assetType is generic (e.g. "etf", "mutual fund")
       // or unknown, check security name for bond hints before assuming equity.
       // Fixes misclassification where bond ETFs defaulted to equity (e.g. 91.9% vs actual ~30%).
-      if (securityName.includes('bond') || securityName.includes('fixed income') ||
-          securityName.includes('treasury') || securityName.includes('tips') ||
-          securityName.includes('aggregate') || securityName.includes('corporate bond')) {
+      if (hasBondNameSignal(securityName) || isKnownBondTicker(ticker)) {
         fixedIncomeValue += holdingValue;
       } else {
         equityValue += holdingValue;

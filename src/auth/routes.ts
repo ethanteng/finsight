@@ -20,7 +20,6 @@ import { stripe } from '../config/stripe';
 import { sendWelcomeEmail } from '../services/stripe-email';
 import { analytics } from '../analytics/heycatch';
 import { isValidTimeZone, normalizeTimeZone } from '../domain/time-zone';
-import { getLatestFinancialSnapshot } from '../services/financial-snapshot-persistence';
 
 function isUniqueConstraintError(error: unknown): error is { code: string } {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002';
@@ -349,13 +348,12 @@ router.post('/login', async (req: Request, res: Response) => {
     // Trigger non-blocking financial summary refresh if stale
     setImmediate(async () => {
       try {
-        const { SummaryCacheService } = await import('../services/summary-cache-service');
-        const snapshot = await getLatestFinancialSnapshot(user.id, 'summary');
-        const computedAt = snapshot?.computedAt ? new Date(snapshot.computedAt) : null;
-        const cacheExpired = !computedAt || Date.now() - computedAt.getTime() > 24 * 60 * 60 * 1000;
-        if (!snapshot || snapshot.status !== 'current' || cacheExpired) {
-          await SummaryCacheService.computeForUser(user.id, { categorize: false });
-        }
+        const { FinancialRevisionService } = await import('../services/financial-revision-service');
+        await FinancialRevisionService.recomputeIfStale(
+          user.id,
+          24 * 60 * 60 * 1000,
+          { categorize: false }
+        );
       } catch (error) {
         console.error(`Failed to refresh summary on login for user ${user.id}:`, error);
         // Don't throw - this is a background operation

@@ -1,6 +1,7 @@
 import express from 'express';
 import { requireAuth, AuthenticatedRequest } from './middleware';
 import { getPrismaClient } from '../prisma-client';
+import { FinancialRevisionService } from '../services/financial-revision-service';
 
 const router = express.Router();
 const prisma = getPrismaClient();
@@ -66,13 +67,7 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
       data: { name: name.trim() },
     });
 
-    // Invalidate financial data cache for this user
-    const { cacheService } = await import('../data/cache');
-    await cacheService.invalidate(`financial-data:${userId}`);
-    
-    // Trigger snapshot refresh
-    const { SummaryCacheService } = await import('../services/summary-cache-service');
-    await SummaryCacheService.computeForUser(userId, { history: { kind: 'none' } }).catch(err => {
+    await FinancialRevisionService.recompute(userId, { history: { kind: 'none' } }).catch(err => {
       console.error('Failed to refresh snapshot after updating account name:', err);
     });
 

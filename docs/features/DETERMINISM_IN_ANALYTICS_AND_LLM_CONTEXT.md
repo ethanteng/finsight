@@ -24,7 +24,7 @@ The retirement analysis uses **rolling historical windows**, not Monte Carlo sim
 
 **How it works:**
 
-1. **Rolling sequences** (`stress-tester.ts`) — Generates quarterly rolling windows (10/20/30 years) from historical returns of VTI, VXUS, AGG (or fallbacks). Each window is a fixed historical period (e.g., 1970-Q1 to 1980-Q1).
+1. **Rolling sequences** (`stress-tester.ts`) — Generates monthly-start rolling windows from the checked-in Shiller US equity and bond histories plus Kenneth French cash returns. International equity currently reuses the US equity series, so international diversification effects are not modeled.
 2. **Withdrawal simulation** (`withdrawal-simulator.ts`) — For each sequence, runs a deterministic month-by-month simulation: apply portfolio return, subtract withdrawal, track drawdowns and depletion.
 3. **Outcome analysis** (`outcome-analyzer.ts`) — Computes survival rate, depletion percentiles, worst sequences, etc. from the simulation results.
 

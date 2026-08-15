@@ -1,6 +1,7 @@
 import type { EvidenceManifest } from '../openai/show-the-math-types';
 
 const MAX_SAMPLES = 500;
+export const LLM_BASELINE_MIN_SAMPLES = 100;
 
 export const LLM_PERFORMANCE_TARGETS = {
   contextGatherP95Ms: 1500,
@@ -45,6 +46,17 @@ function summarize(values: Array<number | undefined>) {
 
 function meetsUpperBound(value: number | null, target: number): boolean | null {
   return value === null ? null : value <= target;
+}
+
+function baselineStage(samples: number, p50Ms: number | null, p95Ms: number | null) {
+  return {
+    samples,
+    minimumSamples: LLM_BASELINE_MIN_SAMPLES,
+    remainingSamples: Math.max(0, LLM_BASELINE_MIN_SAMPLES - samples),
+    ready: samples >= LLM_BASELINE_MIN_SAMPLES,
+    p50Ms,
+    p95Ms,
+  };
 }
 
 export function recordLlmAnalysis(manifest: EvidenceManifest, success = true): void {
@@ -93,9 +105,23 @@ export function getLlmMetricsSnapshot() {
     total: summarize(samples.map(sample => sample.totalMs)),
   };
 
+  const baselineStages = {
+    contextGather: baselineStage(stages.contextGather.samples, stages.contextGather.p50Ms, stages.contextGather.p95Ms),
+    promptBuild: baselineStage(stages.promptBuild.samples, stages.promptBuild.p50Ms, stages.promptBuild.p95Ms),
+    model: baselineStage(stages.model.samples, stages.model.p50Ms, stages.model.p95Ms),
+    validation: baselineStage(stages.validation.samples, stages.validation.p50Ms, stages.validation.p95Ms),
+    timeToFirstToken: baselineStage(stages.timeToFirstToken.samples, stages.timeToFirstToken.p50Ms, stages.timeToFirstToken.p95Ms),
+    total: baselineStage(stages.total.samples, stages.total.p50Ms, stages.total.p95Ms),
+  };
+  const baselineReady = Object.values(baselineStages).every(stage => stage.ready);
+
   return {
     processStartedAt: new Date(Date.now() - process.uptime() * 1000).toISOString(),
     retainedSamples: samples.length,
+    observationWindow: {
+      from: samples[0]?.at ?? null,
+      to: samples[samples.length - 1]?.at ?? null,
+    },
     targets: LLM_PERFORMANCE_TARGETS,
     stages,
     quality: {
@@ -103,6 +129,19 @@ export function getLlmMetricsSnapshot() {
       deterministicGroundingRate: groundingRate,
       fallbackRate: rate(sample => sample.fallbackUsed),
       retryRate: rate(sample => sample.retryUsed),
+    },
+    baselineCandidate: {
+      ready: baselineReady,
+      note: baselineReady
+        ? 'Representative sample threshold met. Record these deployed p50/p95 values as the release baseline.'
+        : 'Collect more deployed samples before treating these values as a latency baseline.',
+      stages: baselineStages,
+      quality: {
+        successRate: rate(sample => sample.success),
+        deterministicGroundingRate: groundingRate,
+        fallbackRate: rate(sample => sample.fallbackUsed),
+        retryRate: rate(sample => sample.retryUsed),
+      },
     },
     targetStatus: {
       contextGatherP95: meetsUpperBound(stages.contextGather.p95Ms, LLM_PERFORMANCE_TARGETS.contextGatherP95Ms),

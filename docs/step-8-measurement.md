@@ -26,17 +26,41 @@ after collecting a representative production window. First-token latency is
 reported only for genuinely streamed Claude responses; buffered responses and
 the non-streaming fallback do not claim a first-token measurement.
 
+### Capturing a deployed baseline
+
+Do not use local timings as a production baseline. After deploying a release:
+
+1. Let normal production traffic collect at least 100 observations for every
+   stage, including streamed first-token latency.
+2. Fetch the admin-only `GET /ai/performance` endpoint. Confirm
+   `baselineCandidate.ready` is `true` and save the `observationWindow`, stage
+   p50/p95 values, and quality rates with the release notes.
+3. Cross-check the same window in Sentry before changing a target. The endpoint
+   is process-local and intentionally resets on each deployment; Sentry is the
+   durable source for comparisons across releases and instances.
+4. Use the captured values as the prior-release baseline for the next change.
+   Keep the published targets as budgets unless representative production data
+   supports revising them.
+
+`baselineCandidate` reports the remaining samples per stage and never labels an
+undersized window ready. A restart or deployment starts a new candidate window.
+
 ## Correctness evaluation
 
-Run `npm run eval:llm`. The deterministic evaluation gate requires 100% across:
+Run `npm run eval:llm`. The deterministic evaluation gate executes controlled
+snapshots and model responses through the production analysis pipeline and
+requires 100% across:
 
 - numerical accuracy and provenance;
 - contextual follow-up routing;
 - stale snapshot traceability;
 - missing-data non-invention;
-- retirement input handling without financial-rule defaults.
+- retirement accumulation-phase facts and input handling without
+  financial-rule defaults;
+- rejection and grounded retry of a model-invented amount.
 
-This offline gate validates the contracts around model output without spending
-tokens or depending on provider availability. The authenticated end-to-end
-audit in `scripts/audit-canonical-facts-e2e.ts` remains the live-provider smoke
-test.
+The scenarios exercise intent routing, question-specific prompt construction,
+structured parsing, canonicalization, local arithmetic validation, retries, and
+evidence manifests without spending tokens or depending on provider
+availability. The authenticated end-to-end audit in
+`scripts/audit-canonical-facts-e2e.ts` remains the live-provider smoke test.

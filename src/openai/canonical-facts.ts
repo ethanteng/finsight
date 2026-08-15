@@ -367,6 +367,20 @@ export function buildCanonicalFactPack(
     addCalculatedFact('withdrawal_rate', 'Withdrawal rate', retirement.metrics.withdrawalRate * 100, 'percent', 'input * 100', ['withdrawal_rate_ratio']);
     addSnapshotFact('equity_allocation', 'Equity allocation', retirement.metrics.equityAllocation, 'percent', 'retirementAnalysis.metrics.equityAllocation');
     addSnapshotFact('years_of_expenses', 'Years of expenses', retirement.metrics.yearsOfExpenses, 'years', 'retirementAnalysis.metrics.yearsOfExpenses');
+    addSnapshotFact(
+      'projected_portfolio_at_withdrawal_start',
+      'Median historically projected portfolio at withdrawal start in today dollars',
+      retirement.metrics.projectedPortfolioAtWithdrawalStart,
+      'usd',
+      'retirementAnalysis.metrics.projectedPortfolioAtWithdrawalStart'
+    );
+    addSnapshotFact(
+      'years_to_withdrawal_start',
+      'Years until withdrawals begin',
+      retirement.metrics.yearsToWithdrawalStart,
+      'years',
+      'retirementAnalysis.metrics.yearsToWithdrawalStart'
+    );
     addSnapshotFact('survival_rate_ratio', 'Historical survival rate source ratio', retirement.stressTest.survivalRate, 'ratio', 'retirementAnalysis.stressTest.survivalRate', false);
     addCalculatedFact('survival_rate', 'Historical survival rate', retirement.stressTest.survivalRate * 100, 'percent', 'input * 100', ['survival_rate_ratio']);
     addSnapshotFact('historical_sequence_count', 'Historical sequence count', retirement.stressTest.totalSequences, 'count', 'retirementAnalysis.stressTest.totalSequences');

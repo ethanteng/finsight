@@ -29,6 +29,7 @@ import { validateCanonicalFactPack } from './canonical-facts';
 import { askOpenAIWithPreparedPrompt } from './openai-fallback-client';
 import { createHash } from 'crypto';
 import { recordLlmAnalysisFailure } from '../observability/llm-metrics';
+import type { FinancialContextSnapshot } from './types';
 
 export interface RunAskLincAnalysisOptions {
   question: string;
@@ -42,6 +43,16 @@ export interface RunAskLincAnalysisOptions {
   onAnswerDelta?: (delta: string) => void;
   /** Optional callback signalling the streamed answer so far should be discarded (e.g. before a validation retry). */
   onAnswerReset?: () => void;
+  /** Deterministic dependency seam for the offline end-to-end evaluation suite. */
+  evaluation?: {
+    snapshot: FinancialContextSnapshot;
+    model: (input: {
+      systemPrompt: string;
+      userMessage: string;
+      phase: 'initial' | 'retry';
+    }) => string | Promise<string>;
+    skipToneConfig?: boolean;
+  };
 }
 
 /**
@@ -112,7 +123,8 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     enableValidation = process.env.ENABLE_RESPONSE_VALIDATION === 'true',
     onProgress,
     onAnswerDelta,
-    onAnswerReset
+    onAnswerReset,
+    evaluation,
   } = options;
 
   const tier = typeof userTier === 'string' ? (userTier as UserTier) : userTier;
@@ -136,7 +148,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
 
   // Step 1: Retrieve context (snapshot, profile, market summary, RAG)
   const contextGatherStartedAt = Date.now();
-  const snapshot = await gatherContextSnapshot({
+  const snapshot = evaluation?.snapshot ?? await gatherContextSnapshot({
     userId,
     question,
     questionNeeds,
@@ -148,7 +160,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   // Step 2: Build the prompt directly from the persisted canonical snapshot.
   const promptBuildStartedAt = Date.now();
   onProgress?.('Submitting to Claude for analysis');
-  await loadResponseToneConfig();
+  if (!evaluation?.skipToneConfig) await loadResponseToneConfig();
   const orderedConversationHistory = conversationHistory
     .slice()
     .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
@@ -176,6 +188,23 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     phase: 'initial' | 'retry',
     preferredProvider: 'claude' | 'openai' = 'claude'
   ): Promise<{ rawResponse: string; provider: 'claude' | 'openai' }> => {
+    if (evaluation) {
+      const startedAt = Date.now();
+      const rawResponse = await evaluation.model({
+        systemPrompt: prompt.systemPrompt,
+        userMessage: prompt.userMessage,
+        phase,
+      });
+      modelCalls.push({
+        phase,
+        provider: 'claude',
+        outcome: 'success',
+        promptCharacters: prompt.systemPrompt.length + prompt.userMessage.length,
+        responseCharacters: rawResponse.length,
+        durationMs: Date.now() - startedAt,
+      });
+      return { rawResponse, provider: 'claude' };
+    }
     if (preferredProvider === 'openai') {
       const startedAt = Date.now();
       const rawResponse = await askOpenAIWithPreparedPrompt(prompt.systemPrompt, prompt.userMessage);

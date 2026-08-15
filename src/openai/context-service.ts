@@ -544,7 +544,9 @@ async function fetchOrCreateRetirementAnalysis(args: {
         historicalImplications: Array.isArray(cachedAnalysis?.historicalImplications) ? cachedAnalysis.historicalImplications : [],
         dataQuality: {
           completeness: recentAnalysis.dataQualityScore,
-          priceHistoryCoverage: 0.8,
+          // Legacy rows predate measured proxy coverage. Report it as unknown
+          // rather than preserving the former hardcoded 80% claim.
+          priceHistoryCoverage: 0,
           metadataConfidence: 'medium' as const,
           portfolioMappingConfidence: 'medium' as const,
           proxiedValuePercentage: 0,
@@ -556,7 +558,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
             mappingMethod: 'direct'
           },
           assumptions: [],
-          missingData: []
+          missingData: ['Historical proxy coverage was not recorded for this legacy analysis']
         },
         disclaimers: [],
         _storedInputParams: storedInput,
