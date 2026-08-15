@@ -174,7 +174,55 @@ describe('finances overview contract', () => {
     ]);
   });
 
-  it('flags a renamed manual account as out of sync until the snapshot is rebuilt', () => {
+  it('shows the current account name without waiting for the snapshot to be rebuilt', () => {
+    const overview = buildFinancesOverview({
+      snapshot,
+      accountNames: new Map([
+        ['brokerage', 'University of California 401K'],
+        ['manual-manual-cash', 'Travel Wallet'],
+      ]),
+      manualAccounts: [{
+        id: 'manual-cash', name: 'Travel Wallet', amount: 100, type: 'cash',
+        createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
+      }],
+    });
+
+    expect(overview.accountGroups.investments.accounts[0].name).toBe('University of California 401K');
+    expect(overview.accountGroups.cash.accounts.map(account => account.name))
+      .toContain('Travel Wallet');
+    // Renaming moves no money.
+    expect(overview.financialOverview.totalInvestments).toBe(100000);
+  });
+
+  it('keeps the snapshot name for accounts with no live name', () => {
+    const overview = buildFinancesOverview({
+      snapshot,
+      accountNames: new Map([['brokerage', 'Renamed Brokerage']]),
+    });
+
+    expect(overview.accountGroups.investments.accounts[0].name).toBe('Renamed Brokerage');
+    expect(overview.accountGroups.cash.accounts[0].name).toBe('Checking');
+  });
+
+  it('does not flag a rename as out of sync, because the name is served live', () => {
+    // The route always supplies live names, so a rename is already reflected everywhere the
+    // page shows it. Warning about it would ask the user to refresh totals that did not move.
+    const overview = buildFinancesOverview({
+      snapshot,
+      accountNames: new Map([['manual-manual-cash', 'Travel Wallet']]),
+      manualAccounts: [{
+        id: 'manual-cash', name: 'Travel Wallet', amount: 100, type: 'cash',
+        createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
+      }],
+    });
+
+    expect(overview.warnings.map(warning => warning.code)).not.toContain('manual-accounts-out-of-sync');
+    expect(overview.manualAccounts[0].name).toBe('Travel Wallet');
+    expect(overview.accountGroups.cash.accounts.map(account => account.name)).toContain('Travel Wallet');
+  });
+
+  it('still flags a renamed manual account when no live name is supplied', () => {
+    // Defensive: without the overlay the snapshot name is genuinely what the user sees.
     const overview = buildFinancesOverview({
       snapshot,
       manualAccounts: [{
@@ -184,13 +232,13 @@ describe('finances overview contract', () => {
     });
 
     expect(overview.warnings.map(warning => warning.code)).toContain('manual-accounts-out-of-sync');
-    // The list itself reads live, so the new name is visible immediately.
-    expect(overview.manualAccounts[0].name).toBe('Travel Wallet');
   });
 
   it('flags an edited manual account amount as out of sync until the snapshot is rebuilt', () => {
+    // Amounts are never overlaid — only the snapshot knows the totals they feed.
     const overview = buildFinancesOverview({
       snapshot,
+      accountNames: new Map([['manual-manual-cash', 'Wallet']]),
       manualAccounts: [{
         id: 'manual-cash', name: 'Wallet', amount: 250, type: 'cash',
         createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',

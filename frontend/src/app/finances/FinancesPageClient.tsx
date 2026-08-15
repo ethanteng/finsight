@@ -290,8 +290,23 @@ export default function FinancesPageClient() {
     }
   }, [loadOverview]);
 
-  const refreshAccounts = refreshAfterAccountEdit;
-  const refreshManualAccounts = refreshAfterAccountEdit;
+  // A rename moves no money, so there is no derived total to reconcile and nothing to wait
+  // for — the overview reads account names live. Reload and stop; a failure here does not
+  // mean the rename failed, so it must not surface as a rename error.
+  const refreshAccounts = useCallback(async () => {
+    await loadOverview().catch(() => null);
+  }, [loadOverview]);
+
+  // Adding, deleting, or re-valuing a manual account moves the totals and has to wait for
+  // the rebuilt snapshot. Renaming one does not, so it takes the same fast path as a
+  // connected-account rename.
+  const refreshManualAccounts = useCallback(async (result?: { affectsTotals: boolean }) => {
+    if (result && !result.affectsTotals) {
+      await refreshAccounts();
+      return;
+    }
+    await refreshAfterAccountEdit();
+  }, [refreshAccounts, refreshAfterAccountEdit]);
 
   // Unlike manual accounts, the home card is fed by the snapshot rather than read live, so
   // reloading before the rebuild lands would snap the value back to the old one. Hold the
