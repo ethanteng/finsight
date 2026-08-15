@@ -51,9 +51,24 @@ jobs:
   # Quick validation for website pages and blog
   validate-website:
     runs-on: ubuntu-latest
+    outputs:
+      marketing_only: ${{ steps.scope.outputs.marketing_only }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # Full history so the guard below can diff against any push base.
+          fetch-depth: 0
+
+      # A `paths:` filter fires when ANY changed file matches, so a commit that
+      # touches a marketing page and application code lands here as well as in
+      # ci-cd.yml — and this pipeline would publish the whole commit (Vercel
+      # builds the checked-out tree; the Render hook redeploys from branch HEAD)
+      # before the full suite finishes. The deploy jobs below therefore run only
+      # when every changed file is inside the marketing allowlist.
+      - name: Check change scope
+        id: scope
+        run: bash scripts/check-fast-deploy-scope.sh "${{ github.event.before }}" "${{ github.sha }}"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -92,7 +107,12 @@ jobs:
   deploy-frontend:
     needs: [validate-website]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.event.inputs.force_deploy == 'true'
+    # Deploy only a genuinely marketing-only push. Anything mixed is left to
+    # ci-cd.yml, which tests before it ships. `force_deploy` is the explicit
+    # manual override.
+    if: |
+      github.event.inputs.force_deploy == 'true' ||
+      (github.ref == 'refs/heads/main' && needs.validate-website.outputs.marketing_only == 'true')
     # Shared with ci-cd.yml's deploy job — see the note there.
     concurrency:
       group: production-deploy
@@ -112,9 +132,14 @@ jobs:
 
   # Optional: Quick backend restart (if needed)
   restart-backend:
-    needs: [deploy-frontend]
+    needs: [validate-website, deploy-frontend]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.event.inputs.force_deploy == 'true'
+    # Same scope gate as deploy-frontend: the Render hook redeploys the backend
+    # from branch HEAD, so it must never fire for a commit carrying untested
+    # backend changes.
+    if: |
+      github.event.inputs.force_deploy == 'true' ||
+      (github.ref == 'refs/heads/main' && needs.validate-website.outputs.marketing_only == 'true')
     # Same Render webhook as ci-cd.yml deploy — must not overlap that job.
     concurrency:
       group: production-deploy
