@@ -5,7 +5,7 @@ import { BalanceService } from './services/balance-service';
 import { FinancialDataService } from './services/financial-data-service';
 import { SnapTradeService } from './snaptrade';
 import { TransactionSyncService } from './services/transaction-sync-service';
-import { matchAccountsAcrossConnections } from './services/plaid-connection-supersede';
+import { matchAccountsAcrossConnections, toConnectionAccount } from './services/plaid-connection-supersede';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
@@ -718,7 +718,8 @@ export const setupPlaidRoutes = (app: any) => {
                   },
                   select: {
                     id: true, plaidAccountId: true, persistentAccountId: true,
-                    name: true, type: true, subtype: true, mask: true, currentBalance: true
+                    name: true, type: true, subtype: true, mask: true, currentBalance: true,
+                      balanceLastFetched: true, lastSynced: true
                   }
                 });
                 if (staleOwnAccounts.length > 0) {
@@ -729,12 +730,13 @@ export const setupPlaidRoutes = (app: any) => {
                     },
                     select: {
                       id: true, plaidAccountId: true, persistentAccountId: true,
-                      name: true, type: true, subtype: true, mask: true, currentBalance: true
+                      name: true, type: true, subtype: true, mask: true, currentBalance: true,
+                      balanceLastFetched: true, lastSynced: true
                     }
                   });
                   const { matches, unmatchedPrevious } = matchAccountsAcrossConnections(
-                    staleOwnAccounts as any,
-                    currentOwnAccounts as any
+                    staleOwnAccounts.map(toConnectionAccount),
+                    currentOwnAccounts.map(toConnectionAccount)
                   );
                   console.log(`Reconciling ${staleOwnAccounts.length} stale account(s) from the previous ${institutionName} Item`);
                   if (matches.length > 0) {

@@ -53,23 +53,27 @@ describe('matchAccountsAcrossConnections', () => {
   });
 
   it('resolves the real Betterment relink: names via name pass, renamed goals via balance', () => {
+    // Production timestamps: both tokens sync in the same sweep, ~0.6s apart, so the balance pass
+    // stays available to the offline cleanup script.
+    const oldSync = '2026-08-15T06:06:38.376Z';
+    const newSync = '2026-08-15T06:06:37.976Z';
     // Old Item: masks present, names carry a registration suffix, ampersand HTML-escaped.
     const previous = [
-      account({ id: 'p1', name: 'Retirement - Roth IRA', subtype: 'roth', mask: '0337', currentBalance: 56039.33 }),
-      account({ id: 'p2', name: 'Retirement - Traditional IRA', subtype: 'ira', mask: '9284', currentBalance: 669403.81 }),
-      account({ id: 'p3', name: 'Retirement - Taxable', mask: '9314', currentBalance: 0 }),
-      account({ id: 'p4', name: 'Mortgage Payoff Fund ($325K by 2035) - Joint Taxable', mask: '4870', currentBalance: 6520.84 }),
-      account({ id: 'p5', name: 'Retirement Bridge Fund ($325K by 2043) - Taxable', mask: '6285', currentBalance: 24752.85 }),
-      account({ id: 'p6', name: 'Travel &amp; Healthcare Bridge Fund ($80K by 2031) - Joint Taxable', mask: '5597', currentBalance: 55436.81 })
+      account({ id: 'p1', name: 'Retirement - Roth IRA', subtype: 'roth', mask: '0337', currentBalance: 56039.33, balanceObservedAt: oldSync }),
+      account({ id: 'p2', name: 'Retirement - Traditional IRA', subtype: 'ira', mask: '9284', currentBalance: 669403.81, balanceObservedAt: oldSync }),
+      account({ id: 'p3', name: 'Retirement - Taxable', mask: '9314', currentBalance: 0, balanceObservedAt: oldSync }),
+      account({ id: 'p4', name: 'Mortgage Payoff Fund ($325K by 2035) - Joint Taxable', mask: '4870', currentBalance: 6520.84, balanceObservedAt: oldSync }),
+      account({ id: 'p5', name: 'Retirement Bridge Fund ($325K by 2043) - Taxable', mask: '6285', currentBalance: 24752.85, balanceObservedAt: oldSync }),
+      account({ id: 'p6', name: 'Travel &amp; Healthcare Bridge Fund ($80K by 2031) - Joint Taxable', mask: '5597', currentBalance: 55436.81, balanceObservedAt: oldSync })
     ];
     // New Item: no masks, cleaner names, identical balances.
     const current = [
-      account({ id: 'c1', name: 'Retirement - Roth IRA', subtype: 'roth', currentBalance: 56039.33 }),
-      account({ id: 'c2', name: 'Retirement - Traditional IRA', subtype: 'ira', currentBalance: 669403.81 }),
-      account({ id: 'c3', name: 'Retirement - Taxable', currentBalance: 0 }),
-      account({ id: 'c4', name: 'Mortgage Payoff Fund ($325K by 2035)', currentBalance: 6520.84 }),
-      account({ id: 'c5', name: 'Retirement Bridge Fund ($325K by 2043)', currentBalance: 24752.85 }),
-      account({ id: 'c6', name: 'Travel & Healthcare Bridge Fund ($80K by 2031)', currentBalance: 55436.81 })
+      account({ id: 'c1', name: 'Retirement - Roth IRA', subtype: 'roth', currentBalance: 56039.33, balanceObservedAt: newSync }),
+      account({ id: 'c2', name: 'Retirement - Traditional IRA', subtype: 'ira', currentBalance: 669403.81, balanceObservedAt: newSync }),
+      account({ id: 'c3', name: 'Retirement - Taxable', currentBalance: 0, balanceObservedAt: newSync }),
+      account({ id: 'c4', name: 'Mortgage Payoff Fund ($325K by 2035)', currentBalance: 6520.84, balanceObservedAt: newSync }),
+      account({ id: 'c5', name: 'Retirement Bridge Fund ($325K by 2043)', currentBalance: 24752.85, balanceObservedAt: newSync }),
+      account({ id: 'c6', name: 'Travel & Healthcare Bridge Fund ($80K by 2031)', currentBalance: 55436.81, balanceObservedAt: newSync })
     ];
 
     const result = matchAccountsAcrossConnections(previous, current);
@@ -144,6 +148,33 @@ describe('matchAccountsAcrossConnections', () => {
     const current = [account({ id: 'c1', persistentAccountId: 'stable-2', name: 'Checking', currentBalance: 10 })];
 
     expect(matchAccountsAcrossConnections(previous, current).fullyCovered).toBe(false);
+  });
+
+  it('refuses to match on balance when the two observations are far apart', () => {
+    // Offline cleanup reads persisted balances. Two accounts last synced weeks apart that happen to
+    // show the same number have drifted into agreement; that is coincidence, not identity.
+    const previous = [account({ id: 'p1', name: 'Goal A', currentBalance: 250, balanceObservedAt: '2026-07-01T00:00:00Z' })];
+    const current = [account({ id: 'c1', name: 'Goal B', currentBalance: 250, balanceObservedAt: '2026-08-15T00:00:00Z' })];
+
+    expect(matchAccountsAcrossConnections(previous, current).fullyCovered).toBe(false);
+  });
+
+  it('matches on balance when both sides were observed in the same sweep', () => {
+    const previous = [account({ id: 'p1', name: 'Goal A', currentBalance: 250, balanceObservedAt: '2026-08-15T06:06:38Z' })];
+    const current = [account({ id: 'c1', name: 'Goal B', currentBalance: 250, balanceObservedAt: '2026-08-15T06:06:37Z' })];
+
+    const result = matchAccountsAcrossConnections(previous, current);
+
+    expect(result.fullyCovered).toBe(true);
+    expect(result.matches[0].strategy).toBe('balance');
+  });
+
+  it('trusts the balance pass when no observation time is supplied', () => {
+    // The exchange path fetches both Items moments apart and omits the timestamp.
+    const previous = [account({ id: 'p1', name: 'Goal A', currentBalance: 250 })];
+    const current = [account({ id: 'c1', name: 'Goal B', currentBalance: 250 })];
+
+    expect(matchAccountsAcrossConnections(previous, current).fullyCovered).toBe(true);
   });
 
   it('still matches when only one side reports a mask', () => {

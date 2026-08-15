@@ -27,7 +27,8 @@
 import { getPrismaClient } from '../src/prisma-client';
 import {
   matchAccountsAcrossConnections,
-  supersedeDuplicateInstitutionConnections
+  supersedeDuplicateInstitutionConnections,
+  toConnectionAccount
 } from '../src/services/plaid-connection-supersede';
 import { FinancialRevisionService } from '../src/services/financial-revision-service';
 
@@ -59,6 +60,8 @@ type TokenWithAccounts = {
     subtype: string | null;
     mask: string | null;
     currentBalance: number | null;
+    balanceLastFetched: Date | null;
+    lastSynced: Date | null;
   }>;
 };
 
@@ -91,7 +94,8 @@ async function main() {
       accounts: {
         select: {
           id: true, plaidAccountId: true, persistentAccountId: true, institution: true,
-          name: true, type: true, subtype: true, mask: true, currentBalance: true
+          name: true, type: true, subtype: true, mask: true, currentBalance: true,
+          balanceLastFetched: true, lastSynced: true
         }
       }
     }
@@ -142,7 +146,10 @@ async function main() {
         // Every account on the candidate token must be covered, matching the apply path - a
         // subset filter here would preview a supersede that the apply run would refuse.
         const previous = candidate.accounts;
-        const result = matchAccountsAcrossConnections(previous as any, keeper.accounts as any);
+        const result = matchAccountsAcrossConnections(
+          previous.map(toConnectionAccount),
+          keeper.accounts.map(toConnectionAccount)
+        );
         if (result.fullyCovered) {
           const txCount = await prisma.transaction.count({
             where: { accountId: { in: previous.map(a => a.id) } }

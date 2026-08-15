@@ -34,6 +34,12 @@ export type ConnectionAccount = {
   subtype?: string | null;
   mask?: string | null;
   currentBalance?: number | null;
+  /**
+   * When `currentBalance` was observed. Optional: the exchange path fetches both Items moments
+   * apart and can omit it. Offline callers (the cleanup script) read balances persisted at
+   * different times and must supply it so drifted balances are not treated as evidence.
+   */
+  balanceObservedAt?: Date | string | null;
 };
 
 export type AccountMatch = {
@@ -52,6 +58,13 @@ export type MatchResult = {
 
 /** Balances must agree to the cent - this runs right after both Items were fetched. */
 const BALANCE_EPSILON = 0.005;
+
+/**
+ * How far apart two balance observations may be and still be comparable. Equal balances are only
+ * evidence of identity when both sides were observed in the same sweep; across a longer gap the
+ * accounts have simply drifted and equality is coincidence.
+ */
+const BALANCE_OBSERVATION_WINDOW_MS = 6 * 60 * 60 * 1000;
 
 const HTML_ENTITIES: Record<string, string> = {
   '&amp;': '&',
@@ -106,6 +119,24 @@ function hasConflictingStableIdentifier(a: ConnectionAccount, b: ConnectionAccou
  * two current accounts is skipped rather than guessed - a wrong match deletes a real account and
  * its history.
  */
+function observedAt(account: ConnectionAccount): number | null {
+  const raw = account.balanceObservedAt;
+  if (!raw) return null;
+  const parsed = raw instanceof Date ? raw.getTime() : Date.parse(raw);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+/**
+ * Equal balances only prove identity when both sides were observed close together. Callers that
+ * omit the timestamp are fetching both Items in the same breath, so they are trusted.
+ */
+function balancesComparable(a: ConnectionAccount, b: ConnectionAccount): boolean {
+  const aObserved = observedAt(a);
+  const bObserved = observedAt(b);
+  if (aObserved === null || bObserved === null) return true;
+  return Math.abs(aObserved - bObserved) <= BALANCE_OBSERVATION_WINDOW_MS;
+}
+
 function matchByKey(
   previous: ConnectionAccount[],
   current: ConnectionAccount[],
@@ -133,6 +164,7 @@ function matchByKey(
     const currentAccounts = currentByKey.get(key);
     if (previousAccounts.length !== 1 || !currentAccounts || currentAccounts.length !== 1) continue;
     if (hasConflictingStableIdentifier(previousAccounts[0], currentAccounts[0])) continue;
+    if (strategy === 'balance' && !balancesComparable(previousAccounts[0], currentAccounts[0])) continue;
     matches.push({ previous: previousAccounts[0], current: currentAccounts[0], strategy });
     claimed.previous.add(previousAccounts[0].id);
     claimed.current.add(currentAccounts[0].id);
@@ -165,8 +197,8 @@ export function matchAccountsAcrossConnections(
     return name ? `name:${typeKey(account)}|${name}` : null;
   }, claimed, matches);
 
-  // 4. Exact balance, scoped by account type. Sound only because both Items were just fetched,
-  //    so the same logical account reports the same balance to the cent.
+  // 4. Exact balance, scoped by account type. Sound only when both sides were observed together,
+  //    so the same logical account reports the same balance to the cent - see balancesComparable.
   matchByKey(previous, current, 'balance', account => {
     const balance = account.currentBalance;
     if (balance === null || balance === undefined || Number.isNaN(balance)) return null;
@@ -222,7 +254,12 @@ type PrismaLike = {
   };
 };
 
-function toConnectionAccount(record: any): ConnectionAccount {
+/**
+ * Map a persisted Account row onto the matcher's input shape. Callers must use this rather than
+ * passing rows through untyped - it is what carries `balanceObservedAt`, without which the balance
+ * pass silently trusts stale balances.
+ */
+export function toConnectionAccount(record: any): ConnectionAccount {
   return {
     id: record.id,
     plaidAccountId: record.plaidAccountId,
@@ -231,7 +268,8 @@ function toConnectionAccount(record: any): ConnectionAccount {
     type: record.type,
     subtype: record.subtype,
     mask: record.mask,
-    currentBalance: record.currentBalance
+    currentBalance: record.currentBalance,
+    balanceObservedAt: record.balanceLastFetched ?? record.lastSynced ?? null
   };
 }
 
@@ -257,7 +295,8 @@ export async function supersedeDuplicateInstitutionConnections(options: {
     where: { userId, accessTokenId: keepTokenId },
     select: {
       id: true, plaidAccountId: true, persistentAccountId: true,
-      name: true, type: true, subtype: true, mask: true, currentBalance: true
+      name: true, type: true, subtype: true, mask: true, currentBalance: true,
+          balanceLastFetched: true, lastSynced: true
     }
   });
   if (currentRecords.length === 0) {
@@ -278,7 +317,8 @@ export async function supersedeDuplicateInstitutionConnections(options: {
       accounts: {
         select: {
           id: true, plaidAccountId: true, persistentAccountId: true, institution: true,
-          name: true, type: true, subtype: true, mask: true, currentBalance: true
+          name: true, type: true, subtype: true, mask: true, currentBalance: true,
+          balanceLastFetched: true, lastSynced: true
         }
       }
     }
