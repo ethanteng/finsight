@@ -174,6 +174,36 @@ describe('finances overview contract', () => {
     ]);
   });
 
+  it('shows the current account name without waiting for the snapshot to be rebuilt', () => {
+    const overview = buildFinancesOverview({
+      snapshot,
+      accountNames: new Map([
+        ['brokerage', 'University of California 401K'],
+        ['manual-manual-cash', 'Travel Wallet'],
+      ]),
+      manualAccounts: [{
+        id: 'manual-cash', name: 'Travel Wallet', amount: 100, type: 'cash',
+        createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
+      }],
+    });
+
+    expect(overview.accountGroups.investments.accounts[0].name).toBe('University of California 401K');
+    expect(overview.accountGroups.cash.accounts.map(account => account.name))
+      .toContain('Travel Wallet');
+    // Renaming moves no money.
+    expect(overview.financialOverview.totalInvestments).toBe(100000);
+  });
+
+  it('keeps the snapshot name for accounts with no live name', () => {
+    const overview = buildFinancesOverview({
+      snapshot,
+      accountNames: new Map([['brokerage', 'Renamed Brokerage']]),
+    });
+
+    expect(overview.accountGroups.investments.accounts[0].name).toBe('Renamed Brokerage');
+    expect(overview.accountGroups.cash.accounts[0].name).toBe('Checking');
+  });
+
   it('flags a renamed manual account as out of sync until the snapshot is rebuilt', () => {
     const overview = buildFinancesOverview({
       snapshot,

@@ -290,7 +290,13 @@ export default function FinancesPageClient() {
     }
   }, [loadOverview]);
 
-  const refreshAccounts = refreshAfterAccountEdit;
+  // A rename moves no money, so there is no derived total to reconcile and nothing to wait
+  // for — the overview reads account names live. Reload and stop; a failure here does not
+  // mean the rename failed, so it must not surface as a rename error.
+  const refreshAccounts = useCallback(async () => {
+    await loadOverview().catch(() => null);
+  }, [loadOverview]);
+
   const refreshManualAccounts = refreshAfterAccountEdit;
 
   // Unlike manual accounts, the home card is fed by the snapshot rather than read live, so

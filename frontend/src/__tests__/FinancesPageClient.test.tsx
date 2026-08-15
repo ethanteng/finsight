@@ -9,6 +9,11 @@ jest.mock('@/components/finances/FinancialMetricsChart', () => ({
   default: () => <div data-testid="financial-metrics-chart" />,
 }));
 
+const confirmDeleteManualAccount = async () => {
+  fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Delete account' }));
+};
+
 describe('FinancesPageClient', () => {
   beforeEach(() => {
     localStorage.setItem('auth_token', 'new-user-token');
@@ -183,16 +188,15 @@ describe('FinancesPageClient', () => {
       return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true, data: [] }) });
     }) as jest.Mock;
 
-    jest.spyOn(window, 'confirm').mockReturnValue(true);
     jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
 
     try {
       render(<FinancesPageClient />);
 
-      const deleteButton = await screen.findByRole('button', { name: 'Delete' });
+      await screen.findByText('Wallet');
       expect(screen.getAllByText('$10,000').length).toBeGreaterThan(0);
 
-      fireEvent.click(deleteButton);
+      await confirmDeleteManualAccount();
 
       // The row disappears immediately; the totals still show the old revision.
       await waitFor(() => expect(screen.queryByText('Wallet')).not.toBeInTheDocument());
@@ -208,6 +212,72 @@ describe('FinancesPageClient', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it('shows a renamed account immediately without waiting on a snapshot rebuild', async () => {
+    const overviewWith = (accountName: string) => ({
+      userTimeZone: 'America/Los_Angeles',
+      revision: {
+        id: 'revision-1',
+        computedAt: '2026-08-14T12:00:00.000Z',
+        asOf: null,
+        status: 'current',
+        reportingCurrency: 'USD',
+        rebuildPending: true,
+      },
+      warnings: [],
+      financialOverview: { netWorth: 263, totalCash: 0, totalInvestments: 263, totalDebt: 0, homeValue: null },
+      investmentPortfolio: { holdingCount: 0, securityCount: 0, assetAllocation: [] },
+      accountGroups: {
+        cash: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+        investments: {
+          accounts: [{
+            id: 'snaptrade-uc', account_id: 'snaptrade-uc', name: accountName,
+            institution: 'Fidelity', source: 'snaptrade', displayBalance: 263,
+          }],
+          totalBalance: 263,
+          unavailableBalanceCount: 0,
+        },
+        debt: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+        other: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+      },
+      cashFlow: {},
+      home: null,
+      manualAccounts: [],
+    });
+
+    let renamed = false;
+
+    global.fetch = jest.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/accounts/snaptrade-uc') && init?.method === 'PUT') {
+        renamed = true;
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true }) });
+      }
+      if (url.includes('/api/finances/overview')) {
+        // The snapshot revision never moves: the name is read live, not rebuilt.
+        const body = overviewWith(renamed ? 'University of California 401K' : 'UC DEFINED CONTRIBUTION PLAN');
+        return Promise.resolve({ ok: true, status: 200, json: async () => body });
+      }
+      if (url.includes('/api/financial-history')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => [] });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true, data: [] }) });
+    }) as jest.Mock;
+
+    render(<FinancesPageClient />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Investment Accounts/ }));
+    fireEvent.click(await screen.findByTitle('Rename account'));
+    fireEvent.change(screen.getByDisplayValue('UC DEFINED CONTRIBUTION PLAN'), {
+      target: { value: 'University of California 401K' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(screen.getByText('University of California 401K')).toBeInTheDocument());
+    // A rename moves no money, so the page must not sit on the totals spinner — even though
+    // the server still reports a background rebuild in flight.
+    expect(screen.queryByText('Updating totals with your change…')).not.toBeInTheDocument();
   });
 
   it('keeps polling past an intermediate revision while the server still has a rebuild queued', async () => {
@@ -257,12 +327,11 @@ describe('FinancesPageClient', () => {
       return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true, data: [] }) });
     }) as jest.Mock;
 
-    jest.spyOn(window, 'confirm').mockReturnValue(true);
     jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
 
     try {
       render(<FinancesPageClient />);
-      fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+      await confirmDeleteManualAccount();
 
       await waitFor(() => expect(screen.getByText('Updating totals with your change…')).toBeInTheDocument());
 
@@ -322,12 +391,11 @@ describe('FinancesPageClient', () => {
       return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true, data: [] }) });
     }) as jest.Mock;
 
-    jest.spyOn(window, 'confirm').mockReturnValue(true);
     jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
 
     try {
       render(<FinancesPageClient />);
-      fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+      await confirmDeleteManualAccount();
 
       await waitFor(() => expect(screen.getByText('Updating totals with your change…')).toBeInTheDocument());
 
@@ -386,12 +454,11 @@ describe('FinancesPageClient', () => {
       return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true, data: [] }) });
     }) as jest.Mock;
 
-    jest.spyOn(window, 'confirm').mockReturnValue(true);
     jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
 
     try {
       render(<FinancesPageClient />);
-      fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+      await confirmDeleteManualAccount();
       await waitFor(() => expect(screen.getByText('Updating totals with your change…')).toBeInTheDocument());
 
       // Well past REVISION_POLL_ATTEMPTS × 2s, and still waiting rather than giving up.
@@ -452,12 +519,11 @@ describe('FinancesPageClient', () => {
       return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true, data: [] }) });
     }) as jest.Mock;
 
-    jest.spyOn(window, 'confirm').mockReturnValue(true);
     jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
 
     try {
       render(<FinancesPageClient />);
-      fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+      await confirmDeleteManualAccount();
 
       // The failed reload must not leave the edit unreconciled and unexplained.
       await waitFor(() => expect(screen.getByText('Updating totals with your change…')).toBeInTheDocument());
