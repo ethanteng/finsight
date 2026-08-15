@@ -31,3 +31,27 @@ export function normalizeLabel(value: unknown, fallback = 'Unknown'): string {
   if (!key) return fallback;
   return key.replace(/\b\w/g, character => character.toUpperCase());
 }
+
+/**
+ * Sum numeric totals keyed by raw labels that differ only in spelling.
+ * Persisted snapshots can carry both "Food and Drink" and "Food And Drink";
+ * consumers that pick top-N categories must merge first or under-report.
+ */
+export function mergeLabelKeyedTotals(
+  totals: Record<string, number> | undefined,
+  fallbackLabel = 'Unknown'
+): Record<string, number> {
+  const merged = new Map<string, { label: string; total: number }>();
+  for (const [rawLabel, amount] of Object.entries(totals || {})) {
+    if (typeof amount !== 'number' || !Number.isFinite(amount)) continue;
+    const key = labelKey(rawLabel);
+    if (!key) continue;
+    const existing = merged.get(key);
+    if (existing) {
+      existing.total += amount;
+    } else {
+      merged.set(key, { label: normalizeLabel(rawLabel, fallbackLabel), total: amount });
+    }
+  }
+  return Object.fromEntries([...merged.values()].map(({ label, total }) => [label, total]));
+}

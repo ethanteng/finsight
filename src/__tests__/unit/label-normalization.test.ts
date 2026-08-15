@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import { labelKey, normalizeLabel } from '../../services/label-normalization';
+import { labelKey, mergeLabelKeyedTotals, normalizeLabel } from '../../services/label-normalization';
 
 describe('normalizeLabel', () => {
   it('gives one label to values differing only by case or separator', () => {
@@ -25,5 +25,21 @@ describe('normalizeLabel', () => {
     expect(labelKey('FOOD_AND_DRINK')).toBe('food and drink');
     expect(labelKey('Food and Drink')).toBe(labelKey('FOOD_AND_DRINK'));
     expect(labelKey(undefined)).toBe('');
+  });
+});
+
+describe('mergeLabelKeyedTotals', () => {
+  it('sums totals that differ only in spelling', () => {
+    expect(
+      mergeLabelKeyedTotals({
+        'Food and Drink': 1_200,
+        'Food And Drink': 800,
+        Travel: 500,
+        travel: 300,
+      })
+    ).toEqual({
+      'Food And Drink': 2_000,
+      Travel: 800,
+    });
   });
 });
