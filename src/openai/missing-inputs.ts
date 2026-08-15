@@ -36,15 +36,17 @@ export function collectMissingInputAsks(
   const needsInfo = snapshot.retirementAnalysisNeedsInfo;
 
   // 1. Inputs for an analysis the question asked for, which only the user has.
-  const retirementAsk = describeMissingRetirementInputs(needsInfo);
-  if (retirementAsk) {
-    asks.push({ id: 'retirement_inputs', message: retirementAsk });
-  } else if (needs.needsRetirement && needsInfo?.unavailableCode === 'no_holdings') {
-    asks.push({
-      id: 'retirement_no_holdings',
-      message: 'I could not run a retirement projection because no investment holdings are connected. ' +
-        'Link an investment account and ask again, and I will include it.',
-    });
+  if (needs.needsRetirement) {
+    const retirementAsk = describeMissingRetirementInputs(needsInfo);
+    if (retirementAsk) {
+      asks.push({ id: 'retirement_inputs', message: retirementAsk });
+    } else if (needsInfo?.unavailableCode === 'no_holdings') {
+      asks.push({
+        id: 'retirement_no_holdings',
+        message: 'I could not run a retirement projection because no investment holdings are connected. ' +
+          'Link an investment account and ask again, and I will include it.',
+      });
+    }
   }
 
   // 2. A figure the question needed that the profile does not carry.

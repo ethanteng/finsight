@@ -18,6 +18,13 @@ describe('missing input asks', () => {
     expect(asks[0].message).toContain('how much you expect to spend per year once retired');
   });
 
+  it('does not ask for retirement inputs when the question was not about retirement', () => {
+    expect(ids(
+      { retirementAnalysisNeedsInfo: { missingParams: ['annualWithdrawalAmount'], detectedParams: {} } },
+      { needsRetirement: false, needsHomeValue: false }
+    )).toEqual([]);
+  });
+
   it('asks for a connection when the analysis had nothing to analyze', () => {
     const asks = collectMissingInputAsks(
       {
