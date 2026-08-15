@@ -60,9 +60,15 @@ export interface ResolveAccountClosuresInput {
    */
   snapshotHasProviderGap?: boolean;
   /**
-   * Connections that were active when the snapshot was built. An account whose
-   * connection is inactive was never queried, so its absence from the snapshot
-   * proves nothing.
+   * Connections currently marked active. A snapshot rebuild only queries these,
+   * so an account behind an inactive one was never asked about and its absence
+   * from the snapshot proves nothing.
+   *
+   * Current state stands in for state at snapshot time, which is not recorded.
+   * A connection that has gone inactive since only suppresses a badge, and one
+   * re-activated since is covered elsewhere: the caller skips detection on live
+   * data, and a re-authenticated account's refresh timestamp postdates the
+   * snapshot, which already marks it open.
    */
   activeConnections?: ActiveConnections;
 }

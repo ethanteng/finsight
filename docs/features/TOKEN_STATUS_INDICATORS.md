@@ -57,6 +57,8 @@ An account is reported closed only when every one of these holds:
 4. No provider refreshed that row after the snapshot was computed. `balanceLastFetched` / `lastSynced` move without a snapshot rebuild (the balance refresh endpoint does exactly that), and a sighting that recent outranks the snapshot's silence. `updatedAt` is deliberately *not* consulted — it also moves for local edits such as a rename.
 5. The row's connection is still active. A snapshot rebuild only queries `AccessToken` rows with `isActive: true`, so an account behind an expired connection is missing from the snapshot **without** any error observation — flagging it would tell a user their accounts were closed when the connection merely needs re-authentication. Legacy rows stored without an `accessTokenId` are placed by institution name; a row with neither is never flagged.
 
+Detection runs only when `/plaid/all-accounts` is serving **persisted** Plaid rows (`metadata.dataSources.plaid === 'persisted'`). On a live fetch every returned account is open by definition, and comparing that list against an older snapshot could mislabel a just-reconnected account. This costs nothing: a closed account is absent from a live response entirely, exactly as it is on Finances, so the badge is only ever needed on the persisted path.
+
 `GET /plaid/all-accounts` returns `isClosed` and `lastSeenAt` per account. Detection failures are logged and fall back to treating every account as open.
 
 ### 4. Token Validation in AI Context
