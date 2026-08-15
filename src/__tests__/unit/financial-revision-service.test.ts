@@ -57,4 +57,60 @@ describe('FinancialRevisionService', () => {
     expect(invalidate).toHaveBeenCalledWith('financial-data:user-1');
     expect(computeForUser).toHaveBeenCalledWith('user-1', { categorize: false });
   });
+
+  describe('schedule', () => {
+    it('runs the revision in the background instead of blocking the caller', async () => {
+      FinancialRevisionService.schedule('user-1', { categorize: false }, 'test');
+
+      expect(computeForUser).not.toHaveBeenCalled();
+
+      await FinancialRevisionService.whenIdle('user-1');
+      await new Promise(resolve => setImmediate(resolve));
+      await FinancialRevisionService.whenIdle('user-1');
+
+      expect(computeForUser).toHaveBeenCalledWith('user-1', { categorize: false });
+    });
+
+    it('collapses bursts for one user into a single follow-up run', async () => {
+      let release: () => void = () => {};
+      computeForUser.mockImplementationOnce(
+        () => new Promise(resolve => {
+          release = () => resolve({ computedAt: new Date() });
+        })
+      );
+
+      FinancialRevisionService.schedule('user-1', { history: { kind: 'none' } }, 'first');
+      await new Promise(resolve => setImmediate(resolve));
+
+      FinancialRevisionService.schedule('user-1', { history: { kind: 'none' } }, 'second');
+      FinancialRevisionService.schedule('user-1', { history: { kind: 'material', reason: 'manual-account-deleted' } }, 'third');
+
+      expect(computeForUser).toHaveBeenCalledTimes(1);
+
+      release();
+      await FinancialRevisionService.whenIdle('user-1');
+
+      // The two requests made while the first run was in flight coalesce into one rerun,
+      // carrying the most recent intent.
+      expect(computeForUser).toHaveBeenCalledTimes(2);
+      expect(computeForUser).toHaveBeenLastCalledWith('user-1', {
+        history: { kind: 'material', reason: 'manual-account-deleted' },
+      });
+    });
+
+    it('keeps a failed background revision from rejecting into the request path', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      computeForUser.mockRejectedValueOnce(new Error('provider unavailable'));
+
+      FinancialRevisionService.schedule('user-1', { categorize: false }, 'failing');
+      await new Promise(resolve => setImmediate(resolve));
+      await FinancialRevisionService.whenIdle('user-1');
+
+      expect(warn).toHaveBeenCalledWith(
+        'failing: financial revision refresh failed',
+        expect.any(Error)
+      );
+      warn.mockRestore();
+    });
+  });
 });

@@ -34,11 +34,14 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
       },
     });
 
-    await FinancialRevisionService.recompute(userId, {
-      history: { kind: 'material', reason: 'manual-account-created' },
-    }).catch(err => {
-      console.error('Failed to refresh snapshot after creating manual account:', err);
-    });
+    // The snapshot rebuild re-reads every connected provider and takes tens of seconds.
+    // Holding the response for it made the UI look hung, so run it in the background;
+    // the manual account itself is already durable and reads straight from the database.
+    FinancialRevisionService.schedule(
+      userId,
+      { history: { kind: 'material', reason: 'manual-account-created' } },
+      'manual-account-created'
+    );
 
     res.status(201).json({
       success: true,
@@ -121,11 +124,11 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
       data: updateData,
     });
 
-    await FinancialRevisionService.recompute(userId, {
-      history: { kind: 'material', reason: 'manual-account-updated' },
-    }).catch(err => {
-      console.error('Failed to refresh snapshot after updating manual account:', err);
-    });
+    FinancialRevisionService.schedule(
+      userId,
+      { history: { kind: 'material', reason: 'manual-account-updated' } },
+      'manual-account-updated'
+    );
 
     res.json({
       success: true,
@@ -198,11 +201,11 @@ router.delete('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
       where: { id },
     });
 
-    await FinancialRevisionService.recompute(userId, {
-      history: { kind: 'material', reason: 'manual-account-deleted' },
-    }).catch(err => {
-      console.error('Failed to refresh snapshot after deleting manual account:', err);
-    });
+    FinancialRevisionService.schedule(
+      userId,
+      { history: { kind: 'material', reason: 'manual-account-deleted' } },
+      'manual-account-deleted'
+    );
 
     res.json({
       success: true,

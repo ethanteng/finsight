@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, BarChart3, Building2, Landmark, ShieldCheck, TrendingUp } from 'lucide-react';
@@ -22,6 +22,12 @@ import {
 
 const ManualAccountList = lazy(() => import('../../components/ManualAccountList'));
 const AccountDetailModal = lazy(() => import('../../components/finances/AccountDetailModal'));
+
+// Account edits return as soon as they are durable; the canonical snapshot they feed is
+// rebuilt in the background because it re-reads every connected provider. Poll the
+// overview until that new revision lands so totals catch up without a manual reload.
+const REVISION_POLL_INTERVAL_MS = 2000;
+const REVISION_POLL_ATTEMPTS = 30;
 
 function FinancesEmptyState({ onLogout }: { onLogout: () => void }) {
   return (
@@ -133,31 +139,43 @@ export default function FinancesPageClient() {
     kind: 'success' | 'warning' | 'error';
     text: string;
   } | null>(null);
+  const [awaitingRevision, setAwaitingRevision] = useState(false);
   const router = useRouter();
+  const revisionRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
-  const loadOverview = useCallback(async () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const loadOverview = useCallback(async (): Promise<FinancesOverview | null> => {
     const token = localStorage.getItem('auth_token');
     if (!token) {
       router.push('/login');
-      return;
+      return null;
     }
     const response = await fetch(`${API_URL}/api/finances/overview`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (response.status === 204) {
       setOverview(null);
-      return;
+      return null;
     }
     if (response.status === 401) {
       router.push('/login');
-      return;
+      return null;
     }
     if (!response.ok) throw new Error('Failed to load financial data');
     const data = await response.json() as FinancesOverview;
     syncStoredUserTimeZoneFromAuthUser({ timeZone: data.userTimeZone });
     setOverview(data);
+    revisionRef.current = data.revision.computedAt;
+    return data;
   }, [API_URL, router]);
 
   useEffect(() => {
@@ -203,8 +221,29 @@ export default function FinancesPageClient() {
     void loadFinancialData();
   }, [API_URL, loadOverview, router]);
 
-  const refreshAccounts = loadOverview;
-  const refreshManualAccounts = loadOverview;
+  // Reload right away so the edit is visible (manual accounts and names read straight from
+  // the database), then keep polling until the background snapshot rebuild publishes a new
+  // revision so the derived totals and account groups line up too.
+  const refreshAfterAccountEdit = useCallback(async () => {
+    const baselineRevision = revisionRef.current;
+    const immediate = await loadOverview().catch(() => null);
+    if (!immediate || immediate.revision.computedAt !== baselineRevision) return;
+
+    setAwaitingRevision(true);
+    try {
+      for (let attempt = 0; attempt < REVISION_POLL_ATTEMPTS; attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, REVISION_POLL_INTERVAL_MS));
+        if (!mountedRef.current) return;
+        const next = await loadOverview().catch(() => null);
+        if (!next || next.revision.computedAt !== baselineRevision) return;
+      }
+    } finally {
+      if (mountedRef.current) setAwaitingRevision(false);
+    }
+  }, [loadOverview]);
+
+  const refreshAccounts = refreshAfterAccountEdit;
+  const refreshManualAccounts = refreshAfterAccountEdit;
 
   const refreshSummary = useCallback(async () => {
     try {
@@ -280,6 +319,12 @@ export default function FinancesPageClient() {
     return <FinancesEmptyState onLogout={handleLogout} />;
   }
 
+  // While the background rebuild is being polled for, the out-of-sync notice would just be
+  // telling the user to do what the page is already doing.
+  const visibleWarnings = awaitingRevision
+    ? overview.warnings.filter(warning => warning.code !== 'manual-accounts-out-of-sync')
+    : overview.warnings;
+
   const findAccountById = (accountId: string): FinancesAccount | null => {
     const allAccounts = [
       ...overview.accountGroups.cash.accounts,
@@ -309,10 +354,16 @@ export default function FinancesPageClient() {
             <span>Source data as of {new Date(overview.revision.asOf).toLocaleString()}</span>
           )}
           <span>Snapshot computed {new Date(overview.revision.computedAt).toLocaleString()}</span>
+          {awaitingRevision && (
+            <span role="status" className="inline-flex items-center gap-2 font-medium text-[#102319]">
+              <span className="h-3 w-3 animate-spin rounded-full border-b-2 border-[#102319]" aria-hidden="true" />
+              Updating totals with your change…
+            </span>
+          )}
         </div>
-        {overview.warnings.length > 0 && (
+        {visibleWarnings.length > 0 && (
           <div className="space-y-2" role="status" aria-label="Financial data warnings">
-            {overview.warnings.map(warning => (
+            {visibleWarnings.map(warning => (
               <div key={warning.code} className="rounded-xl border border-[#d4a72c]/30 bg-[#fff3ce] px-4 py-3 text-sm font-medium text-[#76510f]">
                 {warning.message}
               </div>

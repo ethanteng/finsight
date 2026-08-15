@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import FinancesPageClient from '@/app/finances/FinancesPageClient';
 
 const mockRouter = { push: jest.fn() };
@@ -105,5 +105,106 @@ describe('FinancesPageClient', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Refresh totals' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Connected provider unavailable');
+  });
+
+  it('keeps polling after a manual account is deleted until the rebuilt snapshot lands', async () => {
+    // The delete endpoint returns as soon as the row is gone and rebuilds the snapshot in
+    // the background, so the first reload still carries the pre-delete revision.
+    const baseOverview = {
+      userTimeZone: 'America/Los_Angeles',
+      revision: {
+        id: 'revision-1',
+        computedAt: '2026-08-14T12:00:00.000Z',
+        asOf: '2026-08-14T11:59:00.000Z',
+        status: 'current',
+        reportingCurrency: 'USD',
+      },
+      warnings: [],
+      financialOverview: {
+        netWorth: 10_000,
+        totalCash: 10_000,
+        totalInvestments: 0,
+        totalDebt: 0,
+        homeValue: null,
+      },
+      investmentPortfolio: { holdingCount: 0, securityCount: 0, assetAllocation: [] },
+      accountGroups: {
+        cash: { accounts: [], totalBalance: 10_000, unavailableBalanceCount: 0 },
+        investments: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+        debt: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+        other: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+      },
+      cashFlow: {},
+      home: null,
+      manualAccounts: [{
+        id: 'manual-1',
+        name: 'Wallet',
+        amount: 100,
+        type: 'cash',
+        createdAt: '2026-08-01T00:00:00.000Z',
+        updatedAt: '2026-08-01T00:00:00.000Z',
+      }],
+    };
+
+    // Deleted from the database, but the snapshot totals are still the old revision.
+    const staleRevisionOverview = { ...baseOverview, manualAccounts: [] };
+
+    const rebuiltOverview = {
+      ...staleRevisionOverview,
+      revision: { ...baseOverview.revision, id: 'revision-2', computedAt: '2026-08-14T12:00:20.000Z' },
+      financialOverview: { ...baseOverview.financialOverview, netWorth: 9_900, totalCash: 9_900 },
+      accountGroups: {
+        ...baseOverview.accountGroups,
+        cash: { accounts: [], totalBalance: 9_900, unavailableBalanceCount: 0 },
+      },
+    };
+
+    let deleted = false;
+    let overviewRequests = 0;
+
+    global.fetch = jest.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/manual-accounts/manual-1') && init?.method === 'DELETE') {
+        deleted = true;
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true }) });
+      }
+      if (url.includes('/api/finances/overview')) {
+        overviewRequests += 1;
+        if (!deleted) return Promise.resolve({ ok: true, status: 200, json: async () => baseOverview });
+        // First reload after the delete still sees the pre-delete revision.
+        const body = overviewRequests <= 2 ? staleRevisionOverview : rebuiltOverview;
+        return Promise.resolve({ ok: true, status: 200, json: async () => body });
+      }
+      if (url.includes('/api/financial-history')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => [] });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true, data: [] }) });
+    }) as jest.Mock;
+
+    jest.spyOn(window, 'confirm').mockReturnValue(true);
+    jest.useFakeTimers({ doNotFake: ['queueMicrotask'] });
+
+    try {
+      render(<FinancesPageClient />);
+
+      const deleteButton = await screen.findByRole('button', { name: 'Delete' });
+      expect(screen.getAllByText('$10,000').length).toBeGreaterThan(0);
+
+      fireEvent.click(deleteButton);
+
+      // The row disappears immediately; the totals still show the old revision.
+      await waitFor(() => expect(screen.queryByText('Wallet')).not.toBeInTheDocument());
+      expect(screen.getAllByText('$10,000').length).toBeGreaterThan(0);
+      expect(screen.getByText('Updating totals with your change…')).toBeInTheDocument();
+
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2000);
+      });
+
+      await waitFor(() => expect(screen.getAllByText('$9,900').length).toBeGreaterThan(0));
+      expect(screen.queryByText('Updating totals with your change…')).not.toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
