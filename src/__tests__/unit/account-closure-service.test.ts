@@ -78,15 +78,15 @@ describe('resolveAccountClosures', () => {
     expect(closureFor(closures, { account_id: 'anything' }).isClosed).toBe(false);
   });
 
-  it('flags nothing when the snapshot holds no accounts', () => {
+  it('flags persisted accounts when the snapshot is empty because every account was closed', () => {
     const closures = resolveAccountClosures({
-      accounts: [{ account_id: 'anything' }],
+      accounts: [{ account_id: 'closed-only' }],
       snapshotAccounts: [],
       snapshotComputedAt: SNAPSHOT_AT,
-      persistedRecords: [record({ plaidAccountId: 'anything' })],
+      persistedRecords: [record({ plaidAccountId: 'closed-only' })],
     });
 
-    expect(closureFor(closures, { account_id: 'anything' }).isClosed).toBe(false);
+    expect(closureFor(closures, { account_id: 'closed-only' }).isClosed).toBe(true);
   });
 
   it('reports a closed account with no refresh timestamp as closed without a date', () => {

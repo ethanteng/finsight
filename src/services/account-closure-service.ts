@@ -91,7 +91,7 @@ export function resolveAccountClosures(input: ResolveAccountClosuresInput): Map<
     }
   };
 
-  if (snapshotHasProviderGap || !snapshotAccounts || snapshotAccounts.length === 0 || !snapshotComputedAt) {
+  if (snapshotHasProviderGap || snapshotAccounts === null || !snapshotComputedAt) {
     accounts.forEach(open);
     return closures;
   }
