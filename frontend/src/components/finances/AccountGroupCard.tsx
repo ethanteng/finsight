@@ -1,6 +1,7 @@
 "use client";
 import { useState } from 'react';
 import type { FinancesAccount } from '../../types/finances-overview';
+import { useDialog } from '../ui/dialog';
 
 export type Account = FinancesAccount;
 
@@ -45,6 +46,7 @@ export default function AccountGroupCard({
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [editName, setEditName] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
+  const { showError, dialog } = useDialog();
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -83,7 +85,7 @@ export default function AccountGroupCard({
     e.stopPropagation();
     
     if (!editName.trim()) {
-      alert('Account name cannot be empty');
+      void showError('Account name cannot be empty', { title: 'Name required' });
       return;
     }
 
@@ -93,7 +95,7 @@ export default function AccountGroupCard({
       const token = localStorage.getItem('auth_token');
       
       if (!token) {
-        alert('Authentication required. Please log in again.');
+        void showError('Authentication required. Please log in again.');
         setIsSaving(false);
         return;
       }
@@ -118,11 +120,11 @@ export default function AccountGroupCard({
       } else {
         const data = await response.json();
         console.error('❌ Failed to rename account:', data);
-        alert(data.error || 'Failed to rename account');
+        void showError(data.error || 'Failed to rename account');
       }
     } catch (error) {
       console.error('Error renaming account:', error);
-      alert('Network error. Please try again.');
+      void showError('Network error. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -237,6 +239,8 @@ export default function AccountGroupCard({
           })}
         </div>
       )}
+
+      {dialog}
     </div>
   );
 }

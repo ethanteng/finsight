@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { pushBeginCheckout } from "@/lib/dataLayer";
+import { useDialog } from "@/components/ui/dialog";
 
 type MarketingGetStartedButtonProps = {
   className?: string;
@@ -13,6 +14,7 @@ export function MarketingGetStartedButton({
   trackingLocation = "marketing_cta",
 }: MarketingGetStartedButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const { showError, dialog } = useDialog();
 
   const handleClick = async () => {
     pushBeginCheckout(trackingLocation);
@@ -37,18 +39,21 @@ export function MarketingGetStartedButton({
       }
 
       const err = await response.json();
-      alert(err.error || "Failed to create checkout session. Please try again.");
+      void showError(err.error || "Failed to create checkout session. Please try again.");
     } catch (error) {
       console.error("Error creating checkout session:", error);
-      alert("An error occurred. Please try again.");
+      void showError("An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <button className={className} type="button" onClick={handleClick} disabled={isLoading}>
-      {isLoading ? "Loading..." : "Start free trial"}
-    </button>
+    <>
+      <button className={className} type="button" onClick={handleClick} disabled={isLoading}>
+        {isLoading ? "Loading..." : "Start free trial"}
+      </button>
+      {dialog}
+    </>
   );
 }

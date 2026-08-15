@@ -7,6 +7,7 @@ import { Brain, MessageCircle, Send, CheckCircle, ExternalLink, Menu, X, Chevron
 import Link from 'next/link';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 import SiteFooter from './SiteFooter';
+import { useDialog } from '@/components/ui/dialog';
 
 const USE_CASE_LINKS = [
   { href: '/use-cases/retirement', label: 'Retirement Planning' },
@@ -25,6 +26,7 @@ export default function ContactForm() {
   const [error, setError] = useState('');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState<string | null>(null);
+  const { showError, dialog } = useDialog();
   const [isUseCasesOpen, setIsUseCasesOpen] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -81,11 +83,11 @@ export default function ContactForm() {
         window.location.href = url;
       } else {
         const err = await response.json();
-        alert(err.error || 'Failed to create checkout session. Please try again.');
+        void showError(err.error || 'Failed to create checkout session. Please try again.');
       }
     } catch (err) {
       console.error(err);
-      alert('An error occurred. Please try again.');
+      void showError('An error occurred. Please try again.');
     } finally {
       setIsLoading(null);
     }
@@ -439,6 +441,7 @@ export default function ContactForm() {
         </div>
       </section>
       <SiteFooter />
+      {dialog}
     </div>
   );
 }

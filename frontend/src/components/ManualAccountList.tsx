@@ -1,6 +1,7 @@
 "use client";
 import { useState, lazy, Suspense } from 'react';
 import type { ManualAccount } from '../types/manual-account';
+import { useDialog } from './ui/dialog';
 
 const ManualAccountForm = lazy(() => import('./ManualAccountForm'));
 
@@ -13,18 +14,25 @@ export default function ManualAccountList({ accounts, onRefresh }: ManualAccount
   const [editingAccount, setEditingAccount] = useState<ManualAccount | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const { showError, showConfirm, dialog } = useDialog();
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this account?')) {
+  const handleDelete = async (account: ManualAccount) => {
+    const confirmed = await showConfirm({
+      title: 'Delete this account?',
+      message: `${account.name} will be removed from your profile. This can't be undone.`,
+      confirmLabel: 'Delete account',
+    });
+    if (!confirmed) {
       return;
     }
 
+    const id = account.id;
     setDeletingId(id);
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
       const token = localStorage.getItem('auth_token');
       if (!token) {
-        alert('Authentication required. Please log in again.');
+        void showError('Authentication required. Please log in again.');
         setDeletingId(null);
         return;
       }
@@ -43,10 +51,10 @@ export default function ManualAccountList({ accounts, onRefresh }: ManualAccount
         onRefresh();
       } else {
         const data = await response.json();
-        alert(data.error || 'Failed to delete account');
+        void showError(data.error || 'Failed to delete account');
       }
     } catch (err) {
-      alert('Network error. Please try again.');
+      void showError('Network error. Please try again.');
     } finally {
       setDeletingId(null);
     }
@@ -93,20 +101,23 @@ export default function ManualAccountList({ accounts, onRefresh }: ManualAccount
 
   if (showForm || editingAccount) {
     return (
-      <Suspense fallback={<div className="bg-gray-800 rounded-lg p-6 border border-gray-700 text-gray-400">Loading form...</div>}>
-        <ManualAccountForm
-          account={editingAccount}
-          onSuccess={() => {
-            setShowForm(false);
-            setEditingAccount(null);
-            onRefresh();
-          }}
-          onCancel={() => {
-            setShowForm(false);
-            setEditingAccount(null);
-          }}
-        />
-      </Suspense>
+      <>
+        <Suspense fallback={<div className="bg-gray-800 rounded-lg p-6 border border-gray-700 text-gray-400">Loading form...</div>}>
+          <ManualAccountForm
+            account={editingAccount}
+            onSuccess={() => {
+              setShowForm(false);
+              setEditingAccount(null);
+              onRefresh();
+            }}
+            onCancel={() => {
+              setShowForm(false);
+              setEditingAccount(null);
+            }}
+          />
+        </Suspense>
+        {dialog}
+      </>
     );
   }
 
@@ -153,7 +164,7 @@ export default function ManualAccountList({ accounts, onRefresh }: ManualAccount
                   Edit
                 </button>
                 <button
-                  onClick={() => handleDelete(account.id)}
+                  onClick={() => void handleDelete(account)}
                   className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-sm transition-colors"
                   disabled={deletingId === account.id}
                 >
@@ -164,6 +175,8 @@ export default function ManualAccountList({ accounts, onRefresh }: ManualAccount
           ))}
         </div>
       )}
+
+      {dialog}
     </div>
   );
 }

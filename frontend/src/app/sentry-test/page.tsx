@@ -2,9 +2,11 @@
 
 import * as Sentry from '@sentry/nextjs';
 import { useState } from 'react';
+import { useDialog } from '@/components/ui/dialog';
 
 export default function SentryTestPage() {
   const [isLoading, setIsLoading] = useState(false);
+  const { showAlert, dialog } = useDialog();
 
   const throwFrontendError = () => {
     throw new Error('This is a test frontend error for Sentry');
@@ -63,7 +65,7 @@ export default function SentryTestPage() {
       context: 'sentry_testing',
     });
     
-    alert('Log messages sent to Sentry! Check your Sentry dashboard.');
+    void showAlert('Log messages sent to Sentry! Check your Sentry dashboard.', { tone: 'success', title: 'Logs sent' });
   };
 
   const testUserContext = () => {
@@ -76,7 +78,7 @@ export default function SentryTestPage() {
     Sentry.setTag('user_type', 'test');
     Sentry.setTag('test_session', 'true');
     
-    alert('User context set! Future events will include this user information.');
+    void showAlert('User context set! Future events will include this user information.', { tone: 'success', title: 'User context set' });
   };
 
   return (
@@ -197,6 +199,8 @@ export default function SentryTestPage() {
           </div>
         </div>
       </div>
+
+      {dialog}
     </div>
   );
 }
