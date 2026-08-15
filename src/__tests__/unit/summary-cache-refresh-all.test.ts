@@ -30,12 +30,16 @@ describe('SummaryCacheService.refreshAllUsers', () => {
       where: {
         OR: [
           { accessTokens: { some: { isActive: true } } },
-          { accounts: { some: { plaidAccountId: { startsWith: 'snaptrade-' } } } },
-          { snapTradeUser: { activities: { some: {} } } },
+          { snapTradeUser: { is: { activities: { some: {} } } } },
           { manualAccounts: { some: {} } },
           {
             financialSummarySnapshot: {
-              is: { financialOverview: { path: ['homeValue'], gt: 0 } },
+              is: {
+                OR: [
+                  { investmentPortfolio: { path: ['holdingCount'], gt: 0 } },
+                  { financialOverview: { path: ['homeValue'], gt: 0 } },
+                ],
+              },
             },
           },
         ],
@@ -44,9 +48,30 @@ describe('SummaryCacheService.refreshAllUsers', () => {
     });
   });
 
+  it('proves a SnapTrade connection with data this cron does not itself write', async () => {
+    await SummaryCacheService.refreshAllUsers();
+
+    const clauses = findMany.mock.calls[0][0].where.OR;
+    // `snaptrade-` Account rows require Plaid banking transactions, and SnapTradeActivity
+    // rows require categorize: true, which only refreshAllUsers passes. Selecting on
+    // either would be circular: a SnapTrade-only user is skipped, so the evidence proving
+    // they should not be skipped never gets written.
+    expect(JSON.stringify(clauses)).not.toContain('startsWith');
+    expect(clauses).toContainEqual({
+      financialSummarySnapshot: {
+        is: {
+          OR: [
+            { investmentPortfolio: { path: ['holdingCount'], gt: 0 } },
+            { financialOverview: { path: ['homeValue'], gt: 0 } },
+          ],
+        },
+      },
+    });
+  });
+
   it('rebuilds snapshots for users without a Plaid connection', async () => {
     findMany.mockResolvedValue([
-      { id: 'snaptrade-only-user' },
+      { id: 'snaptrade-holdings-user' },
       { id: 'manual-only-user' },
       { id: 'home-only-user' },
     ]);
@@ -55,7 +80,7 @@ describe('SummaryCacheService.refreshAllUsers', () => {
       success: true,
       usersProcessed: 3,
     });
-    expect(computeForUser).toHaveBeenCalledWith('snaptrade-only-user', { categorize: true });
+    expect(computeForUser).toHaveBeenCalledWith('snaptrade-holdings-user', { categorize: true });
     expect(computeForUser).toHaveBeenCalledWith('manual-only-user', { categorize: true });
     expect(computeForUser).toHaveBeenCalledWith('home-only-user', { categorize: true });
   });
