@@ -43,8 +43,15 @@ function analyzeSingleQuestion(question: string): QuestionNeeds {
   // "retire"/"retirement" miss "retiring", "retires", "retired", and "retiree",
   // which silently withheld the retirement analysis from questions that were
   // plainly about retiring.
+  // "Retiring a mortgage" is debt payoff. Drop that sense before testing, so a
+  // question that means both ("retire my mortgage so I can retire at 62") still
+  // routes as retirement.
+  const withoutDebtPayoff = qLower.replace(
+    /\bretir\w+\s+(?:my|our|the|this|that|their)\s+(?:mortgage|loans?|debts?|note|card|balance)\b/g,
+    ' '
+  );
   const needsRetirement =
-    /\bretir\w*/.test(qLower) ||
+    /\bretir\w*/.test(withoutDebtPayoff) ||
     /\b(withdrawals?|drawdown|draw\s+down|nest\s+egg|financial\s+independence)\b/.test(qLower) ||
     /\b(stop|quit)\s+working\b/.test(qLower);
 
@@ -54,12 +61,15 @@ function analyzeSingleQuestion(question: string): QuestionNeeds {
 
   // "How much do I spend each month?" is answered by the monthly totals, but
   // "evaluate my spending" is not — that asks what the averages are made of.
+  // "money" on its own is too generic to route on — "review where my money is
+  // invested" is an investments question — so the money phrasing has to name
+  // the outflow explicitly.
   const evaluatesSpending =
-    /\b(spending|expenses|budget|cash[ -]?flow|money)\b/.test(qLower) &&
-    (/\b(evaluate|evaluating|assess|assessment|analy[sz]e|analy[sz]ing|analysis|review|reviewing|breakdown|optimi[sz]e|improve|reduce|cut|trim)\b/.test(qLower) ||
-      /\bbreak\s+down\b/.test(qLower) ||
-      /\bwhere\s+(?:is|are|does|do)\b/.test(qLower) ||
-      /\bstrengths?\s+and\s+weakness/.test(qLower));
+    (/\b(spending|expenses|budget|cash[ -]?flow)\b/.test(qLower) &&
+      (/\b(evaluate|evaluating|assess|assessment|analy[sz]e|analy[sz]ing|analysis|review|reviewing|breakdown|optimi[sz]e|improve|reduce|cut|trim)\b/.test(qLower) ||
+        /\bbreak\s+down\b/.test(qLower) ||
+        /\bstrengths?\s+and\s+weakness/.test(qLower))) ||
+    /\bwhere\s+(?:is|are|does|do)\s+(?:all\s+)?(?:my|our|the)\s+money\s+(?:go|goes|going)\b/.test(qLower);
 
   const needsTransactionDetails =
     /\b(transaction|transactions|purchase|purchases|merchant|merchants|category|categories|paycheck|salary|subscription|subscriptions|fee|fees)\b/.test(qLower) ||
