@@ -95,19 +95,21 @@ async function main() {
     }
   })) as TokenWithAccounts[];
 
-  // Group active connections by user + institution.
-  const groups = new Map<string, TokenWithAccounts[]>();
+  // Group active connections by user + institution. The grouping key is never parsed back apart -
+  // userId and institution are carried on the group itself, so an institution name containing the
+  // delimiter cannot corrupt them.
+  const groups = new Map<string, { userId: string; institution: string; tokens: TokenWithAccounts[] }>();
   for (const token of tokens) {
     if (!token.userId) continue;
     const institution = resolveInstitution(token);
     if (!institution) continue;
     if (institutionFilter && institution.toLowerCase() !== institutionFilter.toLowerCase()) continue;
     const key = `${token.userId}::${institution}`;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(token);
+    if (!groups.has(key)) groups.set(key, { userId: token.userId, institution, tokens: [] });
+    groups.get(key)!.tokens.push(token);
   }
 
-  const duplicateGroups = [...groups.entries()].filter(([, group]) => group.length > 1);
+  const duplicateGroups = [...groups.values()].filter(group => group.tokens.length > 1);
   if (duplicateGroups.length === 0) {
     console.log('✅ No user has more than one active connection to the same institution.');
     return;
@@ -120,8 +122,7 @@ async function main() {
   let totalTransactionsMigrated = 0;
   let totalSkipped = 0;
 
-  for (const [key, group] of duplicateGroups) {
-    const [userId, institution] = key.split('::');
+  for (const { userId, institution, tokens: group } of duplicateGroups) {
     console.log(`🏦 ${institution} (user ${userId}) - ${group.length} active connections`);
 
     // Keep the most recently refreshed connection, falling back to the newest.
@@ -136,7 +137,9 @@ async function main() {
     if (!apply) {
       // Preview exactly what the apply run would decide, using the same matcher.
       for (const candidate of sorted.slice(1)) {
-        const previous = candidate.accounts.filter(a => (a.institution ?? institution) === institution);
+        // Every account on the candidate token must be covered, matching the apply path - a
+        // subset filter here would preview a supersede that the apply run would refuse.
+        const previous = candidate.accounts;
         const result = matchAccountsAcrossConnections(previous as any, keeper.accounts as any);
         if (result.fullyCovered) {
           const txCount = await prisma.transaction.count({

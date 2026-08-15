@@ -70,6 +70,29 @@ function typeKey(account: ConnectionAccount): string {
   return `${(account.type || '').trim().toLowerCase()}|${(account.subtype || '').trim().toLowerCase()}`;
 }
 
+function distinctPersistentId(account: ConnectionAccount): string {
+  const persistentId = (account.persistentAccountId || '').trim();
+  return persistentId && persistentId !== account.plaidAccountId ? persistentId : '';
+}
+
+/**
+ * A stable identifier that DISAGREES is proof the two accounts are different, and outranks any
+ * weaker signal that happens to agree. Without this, two logins at one institution that both
+ * expose an account named "Checking" would match on name despite reporting different masks - the
+ * old connection would look fully covered and be superseded, destroying a real account.
+ */
+function hasConflictingStableIdentifier(a: ConnectionAccount, b: ConnectionAccount): boolean {
+  const aMask = (a.mask || '').trim();
+  const bMask = (b.mask || '').trim();
+  if (aMask && bMask && aMask !== bMask) return true;
+
+  const aPersistentId = distinctPersistentId(a);
+  const bPersistentId = distinctPersistentId(b);
+  if (aPersistentId && bPersistentId && aPersistentId !== bPersistentId) return true;
+
+  return false;
+}
+
 /**
  * Match by a key that must be unambiguous on BOTH sides. A key held by two previous accounts or
  * two current accounts is skipped rather than guessed - a wrong match migrates transactions onto
@@ -101,6 +124,7 @@ function matchByKey(
   for (const [key, previousAccounts] of previousByKey) {
     const currentAccounts = currentByKey.get(key);
     if (previousAccounts.length !== 1 || !currentAccounts || currentAccounts.length !== 1) continue;
+    if (hasConflictingStableIdentifier(previousAccounts[0], currentAccounts[0])) continue;
     matches.push({ previous: previousAccounts[0], current: currentAccounts[0], strategy });
     claimed.previous.add(previousAccounts[0].id);
     claimed.current.add(currentAccounts[0].id);
@@ -258,7 +282,11 @@ export async function supersedeDuplicateInstitutionConnections(options: {
     const isSameInstitution = token.institutionName === institutionName || accountsAtInstitution.length > 0;
     if (!isSameInstitution) continue;
 
-    const previousRecords = accountsAtInstitution.length > 0 ? accountsAtInstitution : token.accounts || [];
+    // Coverage must be proven for EVERY account on the token, not just the ones tagged with this
+    // institution. Legacy rows can have a null institution; deactivating the token on the strength
+    // of the tagged subset alone would silently strand those accounts, since both live and
+    // persisted ingestion skip a superseded token.
+    const previousRecords = token.accounts || [];
     if (previousRecords.length === 0) {
       // An active token at this institution with no accounts of its own is a dead connection.
       log(`   🔻 Deactivating empty duplicate connection ${token.id} (item ${token.itemId})`);

@@ -115,6 +115,44 @@ describe('matchAccountsAcrossConnections', () => {
   it('treats an empty previous connection as not covered', () => {
     expect(matchAccountsAcrossConnections([], [account({ id: 'c1' })]).fullyCovered).toBe(false);
   });
+
+  it('refuses to match on name when the two accounts report different masks', () => {
+    // Two logins at one bank both expose an account literally named "Checking". Matching on name
+    // would report full coverage and destroy the other login's account.
+    const previous = [
+      account({ id: 'p1', type: 'depository', subtype: 'checking', name: 'Checking', mask: '1111', currentBalance: 5000 })
+    ];
+    const current = [
+      account({ id: 'c1', type: 'depository', subtype: 'checking', name: 'Checking', mask: '2222', currentBalance: 900 })
+    ];
+
+    const result = matchAccountsAcrossConnections(previous, current);
+
+    expect(result.matches).toHaveLength(0);
+    expect(result.fullyCovered).toBe(false);
+  });
+
+  it('refuses to match on balance when the two accounts report different masks', () => {
+    const previous = [account({ id: 'p1', name: 'Goal A', mask: '1111', currentBalance: 250 })];
+    const current = [account({ id: 'c1', name: 'Goal B', mask: '2222', currentBalance: 250 })];
+
+    expect(matchAccountsAcrossConnections(previous, current).fullyCovered).toBe(false);
+  });
+
+  it('refuses to match when both sides carry different persistent account ids', () => {
+    const previous = [account({ id: 'p1', persistentAccountId: 'stable-1', name: 'Checking', currentBalance: 10 })];
+    const current = [account({ id: 'c1', persistentAccountId: 'stable-2', name: 'Checking', currentBalance: 10 })];
+
+    expect(matchAccountsAcrossConnections(previous, current).fullyCovered).toBe(false);
+  });
+
+  it('still matches when only one side reports a mask', () => {
+    // The real Betterment relink: old Item has masks, new Item reports none.
+    const previous = [account({ id: 'p1', name: 'Retirement - Roth IRA', subtype: 'roth', mask: '0337', currentBalance: 100 })];
+    const current = [account({ id: 'c1', name: 'Retirement - Roth IRA', subtype: 'roth', mask: null, currentBalance: 100 })];
+
+    expect(matchAccountsAcrossConnections(previous, current).fullyCovered).toBe(true);
+  });
 });
 
 describe('supersedeDuplicateInstitutionConnections', () => {
@@ -205,6 +243,35 @@ describe('supersedeDuplicateInstitutionConnections', () => {
     expect(tokenUpdates).toEqual([]);
     expect(report.superseded).toHaveLength(0);
     expect(report.skipped[0]).toMatchObject({ tokenId: 'other-login', reason: 'partial-coverage' });
+  });
+
+  it('will not deactivate a token whose untagged accounts were never covered', async () => {
+    // Legacy token: one Betterment-tagged account the new Item covers, plus an account with a null
+    // institution that nothing covers. Deactivating would strand it from live AND persisted reads.
+    const { prisma, deleted, tokenUpdates } = buildPrisma({
+      currentAccounts,
+      otherTokens: [{
+        id: 'legacy-token',
+        itemId: 'item-legacy',
+        institutionName: 'Betterment',
+        accounts: [
+          { id: 'p1', plaidAccountId: 'old-1', persistentAccountId: null, institution: 'Betterment', name: 'Roth IRA', type: 'investment', subtype: 'roth', mask: null, currentBalance: 100 },
+          { id: 'p2', plaidAccountId: 'old-2', persistentAccountId: null, institution: null, name: 'Untagged Legacy Account', type: 'depository', subtype: 'checking', mask: null, currentBalance: 42 }
+        ]
+      }]
+    });
+
+    const report = await supersedeDuplicateInstitutionConnections({
+      prisma: prisma as any,
+      userId: 'user-1',
+      keepTokenId: 'keep-token',
+      institutionName: 'Betterment'
+    });
+
+    expect(deleted).toEqual([]);
+    expect(tokenUpdates).toEqual([]);
+    expect(report.superseded).toHaveLength(0);
+    expect(report.skipped[0].unmatchedPreviousNames).toEqual(['Untagged Legacy Account']);
   });
 
   it('ignores active connections to other institutions', async () => {
