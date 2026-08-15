@@ -141,13 +141,21 @@ export class SummaryCacheService {
 
   static async refreshAllUsers() {
     const prisma = getPrismaClient();
-    // Refresh every user with a connected provider, not just Plaid. A SnapTrade-only
-    // user has no AccessToken row, so gating on accessTokens alone skipped them entirely.
+    // Refresh every user with any financial data source, not just Plaid. A user with
+    // only SnapTrade, only manual accounts, or only a home value has no AccessToken row,
+    // so gating on accessTokens alone skipped them entirely: no snapshot rebuild and no
+    // daily history row for trend tracking.
+    //
+    // Home data lives in the (often encrypted) profile text and cannot be filtered in
+    // SQL, so the persisted snapshot's homeValue stands in for it. Selecting on the
+    // snapshot's mere existence would not work -- every login writes one.
     const userIds = await prisma.user.findMany({
       where: {
         OR: [
           { accessTokens: { some: { isActive: true } } },
           { snapTradeUser: { isNot: null } },
+          { manualAccounts: { some: {} } },
+          { financialSummarySnapshot: { is: { financialOverview: { path: ['homeValue'], gt: 0 } } } },
         ],
       },
       select: { id: true },

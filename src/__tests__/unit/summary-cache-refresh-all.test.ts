@@ -23,7 +23,7 @@ describe('SummaryCacheService.refreshAllUsers', () => {
     computeForUser.mockRestore();
   });
 
-  it('selects users connected through either provider, not just Plaid', async () => {
+  it('selects users with any financial data source, not just Plaid', async () => {
     await SummaryCacheService.refreshAllUsers();
 
     expect(findMany).toHaveBeenCalledWith({
@@ -31,20 +31,32 @@ describe('SummaryCacheService.refreshAllUsers', () => {
         OR: [
           { accessTokens: { some: { isActive: true } } },
           { snapTradeUser: { isNot: null } },
+          { manualAccounts: { some: {} } },
+          {
+            financialSummarySnapshot: {
+              is: { financialOverview: { path: ['homeValue'], gt: 0 } },
+            },
+          },
         ],
       },
       select: { id: true },
     });
   });
 
-  it('rebuilds the snapshot for a SnapTrade-only user', async () => {
-    findMany.mockResolvedValue([{ id: 'snaptrade-only-user' }]);
+  it('rebuilds snapshots for users without a Plaid connection', async () => {
+    findMany.mockResolvedValue([
+      { id: 'snaptrade-only-user' },
+      { id: 'manual-only-user' },
+      { id: 'home-only-user' },
+    ]);
 
     await expect(SummaryCacheService.refreshAllUsers()).resolves.toEqual({
       success: true,
-      usersProcessed: 1,
+      usersProcessed: 3,
     });
     expect(computeForUser).toHaveBeenCalledWith('snaptrade-only-user', { categorize: true });
+    expect(computeForUser).toHaveBeenCalledWith('manual-only-user', { categorize: true });
+    expect(computeForUser).toHaveBeenCalledWith('home-only-user', { categorize: true });
   });
 
   it('keeps refreshing remaining users when one fails', async () => {
