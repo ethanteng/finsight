@@ -200,6 +200,30 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(result.showTheMathData?.evidenceManifest.secondaryCaveat).toBe(true);
   });
 
+  it('asks for the input that blocked the retirement projection', async () => {
+    // The missing input was only ever described to the model, buried in the
+    // context pack. The user is the one who can supply it.
+    mockedGatherContext.mockResolvedValue({
+      ...snapshot(),
+      retirementAnalysisNeedsInfo: {
+        missingParams: ['annualWithdrawalAmount'],
+        detectedParams: {},
+      },
+    } as any);
+    mockedAskClaude.mockResolvedValue(JSON.stringify({
+      summary: 'Your net worth is $100.',
+      insights: [],
+      suggested_actions: [],
+    }));
+
+    const result = await runAskLincAnalysis({ question: 'Am I on track for retirement?', userId: 'user-1' });
+
+    expect(result.structuredResponse.summary).toContain('Your net worth is $100.');
+    expect(result.structuredResponse.summary).toContain('how much you expect to spend per year once retired');
+    expect(result.structuredResponse.summary).toContain('Reply with that');
+    expect(result.displayText).toContain('Reply with that');
+  });
+
   it('widens the context when the first answer reached for a number it was not given', async () => {
     mockedAskClaude
       .mockResolvedValueOnce(JSON.stringify({

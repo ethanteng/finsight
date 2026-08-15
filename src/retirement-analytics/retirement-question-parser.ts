@@ -3,6 +3,8 @@
  * Extracts retirement analysis parameters from user questions
  */
 
+import { extractCurrentAge, extractRetirementAge, mentionsRetirement } from './retirement-language';
+
 export interface RetirementQuestionParams {
   hasRetirementIntent: boolean;
   currentAge?: number;
@@ -17,54 +19,18 @@ export interface RetirementQuestionParams {
  */
 export function parseRetirementQuestion(question: string): RetirementQuestionParams {
   const qLower = question.toLowerCase();
-  
-  // Match the whole word family. Substring checks for "retire"/"retirement"
-  // miss "retiring", "retires", and "retired", and this returns early on a
-  // miss — so a question about retiring by 62 arrived with no parameters at
-  // all and the analysis reported the retirement age as missing.
-  const hasRetirementIntent =
-    /\bretir\w*/.test(qLower) ||
-    /\b(?:withdrawals?|drawdown|draw\s+down|nest\s+egg|financial\s+independence)\b/.test(qLower);
+
+  // Intent and both ages come from the shared matchers; this used to keep its
+  // own substring list and returned early when it missed, so "retiring by age
+  // 62" produced no parameters at all.
+  const hasRetirementIntent = mentionsRetirement(qLower);
 
   if (!hasRetirementIntent) {
     return { hasRetirementIntent: false };
   }
 
-  // Extract current age — avoid bare "age N" (matches "retire at age 68" as current age).
-  const agePatterns = [
-    /(?:i'?m|i am)\s+(\d{2,3})\b/i,
-    /(\d{2,3})\s*(?:years?\s*old|y\.?o\.?)/i,
-  ];
-  
-  let currentAge: number | undefined;
-  for (const pattern of agePatterns) {
-    const match = qLower.match(pattern);
-    if (match) {
-      currentAge = parseInt(match[1]);
-      break;
-    }
-  }
-
-  // Extract retirement age patterns
-  // "retire at 65" or "retirement age 65" or "planning to retire at 68" or "retiring by 68"
-  // The prepositions repeat and "age" can follow one of them: "retiring by age
-  // 62" is the way people write this, and matching only a single connector
-  // missed it entirely, leaving the retirement age unknown for a question that
-  // stated it plainly.
-  const retirementAgePatterns = [
-    /retir\w*(?:\s+(?:at|by|around|about|near|before|no\s+later\s+than))*(?:\s+age)?\s+(\d{2,3})\b/i,
-    /retirement\s+age\s+(?:of\s+)?(\d{2,3})\b/i,
-    /planning\s+to\s+retire\s+(?:at|by)\s+(?:age\s+)?(\d{2,3})\b/i
-  ];
-  
-  let retirementAge: number | undefined;
-  for (const pattern of retirementAgePatterns) {
-    const match = qLower.match(pattern);
-    if (match) {
-      retirementAge = parseInt(match[1]);
-      break;
-    }
-  }
+  const currentAge = extractCurrentAge(qLower) ?? undefined;
+  const retirementAge = extractRetirementAge(qLower) ?? undefined;
 
   // Extract withdrawal amount patterns
   // "$100,000 per year" or "$100k annually" or "withdraw 100000" or "100000 annual withdrawal"

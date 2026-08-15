@@ -1,58 +1,20 @@
 /**
  * Profile Age Extractor
- * Extracts age and retirement information from user profile text
+ *
+ * Thin wrappers over the shared retirement-language matchers, kept as named
+ * functions because callers read better for them. The phrasing itself lives in
+ * one place so the profile and the question can never disagree about what
+ * "retiring by age 62" means.
  */
 
-/**
- * Extract age from profile text
- * Looks for patterns like "45 years old", "age 45", "I'm 45", etc.
- */
+import { extractCurrentAge, extractRetirementAge } from './retirement-language';
+
+/** Extract age from profile text: "48-year-old", "45 years old", "I'm 45". */
 export function extractAgeFromProfile(profileText: string): number | null {
-  if (!profileText) return null;
-
-  // Prefer explicit current-age phrasing; avoid "retire at age 68" matching as current age.
-  const agePatterns = [
-    /(?:i'?m|i am)\s+(\d{2,3})\b/i,
-    /(?:^|\s)(\d{2,3})\s*(?:years?\s*old|y\.?o\.?)/i,
-    /(\d{2,3})-year-old/i,
-  ];
-
-  for (const pattern of agePatterns) {
-    const match = profileText.match(pattern);
-    if (match) {
-      const age = parseInt(match[1]);
-      if (age >= 18 && age <= 120) { // Reasonable age range
-        return age;
-      }
-    }
-  }
-
-  return null;
+  return extractCurrentAge(profileText);
 }
 
-/**
- * Extract retirement age from profile text
- */
+/** Extract the planned retirement age from profile text. */
 export function extractRetirementAgeFromProfile(profileText: string): number | null {
-  if (!profileText) return null;
-
-  // Same phrasing spread as the question parser: "retiring by age 62" has to
-  // match, not just "retire at 62".
-  const retirementPatterns = [
-    /retir\w*(?:\s+(?:at|by|around|about|near|before|no\s+later\s+than))*(?:\s+age)?\s+(\d{2,3})\b/i,
-    /retirement\s+age\s+(?:of\s+)?(\d{2,3})\b/i,
-    /planning\s+to\s+retire\s+(?:at|by)\s+(?:age\s+)?(\d{2,3})\b/i
-  ];
-
-  for (const pattern of retirementPatterns) {
-    const match = profileText.match(pattern);
-    if (match) {
-      const age = parseInt(match[1]);
-      if (age >= 50 && age <= 100) { // Reasonable retirement age range
-        return age;
-      }
-    }
-  }
-
-  return null;
+  return extractRetirementAge(profileText);
 }

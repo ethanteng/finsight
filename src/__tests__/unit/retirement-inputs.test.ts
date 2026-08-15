@@ -156,3 +156,46 @@ describe('retirement age phrasing', () => {
     expect(extractRetirementAgeFromProfile(profile)).toBe(62);
   });
 });
+
+describe('describeMissingRetirementInputs', () => {
+  const { describeMissingRetirementInputs } = require('../../openai/retirement-inputs');
+
+  it('asks for exactly what is missing, in plain language', () => {
+    expect(describeMissingRetirementInputs({
+      missingParams: ['annualWithdrawalAmount'],
+      detectedParams: {},
+    })).toBe(
+      'I could not run a retirement projection because I am missing roughly how much you expect to ' +
+      'spend per year once retired, in today\'s dollars. Reply with that and I will work it into the next answer.'
+    );
+  });
+
+  it('lists several missing inputs', () => {
+    const ask = describeMissingRetirementInputs({
+      missingParams: ['retirementAge', 'annualWithdrawalAmount'],
+      detectedParams: {},
+    });
+    expect(ask).toContain('the age you plan to retire and roughly how much');
+    expect(ask).toContain('Reply with those');
+  });
+
+  it('asks to confirm a remembered amount rather than asking again', () => {
+    expect(describeMissingRetirementInputs({
+      missingParams: ['annualWithdrawalAmount'],
+      detectedParams: { annualWithdrawalAmount: 118_000 },
+      confirmationRequiredParams: ['annualWithdrawalAmount'],
+    })).toBe(
+      'To run the retirement projection I need to confirm one thing: are you still planning to spend ' +
+      'about $118,000 a year in retirement? Tell me either way and I will include the analysis.'
+    );
+  });
+
+  it('says nothing when there is nothing the user can supply', () => {
+    expect(describeMissingRetirementInputs(undefined)).toBeNull();
+    expect(describeMissingRetirementInputs({
+      missingParams: [],
+      detectedParams: {},
+      unavailableReason: 'No linked investment holdings are available.',
+    })).toBeNull();
+  });
+});

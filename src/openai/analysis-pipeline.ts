@@ -36,6 +36,7 @@ import {
   validateResponseFacts,
 } from './response-facts';
 import { validateCanonicalFactPack } from './canonical-facts';
+import { describeMissingRetirementInputs } from './retirement-inputs';
 import { askOpenAIWithPreparedPrompt } from './openai-fallback-client';
 import { createHash } from 'crypto';
 import { recordLlmAnalysisFailure } from '../observability/llm-metrics';
@@ -429,6 +430,14 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   }
 
   onProgress?.('Formatting response');
+
+  // When the only thing missing is something the user can type in a sentence,
+  // ask for it. Appended after validation because it is server-authored: the
+  // amount comes from persisted input, not from the model.
+  const missingInputsAsk = describeMissingRetirementInputs(snapshot.retirementAnalysisNeedsInfo);
+  if (missingInputsAsk) {
+    structuredResponse = appendNotice(structuredResponse, missingInputsAsk);
+  }
 
   // Step 6: Output validation (security)
   const displayText = toDisplayText(structuredResponse);

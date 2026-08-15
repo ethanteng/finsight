@@ -1,3 +1,4 @@
+import { mentionsRetirement } from '../retirement-analytics/retirement-language';
 import { QuestionNeeds } from './types';
 
 function analyzeSingleQuestion(question: string): QuestionNeeds {
@@ -43,17 +44,9 @@ function analyzeSingleQuestion(question: string): QuestionNeeds {
   // "retire"/"retirement" miss "retiring", "retires", "retired", and "retiree",
   // which silently withheld the retirement analysis from questions that were
   // plainly about retiring.
-  // "Retiring a mortgage" is debt payoff. Drop that sense before testing, so a
-  // question that means both ("retire my mortgage so I can retire at 62") still
-  // routes as retirement.
-  const withoutDebtPayoff = qLower.replace(
-    /\bretir\w+\s+(?:my|our|the|this|that|their)\s+(?:mortgage|loans?|debts?|note|card|balance)\b/g,
-    ' '
-  );
-  const needsRetirement =
-    /\bretir\w*/.test(withoutDebtPayoff) ||
-    /\b(withdrawals?|drawdown|draw\s+down|nest\s+egg|financial\s+independence)\b/.test(qLower) ||
-    /\b(stop|quit)\s+working\b/.test(qLower);
+  // Shared with the retirement parser and the profile extractor, so routing a
+  // question and reading its parameters can never disagree about the phrasing.
+  const needsRetirement = mentionsRetirement(qLower);
 
   const needsAccountDetails =
     /\b(account|accounts|balance|balances|checking|savings|loan|credit card|mortgage)\b/.test(qLower) ||
