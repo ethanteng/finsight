@@ -263,7 +263,7 @@ export default function FinancesPageClient() {
     // A revision that already moved past the baseline settles this edit only if the server
     // has nothing further queued. Back-to-back edits land in separate rebuilds, so the
     // first one publishing is not the end of the story.
-    if (immediate && !isReconciled(immediate, baselineRevision)) {
+    if (!immediate || !isReconciled(immediate, baselineRevision)) {
       setAwaitingRevision(true);
       try {
         for (let attempt = 0; attempt < REVISION_POLL_ATTEMPTS; attempt += 1) {
@@ -383,7 +383,10 @@ export default function FinancesPageClient() {
   // While the background rebuild is being polled for, the out-of-sync notice would just be
   // telling the user to do what the page is already doing.
   const visibleWarnings = awaitingRevision
-    ? overview.warnings.filter(warning => warning.code !== 'manual-accounts-out-of-sync')
+    ? overview.warnings.filter(warning =>
+        warning.code !== 'manual-accounts-out-of-sync' &&
+        warning.code !== 'home-metadata-out-of-sync'
+      )
     : overview.warnings;
 
   const findAccountById = (accountId: string): FinancesAccount | null => {
