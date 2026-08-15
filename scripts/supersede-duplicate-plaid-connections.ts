@@ -29,7 +29,7 @@ import {
   matchAccountsAcrossConnections,
   supersedeDuplicateInstitutionConnections
 } from '../src/services/plaid-connection-supersede';
-import { SummaryCacheService } from '../src/services/summary-cache-service';
+import { FinancialRevisionService } from '../src/services/financial-revision-service';
 
 const prisma = getPrismaClient();
 
@@ -184,7 +184,7 @@ async function main() {
     console.log(`🔄 Refreshing financial caches for ${affectedUserIds.size} affected user(s)...`);
     for (const userId of affectedUserIds) {
       try {
-        await SummaryCacheService.computeForUser(userId, { categorize: false });
+        await FinancialRevisionService.recompute(userId, { categorize: false });
         console.log(`   ✅ Refreshed caches for user ${userId}`);
       } catch (err) {
         console.error(`   ❌ Failed to refresh caches for user ${userId}:`, (err as Error).message);
