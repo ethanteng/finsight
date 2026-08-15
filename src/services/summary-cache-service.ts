@@ -141,9 +141,14 @@ export class SummaryCacheService {
 
   static async refreshAllUsers() {
     const prisma = getPrismaClient();
+    // Refresh every user with a connected provider, not just Plaid. A SnapTrade-only
+    // user has no AccessToken row, so gating on accessTokens alone skipped them entirely.
     const userIds = await prisma.user.findMany({
       where: {
-        accessTokens: { some: { isActive: true } },
+        OR: [
+          { accessTokens: { some: { isActive: true } } },
+          { snapTradeUser: { isNot: null } },
+        ],
       },
       select: { id: true },
     });
