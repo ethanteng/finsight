@@ -737,17 +737,21 @@ export const setupPlaidRoutes = (app: any) => {
                     currentOwnAccounts as any
                   );
                   console.log(`Reconciling ${staleOwnAccounts.length} stale account(s) from the previous ${institutionName} Item`);
-                  for (const match of matches) {
-                    // Drop the stale history rather than carrying it over: Plaid transaction ids are
-                    // Item-scoped, so the replacement re-imports the same activity under new ids and
-                    // persistence (keyed on plaidTransactionId) would keep both copies.
-                    const dropped = await getPrismaClient().transaction.deleteMany({
-                      where: { accountId: match.previous.id }
+                  if (matches.length > 0) {
+                    await getPrismaClient().$transaction(async tx => {
+                      for (const match of matches) {
+                        // Drop the stale history rather than carrying it over: Plaid transaction ids are
+                        // Item-scoped, so the replacement re-imports the same activity under new ids and
+                        // persistence (keyed on plaidTransactionId) would keep both copies.
+                        const dropped = await tx.transaction.deleteMany({
+                          where: { accountId: match.previous.id }
+                        });
+                        if (dropped.count > 0) {
+                          console.log(`   Dropped ${dropped.count} stale transactions from ${match.previous.name} (matched by ${match.strategy}) - the new Item re-imports them`);
+                        }
+                        await tx.account.delete({ where: { id: match.previous.id } });
+                      }
                     });
-                    if (dropped.count > 0) {
-                      console.log(`   Dropped ${dropped.count} stale transactions from ${match.previous.name} (matched by ${match.strategy}) - the new Item re-imports them`);
-                    }
-                    await getPrismaClient().account.delete({ where: { id: match.previous.id } });
                     reconciliationChanged = true;
                   }
                   for (const orphan of unmatchedPrevious) {
