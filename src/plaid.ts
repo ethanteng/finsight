@@ -5,6 +5,7 @@ import { BalanceService } from './services/balance-service';
 import { FinancialDataService } from './services/financial-data-service';
 import { SnapTradeService } from './snaptrade';
 import { TransactionSyncService } from './services/transaction-sync-service';
+import { matchAccountsAcrossConnections, toConnectionAccount } from './services/plaid-connection-supersede';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
@@ -632,124 +633,173 @@ export const setupPlaidRoutes = (app: any) => {
         const accounts = accountsResponse.data.accounts;
         console.log(`Found ${accounts.length} accounts to analyze`);
 
-        // ORPHAN CLEANUP: When re-linking same institution (updating existing token), migrate transactions
-        // and remove old accounts from the expiring Item. Only run when updating - we need the old Item's
-        // account_ids to avoid including accounts from OTHER connections to the same institution.
-        if (req.user?.id && accounts.length > 0 && existingToken) {
+        // RELINK RECONCILIATION: A fresh Link flow always mints a new Plaid Item, even when the
+        // user is re-connecting an institution they already have. Without reconciliation the old
+        // Item stays active and every logical account is counted twice. Two cases to handle:
+        //   1. Update mode - the same token row was reused, so its old account_ids are now stale.
+        //   2. New Item - a separate active token exists for the same institution.
+        // Both use the same matcher, which only supersedes when the new Item fully covers the old.
+        if (req.user?.id && accounts.length > 0) {
+          let reconciliationChanged = false;
           try {
             const itemResponse = await plaidClient.itemGet({ access_token: access_token });
             const institutionId = itemResponse.data.item.institution_id;
+            let institutionName: string | undefined;
             if (institutionId) {
               const institutionResponse = await plaidClient.institutionsGetById({
                 institution_id: institutionId,
                 country_codes: [CountryCode.Us]
               });
-              const institutionName = institutionResponse.data.institution?.name;
-              if (institutionName) {
-                const newAccountIds = new Set(accounts.map((a: any) => a.account_id));
-                // Get old Item's account_ids - only migrate orphans from THIS connection, not other connections
-                let oldAccountIds: Set<string> | null = null;
-                try {
-                  const oldAccountsResponse = await plaidClient.accountsGet({
-                    access_token: existingToken.token
+              institutionName = institutionResponse.data.institution?.name;
+            }
+
+            // Persist the institution on the token so duplicate connections are detectable
+            // without a Plaid round-trip (previously this was only backfilled lazily).
+            if (institutionName && storedToken.institutionName !== institutionName) {
+              await getPrismaClient().accessToken.update({
+                where: { id: storedToken.id },
+                data: { institutionName }
+              });
+            }
+
+            {
+              const newAccountIds = new Set(accounts.map((a: any) => a.account_id));
+
+              // Upsert the new Item's accounts so both reconciliation paths have targets. Runs even
+              // when the Item reports no institution_id: Case 1 scopes by accessTokenId and needs no
+              // institution. An undefined institution leaves the stored value untouched on update.
+              // Only touch accounts we own or that are unassigned - never overwrite another user's.
+              const accountData = (account: any) => ({
+                name: account.name,
+                mask: account.mask,
+                type: account.type,
+                subtype: account.subtype,
+                currentBalance: account.balances?.current,
+                availableBalance: account.balances?.available,
+                limit: account.balances?.limit,
+                currency: account.balances?.iso_currency_code,
+                institution: institutionName,
+                persistentAccountId: account.persistent_account_id || null,
+                userId: req.user.id,
+                accessTokenId: storedToken.id,
+                lastSynced: new Date()
+              });
+              for (const account of accounts) {
+                const existing = await getPrismaClient().account.findUnique({
+                  where: { plaidAccountId: account.account_id },
+                  select: { id: true, userId: true }
+                });
+                if (existing) {
+                  if (existing.userId !== null && existing.userId !== req.user.id) {
+                    console.warn(`   Skipping account ${account.account_id} - belongs to another user`);
+                    continue;
+                  }
+                  // Preserve user-customized names on update (same as other Plaid sync paths).
+                  const { name: _plaidName, ...accountFields } = accountData(account);
+                  await getPrismaClient().account.update({
+                    where: { id: existing.id },
+                    data: accountFields
                   });
-                  oldAccountIds = new Set(oldAccountsResponse.data.accounts.map((a: any) => a.account_id));
-                } catch {
-                  // Old token may be invalid (e.g. ITEM_LOGIN_REQUIRED) - skip cleanup to avoid wrong migration
-                  console.warn('   Cannot fetch old Item accounts (token may be invalid) - skipping orphan cleanup');
+                } else {
+                  await getPrismaClient().account.create({
+                    data: {
+                      plaidAccountId: account.account_id,
+                      ...accountData(account)
+                    }
+                  });
                 }
-                if (!oldAccountIds || oldAccountIds.size === 0) {
-                  // Skip - we can't safely identify which orphans belong to this Item
-                  oldAccountIds = null;
-                }
-                // Only include accounts from the old Item (plaidAccountId in oldAccountIds)
-                const orphanedAccounts = oldAccountIds
-                  ? await getPrismaClient().account.findMany({
-                      where: {
-                        userId: req.user.id,
-                        OR: [{ institution: institutionName }, { institution: null }],
-                        plaidAccountId: { in: Array.from(oldAccountIds) }
-                      },
-                      select: { id: true, plaidAccountId: true, persistentAccountId: true, name: true, type: true, subtype: true }
-                    })
-                  : [];
-                if (orphanedAccounts.length > 0) {
-                  // Upsert new accounts to DB so we have IDs for transaction migration.
-                  // Only update accounts we own or that are unassigned - never overwrite another user's account.
-                  const accountData = (account: any) => ({
-                    name: account.name,
-                    mask: account.mask,
-                    type: account.type,
-                    subtype: account.subtype,
-                    currentBalance: account.balances?.current,
-                    availableBalance: account.balances?.available,
-                    limit: account.balances?.limit,
-                    currency: account.balances?.iso_currency_code,
-                    institution: institutionName,
-                    persistentAccountId: account.persistent_account_id || null,
+              }
+
+              // Case 1: stale accounts still attached to the reused token row.
+              if (existingToken) {
+                const staleOwnAccounts = await getPrismaClient().account.findMany({
+                  where: {
                     userId: req.user.id,
                     accessTokenId: storedToken.id,
-                    lastSynced: new Date()
-                  });
-                  for (const account of accounts) {
-                    const existing = await getPrismaClient().account.findUnique({
-                      where: { plaidAccountId: account.account_id },
-                      select: { id: true, userId: true }
-                    });
-                    if (existing) {
-                      if (existing.userId !== null && existing.userId !== req.user.id) {
-                        console.warn(`   Skipping account ${account.account_id} - belongs to another user`);
-                        continue;
-                      }
-                      await getPrismaClient().account.update({
-                        where: { id: existing.id },
-                        data: accountData(account)
-                      });
-                    } else {
-                      await getPrismaClient().account.create({
-                        data: {
-                          plaidAccountId: account.account_id,
-                          ...accountData(account)
-                        }
-                      });
-                    }
+                    plaidAccountId: { notIn: Array.from(newAccountIds) }
+                  },
+                  select: {
+                    id: true, plaidAccountId: true, persistentAccountId: true,
+                    name: true, type: true, subtype: true, mask: true, currentBalance: true,
+                      balanceLastFetched: true, lastSynced: true
                   }
-                  const newAccountRecords = await getPrismaClient().account.findMany({
+                });
+                if (staleOwnAccounts.length > 0) {
+                  const currentOwnAccounts = await getPrismaClient().account.findMany({
                     where: {
                       userId: req.user.id,
                       plaidAccountId: { in: Array.from(newAccountIds) }
                     },
-                    select: { id: true, persistentAccountId: true }
+                    select: {
+                      id: true, plaidAccountId: true, persistentAccountId: true,
+                      name: true, type: true, subtype: true, mask: true, currentBalance: true,
+                      balanceLastFetched: true, lastSynced: true
+                    }
                   });
-                  const newAccountByPersistentId = new Map<string, string>();
-                  for (const a of newAccountRecords) {
-                    if (a.persistentAccountId) {
-                      newAccountByPersistentId.set(a.persistentAccountId, a.id);
-                    }
-                  }
-                  console.log(`Migrating transactions and removing ${orphanedAccounts.length} orphaned accounts from previous ${institutionName} link`);
-                  for (const orphan of orphanedAccounts) {
-                    const newAccountId = orphan.persistentAccountId
-                      ? newAccountByPersistentId.get(orphan.persistentAccountId)
-                      : undefined;
-                    if (newAccountId) {
-                      const migrated = await getPrismaClient().transaction.updateMany({
-                        where: { accountId: orphan.id },
-                        data: { accountId: newAccountId }
-                      });
-                      if (migrated.count > 0) {
-                        console.log(`   Migrated ${migrated.count} transactions from orphan ${orphan.name} to new account`);
+                  const { matches, unmatchedPrevious } = matchAccountsAcrossConnections(
+                    staleOwnAccounts.map(toConnectionAccount),
+                    currentOwnAccounts.map(toConnectionAccount)
+                  );
+                  console.log(`Reconciling ${staleOwnAccounts.length} stale account(s) from the previous ${institutionName || 'unknown institution'} Item`);
+                  if (matches.length > 0) {
+                    await getPrismaClient().$transaction(async tx => {
+                      for (const match of matches) {
+                        // Drop the stale history rather than carrying it over: Plaid transaction ids are
+                        // Item-scoped, so the replacement re-imports the same activity under new ids and
+                        // persistence (keyed on plaidTransactionId) would keep both copies.
+                        const dropped = await tx.transaction.deleteMany({
+                          where: { accountId: match.previous.id }
+                        });
+                        if (dropped.count > 0) {
+                          console.log(`   Dropped ${dropped.count} stale transactions from ${match.previous.name} (matched by ${match.strategy}) - the new Item re-imports them`);
+                        }
+                        await tx.account.delete({ where: { id: match.previous.id } });
                       }
-                      await getPrismaClient().account.delete({ where: { id: orphan.id } });
-                    } else {
-                      console.warn(`   Skipping orphan ${orphan.name} (${orphan.type}/${orphan.subtype}) - no stable persistent account match, preserving to avoid transaction loss`);
-                    }
+                    });
+                    reconciliationChanged = true;
+                  }
+                  for (const orphan of unmatchedPrevious) {
+                    console.warn(`   Keeping ${orphan.name} (${orphan.type}/${orphan.subtype}) - no match in the new Item, preserving it and its history`);
                   }
                 }
               }
+
+              // Case 2: a separate active token for the same institution (fresh-Link re-connect).
+              // This is the only step that needs an institution name - it is what groups connections.
+              if (institutionName) {
+                const { supersedeDuplicateInstitutionConnections } = await import('./services/plaid-connection-supersede');
+                const supersedeReport = await supersedeDuplicateInstitutionConnections({
+                  prisma: getPrismaClient() as any,
+                  userId: req.user.id,
+                  keepTokenId: storedToken.id,
+                  institutionName,
+                  log: message => console.log(message)
+                });
+                if (supersedeReport.superseded.length > 0) {
+                  reconciliationChanged = true;
+                }
+              } else {
+                console.warn(
+                  '   Item reports no institution_id (common for some OAuth/brokerage connections) - ' +
+                  'skipping cross-connection supersede. Run scripts/backfill-institution-names.js, then ' +
+                  'scripts/supersede-duplicate-plaid-connections.ts, if duplicates appear.'
+                );
+              }
+            }
+
+            if (reconciliationChanged) {
+              const { FinancialRevisionService } = await import('./services/financial-revision-service');
+              FinancialRevisionService.schedule(
+                req.user.id,
+                {
+                  categorize: false,
+                  history: { kind: 'material', reason: 'account-sync' },
+                },
+                'exchange_public_token'
+              );
             }
           } catch (cleanupErr: any) {
-            console.warn('Orphan cleanup failed (non-critical):', cleanupErr?.message);
+            console.warn('Relink reconciliation failed (non-critical):', cleanupErr?.message);
           }
         }
 
