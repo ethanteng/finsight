@@ -297,7 +297,7 @@ describe('Authentication Integration', () => {
         });
 
       expect(response.status).toBe(401);
-      expect(response.body).toHaveProperty('error', 'Authentication required');
+      expect(response.body).toHaveProperty('error', 'No token provided');
     });
 
     it('should reject access with invalid token', async () => {
@@ -312,7 +312,7 @@ describe('Authentication Integration', () => {
         });
 
       expect(response.status).toBe(401);
-      expect(response.body).toHaveProperty('error', 'Authentication required');
+      expect(response.body).toHaveProperty('error', 'Invalid or expired token');
     });
   });
 
