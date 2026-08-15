@@ -196,6 +196,49 @@ describe('rounded canonical values', () => {
     });
   });
 
+  it('removes a sentence left pointing at one it just dropped', () => {
+    // Reported from production: stripping "equities are 59%" left "That's
+    // risky…" behind, and the secondary validator flagged the fragment.
+    const response = {
+      summary: 'Your portfolio is worth $1.92 million. Equities are 59% of it. That is risky this close to retirement.',
+      insights: ['Cash is $75,038.94. It could cover more months than that.'],
+      suggested_actions: ['Keep contributing.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.summary).toContain('$1.92 million');
+    expect(salvaged.summary).not.toContain('59%');
+    expect(salvaged.summary).not.toContain('That is risky');
+    // A dependent opener whose antecedent survived is kept.
+    expect(salvaged.insights).toEqual(['Cash is $75,038.94. It could cover more months than that.']);
+  });
+
+  it('carries removal across adjacent list items', () => {
+    // A claim and the sentence depending on it are as often two bullets as two
+    // sentences, and each bullet is stripped separately.
+    const response = {
+      summary: 'Your portfolio is worth $1.92 million.',
+      insights: ['Equities are 59% of the portfolio.', 'That is risky this close to retirement.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.insights).toEqual([]);
+  });
+
+  it('keeps self-contained sentences that merely start with a demonstrative', () => {
+    // "This year" is a date, not a reference to the sentence before it, and
+    // "It is prudent" is a dummy subject — neither should be collateral.
+    const response = {
+      summary: 'Your portfolio is worth $1.92 million. Equities are 59% of it. This year, review your beneficiaries.',
+      insights: ['Equities are 15% overweight.', 'It is prudent to rebalance.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.summary).toContain('This year, review your beneficiaries.');
+    expect(salvaged.summary).not.toContain('59%');
+    expect(salvaged.insights).toEqual(['It is prudent to rebalance.']);
+  });
+
   it('does not pass an abbreviation off as a surviving summary', () => {
     // "U.S." must not read as a complete sentence that outlived the strip.
     const response = { summary: 'U.S. stocks could lose $999,999 next year.' };

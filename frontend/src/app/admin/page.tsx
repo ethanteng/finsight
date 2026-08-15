@@ -4,6 +4,7 @@ import MarkdownRenderer from '../../components/MarkdownRenderer';
 import PageMeta from '../../components/PageMeta';
 import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
 import AnswerQualityPanel from '../../components/admin/AnswerQualityPanel';
+import RoutingVocabularyPanel from '../../components/admin/RoutingVocabularyPanel';
 
 interface ProductionUser {
   userId: string;
@@ -1288,6 +1289,7 @@ export default function AdminPage() {
 
     return (
       <div className="space-y-6">
+        <RoutingVocabularyPanel apiUrl={API_URL} getAuthHeaders={getAuthHeaders} />
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-semibold text-white">AI Response Tone</h2>
           {!editingTone && (

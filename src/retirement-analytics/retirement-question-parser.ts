@@ -3,6 +3,8 @@
  * Extracts retirement analysis parameters from user questions
  */
 
+import { extractCurrentAge, extractRetirementAge, mentionsRetirement } from './retirement-language';
+
 export interface RetirementQuestionParams {
   hasRetirementIntent: boolean;
   currentAge?: number;
@@ -17,58 +19,18 @@ export interface RetirementQuestionParams {
  */
 export function parseRetirementQuestion(question: string): RetirementQuestionParams {
   const qLower = question.toLowerCase();
-  
-  // Check if question is retirement-related
-  const retirementKeywords = [
-    'retirement',
-    'retire',
-    'withdrawal',
-    'retirement planning',
-    'retirement readiness',
-    'sustainable withdrawal',
-    'retirement portfolio',
-    'retirement analysis',
-    'retirement withdrawal',
-    'withdraw in retirement'
-  ];
-  
-  const hasRetirementIntent = retirementKeywords.some(keyword => qLower.includes(keyword));
-  
+
+  // Intent and both ages come from the shared matchers; this used to keep its
+  // own substring list and returned early when it missed, so "retiring by age
+  // 62" produced no parameters at all.
+  const hasRetirementIntent = mentionsRetirement(qLower);
+
   if (!hasRetirementIntent) {
     return { hasRetirementIntent: false };
   }
 
-  // Extract current age — avoid bare "age N" (matches "retire at age 68" as current age).
-  const agePatterns = [
-    /(?:i'?m|i am)\s+(\d{2,3})\b/i,
-    /(\d{2,3})\s*(?:years?\s*old|y\.?o\.?)/i,
-  ];
-  
-  let currentAge: number | undefined;
-  for (const pattern of agePatterns) {
-    const match = qLower.match(pattern);
-    if (match) {
-      currentAge = parseInt(match[1]);
-      break;
-    }
-  }
-
-  // Extract retirement age patterns
-  // "retire at 65" or "retirement age 65" or "planning to retire at 68" or "retiring by 68"
-  const retirementAgePatterns = [
-    /retir(?:e|ing|ement)(?:\s+(?:at|by|age))?\s+(\d+)/i, // Matches "retire at 65", "retiring by 68", "retirement age 65"
-    /retirement\s+age\s+(\d+)/i,
-    /planning\s+to\s+retire\s+(?:at|by)\s+(\d+)/i
-  ];
-  
-  let retirementAge: number | undefined;
-  for (const pattern of retirementAgePatterns) {
-    const match = qLower.match(pattern);
-    if (match) {
-      retirementAge = parseInt(match[1]);
-      break;
-    }
-  }
+  const currentAge = extractCurrentAge(qLower) ?? undefined;
+  const retirementAge = extractRetirementAge(qLower) ?? undefined;
 
   // Extract withdrawal amount patterns
   // "$100,000 per year" or "$100k annually" or "withdraw 100000" or "100000 annual withdrawal"

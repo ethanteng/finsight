@@ -23,7 +23,12 @@ import { validateLLMResponse } from '../security/output-validation';
 import { logRejectedPrompt, logFlaggedOutput } from '../security/security-logger';
 import { PromptValidationError } from './errors';
 import type { EvidenceManifest, ShowTheMathData } from './show-the-math-types';
-import { sanitizeUngroundedResponse, UNVERIFIABLE_SUMMARY } from './response-grounding';
+import {
+  appendNotice,
+  sanitizeUngroundedResponse,
+  SECONDARY_REVIEW_CAVEAT,
+  UNVERIFIABLE_SUMMARY,
+} from './response-grounding';
 import {
   canonicalizeResponseNumbers,
   hasUnsupportedValueIssue,
@@ -31,6 +36,8 @@ import {
   validateResponseFacts,
 } from './response-facts';
 import { validateCanonicalFactPack } from './canonical-facts';
+import { describeMissingInputs } from './missing-inputs';
+import { loadRoutingVocabulary } from './routing-vocabulary';
 import { askOpenAIWithPreparedPrompt } from './openai-fallback-client';
 import { createHash } from 'crypto';
 import { recordLlmAnalysisFailure } from '../observability/llm-metrics';
@@ -190,6 +197,9 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     .slice()
     .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
     .map((entry) => entry.question);
+  // Routing vocabulary is admin-editable, so refresh it before matching. Never
+  // throws; a stale or default vocabulary still routes.
+  if (!evaluation) await loadRoutingVocabulary();
   const questionNeeds = analyzeQuestionNeeds(question, recentQuestions);
 
   // Step 1: Retrieve context (snapshot, profile, market summary, RAG)
@@ -310,6 +320,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   let groundingResult = validateResponseFacts(structuredResponse, factPack);
   let deterministicOutcome: 'passed' | 'salvaged' | 'replaced' = 'passed';
   let contextEscalated = false;
+  let secondaryCaveat = false;
 
   let validationIssues = groundingResult.issues;
 
@@ -409,21 +420,28 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         const postRetryIssues = await runSecondaryValidation('retry');
         if (postRetryIssues.length > 0) {
           console.error('Ask Linc: Retry passed grounding but secondary validation still flagged issues:', postRetryIssues);
-          // Secondary validation reports prose, not claims, so there is nothing
-          // specific to strip — the whole answer has to go.
-          structuredResponse = sanitizeUngroundedResponse(structuredResponse, {
-            valid: false,
-            issues: postRetryIssues,
-            invalidKeyNumbers: [],
-            invalidSummary: true,
-          });
-          deterministicOutcome = 'replaced';
+          // Every figure here has been checked against the snapshot; what the
+          // reviewer objects to is the reasoning around them. Discarding the
+          // answer for that spent the user's time and returned nothing, so it
+          // ships with the objection attached instead. The specific issues stay
+          // in the evidence manifest for review rather than going to the user,
+          // where internal QA phrasing would confuse more than it warns.
+          structuredResponse = appendNotice(structuredResponse, SECONDARY_REVIEW_CAVEAT);
+          secondaryCaveat = true;
         }
       }
     }
   }
 
   onProgress?.('Formatting response');
+
+  // When something the question needed is missing and the user is the one who
+  // can supply it, ask for it. Appended after validation because it is
+  // server-authored: these values come from persisted state, not the model.
+  const missingInputsAsk = describeMissingInputs(snapshot, questionNeeds);
+  if (missingInputsAsk) {
+    structuredResponse = appendNotice(structuredResponse, missingInputsAsk);
+  }
 
   // Step 6: Output validation (security)
   const displayText = toDisplayText(structuredResponse);
@@ -454,6 +472,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         contextEscalated: true,
         ...(routedContextSelection && { routedContextSelection }),
       }),
+      ...(secondaryCaveat && { secondaryCaveat: true }),
       modelCalls,
       timings: {
         contextGatherMs,

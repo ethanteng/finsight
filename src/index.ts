@@ -2362,6 +2362,125 @@ app.get('/admin/ai/response-tone', adminAuth, async (req: Request, res: Response
   }
 });
 
+// Admin: Read the question-routing vocabulary
+app.get('/admin/ai/routing-vocabulary', adminAuth, async (_req: Request, res: Response) => {
+  try {
+    const {
+      DEFAULT_ROUTING_TERMS, ROUTING_CATEGORY_META, loadRoutingVocabulary, getActiveRoutingTerms,
+    } = await import('./openai/routing-vocabulary');
+    const { AI_PROMPT_CONFIG_ID } = await import('./openai/prompt-config');
+    const { getPrismaClient } = await import('./prisma-client');
+
+    await loadRoutingVocabulary(true);
+    const config = await getPrismaClient().aiPromptConfig.findUnique({
+      where: { id: AI_PROMPT_CONFIG_ID },
+    });
+
+    res.json({
+      categories: ROUTING_CATEGORY_META,
+      terms: getActiveRoutingTerms(),
+      defaultTerms: DEFAULT_ROUTING_TERMS,
+      isDefault: !(config as { routingTerms?: unknown } | null)?.routingTerms,
+      lastEditedBy: config?.lastEditedBy || null,
+      updatedAt: config?.updatedAt || null,
+    });
+  } catch (error) {
+    console.error('Error fetching routing vocabulary:', error);
+    Sentry.captureException(error instanceof Error ? error : new Error(String(error)));
+    res.status(500).json({ error: 'Failed to fetch routing vocabulary' });
+  }
+});
+
+// Admin: Update the question-routing vocabulary
+app.put('/admin/ai/routing-vocabulary', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { terms } = req.body;
+    if (!terms || typeof terms !== 'object' || Array.isArray(terms)) {
+      return res.status(400).json({ error: 'terms must be an object of category -> string[]' });
+    }
+
+    const { ROUTING_CATEGORIES, setActiveRoutingTerms, compileTerm } =
+      await import('./openai/routing-vocabulary');
+    const { AI_PROMPT_CONFIG_ID, DEFAULT_RESPONSE_TONE } = await import('./openai/prompt-config');
+    const { getPrismaClient } = await import('./prisma-client');
+
+    // Validate before persisting: a term that compiles to nothing is a typo the
+    // admin should see now, not a category that silently stops matching.
+    const cleaned: Record<string, string[]> = {};
+    for (const category of ROUTING_CATEGORIES) {
+      const value = (terms as Record<string, unknown>)[category];
+      if (value === undefined) continue;
+      if (!Array.isArray(value) || value.some((term) => typeof term !== 'string')) {
+        return res.status(400).json({ error: `${category} must be an array of strings` });
+      }
+      const list = (value as string[]).map((term) => term.trim()).filter(Boolean);
+      const unusable = list.filter((term) => compileTerm(term) === null);
+      if (unusable.length > 0) {
+        return res.status(400).json({ error: `${category} has unusable terms: ${unusable.join(', ')}` });
+      }
+      cleaned[category] = Array.from(new Set(list));
+    }
+
+    const adminUser = (req as Request & { user?: { email?: string } }).user?.email || 'admin';
+    const prisma = getPrismaClient();
+    const existing = await prisma.aiPromptConfig.findUnique({ where: { id: AI_PROMPT_CONFIG_ID } });
+    const storedTerms = (existing as { routingTerms?: unknown } | null)?.routingTerms;
+
+    // Merge rather than replace: the admin UI sends every category, but a
+    // partial API call should edit the categories it names, not silently drop
+    // the rest. An explicit empty array still clears a category.
+    const merged = {
+      ...(storedTerms && typeof storedTerms === 'object' && !Array.isArray(storedTerms) ? storedTerms : {}),
+      ...cleaned,
+    };
+
+    const saved = await prisma.aiPromptConfig.upsert({
+      where: { id: AI_PROMPT_CONFIG_ID },
+      update: { routingTerms: merged, lastEditedBy: adminUser },
+      create: {
+        id: AI_PROMPT_CONFIG_ID,
+        responseTone: DEFAULT_RESPONSE_TONE,
+        routingTerms: merged,
+        lastEditedBy: adminUser,
+      },
+    });
+
+    res.json({ terms: setActiveRoutingTerms(merged), updatedAt: saved.updatedAt });
+  } catch (error) {
+    console.error('Error updating routing vocabulary:', error);
+    Sentry.captureException(error instanceof Error ? error : new Error(String(error)));
+    res.status(500).json({ error: 'Failed to update routing vocabulary' });
+  }
+});
+
+// Admin: See how a question routes, and which terms matched
+app.post('/admin/ai/routing-preview', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { question } = req.body;
+    if (typeof question !== 'string' || !question.trim()) {
+      return res.status(400).json({ error: 'question must be a non-empty string' });
+    }
+
+    const { ROUTING_CATEGORIES, loadRoutingVocabulary, matchingTerms } =
+      await import('./openai/routing-vocabulary');
+    const { analyzeQuestionNeeds } = await import('./openai/question-analysis');
+
+    await loadRoutingVocabulary(true);
+    const lowered = question.toLowerCase();
+
+    res.json({
+      needs: analyzeQuestionNeeds(question),
+      matches: Object.fromEntries(
+        ROUTING_CATEGORIES.map((category) => [category, matchingTerms(category, lowered)])
+      ),
+    });
+  } catch (error) {
+    console.error('Error previewing question routing:', error);
+    Sentry.captureException(error instanceof Error ? error : new Error(String(error)));
+    res.status(500).json({ error: 'Failed to preview question routing' });
+  }
+});
+
 // Admin: Update the configurable AI response tone
 app.put('/admin/ai/response-tone', adminAuth, async (req: Request, res: Response) => {
   try {

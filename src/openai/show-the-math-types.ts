@@ -60,6 +60,12 @@ export interface EvidenceManifest {
    */
   contextEscalated?: boolean;
   /**
+   * Secondary validation objected to the answer's reasoning after it had passed
+   * grounding. The answer ships with a caveat rather than being discarded; the
+   * objections themselves are in validation.secondary.
+   */
+  secondaryCaveat?: boolean;
+  /**
    * What routing selected before that widening. Present only when escalation
    * happened; routing metrics score this, since contextSelection above records
    * the correction rather than the prediction that needed correcting.

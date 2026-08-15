@@ -341,20 +341,58 @@ function hasSubstantiveContent(text: string): boolean {
   return (text.match(/[A-Za-z0-9$][^\s]*/g) || []).length >= 3;
 }
 
-/** Drop only the sentences carrying an unverifiable number; keep the rest. */
-function stripSentences(text: string, pack: CanonicalFactPack): { text: string; removed: number } {
+/**
+ * A sentence that opens by pointing back at the one before it. "Your equity
+ * allocation is 59%. That's risky this close to retirement." — remove the first
+ * and the second is left referring to nothing.
+ *
+ * Anchored on a demonstrative used as a subject, so a determiner keeps its
+ * sentence: "This means you are over-weighted" depends on what came before,
+ * "This year, review your beneficiaries" does not. Bare "it" and "they" are
+ * left out entirely — they are as often a dummy subject as a reference, and
+ * deleting sound advice is worse than leaving a loose sentence.
+ */
+const DEPENDENT_OPENER = new RegExp(
+  String.raw`^\s*(?:` +
+    String.raw`(?:that|this|these|those)\s*(?:'s|’s|\b(?:is|are|was|were|means|leaves|makes|puts|gives|adds|brings|represents|reflects|suggests|would|will|could|should|can|may|might)\b)` +
+    String.raw`|which\b|doing so\b|as a result\b|hence\b|therefore\b` +
+  String.raw`)`,
+  'i'
+);
+
+/**
+ * Drop only the sentences carrying an unverifiable number; keep the rest.
+ *
+ * `startsAfterRemoval` carries the previous entry's state in, because insights
+ * arrive as separate array items and a claim and its dependent sentence are
+ * just as likely to be two bullets as two sentences in one.
+ */
+function stripSentences(
+  text: string,
+  pack: CanonicalFactPack,
+  startsAfterRemoval = false
+): { text: string; removed: number; endedRemoved: boolean } {
   const kept: string[] = [];
   let removed = 0;
+  let previousRemoved = startsAfterRemoval;
   for (const sentence of splitSentences(text)) {
     if (sentence.trim() && unsupportedClaims(sentence, pack).length > 0) {
       removed++;
+      previousRemoved = true;
       continue;
     }
+    // Its antecedent just went; on its own it reads as a fragment, and a
+    // reviewer or a user will read it as one.
+    if (previousRemoved && sentence.trim() && DEPENDENT_OPENER.test(sentence)) {
+      removed++;
+      continue;
+    }
+    previousRemoved = false;
     kept.push(sentence);
   }
   // Close the gaps left by removed sentences without flattening paragraphs.
   const joined = kept.join('').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
-  return { text: joined, removed };
+  return { text: joined, removed, endedRemoved: previousRemoved };
 }
 
 export function stripUnverifiedProse(
@@ -362,16 +400,28 @@ export function stripUnverifiedProse(
   pack: CanonicalFactPack
 ): { response: AskLincResponse; removed: number } {
   let removed = 0;
-  const strip = (text: string): string => {
-    const result = stripSentences(text, pack);
-    removed += result.removed;
-    return result.text;
+  /** Each list is its own chain; a bullet can depend on the bullet above it. */
+  const stripList = (items: readonly string[]): string[] => {
+    let carriedRemoval = false;
+    const kept: string[] = [];
+    for (const item of items) {
+      const result = stripSentences(item, pack, carriedRemoval);
+      removed += result.removed;
+      carriedRemoval = result.endedRemoved || (result.text.trim() === '' && item.trim() !== '');
+      if (result.text) kept.push(result.text);
+    }
+    return kept;
   };
-  const summary = strip(response.summary || '');
-  const insights = (response.insights || []).map(strip).filter(Boolean);
-  const suggested_actions = (response.suggested_actions || []).map(strip).filter(Boolean);
+
+  const summaryResult = stripSentences(response.summary || '', pack);
+  removed += summaryResult.removed;
   return {
-    response: { ...response, summary, insights, suggested_actions },
+    response: {
+      ...response,
+      summary: summaryResult.text,
+      insights: stripList(response.insights || []),
+      suggested_actions: stripList(response.suggested_actions || []),
+    },
     removed,
   };
 }

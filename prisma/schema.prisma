@@ -247,6 +247,7 @@ model EmailVerificationCode {
 model AiPromptConfig {
   id           String   @id
   responseTone String
+  routingTerms Json?
   lastEditedBy String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

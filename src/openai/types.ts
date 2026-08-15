@@ -176,6 +176,8 @@ export interface FinancialContextSnapshot {
     confirmationRequiredParams?: Array<'annualWithdrawalAmount'>;
     /** When retirement analysis cannot run despite a retirement question (e.g. no holdings). */
     unavailableReason?: string;
+    /** Machine-readable form of unavailableReason: only some causes are the user's to fix. */
+    unavailableCode?: 'no_holdings' | 'service_error';
   };
   financialSummary?: {
     computedAt?: Date | string;
