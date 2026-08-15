@@ -178,17 +178,19 @@ export class SummaryCacheService {
       select: { id: true },
     });
 
-    let processed = 0;
+    // Report which users were covered so callers that refreshed other inputs
+    // can recompute anyone this pass did not reach.
+    const processedUserIds: string[] = [];
     for (const u of userIds) {
       try {
         // Cron: run full categorization for richer GPT context
         await this.computeForUser(u.id, { categorize: true });
-        processed++;
+        processedUserIds.push(u.id);
       } catch (err) {
         console.error(`SummaryCacheService: Failed to refresh snapshot for user ${u.id}`, err);
       }
     }
-    return { success: true, usersProcessed: processed };
+    return { success: true, usersProcessed: processedUserIds.length, processedUserIds };
   }
 
 }

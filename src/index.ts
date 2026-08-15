@@ -2130,6 +2130,16 @@ app.post('/api/refresh-summary', requireAuth, async (req: Request, res: Response
     const userId = req.user!.id;
     // A user-initiated refresh means live provider balances, not merely a new
     // snapshot over values still inside the normal freshness window.
+    // Refresh the home estimate first so the recompute below picks it up in the
+    // same revision. A manual override and a recent estimate are both skipped
+    // inside the service, and a RentCast failure must not fail the refresh —
+    // the rest of the snapshot is still worth producing.
+    try {
+      const { HomeValueRefreshService } = await import('./services/home-value-refresh');
+      await new HomeValueRefreshService().refreshUserHomeValue(userId);
+    } catch (error) {
+      console.warn('Refresh summary: home value refresh failed (non-fatal):', error);
+    }
     const { FinancialRevisionService } = await import('./services/financial-revision-service');
     // Fast path: skip heavy categorization to avoid request timeouts
     const payload = await FinancialRevisionService.recompute(userId, {
