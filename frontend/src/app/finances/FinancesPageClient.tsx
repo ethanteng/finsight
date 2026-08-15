@@ -27,7 +27,10 @@ const AccountDetailModal = lazy(() => import('../../components/finances/AccountD
 // rebuilt in the background because it re-reads every connected provider. Poll the
 // overview until that new revision lands so totals catch up without a manual reload.
 const REVISION_POLL_INTERVAL_MS = 2000;
+// How long to wait when the server reports nothing in flight, and the hard ceiling for a
+// rebuild it says is still running.
 const REVISION_POLL_ATTEMPTS = 30;
+const REVISION_POLL_MAX_ATTEMPTS = 150;
 
 type SavedHomeValue = {
   address: string;
@@ -266,13 +269,18 @@ export default function FinancesPageClient() {
     if (!immediate || !isReconciled(immediate, baselineRevision)) {
       setAwaitingRevision(true);
       try {
-        for (let attempt = 0; attempt < REVISION_POLL_ATTEMPTS; attempt += 1) {
+        for (let attempt = 0; attempt < REVISION_POLL_MAX_ATTEMPTS; attempt += 1) {
           await new Promise(resolve => setTimeout(resolve, REVISION_POLL_INTERVAL_MS));
           if (!mountedRef.current) return;
           // A transient failure costs an attempt; it is not a reason to stop watching for
           // a rebuild that is still on its way.
           const next = await loadOverview().catch(() => null);
           if (next && isReconciled(next, baselineRevision)) return;
+          // A user with many connected providers can take longer than the default window
+          // to re-read them all. Keep waiting while the server says work is still in
+          // flight; the shorter window only bounds the case where nothing is known to be
+          // running, and the outer cap bounds a flag that never clears.
+          if (attempt + 1 >= REVISION_POLL_ATTEMPTS && !next?.revision.rebuildPending) break;
         }
         // The rebuild never published. Say so rather than leaving stale totals unexplained.
         if (mountedRef.current) setRevisionStalled(true);
