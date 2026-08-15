@@ -188,6 +188,102 @@ describe('canonical financial snapshot', () => {
     expect(portfolio.unavailableValueIds).toEqual(['holding:missing']);
   });
 
+  it('keeps a months-old manual account current while a bank balance goes stale', () => {
+    const snapshot = buildCanonicalSnapshotCore(
+      {
+        accounts: [
+          {
+            account_id: 'checking',
+            source: 'plaid',
+            type: 'depository',
+            subtype: 'checking',
+            snapshotTimestamp: '2026-08-14T11:00:00.000Z',
+            balance: { current: 10_000, iso_currency_code: 'USD' },
+          },
+          {
+            // Entered by hand in February and untouched since: it is not stale,
+            // it is simply what the user said it was.
+            account_id: 'manual-pension',
+            source: 'manual',
+            type: 'investment',
+            subtype: 'pension',
+            snapshotTimestamp: '2026-02-07T19:29:10.000Z',
+            balance: { current: 44_817.23, iso_currency_code: 'USD' },
+          },
+        ],
+      },
+      { computedAt, reportingCurrency: 'USD', balanceMaxAgeMs: 24 * 60 * 60 * 1000 }
+    );
+
+    expect(snapshot.quality.staleSourceIds).toEqual([]);
+    expect(snapshot.status).toBe('current');
+    expect(snapshot.financialOverview.totalInvestments).toBe(44_817.23);
+  });
+
+  it('expires a provider home estimate but not a manual one', () => {
+    const stale = { valueMid: 1_200_000, lastUpdated: '2026-06-09T17:13:46.455Z' };
+    const accounts = [{
+      account_id: 'checking',
+      source: 'plaid',
+      type: 'depository',
+      subtype: 'checking',
+      snapshotTimestamp: computedAt,
+      balance: { current: 10_000, iso_currency_code: 'USD' },
+    }];
+
+    const estimated = buildCanonicalSnapshotCore(
+      { accounts, homeValue: { ...stale, isManualOverride: false } },
+      { computedAt, reportingCurrency: 'USD' }
+    );
+    expect(estimated.quality.staleSourceIds).toEqual(['home-value']);
+    expect(estimated.status).toBe('stale');
+
+    const manual = buildCanonicalSnapshotCore(
+      { accounts, homeValue: { ...stale, isManualOverride: true } },
+      { computedAt, reportingCurrency: 'USD' }
+    );
+    expect(manual.quality.staleSourceIds).toEqual([]);
+    expect(manual.status).toBe('current');
+    // Same value either way: freshness rules must not change the number.
+    expect(manual.financialOverview.homeValue).toBe(1_200_000);
+  });
+
+  it('reports bank freshness as asOf, not the date a manual account was edited', () => {
+    const snapshot = buildCanonicalSnapshotCore(
+      {
+        accounts: [
+          {
+            account_id: 'checking',
+            source: 'plaid',
+            type: 'depository',
+            subtype: 'checking',
+            snapshotTimestamp: '2026-08-14T11:00:00.000Z',
+            balance: { current: 10_000, iso_currency_code: 'USD' },
+          },
+          {
+            account_id: 'manual-pension',
+            source: 'manual',
+            type: 'investment',
+            subtype: 'pension',
+            snapshotTimestamp: '2026-02-07T19:29:10.000Z',
+            balance: { current: 44_817.23, iso_currency_code: 'USD' },
+          },
+        ],
+        homeValue: {
+          valueMid: 1_200_000,
+          lastUpdated: '2026-01-05T00:00:00.000Z',
+          isManualOverride: true,
+        },
+      },
+      { computedAt, reportingCurrency: 'USD', balanceMaxAgeMs: 24 * 60 * 60 * 1000 }
+    );
+
+    // Both hand-entered values are older than the bank balance, and neither
+    // should make the page claim its data is from February.
+    expect(snapshot.asOf?.toISOString()).toBe('2026-08-14T11:00:00.000Z');
+    expect(snapshot.status).toBe('current');
+  });
+
   it('does not assume a missing source currency is USD', () => {
     const snapshot = buildCanonicalSnapshotCore(
       {

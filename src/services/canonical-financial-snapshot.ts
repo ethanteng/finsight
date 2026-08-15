@@ -77,6 +77,8 @@ export interface CanonicalSnapshotData {
   homeValue?: {
     valueMid?: number | null;
     lastUpdated?: string | Date | null;
+    /** True when the user set the figure by hand instead of a provider estimate. */
+    isManualOverride?: boolean;
   } | null;
   metadata?: {
     partialData?: boolean;
@@ -224,12 +226,16 @@ function buildSourceObservations(
   accounts.forEach((account, index) => {
     const id = accountId(account, index);
     const asOf = validObservationDate(account.snapshotTimestamp || account.lastSyncedAt);
+    // A manual account has no provider to go stale against: its value changes
+    // only when the user edits it, so holding it to the balance refresh window
+    // would mark it stale a day after entry and leave no way to clear that.
+    const accountMaxAgeMs = account.source === 'manual' ? null : balanceMaxAgeMs;
     observations.push({
       id: `account:${id}`,
       required: true,
       status: asOf ? 'available' : 'unavailable',
       asOf,
-      maxAgeMs: balanceMaxAgeMs,
+      maxAgeMs: accountMaxAgeMs,
       error: asOf ? null : 'Account source timestamp is unavailable',
     });
 
@@ -240,7 +246,7 @@ function buildSourceObservations(
         required: true,
         status: 'unavailable',
         asOf: null,
-        maxAgeMs: balanceMaxAgeMs,
+        maxAgeMs: accountMaxAgeMs,
         error: 'Account type could not be classified for canonical metrics',
       });
     }
@@ -250,7 +256,7 @@ function buildSourceObservations(
         required: true,
         status: 'unavailable',
         asOf: null,
-        maxAgeMs: balanceMaxAgeMs,
+        maxAgeMs: accountMaxAgeMs,
         error: 'Account balance is unavailable',
       });
     }
@@ -260,7 +266,7 @@ function buildSourceObservations(
         required: true,
         status: 'unavailable',
         asOf: null,
-        maxAgeMs: balanceMaxAgeMs,
+        maxAgeMs: accountMaxAgeMs,
         error: `Account balance has not been converted to ${reportingCurrency}`,
       });
     }
@@ -302,7 +308,9 @@ function buildSourceObservations(
     required: hasKnownHomeValue,
     status: hasKnownHomeValue && homeAsOf ? 'available' : 'unavailable',
     asOf: hasKnownHomeValue && homeAsOf ? homeAsOf : null,
-    maxAgeMs: homeValueMaxAgeMs,
+    // A manual override is the user's own figure, so it does not expire. Only a
+    // provider estimate can drift away from what the home is currently worth.
+    maxAgeMs: homeValue?.isManualOverride ? null : homeValueMaxAgeMs,
     error: data.metadata?.errors?.homeValue?.error ||
       (homeValue && !hasKnownHomeValue ? 'Home value midpoint is unavailable' : null),
   });

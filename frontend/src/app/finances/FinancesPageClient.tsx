@@ -353,16 +353,30 @@ export default function FinancesPageClient() {
 
           return (
             <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
+              {refreshSummaryMessage && (
+                <div
+                  role={refreshSummaryMessage.kind === 'error' ? 'alert' : 'status'}
+                  className={`mb-5 rounded-xl border px-4 py-3 text-sm font-medium ${
+                    refreshSummaryMessage.kind === 'success'
+                      ? 'border-[#28704d]/25 bg-[#c9f2df]/55 text-[#28704d]'
+                      : refreshSummaryMessage.kind === 'warning'
+                        ? 'border-[#d4a72c]/30 bg-[#fff3ce] text-[#76510f]'
+                        : 'border-[#b84a3d]/25 bg-[#f8e8e3] text-[#8b3027]'
+                  }`}
+                >
+                  {refreshSummaryMessage.text}
+                </div>
+              )}
               <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <h3 className="text-lg font-semibold text-white">Financial Metrics Over Time</h3>
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                   <select
                     value={chartTimeRange}
                     onChange={(e) => {
                       const value = e.target.value as '1M' | '3M' | '6M' | '1Y' | 'All';
                       setChartTimeRange(value);
                     }}
-                    className="bg-gray-700 text-white px-3 py-1 rounded text-sm border border-gray-600 focus:border-blue-500 focus:outline-none"
+                    className="min-h-10 rounded-full border border-[#102319]/15 bg-[#fffdf5] px-4 py-2 text-sm font-bold text-[#102319] transition hover:border-[#102319]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319] focus-visible:ring-offset-2"
                   >
                     <option value="1M">1 Month</option>
                     <option value="3M">3 Months</option>
@@ -373,22 +387,16 @@ export default function FinancesPageClient() {
                   <button
                     onClick={refreshSummary}
                     disabled={refreshingSummary}
-                    className="text-sm px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="inline-flex min-h-10 items-center gap-2 rounded-full border border-[#102319]/15 bg-[#fffdf5] px-4 py-2 text-sm font-bold text-[#102319] transition hover:border-[#102319]/30 hover:bg-[#f0f0e8] disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#102319] focus-visible:ring-offset-2"
                   >
+                    {refreshingSummary && (
+                      <span
+                        aria-hidden="true"
+                        className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-[#102319]/25 border-t-[#102319]"
+                      />
+                    )}
                     {refreshingSummary ? 'Refreshing...' : 'Refresh totals'}
                   </button>
-                  {refreshSummaryMessage && (
-                    <span
-                      role={refreshSummaryMessage.kind === 'error' ? 'alert' : 'status'}
-                      className={refreshSummaryMessage.kind === 'success'
-                        ? 'text-[#b9e890]'
-                        : refreshSummaryMessage.kind === 'warning'
-                          ? 'text-[#f4d77c]'
-                          : 'text-[#ffaaa0]'}
-                    >
-                      {refreshSummaryMessage.text}
-                    </span>
-                  )}
                 </div>
               </div>
               <FinancialMetricsChart 

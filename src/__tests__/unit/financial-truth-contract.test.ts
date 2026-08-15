@@ -268,6 +268,63 @@ describe('financial truth contract', () => {
       expect(quality.staleSourceIds).toEqual(['balances']);
     });
 
+    it('never marks a non-expiring source stale, however old it is', () => {
+      const quality = evaluateSnapshotQuality(
+        [
+          { id: 'balances', required: true, status: 'available', asOf: '2026-05-10T10:00:00.000Z', maxAgeMs: oneDay },
+          // A user-entered value: age alone cannot make it wrong.
+          { id: 'account:manual-1', required: true, status: 'available', asOf: '2025-01-01T00:00:00.000Z', maxAgeMs: null },
+        ],
+        computedAt
+      );
+
+      expect(quality.staleSourceIds).toEqual([]);
+      expect(quality.status).toBe('current');
+    });
+
+    it('excludes non-expiring sources from asOf so an old edit cannot backdate it', () => {
+      const quality = evaluateSnapshotQuality(
+        [
+          { id: 'balances', required: true, status: 'available', asOf: '2026-05-10T10:00:00.000Z', maxAgeMs: oneDay },
+          { id: 'account:manual-1', required: true, status: 'available', asOf: '2025-01-01T00:00:00.000Z', maxAgeMs: null },
+        ],
+        computedAt
+      );
+
+      expect(quality.asOf?.toISOString()).toBe('2026-05-10T10:00:00.000Z');
+      expect(quality.status).toBe('current');
+    });
+
+    it('reports no asOf when nothing in the snapshot can age', () => {
+      const quality = evaluateSnapshotQuality(
+        [
+          { id: 'account:manual-1', required: true, status: 'available', asOf: '2025-01-01T00:00:00.000Z', maxAgeMs: null },
+        ],
+        computedAt
+      );
+
+      // There is data, so this is not 'unavailable' — there is simply no
+      // provider age to report.
+      expect(quality.asOf).toBeNull();
+      expect(quality.status).toBe('current');
+    });
+
+    it('rejects a negative max age but accepts an explicit null', () => {
+      expect(() =>
+        evaluateSnapshotQuality(
+          [{ id: 'balances', required: true, status: 'available', asOf: computedAt, maxAgeMs: -1 }],
+          computedAt
+        )
+      ).toThrow('non-negative finite number or null');
+
+      expect(() =>
+        evaluateSnapshotQuality(
+          [{ id: 'balances', required: true, status: 'available', asOf: computedAt, maxAgeMs: null }],
+          computedAt
+        )
+      ).not.toThrow();
+    });
+
     it('marks a snapshot partial when a required source failed', () => {
       const quality = evaluateSnapshotQuality(
         [
