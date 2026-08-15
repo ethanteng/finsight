@@ -186,6 +186,9 @@ async function seedManualAccountsAndHoldings(token: string, userId: string): Pro
         data: { userId, ...payload },
       });
     }
+  } finally {
+    await prisma.$disconnect();
+  }
 }
 
 function verifyKeyNumbersAgainstManifest(keyNumbers: Record<string, unknown> | undefined, showTheMath: Json): AuditIssue[] {

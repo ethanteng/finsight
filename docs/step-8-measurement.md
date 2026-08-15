@@ -7,8 +7,9 @@ validation behavior.
 
 ## Runtime targets
 
-`GET /ai/performance` reports up to 500 process-local observations. Metrics
-reset on deployment and contain no question, user, account, or response text.
+The admin-only `GET /ai/performance` endpoint reports up to 500 process-local
+observations. Metrics reset on deployment and contain no question, user,
+account, or response text.
 
 | Metric | Target |
 | --- | ---: |

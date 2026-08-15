@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { getLlmMetricsSnapshot } from '../observability/llm-metrics';
+import { adminAuth } from '../auth/middleware';
 
 const router = Router();
 
-router.get('/', (_req, res) => {
+router.get('/', adminAuth, (_req, res) => {
   res.json({
     status: 'OK',
     timestamp: new Date().toISOString(),

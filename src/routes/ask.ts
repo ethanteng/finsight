@@ -26,6 +26,7 @@ router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req,
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
+    res.setHeader('X-AI-Mode', 'canonical');
     res.flushHeaders?.();
   }
 
@@ -90,12 +91,12 @@ router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req,
         conversationId: conversation.id,
         structuredResponse: result.structuredResponse,
       };
-      res.set('X-AI-Response-Time', String(Date.now() - startedAt));
-      res.set('X-AI-Mode', 'canonical');
       if (streaming) {
         writeSse(res, 'result', payload);
         res.end();
       } else {
+        res.set('X-AI-Response-Time', String(Date.now() - startedAt));
+        res.set('X-AI-Mode', 'canonical');
         res.json(payload);
       }
     });
@@ -103,8 +104,6 @@ router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req,
     const totalMs = Date.now() - startedAt;
     const rejectedPrompt = error instanceof PromptValidationError;
     if (!rejectedPrompt) recordLlmAnalysisFailure(totalMs);
-    res.set('X-AI-Response-Time', String(totalMs));
-    res.set('X-AI-Mode', 'error');
     const message = rejectedPrompt
       ? error.userMessage
       : error instanceof Error ? error.message : 'Failed to process question';
@@ -113,6 +112,8 @@ router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req,
       writeSse(res, 'error', { error: message });
       res.end();
     } else {
+      res.set('X-AI-Response-Time', String(totalMs));
+      res.set('X-AI-Mode', 'error');
       res.status(rejectedPrompt ? 400 : 500).json({ error: message });
     }
   }
