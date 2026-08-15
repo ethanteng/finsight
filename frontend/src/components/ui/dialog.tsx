@@ -55,6 +55,7 @@ export function Dialog({ request, onResolve }: { request: DialogRequest; onResol
   const titleId = useId();
   const messageId = useId();
   const confirmRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const Icon = TONE_ICONS[request.tone];
 
   useEffect(() => {
@@ -67,6 +68,29 @@ export function Dialog({ request, onResolve }: { request: DialogRequest; onResol
       if (event.key === 'Escape') {
         event.stopPropagation();
         onResolve(false);
+        return;
+      }
+
+      // Keep Tab inside the dialog so focus never lands on the page behind it.
+      if (event.key !== 'Tab') return;
+      const panel = panelRef.current;
+      if (!panel) return;
+      const focusable = Array.from(panel.querySelectorAll<HTMLElement>('button:not([disabled])'));
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+
+      if (!panel.contains(active)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
       }
     };
     document.addEventListener('keydown', handleKeyDown);
@@ -84,6 +108,7 @@ export function Dialog({ request, onResolve }: { request: DialogRequest; onResol
       onClick={() => onResolve(false)}
     >
       <div
+        ref={panelRef}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}

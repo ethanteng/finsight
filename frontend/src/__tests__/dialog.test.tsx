@@ -78,6 +78,30 @@ describe('useDialog', () => {
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
   });
 
+  it('keeps Tab focus inside the dialog', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    const trigger = screen.getByRole('button', { name: 'Trigger confirm' });
+    await user.click(trigger);
+
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+    const confirm = screen.getByRole('button', { name: 'Delete account' });
+    expect(confirm).toHaveFocus();
+
+    // Tab off the last control wraps to the first rather than reaching the page behind.
+    await user.tab();
+    expect(cancel).toHaveFocus();
+
+    await user.tab({ shift: true });
+    expect(confirm).toHaveFocus();
+
+    await user.tab();
+    await user.tab();
+    expect(confirm).toHaveFocus();
+    expect(trigger).not.toHaveFocus();
+  });
+
   it('restores page scrolling once the dialog closes', async () => {
     const user = userEvent.setup();
     render(<Harness />);
