@@ -371,7 +371,12 @@ export interface SnapshotSourceObservation {
   status: SnapshotSourceStatus;
   /** Provider observation time, not cache write time. */
   asOf: string | Date | null;
-  maxAgeMs: number;
+  /**
+   * How old this observation may be before it counts as stale. Null means the
+   * value does not expire — a user-entered figure is exactly as current as the
+   * last time its owner set it, so no elapsed time makes it wrong.
+   */
+  maxAgeMs: number | null;
   error?: string | null;
 }
 
@@ -379,7 +384,11 @@ export type SnapshotStatus = 'current' | 'stale' | 'partial' | 'unavailable';
 
 export interface SnapshotQuality {
   status: SnapshotStatus;
-  /** Oldest successful source observation used by the snapshot. */
+  /**
+   * Oldest expiring source observation used by the snapshot, or null when no
+   * source can age. Non-expiring sources are excluded: their timestamp records
+   * when a user set a value, not how current the snapshot's data is.
+   */
   asOf: Date | null;
   computedAt: Date;
   staleSourceIds: string[];
@@ -399,7 +408,10 @@ export function evaluateSnapshotQuality(
   computedAtInput: string | Date
 ): SnapshotQuality {
   const computedAt = parseDate(computedAtInput, 'computedAt');
+  /** Every available observation, expiring or not — decides whether we have data at all. */
   const availableDates: Date[] = [];
+  /** Only observations that can age — decides how old the snapshot's data is. */
+  const expiringDates: Date[] = [];
   const staleSourceIds: string[] = [];
   const unavailableSourceIds: string[] = [];
   const requiredUnavailableSourceIds: string[] = [];
@@ -407,8 +419,8 @@ export function evaluateSnapshotQuality(
 
   for (const source of sources) {
     if (!source.id.trim()) throw new Error('Snapshot source id must be non-empty');
-    if (!Number.isFinite(source.maxAgeMs) || source.maxAgeMs < 0) {
-      throw new Error(`maxAgeMs for ${source.id} must be a non-negative finite number`);
+    if (source.maxAgeMs !== null && (!Number.isFinite(source.maxAgeMs) || source.maxAgeMs < 0)) {
+      throw new Error(`maxAgeMs for ${source.id} must be a non-negative finite number or null`);
     }
     if (source.error) errors.push({ sourceId: source.id, message: source.error });
 
@@ -421,13 +433,20 @@ export function evaluateSnapshotQuality(
     const asOf = parseDate(source.asOf, `asOf for ${source.id}`);
     if (asOf > computedAt) throw new Error(`asOf for ${source.id} cannot be after computedAt`);
     availableDates.push(asOf);
-    if (computedAt.getTime() - asOf.getTime() > source.maxAgeMs) {
-      staleSourceIds.push(source.id);
+    if (source.maxAgeMs !== null) {
+      expiringDates.push(asOf);
+      if (computedAt.getTime() - asOf.getTime() > source.maxAgeMs) {
+        staleSourceIds.push(source.id);
+      }
     }
   }
 
-  const asOf = availableDates.length
-    ? new Date(Math.min(...availableDates.map((date) => date.getTime())))
+  // A non-expiring source carries a timestamp — when the user last edited it —
+  // but that timestamp says nothing about how current the snapshot is, so it
+  // must not drag the reported as-of backwards. When every source is
+  // non-expiring there is no provider age to report, and asOf is null.
+  const asOf = expiringDates.length
+    ? new Date(Math.min(...expiringDates.map((date) => date.getTime())))
     : null;
   let status: SnapshotStatus = 'current';
   if (availableDates.length === 0) status = 'unavailable';

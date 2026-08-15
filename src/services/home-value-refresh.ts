@@ -6,6 +6,20 @@
 import { PrismaClient } from '@prisma/client';
 import { ProfileManager } from '../profile/manager';
 
+/**
+ * RentCast re-estimates slowly, so a value younger than this is not worth
+ * spending an API call on. Kept below the 30-day staleness window so a value
+ * that has gone stale is always eligible to be refreshed.
+ */
+export const HOME_VALUE_MIN_REFRESH_AGE_MS = 25 * 24 * 60 * 60 * 1000;
+
+export type HomeValueRefreshOutcome =
+  | 'refreshed'
+  | 'skipped-manual-override'
+  | 'skipped-recent'
+  | 'skipped-no-address'
+  | 'failed';
+
 export class HomeValueRefreshService {
   private prisma: PrismaClient;
 
@@ -46,53 +60,32 @@ export class HomeValueRefreshService {
 
       console.log(`HomeValueRefresh: Found ${profiles.length} user profiles to check`);
 
-      const profileManager = new ProfileManager();
-
       for (const profile of profiles) {
         if (!profile.userId) continue;
 
         try {
-          // Get decrypted profile text
-          const profileText = await profileManager.getOriginalProfile(profile.userId);
-          
-          // Check if profile has home data
-          const homeData = profileManager.extractHomeData(profileText);
-          
-          if (!homeData.address) {
-            // Skip users without home data
-            continue;
-          }
+          // Single per-user path, so the batch job and an on-demand refresh
+          // apply the same manual-override and freshness rules.
+          const outcome = await this.refreshUserHomeValue(profile.userId);
+
+          if (outcome === 'skipped-no-address') continue;
 
           results.total++;
-          console.log(`HomeValueRefresh: Refreshing home value for user ${profile.userId}, address: ${homeData.address}`);
 
-          // Check if last update was recent (within 25 days)
-          if (homeData.lastUpdated) {
-            const daysSinceUpdate = (Date.now() - homeData.lastUpdated.getTime()) / (1000 * 60 * 60 * 24);
-            if (daysSinceUpdate < 25) {
-              console.log(`HomeValueRefresh: Skipping user ${profile.userId} - last updated ${Math.floor(daysSinceUpdate)} days ago`);
-              results.successful++;
-              continue;
-            }
-          }
-
-          // Refresh home value from RentCast
-          const updatedValue = await profileManager.updateHomeValue(profile.userId, homeData.address);
-
-          if (updatedValue) {
-            results.successful++;
-            console.log(`HomeValueRefresh: Successfully refreshed home value for user ${profile.userId}: $${updatedValue}`);
-          } else {
+          if (outcome === 'failed') {
             results.failed++;
             results.errors.push({
               userId: profile.userId,
               error: 'Failed to fetch updated home value from RentCast'
             });
-            console.error(`HomeValueRefresh: Failed to refresh home value for user ${profile.userId}`);
+          } else {
+            results.successful++;
           }
 
-          // Add a small delay between requests to avoid rate limiting
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          // Only pace requests that actually reached RentCast.
+          if (outcome === 'refreshed' || outcome === 'failed') {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
 
         } catch (error) {
           results.failed++;
@@ -126,33 +119,50 @@ export class HomeValueRefreshService {
    * Refresh home value for a specific user
    * @param userId - User ID to refresh
    */
-  async refreshUserHomeValue(userId: string): Promise<boolean> {
-    console.log(`HomeValueRefresh: Refreshing home value for user ${userId}`);
+  async refreshUserHomeValue(
+    userId: string,
+    options: { minAgeMs?: number } = {}
+  ): Promise<HomeValueRefreshOutcome> {
+    const minAgeMs = options.minAgeMs ?? HOME_VALUE_MIN_REFRESH_AGE_MS;
 
     try {
       const profileManager = new ProfileManager();
-      
+
       const profileText = await profileManager.getOriginalProfile(userId);
       const homeData = profileManager.extractHomeData(profileText);
-      
+
       if (!homeData.address) {
         console.log(`HomeValueRefresh: User ${userId} has no home data`);
-        return false;
+        return 'skipped-no-address';
       }
 
+      // A manual override is the user's own number. Overwriting it with a
+      // provider estimate would silently discard what they entered.
+      if (homeData.isManualOverride) {
+        console.log(`HomeValueRefresh: User ${userId} has a manual home value override - leaving it untouched`);
+        return 'skipped-manual-override';
+      }
+
+      if (homeData.lastUpdated && Date.now() - homeData.lastUpdated.getTime() < minAgeMs) {
+        const days = Math.floor((Date.now() - homeData.lastUpdated.getTime()) / (24 * 60 * 60 * 1000));
+        console.log(`HomeValueRefresh: Skipping user ${userId} - value is only ${days} day(s) old`);
+        return 'skipped-recent';
+      }
+
+      console.log(`HomeValueRefresh: Refreshing home value for user ${userId}`);
       const updatedValue = await profileManager.updateHomeValue(userId, homeData.address);
 
       if (updatedValue) {
         console.log(`HomeValueRefresh: Successfully refreshed home value for user ${userId}: $${updatedValue}`);
-        return true;
-      } else {
-        console.error(`HomeValueRefresh: Failed to refresh home value for user ${userId}`);
-        return false;
+        return 'refreshed';
       }
+
+      console.error(`HomeValueRefresh: Failed to refresh home value for user ${userId}`);
+      return 'failed';
 
     } catch (error) {
       console.error(`HomeValueRefresh: Error refreshing home value for user ${userId}:`, error);
-      return false;
+      return 'failed';
     }
   }
 }

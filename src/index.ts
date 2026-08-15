@@ -150,6 +150,7 @@ app.get('/health/cron', (req: Request, res: Response) => {
   const syncJob = Array.from(cronJobs.values()).find((job: any) => job.name === 'daily-sync');
   const marketContextJob = Array.from(cronJobs.values()).find((job: any) => job.name === 'market-context-refresh');
   const mailerLiteJob = Array.from(cronJobs.values()).find((job: any) => job.name === 'mailerlite-sync');
+  const homeValueJob = Array.from(cronJobs.values()).find((job: any) => job.name === 'home-value-refresh');
 
   res.json({
     status: 'OK',
@@ -165,6 +166,10 @@ app.get('/health/cron', (req: Request, res: Response) => {
       mailerLiteSync: {
         running: !!mailerLiteJob,
         name: 'mailerlite-sync'
+      },
+      homeValueRefresh: {
+        running: !!homeValueJob,
+        name: 'home-value-refresh'
       }
     },
     timestamp: new Date().toISOString(),
@@ -2130,6 +2135,16 @@ app.post('/api/refresh-summary', requireAuth, async (req: Request, res: Response
     const userId = req.user!.id;
     // A user-initiated refresh means live provider balances, not merely a new
     // snapshot over values still inside the normal freshness window.
+    // Refresh the home estimate first so the recompute below picks it up in the
+    // same revision. A manual override and a recent estimate are both skipped
+    // inside the service, and a RentCast failure must not fail the refresh —
+    // the rest of the snapshot is still worth producing.
+    try {
+      const { HomeValueRefreshService } = await import('./services/home-value-refresh');
+      await new HomeValueRefreshService().refreshUserHomeValue(userId);
+    } catch (error) {
+      console.warn('Refresh summary: home value refresh failed (non-fatal):', error);
+    }
     const { FinancialRevisionService } = await import('./services/financial-revision-service');
     // Fast path: skip heavy categorization to avoid request timeouts
     const payload = await FinancialRevisionService.recompute(userId, {
@@ -2560,7 +2575,40 @@ if (require.main === module) {
       name: 'mailerlite-sync'
     });
 
-    console.log('Cron job scheduled: MailerLite user sync daily at 3 AM EST');
+    // Set up cron job to refresh home values daily at 4 AM EST. The service
+    // itself skips manual overrides and anything valued within the last 25
+    // days, so this only reaches RentCast for estimates that have aged out.
+    cron.schedule('0 4 * * *', async () => {
+      console.log('🔄 Starting daily home value refresh...');
+      const startTime = Date.now();
+
+      try {
+        const { HomeValueRefreshService } = await import('./services/home-value-refresh');
+        const results = await new HomeValueRefreshService().refreshAllHomeValues();
+        const duration = Date.now() - startTime;
+
+        console.log(`✅ Home value refresh completed in ${duration}ms`);
+        console.log(`📊 Home Value Refresh Metrics: duration=${duration}ms, users=${results.successful}/${results.total}, failed=${results.failed}`);
+
+        if (results.errors.length > 0) {
+          console.error('Home value refresh errors:', results.errors);
+        }
+      } catch (error) {
+        const duration = Date.now() - startTime;
+        console.error(`❌ Error in home value refresh after ${duration}ms:`, error);
+
+        if (error instanceof Error) {
+          Sentry.captureException(error);
+        } else {
+          Sentry.captureMessage('Unknown error in home value refresh cron job', 'error');
+        }
+      }
+    }, {
+      timezone: 'America/New_York',
+      name: 'home-value-refresh'
+    });
+
+    console.log('Cron jobs scheduled: MailerLite user sync daily at 3 AM EST, home value refresh daily at 4 AM EST');
   });
 }
 
