@@ -71,7 +71,7 @@ describe('Enhanced Market Context API Integration', () => {
         keys: [],
         marketContextCache: {
           size: 1,
-          keys: ['market_context_starter_true'],
+          keys: ['market_context_starter'],
           lastRefresh: new Date('1970-01-01T00:00:00.000Z')
         }
       });
@@ -91,14 +91,14 @@ describe('Enhanced Market Context API Integration', () => {
           keys: [],
           marketContextCache: {
             size: 1,
-            keys: ['market_context_starter_true'],
+            keys: ['market_context_starter'],
             lastRefresh: '1970-01-01T00:00:00.000Z'
           }
         },
         timestamp: expect.any(String)
       });
 
-      expect(MockDataOrchestrator.getMarketContextSummary).toHaveBeenCalledWith('starter', true);
+      expect(MockDataOrchestrator.getMarketContextSummary).toHaveBeenCalledWith('starter');
     });
 
     it('should return enhanced market context for standard tier', async () => {
@@ -112,7 +112,7 @@ describe('Enhanced Market Context API Integration', () => {
         keys: ['fred_MORTGAGE30US', 'fred_FEDFUNDS', 'fred_CPIAUCSL', 'economic_indicators'],
         marketContextCache: {
           size: 2,
-          keys: ['market_context_starter_true', 'market_context_standard_true'],
+          keys: ['market_context_starter', 'market_context_standard'],
           lastRefresh: new Date('1970-01-01T00:00:00.000Z')
         }
       });
@@ -140,7 +140,7 @@ describe('Enhanced Market Context API Integration', () => {
         keys: ['fred_MORTGAGE30US', 'fred_FEDFUNDS', 'fred_CPIAUCSL', 'economic_indicators', 'live_market_data'],
         marketContextCache: {
           size: 3,
-          keys: ['market_context_starter_true', 'market_context_standard_true', 'market_context_premium_true'],
+          keys: ['market_context_starter', 'market_context_standard', 'market_context_premium'],
           lastRefresh: new Date('1970-01-01T00:00:00.000Z')
         }
       });
@@ -170,7 +170,7 @@ describe('Enhanced Market Context API Integration', () => {
         keys: [],
         marketContextCache: {
           size: 1,
-          keys: ['market_context_starter_false'],
+          keys: ['market_context_starter'],
           lastRefresh: new Date('1970-01-01T00:00:00.000Z')
         }
       });
@@ -181,7 +181,7 @@ describe('Enhanced Market Context API Integration', () => {
         .expect(200);
 
       expect(response.body.tier).toBe('starter');
-      expect(MockDataOrchestrator.getMarketContextSummary).toHaveBeenCalledWith('starter', false);
+      expect(MockDataOrchestrator.getMarketContextSummary).toHaveBeenCalledWith('starter');
     });
 
     it.skip('should handle orchestrator errors gracefully', async () => {
@@ -207,7 +207,7 @@ describe('Enhanced Market Context API Integration', () => {
         keys: ['fred_MORTGAGE30US', 'fred_FEDFUNDS', 'fred_CPIAUCSL', 'economic_indicators'],
         marketContextCache: {
           size: 1,
-          keys: ['market_context_premium_true'],
+          keys: ['market_context_premium'],
           lastRefresh: new Date('2025-08-01T05:57:41.405Z')
         }
       });
@@ -226,14 +226,14 @@ describe('Enhanced Market Context API Integration', () => {
           keys: ['fred_MORTGAGE30US', 'fred_FEDFUNDS', 'fred_CPIAUCSL', 'economic_indicators'],
           marketContextCache: {
             size: 1,
-            keys: ['market_context_premium_true'],
+            keys: ['market_context_premium'],
             lastRefresh: '2025-08-01T05:57:41.405Z'
           }
         },
         timestamp: expect.any(String)
       });
 
-      expect(MockDataOrchestrator.refreshMarketContext).toHaveBeenCalledWith('premium', true);
+      expect(MockDataOrchestrator.refreshMarketContext).toHaveBeenCalledWith('premium');
     });
 
     it('should handle missing request body parameters', async () => {
@@ -246,7 +246,7 @@ describe('Enhanced Market Context API Integration', () => {
         .expect(200);
 
       expect(response.body.tier).toBe('starter');
-      expect(MockDataOrchestrator.refreshMarketContext).toHaveBeenCalledWith('starter', false);
+      expect(MockDataOrchestrator.refreshMarketContext).toHaveBeenCalledWith('starter');
     });
 
     it('should handle orchestrator errors gracefully', async () => {
@@ -293,7 +293,7 @@ describe('Enhanced Market Context API Integration', () => {
         keys: ['fred_MORTGAGE30US', 'fred_FEDFUNDS', 'fred_CPIAUCSL', 'economic_indicators', 'live_market_data'],
         marketContextCache: {
           size: 3,
-          keys: ['market_context_starter_true', 'market_context_standard_true', 'market_context_premium_true'],
+          keys: ['market_context_starter', 'market_context_standard', 'market_context_premium'],
           lastRefresh: new Date('2025-08-01T05:57:41.405Z')
         }
       });
@@ -308,7 +308,7 @@ describe('Enhanced Market Context API Integration', () => {
         keys: ['fred_MORTGAGE30US', 'fred_FEDFUNDS', 'fred_CPIAUCSL', 'economic_indicators', 'live_market_data'],
         marketContextCache: {
           size: 3,
-          keys: ['market_context_starter_true', 'market_context_standard_true', 'market_context_premium_true'],
+          keys: ['market_context_starter', 'market_context_standard', 'market_context_premium'],
           lastRefresh: '2025-08-01T05:57:41.405Z'
         }
       });
@@ -361,8 +361,7 @@ describe('Enhanced Market Context API Integration', () => {
         await askOpenAIWithEnhancedContext(
           'Test question',
           [],
-          UserTier.STARTER,
-          true
+          UserTier.STARTER
         );
       } catch (error) {
         // It's okay if it fails due to missing API keys or other external dependencies
@@ -384,7 +383,7 @@ describe('Enhanced Market Context API Integration', () => {
         keys: [],
         marketContextCache: {
           size: 1,
-          keys: ['market_context_starter_true'],
+          keys: ['market_context_starter'],
           lastRefresh: new Date('1970-01-01T00:00:00.000Z')
         }
       });
@@ -416,7 +415,7 @@ describe('Enhanced Market Context API Integration', () => {
         keys: [],
         marketContextCache: {
           size: 1,
-          keys: ['market_context_starter_true'],
+          keys: ['market_context_starter'],
           lastRefresh: new Date('1970-01-01T00:00:00.000Z')
         }
       });
