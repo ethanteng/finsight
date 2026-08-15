@@ -101,20 +101,23 @@ export default function ManualAccountList({ accounts, onRefresh }: ManualAccount
 
   if (showForm || editingAccount) {
     return (
-      <Suspense fallback={<div className="bg-gray-800 rounded-lg p-6 border border-gray-700 text-gray-400">Loading form...</div>}>
-        <ManualAccountForm
-          account={editingAccount}
-          onSuccess={() => {
-            setShowForm(false);
-            setEditingAccount(null);
-            onRefresh();
-          }}
-          onCancel={() => {
-            setShowForm(false);
-            setEditingAccount(null);
-          }}
-        />
-      </Suspense>
+      <>
+        <Suspense fallback={<div className="bg-gray-800 rounded-lg p-6 border border-gray-700 text-gray-400">Loading form...</div>}>
+          <ManualAccountForm
+            account={editingAccount}
+            onSuccess={() => {
+              setShowForm(false);
+              setEditingAccount(null);
+              onRefresh();
+            }}
+            onCancel={() => {
+              setShowForm(false);
+              setEditingAccount(null);
+            }}
+          />
+        </Suspense>
+        {dialog}
+      </>
     );
   }
 

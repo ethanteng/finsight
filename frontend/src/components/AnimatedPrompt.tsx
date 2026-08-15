@@ -149,7 +149,7 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef, questions
           }}
         />
       </div>
-    {dialog}
+      {dialog}
     </div>
   );
 };
