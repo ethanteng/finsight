@@ -7,7 +7,11 @@ const ManualAccountForm = lazy(() => import('./ManualAccountForm'));
 
 interface ManualAccountListProps {
   accounts: ManualAccount[];
-  onRefresh: () => void;
+  /**
+   * `affectsTotals` is false when the change only renamed an account, so the caller can
+   * skip waiting on a snapshot rebuild that would not change any number.
+   */
+  onRefresh: (result?: { affectsTotals: boolean }) => void;
 }
 
 export default function ManualAccountList({ accounts, onRefresh }: ManualAccountListProps) {
@@ -48,7 +52,7 @@ export default function ManualAccountList({ accounts, onRefresh }: ManualAccount
       });
 
       if (response.ok) {
-        onRefresh();
+        onRefresh({ affectsTotals: true });
       } else {
         const data = await response.json();
         void showError(data.error || 'Failed to delete account');
@@ -105,10 +109,10 @@ export default function ManualAccountList({ accounts, onRefresh }: ManualAccount
         <Suspense fallback={<div className="bg-gray-800 rounded-lg p-6 border border-gray-700 text-gray-400">Loading form...</div>}>
           <ManualAccountForm
             account={editingAccount}
-            onSuccess={() => {
+            onSuccess={(result) => {
               setShowForm(false);
               setEditingAccount(null);
-              onRefresh();
+              onRefresh(result);
             }}
             onCancel={() => {
               setShowForm(false);

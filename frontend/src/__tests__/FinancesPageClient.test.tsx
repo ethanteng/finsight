@@ -280,6 +280,62 @@ describe('FinancesPageClient', () => {
     expect(screen.queryByText('Updating totals with your change…')).not.toBeInTheDocument();
   });
 
+  it('does not wait on a rebuild when a manual account edit only changed the name', async () => {
+    const overviewWith = (accountName: string) => ({
+      userTimeZone: 'America/Los_Angeles',
+      revision: {
+        id: 'revision-1', computedAt: '2026-08-14T12:00:00.000Z', asOf: null,
+        status: 'current', reportingCurrency: 'USD', rebuildPending: true,
+      },
+      warnings: [],
+      financialOverview: { netWorth: 100, totalCash: 100, totalInvestments: 0, totalDebt: 0, homeValue: null },
+      investmentPortfolio: { holdingCount: 0, securityCount: 0, assetAllocation: [] },
+      accountGroups: {
+        cash: { accounts: [], totalBalance: 100, unavailableBalanceCount: 0 },
+        investments: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+        debt: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+        other: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+      },
+      cashFlow: {},
+      home: null,
+      manualAccounts: [{
+        id: 'manual-1', name: accountName, amount: 100, type: 'cash',
+        createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
+      }],
+    });
+
+    let renamed = false;
+
+    global.fetch = jest.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/api/manual-accounts/manual-1') && init?.method === 'PUT') {
+        renamed = true;
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true }) });
+      }
+      if (url.includes('/api/finances/overview')) {
+        return Promise.resolve({
+          ok: true, status: 200,
+          json: async () => overviewWith(renamed ? 'Travel Wallet' : 'Wallet'),
+        });
+      }
+      if (url.includes('/api/financial-history')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => [] });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true, data: [] }) });
+    }) as jest.Mock;
+
+    render(<FinancesPageClient />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(await screen.findByDisplayValue('Wallet'), { target: { value: 'Travel Wallet' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Update Account' }));
+
+    await waitFor(() => expect(screen.getByText('Travel Wallet')).toBeInTheDocument());
+    // The amount did not change, so there is nothing to reconcile even though the server
+    // still reports a rebuild in flight.
+    expect(screen.queryByText('Updating totals with your change…')).not.toBeInTheDocument();
+  });
+
   it('keeps polling past an intermediate revision while the server still has a rebuild queued', async () => {
     // Two edits in quick succession: the first rebuild publishes a revision that does not
     // yet include the second edit, and the service reports the queued follow-up.

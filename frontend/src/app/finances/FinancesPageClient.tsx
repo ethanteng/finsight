@@ -297,7 +297,16 @@ export default function FinancesPageClient() {
     await loadOverview().catch(() => null);
   }, [loadOverview]);
 
-  const refreshManualAccounts = refreshAfterAccountEdit;
+  // Adding, deleting, or re-valuing a manual account moves the totals and has to wait for
+  // the rebuilt snapshot. Renaming one does not, so it takes the same fast path as a
+  // connected-account rename.
+  const refreshManualAccounts = useCallback(async (result?: { affectsTotals: boolean }) => {
+    if (result && !result.affectsTotals) {
+      await refreshAccounts();
+      return;
+    }
+    await refreshAfterAccountEdit();
+  }, [refreshAccounts, refreshAfterAccountEdit]);
 
   // Unlike manual accounts, the home card is fed by the snapshot rather than read live, so
   // reloading before the rebuild lands would snap the value back to the old one. Hold the
