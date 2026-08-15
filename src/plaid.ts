@@ -520,14 +520,19 @@ export const setupPlaidRoutes = (app: any) => {
       }
 
       // ✅ Flag accounts the provider no longer reports (closed at the institution).
-      // This list can be served from persisted rows, which outlive the account
-      // itself; the Finances page is built from live data and drops them silently.
+      // Only when this response is built from persisted rows — if Plaid just returned
+      // an account in a live fetch, it is open by definition. Comparing a live list
+      // against a stale snapshot would mislabel re-authenticated accounts as closed
+      // (and hide the token re-auth prompt).
       const { getAccountClosures, closureFor } = await import('./services/account-closure-service');
-      const closures = await getAccountClosures(req.user.id, plaidOnlyAccounts as any[]).catch(error => {
-        // Never fail the accounts list over the closed-account annotation.
-        console.warn('/plaid/all-accounts: closed-account detection failed:', error);
-        return new Map();
-      });
+      const usingPersistedPlaid = financialData.metadata?.dataSources?.plaid === 'persisted';
+      const closures = usingPersistedPlaid
+        ? await getAccountClosures(req.user.id, plaidOnlyAccounts as any[]).catch(error => {
+            // Never fail the accounts list over the closed-account annotation.
+            console.warn('/plaid/all-accounts: closed-account detection failed:', error);
+            return new Map();
+          })
+        : new Map();
 
       // ✅ Format accounts for frontend (matching expected format)
       // Trust FinancialDataService - it should have already deduplicated
