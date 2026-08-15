@@ -357,6 +357,33 @@ describe('supersedeDuplicateInstitutionConnections', () => {
     expect(report.superseded[0].accountsRemoved).toBe(1);
   });
 
+  it('does not treat an untagged token as belonging to the institution', async () => {
+    // Neither AccessToken.institutionName nor any Account.institution is set, so the connection
+    // cannot be attributed. Grouping it on guesswork could supersede an unrelated institution -
+    // scripts/backfill-institution-names.js is the intended remedy.
+    const { prisma, deleted, tokenUpdates } = buildPrisma({
+      currentAccounts,
+      otherTokens: [{
+        id: 'untagged-token',
+        itemId: 'item-untagged',
+        institutionName: null,
+        accounts: [{ id: 'p1', plaidAccountId: 'old-1', persistentAccountId: null, institution: null, name: 'Roth IRA', type: 'investment', subtype: 'roth', mask: null, currentBalance: 100 }]
+      }]
+    });
+
+    const report = await supersedeDuplicateInstitutionConnections({
+      prisma: prisma as any,
+      userId: 'user-1',
+      keepTokenId: 'keep-token',
+      institutionName: 'Betterment'
+    });
+
+    expect(deleted).toEqual([]);
+    expect(tokenUpdates).toEqual([]);
+    expect(report.superseded).toHaveLength(0);
+    expect(report.skipped).toHaveLength(0);
+  });
+
   it('does nothing when the surviving connection has no persisted accounts yet', async () => {
     const { prisma, tokenUpdates } = buildPrisma({ currentAccounts: [], otherTokens: [] });
 

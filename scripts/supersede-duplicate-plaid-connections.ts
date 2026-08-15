@@ -17,6 +17,10 @@
  * surviving Item re-imports the same activity under new ids, and persistence dedupes only on
  * plaidTransactionId, so keeping both copies would double expenses and income.
  *
+ * Connections are grouped by institution, resolved from Account.institution or the token's
+ * institutionName. A duplicate pair with neither set is invisible to this script - run
+ * scripts/backfill-institution-names.js first so those tokens can be grouped.
+ *
  * Usage:
  *   npx ts-node scripts/supersede-duplicate-plaid-connections.ts            # dry run (default)
  *   npx ts-node scripts/supersede-duplicate-plaid-connections.ts --apply    # perform changes

@@ -653,19 +653,21 @@ export const setupPlaidRoutes = (app: any) => {
               institutionName = institutionResponse.data.institution?.name;
             }
 
-            if (institutionName) {
-              // Persist the institution on the token so duplicate connections are detectable
-              // without a Plaid round-trip (previously this was only backfilled lazily).
-              if (storedToken.institutionName !== institutionName) {
-                await getPrismaClient().accessToken.update({
-                  where: { id: storedToken.id },
-                  data: { institutionName }
-                });
-              }
+            // Persist the institution on the token so duplicate connections are detectable
+            // without a Plaid round-trip (previously this was only backfilled lazily).
+            if (institutionName && storedToken.institutionName !== institutionName) {
+              await getPrismaClient().accessToken.update({
+                where: { id: storedToken.id },
+                data: { institutionName }
+              });
+            }
 
+            {
               const newAccountIds = new Set(accounts.map((a: any) => a.account_id));
 
-              // Upsert the new Item's accounts so both reconciliation paths have migration targets.
+              // Upsert the new Item's accounts so both reconciliation paths have targets. Runs even
+              // when the Item reports no institution_id: Case 1 scopes by accessTokenId and needs no
+              // institution. An undefined institution leaves the stored value untouched on update.
               // Only touch accounts we own or that are unassigned - never overwrite another user's.
               const accountData = (account: any) => ({
                 name: account.name,
@@ -738,7 +740,7 @@ export const setupPlaidRoutes = (app: any) => {
                     staleOwnAccounts.map(toConnectionAccount),
                     currentOwnAccounts.map(toConnectionAccount)
                   );
-                  console.log(`Reconciling ${staleOwnAccounts.length} stale account(s) from the previous ${institutionName} Item`);
+                  console.log(`Reconciling ${staleOwnAccounts.length} stale account(s) from the previous ${institutionName || 'unknown institution'} Item`);
                   if (matches.length > 0) {
                     await getPrismaClient().$transaction(async tx => {
                       for (const match of matches) {
@@ -763,16 +765,25 @@ export const setupPlaidRoutes = (app: any) => {
               }
 
               // Case 2: a separate active token for the same institution (fresh-Link re-connect).
-              const { supersedeDuplicateInstitutionConnections } = await import('./services/plaid-connection-supersede');
-              const supersedeReport = await supersedeDuplicateInstitutionConnections({
-                prisma: getPrismaClient() as any,
-                userId: req.user.id,
-                keepTokenId: storedToken.id,
-                institutionName,
-                log: message => console.log(message)
-              });
-              if (supersedeReport.superseded.length > 0) {
-                reconciliationChanged = true;
+              // This is the only step that needs an institution name - it is what groups connections.
+              if (institutionName) {
+                const { supersedeDuplicateInstitutionConnections } = await import('./services/plaid-connection-supersede');
+                const supersedeReport = await supersedeDuplicateInstitutionConnections({
+                  prisma: getPrismaClient() as any,
+                  userId: req.user.id,
+                  keepTokenId: storedToken.id,
+                  institutionName,
+                  log: message => console.log(message)
+                });
+                if (supersedeReport.superseded.length > 0) {
+                  reconciliationChanged = true;
+                }
+              } else {
+                console.warn(
+                  '   Item reports no institution_id (common for some OAuth/brokerage connections) - ' +
+                  'skipping cross-connection supersede. Run scripts/backfill-institution-names.js, then ' +
+                  'scripts/supersede-duplicate-plaid-connections.ts, if duplicates appear.'
+                );
               }
             }
 
