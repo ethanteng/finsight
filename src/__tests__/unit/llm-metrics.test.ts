@@ -47,12 +47,46 @@ describe('LLM stage metrics', () => {
 
     const routing = getLlmMetricsSnapshot().routing;
     expect(routing.transactionDetailsIncluded).toEqual({
-      withheld: { samples: 3, ungroundedRate: 2 / 3 },
-      supplied: { samples: 2, ungroundedRate: 0 },
+      withheld: { samples: 3, missRate: 2 / 3 },
+      supplied: { samples: 2, missRate: 0 },
       excessWhenWithheld: 2 / 3,
     });
     // A tier that was never withheld has nothing to compare.
     expect(routing.accountsIncluded.excessWhenWithheld).toBeNull();
+  });
+
+  it('scores routing on what it predicted, not on the widening that rescued it', () => {
+    // An escalated request ends with every tier loaded and a grounded answer.
+    // Scoring the final state would erase the miss that caused the escalation.
+    recordLlmAnalysis({
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      snapshot: {},
+      facts: [],
+      contextSelection: {
+        accountsIncluded: true,
+        transactionDetailsIncluded: true,
+        investmentDetailsIncluded: true,
+        marketContextRequested: false,
+        searchContextRequested: false,
+      },
+      contextEscalated: true,
+      routedContextSelection: {
+        accountsIncluded: false,
+        transactionDetailsIncluded: false,
+        investmentDetailsIncluded: false,
+        marketContextRequested: false,
+        searchContextRequested: false,
+      },
+      modelCalls: [],
+      timings: { contextGatherMs: 1, promptBuildMs: 1, totalMs: 2 },
+      validation: { deterministic: { valid: true, issues: [] } },
+      evidenceRefs: { tickers: [], retirementAnalysis: false, marketContext: false },
+    });
+
+    const routing = getLlmMetricsSnapshot().routing;
+    expect(routing.investmentDetailsIncluded.withheld).toEqual({ samples: 1, missRate: 1 });
+    expect(routing.investmentDetailsIncluded.supplied.samples).toBe(0);
   });
 
   it('separates model grounding from what the user actually received', () => {

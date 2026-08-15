@@ -226,6 +226,31 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
   });
 
+  it('keeps the first answer when widening the context grounds it', async () => {
+    // $80 is total_cash, which the fact pack only gained on the widened read.
+    // Re-judging against it means no second model call, and no feedback telling
+    // the model to drop a number that is now supported.
+    mockedGatherContext
+      .mockResolvedValueOnce({ ...snapshot(), financialSummary: { financialOverview: { netWorth: 100, totalCash: null, totalInvestments: 20, totalDebt: 0, homeValue: null } } } as any)
+      .mockResolvedValueOnce(snapshot());
+    mockedAskClaude.mockResolvedValue(JSON.stringify({
+      summary: 'You are holding $80 in cash.',
+      insights: [],
+      suggested_actions: [],
+    }));
+
+    const result = await runAskLincAnalysis({ question: 'What is my net worth?', userId: 'user-1' });
+
+    expect(mockedAskClaude).toHaveBeenCalledTimes(1);
+    expect(result.structuredResponse.summary).toBe('You are holding $80 in cash.');
+    expect(result.showTheMathData?.evidenceManifest.validation.deterministic.valid).toBe(true);
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+    // Routing metrics must still see what routing originally chose.
+    expect(result.showTheMathData?.evidenceManifest.routedContextSelection).toMatchObject({
+      accountsIncluded: false,
+    });
+  });
+
   it('does not widen the context when every tier is already loaded', async () => {
     mockedAskClaude.mockResolvedValue(JSON.stringify({
       summary: 'Your portfolio could reach $250,000.',

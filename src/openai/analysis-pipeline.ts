@@ -202,6 +202,9 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     onProgress
   });
   let contextGatherMs = Date.now() - contextGatherStartedAt;
+  // What routing chose, before any widening. Routing metrics have to score the
+  // prediction, not the correction it triggered.
+  const routedContextSelection = snapshot.contextSelection;
 
   // Step 2: Build the prompt directly from the persisted canonical snapshot.
   const promptBuildStartedAt = Date.now();
@@ -335,6 +338,9 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
 
   if (validationIssues.length > 0) {
     console.warn('Ask Linc: Response validation failed, regenerating with feedback:', validationIssues);
+    // Secondary validation reports reasoning, not fact citations, so widening the
+    // context cannot resolve those issues the way it can resolve a missing fact.
+    const secondaryIssues = validationIssues.filter((issue) => !groundingResult.issues.includes(issue));
 
     // The model reached for a number nobody gave it. Rather than re-prompting
     // against the same fact pack and hoping for restraint, widen the context and
@@ -363,41 +369,56 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
           console.error('Ask Linc: Context escalation failed; retrying with the original context:', error);
         }
       }
+
+      // Re-judge the first answer against the wider pack. Skipping this would
+      // hand the retry a "Must Fix" telling it to drop the very number the
+      // widened context just supplied — and when every issue resolves, the
+      // answer was right all along and needs no second call at all.
+      if (contextEscalated) {
+        structuredResponse = canonicalizeResponseNumbers(parseStructuredResponse(rawResponse), factPack);
+        groundingResult = validateResponseFacts(structuredResponse, factPack);
+        validationIssues = Array.from(new Set([...groundingResult.issues, ...secondaryIssues]));
+        if (validationIssues.length === 0) {
+          console.warn('Ask Linc: Widened context grounded the original answer; skipping the retry.');
+        }
+      }
     }
 
-    const retryPrompt = buildFinancialReasoningPrompt({
-      ...promptInput,
-      validationFeedback: selectValidationFeedback(validationIssues),
-    });
-    onAnswerReset?.();
-    firstAnswerTokenAt = undefined;
-    const retryResult = await callAnalysisModel(retryPrompt, 'retry', provider);
-    rawResponse = retryResult.rawResponse;
-    provider = retryResult.provider;
-    structuredResponse = canonicalizeResponseNumbers(parseStructuredResponse(rawResponse), factPack);
-    groundingResult = validateResponseFacts(structuredResponse, factPack);
-    if (!groundingResult.valid) {
-      console.error('Ask Linc: Retry was still not grounded:', groundingResult.issues);
-      // Keep the grounded part of the answer; the placeholder is the last resort.
-      structuredResponse = salvageUngroundedResponse(structuredResponse, factPack, groundingResult);
-      deterministicOutcome = structuredResponse.summary === UNVERIFIABLE_SUMMARY ? 'replaced' : 'salvaged';
-    }
+    if (validationIssues.length > 0) {
+      const retryPrompt = buildFinancialReasoningPrompt({
+        ...promptInput,
+        validationFeedback: selectValidationFeedback(validationIssues),
+      });
+      onAnswerReset?.();
+      firstAnswerTokenAt = undefined;
+      const retryResult = await callAnalysisModel(retryPrompt, 'retry', provider);
+      rawResponse = retryResult.rawResponse;
+      provider = retryResult.provider;
+      structuredResponse = canonicalizeResponseNumbers(parseStructuredResponse(rawResponse), factPack);
+      groundingResult = validateResponseFacts(structuredResponse, factPack);
+      if (!groundingResult.valid) {
+        console.error('Ask Linc: Retry was still not grounded:', groundingResult.issues);
+        // Keep the grounded part of the answer; the placeholder is the last resort.
+        structuredResponse = salvageUngroundedResponse(structuredResponse, factPack, groundingResult);
+        deterministicOutcome = structuredResponse.summary === UNVERIFIABLE_SUMMARY ? 'replaced' : 'salvaged';
+      }
 
-    // Salvaged prose reaches the user, so it owes the same secondary check as a
-    // retry that passed outright. Only the placeholder has nothing left to check.
-    if (deterministicOutcome !== 'replaced') {
-      const postRetryIssues = await runSecondaryValidation('retry');
-      if (postRetryIssues.length > 0) {
-        console.error('Ask Linc: Retry passed grounding but secondary validation still flagged issues:', postRetryIssues);
-        // Secondary validation reports prose, not claims, so there is nothing
-        // specific to strip — the whole answer has to go.
-        structuredResponse = sanitizeUngroundedResponse(structuredResponse, {
-          valid: false,
-          issues: postRetryIssues,
-          invalidKeyNumbers: [],
-          invalidSummary: true,
-        });
-        deterministicOutcome = 'replaced';
+      // Salvaged prose reaches the user, so it owes the same secondary check as a
+      // retry that passed outright. Only the placeholder has nothing left to check.
+      if (deterministicOutcome !== 'replaced') {
+        const postRetryIssues = await runSecondaryValidation('retry');
+        if (postRetryIssues.length > 0) {
+          console.error('Ask Linc: Retry passed grounding but secondary validation still flagged issues:', postRetryIssues);
+          // Secondary validation reports prose, not claims, so there is nothing
+          // specific to strip — the whole answer has to go.
+          structuredResponse = sanitizeUngroundedResponse(structuredResponse, {
+            valid: false,
+            issues: postRetryIssues,
+            invalidKeyNumbers: [],
+            invalidSummary: true,
+          });
+          deterministicOutcome = 'replaced';
+        }
       }
     }
   }
@@ -429,7 +450,10 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       },
       facts: factPack.facts,
       contextSelection: snapshot.contextSelection,
-      ...(contextEscalated && { contextEscalated: true }),
+      ...(contextEscalated && {
+        contextEscalated: true,
+        ...(routedContextSelection && { routedContextSelection }),
+      }),
       modelCalls,
       timings: {
         contextGatherMs,

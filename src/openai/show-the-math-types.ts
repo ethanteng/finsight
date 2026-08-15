@@ -31,6 +31,18 @@ export interface EvidenceManifest {
    * describes the widened read.
    */
   contextEscalated?: boolean;
+  /**
+   * What routing selected before that widening. Present only when escalation
+   * happened; routing metrics score this, since contextSelection above records
+   * the correction rather than the prediction that needed correcting.
+   */
+  routedContextSelection?: {
+    accountsIncluded: boolean;
+    transactionDetailsIncluded: boolean;
+    investmentDetailsIncluded: boolean;
+    marketContextRequested: boolean;
+    searchContextRequested: boolean;
+  };
   modelCalls: Array<{
     phase: 'initial' | 'retry';
     provider: 'claude' | 'openai';
