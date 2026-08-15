@@ -196,6 +196,68 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(result.showTheMathData?.evidenceManifest.validation.deterministic.outcome).toBe('replaced');
   });
 
+  it('widens the context when the first answer reached for a number it was not given', async () => {
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your largest holding is worth $250,000.',
+        insights: [],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $100.',
+        insights: [],
+        suggested_actions: [],
+      }));
+
+    const result = await runAskLincAnalysis({ question: 'What is my net worth?', userId: 'user-1' });
+
+    // Routing selected none of the detail tiers; the retry asked for all of them.
+    expect(mockedGatherContext).toHaveBeenCalledTimes(2);
+    expect(mockedGatherContext.mock.calls[0][0].questionNeeds).toMatchObject({
+      needsAccountDetails: false,
+      needsInvestments: false,
+    });
+    expect(mockedGatherContext.mock.calls[1][0].questionNeeds).toMatchObject({
+      needsAccountDetails: true,
+      needsTransactionDetails: true,
+      needsInvestments: true,
+      needsRetirement: true,
+    });
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+  });
+
+  it('does not widen the context when every tier is already loaded', async () => {
+    mockedAskClaude.mockResolvedValue(JSON.stringify({
+      summary: 'Your portfolio could reach $250,000.',
+      insights: [],
+      suggested_actions: [],
+    }));
+
+    // This question routes to accounts, transactions, investments, and retirement.
+    const result = await runAskLincAnalysis({
+      question: 'Evaluate my spending and my portfolio as I plan on retiring soon.',
+      userId: 'user-1',
+    });
+
+    expect(mockedGatherContext).toHaveBeenCalledTimes(1);
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBeUndefined();
+  });
+
+  it('keeps the retry when widening the context fails', async () => {
+    mockedGatherContext
+      .mockResolvedValueOnce(snapshot())
+      .mockRejectedValueOnce(new Error('snapshot read failed'));
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({ summary: 'Your holding is worth $250,000.' }))
+      .mockResolvedValueOnce(JSON.stringify({ summary: 'Your net worth is $100.' }));
+
+    const result = await runAskLincAnalysis({ question: 'What is my net worth?', userId: 'user-1' });
+
+    expect(mockedAskClaude).toHaveBeenCalledTimes(2);
+    expect(result.structuredResponse.summary).toBe('Your net worth is $100.');
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBeUndefined();
+  });
+
   it('sends one example of every failure kind back to the retry', async () => {
     mockedAskClaude.mockResolvedValue(JSON.stringify({
       summary: 'Your net worth is $999. Growth was 47%. You could add 250,000 to savings.',

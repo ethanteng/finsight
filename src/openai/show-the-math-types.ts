@@ -25,6 +25,12 @@ export interface EvidenceManifest {
     marketContextRequested: boolean;
     searchContextRequested: boolean;
   };
+  /**
+   * The first answer cited numbers the fact pack did not contain, so the retry
+   * was given a wider context than routing selected. contextSelection above
+   * describes the widened read.
+   */
+  contextEscalated?: boolean;
   modelCalls: Array<{
     phase: 'initial' | 'retry';
     provider: 'claude' | 'openai';

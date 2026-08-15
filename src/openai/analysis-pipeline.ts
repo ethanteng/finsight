@@ -24,7 +24,12 @@ import { logRejectedPrompt, logFlaggedOutput } from '../security/security-logger
 import { PromptValidationError } from './errors';
 import type { EvidenceManifest, ShowTheMathData } from './show-the-math-types';
 import { sanitizeUngroundedResponse, UNVERIFIABLE_SUMMARY } from './response-grounding';
-import { canonicalizeResponseNumbers, salvageUngroundedResponse, validateResponseFacts } from './response-facts';
+import {
+  canonicalizeResponseNumbers,
+  hasUnsupportedValueIssue,
+  salvageUngroundedResponse,
+  validateResponseFacts,
+} from './response-facts';
 import { validateCanonicalFactPack } from './canonical-facts';
 import { askOpenAIWithPreparedPrompt } from './openai-fallback-client';
 import { createHash } from 'crypto';
@@ -109,6 +114,14 @@ function contextDigest(value: string | undefined): string | undefined {
   return value ? createHash('sha256').update(value).digest('hex') : undefined;
 }
 
+/** Context tiers a retry can switch on; the rest is loaded for every question. */
+const ROUTED_NEEDS = [
+  'needsAccountDetails',
+  'needsTransactionDetails',
+  'needsInvestments',
+  'needsRetirement',
+] as const;
+
 /**
  * Pick retry feedback that covers every kind of failure rather than the first N
  * of one kind. Sending eight "usd value X is not present" lines teaches nothing
@@ -181,14 +194,14 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
 
   // Step 1: Retrieve context (snapshot, profile, market summary, RAG)
   const contextGatherStartedAt = Date.now();
-  const snapshot = evaluation?.snapshot ?? await gatherContextSnapshot({
+  let snapshot = evaluation?.snapshot ?? await gatherContextSnapshot({
     userId,
     question,
     questionNeeds,
     tier,
     onProgress
   });
-  const contextGatherMs = Date.now() - contextGatherStartedAt;
+  let contextGatherMs = Date.now() - contextGatherStartedAt;
 
   // Step 2: Build the prompt directly from the persisted canonical snapshot.
   const promptBuildStartedAt = Date.now();
@@ -197,17 +210,17 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   const orderedConversationHistory = conversationHistory
     .slice()
     .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
-  const promptInput = buildPromptInputFromSnapshot(
-    question,
-    snapshot,
-    questionNeeds,
-    orderedConversationHistory.map(c => ({ question: c.question, answer: c.answer }))
-  );
-  const factPack = promptInput.canonicalFacts!;
-  const factPackIssues = validateCanonicalFactPack(factPack);
-  if (factPackIssues.length > 0) {
-    throw new Error(`Canonical fact validation failed: ${factPackIssues.join(' ')}`);
-  }
+  const historyForPrompt = orderedConversationHistory.map(c => ({ question: c.question, answer: c.answer }));
+  const buildPromptInput = (from: typeof snapshot, needs: typeof questionNeeds) => {
+    const input = buildPromptInputFromSnapshot(question, from, needs, historyForPrompt);
+    const issues = validateCanonicalFactPack(input.canonicalFacts!);
+    if (issues.length > 0) {
+      throw new Error(`Canonical fact validation failed: ${issues.join(' ')}`);
+    }
+    return input;
+  };
+  let promptInput = buildPromptInput(snapshot, questionNeeds);
+  let factPack = promptInput.canonicalFacts!;
 
   // Step 3: LLM financial reasoning (Claude Sonnet). Build the prompt once and
   // pass it through (avoids rebuilding the large reasoning prompt inside the client).
@@ -293,6 +306,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   let structuredResponse = canonicalizeResponseNumbers(parseStructuredResponse(rawResponse), factPack);
   let groundingResult = validateResponseFacts(structuredResponse, factPack);
   let deterministicOutcome: 'passed' | 'salvaged' | 'replaced' = 'passed';
+  let contextEscalated = false;
 
   let validationIssues = groundingResult.issues;
 
@@ -321,6 +335,36 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
 
   if (validationIssues.length > 0) {
     console.warn('Ask Linc: Response validation failed, regenerating with feedback:', validationIssues);
+
+    // The model reached for a number nobody gave it. Rather than re-prompting
+    // against the same fact pack and hoping for restraint, widen the context and
+    // let the retry answer the question it was actually asked. Routing predicts
+    // what a question needs; this reacts to what it turned out to need.
+    if (!evaluation && hasUnsupportedValueIssue(groundingResult.issues)) {
+      const escalatedNeeds = {
+        ...questionNeeds,
+        needsAccountDetails: true,
+        needsTransactionDetails: true,
+        needsInvestments: true,
+        needsRetirement: true,
+      };
+      const widens = ROUTED_NEEDS.some((need) => !questionNeeds[need]);
+      if (widens) {
+        try {
+          onProgress?.('Loading more of your financial data');
+          const escalationStartedAt = Date.now();
+          snapshot = await gatherContextSnapshot({ userId, question, questionNeeds: escalatedNeeds, tier, onProgress });
+          contextGatherMs += Date.now() - escalationStartedAt;
+          promptInput = buildPromptInput(snapshot, escalatedNeeds);
+          factPack = promptInput.canonicalFacts!;
+          contextEscalated = true;
+        } catch (error) {
+          // A failed widening must not cost the user the retry they were owed.
+          console.error('Ask Linc: Context escalation failed; retrying with the original context:', error);
+        }
+      }
+    }
+
     const retryPrompt = buildFinancialReasoningPrompt({
       ...promptInput,
       validationFeedback: selectValidationFeedback(validationIssues),
@@ -385,6 +429,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       },
       facts: factPack.facts,
       contextSelection: snapshot.contextSelection,
+      ...(contextEscalated && { contextEscalated: true }),
       modelCalls,
       timings: {
         contextGatherMs,

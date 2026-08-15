@@ -11,6 +11,17 @@ export const LLM_PERFORMANCE_TARGETS = {
   deterministicGroundingRate: 1,
 } as const;
 
+/** Context tiers that are still decided by question routing rather than always loaded. */
+const ROUTED_CONTEXT = [
+  'accountsIncluded',
+  'transactionDetailsIncluded',
+  'investmentDetailsIncluded',
+  'marketContextRequested',
+  'searchContextRequested',
+] as const;
+
+type RoutedContext = (typeof ROUTED_CONTEXT)[number];
+
 type Sample = {
   at: string;
   success: boolean;
@@ -21,6 +32,9 @@ type Sample = {
   timeToFirstTokenMs?: number;
   totalMs?: number;
   grounded?: boolean;
+  outcome?: 'passed' | 'salvaged' | 'replaced';
+  contextSelection?: Partial<Record<RoutedContext, boolean>>;
+  contextEscalated?: boolean;
   fallbackUsed: boolean;
   retryUsed: boolean;
 };
@@ -70,6 +84,9 @@ export function recordLlmAnalysis(manifest: EvidenceManifest, success = true): v
     timeToFirstTokenMs: manifest.timings.timeToFirstAnswerTokenMs,
     totalMs: manifest.timings.totalMs,
     grounded: manifest.validation.deterministic.valid,
+    outcome: manifest.validation.deterministic.outcome,
+    contextSelection: manifest.contextSelection,
+    contextEscalated: manifest.contextEscalated,
     fallbackUsed: manifest.modelCalls.some(call => call.provider === 'openai'),
     retryUsed: manifest.modelCalls.some(call => call.phase === 'retry'),
   };
@@ -86,6 +103,41 @@ export function recordLlmAnalysisFailure(totalMs: number): void {
     retryUsed: false,
   });
   if (samples.length > MAX_SAMPLES) samples.splice(0, samples.length - MAX_SAMPLES);
+}
+
+/**
+ * Did grounding fail more often when a context tier was withheld than when it
+ * was supplied?
+ *
+ * A routing miss is invisible today: the question is answered, the model fills
+ * the gap with a number nobody supplied, and the failure surfaces as a grounding
+ * error with no indication that the cause was upstream. Both bugs behind #62 and
+ * #63 would have shown up here as a positive `excessWhenWithheld` on
+ * `transactionDetailsIncluded` and `investmentDetailsIncluded` long before a
+ * user reported one.
+ *
+ * This is a correlation, not a diagnosis — a tier can be withheld correctly and
+ * still sit next to failures. Treat a persistent positive gap as a prompt to go
+ * read those questions, not as proof the router is wrong.
+ */
+function routingSignals() {
+  const scored = samples.filter((sample) => sample.contextSelection && sample.grounded !== undefined);
+  const ungroundedRate = (subset: Sample[]) =>
+    subset.length === 0 ? null : subset.filter((sample) => !sample.grounded).length / subset.length;
+
+  return Object.fromEntries(ROUTED_CONTEXT.map((flag) => {
+    const withheld = scored.filter((sample) => sample.contextSelection![flag] === false);
+    const supplied = scored.filter((sample) => sample.contextSelection![flag] === true);
+    const withheldRate = ungroundedRate(withheld);
+    const suppliedRate = ungroundedRate(supplied);
+    return [flag, {
+      withheld: { samples: withheld.length, ungroundedRate: withheldRate },
+      supplied: { samples: supplied.length, ungroundedRate: suppliedRate },
+      excessWhenWithheld: withheldRate === null || suppliedRate === null
+        ? null
+        : withheldRate - suppliedRate,
+    }];
+  }));
 }
 
 export function getLlmMetricsSnapshot() {
@@ -138,7 +190,14 @@ export function getLlmMetricsSnapshot() {
       deterministicGroundingRate: groundingRate,
       fallbackRate: rate(sample => sample.fallbackUsed),
       retryRate: rate(sample => sample.retryUsed),
+      // deterministicGroundingRate measures the model: any ungrounded figure
+      // counts against it, even when the user still got a usable answer. These
+      // two measure what reached the user.
+      answerDeliveredRate: rate(sample => sample.outcome !== 'replaced'),
+      salvageRate: rate(sample => sample.outcome === 'salvaged'),
+      contextEscalationRate: rate(sample => sample.contextEscalated === true),
     },
+    routing: routingSignals(),
     baselineCandidate: {
       ready: coreBaselineReady,
       timeToFirstTokenReady: baselineStages.timeToFirstToken.ready,

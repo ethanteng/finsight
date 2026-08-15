@@ -17,6 +17,66 @@ describe('LLM stage metrics', () => {
     expect(metrics.observationWindow).toEqual({ from: null, to: null });
   });
 
+  it('surfaces grounding failures that cluster on a withheld context tier', () => {
+    // The shape both routing bugs had: questions that were given the
+    // transaction rows stayed grounded, questions that were not did not.
+    const sample = (transactionDetailsIncluded: boolean, valid: boolean): EvidenceManifest => ({
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      snapshot: {},
+      facts: [],
+      contextSelection: {
+        accountsIncluded: true,
+        transactionDetailsIncluded,
+        investmentDetailsIncluded: true,
+        marketContextRequested: false,
+        searchContextRequested: false,
+      },
+      modelCalls: [],
+      timings: { contextGatherMs: 1, promptBuildMs: 1, totalMs: 2 },
+      validation: { deterministic: { valid, issues: [] } },
+      evidenceRefs: { tickers: [], retirementAnalysis: false, marketContext: false },
+    });
+
+    recordLlmAnalysis(sample(false, false));
+    recordLlmAnalysis(sample(false, false));
+    recordLlmAnalysis(sample(false, true));
+    recordLlmAnalysis(sample(true, true));
+    recordLlmAnalysis(sample(true, true));
+
+    const routing = getLlmMetricsSnapshot().routing;
+    expect(routing.transactionDetailsIncluded).toEqual({
+      withheld: { samples: 3, ungroundedRate: 2 / 3 },
+      supplied: { samples: 2, ungroundedRate: 0 },
+      excessWhenWithheld: 2 / 3,
+    });
+    // A tier that was never withheld has nothing to compare.
+    expect(routing.accountsIncluded.excessWhenWithheld).toBeNull();
+  });
+
+  it('separates model grounding from what the user actually received', () => {
+    const manifest = (outcome: 'passed' | 'salvaged' | 'replaced', valid: boolean): EvidenceManifest => ({
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      snapshot: {},
+      facts: [],
+      modelCalls: [],
+      timings: { contextGatherMs: 1, promptBuildMs: 1, totalMs: 2 },
+      validation: { deterministic: { valid, issues: [], outcome } },
+      evidenceRefs: { tickers: [], retirementAnalysis: false, marketContext: false },
+    });
+
+    recordLlmAnalysis(manifest('passed', true));
+    recordLlmAnalysis(manifest('salvaged', false));
+    recordLlmAnalysis(manifest('replaced', false));
+
+    const quality = getLlmMetricsSnapshot().quality;
+    // One of three answers was fully grounded, but two of three reached the user.
+    expect(quality.deterministicGroundingRate).toBeCloseTo(1 / 3);
+    expect(quality.answerDeliveredRate).toBeCloseTo(2 / 3);
+    expect(quality.salvageRate).toBeCloseTo(1 / 3);
+  });
+
   it('reports stage percentiles and quality rates', () => {
     const manifest: EvidenceManifest = {
       version: 1,
