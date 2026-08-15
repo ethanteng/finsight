@@ -35,6 +35,13 @@ export class HomeValueRefreshService {
     total: number;
     successful: number;
     failed: number;
+    /**
+     * Users whose stored value actually changed. Callers must recompute these
+     * users' snapshots: the finances page reads the persisted snapshot and
+     * ignores the live profile once meta.home exists, so a profile-only
+     * update would never reach the page.
+     */
+    refreshedUserIds: string[];
     errors: Array<{ userId: string; error: string }>;
   }> {
     console.log('HomeValueRefresh: Starting home value refresh for all users');
@@ -43,6 +50,7 @@ export class HomeValueRefreshService {
       total: 0,
       successful: 0,
       failed: 0,
+      refreshedUserIds: [] as string[],
       errors: [] as Array<{ userId: string; error: string }>
     };
 
@@ -80,6 +88,9 @@ export class HomeValueRefreshService {
             });
           } else {
             results.successful++;
+            if (outcome === 'refreshed') {
+              results.refreshedUserIds.push(profile.userId);
+            }
           }
 
           // Only pace requests that actually reached RentCast.

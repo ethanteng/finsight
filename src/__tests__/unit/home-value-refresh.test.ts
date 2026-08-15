@@ -12,9 +12,11 @@ jest.mock('../../profile/manager', () => ({
   })),
 }));
 
+const mockProfileFindMany = jest.fn<any>();
+
 jest.mock('@prisma/client', () => ({
   PrismaClient: jest.fn(() => ({
-    userProfile: { findMany: jest.fn() },
+    userProfile: { findMany: mockProfileFindMany },
     $disconnect: jest.fn(),
   })),
 }));
@@ -93,5 +95,59 @@ describe('HomeValueRefreshService.refreshUserHomeValue', () => {
 
     await expect(service.refreshUserHomeValue('user-1')).resolves.toBe('skipped-no-address');
     expect(mockUpdateHomeValue).not.toHaveBeenCalled();
+  });
+});
+
+describe('HomeValueRefreshService.refreshAllHomeValues', () => {
+  let service: HomeValueRefreshService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    service = new HomeValueRefreshService();
+    mockGetOriginalProfile.mockResolvedValue('profile text');
+    mockUpdateHomeValue.mockResolvedValue(1_250_000);
+    mockProfileFindMany.mockResolvedValue([
+      { userId: 'changed-1' },
+      { userId: 'manual-1' },
+      { userId: 'recent-1' },
+      { userId: 'no-address-1' },
+    ]);
+    mockExtractHomeData.mockImplementation(() => ({
+      address: '1 Main St',
+      lastUpdated: daysAgo(70),
+      isManualOverride: false,
+    }));
+  });
+
+  it('reports only the users whose stored value actually changed', async () => {
+    // getOriginalProfile is called once per user, in list order.
+    const byCall = [
+      { address: '1 Main St', lastUpdated: daysAgo(70), isManualOverride: false },  // changed-1
+      { address: '2 Main St', lastUpdated: daysAgo(400), isManualOverride: true },  // manual-1
+      { address: '3 Main St', lastUpdated: daysAgo(2), isManualOverride: false },   // recent-1
+      { address: null, lastUpdated: null, isManualOverride: false },                // no-address-1
+    ];
+    let call = 0;
+    mockExtractHomeData.mockImplementation(() => byCall[call++]);
+
+    const results = await service.refreshAllHomeValues();
+
+    // Only a user whose value was actually re-fetched needs a recompute; a
+    // skipped user's snapshot still matches their profile.
+    expect(results.refreshedUserIds).toEqual(['changed-1']);
+    // The address-less user is not counted at all.
+    expect(results.total).toBe(3);
+    expect(results.successful).toBe(3);
+    expect(results.failed).toBe(0);
+  });
+
+  it('does not report a user whose provider call failed', async () => {
+    mockProfileFindMany.mockResolvedValue([{ userId: 'failed-1' }]);
+    mockUpdateHomeValue.mockResolvedValue(null);
+
+    const results = await service.refreshAllHomeValues();
+
+    expect(results.refreshedUserIds).toEqual([]);
+    expect(results.failed).toBe(1);
   });
 });
