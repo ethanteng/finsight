@@ -2,14 +2,15 @@ import express from 'express';
 import { requireAuth, AuthenticatedRequest } from './middleware';
 import { getPrismaClient } from '../prisma-client';
 import {
-  listTransactionCategoryOptions,
-  resolveCategorySelection,
-} from '../services/transaction-category-taxonomy';
-import {
   findSnapshotTransaction,
   patchSnapshotTransactionCategory,
   providerCategoryFromTransaction,
 } from '../services/transaction-category-override-service';
+import {
+  listTransactionCategoryOptions,
+  resolveCategorySelection,
+  canonicalTypeForCategory,
+} from '../services/transaction-category-taxonomy';
 import { FinancialRevisionService } from '../services/financial-revision-service';
 
 const router = express.Router();
@@ -84,7 +85,13 @@ router.put('/:transactionId', requireAuth, async (req: AuthenticatedRequest, res
 
     scheduleCashFlowCatchUp(userId, 'transaction-category-updated');
 
-    res.json({ success: true, data: override });
+    res.json({
+      success: true,
+      data: {
+        ...override,
+        canonicalTransactionType: canonicalTypeForCategory(category),
+      },
+    });
   } catch (error) {
     console.error('Failed to save transaction category:', error);
     res.status(500).json({ success: false, error: 'Failed to save transaction category' });
@@ -131,7 +138,14 @@ router.delete('/:transactionId', requireAuth, async (req: AuthenticatedRequest, 
 
     scheduleCashFlowCatchUp(userId, 'transaction-category-restored');
 
-    res.json({ success: true, data: { transactionId, category: existing.originalCategory } });
+    res.json({
+      success: true,
+      data: {
+        transactionId,
+        category: existing.originalCategory,
+        canonicalTransactionType: canonicalTypeForCategory(existing.originalCategory),
+      },
+    });
   } catch (error) {
     console.error('Failed to clear transaction category:', error);
     res.status(500).json({ success: false, error: 'Failed to clear transaction category' });

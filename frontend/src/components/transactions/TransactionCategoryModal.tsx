@@ -21,7 +21,7 @@ export interface TransactionCategorySubject {
 interface TransactionCategoryModalProps {
   transaction: TransactionCategorySubject;
   onClose: () => void;
-  onSaved: (transactionId: string, category: string[], isUserCategory: boolean) => void;
+  onSaved: (transactionId: string, category: string[], isUserCategory: boolean, transactionType?: string) => void;
 }
 
 // The menu is the same for every transaction and never changes within a session, so the
@@ -174,7 +174,11 @@ export default function TransactionCategoryModal({
       const saved: string[] = Array.isArray(body?.data?.category)
         ? body.data.category
         : detailed ? [primary, detailed] : [primary];
-      onSaved(transaction.id, saved, true);
+      const transactionType =
+        typeof body?.data?.canonicalTransactionType === 'string'
+          ? body.data.canonicalTransactionType
+          : undefined;
+      onSaved(transaction.id, saved, true, transactionType);
       onClose();
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Failed to save category');
@@ -194,7 +198,11 @@ export default function TransactionCategoryModal({
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body?.error || 'Failed to restore category');
       const restored: string[] = Array.isArray(body?.data?.category) ? body.data.category : [];
-      onSaved(transaction.id, restored, false);
+      const transactionType =
+        typeof body?.data?.canonicalTransactionType === 'string'
+          ? body.data.canonicalTransactionType
+          : undefined;
+      onSaved(transaction.id, restored, false, transactionType);
       onClose();
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : 'Failed to restore category');

@@ -193,11 +193,16 @@ export default forwardRef<{ refresh: () => void }, object>(function TransactionH
   // Applies a category saved in the modal without re-fetching the whole snapshot; the
   // backend has already patched the stored snapshot, so a later refresh agrees with this.
   const handleCategorySaved = useCallback(
-    (transactionId: string, category: string[], isUserCategory: boolean) => {
+    (transactionId: string, category: string[], isUserCategory: boolean, transactionType?: string) => {
       setTransactions(previous =>
         previous.map(transaction =>
           transaction.provider_id === transactionId
-            ? { ...transaction, category, category_source: isUserCategory ? 'user' : undefined }
+            ? {
+                ...transaction,
+                category,
+                category_source: isUserCategory ? 'user' : undefined,
+                transaction_type: transactionType ?? transaction.transaction_type,
+              }
             : transaction
         )
       );

@@ -28,6 +28,37 @@ export function resolveProviderTransactionId(transaction: any): string | null {
   return typeof id === 'string' && id.length > 0 ? id : null;
 }
 
+/** Applies category + classification fields the same way ingestion does. */
+export function stampCategoryFieldsOnTransaction(
+  transaction: any,
+  category: string[],
+  source: 'user' | 'provider'
+): void {
+  transaction.category = [...category];
+  if (source === 'user') {
+    transaction.category_source = 'user';
+  } else {
+    delete transaction.category_source;
+  }
+
+  const primary = category[0];
+  if (primary) {
+    transaction.personal_finance_category = {
+      primary,
+      detailed: category[1] || '',
+    };
+  }
+
+  const canonicalType = canonicalTypeForCategory(category);
+  if (canonicalType) {
+    // All three are consulted ahead of the category, in this order, so a stale value
+    // left in any of them would outrank the user's choice.
+    transaction.aiCategory = canonicalType;
+    transaction.canonicalTransactionType = canonicalType;
+    transaction.transaction_type = canonicalType;
+  }
+}
+
 export function normalizeCategory(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value
@@ -75,21 +106,7 @@ export function applyOverridesToTransactions(
     if (!id) continue;
     const category = overrides.get(id);
     if (!category) continue;
-    transaction.category = [...category];
-    transaction.category_source = 'user';
-    transaction.personal_finance_category = {
-      primary: category[0],
-      detailed: category[1] || '',
-    };
-
-    const canonicalType = canonicalTypeForCategory(category);
-    if (canonicalType) {
-      // All three are consulted ahead of the category, in this order, so a stale value
-      // left in any of them would outrank the user's choice.
-      transaction.aiCategory = canonicalType;
-      transaction.canonicalTransactionType = canonicalType;
-      transaction.transaction_type = canonicalType;
-    }
+    stampCategoryFieldsOnTransaction(transaction, category, 'user');
     applied += 1;
   }
   return applied;
@@ -127,12 +144,8 @@ export async function patchSnapshotTransactionCategory(
   const transactions = (snapshot.transactions as any[]).map(transaction => {
     if (resolveProviderTransactionId(transaction) !== transactionId) return transaction;
     found = true;
-    const patched = { ...transaction, category: [...category] };
-    if (source === 'user') {
-      patched.category_source = 'user';
-    } else {
-      delete patched.category_source;
-    }
+    const patched = { ...transaction };
+    stampCategoryFieldsOnTransaction(patched, category, source);
     return patched;
   });
   if (!found) return false;

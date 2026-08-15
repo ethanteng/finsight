@@ -162,6 +162,7 @@ describe('snapshot patching', () => {
       category: ['MEDICAL'],
       category_source: 'user',
       name: 'Peet’s',
+      transaction_type: 'expense',
     });
     expect(call.data.transactions[1]).toEqual({ transaction_id: 'txn-2', category: ['TRAVEL'] });
   });
@@ -178,9 +179,10 @@ describe('snapshot patching', () => {
     await patchSnapshotTransactionCategory('user-1', 'txn-1', ['FOOD_AND_DRINK'], 'provider');
 
     const call = prisma.financialSummarySnapshot.updateMany.mock.calls[0][0] as any;
-    expect(call.data.transactions[0]).toEqual({
+    expect(call.data.transactions[0]).toMatchObject({
       transaction_id: 'txn-1',
       category: ['FOOD_AND_DRINK'],
+      transaction_type: 'expense',
     });
   });
 
