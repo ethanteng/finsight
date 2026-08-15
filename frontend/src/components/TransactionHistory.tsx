@@ -157,15 +157,25 @@ export default forwardRef<{ refresh: () => void }, object>(function TransactionH
     });
   }, [transactions]);
 
-  // Filter transactions based on date range and always show pending
+  // Filter transactions based on date range, newest transaction date first.
   const filteredTransactions = useMemo(() => {
     const daysAgo = new Date();
     daysAgo.setDate(daysAgo.getDate() - parseInt(dateRange));
 
-    return transactions.filter(transaction => {
-      const transactionDate = new Date(transaction.date);
-      return transactionDate >= daysAgo;
-    });
+    return transactions
+      .filter(transaction => {
+        const transactionDate = new Date(transaction.date);
+        return transactionDate >= daysAgo;
+      })
+      .sort((a, b) => {
+        const aTime = new Date(a.date).getTime();
+        const bTime = new Date(b.date).getTime();
+        // Keep undated/unparseable rows at the end rather than scattering them.
+        if (Number.isNaN(aTime) && Number.isNaN(bTime)) return 0;
+        if (Number.isNaN(aTime)) return 1;
+        if (Number.isNaN(bTime)) return -1;
+        return bTime - aTime;
+      });
   }, [transactions, dateRange]);
 
   return (

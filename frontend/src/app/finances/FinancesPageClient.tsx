@@ -421,18 +421,25 @@ export default function FinancesPageClient() {
 
       <main className="mx-auto max-w-[1200px] space-y-6 p-5 py-10 sm:px-6 md:py-12">
         <div className="authenticated-intro mb-10"><h2>Your whole financial picture, in one place.</h2><p>A connected view of your net worth, trends, accounts, and the assumptions Ask Linc uses.</p></div>
-        <div className="flex flex-wrap items-center gap-2 text-xs text-[#5e6b63]">
-          {overview.revision.asOf && (
-            <span>Source data as of {new Date(overview.revision.asOf).toLocaleString()}</span>
-          )}
-          <span>Snapshot computed {new Date(overview.revision.computedAt).toLocaleString()}</span>
-          {awaitingRevision && (
-            <span role="status" className="inline-flex items-center gap-2 font-medium text-[#102319]">
-              <span className="h-3 w-3 animate-spin rounded-full border-b-2 border-[#102319]" aria-hidden="true" />
-              Updating totals with your change…
-            </span>
-          )}
-        </div>
+        {/* Net Worth Card — snapshot timing sits inside the card, warnings below it */}
+        <NetWorthCard
+          netWorth={Math.round(overview.financialOverview.netWorth)}
+          footer={
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white/55">
+              {overview.revision.asOf && (
+                <span>Source data as of {new Date(overview.revision.asOf).toLocaleString()}</span>
+              )}
+              <span>Snapshot computed {new Date(overview.revision.computedAt).toLocaleString()}</span>
+              {awaitingRevision && (
+                <span role="status" className="inline-flex items-center gap-2 font-medium text-white">
+                  <span className="h-3 w-3 animate-spin rounded-full border-b-2 border-white" aria-hidden="true" />
+                  Updating totals with your change…
+                </span>
+              )}
+            </div>
+          }
+        />
+
         {revisionStalled && !awaitingRevision && (
           <div role="status" className="rounded-xl border border-[#d4a72c]/30 bg-[#fff3ce] px-4 py-3 text-sm font-medium text-[#76510f]">
             Your change was saved, but totals have not caught up yet. Use Refresh totals to try again.
@@ -447,14 +454,6 @@ export default function FinancesPageClient() {
             ))}
           </div>
         )}
-        {/* Net Worth Card */}
-        <NetWorthCard 
-          netWorth={Math.round(overview.financialOverview.netWorth)}
-          totalCash={Math.round(overview.financialOverview.totalCash)}
-          totalInvestments={Math.round(overview.financialOverview.totalInvestments)}
-          totalDebt={Math.round(overview.financialOverview.totalDebt)}
-          homeValue={overview.financialOverview.homeValue}
-        />
 
         {/* Financial Metrics Chart */}
         {!historicalDataLoading && (() => {
