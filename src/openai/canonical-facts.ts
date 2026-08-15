@@ -331,7 +331,7 @@ export function buildCanonicalFactPack(
 
   // Individual holdings are a different matter: they come from the holdings
   // column, which is only selected when the question routed to investments.
-  {
+  if (needs.needsInvestments || needs.needsRetirement) {
     const holdings = snapshot.investments?.holdings || [];
     const matchedHoldings = holdings.filter((holding) => {
       const ticker = holding.ticker_symbol?.trim();
