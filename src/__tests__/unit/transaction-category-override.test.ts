@@ -14,6 +14,7 @@ import {
   applyOverridesToTransactions,
   findSnapshotTransactionCategory,
   patchSnapshotTransactionCategory,
+  providerCategoryFromTransaction,
   resolveProviderTransactionId,
 } from '../../services/transaction-category-override-service';
 import { resolveCategorySelection } from '../../services/transaction-category-taxonomy';
@@ -132,5 +133,21 @@ describe('snapshot patching', () => {
 
     await expect(findSnapshotTransactionCategory('user-1', 'txn-1')).resolves.toEqual(['FOOD_AND_DRINK']);
     await expect(findSnapshotTransactionCategory('user-1', 'txn-9')).resolves.toBeNull();
+  });
+
+  it('does not treat a user-stamped snapshot row as the provider restore point', () => {
+    expect(
+      providerCategoryFromTransaction({
+        transaction_id: 'txn-1',
+        category: ['MEDICAL'],
+        category_source: 'user',
+      })
+    ).toEqual([]);
+    expect(
+      providerCategoryFromTransaction({
+        transaction_id: 'txn-1',
+        category: ['FOOD_AND_DRINK'],
+      })
+    ).toEqual(['FOOD_AND_DRINK']);
   });
 });

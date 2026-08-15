@@ -6,8 +6,9 @@ import {
   resolveCategorySelection,
 } from '../services/transaction-category-taxonomy';
 import {
-  findSnapshotTransactionCategory,
+  findSnapshotTransaction,
   patchSnapshotTransactionCategory,
+  providerCategoryFromTransaction,
 } from '../services/transaction-category-override-service';
 
 const router = express.Router();
@@ -59,23 +60,30 @@ router.put('/:transactionId', requireAuth, async (req: AuthenticatedRequest, res
       where: { userId_transactionId: { userId, transactionId } },
       select: { id: true },
     });
-    const originalCategory = existing
-      ? undefined
-      : (await findSnapshotTransactionCategory(userId, transactionId)) ?? [];
-
-    const applied = await patchSnapshotTransactionCategory(userId, transactionId, category, 'user');
-    if (!applied && !existing) {
-      // Nothing in the current snapshot matches this id, so it is not the user's
-      // transaction (or the snapshot has moved on). Do not store an override for it.
+    const snapshotTransaction = await findSnapshotTransaction(userId, transactionId);
+    if (!existing && !snapshotTransaction) {
       return res.status(404).json({ success: false, error: 'Transaction not found' });
     }
+    const originalCategory = existing
+      ? undefined
+      : providerCategoryFromTransaction(snapshotTransaction);
 
+    // Persist the override before patching the snapshot so a failed upsert cannot
+    // leave a user category in the JSON blob with no row to restore from.
     const override = await getPrismaClient().transactionCategoryOverride.upsert({
       where: { userId_transactionId: { userId, transactionId } },
       create: { userId, transactionId, category, originalCategory: originalCategory ?? [] },
       update: { category },
       select: { transactionId: true, category: true, originalCategory: true, updatedAt: true },
     });
+
+    const applied = await patchSnapshotTransactionCategory(userId, transactionId, category, 'user');
+    if (!applied && !existing) {
+      await getPrismaClient().transactionCategoryOverride.delete({
+        where: { userId_transactionId: { userId, transactionId } },
+      });
+      return res.status(404).json({ success: false, error: 'Transaction not found' });
+    }
 
     res.json({ success: true, data: override });
   } catch (error) {
@@ -101,15 +109,19 @@ router.delete('/:transactionId', requireAuth, async (req: AuthenticatedRequest, 
       return res.status(404).json({ success: false, error: 'No category override to remove' });
     }
 
-    await getPrismaClient().transactionCategoryOverride.delete({
-      where: { userId_transactionId: { userId, transactionId } },
-    });
-    await patchSnapshotTransactionCategory(
+    const restored = await patchSnapshotTransactionCategory(
       userId,
       transactionId,
       existing.originalCategory,
       'provider'
     );
+    if (!restored) {
+      return res.status(500).json({ success: false, error: 'Failed to restore category in snapshot' });
+    }
+
+    await getPrismaClient().transactionCategoryOverride.delete({
+      where: { userId_transactionId: { userId, transactionId } },
+    });
 
     res.json({ success: true, data: { transactionId, category: existing.originalCategory } });
   } catch (error) {

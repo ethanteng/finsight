@@ -23,7 +23,7 @@ export function resolveProviderTransactionId(transaction: any): string | null {
   return typeof id === 'string' && id.length > 0 ? id : null;
 }
 
-function normalizeCategory(value: unknown): string[] {
+export function normalizeCategory(value: unknown): string[] {
   if (Array.isArray(value)) {
     return value
       .map(entry => (typeof entry === 'string' ? entry.trim() : ''))
@@ -117,6 +117,32 @@ export async function patchSnapshotTransactionCategory(
   return update.count > 0;
 }
 
+export async function findSnapshotTransaction(
+  userId: string,
+  transactionId: string
+): Promise<any | null> {
+  const snapshot = await getPrismaClient().financialSummarySnapshot.findUnique({
+    where: { userId },
+    select: { transactions: true },
+  });
+  if (!snapshot || !Array.isArray(snapshot.transactions)) return null;
+
+  return (
+    (snapshot.transactions as any[]).find(
+      transaction => resolveProviderTransactionId(transaction) === transactionId
+    ) ?? null
+  );
+}
+
+/**
+ * Provider category on a snapshot row. Skips rows already stamped with a user override
+ * so a retried save does not treat the user's choice as the restore point.
+ */
+export function providerCategoryFromTransaction(transaction: any): string[] {
+  if (!transaction || transaction.category_source === 'user') return [];
+  return normalizeCategory(transaction.category);
+}
+
 /**
  * Provider category currently on the transaction, used as the restore point when the
  * user later clears their override. Reads the snapshot rather than the Transaction
@@ -126,15 +152,7 @@ export async function findSnapshotTransactionCategory(
   userId: string,
   transactionId: string
 ): Promise<string[] | null> {
-  const snapshot = await getPrismaClient().financialSummarySnapshot.findUnique({
-    where: { userId },
-    select: { transactions: true },
-  });
-  if (!snapshot || !Array.isArray(snapshot.transactions)) return null;
-
-  const match = (snapshot.transactions as any[]).find(
-    transaction => resolveProviderTransactionId(transaction) === transactionId
-  );
+  const match = await findSnapshotTransaction(userId, transactionId);
   if (!match) return null;
-  return normalizeCategory(match.category);
+  return providerCategoryFromTransaction(match);
 }
