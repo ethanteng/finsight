@@ -175,7 +175,7 @@ describe('Authentication Integration', () => {
             email: testUser.email,
             password: testUser.password
           });
-        
+
         if (loginResponse.status === 200) {
           token = loginResponse.body.token;
         }
@@ -234,7 +234,7 @@ describe('Authentication Integration', () => {
             email: testUser.email,
             password: testUser.password
           });
-        
+
         if (loginResponse.status === 200) {
           token = loginResponse.body.token;
         }
@@ -267,7 +267,7 @@ describe('Authentication Integration', () => {
             email: testUser.email,
             password: testUser.password
           });
-        
+
         if (loginResponse.status === 200) {
           token = loginResponse.body.token;
         }
@@ -286,18 +286,4 @@ describe('Authentication Integration', () => {
     });
   });
 
-  describe('Demo Mode', () => {
-    it('should allow demo requests without authentication', async () => {
-      const response = await request(app)
-        .post('/ask')
-        .set('x-session-id', 'test-session-id')
-        .send({
-          question: 'What is my account balance?',
-          isDemo: true
-        });
-
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('answer');
-    });
-  });
-}); 
+});

@@ -10,7 +10,7 @@ This document describes the **deterministic** (non-AI) mathematical calculations
 |-----|----------|-------------------|
 | **Claude** | Ask Linc financial analysis | `buildFinancialContextForPrompt()` + `buildFinancialReasoningPrompt()` |
 | **Gemini** | Response validation (optional) | `buildSnapshotSummaryForValidation()` — subset of same snapshot |
-| **OpenAI** | Legacy/demo Ask endpoint | `buildPromptPayload()` via `formatAccountSummary`, `formatTransactionSummary`, `formatInvestmentSummary` |
+| **OpenAI** | Legacy Ask endpoint | `buildPromptPayload()` via `formatAccountSummary`, `formatTransactionSummary`, `formatInvestmentSummary` |
 
 All three receive data derived from the same underlying deterministic calculations.
 
@@ -18,7 +18,7 @@ All three receive data derived from the same underlying deterministic calculatio
 
 ## 2. Financial Overview (Net Worth, Cash, Debt, Investments)
 
-**Source:** `FinancialSummaryService.calculateFinancialOverview()`  
+**Source:** `FinancialSummaryService.calculateFinancialOverview()`
 **File:** `src/services/financial-summary-service.ts`
 
 ### Formulas
@@ -48,7 +48,7 @@ Accounts are deduplicated by `plaidAccountId || persistentAccountId || account_i
 
 ## 3. Investment Portfolio
 
-**Source:** `FinancialDataService.analyzePortfolio()`  
+**Source:** `FinancialDataService.analyzePortfolio()`
 **File:** `src/services/financial-data-service.ts`
 
 ### Portfolio Value
@@ -79,7 +79,7 @@ gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0
 
 ## 4. Income and Expense Analysis
 
-**Source:** `buildIncomeAnalysis()`, `buildExpenseAnalysis()`  
+**Source:** `buildIncomeAnalysis()`, `buildExpenseAnalysis()`
 **File:** `src/openai/context-service.ts`
 
 ### Income
@@ -107,7 +107,7 @@ gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0
 
 ### Manual Override
 
-If `override` is provided (not null/undefined), the analysis string uses that value directly:  
+If `override` is provided (not null/undefined), the analysis string uses that value directly:
 `Average Monthly Income/Expenses: $X.XX (Manual Override)`.
 
 ---
@@ -162,7 +162,7 @@ expenses = (averageMonthlyExpense ?? 0) * 12
 
 ## 6. Retirement Portfolio Analysis
 
-**Source:** `analyzeRetirementPortfolio()` and engine modules  
+**Source:** `analyzeRetirementPortfolio()` and engine modules
 **Files:** `src/retirement-analytics/`
 
 ### Portfolio Metrics (Phase 1)
@@ -259,7 +259,7 @@ yearsOfExpenses = totalValue / annualWithdrawalAmount
 
 ## 7. Data Quality (Retirement)
 
-**Source:** `calculateDataQuality()`  
+**Source:** `calculateDataQuality()`
 **File:** `src/retirement-analytics/interpretation/uncertainty-quantifier.ts`
 
 ```
@@ -274,7 +274,7 @@ metadataConfidence = completeness < 0.5 ? 'low' : completeness < 0.8 ? 'medium' 
 
 ## 8. Summary Cache Service (Alternative Path)
 
-**Source:** `SummaryCacheService.computeFinancialOverview()`  
+**Source:** `SummaryCacheService.computeFinancialOverview()`
 **File:** `src/services/summary-cache-service.ts`
 
 Uses the same logic as `FinancialSummaryService` for consistency:
@@ -291,7 +291,7 @@ netWorth = totalCash + totalInvestments + (homeValue ?? 0) - totalDebt
 
 ## 9. Expense Ratio Formatting (Prompt)
 
-**Source:** `formatRetirementSecurityMetadata()`  
+**Source:** `formatRetirementSecurityMetadata()`
 **File:** `src/openai/prompt-builder.ts`
 
 ```
@@ -305,7 +305,7 @@ expenseRatioDisplay = value < 1 ? value * 100 : value
 
 ## 10. Transaction Summary Formatting
 
-**Source:** `formatTransactionSummary()`  
+**Source:** `formatTransactionSummary()`
 **File:** `src/openai/prompt-builder.ts`
 
 ```
@@ -316,7 +316,7 @@ amountDisplay = amount >= 0 ? `$${amount.toFixed(2)}` : `-$${Math.abs(amount).to
 
 ## 11. Percentile Calculation (Outcome Analyzer)
 
-**Source:** `calculatePercentiles()`  
+**Source:** `calculatePercentiles()`
 **File:** `src/retirement-analytics/engine/outcome-analyzer.ts`
 
 ```

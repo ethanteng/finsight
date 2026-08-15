@@ -52,9 +52,6 @@ ADMIN_EMAILS= admin@example.com , manager@example.com , owner@example.com
 
 ## Admin Dashboard Features
 
-### Demo Tab
-- View demo session statistics
-- Analyze demo conversation patterns
 - Monitor user engagement metrics
 
 ### Production Tab
@@ -212,4 +209,4 @@ ADMIN_EMAILS=admin@finsight.com,manager@finsight.com
 ADMIN_EMAILS=test-admin@example.com
 ```
 
-This admin access control system provides secure, configurable access to the admin dashboard while maintaining simplicity and ease of use. 
+This admin access control system provides secure, configurable access to the admin dashboard while maintaining simplicity and ease of use.

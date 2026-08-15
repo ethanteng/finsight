@@ -24,7 +24,6 @@ module.exports = {
     '!src/__tests__/**',
     '!src/data/providers/**',
     '!src/auth/**',
-    '!src/demo-data.ts',
     '!src/sync.ts',
     '!src/privacy.ts',
     '!src/prisma-client.ts',
@@ -42,4 +41,4 @@ module.exports = {
       statements: 20
     }
   }
-}; 
+};

@@ -7,10 +7,9 @@ const ManualAccountForm = lazy(() => import('./ManualAccountForm'));
 interface ManualAccountListProps {
   accounts: ManualAccount[];
   onRefresh: () => void;
-  isDemo?: boolean;
 }
 
-export default function ManualAccountList({ accounts, onRefresh, isDemo = false }: ManualAccountListProps) {
+export default function ManualAccountList({ accounts, onRefresh }: ManualAccountListProps) {
   const [editingAccount, setEditingAccount] = useState<ManualAccount | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -29,7 +28,7 @@ export default function ManualAccountList({ accounts, onRefresh, isDemo = false 
         setDeletingId(null);
         return;
       }
-      
+
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
@@ -106,7 +105,6 @@ export default function ManualAccountList({ accounts, onRefresh, isDemo = false 
             setShowForm(false);
             setEditingAccount(null);
           }}
-          isDemo={isDemo}
         />
       </Suspense>
     );

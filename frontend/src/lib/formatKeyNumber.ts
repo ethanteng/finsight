@@ -3,6 +3,11 @@ function isPercentageKey(keyLower: string): boolean {
   return tokens.some((token) => ['percent', 'pct', 'rate', 'allocation', 'apy'].includes(token));
 }
 
+function hasUnitToken(keyLower: string, units: readonly string[]): boolean {
+  const tokens = keyLower.split(/[^a-z0-9]+/).filter(Boolean);
+  return tokens.some((token) => units.includes(token));
+}
+
 function formatDollars(value: number): string {
   const rounded = Math.round(value);
   const sign = rounded < 0 ? '-' : '';
@@ -31,7 +36,7 @@ export function formatKeyNumberValue(key: string, metric: number | DisplayKeyNum
     return `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`;
   }
   if (unit === 'months' || unit === 'years' || unit === 'age' || unit === 'count' || unit === 'ratio' ||
-      (!unit && (keyLower.includes('months') || keyLower.includes('years') || keyLower.includes('age') || keyLower.includes('count')))) {
+      (!unit && hasUnitToken(keyLower, ['month', 'months', 'year', 'years', 'age', 'count', 'ratio']))) {
     return value.toLocaleString();
   }
   return formatDollars(value);

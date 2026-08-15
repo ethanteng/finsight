@@ -11,7 +11,7 @@ const getApp = async () => {
   return app;
 };
 
-// Mock external dependencies - must include all exports used by index (ask, handleUserRequest, handleDemoRequest)
+// Mock external dependencies used by the application entry point.
 jest.mock('../../openai', () => {
   const mockResponse = 'Mocked AI response';
   return {
@@ -39,23 +39,23 @@ const prisma = new PrismaClient();
 describe('Authentication Integration', () => {
   // Check if we're actually in GitHub Actions (not just CI=true set locally)
   // Even if CI=true is set locally, we're still on macOS which has permission issues
-  const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' && 
+  const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' &&
                                      process.env.GITHUB_RUN_ID !== undefined;
-  
+
   /**
    * Skip network tests locally - these require special permissions on macOS
-   * 
+   *
    * Issue: macOS requires special permissions to bind to 0.0.0.0, which supertest
    * tries to do when creating a test server. This causes EPERM errors locally.
-   * 
+   *
    * Solution: Skip these tests locally (not in CI/CD) since they will run properly
    * in CI/CD environments where permissions are configured correctly.
-   * 
+   *
    * Even if CI=true is set manually, we still skip on macOS to avoid EPERM errors.
    * This is a local vs production mismatch, not a real code issue.
    */
   const shouldSkipNetworkTests = !isActuallyInGitHubActions;
-  
+
   // Helper to skip network tests locally
   const skipIfLocal = () => {
     if (shouldSkipNetworkTests) {
@@ -64,7 +64,7 @@ describe('Authentication Integration', () => {
     }
     return false;
   };
-  
+
   const testUser = {
     email: 'test@example.com',
     password: 'TestPassword123',
@@ -79,7 +79,7 @@ describe('Authentication Integration', () => {
     if (shouldSkipNetworkTests) {
       return;
     }
-    
+
     // Clean up any existing test user and related records
     try {
       await prisma.privacySettings.deleteMany({
@@ -102,7 +102,7 @@ describe('Authentication Integration', () => {
     if (shouldSkipNetworkTests) {
       return;
     }
-    
+
     // Clean up test user and related records
     try {
       await prisma.privacySettings.deleteMany({
@@ -124,7 +124,7 @@ describe('Authentication Integration', () => {
   describe('User Registration', () => {
     it('should register a new user successfully', async () => {
       if (skipIfLocal()) return;
-      
+
       const testApp = await getApp();
       const response = await request(testApp)
         .post('/auth/register')
@@ -144,7 +144,7 @@ describe('Authentication Integration', () => {
 
     it('should reject duplicate email registration', async () => {
       if (skipIfLocal()) return;
-      
+
       const testApp = await getApp();
       const response = await request(testApp)
         .post('/auth/register')
@@ -156,7 +156,7 @@ describe('Authentication Integration', () => {
 
     it('should reject invalid email format', async () => {
       if (skipIfLocal()) return;
-      
+
       const testApp = await getApp();
       const response = await request(testApp)
         .post('/auth/register')
@@ -171,7 +171,7 @@ describe('Authentication Integration', () => {
 
     it('should reject weak password', async () => {
       if (skipIfLocal()) return;
-      
+
       const testApp = await getApp();
       const response = await request(testApp)
         .post('/auth/register')
@@ -189,7 +189,7 @@ describe('Authentication Integration', () => {
   describe('User Login', () => {
     it('should login with correct credentials', async () => {
       if (skipIfLocal()) return;
-      
+
       // First ensure the user exists by registering
       const registerResponse = await request(app)
         .post('/auth/register')
@@ -218,7 +218,7 @@ describe('Authentication Integration', () => {
 
     it('should reject incorrect password', async () => {
       if (skipIfLocal()) return;
-      
+
       const testApp = await getApp();
       const response = await request(testApp)
         .post('/auth/login')
@@ -233,7 +233,7 @@ describe('Authentication Integration', () => {
 
     it('should reject non-existent email', async () => {
       if (skipIfLocal()) return;
-      
+
       const testApp = await getApp();
       const response = await request(testApp)
         .post('/auth/login')
@@ -250,7 +250,7 @@ describe('Authentication Integration', () => {
   describe('Protected Endpoints', () => {
     it('should access protected endpoint with valid token', async () => {
       if (skipIfLocal()) return;
-      
+
       // First ensure we have a valid token by registering and logging in
       const registerResponse = await request(app)
         .post('/auth/register')
@@ -267,7 +267,7 @@ describe('Authentication Integration', () => {
             email: testUser.email,
             password: testUser.password
           });
-        
+
         if (loginResponse.status === 200) {
           token = loginResponse.body.token;
         }
@@ -293,7 +293,7 @@ describe('Authentication Integration', () => {
 
     it('should reject access without token', async () => {
       if (skipIfLocal()) return;
-      
+
       const testApp = await getApp();
       const response = await request(testApp)
         .post('/ask')
@@ -307,7 +307,7 @@ describe('Authentication Integration', () => {
 
     it('should reject access with invalid token', async () => {
       if (skipIfLocal()) return;
-      
+
       const testApp = await getApp();
       const response = await request(testApp)
         .post('/ask')
@@ -324,7 +324,7 @@ describe('Authentication Integration', () => {
   describe('User Profile', () => {
     it('should get user profile with valid token', async () => {
       if (skipIfLocal()) return;
-      
+
       // First ensure we have a valid token by registering and logging in
       const registerResponse = await request(app)
         .post('/auth/register')
@@ -341,7 +341,7 @@ describe('Authentication Integration', () => {
             email: testUser.email,
             password: testUser.password
           });
-        
+
         if (loginResponse.status === 200) {
           token = loginResponse.body.token;
         }
@@ -360,7 +360,7 @@ describe('Authentication Integration', () => {
 
     it('should update user profile', async () => {
       if (skipIfLocal()) return;
-      
+
       // First ensure we have a valid token by registering and logging in
       const registerResponse = await request(app)
         .post('/auth/register')
@@ -377,7 +377,7 @@ describe('Authentication Integration', () => {
             email: testUser.email,
             password: testUser.password
           });
-        
+
         if (loginResponse.status === 200) {
           token = loginResponse.body.token;
         }
@@ -397,27 +397,4 @@ describe('Authentication Integration', () => {
     });
   });
 
-  describe('Demo Mode', () => {
-    it('should allow demo requests without authentication', async () => {
-      if (skipIfLocal()) return;
-      
-      const testApp = await getApp();
-      const response = await request(testApp)
-        .post('/ask')
-        .set('x-session-id', 'test-session-id')
-        .send({
-          question: 'What is my account balance?',
-          isDemo: true
-        });
-
-      // Accept both 200 (success) and 500 (AI/API error) for demo mode test
-      // The key is that demo mode allowed the request without authentication
-      expect([200, 500]).toContain(response.status);
-      if (response.status === 200) {
-        expect(response.body).toHaveProperty('answer');
-      } else {
-        expect(response.body).toHaveProperty('error');
-      }
-    });
-  });
-}); 
+});

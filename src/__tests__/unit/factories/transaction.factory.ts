@@ -11,36 +11,39 @@ export const createTestTransaction = (overrides = {}) => ({
   ...overrides
 });
 
-export const createTestIncomeTransaction = (overrides = {}) => 
-  createTestTransaction({ 
+export const createTestIncomeTransaction = (overrides = {}) =>
+  createTestTransaction({
     amount: 2500.00,
     name: 'Salary Deposit',
+    canonicalTransactionType: 'income',
     category: ['income'],
     categoryId: 'income',
-    ...overrides 
+    ...overrides
   });
 
-export const createTestExpenseTransaction = (overrides = {}) => 
-  createTestTransaction({ 
+export const createTestExpenseTransaction = (overrides = {}) =>
+  createTestTransaction({
     amount: -50.00,
     name: 'Grocery Store',
+    canonicalTransactionType: 'expense',
     category: ['food'],
     categoryId: 'food',
-    ...overrides 
+    ...overrides
   });
 
-export const createTestTransferTransaction = (overrides = {}) => 
-  createTestTransaction({ 
+export const createTestTransferTransaction = (overrides = {}) =>
+  createTestTransaction({
     amount: -500.00,
     name: 'Transfer to Savings',
+    canonicalTransactionType: 'transfer_out',
     category: ['transfer'],
     categoryId: 'transfer',
-    ...overrides 
+    ...overrides
   });
 
-export const createTestPendingTransaction = (overrides = {}) => 
-  createTestTransaction({ 
+export const createTestPendingTransaction = (overrides = {}) =>
+  createTestTransaction({
     pending: true,
     name: 'Pending Transaction',
-    ...overrides 
-  }); 
+    ...overrides
+  });

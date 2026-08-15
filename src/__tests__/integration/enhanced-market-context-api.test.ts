@@ -31,14 +31,14 @@ const MockDataOrchestrator = dataOrchestrator as jest.Mocked<typeof dataOrchestr
 describe('Enhanced Market Context API Integration', () => {
   // Check if we're actually in GitHub Actions (not just CI=true set locally)
   // Even if CI=true is set locally, we're still on macOS which has permission issues
-  const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' && 
+  const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' &&
                                      process.env.GITHUB_RUN_ID !== undefined;
-  
+
   /**
    * Skip network tests locally - these require special permissions on macOS
    */
   const shouldSkipNetworkTests = !isActuallyInGitHubActions;
-  
+
   // Helper to skip network tests locally
   const skipIfLocal = () => {
     if (shouldSkipNetworkTests) {
@@ -47,7 +47,7 @@ describe('Enhanced Market Context API Integration', () => {
     }
     return false;
   };
-  
+
   beforeEach(() => {
     jest.clearAllMocks();
     // Set test environment variables
@@ -62,9 +62,9 @@ describe('Enhanced Market Context API Integration', () => {
   describe('GET /test/enhanced-market-context', () => {
     it('should return enhanced market context for starter tier', async () => {
       if (skipIfLocal()) return;
-      
+
       const mockContext = 'CURRENT MARKET CONTEXT (Updated: 7/31/2025, 10:57:33 PM):\n\nUse this current market context to provide informed financial advice. Always reference specific data points when making recommendations.';
-      
+
       MockDataOrchestrator.getMarketContextSummary.mockResolvedValue(mockContext);
       MockDataOrchestrator.getCacheStats.mockResolvedValue({
         size: 0,
@@ -79,12 +79,11 @@ describe('Enhanced Market Context API Integration', () => {
       const app = await getTestApp();
       const response = await request(app)
         .get('/test/enhanced-market-context')
-        .query({ tier: 'starter', isDemo: 'true' })
+        .query({ tier: 'starter' })
         .expect(200);
 
       expect(response.body).toEqual({
         tier: 'starter',
-        isDemo: true,
         marketContextSummary: mockContext,
         contextLength: mockContext.length,
         cacheStats: {
@@ -104,9 +103,9 @@ describe('Enhanced Market Context API Integration', () => {
 
     it('should return enhanced market context for standard tier', async () => {
       if (skipIfLocal()) return;
-      
+
       const mockContext = 'CURRENT MARKET CONTEXT (Updated: 7/31/2025, 10:57:37 PM):\n\nECONOMIC INDICATORS:\n• Fed Funds Rate: 4.33%\n• CPI (YoY): 321.5%\n• Mortgage Rate: 6.72%\n• Credit Card APR: 24.59%\n\nKEY INSIGHTS:\n• Elevated inflation suggests TIPS and inflation-protected investments may be beneficial\n• High mortgage rates suggest waiting for refinancing opportunities\n\nUse this current market context to provide informed financial advice. Always reference specific data points when making recommendations.';
-      
+
       MockDataOrchestrator.getMarketContextSummary.mockResolvedValue(mockContext);
       MockDataOrchestrator.getCacheStats.mockResolvedValue({
         size: 4,
@@ -117,15 +116,14 @@ describe('Enhanced Market Context API Integration', () => {
           lastRefresh: new Date('1970-01-01T00:00:00.000Z')
         }
       });
-      
+
       const app = await getTestApp();
       const response = await request(app)
         .get('/test/enhanced-market-context')
-        .query({ tier: 'standard', isDemo: 'true' })
+        .query({ tier: 'standard' })
         .expect(200);
 
       expect(response.body.tier).toBe('standard');
-      expect(response.body.isDemo).toBe(true);
       expect(response.body.marketContextSummary).toContain('ECONOMIC INDICATORS');
       expect(response.body.marketContextSummary).toContain('Fed Funds Rate: 4.33%');
       expect(response.body.contextLength).toBeGreaterThan(400);
@@ -133,9 +131,9 @@ describe('Enhanced Market Context API Integration', () => {
 
     it('should return enhanced market context for premium tier', async () => {
       if (skipIfLocal()) return;
-      
+
       const mockContext = 'CURRENT MARKET CONTEXT (Updated: 7/31/2025, 10:57:41 PM):\n\nECONOMIC INDICATORS:\n• Fed Funds Rate: 4.33%\n• CPI (YoY): 321.5%\n• Mortgage Rate: 6.72%\n• Credit Card APR: 24.59%\n\nLIVE MARKET DATA:\n• CD Rates: 3-month: 5.25%, 6-month: 5.35%, 1-year: 5.45%\n• Treasury Yields: 1-month: 5.12%, 3-month: 5.18%, 6-month: 5.25%\n• Mortgage Rates: 30-year-fixed: 6.85%, 15-year-fixed: 6.25%\n\nKEY INSIGHTS:\n• Elevated inflation suggests TIPS and inflation-protected investments may be beneficial\n• High mortgage rates suggest waiting for refinancing opportunities\n• High-yield CD rates available - consider laddering CDs for steady income\n• Attractive Treasury yields available for conservative investors\n\nUse this current market context to provide informed financial advice. Always reference specific data points when making recommendations.';
-      
+
       MockDataOrchestrator.getMarketContextSummary.mockResolvedValue(mockContext);
       MockDataOrchestrator.getCacheStats.mockResolvedValue({
         size: 5,
@@ -146,15 +144,14 @@ describe('Enhanced Market Context API Integration', () => {
           lastRefresh: new Date('1970-01-01T00:00:00.000Z')
         }
       });
-      
+
       const app = await getTestApp();
       const response = await request(app)
         .get('/test/enhanced-market-context')
-        .query({ tier: 'premium', isDemo: 'true' })
+        .query({ tier: 'premium' })
         .expect(200);
 
       expect(response.body.tier).toBe('premium');
-      expect(response.body.isDemo).toBe(true);
       expect(response.body.marketContextSummary).toContain('ECONOMIC INDICATORS');
       expect(response.body.marketContextSummary).toContain('LIVE MARKET DATA');
       expect(response.body.marketContextSummary).toContain('CD Rates: 3-month: 5.25%');
@@ -164,9 +161,9 @@ describe('Enhanced Market Context API Integration', () => {
 
     it('should handle missing query parameters', async () => {
       if (skipIfLocal()) return;
-      
+
       const mockContext = 'CURRENT MARKET CONTEXT (Updated: 7/31/2025, 10:57:33 PM):\n\nUse this current market context to provide informed financial advice. Always reference specific data points when making recommendations.';
-      
+
       MockDataOrchestrator.getMarketContextSummary.mockResolvedValue(mockContext);
       MockDataOrchestrator.getCacheStats.mockResolvedValue({
         size: 0,
@@ -184,7 +181,6 @@ describe('Enhanced Market Context API Integration', () => {
         .expect(200);
 
       expect(response.body.tier).toBe('starter');
-      expect(response.body.isDemo).toBe(false);
       expect(MockDataOrchestrator.getMarketContextSummary).toHaveBeenCalledWith('starter', false);
     });
 
@@ -194,7 +190,7 @@ describe('Enhanced Market Context API Integration', () => {
       const app = await getTestApp();
       const response = await request(app)
         .get('/test/enhanced-market-context')
-        .query({ tier: 'standard', isDemo: 'true' })
+        .query({ tier: 'standard' })
         .expect(500);
 
       expect(response.body.error).toBe('Test error');
@@ -204,7 +200,7 @@ describe('Enhanced Market Context API Integration', () => {
   describe('POST /test/refresh-market-context', () => {
     it('should force refresh market context for specific tier', async () => {
       if (skipIfLocal()) return;
-      
+
       MockDataOrchestrator.refreshMarketContext.mockResolvedValue();
       MockDataOrchestrator.getCacheStats.mockResolvedValue({
         size: 4,
@@ -219,13 +215,12 @@ describe('Enhanced Market Context API Integration', () => {
       const app = await getTestApp();
       const response = await request(app)
         .post('/test/refresh-market-context')
-        .send({ tier: 'premium', isDemo: true })
+        .send({ tier: 'premium' })
         .expect(200);
 
       expect(response.body).toEqual({
         success: true,
         tier: 'premium',
-        isDemo: true,
         cacheStats: {
           size: 4,
           keys: ['fred_MORTGAGE30US', 'fred_FEDFUNDS', 'fred_CPIAUCSL', 'economic_indicators'],
@@ -243,7 +238,7 @@ describe('Enhanced Market Context API Integration', () => {
 
     it('should handle missing request body parameters', async () => {
       if (skipIfLocal()) return;
-      
+
       const app = await getTestApp();
       const response = await request(app)
         .post('/test/refresh-market-context')
@@ -251,19 +246,18 @@ describe('Enhanced Market Context API Integration', () => {
         .expect(200);
 
       expect(response.body.tier).toBe('starter');
-      expect(response.body.isDemo).toBe(false);
       expect(MockDataOrchestrator.refreshMarketContext).toHaveBeenCalledWith('starter', false);
     });
 
     it('should handle orchestrator errors gracefully', async () => {
       if (skipIfLocal()) return;
-      
+
       MockDataOrchestrator.refreshMarketContext.mockRejectedValue(new Error('Refresh failed'));
-      
+
       const app = await getTestApp();
       const response = await request(app)
         .post('/test/refresh-market-context')
-        .send({ tier: 'standard', isDemo: true })
+        .send({ tier: 'standard' })
         .expect(500);
 
       expect(response.body.error).toBe('Refresh failed');
@@ -273,7 +267,7 @@ describe('Enhanced Market Context API Integration', () => {
   describe('GET /test/current-tier', () => {
     it('should return current tier configuration', async () => {
       if (skipIfLocal()) return;
-      
+
       const app = await getTestApp();
       const response = await request(app)
         .get('/test/current-tier')
@@ -282,7 +276,7 @@ describe('Enhanced Market Context API Integration', () => {
       expect(response.body).toHaveProperty('testTier');
       expect(response.body).toHaveProperty('backendTier');
       expect(response.body).toHaveProperty('message');
-      
+
       // Should match the environment variable we set
       expect(response.body.testTier).toBe('starter');
       expect(response.body.backendTier).toBe('starter');
@@ -293,7 +287,7 @@ describe('Enhanced Market Context API Integration', () => {
   describe('Cache Management Endpoints', () => {
     it('should return cache statistics', async () => {
       if (skipIfLocal()) return;
-      
+
       MockDataOrchestrator.getCacheStats.mockResolvedValue({
         size: 5,
         keys: ['fred_MORTGAGE30US', 'fred_FEDFUNDS', 'fred_CPIAUCSL', 'economic_indicators', 'live_market_data'],
@@ -303,7 +297,7 @@ describe('Enhanced Market Context API Integration', () => {
           lastRefresh: new Date('2025-08-01T05:57:41.405Z')
         }
       });
-      
+
       const app = await getTestApp();
       const response = await request(app)
         .get('/test/cache-stats')
@@ -322,9 +316,9 @@ describe('Enhanced Market Context API Integration', () => {
 
     it('should invalidate cache with pattern', async () => {
       if (skipIfLocal()) return;
-      
+
       MockDataOrchestrator.invalidateCache.mockResolvedValue();
-      
+
       const app = await getTestApp();
       const response = await request(app)
         .post('/test/invalidate-cache')
@@ -337,9 +331,9 @@ describe('Enhanced Market Context API Integration', () => {
 
     it('should use default pattern when none provided', async () => {
       if (skipIfLocal()) return;
-      
+
       MockDataOrchestrator.invalidateCache.mockResolvedValue();
-      
+
       const app = await getTestApp();
       const response = await request(app)
         .post('/test/invalidate-cache')
@@ -355,10 +349,10 @@ describe('Enhanced Market Context API Integration', () => {
     it('should use enhanced context in askOpenAIWithEnhancedContext', async () => {
       // Import the function to check it exists
       const { askOpenAIWithEnhancedContext } = require('../../openai');
-      
+
       // Verify the function exists and is callable
       expect(typeof askOpenAIWithEnhancedContext).toBe('function');
-      
+
       // Test that the function can be called with basic parameters
       // We'll use a simple test without complex mocking
       try {
@@ -381,9 +375,9 @@ describe('Enhanced Market Context API Integration', () => {
   describe('Performance and Monitoring', () => {
     it('should return response within reasonable time', async () => {
       if (skipIfLocal()) return;
-      
+
       const mockContext = 'CURRENT MARKET CONTEXT (Updated: 7/31/2025, 10:57:33 PM):\n\nUse this current market context to provide informed financial advice. Always reference specific data points when making recommendations.';
-      
+
       MockDataOrchestrator.getMarketContextSummary.mockResolvedValue(mockContext);
       MockDataOrchestrator.getCacheStats.mockResolvedValue({
         size: 0,
@@ -396,11 +390,11 @@ describe('Enhanced Market Context API Integration', () => {
       });
 
       const startTime = Date.now();
-      
+
       const app = await getTestApp();
       const response = await request(app)
         .get('/test/enhanced-market-context')
-        .query({ tier: 'starter', isDemo: 'true' })
+        .query({ tier: 'starter' })
         .expect(200);
 
       const endTime = Date.now();
@@ -413,9 +407,9 @@ describe('Enhanced Market Context API Integration', () => {
 
     it('should handle concurrent requests', async () => {
       if (skipIfLocal()) return;
-      
+
       const mockContext = 'CURRENT MARKET CONTEXT (Updated: 7/31/2025, 10:57:33 PM):\n\nUse this current market context to provide informed financial advice. Always reference specific data points when making recommendations.';
-      
+
       MockDataOrchestrator.getMarketContextSummary.mockResolvedValue(mockContext);
       MockDataOrchestrator.getCacheStats.mockResolvedValue({
         size: 0,
@@ -432,7 +426,7 @@ describe('Enhanced Market Context API Integration', () => {
       const requests = Array(5).fill(null).map(() =>
         request(app)
           .get('/test/enhanced-market-context')
-          .query({ tier: 'starter', isDemo: 'true' })
+          .query({ tier: 'starter' })
       );
 
       const responses = await Promise.all(requests);
@@ -447,4 +441,4 @@ describe('Enhanced Market Context API Integration', () => {
       expect(MockDataOrchestrator.getMarketContextSummary).toHaveBeenCalledTimes(5);
     });
   });
-}); 
+});

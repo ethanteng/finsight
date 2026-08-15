@@ -4,11 +4,11 @@
 
 Your backend now has **comprehensive Sentry integration** that will capture:
 
-✅ **AI Performance Data** - Response times, question lengths, user tiers  
-✅ **Error Tracking** - All backend errors with full context  
-✅ **Performance Spans** - Detailed timing for every AI request  
-✅ **User Context** - User IDs, tiers, and request details  
-✅ **Cron Job Monitoring** - Background task error tracking  
+✅ **AI Performance Data** - Response times, question lengths, user tiers
+✅ **Error Tracking** - All backend errors with full context
+✅ **Performance Spans** - Detailed timing for every AI request
+✅ **User Context** - User IDs, tiers, and request details
+✅ **Cron Job Monitoring** - Background task error tracking
 
 ## 🚀 What's Now Working
 
@@ -79,7 +79,6 @@ npm run build:render
 ### **AI Response Time Attributes:**
 - `ai.question_length` - Question character count
 - `ai.user_tier` - User subscription tier
-- `ai.is_demo` - Demo vs production mode
 - `ai.response_time_ms` - Total response time
 - `ai.endpoint` - Which AI endpoint was used
 - `ai.user_id` - User identifier (if authenticated)

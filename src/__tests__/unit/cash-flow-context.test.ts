@@ -1,4 +1,9 @@
 import { buildCanonicalCashFlowAnalyses } from '../../openai/cash-flow-context';
+import { buildTransactionSummary } from '../../services/transaction-summary-service';
+import {
+  createTestExpenseTransaction,
+  createTestIncomeTransaction,
+} from './factories/transaction.factory';
 
 describe('buildCanonicalCashFlowAnalyses', () => {
   const summary = {
@@ -45,5 +50,49 @@ describe('buildCanonicalCashFlowAnalyses', () => {
     expect(result.monthlyAnalysis).toContain(
       '2026-02: income $7000.00, expenses $4500.00, operating cash flow $2500.00'
     );
+  });
+
+  it('builds broad-question cash-flow context from deterministic transaction factories', () => {
+    const transactions = [
+      createTestIncomeTransaction({
+        id: 'income-jan',
+        transaction_id: 'income-jan',
+        date: '2026-01-15',
+        amount: -5_000,
+        cashFlowAmount: 5_000,
+      }),
+      createTestExpenseTransaction({
+        id: 'expense-jan',
+        transaction_id: 'expense-jan',
+        date: '2026-01-20',
+        amount: 2_000,
+        cashFlowAmount: -2_000,
+      }),
+      createTestIncomeTransaction({
+        id: 'income-feb',
+        transaction_id: 'income-feb',
+        date: '2026-02-15',
+        amount: -7_000,
+        cashFlowAmount: 7_000,
+      }),
+      createTestExpenseTransaction({
+        id: 'expense-feb',
+        transaction_id: 'expense-feb',
+        date: '2026-02-20',
+        amount: 3_000,
+        cashFlowAmount: -3_000,
+      }),
+    ];
+    const { transactionsSummary } = buildTransactionSummary(
+      transactions,
+      new Date('2026-01-01T00:00:00.000Z'),
+      new Date('2026-03-01T00:00:00.000Z'),
+    );
+
+    const result = buildCanonicalCashFlowAnalyses(transactionsSummary);
+
+    expect(result.incomeResult?.averageMonthly).toBe(6_000);
+    expect(result.expenseResult?.averageMonthly).toBe(2_500);
+    expect(result.monthlyAnalysis).toBeUndefined();
   });
 });

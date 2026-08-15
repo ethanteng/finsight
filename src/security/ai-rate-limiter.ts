@@ -1,13 +1,13 @@
 /**
  * Rate limiter for AI /ask endpoints.
- * Per-user (authenticated) and per-session (demo) limits.
+ * Per-user limits with an IP fallback for malformed or unauthenticated requests.
  */
 
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken, extractTokenFromHeader } from '../auth/utils';
 
 const AUTHENTICATED_LIMIT = parseInt(process.env.AI_RATE_LIMIT_AUTHENTICATED || '30', 10);
-const DEMO_LIMIT = parseInt(process.env.AI_RATE_LIMIT_DEMO || '20', 10);
+const UNAUTHENTICATED_LIMIT = parseInt(process.env.AI_RATE_LIMIT_UNAUTHENTICATED || '20', 10);
 const WINDOW_MS = 60 * 1000; // 1 minute
 
 interface WindowEntry {
@@ -16,7 +16,7 @@ interface WindowEntry {
 }
 
 const authenticatedWindows = new Map<string, WindowEntry>();
-const demoWindows = new Map<string, WindowEntry>();
+const unauthenticatedWindows = new Map<string, WindowEntry>();
 
 function getOrCreateWindow(
   store: Map<string, WindowEntry>,
@@ -48,18 +48,17 @@ function getClientIdentifier(req: Request): string {
 
 /**
  * Express middleware for AI rate limiting.
- * Uses userId for authenticated requests (from token or req.user), sessionId or IP for demo.
+ * Uses userId for authenticated requests and IP only as a pre-auth fallback.
  */
 export function aiRateLimitMiddleware(
   req: Request,
   res: Response,
   next: NextFunction
 ): void {
-  const isDemo = req.body?.isDemo === true;
   let userId = (req as any).user?.id;
 
   // Decode token for routes that do auth inline (e.g. /ask/display-real)
-  if (!userId && !isDemo && req.headers.authorization) {
+  if (!userId && req.headers.authorization) {
     try {
       const token = extractTokenFromHeader(req.headers.authorization);
       const payload = token ? verifyToken(token) : null;
@@ -69,23 +68,18 @@ export function aiRateLimitMiddleware(
     }
   }
 
-  const sessionId = req.body?.sessionId;
-
   let key: string;
   let limit: number;
 
-  if (!isDemo && userId) {
+  if (userId) {
     key = `user:${userId}`;
     limit = AUTHENTICATED_LIMIT;
-  } else if (isDemo && sessionId) {
-    key = `demo:${sessionId}`;
-    limit = DEMO_LIMIT;
   } else {
     key = `ip:${getClientIdentifier(req)}`;
-    limit = DEMO_LIMIT;
+    limit = UNAUTHENTICATED_LIMIT;
   }
 
-  const store = key.startsWith('user:') ? authenticatedWindows : demoWindows;
+  const store = key.startsWith('user:') ? authenticatedWindows : unauthenticatedWindows;
   const { allowed, remaining, resetAt } = getOrCreateWindow(store, key, limit);
 
   res.setHeader('X-RateLimit-Limit', limit);

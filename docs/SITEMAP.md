@@ -20,7 +20,6 @@ This document provides a comprehensive overview of the asklinc.com website struc
 ### 👤 User Account Pages
 - **Profile** (`/profile`) - User profile management
 - **App Dashboard** (`/app`) - Main application interface
-- **Demo** (`/demo`) - Demo version of the app
 
 ### 💳 Payment & Success
 - **Payment Success** (`/payment-success`) - Post-payment confirmation
@@ -52,7 +51,6 @@ asklinc.com/
 ├── /verify-email
 ├── /profile
 ├── /app
-├── /demo
 ├── /payment-success
 ├── /contact
 ├── /privacy
@@ -75,7 +73,6 @@ asklinc.com/
 - Login/Register - User acquisition
 - Blog section - Content marketing
 - Profile - User engagement
-- Demo - User conversion
 
 ### Medium Priority (0.5-0.6)
 - Contact - User support
@@ -90,7 +87,7 @@ asklinc.com/
 
 - **Daily**: Blog section (new content)
 - **Weekly**: Homepage, app dashboard
-- **Monthly**: User pages, demo, contact
+- **Monthly**: User pages and contact
 - **Yearly**: Legal pages, privacy policies
 
 ## SEO Considerations

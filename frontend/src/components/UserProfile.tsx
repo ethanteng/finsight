@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 
 interface UserProfileProps {
   userId?: string;
-  isDemo?: boolean;
 }
 
 interface HomeData {
@@ -16,14 +15,14 @@ interface HomeData {
   isManualOverride?: boolean;
 }
 
-export default function UserProfile({ userId, isDemo }: UserProfileProps) {
+export default function UserProfile({ userId }: UserProfileProps) {
   const [profileText, setProfileText] = useState<string>('');
   const [originalProfileText, setOriginalProfileText] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  
+
   // Home data state
   const [homeData, setHomeData] = useState<HomeData | null>(null);
   const [homeAddress, setHomeAddress] = useState('');
@@ -34,13 +33,13 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
   const [homeEditing, setHomeEditing] = useState(false);
   const [homeError, setHomeError] = useState('');
   const [homeSuccess, setHomeSuccess] = useState('');
-  
+
   // Home value override state
   const [isEditingValue, setIsEditingValue] = useState(false);
   const [editValue, setEditValue] = useState('');
   const [isSavingValue, setIsSavingValue] = useState(false);
   const [valueError, setValueError] = useState<string | null>(null);
-  
+
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
   const loadProfile = useCallback(async () => {
@@ -51,7 +50,7 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
-      
+
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
@@ -59,7 +58,7 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
       const response = await fetch(`${API_URL}/profile`, {
         headers,
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         const profileTextValue = data.profile?.profileText || '';
@@ -85,7 +84,7 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
-      
+
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
@@ -94,13 +93,13 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
       const response = await fetch(`${API_URL}/profile/home`, {
         headers,
       });
-      
+
       console.log('🏠 Frontend: Response status:', response.status);
-      
+
       if (response.ok) {
         const data = await response.json();
         console.log('🏠 Frontend: Response data:', data);
-        
+
         if (data.hasHome && data.homeData) {
           console.log('🏠 Frontend: Setting home data:', data.homeData);
           setHomeData(data.homeData);
@@ -121,11 +120,11 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
   }, [API_URL]);
 
   useEffect(() => {
-    if (userId && !isDemo) {
+    if (userId) {
       loadProfile();
       loadHomeData();
     }
-  }, [userId, isDemo, loadProfile, loadHomeData]);
+  }, [userId, loadProfile, loadHomeData]);
 
   const saveProfile = async (newText: string) => {
     setSaving(true);
@@ -135,7 +134,7 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
-      
+
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
@@ -145,7 +144,7 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
         headers,
         body: JSON.stringify({ profileText: newText })
       });
-      
+
       if (response.ok) {
         setProfileText(newText);
         setOriginalProfileText(newText);
@@ -190,13 +189,13 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
     setHomeSaving(true);
     setHomeError('');
     setHomeSuccess('');
-    
+
     try {
       const token = localStorage.getItem('auth_token');
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
-      
+
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
@@ -204,12 +203,12 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
       const response = await fetch(`${API_URL}/profile/home`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ 
-          address: homeAddress.trim(), 
-          ownsHome 
+        body: JSON.stringify({
+          address: homeAddress.trim(),
+          ownsHome
         })
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         setHomeData(data.homeData);
@@ -232,13 +231,13 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
     setHomeRefreshing(true);
     setHomeError('');
     setHomeSuccess('');
-    
+
     try {
       const token = localStorage.getItem('auth_token');
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
-      
+
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
@@ -247,7 +246,7 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
         method: 'POST',
         headers
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         setHomeData(data.homeData);
@@ -269,7 +268,7 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
 
   const handleSaveValue = async () => {
     const numericValue = parseFloat(editValue.replace(/[^0-9.]/g, ''));
-    
+
     if (isNaN(numericValue) || numericValue <= 0) {
       setValueError('Please enter a valid positive number');
       return;
@@ -280,7 +279,7 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
 
     try {
       const token = localStorage.getItem('auth_token');
-      
+
       const response = await fetch(`${API_URL}/profile/home/value`, {
         method: 'PUT',
         headers: {
@@ -384,48 +383,15 @@ export default function UserProfile({ userId, isDemo }: UserProfileProps) {
     });
   };
 
-  // Don't show anything if not in demo mode and no userId
-  if (!isDemo && !userId) {
+  if (!userId) {
     return null;
-  }
-
-  // For demo mode, show the profile immediately using the same data structure as the backend
-  if (isDemo) {
-    const demoProfileText = `I am Sarah Chen, a 35-year-old software engineer living in Austin, TX with my husband Michael (37, Marketing Manager) and our two children (ages 5 and 8). 
-
-Our household income is $157,000 annually, with me earning $85,000 as a software engineer and Michael earning $72,000 as a marketing manager. We have a stable dual-income household with good job security in the tech industry.
-
-We own our home with a $485,000 mortgage at 3.25% interest rate, and we're focused on building our emergency fund, saving for our children's education, and planning for retirement. Our financial goals include:
-- Building a $50,000 emergency fund (currently at $28,450)
-- Saving for a family vacation to Europe ($8,000 target, currently at $3,200)
-- Building a house down payment fund ($100,000 target, currently at $45,000)
-- Long-term retirement planning (currently have $246,200 in retirement accounts)
-
-Our investment strategy is conservative with a mix of index funds in our 401(k) and Roth IRA. We prioritize saving and are working to increase our monthly savings rate. We're also focused on paying down our credit card debt and maintaining good credit scores.
-
-Note: This profile reflects our financial situation as of August 2025.`;
-    
-    return (
-      <div className="bg-gray-800 rounded-lg p-6 mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-white">Your Financial Profile</h3>
-          <span className="text-gray-400 text-sm">Demo Mode - Read Only</span>
-        </div>
-        <div>
-          <p className="text-gray-300 whitespace-pre-wrap">{demoProfileText}</p>
-          <div className="mt-4 text-xs text-gray-500">
-            This is a demo profile showing how your financial profile would look in production.
-          </div>
-        </div>
-      </div>
-    );
   }
 
   return (
     <div className="bg-gray-800 rounded-lg p-6 mb-6">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-semibold text-white">Your Financial Profile</h3>
-        {!loading && !isDemo && (
+        {!loading && (
           <button
             onClick={editing ? handleCancel : handleEdit}
             className="text-blue-400 hover:text-blue-300 text-sm transition-colors"
@@ -433,11 +399,8 @@ Note: This profile reflects our financial situation as of August 2025.`;
             {editing ? 'Cancel' : 'Edit'}
           </button>
         )}
-        {isDemo && (
-          <span className="text-gray-400 text-sm">Demo Mode - Read Only</span>
-        )}
       </div>
-      
+
       {loading ? (
         <div className="text-gray-400">Loading profile...</div>
       ) : editing ? (
@@ -473,10 +436,7 @@ Note: This profile reflects our financial situation as of August 2025.`;
             <>
               <p className="text-gray-300 whitespace-pre-wrap">{profileText}</p>
               <div className="mt-4 text-xs text-gray-500">
-                {isDemo 
-                  ? "This is a demo profile showing how your financial profile would look in production."
-                  : "This profile is built automatically from your conversations with Linc and your financial data."
-                }
+                This profile is built automatically from your conversations with Linc and your financial data.
               </div>
             </>
           ) : (
@@ -488,12 +448,11 @@ Note: This profile reflects our financial situation as of August 2025.`;
         </div>
       )}
 
-      {/* Home Information Section - Only for non-demo users */}
-      {!isDemo && (
-        <>
+      {/* Home Information Section */}
+      <>
           <div className="mt-6 pt-6 border-t border-gray-700">
             <h4 className="text-md font-semibold text-white mb-4">Home Information</h4>
-            
+
             {homeLoading ? (
               <div className="text-gray-400">Loading home data...</div>
             ) : homeData && !homeEditing ? (
@@ -520,14 +479,14 @@ Note: This profile reflects our financial situation as of August 2025.`;
                           onChange={(e) => {
                             // Allow only numbers and a single decimal point
                             let value = e.target.value.replace(/[^0-9.]/g, '');
-                            
+
                             // Prevent multiple decimal points - keep only the first decimal part
                             const parts = value.split('.');
                             if (parts.length > 2) {
                               // Keep only the first part and the second part (first decimal part)
                               value = parts[0] + '.' + parts[1];
                             }
-                            
+
                             setEditValue(value);
                             setValueError(null);
                           }}
@@ -578,7 +537,7 @@ Note: This profile reflects our financial situation as of August 2025.`;
                     Last updated: {formatDate(homeData.lastUpdated)}
                   </div>
                 </div>
-                
+
                 <div className="flex gap-2 flex-wrap">
                   {!isEditingValue && (
                     <button
@@ -617,7 +576,7 @@ Note: This profile reflects our financial situation as of August 2025.`;
                 <p className="text-gray-400 text-sm mb-4">
                   Update your home address to refresh the home value.
                 </p>
-                
+
                 <div className="space-y-3">
                   <div>
                     <label className="block text-gray-300 text-sm mb-2">
@@ -631,7 +590,7 @@ Note: This profile reflects our financial situation as of August 2025.`;
                       className="w-full p-3 border border-gray-600 rounded-lg bg-gray-700 text-white placeholder-gray-400"
                     />
                   </div>
-                  
+
                   <div className="flex items-center">
                     <input
                       type="checkbox"
@@ -644,7 +603,7 @@ Note: This profile reflects our financial situation as of August 2025.`;
                       I own this home
                     </label>
                   </div>
-                  
+
                   <div className="flex gap-2">
                     <button
                       onClick={saveHomeData}
@@ -668,7 +627,7 @@ Note: This profile reflects our financial situation as of August 2025.`;
                 <p className="text-gray-400 text-sm mb-4">
                   Add your home address to track your home value and include it in your Net Worth calculation.
                 </p>
-                
+
                 <div className="space-y-3">
                   <div>
                     <label className="block text-gray-300 text-sm mb-2">
@@ -682,7 +641,7 @@ Note: This profile reflects our financial situation as of August 2025.`;
                       className="w-full p-3 border border-gray-600 rounded-lg bg-gray-700 text-white placeholder-gray-400"
                     />
                   </div>
-                  
+
                   <div className="flex items-center">
                     <input
                       type="checkbox"
@@ -695,7 +654,7 @@ Note: This profile reflects our financial situation as of August 2025.`;
                       I own this home
                     </label>
                   </div>
-                  
+
                   <button
                     onClick={saveHomeData}
                     disabled={homeSaving || !homeAddress.trim() || !ownsHome}
@@ -706,7 +665,7 @@ Note: This profile reflects our financial situation as of August 2025.`;
                 </div>
               </div>
             )}
-            
+
             {/* Success/Error Messages */}
             {homeSuccess && (
               <div className="mt-3 p-3 bg-green-900/20 border border-green-700 rounded-lg text-green-300 text-sm">
@@ -719,8 +678,7 @@ Note: This profile reflects our financial situation as of August 2025.`;
               </div>
             )}
           </div>
-        </>
-      )}
+      </>
     </div>
   );
-} 
+}

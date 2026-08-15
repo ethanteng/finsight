@@ -374,7 +374,7 @@ async function main() {
   const ask = await api('/ask/display-real', {
     method: 'POST',
     token,
-    body: { question, isDemo: false },
+    body: { question },
     timeoutMs: 600000,
   });
   if (ask.status !== 200) {

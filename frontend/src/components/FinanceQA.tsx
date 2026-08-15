@@ -19,13 +19,22 @@ interface FinanceQAProps {
   onNewAnswer?: (question: string, answer: string) => void;
   selectedPrompt?: PromptHistory | null;
   onNewQuestion?: () => void;
-  isDemo?: boolean;
-  sessionId?: string;
-  /** Pre-fill and auto-submit this question (e.g. from hero click on homepage) */
-  initialQuestion?: string | null;
 }
 
-export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: _onNewQuestion, isDemo = false, sessionId: propSessionId, initialQuestion: propInitialQuestion }: FinanceQAProps) {
+const PLACEHOLDER_QUESTIONS = [
+  "What part of my retirement plan breaks first if interest rates stay high longer than expected?",
+  "If markets underperform for 5 years, can my retirement plan still hold?",
+  "Am I taking more risk than I realize by staying in cash right now?",
+  "What happens to my retirement plan if inflation never really goes back to 2%?",
+  "Assuming today’s rates, what’s the smartest thing to do with excess cash?",
+  "If I stop increasing my retirement contributions now, what does that cost me later?",
+  "Which matters more right now: paying down debt or staying liquid?",
+  "How exposed am I to a recession if it hits next year?",
+  "What assumptions in my retirement plan matter most if they’re wrong?",
+  "Given everything going on right now, am I actually doing okay?"
+];
+
+export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: _onNewQuestion }: FinanceQAProps) {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(false);
@@ -48,46 +57,14 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   const [selectedSourceKey, setSelectedSourceKey] = useState<string | null>(null);
   const { trackEvent } = useAnalytics();
 
-  // Demo placeholder questions that rotate
-  const demoPlaceholders = [
-    "What part of my retirement plan breaks first if interest rates stay high longer than expected?",
-    "If markets underperform for 5 years, can my retirement plan still hold?",
-    "Am I taking more risk than I realize by staying in cash right now?",
-    "What happens to my retirement plan if inflation never really goes back to 2%?",
-    "Assuming today’s rates, what’s the smartest thing to do with excess cash?",
-    "If I stop increasing my retirement contributions now, what does that cost me later?",
-    "Which matters more right now: paying down debt or staying liquid?",
-    "How exposed am I to a recession if it hits next year?",
-    "What assumptions in my retirement plan matter most if they’re wrong?",
-    "Given everything going on right now, am I actually doing okay?"
-  ];
-
-  // Regular user placeholder questions that also rotate
-  const userPlaceholders = [
-    "What part of my retirement plan breaks first if interest rates stay high longer than expected?",
-    "If markets underperform for 5 years, can my retirement plan still hold?",
-    "Am I taking more risk than I realize by staying in cash right now?",
-    "What happens to my retirement plan if inflation never really goes back to 2%?",
-    "Assuming today’s rates, what’s the smartest thing to do with excess cash?",
-    "If I stop increasing my retirement contributions now, what does that cost me later?",
-    "Which matters more right now: paying down debt or staying liquid?",
-    "How exposed am I to a recession if it hits next year?",
-    "What assumptions in my retirement plan matter most if they’re wrong?",
-    "Given everything going on right now, am I actually doing okay?"
-  ];
-
-  // Rotate placeholder every 4 seconds for all users
+  // Rotate placeholder every 4 seconds.
   useEffect(() => {
     const interval = setInterval(() => {
-      if (isDemo) {
-        setPlaceholderIndex((prev) => (prev + 1) % demoPlaceholders.length);
-      } else {
-        setPlaceholderIndex((prev) => (prev + 1) % userPlaceholders.length);
-      }
+      setPlaceholderIndex((prev) => (prev + 1) % PLACEHOLDER_QUESTIONS.length);
     }, 4000);
 
     return () => clearInterval(interval);
-  }, [isDemo, demoPlaceholders.length, userPlaceholders.length]);
+  }, []);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -104,24 +81,9 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
         console.error('Error fetching user tier:', error);
       }
     };
-    
+
     fetchUserTier();
   }, [API_URL]);
-
-  // Auto-submit initial question when coming from hero click (demo only)
-  const initialQuestionRef = React.useRef<string | null>(null);
-  const initialQuestionSubmitted = React.useRef(false);
-  useEffect(() => {
-    if (!isDemo || !propSessionId || !propInitialQuestion?.trim() || initialQuestionSubmitted.current) return;
-    initialQuestionSubmitted.current = true;
-    initialQuestionRef.current = propInitialQuestion.trim();
-    setQuestion(propInitialQuestion.trim());
-    const timer = setTimeout(() => {
-      const form = document.querySelector<HTMLFormElement>('#finance-qa-form');
-      form?.requestSubmit();
-    }, 50);
-    return () => clearTimeout(timer);
-  }, [isDemo, propSessionId, propInitialQuestion]);
 
   // Update question and answer when selectedPrompt changes
   useEffect(() => {
@@ -145,9 +107,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
 
   const askQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Use initial question from hero click, then typed question, then placeholder
-    const questionToAsk = initialQuestionRef.current || question.trim() || (isDemo ? demoPlaceholders[placeholderIndex] : userPlaceholders[placeholderIndex]);
-    if (initialQuestionRef.current) initialQuestionRef.current = null;
+    const questionToAsk = question.trim() || PLACEHOLDER_QUESTIONS[placeholderIndex];
 
     setLoading(true);
     setProgressMessage(null);
@@ -160,44 +120,27 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     setConversationId(null);
     setActiveView('answer');
     setSelectedSourceKey(null);
-    
+
     // Track question submission
     trackEvent('question_asked', {
       question_length: questionToAsk.length,
-      user_tier: userTier,
-      is_demo: isDemo
+      user_tier: userTier
     });
-    
+
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      
-      // Add authentication header for non-demo users
-      if (!isDemo) {
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        } else {
-          console.log('No auth token found for ask request');
-        }
-      }
-      
-      // Add session ID for demo mode
-      if (propSessionId) {
-        headers['x-session-id'] = propSessionId;
-      }
-      
-      // Use display-real for both demo and production so Show the Math evidence is persisted.
-      const endpoint = '/ask/display-real';
-      const requestBody = {
-        question: questionToAsk,
-        isDemo: isDemo,
-        sessionId: propSessionId
-      };
 
-      // Request SSE streaming for production (Ask Linc pipeline)
-      if (!isDemo) {
-        headers['Accept'] = 'text/event-stream';
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      } else {
+        console.log('No auth token found for ask request');
       }
+
+      const endpoint = '/ask/display-real';
+      const requestBody = { question: questionToAsk };
+
+      headers['Accept'] = 'text/event-stream';
 
       const res = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
@@ -247,14 +190,14 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
                   if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
                   if (data.conversationId) setConversationId(data.conversationId);
                   if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
-                  trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier, is_demo: isDemo });
+                  trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier });
                 } else {
                   setError('No answer returned.');
-                  trackEvent('question_error', { error: 'No answer returned', user_tier: userTier, is_demo: isDemo });
+                  trackEvent('question_error', { error: 'No answer returned', user_tier: userTier });
                 }
               } else if (currentEvent === 'error' && data.error) {
                 setError(data.error);
-                trackEvent('question_error', { error: data.error, user_tier: userTier, is_demo: isDemo });
+                trackEvent('question_error', { error: data.error, user_tier: userTier });
               }
             } catch (err) {
               console.error('SSE parse error:', err);
@@ -278,7 +221,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
           buffer.split('\n').forEach(processLine);
         }
       } else {
-        // JSON response (demo or non-streaming backend)
+        // JSON response from a non-streaming backend configuration.
         const data = await res.json();
 
         if (!res.ok && data.error) {
@@ -294,21 +237,20 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
           if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
           if (data.conversationId) setConversationId(data.conversationId);
           if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
-          trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier, is_demo: isDemo });
+          trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier });
         } else {
           setError('No answer returned.');
-          trackEvent('question_error', { error: 'No answer returned', user_tier: userTier, is_demo: isDemo });
+          trackEvent('question_error', { error: 'No answer returned', user_tier: userTier });
         }
       }
     } catch (error) {
       setError('Error contacting backend.');
       console.error('Error:', error);
-      
+
       // Track error
       trackEvent('question_error', {
         error: error instanceof Error ? error.message : 'Unknown error',
-        user_tier: userTier,
-        is_demo: isDemo
+        user_tier: userTier
       });
     } finally {
       setLoading(false);
@@ -323,16 +265,11 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     setShowTheMathError(null);
     try {
       const headers: Record<string, string> = {};
-      if (!isDemo) {
-        const token = localStorage.getItem('auth_token');
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-      }
-      if (isDemo && propSessionId) headers['x-session-id'] = propSessionId;
-      const endpoint = isDemo
-        ? `/demo/conversations/${conversationId}/show-the-math`
-        : `/conversations/${conversationId}/show-the-math`;
+      const token = localStorage.getItem('auth_token');
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const endpoint = `/conversations/${conversationId}/show-the-math`;
       const res = await fetch(`${API_URL}${endpoint}`, { headers });
-      if (res.status === 401 && !isDemo) {
+      if (res.status === 401) {
         localStorage.removeItem('auth_token');
         window.location.href = '/login?message=' + encodeURIComponent('Your session has expired. Please log in again.');
         return;
@@ -349,7 +286,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     } finally {
       setLoadingShowTheMath(false);
     }
-  }, [showTheMathData, loadingShowTheMath, conversationId, isDemo, propSessionId, API_URL]);
+  }, [showTheMathData, loadingShowTheMath, conversationId, API_URL]);
 
   const showTheMathViewData: Partial<ShowTheMathData> | null = showTheMathData;
 
@@ -373,7 +310,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
             onChange={event => setQuestion(event.target.value)}
             className="min-h-24 w-full resize-none bg-transparent text-xl font-medium leading-8 text-[#102319] outline-none placeholder:text-[#7a857e] sm:text-2xl"
             disabled={loading}
-            placeholder={isDemo ? demoPlaceholders[placeholderIndex] : userPlaceholders[placeholderIndex]}
+            placeholder={PLACEHOLDER_QUESTIONS[placeholderIndex]}
           />
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-[#102319]/10 pt-4">
             <p className="text-xs text-[#5e6b63]">Uses connected accounts, calculations, and current context when available.</p>
@@ -412,7 +349,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
                 <div className="decision-answer prose prose-slate max-w-none text-[#48574e] prose-headings:text-[#102319] prose-a:text-[#397052]">{structuredResponse ? <MarkdownRenderer>{structuredResponse.summary}</MarkdownRenderer> : streamingAnswer ? <><MarkdownRenderer>{streamingAnswer}</MarkdownRenderer><span className="inline-block h-4 w-1.5 animate-pulse bg-[#102319]" /></> : answer ? <MarkdownRenderer>{answer}</MarkdownRenderer> : <div className="space-y-3" aria-label="Answer loading"><div className="h-4 w-11/12 animate-pulse rounded bg-[#dfe6d4]" /><div className="h-4 w-4/5 animate-pulse rounded bg-[#dfe6d4]" /><div className="h-4 w-2/3 animate-pulse rounded bg-[#dfe6d4]" /></div>}</div>
                 {structuredResponse?.insights && structuredResponse.insights.length > 0 && <section className="rounded-2xl border border-[#102319]/10 p-5"><h3 className="mb-3 font-semibold text-[#102319]">Key assumptions and decision factors</h3><ul className="space-y-3 text-sm leading-6 text-[#48675e]">{structuredResponse.insights.map((insight, index) => <li key={index} className="flex gap-3"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#49725a]" />{insight}</li>)}</ul></section>}
                 {structuredResponse?.suggested_actions && structuredResponse.suggested_actions.length > 0 && <section><h3 className="mb-3 font-semibold text-[#102319]">Ways to move forward</h3><div className="grid gap-3 sm:grid-cols-2">{structuredResponse.suggested_actions.map((action, index) => <div key={index} className="rounded-2xl bg-[#e2edff] p-4 text-sm leading-6 text-[#254b75]">{action}</div>)}</div><p className="mt-3 text-xs text-[#66736b]">Interactive scenario comparison is not yet available in the current product API.</p></section>}
-                {conversationId && answer && !loading && <Feedback conversationId={conversationId} isDemo={isDemo} onFeedbackSubmitted={(score) => trackEvent('feedback_submitted', { score, is_demo: isDemo, user_tier: userTier })} />}
+                {conversationId && answer && !loading && <Feedback conversationId={conversationId} onFeedbackSubmitted={(score) => trackEvent('feedback_submitted', { score, user_tier: userTier })} />}
               </div>
             )}
 

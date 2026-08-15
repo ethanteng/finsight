@@ -1,72 +1,16 @@
-# 📚 Documentation
+# Ask Linc documentation
 
-This folder contains comprehensive documentation for the Finsight platform.
+The root [README](../README.md) and [CLAUDE.md](../CLAUDE.md) describe the application architecture, setup, and development commands.
 
-## 📋 **Core Documentation**
+## Core references
 
-### **PROJECT_SUMMARY.md**
-Complete overview of the Finsight platform including architecture, features, and technical implementation details. **This is the main context file for new chats.**
+- [Development workflow](DEVELOPMENT_WORKFLOW.md)
+- [Testing](TESTING.md)
+- [Financial truth contract](FINANCIAL_TRUTH_CONTRACT.md)
+- [Deterministic LLM calculations](DETERMINISTIC_LLM_CALCULATIONS.md)
+- [User guide](USER_GUIDE.md)
+- [Application sitemap](SITEMAP.md)
 
-### **TESTING.md**
-Comprehensive testing documentation including unit tests, integration tests, security validation, database schema management, and best practices.
+Feature, integration, security, monitoring, and deployment references are grouped in their corresponding subdirectories. Files under `archived/` are historical and should not be treated as descriptions of current behavior.
 
-### **DEVELOPMENT_WORKFLOW.md**
-Complete development workflow guide including feature development, database schema management, testing procedures, and deployment best practices.
-
-## 🔧 **Technical Documentation**
-
-### **FEATURES.md**
-Complete documentation of platform features including:
-- Tier-based access control system
-- Enhanced market context system
-- Implementation details and configuration
-- API endpoints and usage examples
-
-### **features/SHOW_THE_MATH_TRANSPARENCY.md**
-Documentation for the Show the Math transparency feature:
-- Full LLM pipeline data exposure (Claude, Gemini)
-- Live feed during response generation
-- Database context (7 tables)
-- API endpoints and storage
-
-### **RAG_SYSTEM.md**
-Comprehensive documentation of the Retrieval-Augmented Generation system including:
-- Architecture and components
-- Tier-based access control
-- Data source integration
-- Performance optimization
-- Testing and monitoring
-
-### **features/DETERMINISM_IN_ANALYTICS_AND_LLM_CONTEXT.md**
-Documentation of determinism in analytics and LLM context:
-- Retirement analysis methodology (rolling historical, not Monte Carlo)
-- Deterministic vs non-deterministic components
-- Data passed to Claude, Gemini, and OpenAI
-- Code references and recommendations
-
-## 📖 **How to Use**
-
-- **For New Chats**: Start with `PROJECT_SUMMARY.md` for complete context
-- **For Testing**: Refer to `TESTING.md` for comprehensive testing information
-- **For Development**: Use `DEVELOPMENT_WORKFLOW.md` for development best practices
-- **For Features**: Check `FEATURES.md` for tier system and market context details
-- **For RAG System**: Review `RAG_SYSTEM.md` for RAG implementation details
-
-## 🔄 **Maintenance**
-
-- Update documentation when adding new features
-- Keep test documentation in sync with test changes
-- Maintain architecture diagrams and system descriptions
-- Document any breaking changes or migrations
-- Follow schema management best practices to prevent drift
-
-## 📁 **Archived Documentation**
-
-The following files have been consolidated and are kept for reference:
-- `TESTING_IMPLEMENTATION_PLAN.md` - Completed testing implementation plan
-- `PHASE_3_COMPLETION_SUMMARY.md` - Completed testing phase summary
-- `RAG_AND_INTELLIGENT_PROFILE_SYSTEM.md` - Merged into RAG_SYSTEM.md
-- `RAG_AND_INTELLIGENT_PROFILE_VALIDATION_REPORT.md` - Merged into RAG_SYSTEM.md
-- `RAG_VS_INDIVIDUAL_SOURCES.md` - Merged into RAG_SYSTEM.md
-- `TIER_TESTING.md` - Merged into TESTING.md
-- `LOCALHOST_DEPLOYMENT.md` - Merged into DEVELOPMENT_WORKFLOW.md 
+When application behavior changes, update the closest current reference and remove obsolete instructions or links.

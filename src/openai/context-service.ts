@@ -4,20 +4,14 @@ import { Account, Transaction, UnifiedFinancialData, HomeData } from '../service
 import { TokenStatus } from '../services/token-validation-service';
 import { QuestionNeeds, FinancialContextSnapshot, TransactionSummaryItem, InvestmentSnapshot } from './types';
 import { buildAccountSummaries } from './account-summary';
-import type { DemoAccount, DemoTransaction } from '../demo-data';
 import { buildCanonicalCashFlowAnalyses } from './cash-flow-context';
 import { resolveRetirementInputs, retirementPortfolioFingerprint } from './retirement-inputs';
-import { classifyAccount, getAccountBalance } from '../services/account-classifier';
-import { computeFinancialOverview } from '../domain/financial-truth';
-import { buildTransactionSummary } from '../services/transaction-summary-service';
 
 interface GatherContextArgs {
   userId?: string;
-  isDemo: boolean;
   question: string;
   questionNeeds: QuestionNeeds;
   tier: UserTier;
-  demoProfile?: string;
   /** Optional callback for progress updates (e.g. for SSE streaming) */
   onProgress?: (message: string) => void;
 }
@@ -56,11 +50,9 @@ const DEFAULT_METADATA: UnifiedFinancialData['metadata'] = {
 export async function gatherContextSnapshot(args: GatherContextArgs): Promise<FinancialContextSnapshot> {
   const {
     userId,
-    isDemo,
     question,
     questionNeeds,
     tier,
-    demoProfile,
     onProgress
   } = args;
 
@@ -73,26 +65,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   let transactionSummary: FinancialContextSnapshot['transactionSummary'];
   let accountDisplayBalances: Record<string, unknown> = {};
 
-  if (isDemo) {
-    const { demoData } = await import('../demo-data');
-    accounts = (demoData.accounts || []).map(mapDemoAccount);
-    bankingTransactions = (demoData.transactions || []).map(mapDemoTransaction);
-    investmentsSnapshot = deriveDemoInvestmentSnapshot(demoData.investments);
-    metadata = {
-      ...DEFAULT_METADATA,
-      lastUpdated: new Date(),
-      dataSources: {
-        plaid: 'demo',
-        snaptrade: 'demo'
-      }
-    };
-    if (questionNeeds.needsHomeValue) {
-      homeValueSummary = 'Home value data is not available in demo mode.';
-    }
-    const demoCanonical = buildDemoCanonicalContext(accounts, bankingTransactions, investmentsSnapshot);
-    financialSummary = demoCanonical.financialSummary;
-    transactionSummary = demoCanonical.transactionSummary;
-  } else if (userId) {
+  if (userId) {
     // Fetch the canonical snapshot with only the large JSON columns this
     // question needs. Aggregate financial and cash-flow truth is always loaded.
     const { SummaryCacheService } = await import('../services/summary-cache-service');
@@ -114,15 +87,15 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
         securitiesLength: Array.isArray(snapshot.securities) ? snapshot.securities.length : 'N/A',
         hasInvestmentPortfolio: !!snapshot.investmentPortfolio
       });
-      
+
       // ✅ CRITICAL: snapshot.accounts is stored as JSON in the database
       // When retrieved, Prisma parses it, but we need to ensure it's an array
       const rawAccounts = snapshot.accounts as any;
       accounts = Array.isArray(rawAccounts) ? rawAccounts as Account[] : [];
-      
+
       // Log account count and check for duplicates in snapshot
       console.log(`📊 gatherContextSnapshot: Retrieved ${accounts.length} accounts from snapshot for user ${userId}`);
-      
+
       // Check for duplicates in the snapshot itself (before defensive deduplication)
       const snapshotAccountIds = new Set<string>();
       const snapshotDuplicates: string[] = [];
@@ -143,7 +116,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       } else {
         console.log(`✅ gatherContextSnapshot: Snapshot contains ${accounts.length} unique accounts (no duplicates in JSON)`);
       }
-      
+
       // ✅ CRITICAL: snapshot.transactions is stored as JSON in the database
       // When retrieved, Prisma parses it, but we need to ensure it's an array
       const rawTransactions = snapshot.transactions as any;
@@ -155,19 +128,19 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       accountDisplayBalances = snapshotMeta.accountDisplayBalances && typeof snapshotMeta.accountDisplayBalances === 'object'
         ? snapshotMeta.accountDisplayBalances
         : {};
-      
+
       if (questionNeeds.needsTransactionDetails && !Array.isArray(rawTransactions)) {
         console.warn(`⚠️ gatherContextSnapshot: Snapshot transactions is not an array (type: ${typeof rawTransactions}), defaulting to empty array`);
       } else if (Array.isArray(rawTransactions)) {
         console.log(`📊 gatherContextSnapshot: Retrieved ${bankingTransactions.length} transactions from snapshot for user ${userId}`);
       }
-      
+
       metadata = {
         ...DEFAULT_METADATA,
         lastUpdated: new Date(snapshot.computedAt),
         persistedAsOf: snapshot.asOf ? new Date(snapshot.asOf) : null,
       };
-      
+
       // ✅ Set financialSummary for prompt builder
       financialSummary = {
         computedAt: snapshot.computedAt,
@@ -185,7 +158,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       if (questionNeeds.needsInvestments || questionNeeds.needsRetirement) {
         const holdings = (snapshot.holdings as any[] || []);
         const securities = (snapshot.securities as any[] || []);
-        
+
         // Debug logging for retirement analysis
         if (questionNeeds.needsRetirement) {
           console.log('📊 Loading investments for retirement analysis:', {
@@ -199,7 +172,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
             investmentPortfolioTotalValue: (snapshot.investmentPortfolio as any)?.totalValue
           });
         }
-        
+
         investmentsSnapshot = {
           totalValue: (snapshot.investmentPortfolio as any).totalValue || 0,
           holdingCount: (snapshot.investmentPortfolio as any).holdingCount || 0,
@@ -213,7 +186,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
           holdings: holdings,
           securities: securities,
         };
-        
+
         if (questionNeeds.needsRetirement) {
           console.log('✅ Investments snapshot created:', {
             totalValue: investmentsSnapshot.totalValue,
@@ -279,7 +252,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       } catch (error) {
         console.warn('ContextService: Failed to get token health, using defaults:', error);
       }
-      
+
       metadata = {
         ...DEFAULT_METADATA,
         tokenHealth,
@@ -302,7 +275,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   // IMPORTANT: Use the same deduplication key logic as SummaryCacheService to ensure consistency
   const accountIdMap = new Map<string, Account>();
   const duplicateAccountIds: string[] = [];
-  
+
   accounts.forEach(account => {
     // ✅ Use the same key logic as SummaryCacheService: account_id || plaidAccountId || persistentAccountId
     // Do NOT use account.id (database ID) as it's unique per record and won't catch duplicates
@@ -325,22 +298,22 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       console.warn(`⚠️ gatherContextSnapshot: Account without account_id/plaidAccountId: ${account.name}, skipping`);
     }
   });
-  
+
   const deduplicatedAccounts = Array.from(accountIdMap.values());
-  
+
   if (duplicateAccountIds.length > 0) {
     console.error(`❌ gatherContextSnapshot: Snapshot returned ${duplicateAccountIds.length} duplicate accounts! This indicates corrupted database records or a bug in snapshot deduplication.`);
     console.error(`   Duplicate account_ids: ${duplicateAccountIds.join(', ')}`);
   }
-  
+
   if (accounts.length !== deduplicatedAccounts.length) {
     console.warn(`⚠️ gatherContextSnapshot: Deduplicated ${accounts.length} accounts → ${deduplicatedAccounts.length} unique accounts (removed ${accounts.length - deduplicatedAccounts.length} duplicates)`);
   }
-  
+
   // Filter out pending transactions and deduplicate pending/settled pairs
   // This prevents inflated expense/income calculations in GPT context
   const filteredTransactions = deduplicateTransactions(bankingTransactions);
-  
+
   const sortedTransactions = filteredTransactions
     .slice()
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -368,7 +341,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     monthlyIncomeOverride?: number | null;
     monthlyExpenseOverride?: number | null;
   }> => {
-    if (!userId || isDemo) return {};
+    if (!userId) return {};
     try {
       const { getPrismaClient } = await import('../prisma-client');
       const prisma = getPrismaClient();
@@ -401,14 +374,13 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       tier,
       tierContextAccounts,
       tierContextTransactions,
-      isDemo,
       { includeMarketContext: false }
     ),
-    maybeFetchSearchContext(question, questionNeeds, tier, isDemo),
-    maybeFetchMarketContext(questionNeeds, tier, isDemo),
+    maybeFetchSearchContext(question, questionNeeds, tier),
+    maybeFetchMarketContext(questionNeeds, tier),
     fetchUserOverrides(),
     questionNeeds.needsUserProfile
-      ? loadUserProfile({ userId, isDemo, demoProfile })
+      ? loadUserProfile(userId)
       : Promise.resolve(undefined)
   ]);
 
@@ -435,7 +407,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
   let retirementAnalysis: FinancialContextSnapshot['retirementAnalysis'] | undefined;
   let retirementAnalysisNeedsInfo: FinancialContextSnapshot['retirementAnalysisNeedsInfo'] | undefined;
 
-  if (userId && !isDemo && questionNeeds.needsRetirement && investmentsSnapshot?.holdings && investmentsSnapshot.holdings.length > 0) {
+  if (userId && questionNeeds.needsRetirement && investmentsSnapshot?.holdings && investmentsSnapshot.holdings.length > 0) {
     try {
       onProgress?.('Building your retirement snapshot');
       const result = await fetchOrCreateRetirementAnalysis({
@@ -460,10 +432,10 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
           'Retirement analysis could not be completed because the portfolio analysis service failed. Ask the user to try again later instead of estimating from aggregates alone.',
       };
     }
-  } else if (userId && !isDemo && questionNeeds.needsRetirement) {
+  } else if (userId && questionNeeds.needsRetirement) {
     // Log why retirement analysis didn't trigger
     console.log('⚠️ Retirement analysis NOT triggered:', {
-      reason: !investmentsSnapshot?.holdings ? 'No investment holdings' : 
+      reason: !investmentsSnapshot?.holdings ? 'No investment holdings' :
               investmentsSnapshot.holdings.length === 0 ? 'Empty holdings array' :
               'Unknown reason',
       hasInvestmentsSnapshot: !!investmentsSnapshot,
@@ -526,7 +498,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
   // Parse retirement parameters from question
   const { parseRetirementQuestion } = await import('../retirement-analytics/retirement-question-parser');
   const questionParams = parseRetirementQuestion(question);
-  
+
   console.log('📋 Retirement question parser result:', {
     hasRetirementIntent: questionParams.hasRetirementIntent,
     currentAge: questionParams.currentAge,
@@ -734,7 +706,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : 'No stack trace';
-    
+
     console.error('❌ Error creating retirement analysis:', {
       error: errorMessage,
       stack: errorStack,
@@ -742,7 +714,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       holdingsCount: holdings.length,
       securitiesCount: securities.length
     });
-    
+
     // Log specific error details for common failure modes
     if (errorMessage.includes('Failed to fetch required asset basket data')) {
       console.error('💡 Retirement analysis failed due to missing asset basket data (VTI/VXUS/AGG). ' +
@@ -751,7 +723,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       console.error('💡 Retirement analysis failed due to empty price data from Tiingo API. ' +
         'Check Tiingo API status and rate limits.');
     }
-    
+
     return {
       needsInfo: {
         missingParams: [],
@@ -767,12 +739,12 @@ async function fetchOrCreateRetirementAnalysis(args: {
 
 /**
  * Deduplicate transactions by removing pending versions when settled versions exist.
- * 
+ *
  * Plaid Transaction Behavior:
  * - pending: true → Transaction is pending (authorization hold, not yet settled)
  * - pending: false → Posted/settled transaction
  * - pending_transaction_id: Present on a posted transaction, points to transaction_id of earlier pending version
- * 
+ *
  * Strategy:
  * 1. Always filter out pending transactions (pending: true) from GPT context
  * 2. If a settled transaction has pending_transaction_id, it replaces the pending version
@@ -784,7 +756,7 @@ function deduplicateTransactions(transactions: Transaction[]): Transaction[] {
     console.warn('⚠️ deduplicateTransactions: Received invalid transactions input, returning empty array');
     return [];
   }
-  
+
   if (transactions.length === 0) {
     return transactions;
   }
@@ -792,18 +764,18 @@ function deduplicateTransactions(transactions: Transaction[]): Transaction[] {
   // Build a map of transaction_id -> transaction for quick lookup
   const txById = new Map<string, Transaction>();
   const pendingTxIds = new Set<string>();
-  
+
   // First pass: identify all transactions and mark pending ones
   for (const transaction of transactions) {
-    const txId = transaction.transaction_id || 
-                 (transaction as any).id || 
+    const txId = transaction.transaction_id ||
+                 (transaction as any).id ||
                  (transaction as any).plaidTransactionId;
-    
+
     if (txId) {
       txById.set(txId, transaction);
       // Plaid uses boolean pending field: true = pending, false = settled
       // Also handle edge cases where it might be stored as string
-      const isPending = transaction.pending === true || 
+      const isPending = transaction.pending === true ||
                         (transaction as any).pending === true ||
                         String((transaction as any).pending || '').toLowerCase() === 'true';
       if (isPending) {
@@ -817,22 +789,22 @@ function deduplicateTransactions(transactions: Transaction[]): Transaction[] {
 
   // Second pass: process each transaction according to Plaid's linking pattern
   for (const transaction of transactions) {
-    const txId = transaction.transaction_id || 
-                 (transaction as any).id || 
+    const txId = transaction.transaction_id ||
+                 (transaction as any).id ||
                  (transaction as any).plaidTransactionId;
-    
+
     if (!txId) {
       // Skip transactions without IDs (shouldn't happen, but be safe)
       continue;
     }
 
     // Check pending status (Plaid uses boolean: true = pending, false = settled)
-    const isPending = transaction.pending === true || 
+    const isPending = transaction.pending === true ||
                       (transaction as any).pending === true ||
                       String((transaction as any).pending || '').toLowerCase() === 'true';
-    
+
     // Get pending_transaction_id if present (on settled transactions, points to earlier pending version)
-    const pendingTxId = (transaction as any).pendingTransactionId || 
+    const pendingTxId = (transaction as any).pendingTransactionId ||
                         (transaction as any).pending_transaction_id;
 
     if (isPending) {
@@ -856,10 +828,10 @@ function deduplicateTransactions(transactions: Transaction[]): Transaction[] {
 
   // Build the final deduplicated array
   const deduplicated = transactions.filter(tx => {
-    const txId = tx.transaction_id || 
-                 (tx as any).id || 
+    const txId = tx.transaction_id ||
+                 (tx as any).id ||
                  (tx as any).plaidTransactionId;
-    
+
     if (!txId) {
       return false; // Skip transactions without IDs
     }
@@ -876,21 +848,21 @@ function deduplicateTransactions(transactions: Transaction[]): Transaction[] {
 
     // Safety check: filter out any remaining pending transactions
     // Check multiple possible field names and be strict about pending status
-    const isPending = tx.pending === true || 
+    const isPending = tx.pending === true ||
                       (tx as any).pending === true ||
                       (tx as any).pending === 'true' ||
                       String((tx as any).pending || '').toLowerCase() === 'true';
-    
+
     if (isPending) {
       return false; // Explicitly skip pending transactions
     }
-    
+
     return true;
   });
 
   if (transactions.length !== deduplicated.length) {
     const pendingCount = transactions.filter(tx => {
-      const isPending = tx.pending === true || 
+      const isPending = tx.pending === true ||
                         (tx as any).pending === true ||
                         (tx as any).pending === 'true' ||
                         String((tx as any).pending || '').toLowerCase() === 'true';
@@ -914,7 +886,7 @@ function buildTransactionSummaries(transactions: Transaction[], accountMap?: Map
     const categoryLabel = deriveCategory(transaction);
 
     // Extract merchant name from transaction
-    const merchantName = (transaction as any).merchantName || 
+    const merchantName = (transaction as any).merchantName ||
                         (transaction.enriched_data as any)?.merchant_name ||
                         (transaction.enriched_data as any)?.brand_name;
 
@@ -947,17 +919,17 @@ function deriveTransactionTypeLabel(transaction: Transaction): string {
   // ✅ CRITICAL: Prioritize aiCategory first (this is the source of truth from our categorization service)
   // aiCategory stores the transaction type: income, expense, transfer_in, transfer_out, buy, sell, etc.
   // This ensures we use the AI-categorized type, which respects manual corrections and proper categorization
-  
+
   // Check for manual corrections first (highest priority)
   const isManualCorrection = transaction.aiCategoryReason?.toLowerCase().includes('manually corrected') ||
                              transaction.aiCategoryReason?.toLowerCase().includes('corrected by user');
-  
+
   // Priority order:
   // 1. aiCategory (if manual correction, or if available)
   // 2. transaction_type (fallback, may be set from aiCategory when loading from DB)
   // 3. undefined (will result in (OTHER))
   const rawType = transaction.aiCategory || (transaction as any).transaction_type;
-  
+
   const normalized = typeof rawType === 'string' ? rawType.toLowerCase().trim() : '';
 
   switch (normalized) {
@@ -997,7 +969,7 @@ function deriveCategory(transaction: Transaction): string | undefined {
       return validCategories.join(' > ');
     }
   }
-  
+
   // ✅ CRITICAL FIX: Handle category as string (comma-separated from database)
   // When loading from database, category is stored as "FOOD_AND_DRINK, FOOD_AND_DRINK_COFFEE"
   // Note: Transaction interface defines category as string[], but database stores it as string
@@ -1009,14 +981,14 @@ function deriveCategory(transaction: Transaction): string | undefined {
       return validCategories.join(' > ');
     }
   }
-  
+
   // ✅ Check personal_finance_category directly on transaction
   if ((transaction as any).personal_finance_category?.primary) {
     const primary = (transaction as any).personal_finance_category.primary;
     const detailed = (transaction as any).personal_finance_category.detailed;
     return detailed ? `${primary} > ${detailed}` : primary;
   }
-  
+
   // ✅ CRITICAL FIX: Check personal_finance_category in enriched_data (where it's stored from database)
   if (transaction.enriched_data && typeof transaction.enriched_data === 'object') {
     const enriched = transaction.enriched_data as any;
@@ -1025,7 +997,7 @@ function deriveCategory(transaction: Transaction): string | undefined {
       const detailed = enriched.personal_finance_category.detailed;
       return detailed ? `${primary} > ${detailed}` : primary;
     }
-    
+
     // ✅ Also check category array in enriched_data
     if (Array.isArray(enriched.category) && enriched.category.length > 0) {
       const validCategories = enriched.category.filter((cat: any) => cat && String(cat).trim() !== '' && cat !== '0');
@@ -1033,7 +1005,7 @@ function deriveCategory(transaction: Transaction): string | undefined {
         return validCategories.join(' > ');
       }
     }
-    
+
     // ✅ Also check category as string in enriched_data
     if (typeof enriched.category === 'string' && enriched.category.trim() !== '') {
       const categoryString = enriched.category as string;
@@ -1044,12 +1016,12 @@ function deriveCategory(transaction: Transaction): string | undefined {
       }
     }
   }
-  
+
   // ✅ FALLBACK: If no category found, try to infer from transaction name or merchant
   // This helps GPT categorize transactions even when Plaid didn't provide a category
   const transactionName = (transaction.name || '').toLowerCase();
   const merchantName = ((transaction as any).merchant_name || (transaction as any).merchantName || '').toLowerCase();
-  
+
   // Common patterns to infer category
   if (transactionName.includes('rent') || transactionName.includes('apartment') || transactionName.includes('housing')) {
     return 'RENT_AND_UTILITIES';
@@ -1070,129 +1042,8 @@ function deriveCategory(transaction: Transaction): string | undefined {
     // If we have a merchant name but no category, use the merchant name as a hint
     return `MERCHANT: ${merchantName}`;
   }
-  
+
   return undefined;
-}
-
-function buildDemoCanonicalContext(
-  accounts: Account[],
-  bankingTransactions: Transaction[],
-  investmentsSnapshot?: InvestmentSnapshot,
-): {
-  financialSummary: NonNullable<FinancialContextSnapshot['financialSummary']>;
-  transactionSummary: FinancialContextSnapshot['transactionSummary'];
-} {
-  const reportingCurrency = 'USD';
-  const computedAt = new Date();
-  let totalCash = 0;
-  let totalDebt = 0;
-
-  accounts.forEach((account) => {
-    const classified = classifyAccount(account);
-    if (classified.isInvestment) return;
-    const balance = getAccountBalance(account);
-    if (classified.isDebt) totalDebt += Math.abs(balance);
-    else if (classified.isCash) {
-      totalCash += Math.max(0, balance);
-      if (balance < 0) totalDebt += Math.abs(balance);
-    }
-  });
-
-  const totalInvestments = investmentsSnapshot?.totalValue ?? 0;
-  const financialOverview = computeFinancialOverview({
-    reportingCurrency,
-    totalCash,
-    totalInvestments,
-    homeValue: null,
-    totalDebt,
-  });
-  const txWindowStart = new Date(computedAt.getTime() - 365 * 24 * 60 * 60 * 1000);
-  const { transactionsSummary } = buildTransactionSummary(
-    bankingTransactions,
-    txWindowStart,
-    computedAt,
-    reportingCurrency,
-  );
-
-  return {
-    financialSummary: {
-      computedAt,
-      asOf: computedAt,
-      status: 'current',
-      reportingCurrency,
-      financialOverview,
-      investmentPortfolio: totalInvestments > 0
-        ? {
-            totalValue: totalInvestments,
-            holdingCount: investmentsSnapshot?.holdingCount ?? 0,
-            securityCount: investmentsSnapshot?.holdingCount ?? 0,
-            assetAllocation: [],
-          }
-        : undefined,
-    },
-    transactionSummary: transactionsSummary,
-  };
-}
-
-function mapDemoAccount(account: DemoAccount): Account {
-  const accountId = account.id;
-  return {
-    account_id: accountId,
-    id: accountId,
-    name: account.name,
-    type: account.type,
-    subtype: account.type,
-    balance: {
-      current: account.balance,
-      available: account.type === 'checking' || account.type === 'savings' ? account.balance : undefined,
-      iso_currency_code: 'USD'
-    },
-    institution: account.institution,
-    source: 'plaid'
-  } as Account;
-}
-
-function mapDemoTransaction(tx: DemoTransaction): Transaction {
-  const transactionType = tx.amount >= 0 ? 'income' : 'expense';
-  return {
-    transaction_id: tx.id,
-    account_id: tx.accountId,
-    amount: tx.amount,
-    date: tx.date,
-    name: tx.description,
-    category: tx.category ? [tx.category] : [],
-    pending: false,
-    iso_currency_code: 'USD',
-    transaction_type: transactionType
-  } as Transaction;
-}
-
-function deriveDemoInvestmentSnapshot(rawInvestments: Record<string, Array<{ name: string; value: number }>> | undefined): InvestmentSnapshot | undefined {
-  if (!rawInvestments) {
-    return undefined;
-  }
-
-  const lines: string[] = [];
-  let totalValue = 0;
-  let holdingCount = 0;
-
-  Object.entries(rawInvestments).forEach(([accountId, holdings]) => {
-    holdings.forEach(holding => {
-      holdingCount += 1;
-      totalValue += holding.value || 0;
-      lines.push(`- ${accountId} • ${holding.name}: $${(holding.value || 0).toFixed(2)}`);
-    });
-  });
-
-  if (holdingCount === 0) {
-    return undefined;
-  }
-
-  return {
-    totalValue,
-    holdingCount,
-    summaryLines: lines.slice(0, 10)
-  };
 }
 
 function deriveInvestmentSnapshot(data: any): InvestmentSnapshot | undefined {
@@ -1261,15 +1112,14 @@ function buildHomeValueSummary(homeData: HomeData): string {
 async function maybeFetchSearchContext(
   question: string,
   questionNeeds: QuestionNeeds,
-  tier: UserTier,
-  isDemo: boolean
+  tier: UserTier
 ): Promise<string | undefined> {
   if (!questionNeeds.needsSearchContext) {
     return undefined;
   }
 
   try {
-    const result = await dataOrchestrator.getSearchContext(question, tier, isDemo);
+    const result = await dataOrchestrator.getSearchContext(question, tier);
     return result?.summary;
   } catch (error) {
     console.warn('Search context fetch failed', error);
@@ -1279,8 +1129,7 @@ async function maybeFetchSearchContext(
 
 async function maybeFetchMarketContext(
   questionNeeds: QuestionNeeds,
-  tier: UserTier,
-  isDemo: boolean
+  tier: UserTier
 ): Promise<string | undefined> {
   if (!questionNeeds.needsMarketContext) {
     return undefined;
@@ -1293,7 +1142,7 @@ async function maybeFetchMarketContext(
   } catch (primaryError) {
     console.warn('Market news context failed, attempting orchestrator fallback', primaryError);
     try {
-      return await dataOrchestrator.getMarketContextSummary(tier, isDemo);
+      return await dataOrchestrator.getMarketContextSummary(tier);
     } catch (fallbackError) {
       console.warn('Market context fallback failed', fallbackError);
       return undefined;
@@ -1301,18 +1150,8 @@ async function maybeFetchMarketContext(
   }
 }
 
-async function loadUserProfile(params: {
-  userId?: string;
-  isDemo: boolean;
-  demoProfile?: string;
-}): Promise<string | undefined> {
-  const { userId, isDemo, demoProfile } = params;
-
-  if (isDemo && demoProfile) {
-    return demoProfile;
-  }
-
-  if (!userId || isDemo) {
+async function loadUserProfile(userId?: string): Promise<string | undefined> {
+  if (!userId) {
     return undefined;
   }
 
@@ -1342,35 +1181,35 @@ function deduplicateLiabilitySections(profileText: string): string {
   // Pattern: "LIABILITIES INFORMATION:" followed by text (including newlines) until next section marker or end
   const liabilityPattern = /LIABILITIES INFORMATION:[\s\S]*?(?=\n\n(?:# |[A-Z][A-Z\s]+:)|$)/gi;
   const matches = [...profileText.matchAll(liabilityPattern)];
-  
+
   if (!matches || matches.length <= 1) {
     // No duplicates found
     return profileText;
   }
-  
+
   // Keep only the most complete version (longest one)
   const sortedMatches = matches.map(m => ({
     text: m[0],
     index: m.index!,
     length: m[0].length
   })).sort((a, b) => b.length - a.length);
-  
+
   const keepMatch = sortedMatches[0];
   const removeMatches = sortedMatches.slice(1);
-  
+
   // Build deduplicated text by removing duplicates
   let deduplicated = profileText;
-  
+
   // Remove duplicates in reverse order (to preserve indices)
   for (const match of removeMatches.sort((a, b) => b.index - a.index)) {
     // Remove the match, preserving surrounding structure
     const before = deduplicated.slice(0, match.index);
     const after = deduplicated.slice(match.index + match.text.length);
-    
+
     // Clean up any double newlines that might result
     deduplicated = (before.trimEnd() + '\n\n' + after.trimStart()).replace(/\n{3,}/g, '\n\n');
   }
-  
+
   // Ensure we have the kept match (in case it was removed)
   if (!deduplicated.includes('LIABILITIES INFORMATION:')) {
     // Find insertion point (before "# Accounts" section if present, or after User Profile)
@@ -1395,11 +1234,11 @@ function deduplicateLiabilitySections(profileText: string): string {
       }
     }
   }
-  
+
   // Final cleanup of excessive newlines
   deduplicated = deduplicated.replace(/\n{3,}/g, '\n\n');
-  
+
   console.warn(`⚠️ deduplicateLiabilitySections: Removed ${removeMatches.length} duplicate "LIABILITIES INFORMATION" section(s) from profile`);
-  
+
   return deduplicated;
 }

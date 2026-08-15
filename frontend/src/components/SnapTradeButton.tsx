@@ -30,16 +30,15 @@ interface SnapTradeTokenStatus {
 
 interface SnapTradeButtonProps {
   onAccountsUpdated?: () => void;
-  isDemo?: boolean;
   snapTradeStatus?: SnapTradeTokenStatus | null;
 }
 
-export default function SnapTradeButton({ onAccountsUpdated, isDemo = false, snapTradeStatus: snapTradeTokenStatus }: SnapTradeButtonProps) {
+export default function SnapTradeButton({ onAccountsUpdated, snapTradeStatus: snapTradeTokenStatus }: SnapTradeButtonProps) {
   const [status, setStatus] = useState<string>('loading');
   const [snapTradeStatus, setSnapTradeStatus] = useState<SnapTradeStatus | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<SnapTradeAccount[]>([]);
   const [isInitializing, setIsInitializing] = useState(false);
-  
+
   // Modal state for SnapTrade connection portal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [redirectLink, setRedirectLink] = useState<string | null>(null);
@@ -94,34 +93,32 @@ export default function SnapTradeButton({ onAccountsUpdated, isDemo = false, sna
   });
 
   useEffect(() => {
-    if (!isDemo) {
-      checkSnapTradeStatus();
-    }
-  }, [isDemo]);
+    checkSnapTradeStatus();
+  }, []);
 
   // Auto-initialize SnapTrade if not already initialized (with delay to avoid conflicts)
   useEffect(() => {
-    if (!isDemo && status === 'not_initialized' && !isInitializing) {
+    if (status === 'not_initialized' && !isInitializing) {
       console.log('Auto-initializing SnapTrade with delay to avoid conflicts...');
       // Add a delay to prevent conflicts with other components initializing
       const timer = setTimeout(() => {
         initializeSnapTrade();
       }, 2000); // 2 second delay
-      
+
       return () => clearTimeout(timer);
     }
-  }, [status, isInitializing, isDemo]);
+  }, [status, isInitializing]);
 
   useEffect(() => {
-    if (!isDemo && snapTradeStatus?.status === 'registered') {
+    if (snapTradeStatus?.status === 'registered') {
       checkConnectedAccounts();
     }
-  }, [snapTradeStatus, isDemo]);
+  }, [snapTradeStatus]);
 
   const checkSnapTradeStatus = async () => {
     try {
       setStatus('loading');
-      
+
       const token = localStorage.getItem('auth_token');
       if (!token) {
         setStatus('not_authenticated');
@@ -189,7 +186,7 @@ export default function SnapTradeButton({ onAccountsUpdated, isDemo = false, sna
   const initializeSnapTrade = async () => {
     try {
       setIsInitializing(true);
-      
+
       const token = localStorage.getItem('auth_token');
       if (!token) {
         setStatus('not_authenticated');
@@ -230,11 +227,11 @@ export default function SnapTradeButton({ onAccountsUpdated, isDemo = false, sna
         setStatus('error');
         return;
       }
-      
+
       // Register this service as active
       financialServiceCoordinator.registerService(SERVICE_NAMES.SNAPTRADE);
       setIsInitializing(true);
-      
+
       const token = localStorage.getItem('auth_token');
       if (!token) {
         setStatus('not_authenticated');
@@ -253,7 +250,7 @@ export default function SnapTradeButton({ onAccountsUpdated, isDemo = false, sna
       if (response.ok) {
         const data = await response.json();
         console.log('SnapTrade login redirect:', data);
-        
+
         // Use the modal approach instead of opening in new tab
         if (data.data?.redirectURI) {
           setRedirectLink(data.data.redirectURI);
@@ -276,7 +273,7 @@ export default function SnapTradeButton({ onAccountsUpdated, isDemo = false, sna
   const disconnectSnapTrade = async () => {
     try {
       setIsInitializing(true);
-      
+
       const token = localStorage.getItem('auth_token');
       if (!token) {
         setStatus('not_authenticated');
@@ -359,20 +356,7 @@ export default function SnapTradeButton({ onAccountsUpdated, isDemo = false, sna
 
   return (
     <div className="space-y-4">
-      {isDemo ? (
-        <div>
-          <button 
-            disabled
-            className="bg-gray-600 cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200"
-          >
-            Connect Account
-          </button>
-          <div className="text-sm text-gray-400 mt-2">
-            This is a demo. In the real app, you would see SnapTrade open to let you connect your investment account.
-          </div>
-        </div>
-      ) : (
-        <div className="flex items-center space-x-4">
+      <div className="flex items-center space-x-4">
           <button
             onClick={handleClick}
             disabled={isButtonDisabled()}
@@ -382,7 +366,7 @@ export default function SnapTradeButton({ onAccountsUpdated, isDemo = false, sna
           >
             {getButtonText()}
           </button>
-          
+
           {status === 'loading' && (
             <div className="text-sm text-gray-400 bg-gray-800 border border-gray-600 rounded-lg p-3">
               <div className="flex items-center space-x-2">
@@ -391,8 +375,7 @@ export default function SnapTradeButton({ onAccountsUpdated, isDemo = false, sna
               </div>
             </div>
           )}
-        </div>
-      )}
+      </div>
 
 
 
@@ -401,10 +384,10 @@ export default function SnapTradeButton({ onAccountsUpdated, isDemo = false, sna
           <div className="space-y-3">
             {connectedAccounts.map((account) => {
               // Determine if SnapTrade connection is healthy
-              const isHealthy = snapTradeTokenStatus?.connected && 
-                               (snapTradeTokenStatus?.status === 'VALID' || 
+              const isHealthy = snapTradeTokenStatus?.connected &&
+                               (snapTradeTokenStatus?.status === 'VALID' ||
                                 snapTradeTokenStatus?.status === 'valid');
-              
+
               return (
                 <div key={account.id} className="bg-gray-700 border border-gray-600 rounded-lg p-4">
                   <div className="flex items-center justify-between">

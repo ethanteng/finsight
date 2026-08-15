@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 
 // Mock fetch globally to prevent any real HTTP requests
-global.fetch = jest.fn().mockImplementation(() => 
+global.fetch = jest.fn().mockImplementation(() =>
   Promise.resolve({
     ok: true,
     json: () => Promise.resolve({}),
@@ -141,10 +141,10 @@ beforeAll(async () => {
   if (process.env.NODE_ENV !== 'test') {
     return;
   }
-  
+
   // Setup test environment
   process.env.NODE_ENV = 'test';
-  
+
   // Verify database connection
   try {
     await prisma.$queryRaw`SELECT 1`;
@@ -159,7 +159,7 @@ afterAll(async () => {
   if (process.env.NODE_ENV !== 'test') {
     return;
   }
-  
+
   // Cleanup
   await prisma.$disconnect();
 });
@@ -169,12 +169,10 @@ beforeEach(async () => {
   if (process.env.NODE_ENV !== 'test') {
     return;
   }
-  
+
   // Clean up test data in correct order to respect foreign key constraints
   try {
     // Delete in order: child tables first, then parent tables
-    await prisma.demoConversation.deleteMany();
-    await prisma.demoSession.deleteMany();
     await prisma.conversation.deleteMany();
     await prisma.transaction.deleteMany();
     await prisma.account.deleteMany();
@@ -202,4 +200,4 @@ export { prisma };
 // Helper function to generate unique test emails
 export const generateUniqueEmail = (prefix: string = 'test') => {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}@example.com`;
-}; 
+};

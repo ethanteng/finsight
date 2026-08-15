@@ -32,10 +32,8 @@ import { createHash } from 'crypto';
 export interface RunAskLincAnalysisOptions {
   question: string;
   userId?: string;
-  isDemo?: boolean;
   userTier?: UserTier | string;
   conversationHistory?: Array<{ id: string; question: string; answer: string; createdAt: Date }>;
-  demoProfile?: string;
   enableValidation?: boolean;
   /** Optional callback for progress updates (e.g. for SSE streaming) */
   onProgress?: (message: string) => void;
@@ -108,10 +106,8 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   const {
     question,
     userId,
-    isDemo = false,
     userTier = UserTier.STARTER,
     conversationHistory = [],
-    demoProfile,
     enableValidation = process.env.ENABLE_RESPONSE_VALIDATION === 'true',
     onProgress,
     onAnswerDelta,
@@ -124,7 +120,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   const historyForValidation = conversationHistory.map(c => ({ question: c.question }));
   const validation = validateUserPrompt(question, historyForValidation);
   if (!validation.allowed) {
-    logRejectedPrompt(question, validation.reason || 'unknown', { userId: isDemo ? undefined : userId });
+    logRejectedPrompt(question, validation.reason || 'unknown', { userId });
     const userMessage = getRejectionMessage(validation.reason);
     throw new PromptValidationError(`Prompt rejected: ${validation.reason}`, validation.reason, userMessage);
   }
@@ -141,11 +137,9 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   const contextGatherStartedAt = Date.now();
   const snapshot = await gatherContextSnapshot({
     userId,
-    isDemo,
     question,
     questionNeeds,
     tier,
-    demoProfile,
     onProgress
   });
   const contextGatherMs = Date.now() - contextGatherStartedAt;

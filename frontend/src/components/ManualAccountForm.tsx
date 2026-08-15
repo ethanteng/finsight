@@ -6,10 +6,9 @@ interface ManualAccountFormProps {
   account?: ManualAccount | null;
   onSuccess: () => void;
   onCancel: () => void;
-  isDemo?: boolean;
 }
 
-export default function ManualAccountForm({ account, onSuccess, onCancel, isDemo = false }: ManualAccountFormProps) {
+export default function ManualAccountForm({ account, onSuccess, onCancel }: ManualAccountFormProps) {
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [type, setType] = useState<'cash' | 'investment' | 'debt' | 'mortgage'>('cash');
@@ -64,16 +63,16 @@ export default function ManualAccountForm({ account, onSuccess, onCancel, isDemo
         setIsSubmitting(false);
         return;
       }
-      
+
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       };
 
-      const url = account 
+      const url = account
         ? `${API_URL}/api/manual-accounts/${account.id}`
         : `${API_URL}/api/manual-accounts`;
-      
+
       const method = account ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
@@ -104,7 +103,7 @@ export default function ManualAccountForm({ account, onSuccess, onCancel, isDemo
       <h3 className="text-lg font-semibold text-white mb-4">
         {account ? 'Edit Manual Account' : 'Add Manual Account'}
       </h3>
-      
+
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label htmlFor="name" className="block text-sm font-medium text-gray-300 mb-2">

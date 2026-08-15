@@ -28,20 +28,20 @@ describe('SnapTrade Security Tests', () => {
   // Check if we're in CI/CD environment
   // Only treat as CI/CD if we're actually running in GitHub Actions
   // Note: Even if CI=true is set locally, we're still on macOS which has permission issues
-  const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' && 
+  const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' &&
                                      process.env.GITHUB_RUN_ID !== undefined;
   const isCiEnv = isActuallyInGitHubActions;
   const expectedMissingSnapTradeStatus = isCiEnv ? 401 : 404;
-  
+
   /**
    * Skip network tests locally - these require special permissions on macOS
-   * 
+   *
    * Issue: macOS requires special permissions to bind to 0.0.0.0, which supertest
    * tries to do when creating a test server. This causes EPERM errors locally.
-   * 
+   *
    * Solution: Skip these tests locally (not in CI/CD) since they will run properly
    * in CI/CD environments where permissions are configured correctly.
-   * 
+   *
    * Even if CI=true is set manually, we still skip on macOS to avoid EPERM errors.
    * This is a local vs production mismatch, not a real code issue.
    */
@@ -52,8 +52,6 @@ describe('SnapTrade Security Tests', () => {
     await testPrisma.encryptedEmailVerificationCode.deleteMany();
     await testPrisma.encryptedUserData.deleteMany();
     await testPrisma.encrypted_profile_data.deleteMany();
-    await testPrisma.demoConversation.deleteMany();
-    await testPrisma.demoSession.deleteMany();
     await testPrisma.accessToken.deleteMany();
     await testPrisma.syncStatus.deleteMany();
     await testPrisma.passwordResetToken.deleteMany();
@@ -63,20 +61,20 @@ describe('SnapTrade Security Tests', () => {
 
     // Create real test users with real authentication
     const passwordHash = await hashPassword('password123');
-    
+
     // Generate unique email addresses to prevent conflicts when tests run in parallel
     const timestamp = Date.now();
     const randomId = Math.random().toString(36).substring(7);
-    
+
     user1 = await testPrisma.user.create({
-      data: createTestUser({ 
+      data: createTestUser({
         email: `snaptrade-user1-${timestamp}-${randomId}@test.com`,
         passwordHash: passwordHash
       })
     });
-    
+
     user2 = await testPrisma.user.create({
-      data: createTestUser({ 
+      data: createTestUser({
         email: `snaptrade-user2-${timestamp}-${randomId}@test.com`,
         passwordHash: passwordHash
       })
@@ -85,13 +83,13 @@ describe('SnapTrade Security Tests', () => {
     // Generate real JWT tokens for authentication
     const jwt = require('jsonwebtoken');
     const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-    
+
     user1JWT = jwt.sign(
       { userId: user1.id, email: user1.email, tier: 'starter' },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
-    
+
     user2JWT = jwt.sign(
       { userId: user2.id, email: user2.email, tier: 'starter' },
       JWT_SECRET,
@@ -104,8 +102,6 @@ describe('SnapTrade Security Tests', () => {
     await testPrisma.encryptedEmailVerificationCode.deleteMany();
     await testPrisma.encryptedUserData.deleteMany();
     await testPrisma.encrypted_profile_data.deleteMany();
-    await testPrisma.demoConversation.deleteMany();
-    await testPrisma.demoSession.deleteMany();
     await testPrisma.accessToken.deleteMany();
     await testPrisma.syncStatus.deleteMany();
     await testPrisma.passwordResetToken.deleteMany();
@@ -126,11 +122,11 @@ describe('SnapTrade Security Tests', () => {
         console.log('⏭️ Skipping network test locally - will run in CI/CD');
         return;
       }
-      
+
       const response = await request(app)
         .get('/snaptrade/status/user')
         .expect(401);
-      
+
       expect(response.body).toHaveProperty('error');
     });
 
@@ -139,12 +135,12 @@ describe('SnapTrade Security Tests', () => {
         console.log('⏭️ Skipping network test locally - will run in CI/CD');
         return;
       }
-      
+
       const response = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', 'Bearer invalid_token')
         .expect(401);
-      
+
       expect(response.body).toHaveProperty('error');
     });
 
@@ -153,11 +149,11 @@ describe('SnapTrade Security Tests', () => {
         console.log('⏭️ Skipping network test locally - will run in CI/CD');
         return;
       }
-      
+
       const response = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user1JWT}`);
-      
+
       // In CI the mock auth layer returns 401 because the user isn't in the mock DB
       expect(response.status).toBe(expectedMissingSnapTradeStatus);
     });
@@ -169,17 +165,17 @@ describe('SnapTrade Security Tests', () => {
         console.log('⏭️ Skipping network test locally - will run in CI/CD');
         return;
       }
-      
+
       // User1 should only see their own SnapTrade data
       const user1Response = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user1JWT}`);
-      
+
       // User2 should only see their own SnapTrade data
       const user2Response = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user2JWT}`);
-      
+
       expect(user1Response.status).toBe(expectedMissingSnapTradeStatus);
       expect(user2Response.status).toBe(expectedMissingSnapTradeStatus);
     });
@@ -189,11 +185,11 @@ describe('SnapTrade Security Tests', () => {
         console.log('⏭️ Skipping network test locally - will run in CI/CD');
         return;
       }
-      
+
       const response = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user1JWT}`);
-      
+
       expect(response.status).toBe(expectedMissingSnapTradeStatus);
     });
   });
@@ -204,11 +200,11 @@ describe('SnapTrade Security Tests', () => {
         console.log('⏭️ Skipping network test locally - will run in CI/CD');
         return;
       }
-      
+
       const response = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user1JWT}`);
-      
+
       expect(response.status).toBe(expectedMissingSnapTradeStatus);
     });
 
@@ -217,11 +213,11 @@ describe('SnapTrade Security Tests', () => {
         console.log('⏭️ Skipping network test locally - will run in CI/CD');
         return;
       }
-      
+
       const response = await request(app)
         .get('/snaptrade/accounts')
         .set('Authorization', `Bearer ${user1JWT}`);
-      
+
       expect(response.status).toBe(expectedMissingSnapTradeStatus);
     });
 
@@ -230,11 +226,11 @@ describe('SnapTrade Security Tests', () => {
         console.log('⏭️ Skipping network test locally - will run in CI/CD');
         return;
       }
-      
+
       const response = await request(app)
         .get('/snaptrade/holdings')
         .set('Authorization', `Bearer ${user1JWT}`);
-      
+
       expect(response.status).toBe(expectedMissingSnapTradeStatus);
     });
 
@@ -243,11 +239,11 @@ describe('SnapTrade Security Tests', () => {
         console.log('⏭️ Skipping network test locally - will run in CI/CD');
         return;
       }
-      
+
       const response = await request(app)
         .get('/snaptrade/activities')
         .set('Authorization', `Bearer ${user1JWT}`);
-      
+
       expect(response.status).toBe(expectedMissingSnapTradeStatus);
     });
   });
@@ -258,17 +254,17 @@ describe('SnapTrade Security Tests', () => {
         console.log('⏭️ Skipping network test locally - will run in CI/CD');
         return;
       }
-      
+
       // User1 tries to access their own data
       const user1OwnData = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user1JWT}`);
-      
+
       // User2 tries to access their own data
       const user2OwnData = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user2JWT}`);
-      
+
       expect(user1OwnData.status).toBe(expectedMissingSnapTradeStatus);
       expect(user2OwnData.status).toBe(expectedMissingSnapTradeStatus);
     });
@@ -278,16 +274,16 @@ describe('SnapTrade Security Tests', () => {
         console.log('⏭️ Skipping network test locally - will run in CI/CD');
         return;
       }
-      
+
       // Test that users cannot manipulate endpoints to access other users' data
       const user1Response = await request(app)
         .get('/snaptrade/accounts')
         .set('Authorization', `Bearer ${user1JWT}`);
-      
+
       const user2Response = await request(app)
         .get('/snaptrade/accounts')
         .set('Authorization', `Bearer ${user2JWT}`);
-      
+
       expect(user1Response.status).toBe(expectedMissingSnapTradeStatus);
       expect(user2Response.status).toBe(expectedMissingSnapTradeStatus);
     });
@@ -299,15 +295,15 @@ describe('SnapTrade Security Tests', () => {
         console.log('⏭️ Skipping network test locally - will run in CI/CD');
         return;
       }
-      
+
       // Test with a user that doesn't have SnapTrade initialized
       const newUser = await testPrisma.user.create({
-        data: createTestUser({ 
+        data: createTestUser({
           email: 'newuser@test.com',
           passwordHash: await hashPassword('password123')
         })
       });
-      
+
       const jwt = require('jsonwebtoken');
       const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
       const newUserJWT = jwt.sign(
@@ -315,13 +311,13 @@ describe('SnapTrade Security Tests', () => {
         JWT_SECRET,
         { expiresIn: '24h' }
       );
-      
+
       const response = await request(app)
         .get('/snaptrade/accounts')
         .set('Authorization', `Bearer ${newUserJWT}`);
-      
+
       expect(response.status).toBe(expectedMissingSnapTradeStatus);
-      
+
       // Error message should not contain sensitive information
       if (response.body.error) {
         expect(response.body.error).not.toContain('userSecret');
@@ -335,12 +331,12 @@ describe('SnapTrade Security Tests', () => {
         console.log('⏭️ Skipping network test locally - will run in CI/CD');
         return;
       }
-      
+
       // Test error handling without exposing internal details
       const response = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user1JWT}`);
-      
+
       // Should handle errors gracefully (200, 404, or 401 for test isolation)
       expect([200, 404, 401]).toContain(response.status);
     });

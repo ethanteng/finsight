@@ -35,11 +35,7 @@ interface Transaction {
   };
 }
 
-interface TransactionHistoryProps {
-  isDemo?: boolean;
-}
-
-export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(function TransactionHistory({ isDemo = false }, ref) {
+export default forwardRef<{ refresh: () => void }, object>(function TransactionHistory(_props, ref) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -68,22 +64,18 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
   const loadTransactions = useCallback(async () => {
     setLoading(true);
     setError('');
-    
-    // Clear any existing transactions to prevent demo/real data mixing
+
+    // Clear stale transactions before loading the latest snapshot.
     setTransactions([]);
-    
+
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
 
-      if (isDemo) {
-        headers['x-demo-mode'] = 'true';
-      } else {
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
 
       // Use single source of truth: snapshot transactions
@@ -95,12 +87,12 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
       if (res.ok) {
         const data = await res.json();
         console.log('🔍 Frontend: Received snapshot (full) for transactions:', data);
-        
+
         // Debug: Show the exact enriched_data structure
         if (data.transactions?.[0]?.enriched_data) {
           console.log('🔍 Frontend: Full enriched_data object:', JSON.stringify(data.transactions[0].enriched_data, null, 2));
         }
-        
+
         // Debug: Check for merchant name inconsistencies
         if (data.transactions?.[0]) {
           const firstTransaction = data.transactions[0];
@@ -115,7 +107,7 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
             ].filter(Boolean)
           });
         }
-        
+
         const snapshotTx: SnapshotTransaction[] = Array.isArray(data.transactions) ? data.transactions as SnapshotTransaction[] : [];
         // Ensure each transaction has an id
         const normalized = snapshotTx.map((t) => ({
@@ -144,7 +136,7 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
     } finally {
       setLoading(false);
     }
-  }, [dateRange, isDemo, API_URL]);
+  }, [dateRange, API_URL]);
 
   // Expose refresh method to parent component
   useImperativeHandle(ref, () => ({
@@ -169,7 +161,7 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
   const filteredTransactions = useMemo(() => {
     const daysAgo = new Date();
     daysAgo.setDate(daysAgo.getDate() - parseInt(dateRange));
-    
+
     return transactions.filter(transaction => {
       const transactionDate = new Date(transaction.date);
       return transactionDate >= daysAgo;
@@ -180,7 +172,7 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
     <div className="bg-gray-800 rounded-lg p-6">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-white">Transaction History</h2>
-        
+
         {/* Controls */}
         <div className="flex items-center space-x-4">
           <select
@@ -193,12 +185,12 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
             <option value="90">Last 90 days</option>
             <option value="365">Last year</option>
           </select>
-          
+
           <button
             onClick={loadTransactions}
             disabled={loading}
             className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
-              loading 
+              loading
                 ? 'cursor-not-allowed bg-[#dfe2da] text-[#7a847d]'
                 : 'bg-[#d9ff6f] text-[#102319] hover:bg-[#cdef64]'
             }`}
@@ -219,8 +211,8 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
           {filteredTransactions.map((transaction) => {
             const hasEnrichedData = transaction.enriched_data && Object.keys(transaction.enriched_data).length > 0;
             return (
-            <div 
-              key={transaction.id} 
+            <div
+              key={transaction.id}
               className={`rounded-xl border border-[#102319]/10 bg-[#f8f7ef] p-4 shadow-[inset_3px_0_0_var(--transaction-accent)] ${
                 transaction.amount < 0 ? '[--transaction-accent:#b56a5f]' : '[--transaction-accent:#6f9b7e]'
               } ${hasEnrichedData ? 'ring-1 ring-[#397052]/15' : ''}`}
@@ -232,15 +224,15 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                   <span className="text-xs font-medium text-[#397052]">Enhanced Data Available</span>
                 </div>
               )}
-              
+
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
                   {/* Header row with merchant name and logo */}
                   <div className="flex items-center gap-3 mb-2">
                     {/* Merchant logo */}
                     {transaction.enriched_data?.logo_url && (
-                      <img 
-                        src={transaction.enriched_data.logo_url} 
+                      <img
+                        src={transaction.enriched_data.logo_url}
                         alt={`${transaction.enriched_data?.merchant_name || transaction.name} logo`}
                         className="w-8 h-8 rounded object-contain bg-white p-1 flex-shrink-0"
                         onError={(e) => {
@@ -249,15 +241,15 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                         }}
                       />
                     )}
-                    
+
                     {/* Merchant name */}
                     <div className="font-medium text-white truncate">
-                      {transaction.enriched_data?.merchant_name || 
-                       transaction.merchant_name || 
+                      {transaction.enriched_data?.merchant_name ||
+                       transaction.merchant_name ||
                        transaction.name}
                     </div>
                   </div>
-                  
+
                     {/* Date and categories row */}
                   <div className="mb-3">
                     {/* Date */}
@@ -268,11 +260,11 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                         year: 'numeric'
                       })}
                     </div>
-                    
+
                     {/* Transaction Type - Only show if it's from our categorization service (not Plaid's payment method) */}
                     {/* Plaid's transaction_type is payment method (place, digital, etc.) - we don't want to show that */}
                     {/* Our categorization service sets transaction_type to income, expense, transfer_in, etc. */}
-                    {transaction.transaction_type && 
+                    {transaction.transaction_type &&
                      !['place', 'special', 'digital', 'atm', 'other'].includes(transaction.transaction_type.toLowerCase()) && (
                       <div className="mb-2">
                         <span className="inline-block rounded-full border border-[#397052]/20 bg-[#c9f2df]/55 px-2.5 py-1 text-xs font-semibold text-[#285c43]">
@@ -280,13 +272,13 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                         </span>
                       </div>
                     )}
-                    
+
                     {/* Categories section */}
                     <div className="space-y-2">
                       {/* Show meaningful categories if available */}
-                      {transaction.enriched_data?.category && 
-                       Array.isArray(transaction.enriched_data.category) && 
-                       transaction.enriched_data.category.length > 0 && 
+                      {transaction.enriched_data?.category &&
+                       Array.isArray(transaction.enriched_data.category) &&
+                       transaction.enriched_data.category.length > 0 &&
                        transaction.enriched_data.category.some(cat => cat && cat.trim() !== '' && cat !== '0') ? (
                         <div>
                           <span className="text-xs font-medium text-[#5e6b63]">Enhanced Categories:</span>
@@ -294,7 +286,7 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                             {transaction.enriched_data.category
                               .filter(cat => cat && cat.trim() !== '' && cat !== '0')
                               .map((cat, index) => (
-                                <span 
+                                <span
                                   key={index}
                                   className="inline-block rounded-full border border-[#397052]/18 bg-[#edf3e9] px-2.5 py-1 text-xs text-[#365d49]"
                                 >
@@ -304,11 +296,11 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                           </div>
                         </div>
                       ) : null}
-                      
+
                       {/* Show basic Plaid categories if available */}
-                      {transaction.category && 
-                       Array.isArray(transaction.category) && 
-                       transaction.category.length > 0 && 
+                      {transaction.category &&
+                       Array.isArray(transaction.category) &&
+                       transaction.category.length > 0 &&
                        transaction.category.some(cat => cat && cat.trim() !== '' && cat !== '0') ? (
                         <div>
                           <span className="text-gray-400 font-medium text-xs">Basic Categories:</span>
@@ -316,7 +308,7 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                             {transaction.category
                               .filter(cat => cat && cat.trim() !== '' && cat !== '0')
                               .map((cat, index) => (
-                                <span 
+                                <span
                                   key={index}
                                   className="inline-block rounded-full border border-[#102319]/12 bg-[#ecece4] px-2.5 py-1 text-xs text-[#56635b]"
                                 >
@@ -326,9 +318,9 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                           </div>
                         </div>
                       ) : null}
-                      
+
                       {/* Show message when no categories are available */}
-                      {(!transaction.enriched_data?.category || transaction.enriched_data.category.length === 0) && 
+                      {(!transaction.enriched_data?.category || transaction.enriched_data.category.length === 0) &&
                        (!transaction.category || transaction.category.length === 0) && (
                         <div className="text-xs text-gray-500 italic">
                           No category information available
@@ -336,7 +328,7 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                       )}
                     </div>
                   </div>
-                  
+
                   {/* Enriched metadata row */}
                   <div className="space-y-1">
                     {/* Website link */}
@@ -345,7 +337,7 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                         <svg className="w-3 h-3 mr-1 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M4.083 9h1.946c.089-1.546.383-2.97.837-4.118A6.004 6.004 0 004.083 9zM10 2a8 8 0 100 16 8 8 0 000-16zm0 2c-.076 0-.232.032-.465.262-.238.234-.497.623-.737 1.182-.389.907-.673 2.142-.766 3.556h3.936c-.093-1.414-.377-2.649-.766-3.556-.24-.56-.5-.948-.737-1.182C10.232 4.032 10.076 4 10 4zM3.552 12.049c.233.39.574.689.944.951.562.392 1.313.956 2.165 1.603C7.825 15.449 8.948 16 10 16c1.053 0 2.172-.551 3.338 1.397-.853.647 1.603 1.211 2.165 1.603.37-.263-.711.561-.944-.951.416-.693.676-1.456.676-2.049s-.26-1.356-.676-2.049c-.233-.39-.574-.689-.944-.951-.562-.392-1.313-.956-2.165-1.603C12.175 4.551 11.053 4 10 4c-1.053 0-2.172.551-3.338 1.397-.853.647-1.603 1.211-2.165 1.603-.37.263-.711.561-.944.951C4.26 8.644 4 9.407 4 10s.26 1.356.676 2.049z" clipRule="evenodd" />
                         </svg>
-                        <a 
+                        <a
                           href={transaction.enriched_data.website.startsWith('http') ? transaction.enriched_data.website : `https://${transaction.enriched_data.website}`}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -355,7 +347,7 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                         </a>
                       </div>
                     )}
-                    
+
                     {/* Additional enriched metadata */}
                     {(transaction.enriched_data?.domain || transaction.enriched_data?.brand_name) && (
                       <div className="text-xs text-gray-500">
@@ -369,7 +361,7 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
                     )}
                   </div>
                 </div>
-                
+
                 <div className="text-right ml-4 flex-shrink-0">
                   <div className={`font-semibold text-lg ${
                     transaction.amount < 0 ? 'text-[#8b4137]' : 'text-[#28704d]'
@@ -385,7 +377,7 @@ export default forwardRef<{ refresh: () => void }, TransactionHistoryProps>(func
           )})}
         </div>
       )}
-      
+
       {transactions.length > 0 && (
         <div className="text-center text-gray-400 mt-4">
           Showing {filteredTransactions.length} of {transactions.length} transactions

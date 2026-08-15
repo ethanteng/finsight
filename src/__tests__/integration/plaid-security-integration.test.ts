@@ -10,23 +10,23 @@ import { testPrisma } from '../setup/test-database-ci';
 describe('Plaid Security Integration Tests', () => {
   // Check if we're actually in GitHub Actions (not just CI=true set locally)
   // Even if CI=true is set locally, we're still on macOS which has permission issues
-  const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' && 
+  const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' &&
                                      process.env.GITHUB_RUN_ID !== undefined;
   const isCiEnv = isActuallyInGitHubActions;
-  
+
   /**
    * Skip network tests locally - these require special permissions on macOS
-   * 
+   *
    * Issue: macOS requires special permissions to bind to 0.0.0.0, which supertest
    * tries to do when creating a test server. This causes EPERM errors locally.
-   * 
+   *
    * Solution: Skip these tests locally (not in CI/CD) since they will run properly
    * in CI/CD environments where permissions are configured correctly.
-   * 
+   *
    * This is a local vs production mismatch, not a real code issue.
    */
   const shouldSkipNetworkTests = !isActuallyInGitHubActions;
-  
+
   // Helper to skip network tests locally
   const skipIfLocal = () => {
     if (shouldSkipNetworkTests) {
@@ -35,7 +35,7 @@ describe('Plaid Security Integration Tests', () => {
     }
     return false;
   };
-  
+
   let user1: any;
   let user2: any;
   let user1Token: any;
@@ -52,12 +52,10 @@ describe('Plaid Security Integration Tests', () => {
     await testPrisma.encryptedEmailVerificationCode.deleteMany();
     await testPrisma.encryptedUserData.deleteMany();
     await testPrisma.encrypted_profile_data.deleteMany();
-    await testPrisma.demoConversation.deleteMany();
-    await testPrisma.demoSession.deleteMany();
     await testPrisma.accessToken.deleteMany();
     await testPrisma.userProfile.deleteMany();
     await testPrisma.user.deleteMany();
-    
+
     // Ensure cleanup is complete by waiting a bit
     await new Promise(resolve => setTimeout(resolve, 100));
 
@@ -67,16 +65,16 @@ describe('Plaid Security Integration Tests', () => {
 
     // Create test users in database with proper password hash
     const passwordHash = await hashPassword('password123');
-    
+
     user1 = await testPrisma.user.create({
-      data: createTestUser({ 
+      data: createTestUser({
         email: `user1_${timestamp}@test.com`, // Make email unique
         passwordHash: passwordHash
       })
     });
-    
+
     user2 = await testPrisma.user.create({
-      data: createTestUser({ 
+      data: createTestUser({
         email: `user2_${timestamp}@test.com`, // Make email unique
         passwordHash: passwordHash
       })
@@ -85,15 +83,15 @@ describe('Plaid Security Integration Tests', () => {
     // Create access tokens for each user (simulating linked banks) with unique tokens
     try {
       user1Token = await testPrisma.accessToken.create({
-        data: createTestAccessToken({ 
+        data: createTestAccessToken({
           userId: user1.id,
           token: `plaid-security-token-${timestamp}-${randomId}-user1`,
           itemId: `plaid-security-item-${timestamp}-${randomId}-user1`
         })
       });
-      
+
       user2Token = await testPrisma.accessToken.create({
-        data: createTestAccessToken({ 
+        data: createTestAccessToken({
           userId: user2.id,
           token: `plaid-security-token-${timestamp}-${randomId}-user2`,
           itemId: `plaid-security-item-${timestamp}-${randomId}-user2`
@@ -116,7 +114,7 @@ describe('Plaid Security Integration Tests', () => {
       process.env.JWT_SECRET || 'test-secret',
       { expiresIn: '24h' }
     );
-    
+
     // console.log('User1 JWT length:', user1JWT?.length);
     // console.log('User2 JWT length:', user2JWT?.length);
   });
@@ -126,8 +124,6 @@ describe('Plaid Security Integration Tests', () => {
     await testPrisma.encryptedEmailVerificationCode.deleteMany();
     await testPrisma.encryptedUserData.deleteMany();
     await testPrisma.encrypted_profile_data.deleteMany();
-    await testPrisma.demoConversation.deleteMany();
-    await testPrisma.demoSession.deleteMany();
     await testPrisma.accessToken.deleteMany();
     await testPrisma.userProfile.deleteMany();
     await testPrisma.user.deleteMany();
@@ -140,7 +136,7 @@ describe('Plaid Security Integration Tests', () => {
   describe('User Data Isolation Tests', () => {
     it('should prevent new user from seeing another user\'s account data', async () => {
       if (skipIfLocal()) return;
-      
+
       // This simulates the exact scenario you encountered:
       // User2 creates a new account, hasn't linked any banks yet,
       // but somehow sees User1's account data
@@ -151,10 +147,10 @@ describe('Plaid Security Integration Tests', () => {
         .set('Authorization', `Bearer ${user2JWT}`);
 
       expect(user2Response.status).toBe(200);
-      
+
       // The response should be an empty array or indicate no accounts, not show User1's data
       expect(user2Response.body).toBeDefined();
-      
+
       // Should not contain any indication of User1's data
       // The response should be an empty array for a user with no linked accounts
       if (Array.isArray(user2Response.body)) {
@@ -167,14 +163,14 @@ describe('Plaid Security Integration Tests', () => {
 
     it('should only return data for the authenticated user', async () => {
       if (skipIfLocal()) return;
-      
+
       // User1 asks about their accounts
       const user1Response = await request(testApp)
         .get('/plaid/all-accounts')
         .set('Authorization', `Bearer ${user1JWT}`);
 
       expect(user1Response.status).toBe(200);
-      
+
       // User2 asks about their accounts
       const user2Response = await request(testApp)
         .get('/plaid/all-accounts')
@@ -186,7 +182,7 @@ describe('Plaid Security Integration Tests', () => {
       // This is the correct behavior - users are properly isolated
       expect(user1Response.body).toEqual({ accounts: [] });
       expect(user2Response.body).toEqual({ accounts: [] });
-      
+
       // Verify that the responses are properly structured
       expect(user1Response.body.accounts).toBeDefined();
       expect(user2Response.body.accounts).toBeDefined();
@@ -196,10 +192,10 @@ describe('Plaid Security Integration Tests', () => {
 
     it('should handle user with no linked accounts correctly', async () => {
       if (skipIfLocal()) return;
-      
+
       // Create a third user with no linked accounts
       const user3 = await testPrisma.user.create({
-        data: createTestUser({ 
+        data: createTestUser({
           email: 'user3@test.com',
           passwordHash: await hashPassword('password123')
         })
@@ -218,7 +214,7 @@ describe('Plaid Security Integration Tests', () => {
         .set('Authorization', `Bearer ${user3JWT}`);
 
       expect(user3Response.status).toBe(200);
-      
+
       // Should return empty array for user with no linked accounts
       if (Array.isArray(user3Response.body)) {
         expect(user3Response.body).toHaveLength(0);
@@ -231,10 +227,10 @@ describe('Plaid Security Integration Tests', () => {
   describe('Token Access Control Tests', () => {
     it('should only access tokens belonging to the authenticated user', async () => {
       if (skipIfLocal()) return;
-      
+
       // Test that users can only access their own data
       // This verifies the real security implementation is working
-      
+
       // User1 should only see their own data
       const user1Response = await request(testApp)
         .get('/plaid/all-accounts')
@@ -242,7 +238,7 @@ describe('Plaid Security Integration Tests', () => {
 
       expect(user1Response.status).toBe(200);
       expect(user1Response.body.accounts).toBeDefined();
-      
+
       // User2 should only see their own data
       const user2Response = await request(testApp)
         .get('/plaid/all-accounts')
@@ -250,7 +246,7 @@ describe('Plaid Security Integration Tests', () => {
 
       expect(user2Response.status).toBe(200);
       expect(user2Response.body.accounts).toBeDefined();
-      
+
       // Both users should be properly isolated
       // Since they have no real Plaid connections, both get empty accounts
       // This is the correct security behavior
@@ -269,7 +265,7 @@ describe('Plaid Security Integration Tests', () => {
     //     });
 
     //   expect(response.status).toBe(200);
-      
+
     //   // Verify the response doesn't contain sensitive token data
     //   const responseBody = JSON.stringify(response.body);
     //   expect(responseBody).not.toContain('access_token');
@@ -282,7 +278,7 @@ describe('Plaid Security Integration Tests', () => {
 // Separate test suite for authentication tests that don't need user setup
 describe('Authentication Boundary Tests (Independent)', () => {
   // Check if we're actually in GitHub Actions (not just CI=true set locally)
-  const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' && 
+  const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' &&
                                      process.env.GITHUB_RUN_ID !== undefined;
   const shouldSkipNetworkTests = !isActuallyInGitHubActions;
   const skipIfLocal = () => {
@@ -292,10 +288,10 @@ describe('Authentication Boundary Tests (Independent)', () => {
     }
     return false;
   };
-  
+
   it('should reject requests without valid authentication', async () => {
     if (skipIfLocal()) return;
-    
+
     const response = await request(testApp)
       .get('/plaid/all-accounts');
 
@@ -304,7 +300,7 @@ describe('Authentication Boundary Tests (Independent)', () => {
 
   it('should reject requests with invalid JWT', async () => {
     if (skipIfLocal()) return;
-    
+
     const response = await request(testApp)
       .get('/plaid/all-accounts')
       .set('Authorization', 'Bearer invalid-jwt-token');
@@ -314,10 +310,10 @@ describe('Authentication Boundary Tests (Independent)', () => {
 
   it('should reject requests with expired JWT', async () => {
     if (skipIfLocal()) return;
-    
+
     // Create an expired JWT (this would require JWT library mocking)
     const expiredJWT = 'expired.jwt.token';
-    
+
     const response = await request(testApp)
       .get('/plaid/all-accounts')
       .set('Authorization', `Bearer ${expiredJWT}`);
@@ -326,58 +322,10 @@ describe('Authentication Boundary Tests (Independent)', () => {
   });
 });
 
-describe('Demo Mode Security Tests', () => {
-  it.skip('should not expose real user data in demo mode', async () => {
-    // Test that demo mode doesn't leak real user data
-    const demoResponse = await request(testApp)
-      .post('/ask')
-      .set('x-session-id', 'test-demo-session')
-      .send({
-        question: 'How many accounts do I have?',
-        isDemo: true
-      });
-
-    expect(demoResponse.status).toBe(200);
-    
-    // Demo mode should return demo data, not real user data
-    const responseText = demoResponse.body.answer.toLowerCase();
-    
-    // Should not contain any real user account information
-    expect(responseText).not.toContain('user1');
-    expect(responseText).not.toContain('user2');
-    expect(responseText).not.toContain('@test.com');
-    expect(responseText).not.toContain('password');
-  });
-
-  it.skip('should maintain demo mode isolation from real users', async () => {
-    // Demo mode request
-    const demoResponse = await request(testApp)
-      .post('/ask')
-      .set('x-session-id', 'test-demo-session-2')
-      .send({
-        question: 'Show me my accounts',
-        isDemo: true
-      });
-
-    // Real user request - skip this test since we don't have user setup
-    // const realUserResponse = await request(testApp)
-    //   .post('/ask')
-    //   .set('Authorization', `Bearer ${user1JWT}`)
-    //   .send({
-    //     question: 'Show me my accounts'
-    //   });
-
-    expect(demoResponse.status).toBe(200);
-    // expect(realUserResponse.status).toBe(200);
-
-    // The responses should be different
-    // expect(demoResponse.body.answer).not.toBe(realUserResponse.body.answer);
-  });
-});
 
 describe('Error Handling Security Tests', () => {
   // Check if we're actually in GitHub Actions (not just CI=true set locally)
-  const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' && 
+  const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' &&
                                      process.env.GITHUB_RUN_ID !== undefined;
   const shouldSkipNetworkTests = !isActuallyInGitHubActions;
   const skipIfLocal = () => {
@@ -387,17 +335,17 @@ describe('Error Handling Security Tests', () => {
     }
     return false;
   };
-  
+
   it('should not leak sensitive information in error messages', async () => {
     if (skipIfLocal()) return;
-    
+
     // Test error responses don't contain sensitive data
     const response = await request(testApp)
       .get('/plaid/all-accounts')
       .set('Authorization', 'Bearer invalid-token');
 
     expect(response.status).toBe(401);
-    
+
     // Error response should not contain sensitive information
     const errorBody = JSON.stringify(response.body);
     // Should not contain any sensitive token information
@@ -408,10 +356,10 @@ describe('Error Handling Security Tests', () => {
   it.skip('should handle database errors securely', async () => {
     // This test would require mocking database errors
     // to ensure they don't leak sensitive information
-    
+
     const mockError = new Error('Database connection failed');
     const originalFindMany = testPrisma.accessToken.findMany;
-    
+
     testPrisma.accessToken.findMany = jest.fn().mockRejectedValue(mockError);
 
     const response = await request(testApp)
@@ -425,7 +373,7 @@ describe('Error Handling Security Tests', () => {
     testPrisma.accessToken.findMany = originalFindMany;
 
     expect(response.status).toBe(401);
-    
+
     // Error response should not contain sensitive information
     const errorBody = JSON.stringify(response.body);
     expect(errorBody).not.toContain('access_token');
@@ -441,31 +389,31 @@ describe('GPT Context User Isolation Integration', () => {
   beforeAll(async () => {
     await testPrisma.account.deleteMany();
     await testPrisma.user.deleteMany();
-    
+
     // Create users with proper password hash and unique emails
     const timestamp = Date.now();
     const randomId = Math.random().toString(36).substring(7);
     const passwordHash = await hashPassword('password123');
-    
-    user1 = await testPrisma.user.create({ 
-      data: { 
-        email: `plaid-security-user1-${timestamp}-${randomId}@test.com`, 
-        passwordHash: passwordHash, 
-        tier: 'starter' 
-      } 
+
+    user1 = await testPrisma.user.create({
+      data: {
+        email: `plaid-security-user1-${timestamp}-${randomId}@test.com`,
+        passwordHash: passwordHash,
+        tier: 'starter'
+      }
     });
-    user2 = await testPrisma.user.create({ 
-      data: { 
-        email: `plaid-security-user2-${timestamp}-${randomId}@test.com`, 
-        passwordHash: passwordHash, 
-        tier: 'starter' 
-      } 
+    user2 = await testPrisma.user.create({
+      data: {
+        email: `plaid-security-user2-${timestamp}-${randomId}@test.com`,
+        passwordHash: passwordHash,
+        tier: 'starter'
+      }
     });
-    
+
     // Create accounts for user1 only
     await testPrisma.account.create({ data: { name: 'User1 Checking', type: 'checking', plaidAccountId: 'acc1', userId: user1.id } });
     await testPrisma.account.create({ data: { name: 'User1 Savings', type: 'savings', plaidAccountId: 'acc2', userId: user1.id } });
-    
+
     // Login users to get JWT tokens
     const user1Login = await request(testApp).post('/auth/login').send({ email: user1.email, password: 'password123' });
     const user2Login = await request(testApp).post('/auth/login').send({ email: user2.email, password: 'password123' });
@@ -485,4 +433,4 @@ describe('GPT Context User Isolation Integration', () => {
     // Should indicate no accounts or similar
     expect(answer).toMatch(/no accounts|no banks|haven't linked|connect.*bank/);
   });
-}); 
+});

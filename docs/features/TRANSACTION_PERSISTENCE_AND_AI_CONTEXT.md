@@ -120,7 +120,7 @@ When enabled, the full GPT context (system prompt, user data, market context, et
 **Access:**
 - Visible only when `NEXT_PUBLIC_PERSIST_GPT_CONTEXT=true`
 - Button appears in the FinanceQA component (main chat interface)
-- Only for authenticated users (not demo mode)
+- Only for authenticated users
 
 #### Transaction Category Comparison
 
@@ -306,7 +306,7 @@ cat gpt-context-[userId]-[timestamp].json | jq .
 ### View AI Context button not showing
 
 - Verify `NEXT_PUBLIC_PERSIST_GPT_CONTEXT=true` in frontend
-- Ensure you're logged in (not in demo mode)
+- Ensure you're logged in
 - Restart frontend server after environment change
 
 ### AI categorization failing
@@ -344,4 +344,3 @@ cat gpt-context-[userId]-[timestamp].json | jq .
 - `docs/TESTING.md` - Testing guidelines
 - `prisma/schema.prisma` - Database schema
 - `src/openai.ts` - AI integration logic
-

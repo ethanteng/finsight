@@ -101,7 +101,6 @@ interface InvestmentPortfolioProps {
   };
   holdings: Holding[];
   transactions: InvestmentTransaction[];
-  isDemo?: boolean;
 }
 
 export default function InvestmentPortfolio({ portfolio, holdings, transactions }: InvestmentPortfolioProps) {
@@ -127,7 +126,7 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
 
   const getAssetAllocationArray = () => {
     if (!portfolio.assetAllocation) return [];
-    
+
     return portfolio.assetAllocation
       .sort((a, b) => b.value - a.value);
   };
@@ -145,7 +144,7 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
         : null;
     };
     const totalValue = holdings.reduce((sum, holding) => sum + (knownValue(holding) ?? 0), 0);
-    
+
     return holdings
       .map(holding => {
         const fullName = holding.security_name || holding.name || 'Unknown Security';

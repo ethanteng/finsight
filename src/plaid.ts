@@ -69,11 +69,11 @@ export { plaidClient };
 // Safety check: Prevent real Plaid API calls in test/CI environments
 if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
   console.log('Plaid: Test/CI environment detected - using mock responses');
-  
+
   // Override the plaidClient methods to return mock data in test environment
   const originalAccountsGet = plaidClient.accountsGet;
   const originalAccountsBalanceGet = plaidClient.accountsBalanceGet;
-  
+
   plaidClient.accountsGet = async (request: any) => {
     console.log('Plaid: Mock accountsGet called with:', request);
     // In test environment, return empty accounts to test user isolation
@@ -87,7 +87,7 @@ if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
       config: {}
     } as any;
   };
-  
+
   plaidClient.accountsBalanceGet = async (request: any) => {
     console.log('Plaid: Mock accountsBalanceGet called with:', request);
     // In test environment, return empty accounts to test user isolation
@@ -103,29 +103,11 @@ if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
   };
 }
 
-// Helper function to get subtype for demo accounts
-const getSubtypeForType = (type: string): string => {
-  switch (type) {
-    case 'checking':
-      return 'checking';
-    case 'savings':
-      return 'savings';
-    case 'investment':
-      return 'ira'; // Default to IRA for investment accounts
-    case 'credit':
-      return 'credit card';
-    case 'loan':
-      return 'mortgage';
-    default:
-      return 'other';
-  }
-};
-
 // Enhanced data processing for production Plaid data
 const processAccountData = (account: any) => {
   // Ensure we have valid balance data
   const balances = account.balances || {};
-  
+
   return {
     id: account.account_id,
     name: account.name,
@@ -154,9 +136,9 @@ export const processTransactionData = (transaction: any) => {
   // ✅ Extract basic categories from personal_finance_category if legacy category is empty
   let basicCategory = transaction.category || [];
   let basicCategoryId = transaction.category_id;
-  
+
   // If legacy category is empty but personal_finance_category exists, use that for basic categorization
-  if ((!basicCategory || basicCategory.length === 0 || basicCategory[0] === null) && 
+  if ((!basicCategory || basicCategory.length === 0 || basicCategory[0] === null) &&
       transaction.personal_finance_category) {
     basicCategory = [
       transaction.personal_finance_category.primary,
@@ -164,12 +146,12 @@ export const processTransactionData = (transaction: any) => {
     ].filter(Boolean);
     basicCategoryId = transaction.personal_finance_category.primary;
   }
-  
+
   // ✅ FIX: Interpret transaction amounts correctly
   // Most transactions from Plaid are purchases/charges (money going out)
   // We need to make them negative for intuitive display
   let correctedAmount = transaction.amount;
-  
+
   // Check if this is likely a credit/refund (should remain positive)
   const isCredit = transaction.name?.toLowerCase().includes('credit') ||
                    transaction.name?.toLowerCase().includes('refund') ||
@@ -189,12 +171,12 @@ export const processTransactionData = (transaction: any) => {
                    transaction.merchant_name?.toLowerCase().includes('claim') ||
                    transaction.merchant_name?.toLowerCase().includes('insurance') ||
                    // Check if categories suggest this is income/credit
-                   (basicCategory && basicCategory.some((cat: string) => 
-                     cat?.toLowerCase().includes('income') || 
+                   (basicCategory && basicCategory.some((cat: string) =>
+                     cat?.toLowerCase().includes('income') ||
                      cat?.toLowerCase().includes('transfer') ||
                      cat?.toLowerCase().includes('insurance')
                    ));
-  
+
   // If this is a credit/refund, ensure it's positive
   if (isCredit) {
     if (correctedAmount < 0) {
@@ -207,19 +189,19 @@ export const processTransactionData = (transaction: any) => {
   // If this looks like a purchase (has merchant info, categories, etc.), make it negative
   // BUT only if it's not a credit/refund
   else if (!isCredit && (
-      transaction.merchant_name || 
-      transaction.merchant_entity_id || 
+      transaction.merchant_name ||
+      transaction.merchant_entity_id ||
       (basicCategory && basicCategory.length > 0) ||
       transaction.payment_channel === 'in store' ||
       transaction.payment_channel === 'online')) {
-    
+
     // If amount is positive, it's likely a purchase that should be negative
     if (correctedAmount > 0) {
       correctedAmount = -correctedAmount;
       console.log(`🔄 Amount correction: "${transaction.name}" ${transaction.amount} → ${correctedAmount} (purchase detected)`);
     }
   }
-  
+
   // ✅ IMPORTANT: Don't include Plaid's transaction_type field here!
   // Plaid's transaction_type refers to payment method (place, digital, atm, special, etc.)
   // Our transaction_type (from categorization service) refers to transaction category (income, expense, etc.)
@@ -299,16 +281,16 @@ const analyzePortfolio = (holdings: any[], securities: any[]) => {
   }, 0);
 
   const securityMap = new Map(securities.map(sec => [sec.security_id, sec]));
-  
+
   const assetAllocation = holdings.reduce((allocation, holding) => {
     const security = securityMap.get(holding.security_id);
     const assetType = security?.type || 'Unknown';
-    
+
     if (!allocation[assetType]) {
       allocation[assetType] = 0;
     }
     allocation[assetType] += (holding.institution_value as number) || 0;
-    
+
     return allocation;
   }, {} as Record<string, number>);
 
@@ -356,12 +338,12 @@ const analyzeInvestmentActivity = (transactions: any[]) => {
 // Helper function to handle Plaid errors
 const handlePlaidError = (error: any, operation: string) => {
   console.error(`Error in ${operation}:`, error);
-  
+
   // Check for specific Plaid error codes
   if (error.response?.data?.error_code) {
     const errorCode = error.response.data.error_code;
     const errorMessage = error.response.data.error_message;
-    
+
     switch (errorCode) {
       case 'ADDITIONAL_CONSENT_REQUIRED':
         return {
@@ -389,7 +371,7 @@ const handlePlaidError = (error: any, operation: string) => {
         };
     }
   }
-  
+
   return {
     error: 'Failed to complete operation',
     details: error.message || 'An unexpected error occurred',
@@ -415,19 +397,6 @@ export const setupPlaidRoutes = (app: any) => {
   // Supports update mode when accessTokenId provided (for ITEM_LOGIN_REQUIRED reconnect)
   app.post('/plaid/create_link_token', async (req: any, res: any) => {
     try {
-      // Check if this is a demo request
-      const isDemoRequest = req.headers['x-demo-mode'] === 'true' || req.body.isDemo === true;
-      
-      // For demo mode, ALWAYS use fake data instead of hitting Plaid APIs
-      if (isDemoRequest) {
-        console.log('Demo mode detected - returning fake data instead of hitting Plaid APIs');
-        
-        // Return fake link token for demo mode - NO REAL API CALLS
-        const fakeLinkToken = 'demo_link_token_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        res.json({ link_token: fakeLinkToken });
-        return;
-      }
-
       const { accessTokenId } = req.body || {};
 
       // UPDATE MODE: Reconnect existing Item (e.g. ITEM_LOGIN_REQUIRED) - preserves account_ids
@@ -459,7 +428,7 @@ export const setupPlaidRoutes = (app: any) => {
           }
         }
       }
-      
+
       // SEAMLESS APPROACH: Start with minimal products to maximize institution coverage
       // Use additional_consented_products to collect consent for everything we might need later
       const request = {
@@ -483,7 +452,7 @@ export const setupPlaidRoutes = (app: any) => {
       console.log('Creating seamless link token:');
       console.log(`- Products: ${request.products.join(', ')} (minimal to maximize institution coverage)`);
       console.log(`- Additional consent: ${request.additional_consented_products.join(', ')} (for future access)`);
-      
+
       const createTokenResponse = await plaidClient.linkTokenCreate(request);
       res.json({ link_token: createTokenResponse.data.link_token });
     } catch (error) {
@@ -495,60 +464,7 @@ export const setupPlaidRoutes = (app: any) => {
   // Get all accounts with enhanced data
   app.get('/plaid/all-accounts', async (req: any, res: any) => {
     try {
-      // Check for demo mode
-      const isDemo = req.headers['x-demo-mode'] === 'true';
-      
-      if (isDemo) {
-        // Import demo data and convert to Plaid account format
-        const { demoData } = await import('./demo-data');
-        
-        const demoAccounts = demoData.accounts.map(account => {
-          // Convert demo account format to Plaid account format
-          let type = 'depository';
-          let subtype = 'checking';
-          
-          switch (account.type) {
-            case 'checking':
-              type = 'depository';
-              subtype = 'checking';
-              break;
-            case 'savings':
-              type = 'depository';
-              subtype = 'savings';
-              break;
-            case 'investment':
-              type = 'investment';
-              subtype = 'all';
-              break;
-            case 'credit':
-              type = 'credit';
-              subtype = 'credit card';
-              break;
-            case 'loan':
-              type = 'loan';
-              subtype = 'mortgage';
-              break;
-          }
-          
-          return {
-            id: account.id,
-            name: account.name,
-            type: type,
-            subtype: subtype,
-            mask: account.id.slice(-4),
-            balance: {
-              available: account.balance,
-              current: account.balance,
-              limit: account.type === 'credit' ? 10000 : null,
-              iso_currency_code: "USD",
-              unofficial_currency_code: null
-            },
-            institution: account.institution || 'Demo Bank'
-          };
-        });
-        
-        return res.json({ accounts: demoAccounts });
-      }
+
 
       // 🔒 CRITICAL SECURITY: Require authentication for real user data
       if (!req.user?.id) {
@@ -564,9 +480,9 @@ export const setupPlaidRoutes = (app: any) => {
       // ✅ Use unified FinancialDataService for consistent data
       const { FinancialDataService } = await import('./services/financial-data-service');
       const financialDataService = new FinancialDataService();
-      
+
       console.log(`🔍 Fetching accounts for user ${req.user.id} using FinancialDataService`);
-      
+
       const financialData = await financialDataService.getUserFinancialData(req.user.id, {
         includeTransactions: false,
         includeInvestments: false,
@@ -576,12 +492,12 @@ export const setupPlaidRoutes = (app: any) => {
 
       // ✅ Filter to ONLY Plaid accounts (exclude SnapTrade accounts)
       // SnapTrade accounts have account_id starting with "snaptrade-"
-      const plaidOnlyAccounts = financialData.accounts.filter(account => 
+      const plaidOnlyAccounts = financialData.accounts.filter(account =>
         account.source === 'plaid' || !account.account_id.toString().startsWith('snaptrade-')
       );
 
       console.log(`🔍 Found ${plaidOnlyAccounts.length} Plaid accounts from FinancialDataService (out of ${financialData.accounts.length} total accounts)`);
-      
+
       // ✅ Verify no duplicates (FinancialDataService should have already deduplicated)
       const accountIdSet = new Set<string>();
       const duplicateIds: string[] = [];
@@ -596,7 +512,7 @@ export const setupPlaidRoutes = (app: any) => {
           }
         }
       });
-      
+
       if (duplicateIds.length > 0) {
         console.error(`❌ /plaid/all-accounts: FinancialDataService returned ${duplicateIds.length} duplicate accounts! This should not happen.`);
         // This is a critical error - FinancialDataService should be the single source of truth
@@ -610,7 +526,7 @@ export const setupPlaidRoutes = (app: any) => {
         // Use account_id or plaidAccountId as the primary ID for frontend
         const accountId = account.account_id || accountAny.plaidAccountId || accountAny.persistentAccountId || account.id;
         const mask = accountAny.mask || (accountId ? accountId.slice(-4) : '****');
-        
+
         return {
           id: accountId, // Use account_id/plaidAccountId as the unique identifier
           name: account.name,
@@ -642,21 +558,21 @@ export const setupPlaidRoutes = (app: any) => {
     try {
       const { public_token } = req.body;
       console.log('Exchanging public token for access token...');
-      
+
       // Debug authentication
       console.log('Exchange token - headers:', req.headers);
       console.log('Exchange token - user:', req.user);
-      
+
       const exchangeResponse = await plaidClient.itemPublicTokenExchange({
         public_token: public_token,
       });
-      
+
       const access_token = exchangeResponse.data.access_token;
       const item_id = exchangeResponse.data.item_id;
-      
+
       console.log(`Received access token: ${access_token.substring(0, 8)}...`);
       console.log(`Item ID: ${item_id}`);
-      
+
       // Store the access token and item_id in the database
       // Only update tokens we're allowed to: current user's, or unassigned (userId: null).
       // Never update another user's token - prevents ownership hijacking.
@@ -700,19 +616,19 @@ export const setupPlaidRoutes = (app: any) => {
           }
         });
       }
-      
+
       console.log(`Token stored with userId: ${req.user?.id || 'NO USER'}`);
-      
+
       // INTELLIGENT ACCOUNT DETECTION: After successful linking, detect what's available
       // and call appropriate endpoints based on account types
       try {
         console.log('Starting intelligent account detection...');
-        
+
         // Get accounts to see what types we have
         const accountsResponse = await plaidClient.accountsGet({
           access_token: access_token,
         });
-        
+
         const accounts = accountsResponse.data.accounts;
         console.log(`Found ${accounts.length} accounts to analyze`);
 
@@ -836,14 +752,14 @@ export const setupPlaidRoutes = (app: any) => {
             console.warn('Orphan cleanup failed (non-critical):', cleanupErr?.message);
           }
         }
-        
+
         // Analyze each account and call appropriate endpoints
         for (const account of accounts) {
           const accountType = account.type;
           const accountSubtype = account.subtype;
-          
+
           console.log(`Analyzing account: ${account.name} (${accountType}/${accountSubtype})`);
-          
+
           // For investment accounts, get holdings and transactions
           if (accountType === 'investment') {
             console.log('Investment account detected - fetching holdings and transactions');
@@ -853,7 +769,7 @@ export const setupPlaidRoutes = (app: any) => {
                 access_token: access_token,
               });
               console.log(`Retrieved ${holdingsResponse.data.holdings?.length || 0} investment holdings`);
-              
+
               // Get investment transactions
               const transactionsResponse = await plaidClient.investmentsTransactionsGet({
                 access_token: access_token,
@@ -865,7 +781,7 @@ export const setupPlaidRoutes = (app: any) => {
               console.log('Investment data not available for this account:', error.message);
             }
           }
-          
+
           // For credit/loan accounts, get liabilities
           if (accountType === 'credit' || accountType === 'loan') {
             console.log('Credit/Loan account detected - fetching liabilities');
@@ -878,7 +794,7 @@ export const setupPlaidRoutes = (app: any) => {
               console.log('Liability data not available for this account:', error.message);
             }
           }
-          
+
           // For standard deposit accounts, get transactions
           if (accountType === 'depository') {
             console.log('Depository account detected - fetching transactions');
@@ -895,13 +811,13 @@ export const setupPlaidRoutes = (app: any) => {
             }
           }
         }
-        
+
         console.log('Intelligent account detection completed successfully');
       } catch (detectionError: any) {
         // Don't fail the token exchange if detection fails
         console.log('Account detection failed (non-critical):', detectionError.message);
       }
-      
+
       res.json({ access_token });
     } catch (error) {
       const errorInfo = handlePlaidError(error, 'exchanging public token');
@@ -913,7 +829,7 @@ export const setupPlaidRoutes = (app: any) => {
   app.post('/plaid/refresh_token', async (req: any, res: any) => {
     try {
       const { access_token } = req.body;
-      
+
       // Test if the token is still valid by making a simple API call
       await plaidClient.accountsGet({
         access_token: access_token,
@@ -935,7 +851,7 @@ export const setupPlaidRoutes = (app: any) => {
   app.get('/plaid/accounts', async (req: any, res: any) => {
     try {
       const accessToken = req.headers.authorization?.replace('Bearer ', '') || req.query.access_token;
-      
+
       if (!accessToken) {
         return res.status(400).json({ error: 'Access token required' });
       }
@@ -964,438 +880,19 @@ export const setupPlaidRoutes = (app: any) => {
   // Get all transactions with enhanced data
   app.get('/plaid/transactions', async (req: any, res: any) => {
     try {
-      // Check for demo mode
-      const isDemo = req.headers['x-demo-mode'] === 'true';
-      
-      if (isDemo) {
-        // NOTE: Demo transaction data is hardcoded for the same reasons as accounts above
-        // All dates are set to 2025 to ensure they appear in current date ranges
-        // This array contains 10 transactions with various categories and amounts
-        const demoTransactions = [
-          {
-            id: "t1",
-            account_id: "checking_1",
-            amount: 4250.00,
-            date: "2025-07-15",
-            name: "Salary - Tech Corp",
-            merchant_name: "Tech Corp",
-            category: ["income", "salary"],
-            category_id: "20000000",
-            pending: false,
-            payment_channel: "online",
-            location: {
-              city: "Austin",
-              state: "TX",
-              country: "US"
-            },
-            enriched_data: {
-              merchant_name: "Tech Corp",
-              website: "techcorp.com",
-              logo_url: "https://logo.clearbit.com/techcorp.com",
-              primary_color: "#4CAF50",
-              domain: "techcorp.com",
-              category: ["income", "salary", "technology"],
-              category_id: "20000000",
-              brand_logo_url: "https://logo.clearbit.com/techcorp.com",
-              brand_name: "Tech Corp"
-            }
-          },
-          {
-            id: "t2",
-            account_id: "checking_1",
-            amount: -850.00,
-            date: "2025-07-01",
-            name: "Mortgage Payment",
-            merchant_name: "Wells Fargo",
-            category: ["housing", "mortgage"],
-            category_id: "16000000",
-            pending: false,
-            payment_channel: "online",
-            location: {
-              city: "San Francisco",
-              state: "CA",
-              country: "US"
-            },
-            enriched_data: {
-              merchant_name: "Wells Fargo",
-              website: "wellsfargo.com",
-              logo_url: "https://logo.clearbit.com/wellsfargo.com",
-              primary_color: "#333333",
-              domain: "wellsfargo.com",
-              category: ["housing", "mortgage", "financial"],
-              category_id: "16000000",
-              brand_logo_url: "https://logo.clearbit.com/wellsfargo.com",
-              brand_name: "Wells Fargo"
-            }
-          },
-          {
-            id: "t3",
-            account_id: "checking_1",
-            amount: -120.00,
-            date: "2025-07-05",
-            name: "Electric Bill",
-            merchant_name: "Austin Energy",
-            category: ["utilities", "electric"],
-            category_id: "18000000",
-            pending: false,
-            payment_channel: "online",
-            location: {
-              city: "Austin",
-              state: "TX",
-              country: "US"
-            },
-            enriched_data: {
-              merchant_name: "Austin Energy",
-              website: "austinenergy.com",
-              logo_url: "https://logo.clearbit.com/austinenergy.com",
-              primary_color: "#0066CC",
-              domain: "austinenergy.com",
-              category: ["utilities", "electric", "government"],
-              category_id: "18000000",
-              brand_logo_url: "https://logo.clearbit.com/austinenergy.com",
-              brand_name: "Austin Energy"
-            }
-          },
-          {
-            id: "t4",
-            account_id: "checking_1",
-            amount: -85.00,
-            date: "2025-07-10",
-            name: "Car Insurance",
-            merchant_name: "State Farm",
-            category: ["insurance", "auto"],
-            category_id: "22000000",
-            pending: false,
-            payment_channel: "online",
-            location: {
-              city: "Bloomington",
-              state: "IL",
-              country: "US"
-            },
-            enriched_data: {
-              merchant_name: "State Farm",
-              website: "statefarm.com",
-              logo_url: "https://logo.clearbit.com/statefarm.com",
-              primary_color: "#E31837",
-              domain: "statefarm.com",
-              category: ["insurance", "auto", "financial"],
-              category_id: "22000000",
-              brand_logo_url: "https://logo.clearbit.com/statefarm.com",
-              brand_name: "State Farm"
-            }
-          },
-          {
-            id: "t5",
-            account_id: "checking_1",
-            amount: -450.00,
-            date: "2025-07-12",
-            name: "Whole Foods",
-            merchant_name: "Whole Foods Market",
-            category: ["food", "groceries"],
-            category_id: "13000000",
-            pending: false,
-            payment_channel: "in store",
-            location: {
-              city: "Austin",
-              state: "TX",
-              country: "US"
-            },
-            enriched_data: {
-              merchant_name: "Whole Foods Market",
-              website: "wholefoodsmarket.com",
-              logo_url: "https://logo.clearbit.com/wholefoodsmarket.com",
-              primary_color: "#2E7D32",
-              domain: "wholefoodsmarket.com",
-              category: ["food", "groceries", "organic"],
-              category_id: "13000000",
-              brand_logo_url: "https://logo.clearbit.com/wholefoodsmarket.com",
-              brand_name: "Whole Foods Market"
-            }
-          },
-          {
-            id: "t6",
-            account_id: "checking_1",
-            amount: -200.00,
-            date: "2025-07-14",
-            name: "Shell Gas Station",
-            merchant_name: "Shell",
-            category: ["transportation", "gas"],
-            category_id: "14000000",
-            pending: false,
-            payment_channel: "in store",
-            location: {
-              city: "Austin",
-              state: "TX",
-              country: "US"
-            }
-          },
-          {
-            id: "t7",
-            account_id: "checking_1",
-            amount: -150.00,
-            date: "2025-07-16",
-            name: "Netflix & Spotify",
-            merchant_name: "Netflix",
-            category: ["entertainment", "streaming"],
-            category_id: "17000000",
-            pending: false,
-            payment_channel: "online",
-            location: {
-              city: "Los Gatos",
-              state: "CA",
-              country: "US"
-            }
-          },
-          {
-            id: "t8",
-            account_id: "checking_1",
-            amount: -300.00,
-            date: "2025-07-18",
-            name: "Restaurant Expenses",
-            merchant_name: "Various Restaurants",
-            category: ["food", "dining"],
-            category_id: "13000000",
-            pending: false,
-            payment_channel: "in store",
-            location: {
-              city: "Austin",
-              state: "TX",
-              country: "US"
-            }
-          },
-          {
-            id: "t9",
-            account_id: "checking_1",
-            amount: -1000.00,
-            date: "2025-07-20",
-            name: "Transfer to Savings",
-            merchant_name: "Ally Bank",
-            category: ["transfer", "savings"],
-            category_id: "21000000",
-            pending: false,
-            payment_channel: "online",
-            location: {
-              city: "Sandy",
-              state: "UT",
-              country: "US"
-            }
-          },
-          {
-            id: "t10",
-            account_id: "credit_1",
-            amount: -150.00,
-            date: "2025-07-22",
-            name: "Amazon Purchase",
-            merchant_name: "Amazon",
-            category: ["shopping", "online"],
-            category_id: "19000000",
-            pending: false,
-            payment_channel: "online",
-            location: {
-              city: "Seattle",
-              state: "WA",
-              country: "US"
-            },
-            enriched_data: {
-              merchant_name: "Amazon",
-              website: "amazon.com",
-              logo_url: "https://logo.clearbit.com/amazon.com",
-              primary_color: "#FF9900",
-              domain: "amazon.com",
-              category: ["shopping", "online", "retail"],
-              category_id: "19000000",
-              brand_logo_url: "https://logo.clearbit.com/amazon.com",
-              brand_name: "Amazon"
-            }
-          },
-          // Additional recent transactions to show more activity
-          {
-            id: "t11",
-            account_id: "checking_1",
-            amount: -75.00,
-            date: "2025-07-24",
-            name: "Exxon Gas Station",
-            merchant_name: "Exxon",
-            category: ["transportation", "gas"],
-            category_id: "14000000",
-            pending: false,
-            payment_channel: "in store",
-            location: {
-              city: "Austin",
-              state: "TX",
-              country: "US"
-            }
-          },
-          {
-            id: "t12",
-            account_id: "checking_1",
-            amount: -200.00,
-            date: "2025-07-26",
-            name: "Date Night Restaurant",
-            merchant_name: "Various Restaurants",
-            category: ["food", "dining"],
-            category_id: "13000000",
-            pending: false,
-            payment_channel: "in store",
-            location: {
-              city: "Austin",
-              state: "TX",
-              country: "US"
-            }
-          },
-          {
-            id: "t13",
-            account_id: "checking_1",
-            amount: -180.00,
-            date: "2025-07-27",
-            name: "Target - Household Items",
-            merchant_name: "Target",
-            category: ["shopping", "retail"],
-            category_id: "19000000",
-            pending: false,
-            payment_channel: "in store",
-            location: {
-              city: "Austin",
-              state: "TX",
-              country: "US"
-            }
-          },
-          {
-            id: "t14",
-            account_id: "checking_1",
-            amount: -65.00,
-            date: "2025-07-25",
-            name: "Costco Gas",
-            merchant_name: "Costco",
-            category: ["transportation", "gas"],
-            category_id: "14000000",
-            pending: false,
-            payment_channel: "in store",
-            location: {
-              city: "Austin",
-              state: "TX",
-              country: "US"
-            }
-          },
-          {
-            id: "t15",
-            account_id: "checking_1",
-            amount: -120.00,
-            date: "2025-07-23",
-            name: "Lunch with Colleagues",
-            merchant_name: "Various Restaurants",
-            category: ["food", "dining"],
-            category_id: "13000000",
-            pending: false,
-            payment_channel: "in store",
-            location: {
-              city: "Austin",
-              state: "TX",
-              country: "US"
-            }
-          },
-          {
-            id: "t16",
-            account_id: "checking_1",
-            amount: -95.00,
-            date: "2025-07-21",
-            name: "CVS Pharmacy",
-            merchant_name: "CVS",
-            category: ["shopping", "pharmacy"],
-            category_id: "19000000",
-            pending: false,
-            payment_channel: "in store",
-            location: {
-              city: "Austin",
-              state: "TX",
-              country: "US"
-            }
-          },
-          {
-            id: "t17",
-            account_id: "checking_1",
-            amount: -40.00,
-            date: "2025-07-19",
-            name: "Movie Tickets",
-            merchant_name: "AMC Theaters",
-            category: ["entertainment", "movies"],
-            category_id: "17000000",
-            pending: false,
-            payment_channel: "in store",
-            location: {
-              city: "Austin",
-              state: "TX",
-              country: "US"
-            }
-          },
-          {
-            id: "t18",
-            account_id: "checking_1",
-            amount: -280.00,
-            date: "2025-07-17",
-            name: "H-E-B Groceries",
-            merchant_name: "H-E-B",
-            category: ["food", "groceries"],
-            category_id: "13000000",
-            pending: false,
-            payment_channel: "in store",
-            location: {
-              city: "Austin",
-              state: "TX",
-              country: "US"
-            }
-          },
-          {
-            id: "t19",
-            account_id: "checking_1",
-            amount: -60.00,
-            date: "2025-07-15",
-            name: "Shell Gas Station",
-            merchant_name: "Shell",
-            category: ["transportation", "gas"],
-            category_id: "14000000",
-            pending: false,
-            payment_channel: "in store",
-            location: {
-              city: "Austin",
-              state: "TX",
-              country: "US"
-            }
-          },
-          {
-            id: "t20",
-            account_id: "checking_1",
-            amount: -110.00,
-            date: "2025-07-13",
-            name: "Coffee & Breakfast",
-            merchant_name: "Various Cafes",
-            category: ["food", "dining"],
-            category_id: "13000000",
-            pending: false,
-            payment_channel: "in store",
-            location: {
-              city: "Austin",
-              state: "TX",
-              country: "US"
-            }
-          }
-        ];
-        
-        res.json({ transactions: demoTransactions });
-        return;
-      }
-      
+
+
             // 🔒 CRITICAL SECURITY: Require authentication for real user data
       const authHeader = req.headers.authorization;
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ error: 'Authentication required for accessing transaction data' });
       }
-      
+
       const token = authHeader.replace('Bearer ', '');
       if (!token) {
         return res.status(401).json({ error: 'Authentication required for accessing transaction data' });
       }
-      
+
       // Verify token and get user info
       try {
         const { verifyToken } = await import('./auth/utils');
@@ -1403,7 +900,7 @@ export const setupPlaidRoutes = (app: any) => {
         if (!payload || !payload.userId) {
           return res.status(401).json({ error: 'Authentication required for accessing transaction data' });
         }
-        
+
         // Set req.user for the rest of the endpoint
         req.user = {
           id: payload.userId,
@@ -1413,12 +910,12 @@ export const setupPlaidRoutes = (app: any) => {
       } catch (error) {
         return res.status(401).json({ error: 'Authentication required for accessing transaction data' });
       }
-      
+
       // ✅ PRODUCTION MODE: Use FinancialDataService as single source of truth
       const { count = '500' } = req.query;
-      
+
       console.log(`🔍 /plaid/transactions: Fetching transactions using FinancialDataService for user ${req.user.id}`);
-      
+
       // Use FinancialDataService to get transactions (single source of truth!)
       // ✅ Skip categorization for UI-only requests (performance optimization)
       // Only personal_finance_category is needed for UI display
@@ -1430,12 +927,12 @@ export const setupPlaidRoutes = (app: any) => {
         skipCategorization: true, // ✅ UI doesn't need full categorization, just personal_finance_category from Plaid
         shouldPersistTransactions: false // ✅ Display-only: don't persist transactions
       });
-      
+
       console.log(`🔍 /plaid/transactions: FinancialDataService returned ${financialData.bankingTransactions.length} banking transactions`);
-      
+
       const allTransactions: any[] = [];
       const seenTransactionIds = new Set();
-      
+
       // Process transactions from FinancialDataService
       // Note: These transactions are already normalized by TransactionNormalizationService
       // which converts personal_finance_category to category and normalizes amounts
@@ -1447,22 +944,22 @@ export const setupPlaidRoutes = (app: any) => {
             continue;
           }
           seenTransactionIds.add(transactionId);
-          
+
           // ✅ Transactions from FinancialDataService are already normalized!
           // No need to call processTransactionData() again - it would be redundant
           // and might overwrite the already-normalized category data
           allTransactions.push(transaction);
-          
+
         } catch (error) {
           console.error(`Error processing transaction:`, error);
         }
       }
-      
+
       // Skip the old enrichment logic and go straight to sorting/limiting
       /*
           // Automatically enrich transaction with merchant data
           try {
-            
+
             // Map transactions for Plaid enrichment API
             const mappedTransactions = transactionsForEnrichment.map((t: any) => ({
               id: t.transaction_id,
@@ -1471,35 +968,35 @@ export const setupPlaidRoutes = (app: any) => {
               direction: t.amount > 0 ? 'INFLOW' as any : 'OUTFLOW' as any,
               iso_currency_code: t.iso_currency_code || 'USD'
             }));
-            
+
             // Call Plaid enrichment API
             const enrichResponse = await plaidClient.transactionsEnrich({
               account_type: 'depository',
               transactions: mappedTransactions
             });
-            
+
             console.log(`✅ Transaction enrichment successful:`, {
               total: transactionsResponse.data.transactions.length,
               enrichedCount: enrichResponse.data.enriched_transactions?.length || 0,
               firstEnriched: enrichResponse.data.enriched_transactions?.[0]
             });
-            
+
             // Create a map of enriched data by transaction ID
             const enrichedDataMap = new Map();
             enrichResponse.data.enriched_transactions?.forEach((enriched: any, index: number) => {
               enrichedDataMap.set(mappedTransactions[index].id, enriched);
             });
-            
+
             // Merge enriched data with processed transactions
             const enrichedTransactions = processedTransactions.map((transaction) => {
               // Try to find enriched data by matching the transaction ID
               let enrichedTransaction = enrichedDataMap.get(transaction.id);
-              
+
               // If not found by current ID, try to find by the original Plaid transaction ID
               if (!enrichedTransaction && (transaction as any).transaction_id) {
                 enrichedTransaction = enrichedDataMap.get((transaction as any).transaction_id);
               }
-              
+
               // If still not found, try to find by matching the transaction name (fallback)
               if (!enrichedTransaction) {
                 for (const [key, value] of enrichedDataMap.entries()) {
@@ -1509,7 +1006,7 @@ export const setupPlaidRoutes = (app: any) => {
                   }
                 }
               }
-              
+
               if (enrichedTransaction) {
                 // Get enhanced categories from Plaid enrichment
                 let enhancedCategories = [];
@@ -1520,13 +1017,13 @@ export const setupPlaidRoutes = (app: any) => {
                     enriched.detailed
                   ].filter(Boolean);
                 }
-                
+
                 // Only show enhanced categories if they're different from basic categories
                 const basicCategories = transaction.category || [];
-                const hasDifferentCategories = enhancedCategories.length > 0 && 
-                  (enhancedCategories.length !== basicCategories.length || 
+                const hasDifferentCategories = enhancedCategories.length > 0 &&
+                  (enhancedCategories.length !== basicCategories.length ||
                    !enhancedCategories.every((cat: string, index: number) => basicCategories[index] === cat));
-                
+
                 return {
                   ...transaction,
                   // ✅ PRESERVE original Plaid categories at the top level
@@ -1549,16 +1046,16 @@ export const setupPlaidRoutes = (app: any) => {
               }
               return transaction;
             });
-            
+
             allTransactions.push(...enrichedTransactions);
       */ // END OF OLD ENRICHMENT CODE COMMENT
-      
+
       // Sort transactions by date (newest first)
       allTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      
+
       // Limit to requested count
       const limitedTransactions = allTransactions.slice(0, parseInt(count as string));
-      
+
       // Debug: Check what we're sending to frontend
       console.log(`📤 Sending to frontend:`, {
         totalTransactions: allTransactions.length,
@@ -1578,9 +1075,9 @@ export const setupPlaidRoutes = (app: any) => {
           ].filter(Boolean)
         } : 'No transactions'
       });
-      
+
       res.json({ transactions: limitedTransactions });
-      
+
     } catch (error) {
       console.error('Error in /plaid/transactions endpoint:', error);
       res.status(500).json({ error: 'Failed to fetch transactions' });
@@ -1590,919 +1087,7 @@ export const setupPlaidRoutes = (app: any) => {
   // Get comprehensive investment data (automatically combines holdings and transactions)
   app.get('/plaid/investments', async (req: any, res: any) => {
     try {
-      // Check if this is a demo request
-      const isDemo = req.headers['x-demo-mode'] === 'true';
-      
-      if (isDemo) {
-        // Return demo investment data that matches the frontend expectations
-        const demoData = {
-          portfolio: {
-            totalValue: 421700.75, // Total of all investment accounts: 401k + IRA + Brokerage + HSA + 529
-            assetAllocation: [
-              { type: 'Equity', value: 246200.75, percentage: 58.4 },
-              { type: 'Fixed Income', value: 15678.00, percentage: 3.7 },
-              { type: 'International', value: 33562.05, percentage: 8.0 },
-              { type: 'Cash & Equivalents', value: 126259.95, percentage: 29.9 }
-            ],
-            holdingCount: 60, // Total holdings across all accounts
-            securityCount: 26
-          },
-          holdings: [
-            // 401k holdings
-            {
-              id: 'demo_401k_vtsax',
-              account_id: '401k_1',
-              security_id: 'vtsax',
-              institution_value: 156780.45,
-              institution_price: 142.80,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 156000.00,
-              quantity: 1097.45,
-              iso_currency_code: 'USD',
-              security_name: 'Vanguard Total Stock Market Index Fund',
-              security_type: 'equity',
-              ticker_symbol: 'VTSAX'
-            },
-            {
-              id: 'demo_401k_vtiax',
-              account_id: '401k_1',
-              security_id: 'vtiax',
-              institution_value: 15678.05,
-              institution_price: 35.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 15000.00,
-              quantity: 447.89,
-              iso_currency_code: 'USD',
-              security_name: 'Vanguard Total International Stock Index Fund',
-              security_type: 'equity',
-              ticker_symbol: 'VTIAX'
-            },
-            {
-              id: 'demo_401k_vbtlx',
-              account_id: '401k_1',
-              security_id: 'vbtlx',
-              institution_value: 15678.00,
-              institution_price: 10.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 15500.00,
-              quantity: 1567.80,
-              iso_currency_code: 'USD',
-              security_name: 'Vanguard Total Bond Market Index Fund',
-              security_type: 'fixed income',
-              ticker_symbol: 'VBTLX'
-            },
-            // IRA holdings
-            {
-              id: 'demo_ira_vti',
-              account_id: 'ira_1',
-              security_id: 'vti',
-              institution_value: 89420.30,
-              institution_price: 570.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 85000.00,
-              quantity: 156.78,
-              iso_currency_code: 'USD',
-              security_name: 'Vanguard Total Stock Market ETF',
-              security_type: 'equity',
-              ticker_symbol: 'VTI'
-            },
-            {
-              id: 'demo_ira_vxus',
-              account_id: 'ira_1',
-              security_id: 'vxus',
-              institution_value: 17884.00,
-              institution_price: 40.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 17000.00,
-              quantity: 447.10,
-              iso_currency_code: 'USD',
-              security_name: 'Vanguard Total International Stock ETF',
-              security_type: 'equity',
-              ticker_symbol: 'VXUS'
-            },
-            // Brokerage holdings
-            {
-              id: 'demo_brokerage_aapl',
-              account_id: 'brokerage_1',
-              security_id: 'aapl',
-              institution_value: 8471.85,
-              institution_price: 185.50,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 8000.00,
-              quantity: 45.67,
-              iso_currency_code: 'USD',
-              security_name: 'Apple Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'AAPL'
-            },
-            {
-              id: 'demo_brokerage_msft',
-              account_id: 'brokerage_1',
-              security_id: 'msft',
-              institution_value: 13655.36,
-              institution_price: 420.80,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 13000.00,
-              quantity: 32.45,
-              iso_currency_code: 'USD',
-              security_name: 'Microsoft Corporation',
-              security_type: 'equity',
-              ticker_symbol: 'MSFT'
-            },
-            {
-              id: 'demo_brokerage_googl',
-              account_id: 'brokerage_1',
-              security_id: 'googl',
-              institution_value: 5063.28,
-              institution_price: 175.20,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 4800.00,
-              quantity: 28.90,
-              iso_currency_code: 'USD',
-              security_name: 'Alphabet Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'GOOGL'
-            },
-            {
-              id: 'demo_brokerage_amzn',
-              account_id: 'brokerage_1',
-              security_id: 'amzn',
-              institution_value: 6613.28,
-              institution_price: 185.40,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 6000.00,
-              quantity: 35.67,
-              iso_currency_code: 'USD',
-              security_name: 'Amazon.com Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'AMZN'
-            },
-            {
-              id: 'demo_brokerage_tsla',
-              account_id: 'brokerage_1',
-              security_id: 'tsla',
-              institution_value: 10398.70,
-              institution_price: 245.60,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 11000.00,
-              quantity: 42.34,
-              iso_currency_code: 'USD',
-              security_name: 'Tesla Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'TSLA'
-            },
-            {
-              id: 'demo_brokerage_nvda',
-              account_id: 'brokerage_1',
-              security_id: 'nvda',
-              institution_value: 14052.09,
-              institution_price: 890.50,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 12000.00,
-              quantity: 15.78,
-              iso_currency_code: 'USD',
-              security_name: 'NVIDIA Corporation',
-              security_type: 'equity',
-              ticker_symbol: 'NVDA'
-            },
-            {
-              id: 'demo_brokerage_brkb',
-              account_id: 'brokerage_1',
-              security_id: 'brkb',
-              institution_value: 6906.06,
-              institution_price: 365.40,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 6500.00,
-              quantity: 18.90,
-              iso_currency_code: 'USD',
-              security_name: 'Berkshire Hathaway Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'BRK.B'
-            },
-            {
-              id: 'demo_brokerage_jpm',
-              account_id: 'brokerage_1',
-              security_id: 'jpm',
-              institution_value: 13389.53,
-              institution_price: 198.50,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 12500.00,
-              quantity: 67.45,
-              iso_currency_code: 'USD',
-              security_name: 'JPMorgan Chase & Co.',
-              security_type: 'equity',
-              ticker_symbol: 'JPM'
-            },
-            {
-              id: 'demo_brokerage_jnj',
-              account_id: 'brokerage_1',
-              security_id: 'jnj',
-              institution_value: 14776.50,
-              institution_price: 165.80,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 14000.00,
-              quantity: 89.12,
-              iso_currency_code: 'USD',
-              security_name: 'Johnson & Johnson',
-              security_type: 'equity',
-              ticker_symbol: 'JNJ'
-            },
-            {
-              id: 'demo_brokerage_pg',
-              account_id: 'brokerage_1',
-              security_id: 'pg',
-              institution_value: 11114.62,
-              institution_price: 145.60,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 10500.00,
-              quantity: 76.34,
-              iso_currency_code: 'USD',
-              security_name: 'Procter & Gamble Co.',
-              security_type: 'equity',
-              ticker_symbol: 'PG'
-            },
-            // HSA holdings
-            {
-              id: 'demo_hsa_vtsax',
-              account_id: 'hsa_1',
-              security_id: 'hsa_vtsax',
-              institution_value: 12773.46,
-              institution_price: 142.80,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 12000.00,
-              quantity: 89.45,
-              iso_currency_code: 'USD',
-              security_name: 'Vanguard Total Stock Market Index Fund',
-              security_type: 'equity',
-              ticker_symbol: 'VTSAX'
-            },
-            {
-              id: 'demo_hsa_vtiax',
-              account_id: 'hsa_1',
-              security_id: 'hsa_vtiax',
-              institution_value: 1287.30,
-              institution_price: 35.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 1200.00,
-              quantity: 36.78,
-              iso_currency_code: 'USD',
-              security_name: 'Vanguard Total International Stock Index Fund',
-              security_type: 'equity',
-              ticker_symbol: 'VTIAX'
-            },
-            {
-              id: 'demo_hsa_vbtlx',
-              account_id: 'hsa_1',
-              security_id: 'hsa_vbtlx',
-              institution_value: 1289.00,
-              institution_price: 10.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 1250.00,
-              quantity: 128.90,
-              iso_currency_code: 'USD',
-              security_name: 'Vanguard Total Bond Market Index Fund',
-              security_type: 'fixed income',
-              ticker_symbol: 'VBTLX'
-            },
-            // 529 Plan holdings
-            {
-              id: 'demo_529_vtsax',
-              account_id: '529_1',
-              security_id: '529_vtsax',
-              institution_value: 22387.58,
-              institution_price: 142.80,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 20000.00,
-              quantity: 156.78,
-              iso_currency_code: 'USD',
-              security_name: 'Vanguard Total Stock Market Index Fund',
-              security_type: 'equity',
-              ticker_symbol: 'VTSAX'
-            },
-            {
-              id: 'demo_529_vtiax',
-              account_id: '529_1',
-              security_id: '529_vtiax',
-              institution_value: 2360.75,
-              institution_price: 35.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 2000.00,
-              quantity: 67.45,
-              iso_currency_code: 'USD',
-              security_name: 'Vanguard Total International Stock Index Fund',
-              security_type: 'equity',
-              ticker_symbol: 'VTIAX'
-            },
-            {
-              id: 'demo_529_vbtlx',
-              account_id: '529_1',
-              security_id: '529_vbtlx',
-              institution_value: 2256.70,
-              institution_price: 10.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 2000.00,
-              quantity: 225.67,
-              iso_currency_code: 'USD',
-              security_name: 'Vanguard Total Bond Market Index Fund',
-              security_type: 'fixed income',
-              ticker_symbol: 'VBTLX'
-            },
-            // Additional holdings to reach 60 total
-            {
-              id: 'demo_brokerage_meta',
-              account_id: 'brokerage_1',
-              security_id: 'meta',
-              institution_value: 8750.00,
-              institution_price: 350.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 8000.00,
-              quantity: 25.00,
-              iso_currency_code: 'USD',
-              security_name: 'Meta Platforms Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'META'
-            },
-            {
-              id: 'demo_brokerage_unh',
-              account_id: 'brokerage_1',
-              security_id: 'unh',
-              institution_value: 12500.00,
-              institution_price: 500.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 12000.00,
-              quantity: 25.00,
-              iso_currency_code: 'USD',
-              security_name: 'UnitedHealth Group Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'UNH'
-            },
-            {
-              id: 'demo_brokerage_hd',
-              account_id: 'brokerage_1',
-              security_id: 'hd',
-              institution_value: 11250.00,
-              institution_price: 375.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 11000.00,
-              quantity: 30.00,
-              iso_currency_code: 'USD',
-              security_name: 'Home Depot Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'HD'
-            },
-            {
-              id: 'demo_brokerage_dis',
-              account_id: 'brokerage_1',
-              security_id: 'dis',
-              institution_value: 6000.00,
-              institution_price: 80.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 6000.00,
-              quantity: 75.00,
-              iso_currency_code: 'USD',
-              security_name: 'Walt Disney Co.',
-              security_type: 'equity',
-              ticker_symbol: 'DIS'
-            },
-            {
-              id: 'demo_brokerage_coca',
-              account_id: 'brokerage_1',
-              security_id: 'ko',
-              institution_value: 8750.00,
-              institution_price: 70.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 8000.00,
-              quantity: 125.00,
-              iso_currency_code: 'USD',
-              security_name: 'Coca-Cola Co.',
-              security_type: 'equity',
-              ticker_symbol: 'KO'
-            },
-            {
-              id: 'demo_brokerage_pep',
-              account_id: 'brokerage_1',
-              security_id: 'pep',
-              institution_value: 10000.00,
-              institution_price: 200.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 9500.00,
-              quantity: 50.00,
-              iso_currency_code: 'USD',
-              security_name: 'PepsiCo Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'PEP'
-            },
-            {
-              id: 'demo_brokerage_visa',
-              account_id: 'brokerage_1',
-              security_id: 'v',
-              institution_value: 15000.00,
-              institution_price: 300.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 14000.00,
-              quantity: 50.00,
-              iso_currency_code: 'USD',
-              security_name: 'Visa Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'V'
-            },
-            {
-              id: 'demo_brokerage_mastercard',
-              account_id: 'brokerage_1',
-              security_id: 'ma',
-              institution_value: 12000.00,
-              institution_price: 400.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 11000.00,
-              quantity: 30.00,
-              iso_currency_code: 'USD',
-              security_name: 'Mastercard Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'MA'
-            },
-            {
-              id: 'demo_brokerage_netflix',
-              account_id: 'brokerage_1',
-              security_id: 'nflx',
-              institution_value: 8000.00,
-              institution_price: 400.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 7500.00,
-              quantity: 20.00,
-              iso_currency_code: 'USD',
-              security_name: 'Netflix Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'NFLX'
-            },
-            {
-              id: 'demo_brokerage_spotify',
-              account_id: 'brokerage_1',
-              security_id: 'spot',
-              institution_value: 5000.00,
-              institution_price: 250.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 4500.00,
-              quantity: 20.00,
-              iso_currency_code: 'USD',
-              security_name: 'Spotify Technology S.A.',
-              security_type: 'equity',
-              ticker_symbol: 'SPOT'
-            },
-            {
-              id: 'demo_brokerage_uber',
-              account_id: 'brokerage_1',
-              security_id: 'uber',
-              institution_value: 6000.00,
-              institution_price: 60.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 5500.00,
-              quantity: 100.00,
-              iso_currency_code: 'USD',
-              security_name: 'Uber Technologies Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'UBER'
-            },
-            {
-              id: 'demo_brokerage_lyft',
-              account_id: 'brokerage_1',
-              security_id: 'lyft',
-              institution_value: 3000.00,
-              institution_price: 15.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 2500.00,
-              quantity: 200.00,
-              iso_currency_code: 'USD',
-              security_name: 'Lyft Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'LYFT'
-            },
-            {
-              id: 'demo_brokerage_airbnb',
-              account_id: 'brokerage_1',
-              security_id: 'abnb',
-              institution_value: 7500.00,
-              institution_price: 150.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 7000.00,
-              quantity: 50.00,
-              iso_currency_code: 'USD',
-              security_name: 'Airbnb Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'ABNB'
-            },
-            {
-              id: 'demo_brokerage_snowflake',
-              account_id: 'brokerage_1',
-              security_id: 'snow',
-              institution_value: 10000.00,
-              institution_price: 200.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 9000.00,
-              quantity: 50.00,
-              iso_currency_code: 'USD',
-              security_name: 'Snowflake Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'SNOW'
-            },
-            {
-              id: 'demo_brokerage_salesforce',
-              account_id: 'brokerage_1',
-              security_id: 'crm',
-              institution_value: 12000.00,
-              institution_price: 240.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 11000.00,
-              quantity: 50.00,
-              iso_currency_code: 'USD',
-              security_name: 'Salesforce Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'CRM'
-            },
-            {
-              id: 'demo_brokerage_oracle',
-              account_id: 'brokerage_1',
-              security_id: 'orcl',
-              institution_value: 8000.00,
-              institution_price: 100.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 7500.00,
-              quantity: 80.00,
-              iso_currency_code: 'USD',
-              security_name: 'Oracle Corporation',
-              security_type: 'equity',
-              ticker_symbol: 'ORCL'
-            },
-            {
-              id: 'demo_brokerage_intel',
-              account_id: 'brokerage_1',
-              security_id: 'intc',
-              institution_value: 6000.00,
-              institution_price: 30.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 5500.00,
-              quantity: 200.00,
-              iso_currency_code: 'USD',
-              security_name: 'Intel Corporation',
-              security_type: 'equity',
-              ticker_symbol: 'INTC'
-            },
-            {
-              id: 'demo_brokerage_amd',
-              account_id: 'brokerage_1',
-              security_id: 'amd',
-              institution_value: 9000.00,
-              institution_price: 150.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 8000.00,
-              quantity: 60.00,
-              iso_currency_code: 'USD',
-              security_name: 'Advanced Micro Devices Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'AMD'
-            },
-            {
-              id: 'demo_brokerage_qualcomm',
-              account_id: 'brokerage_1',
-              security_id: 'qcom',
-              institution_value: 7000.00,
-              institution_price: 140.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 6500.00,
-              quantity: 50.00,
-              iso_currency_code: 'USD',
-              security_name: 'Qualcomm Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'QCOM'
-            },
-            {
-              id: 'demo_brokerage_broadcom',
-              account_id: 'brokerage_1',
-              security_id: 'avgo',
-              institution_value: 11000.00,
-              institution_price: 550.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 10000.00,
-              quantity: 20.00,
-              iso_currency_code: 'USD',
-              security_name: 'Broadcom Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'AVGO'
-            },
-            {
-              id: 'demo_brokerage_cisco',
-              account_id: 'brokerage_1',
-              security_id: 'csco',
-              institution_value: 8000.00,
-              institution_price: 50.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 7500.00,
-              quantity: 160.00,
-              iso_currency_code: 'USD',
-              security_name: 'Cisco Systems Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'CSCO'
-            },
-            {
-              id: 'demo_brokerage_verizon',
-              account_id: 'brokerage_1',
-              security_id: 'vz',
-              institution_value: 6000.00,
-              institution_price: 40.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 5500.00,
-              quantity: 150.00,
-              iso_currency_code: 'USD',
-              security_name: 'Verizon Communications Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'VZ'
-            },
-            {
-              id: 'demo_brokerage_att',
-              account_id: 'brokerage_1',
-              security_id: 't',
-              institution_value: 5000.00,
-              institution_price: 20.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 4500.00,
-              quantity: 250.00,
-              iso_currency_code: 'USD',
-              security_name: 'AT&T Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'T'
-            },
-            {
-              id: 'demo_brokerage_comcast',
-              account_id: 'brokerage_1',
-              security_id: 'cmcsa',
-              institution_value: 7000.00,
-              institution_price: 35.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 6500.00,
-              quantity: 200.00,
-              iso_currency_code: 'USD',
-              security_name: 'Comcast Corporation',
-              security_type: 'equity',
-              ticker_symbol: 'CMCSA'
-            },
-            {
-              id: 'demo_brokerage_phillips66',
-              account_id: 'brokerage_1',
-              security_id: 'psx',
-              institution_value: 8000.00,
-              institution_price: 100.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 7500.00,
-              quantity: 80.00,
-              iso_currency_code: 'USD',
-              security_name: 'Phillips 66',
-              security_type: 'equity',
-              ticker_symbol: 'PSX'
-            },
-            {
-              id: 'demo_brokerage_chevron',
-              account_id: 'brokerage_1',
-              security_id: 'cvx',
-              institution_value: 9000.00,
-              institution_price: 150.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 8500.00,
-              quantity: 60.00,
-              iso_currency_code: 'USD',
-              security_name: 'Chevron Corporation',
-              security_type: 'equity',
-              ticker_symbol: 'CVX'
-            },
-            {
-              id: 'demo_brokerage_exxon',
-              account_id: 'brokerage_1',
-              security_id: 'xom',
-              institution_value: 7500.00,
-              institution_price: 75.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 7000.00,
-              quantity: 100.00,
-              iso_currency_code: 'USD',
-              security_name: 'Exxon Mobil Corporation',
-              security_type: 'equity',
-              ticker_symbol: 'XOM'
-            },
-            {
-              id: 'demo_brokerage_3m',
-              account_id: 'brokerage_1',
-              security_id: 'mmm',
-              institution_value: 6000.00,
-              institution_price: 100.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 5500.00,
-              quantity: 60.00,
-              iso_currency_code: 'USD',
-              security_name: '3M Company',
-              security_type: 'equity',
-              ticker_symbol: 'MMM'
-            },
-            {
-              id: 'demo_brokerage_caterpillar',
-              account_id: 'brokerage_1',
-              security_id: 'cat',
-              institution_value: 8000.00,
-              institution_price: 200.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 7500.00,
-              quantity: 40.00,
-              iso_currency_code: 'USD',
-              security_name: 'Caterpillar Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'CAT'
-            },
-            {
-              id: 'demo_brokerage_boeing',
-              account_id: 'brokerage_1',
-              security_id: 'ba',
-              institution_value: 5000.00,
-              institution_price: 200.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 4500.00,
-              quantity: 25.00,
-              iso_currency_code: 'USD',
-              security_name: 'Boeing Co.',
-              security_type: 'equity',
-              ticker_symbol: 'BA'
-            },
-            {
-              id: 'demo_brokerage_general_electric',
-              account_id: 'brokerage_1',
-              security_id: 'ge',
-              institution_value: 4000.00,
-              institution_price: 100.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 3500.00,
-              quantity: 40.00,
-              iso_currency_code: 'USD',
-              security_name: 'General Electric Company',
-              security_type: 'equity',
-              ticker_symbol: 'GE'
-            },
-            {
-              id: 'demo_brokerage_honeywell',
-              account_id: 'brokerage_1',
-              security_id: 'hon',
-              institution_value: 7000.00,
-              institution_price: 175.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 6500.00,
-              quantity: 40.00,
-              iso_currency_code: 'USD',
-              security_name: 'Honeywell International Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'HON'
-            },
-            {
-              id: 'demo_brokerage_dupont',
-              account_id: 'brokerage_1',
-              security_id: 'dd',
-              institution_value: 6000.00,
-              institution_price: 75.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 5500.00,
-              quantity: 80.00,
-              iso_currency_code: 'USD',
-              security_name: 'DuPont de Nemours Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'DD'
-            },
-            {
-              id: 'demo_brokerage_dow',
-              account_id: 'brokerage_1',
-              security_id: 'dow',
-              institution_value: 5000.00,
-              institution_price: 50.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 4500.00,
-              quantity: 100.00,
-              iso_currency_code: 'USD',
-              security_name: 'Dow Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'DOW'
-            },
-            {
-              id: 'demo_brokerage_ibm',
-              account_id: 'brokerage_1',
-              security_id: 'ibm',
-              institution_value: 8000.00,
-              institution_price: 160.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 7500.00,
-              quantity: 50.00,
-              iso_currency_code: 'USD',
-              security_name: 'International Business Machines Corp.',
-              security_type: 'equity',
-              ticker_symbol: 'IBM'
-            },
-            {
-              id: 'demo_brokerage_abbvie',
-              account_id: 'brokerage_1',
-              security_id: 'abbv',
-              institution_value: 7000.00,
-              institution_price: 140.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 6500.00,
-              quantity: 50.00,
-              iso_currency_code: 'USD',
-              security_name: 'AbbVie Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'ABBV'
-            },
-            {
-              id: 'demo_brokerage_merck',
-              account_id: 'brokerage_1',
-              security_id: 'mrk',
-              institution_value: 8000.00,
-              institution_price: 100.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 7500.00,
-              quantity: 80.00,
-              iso_currency_code: 'USD',
-              security_name: 'Merck & Co. Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'MRK'
-            },
-            {
-              id: 'demo_brokerage_pfizer',
-              account_id: 'brokerage_1',
-              security_id: 'pfe',
-              institution_value: 6000.00,
-              institution_price: 30.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 5500.00,
-              quantity: 200.00,
-              iso_currency_code: 'USD',
-              security_name: 'Pfizer Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'PFE'
-            },
-            {
-              id: 'demo_brokerage_amgen',
-              account_id: 'brokerage_1',
-              security_id: 'amgn',
-              institution_value: 7000.00,
-              institution_price: 280.00,
-              institution_price_as_of: new Date().toISOString(),
-              cost_basis: 6500.00,
-              quantity: 25.00,
-              iso_currency_code: 'USD',
-              security_name: 'Amgen Inc.',
-              security_type: 'equity',
-              ticker_symbol: 'AMGN'
-            }
-          ],
-          transactions: [
-            {
-              id: 'demo_transaction_1',
-              account_id: '401k_1',
-              security_id: 'vtsax',
-              amount: 1200.00,
-              date: '2025-07-15',
-              name: '401k Contribution - Tech Corp',
-              quantity: 8.40,
-              fees: 0,
-              price: 142.80,
-              type: 'buy',
-              subtype: 'contribution',
-              iso_currency_code: 'USD'
-            },
-            {
-              id: 'demo_transaction_2',
-              account_id: '401k_1',
-              security_id: 'vtsax',
-              amount: 45.67,
-              date: '2025-07-10',
-              name: 'VTSAX Dividend Reinvestment',
-              quantity: 0.32,
-              fees: 0,
-              price: 142.80,
-              type: 'buy',
-              subtype: 'dividend',
-              iso_currency_code: 'USD'
-            },
-            {
-              id: 'demo_transaction_3',
-              account_id: 'ira_1',
-              security_id: 'vti',
-              amount: 6500.00,
-              date: '2025-07-01',
-              name: 'Roth IRA Contribution',
-              quantity: 11.40,
-              fees: 0,
-              price: 570.00,
-              type: 'buy',
-              subtype: 'contribution',
-              iso_currency_code: 'USD'
-            }
-          ]
-        };
-        
-        return res.json(demoData);
-      }
+
 
       // 🔒 CRITICAL SECURITY: Require authentication for real user data
       if (!req.user?.id) {
@@ -2512,7 +1097,7 @@ export const setupPlaidRoutes = (app: any) => {
       // ✅ Use unified FinancialDataService for consistent data
       const { FinancialDataService } = await import('./services/financial-data-service');
       const financialDataService = new FinancialDataService();
-      
+
       const financialData = await financialDataService.getUserFinancialData(req.user.id, {
         includeTransactions: true, // ✅ Include investment transactions for the Transactions tab
         includeInvestments: true,
@@ -2631,7 +1216,7 @@ export const setupPlaidRoutes = (app: any) => {
   app.post('/plaid/sync_transactions', async (req: any, res: any) => {
     try {
       const { access_token } = req.body;
-      
+
       if (!access_token) {
         return res.status(400).json({ error: 'Access token required' });
       }
@@ -2688,7 +1273,7 @@ export const setupPlaidRoutes = (app: any) => {
         select: { id: true },
       });
       if (!tokenRecord) return res.status(404).json({ error: 'Plaid connection not found' });
-      
+
       // Refresh accounts
       const accountsResponse = await plaidClient.accountsGet({
         access_token: access_token,
@@ -2733,8 +1318,8 @@ export const setupPlaidRoutes = (app: any) => {
       if (!transactionSync.success) throw new Error(transactionSync.error || 'Transaction sync failed');
       const transactionCount = transactionSync.added + transactionSync.modified + transactionSync.removed;
 
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         accountsRefreshed: accountCount,
         transactionsRefreshed: transactionCount
       });
@@ -2749,7 +1334,7 @@ export const setupPlaidRoutes = (app: any) => {
     try {
       if (!req.user?.id) return res.status(401).json({ error: 'Authentication required' });
       await getPrismaClient().accessToken.deleteMany({ where: { userId: req.user.id } });
-      
+
       res.json({ success: true, message: 'All accounts disconnected' });
     } catch (error) {
       const errorInfo = handlePlaidError(error, 'disconnecting accounts');
@@ -2764,99 +1349,7 @@ export const setupPlaidRoutes = (app: any) => {
   // Get investment holdings for all connected accounts
   app.get('/plaid/investments/holdings', async (req: any, res: any) => {
     try {
-      // Check for demo mode
-      const isDemo = req.headers['x-demo-mode'] === 'true';
-      
-      if (isDemo) {
-        // Return demo investment holdings data
-        const demoData = {
-          holdings: [
-            {
-              holdings: [
-                {
-                  id: 'demo_account_1_security_1_100_50000',
-                  account_id: 'demo_account_1',
-                  security_id: 'demo_security_1',
-                  institution_value: 50000,
-                  institution_price: 500.00,
-                  institution_price_as_of: new Date().toISOString(),
-                  cost_basis: 48000,
-                  quantity: 100,
-                  iso_currency_code: 'USD',
-                  security_name: 'Apple Inc. (AAPL)',
-                  security_type: 'equity',
-                  ticker_symbol: 'AAPL'
-                },
-                {
-                  id: 'demo_account_1_security_2_50_25000',
-                  account_id: 'demo_account_1',
-                  security_id: 'demo_security_2',
-                  institution_value: 25000,
-                  institution_price: 500.00,
-                  institution_price_as_of: new Date().toISOString(),
-                  cost_basis: 24000,
-                  quantity: 50,
-                  iso_currency_code: 'USD',
-                  security_name: 'Microsoft Corporation (MSFT)',
-                  security_type: 'equity',
-                  ticker_symbol: 'MSFT'
-                }
-              ],
-              securities: [
-                {
-                  id: 'demo_security_1',
-                  security_id: 'demo_security_1',
-                  name: 'Apple Inc. (AAPL)',
-                  ticker_symbol: 'AAPL',
-                  type: 'equity',
-                  close_price: 500.00,
-                  close_price_as_of: new Date().toISOString(),
-                  iso_currency_code: 'USD'
-                },
-                {
-                  id: 'demo_security_2',
-                  security_id: 'demo_security_2',
-                  name: 'Microsoft Corporation (MSFT)',
-                  ticker_symbol: 'MSFT',
-                  type: 'equity',
-                  close_price: 500.00,
-                  close_price_as_of: new Date().toISOString(),
-                  iso_currency_code: 'USD'
-                }
-              ],
-              accounts: [
-                {
-                  account_id: 'demo_account_1',
-                  name: 'Demo Investment Account',
-                  mask: '1234',
-                  type: 'investment',
-                  subtype: 'brokerage'
-                }
-              ],
-              item: {
-                item_id: 'demo_item_1',
-                institution_id: 'demo_institution_1'
-              },
-              analysis: {
-                totalValue: 75000,
-                assetAllocation: [
-                  { type: 'Stocks', value: 75000, percentage: 100.0 }
-                ],
-                holdingCount: 2,
-                securityCount: 2
-              }
-            }
-          ],
-          summary: {
-            totalAccounts: 1,
-            totalHoldings: 2,
-            totalSecurities: 2,
-            totalPortfolioValue: 75000
-          }
-        };
-        
-        return res.json(demoData);
-      }
+
 
       // 🔒 CRITICAL SECURITY: Require authentication for real user data
       if (!req.user?.id) {
@@ -2866,22 +1359,22 @@ export const setupPlaidRoutes = (app: any) => {
       const accessTokens = await getPrismaClient().accessToken.findMany({
         where: { userId: req.user.id }
       });
-      
+
       const allHoldings: any[] = [];
-      
+
       for (const tokenRecord of accessTokens) {
         try {
           const holdingsResponse = await plaidClient.investmentsHoldingsGet({
             access_token: tokenRecord.token,
           });
-          
+
           // Process and analyze the data
           const processedHoldings = holdingsResponse.data.holdings.map(processInvestmentHolding);
           const processedSecurities = holdingsResponse.data.securities.map(processSecurity);
-          
+
                 // Generate portfolio analysis
       const portfolioAnalysis = analyzePortfolio(processedHoldings, processedSecurities);
-      
+
       allHoldings.push({
         holdings: processedHoldings,
         securities: processedSecurities,
@@ -2889,7 +1382,7 @@ export const setupPlaidRoutes = (app: any) => {
         item: holdingsResponse.data.item,
         analysis: portfolioAnalysis
       });
-      
+
       // Enhance user profile with investment data (if user is authenticated)
       if (req.user?.id) {
         try {
@@ -2907,13 +1400,13 @@ export const setupPlaidRoutes = (app: any) => {
           console.error(`Error fetching holdings for token ${tokenRecord.id}:`, error);
         }
       }
-      
+
       // ✅ FIXED: Calculate combined portfolio analysis for accurate totals
       const combinedHoldings = allHoldings.flatMap(h => h.holdings);
       const combinedSecurities = allHoldings.flatMap(h => h.securities);
       const combinedPortfolioAnalysis = analyzePortfolio(combinedHoldings, combinedSecurities);
-      
-      res.json({ 
+
+      res.json({
         holdings: allHoldings,
         summary: {
           totalAccounts: allHoldings.length,
@@ -2933,86 +1426,7 @@ export const setupPlaidRoutes = (app: any) => {
   // Get investment transactions
   app.get('/plaid/investments/transactions', async (req: any, res: any) => {
     try {
-      // Check for demo mode
-      const isDemo = req.headers['x-demo-mode'] === 'true';
-      
-      if (isDemo) {
-        // Return demo investment transactions data
-        const demoData = {
-          transactions: [
-            {
-              investment_transactions: [
-                {
-                  id: 'demo_transaction_1_demo_account_1_demo_security_1_2025-08-10',
-                  account_id: 'demo_account_1',
-                  security_id: 'demo_security_1',
-                  amount: 50000,
-                  date: '2025-08-10',
-                  name: 'Demo Stock Purchase',
-                  quantity: 100,
-                  fees: 0,
-                  price: 500.00,
-                  type: 'buy',
-                  subtype: 'purchase',
-                  iso_currency_code: 'USD'
-                },
-                {
-                  id: 'demo_transaction_2_demo_account_1_demo_security_2_2025-08-15',
-                  account_id: 'demo_account_1',
-                  security_id: 'demo_security_2',
-                  amount: 25000,
-                  date: '2025-08-15',
-                  name: 'Demo Stock Purchase',
-                  quantity: 50,
-                  fees: 0,
-                  price: 500.00,
-                  type: 'buy',
-                  subtype: 'purchase',
-                  iso_currency_code: 'USD'
-                }
-              ],
-              total_investment_transactions: 2,
-              accounts: [
-                {
-                  account_id: 'demo_account_1',
-                  name: 'Demo Investment Account',
-                  mask: '1234',
-                  type: 'investment',
-                  subtype: 'brokerage'
-                }
-              ],
-              securities: [
-                {
-                  id: 'demo_security_1',
-                  security_id: 'demo_security_1',
-                  name: 'Apple Inc. (AAPL)',
-                  ticker_symbol: 'AAPL',
-                  type: 'equity'
-                },
-                {
-                  id: 'demo_security_2',
-                  security_id: 'demo_security_2',
-                  name: 'Microsoft Corporation (MSFT)',
-                  ticker_symbol: 'MSFT',
-                  type: 'equity'
-                }
-              ],
-              item: {
-                item_id: 'demo_item_1',
-                institution_id: 'demo_institution_1'
-              },
-              analysis: {
-                totalTransactions: 2,
-                totalAmount: 75000,
-                transactionTypes: { buy: 2 },
-                averageAmount: 37500
-              }
-            }
-          ]
-        };
-        
-        return res.json(demoData);
-      }
+
 
       // 🔒 CRITICAL SECURITY: Require authentication for real user data
       if (!req.user?.id) {
@@ -3023,9 +1437,9 @@ export const setupPlaidRoutes = (app: any) => {
       const accessTokens = await getPrismaClient().accessToken.findMany({
         where: { userId: req.user.id }
       });
-      
+
       const allTransactions: any[] = [];
-      
+
       for (const tokenRecord of accessTokens) {
         try {
           const transactionsResponse = await plaidClient.investmentsTransactionsGet({
@@ -3033,14 +1447,14 @@ export const setupPlaidRoutes = (app: any) => {
             start_date: start_date || new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             end_date: end_date || new Date().toISOString().split('T')[0],
           });
-          
+
           // Process and analyze the data
           const processedTransactions = transactionsResponse.data.investment_transactions.map(processInvestmentTransaction);
           const processedSecurities = transactionsResponse.data.securities.map(processSecurity);
-          
+
                 // Generate activity analysis
       const activityAnalysis = analyzeInvestmentActivity(processedTransactions);
-      
+
       allTransactions.push({
         investment_transactions: processedTransactions,
         total_investment_transactions: transactionsResponse.data.total_investment_transactions,
@@ -3049,7 +1463,7 @@ export const setupPlaidRoutes = (app: any) => {
         item: transactionsResponse.data.item,
         analysis: activityAnalysis
       });
-      
+
       // Enhance user profile with investment data (if user is authenticated)
       if (req.user?.id) {
         try {
@@ -3067,20 +1481,20 @@ export const setupPlaidRoutes = (app: any) => {
           console.error(`Error fetching investment transactions for token ${tokenRecord.id}:`, error);
         }
       }
-      
+
       // Sort transactions by date (newest first)
       const sortedTransactions = allTransactions.flatMap(t => t.investment_transactions)
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
         .slice(0, parseInt(count as string));
-      
-      res.json({ 
+
+      res.json({
         transactions: allTransactions,
         sortedTransactions: sortedTransactions,
         summary: {
           totalAccounts: allTransactions.length,
           totalTransactions: allTransactions.reduce((sum, t) => sum + t.investment_transactions.length, 0),
           totalSecurities: allTransactions.reduce((sum, t) => sum + t.securities.length, 0),
-          dateRange: { 
+          dateRange: {
             start_date: start_date || new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
             end_date: end_date || new Date().toISOString().split('T')[0]
           }
@@ -3095,55 +1509,7 @@ export const setupPlaidRoutes = (app: any) => {
   // Get liability information (automatically available for all connected accounts)
   app.get('/plaid/liabilities', async (req: any, res: any) => {
     try {
-      // Check for demo mode
-      const isDemo = req.headers['x-demo-mode'] === 'true';
-      
-      if (isDemo) {
-        // Return demo liability data
-        const demoData = {
-          liabilities: [
-            {
-              accounts: [
-                {
-                  account_id: 'demo_mortgage_1',
-                  account_number: '****1234',
-                  account_type: 'mortgage',
-                  account_subtype: 'mortgage',
-                  account_name: 'Wells Fargo Mortgage',
-                  account_mask: '1234',
-                  current_balance: 450000,
-                  available_balance: 450000,
-                  iso_currency_code: 'USD',
-                  unofficial_currency_code: null,
-                  liability_type: 'mortgage',
-                  apr: [4.25],
-                  last_payment_amount: 2500,
-                  last_payment_date: '2025-07-01',
-                  next_payment_due_date: '2025-08-01',
-                  next_monthly_payment: 2500,
-                  last_statement_balance: 450000,
-                  minimum_payment_amount: 2500,
-                  institution: 'Wells Fargo'
-                }
-              ],
-              item: {
-                item_id: 'demo_item_1',
-                institution_id: 'demo_institution_1',
-                webhook: null,
-                error: null,
-                available_products: ['liabilities'],
-                billed_products: ['liabilities'],
-                products: ['liabilities'],
-                update_type: 'background',
-                consent_expiration_time: null
-              },
-              request_id: 'demo_request_1'
-            }
-          ]
-        };
-        
-        return res.json(demoData);
-      }
+
 
       // 🔒 CRITICAL SECURITY: Require authentication for real user data
       if (!req.user?.id) {
@@ -3153,15 +1519,15 @@ export const setupPlaidRoutes = (app: any) => {
       const accessTokens = await getPrismaClient().accessToken.findMany({
         where: { userId: req.user.id }
       });
-      
+
       const allLiabilities: any[] = [];
-      
+
       for (const tokenRecord of accessTokens) {
         try {
           const liabilitiesResponse = await plaidClient.liabilitiesGet({
             access_token: tokenRecord.token,
           });
-          
+
           // Get institution information
           let institutionName = 'Unknown Institution';
           try {
@@ -3175,19 +1541,19 @@ export const setupPlaidRoutes = (app: any) => {
           } catch (institutionError) {
             console.log('Could not fetch institution name for liabilities, using default');
           }
-          
+
           // Add institution information to accounts
           const accountsWithInstitution = liabilitiesResponse.data.accounts.map((account: any) => ({
             ...account,
             institution: institutionName
           }));
-          
+
           allLiabilities.push({
             accounts: accountsWithInstitution,
             item: liabilitiesResponse.data.item,
             request_id: liabilitiesResponse.data.request_id
           });
-          
+
           // Enhance user profile with liability data (if user is authenticated)
           if (req.user?.id) {
             try {
@@ -3204,7 +1570,7 @@ export const setupPlaidRoutes = (app: any) => {
           console.error(`Error fetching liabilities for token ${tokenRecord.id}:`, error);
         }
       }
-      
+
       res.json({ liabilities: allLiabilities });
     } catch (error) {
       const errorResponse = handlePlaidError(error, 'get liabilities');
@@ -3221,17 +1587,17 @@ export const setupPlaidRoutes = (app: any) => {
       }
 
       const { transaction_ids, account_type = 'depository' } = req.body;
-      
+
       if (!transaction_ids || !Array.isArray(transaction_ids)) {
         return res.status(400).json({ error: 'transaction_ids array required' });
       }
-      
+
       const accessTokens = await getPrismaClient().accessToken.findMany({
         where: { userId: req.user.id }
       });
-      
+
       const allEnrichments: any[] = [];
-      
+
       for (const tokenRecord of accessTokens) {
         try {
           // For transaction enrichment, we need to provide the full transaction data
@@ -3247,12 +1613,12 @@ export const setupPlaidRoutes = (app: any) => {
               iso_currency_code: 'USD'
             }))
           });
-          
+
           allEnrichments.push({
             enriched_transactions: enrichResponse.data.enriched_transactions,
             request_id: enrichResponse.data.request_id
           });
-          
+
           // Enhance user profile with enrichment data (if user is authenticated)
           if (req.user?.id) {
             try {
@@ -3269,7 +1635,7 @@ export const setupPlaidRoutes = (app: any) => {
           console.error(`Error enriching transactions for token ${tokenRecord.id}:`, error);
         }
       }
-      
+
       res.json({ enrichments: allEnrichments });
     } catch (error) {
       const errorResponse = handlePlaidError(error, 'enrich transactions');
@@ -3296,7 +1662,7 @@ export const setupPlaidRoutes = (app: any) => {
       }
 
       const tokenInfo = [];
-      
+
       for (const tokenRecord of accessTokens) {
         try {
           // Get item information to check products
@@ -3325,8 +1691,8 @@ export const setupPlaidRoutes = (app: any) => {
               subtype: acc.subtype,
               mask: acc.mask
             })),
-            hasInvestments: accounts.some((acc: any) => 
-              acc.type === 'investment' || 
+            hasInvestments: accounts.some((acc: any) =>
+              acc.type === 'investment' ||
               acc.subtype === 'investment' ||
               acc.subtype === '401k' ||
               acc.subtype === 'ira' ||
@@ -3343,7 +1709,7 @@ export const setupPlaidRoutes = (app: any) => {
         }
       }
 
-      res.json({ 
+      res.json({
         message: 'Token scope information retrieved',
         tokens: tokenInfo,
         summary: {
@@ -3365,27 +1731,27 @@ export const setupPlaidRoutes = (app: any) => {
     try {
       const { needRealtimeBalance } = req.body as { needRealtimeBalance?: boolean };
       const accessToken = req.headers.authorization?.replace('Bearer ', '') || req.query.access_token;
-      
+
       if (!accessToken) {
         return res.status(400).json({ error: 'Access token required' });
       }
 
       console.log('Starting comprehensive sync for access token...');
-      
+
       // Get accounts to see what types we have
       const accountsResponse = await plaidClient.accountsGet({
         access_token: accessToken,
       });
-      
+
       const accounts = accountsResponse.data.accounts;
       console.log(`Found ${accounts.length} accounts to sync`);
-      
+
       // Quick feature detection
       const hasInvestment = accounts.some((a: any) => a.type === 'investment');
       const hasCreditOrLoan = accounts.some((a: any) => a.type === 'credit' || a.type === 'loan');
       const hasDepository = accounts.some((a: any) => a.type === 'depository');
-      
-      const result: any = { 
+
+      const result: any = {
         accountsSummary: accounts.map((a: any) => ({
           account_id: a.account_id,
           name: a.name,
@@ -3394,7 +1760,7 @@ export const setupPlaidRoutes = (app: any) => {
           mask: a.mask,
         }))
       };
-      
+
       // Investments
       if (hasInvestment) {
         console.log('Investment accounts detected - fetching holdings and transactions');
@@ -3405,20 +1771,20 @@ export const setupPlaidRoutes = (app: any) => {
             start_date: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Last 90 days
             end_date: new Date().toISOString().split('T')[0],
           });
-          
+
           result.investments = {
             holdings: holdings.data.holdings,
             securities: holdings.data.securities,
             transactions: invTx.data.investment_transactions,
           };
-          
+
           console.log(`Retrieved ${holdings.data.holdings?.length || 0} holdings and ${invTx.data.investment_transactions?.length || 0} transactions`);
         } catch (error: any) {
           console.log('Investment data not available:', error.message);
           result.investments = { error: 'Investment data not available' };
         }
       }
-      
+
       // Liabilities (credit cards, student loans, mortgages)
       if (hasCreditOrLoan) {
         console.log('Credit/Loan accounts detected - fetching liabilities');
@@ -3431,7 +1797,7 @@ export const setupPlaidRoutes = (app: any) => {
           result.liabilities = { error: 'Liability data not available' };
         }
       }
-      
+
       // Banking transactions (checking/savings)
       if (hasDepository) {
         console.log('Depository accounts detected - fetching transactions');
@@ -3442,7 +1808,7 @@ export const setupPlaidRoutes = (app: any) => {
           const modified: any[] = [];
           const removed: any[] = [];
           let hasMore = true;
-          
+
           while (hasMore) {
             const syncResp = await plaidClient.transactionsSync({
               access_token: accessToken,
@@ -3454,7 +1820,7 @@ export const setupPlaidRoutes = (app: any) => {
             cursor = syncResp.data.next_cursor;
             hasMore = syncResp.data.has_more;
           }
-          
+
           result.transactions = { added, modified, removed, cursor };
           console.log(`Retrieved ${added.length} transactions`);
         } catch (error: any) {
@@ -3462,7 +1828,7 @@ export const setupPlaidRoutes = (app: any) => {
           result.transactions = { error: 'Transaction data not available' };
         }
       }
-      
+
       // Real-time balances (only if you actually need them)
       if (needRealtimeBalance) {
         console.log('Fetching real-time balances...');
@@ -3485,15 +1851,15 @@ export const setupPlaidRoutes = (app: any) => {
           result.realtimeBalances = { error: 'Real-time balance data not available' };
         }
       }
-      
+
       console.log('Comprehensive sync completed successfully');
       res.json(result);
-      
+
     } catch (error: any) {
       // If you forgot to include a product in additional_consented_products,
       // certain calls can fail here with consent errors → you'd need Update Mode.
       console.error('Sync failed:', error?.response?.data || error);
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'SYNC_FAILED',
         details: error?.response?.data || error?.message || 'Unknown error'
       });
@@ -3540,7 +1906,7 @@ export const setupPlaidRoutes = (app: any) => {
   app.get('/plaid/balance-cache-stats', async (req: any, res: any) => {
     try {
       const cacheStats = await BalanceService.getCacheStats();
-      
+
       res.json({
         success: true,
         cacheStats,

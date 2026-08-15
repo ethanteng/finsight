@@ -164,14 +164,12 @@ export default function ProfilePage() {
   const [snapTradeHoldings, setSnapTradeHoldings] = useState<Record<string, unknown>[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [isDemo, setIsDemo] = useState<boolean | undefined>(undefined); // Start as undefined to prevent premature rendering
   const [tokenStatuses, setTokenStatuses] = useState<TokenStatus[]>([]);
   const [snapTradeStatus, setSnapTradeStatus] = useState<SnapTradeStatus | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState<string>('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userEmail, setUserEmail] = useState<string>('');
-  const [demoStatusDetermined, setDemoStatusDetermined] = useState(false); // Start as false
   const [subscriptionStatus, setSubscriptionStatus] = useState<{
     status?: string;
     tier?: string;
@@ -195,33 +193,26 @@ export default function ProfilePage() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 
-  // Load token statuses for non-demo users
+  // Load token statuses for the authenticated user.
   const loadTokenStatuses = useCallback(async () => {
-    console.log('🔍 loadTokenStatuses called, isDemo:', isDemo);
-    
-    if (isDemo) {
-      console.log('⏭️ Skipping token status load - demo mode');
-      return;
-    }
-    
     try {
       const token = localStorage.getItem('auth_token');
       if (!token) {
         console.log('⚠️ No auth token found');
         return;
       }
-      
+
       console.log('📡 Fetching token statuses from:', `${API_URL}/profile/tokens`);
-      
+
       const response = await fetch(`${API_URL}/profile/tokens`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
-      
+
       console.log('📥 Token statuses response:', response.status);
-      
+
       if (response.ok) {
         const data = await response.json();
         console.log('✅ Token statuses loaded:', data.tokens?.length || 0, 'tokens');
@@ -233,35 +224,28 @@ export default function ProfilePage() {
     } catch (error) {
       console.error('❌ Error loading token statuses:', error);
     }
-  }, [API_URL, isDemo]);
+  }, [API_URL]);
 
-  // Load SnapTrade status for non-demo users
+  // Load SnapTrade status for the authenticated user.
   const loadSnapTradeStatus = useCallback(async () => {
-    console.log('🔍 loadSnapTradeStatus called, isDemo:', isDemo);
-    
-    if (isDemo) {
-      console.log('⏭️ Skipping SnapTrade status load - demo mode');
-      return;
-    }
-    
     try {
       const token = localStorage.getItem('auth_token');
       if (!token) {
         console.log('⚠️ No auth token found');
         return;
       }
-      
+
       console.log('📡 Fetching SnapTrade status from:', `${API_URL}/profile/snaptrade-status`);
-      
+
       const response = await fetch(`${API_URL}/profile/snaptrade-status`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
-      
+
       console.log('📥 SnapTrade status response:', response.status);
-      
+
       if (response.ok) {
         const data = await response.json();
         console.log('✅ SnapTrade status loaded:', data);
@@ -272,23 +256,21 @@ export default function ProfilePage() {
     } catch (error) {
       console.error('❌ Error loading SnapTrade status:', error);
     }
-  }, [API_URL, isDemo]);
+  }, [API_URL]);
 
-  // Load subscription status for non-demo users
+  // Load subscription status.
   const loadSubscriptionStatus = useCallback(async () => {
-    if (isDemo) return;
-    
     try {
       const token = localStorage.getItem('auth_token');
       if (!token) return;
-      
+
       const response = await fetch(`${API_URL}/api/stripe/subscription-status`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         setSubscriptionStatus(data);
@@ -296,12 +278,10 @@ export default function ProfilePage() {
     } catch (error) {
       console.error('Failed to load subscription status:', error);
     }
-  }, [API_URL, isDemo]);
+  }, [API_URL]);
 
   // Handle subscription management
   const handleManageSubscription = async () => {
-    if (isDemo) return;
-    
     setIsManagingSubscription(true);
     try {
       // Use environment variable for Stripe customer portal URL
@@ -318,37 +298,29 @@ export default function ProfilePage() {
     }
   };
 
-  // Helper functions that take demo mode as parameter
-  const loadConnectedAccountsWithDemoMode = useCallback(async (demoMode: boolean) => {
-    console.log('loadConnectedAccountsWithDemoMode called with demoMode:', demoMode);
+  const loadConnectedAccounts = useCallback(async () => {
     console.log('API_URL in function:', API_URL);
-    
+
     setLoading(true);
     setError('');
-    
+
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
 
-      // Add demo mode header or authentication header
-      if (demoMode) {
-        headers['x-demo-mode'] = 'true';
-        console.log('Demo mode detected, sending x-demo-mode header');
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+        console.log('Sending auth token:', token.substring(0, 20) + '...');
       } else {
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-          console.log('Sending auth token:', token.substring(0, 20) + '...');
-        } else {
-          console.log('No auth token found in localStorage');
-        }
+        console.log('No auth token found in localStorage');
       }
 
       const requestUrl = `${API_URL}/plaid/all-accounts`;
       console.log('Making request to:', requestUrl);
       console.log('Request headers:', headers);
-      
+
       const res = await fetch(requestUrl, {
         method: 'GET',
         headers,
@@ -361,7 +333,7 @@ export default function ProfilePage() {
         const data = await res.json();
         const accounts = data.accounts || [];
         console.log(`📊 Received ${accounts.length} accounts from backend`);
-        
+
         // ✅ Trust backend - FinancialDataService should have already deduplicated
         // Only deduplicate here if backend bug causes duplicates (should not happen)
         const accountMap = new Map<string, Account>();
@@ -373,11 +345,11 @@ export default function ProfilePage() {
           accountMap.set(accountId, account);
         });
         const deduplicatedAccounts = Array.from(accountMap.values());
-        
+
         if (deduplicatedAccounts.length !== accounts.length) {
           console.error(`❌ Frontend: Backend returned ${accounts.length} accounts but only ${deduplicatedAccounts.length} are unique! This indicates a bug in FinancialDataService.`);
         }
-        
+
         console.log(`✅ Setting ${deduplicatedAccounts.length} unique accounts`);
         setConnectedAccounts(deduplicatedAccounts);
       } else {
@@ -388,7 +360,7 @@ export default function ProfilePage() {
         }
       }
     } catch (error) {
-      console.error('Error in loadConnectedAccountsWithDemoMode:', error);
+      console.error('Error in loadConnectedAccounts:', error);
       setError('Error loading accounts');
     } finally {
       setLoading(false);
@@ -427,9 +399,6 @@ export default function ProfilePage() {
 
   // Load manual accounts
   const loadManualAccounts = useCallback(async () => {
-    if (isDemo) {
-      return;
-    }
     try {
       const token = localStorage.getItem('auth_token');
       if (!token) {
@@ -453,7 +422,7 @@ export default function ProfilePage() {
     } catch (err) {
       console.error('Error loading manual accounts:', err);
     }
-  }, [API_URL, isDemo]);
+  }, [API_URL]);
 
   // NEW: Load SnapTrade activities data
   const loadSnapTradeActivities = useCallback(async () => {
@@ -497,7 +466,7 @@ export default function ProfilePage() {
     // Convert SnapTrade holdings to the format expected by InvestmentPortfolio
     const snapTradeHoldingsFormatted = snapTradeData ? snapTradeData.flatMap((accountHolding: Record<string, unknown>) => {
       console.log('Processing SnapTrade account holding:', accountHolding);
-      
+
       if (!accountHolding.account) {
         console.log('Skipping account holding - missing account');
         return [];
@@ -510,7 +479,7 @@ export default function ProfilePage() {
         (accountHolding.positions as Record<string, unknown>[]).forEach((position: Record<string, unknown>) => {
           const positionValue = (Number(position.price) || 0) * (Number(position.units) || 0);
           const costBasis = (Number(position.average_purchase_price) || 0) * (Number(position.units) || 0);
-          
+
           console.log('Processing position:', {
             symbol: ((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.symbol,
             description: ((position.symbol as Record<string, unknown>)?.symbol as Record<string, unknown>)?.description,
@@ -519,7 +488,7 @@ export default function ProfilePage() {
             value: positionValue,
             costBasis: costBasis
           });
-          
+
           holdings.push({
             id: `${(accountHolding.account as Record<string, unknown>).id}-${(position.symbol as Record<string, unknown>)?.id || 'unknown'}`,
             account_id: (accountHolding.account as Record<string, unknown>).id as string,
@@ -588,7 +557,7 @@ export default function ProfilePage() {
     // Calculate combined portfolio metrics
     console.log('Combined holdings:', combinedHoldings.length);
     console.log('Sample holding:', combinedHoldings[0]);
-    
+
     const totalValue = combinedHoldings.reduce((sum, holding) => {
       const holdingValue = holding.institution_value || holding.value || 0;
       console.log(`Holding ${holding.security_name || holding.name || 'Unknown'}: value = ${holdingValue}`);
@@ -596,7 +565,7 @@ export default function ProfilePage() {
     }, 0);
     const holdingCount = combinedHoldings.length;
     const securityCount = new Set(combinedHoldings.map(h => h.security_id)).size;
-    
+
     console.log('Calculated metrics:', { totalValue, holdingCount, securityCount });
 
     // Group by security type for asset allocation
@@ -705,32 +674,27 @@ export default function ProfilePage() {
   }, []);
 
   // NEW: Load enhanced investment data from summaries endpoint
-  const loadInvestmentData = useCallback(async (demoMode: boolean) => {
+  const loadInvestmentData = useCallback(async () => {
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
 
-      if (demoMode) {
-        headers['x-demo-mode'] = 'true';
-      } else {
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
 
-      if (!demoMode) {
-        // Load from single-source snapshot (full view so we can show holdings/transactions)
-        const summaryRes = await fetch(`${API_URL}/api/summaries?view=full`, {
-          method: 'GET',
-          headers,
-        });
+      // Load from single-source snapshot (full view so we can show holdings/transactions)
+      const summaryRes = await fetch(`${API_URL}/api/summaries?view=full`, {
+        method: 'GET',
+        headers,
+      });
 
-        if (summaryRes.ok) {
+      if (summaryRes.ok) {
           const summaryData = await summaryRes.json();
           console.log('Received summary data:', summaryData);
-          
+
           // Use portfolio and holdings directly from snapshot
           const portfolioData = summaryData.investmentPortfolio || {};
           const holdings = Array.isArray(summaryData.holdings) ? summaryData.holdings : [];
@@ -776,10 +740,10 @@ export default function ProfilePage() {
               }
             }
           };
-          
+
           setInvestmentData(formattedData);
           setSnapTradeHoldings(null);
-          
+
           console.log('Investment portfolio loaded from summary:', {
             totalValue: portfolioData.totalValue,
             holdingsCount: portfolioData.holdingsCount,
@@ -787,11 +751,10 @@ export default function ProfilePage() {
             holdingsLoaded: holdings.length,
             transactionsLoaded: investmentTransactions.length
           });
-          return;
-        }
+        return;
       }
 
-      // Fallback: Load investment data from old endpoint (for demo mode or if summary fails)
+      // Fallback to the legacy authenticated endpoint if summary loading fails.
       const investmentsRes = await fetch(`${API_URL}/plaid/investments`, {
         method: 'GET',
         headers,
@@ -800,7 +763,7 @@ export default function ProfilePage() {
       if (investmentsRes.ok) {
         const investmentsData = await investmentsRes.json();
         console.log('Received investment data (Plaid + SnapTrade merged):', investmentsData);
-        
+
         // Transform backend data format to match frontend expectations
         const formattedData = {
           portfolio: investmentsData.portfolio,
@@ -821,10 +784,10 @@ export default function ProfilePage() {
             }
           }
         };
-        
+
         setInvestmentData(formattedData);
         setSnapTradeHoldings(null); // No longer needed since data is merged on backend
-        
+
         console.log('Investment data loaded (fallback):', {
           totalValue: formattedData.portfolio?.totalValue,
           holdingCount: formattedData.portfolio?.holdingCount,
@@ -843,7 +806,6 @@ export default function ProfilePage() {
 
   // Function to refresh all data after successful Plaid connection with retry logic
   const refreshAllData = useCallback(async (isRetry = false, currentRetryCount = 0) => {
-    if (isDemo !== undefined) {
       try {
         // Show retry message if this is a retry attempt
         if (isRetry) {
@@ -851,19 +813,16 @@ export default function ProfilePage() {
         } else {
           setRetryMessage('Getting your transaction history...');
         }
-        
+
         // Load accounts and investment data
-        await loadConnectedAccountsWithDemoMode(isDemo);
-        await loadInvestmentData(isDemo);
-        
-        // Load token statuses for non-demo users
-        if (!isDemo) {
-          await Promise.all([
-            loadTokenStatuses(),
-            loadSnapTradeStatus()
-          ]);
-        }
-        
+        await loadConnectedAccounts();
+        await loadInvestmentData();
+
+        await Promise.all([
+          loadTokenStatuses(),
+          loadSnapTradeStatus()
+        ]);
+
         // Try to refresh transaction history
         if (transactionHistoryRef.current?.refresh) {
           try {
@@ -878,19 +837,19 @@ export default function ProfilePage() {
             console.log('Transaction refresh failed:', error);
             // Check if it's a PRODUCT_NOT_READY error
             if (error instanceof Error && (
-                error.message.includes('PRODUCT_NOT_READY') || 
+                error.message.includes('PRODUCT_NOT_READY') ||
                 error.message.includes('not yet ready'))) {
               // Handle retry inline to avoid circular dependency
               if (currentRetryCount < 4) { // Max 5 attempts (0-4)
                 const newRetryCount = currentRetryCount + 1;
                 setRetryCount(newRetryCount);
                 setIsRetrying(true);
-                
+
                 // Exponential backoff: 10s, 20s, 40s, 80s
                 const delay = Math.pow(2, newRetryCount) * 10000;
-                
+
                 console.log(`Scheduling retry ${newRetryCount + 1}/5 in ${delay/1000} seconds...`);
-                
+
                 setTimeout(() => {
                   refreshAllData(true, newRetryCount);
                 }, delay);
@@ -911,19 +870,19 @@ export default function ProfilePage() {
         console.error('Error in refreshAllData:', error);
         // Check if it's a PRODUCT_NOT_READY error
         if (error instanceof Error && (
-            error.message.includes('PRODUCT_NOT_READY') || 
+            error.message.includes('PRODUCT_NOT_READY') ||
             error.message.includes('not yet ready'))) {
           // Handle retry inline to avoid circular dependency
           if (currentRetryCount < 4) { // Max 5 attempts (0-4)
             const newRetryCount = currentRetryCount + 1;
             setRetryCount(newRetryCount);
             setIsRetrying(true);
-            
+
             // Exponential backoff: 10s, 20s, 40s, 80s
             const delay = Math.pow(2, newRetryCount) * 10000;
-            
+
             console.log(`Scheduling retry ${newRetryCount + 1}/5 in ${delay/1000} seconds...`);
-            
+
             setTimeout(() => {
               refreshAllData(true, newRetryCount);
             }, delay);
@@ -938,14 +897,11 @@ export default function ProfilePage() {
           setTimeout(() => setRetryMessage(''), 5000);
         }
       }
-    }
-  }, [isDemo, loadConnectedAccountsWithDemoMode, loadInvestmentData, loadTokenStatuses, loadSnapTradeStatus]);
+  }, [loadConnectedAccounts, loadInvestmentData, loadTokenStatuses, loadSnapTradeStatus]);
 
   useEffect(() => {
-    // Check if demo mode is explicitly requested via URL parameter
     const urlParams = new URLSearchParams(window.location.search);
-    const isFromDemo = urlParams.get('demo') === 'true';
-    
+
     // Check for subscription-related URL parameters
     const subscriptionParam = urlParams.get('subscription');
     if (subscriptionParam) {
@@ -966,43 +922,15 @@ export default function ProfilePage() {
       // Clear the message after 5 seconds
       setTimeout(() => setSubscriptionMessage(''), 5000);
     }
-    
-    // Also check if we have an auth token (indicates real user)
-    const hasAuthToken = !!localStorage.getItem('auth_token');
-    
-    // Determine demo mode: true only if explicitly requested via URL
-    const shouldBeDemo = isFromDemo;
-    
-    console.log('Demo detection debug:', {
-      urlParams: urlParams.get('demo'),
-      isFromDemo,
-      hasAuthToken,
-      shouldBeDemo,
-      currentUrl: window.location.href
-    });
-    
-    console.log('Setting isDemo to:', shouldBeDemo);
-    setIsDemo(shouldBeDemo);
-    setDemoStatusDetermined(true);
-    
-    // Only call API functions after we've determined demo mode
-    if (shouldBeDemo) {
-      console.log('Demo mode detected, calling API functions');
-      console.log('API_URL:', API_URL);
-      loadConnectedAccountsWithDemoMode(true);
-      loadInvestmentData(true);
-    } else {
-      console.log('Real user mode detected, calling API functions');
-      loadConnectedAccountsWithDemoMode(false);
-      loadInvestmentData(false);
-      loadManualAccounts();
-    }
-  }, [loadConnectedAccountsWithDemoMode, loadInvestmentData, loadManualAccounts, API_URL]);
 
-  // Fetch user email, subscription status, and token statuses when not in demo mode
+    loadConnectedAccounts();
+    loadInvestmentData();
+    loadManualAccounts();
+  }, [loadConnectedAccounts, loadInvestmentData, loadManualAccounts]);
+
+  // Fetch user email, subscription status, and connection statuses.
   useEffect(() => {
-    if (!isDemo) {
-      const fetchUserData = async () => {
+    const fetchUserData = async () => {
         try {
           const token = localStorage.getItem('auth_token');
           if (token) {
@@ -1012,12 +940,12 @@ export default function ProfilePage() {
                 'Authorization': `Bearer ${token}`
               }
             });
-            
+
             if (userRes.ok) {
               const userData = await userRes.json();
               setUserEmail(userData.user.email);
             }
-            
+
             // Fetch subscription status, token statuses, and SnapTrade status
             await Promise.all([
               loadSubscriptionStatus(),
@@ -1028,11 +956,10 @@ export default function ProfilePage() {
         } catch (error) {
           console.error('Failed to fetch user data:', error);
         }
-      };
-      
-      fetchUserData();
-    }
-  }, [isDemo, API_URL, loadSubscriptionStatus, loadTokenStatuses, loadSnapTradeStatus]);
+    };
+
+    fetchUserData();
+  }, [API_URL, loadSubscriptionStatus, loadTokenStatuses, loadSnapTradeStatus]);
 
   // Reset Plaid Link flag when forcePlaidReinitialize becomes true
   useEffect(() => {
@@ -1048,20 +975,19 @@ export default function ProfilePage() {
       const flag = localStorage.getItem('wants_to_connect_accounts');
       console.log('localStorage wants_to_connect_accounts flag:', flag);
     };
-    
+
     // Check on mount
     checkFlag();
-    
+
     // Check when storage changes
     window.addEventListener('storage', checkFlag);
-    
+
     return () => window.removeEventListener('storage', checkFlag);
   }, []);
 
   // Auto-trigger Plaid Link when user wants to connect accounts (either first time or add more)
   useEffect(() => {
     console.log('Auto-trigger useEffect check:', {
-      isDemo,
       loading,
       connectedAccountsLength: connectedAccounts.length,
       hasPlaidRef: !!plaidLinkButtonRef.current,
@@ -1069,12 +995,11 @@ export default function ProfilePage() {
       forcePlaidReinitialize,
       wantsToConnectAccounts: localStorage.getItem('wants_to_connect_accounts')
     });
-    
-    // Auto-trigger for real users (not demo mode) who want to connect accounts
-    if (!isDemo && !loading && plaidLinkButtonRef.current) {
+
+    if (!loading && plaidLinkButtonRef.current) {
       // Check if user wants to connect accounts (from localStorage flag set in app page)
       const wantsToConnectAccounts = localStorage.getItem('wants_to_connect_accounts') === 'true';
-      
+
       console.log('Auto-trigger conditions met:', {
         wantsToConnectAccounts,
         referrer: document.referrer,
@@ -1082,22 +1007,22 @@ export default function ProfilePage() {
         forcePlaidReinitialize,
         hasAccounts: connectedAccounts.length > 0
       });
-      
+
       if (wantsToConnectAccounts) {
         console.log('Auto-triggering Plaid Link for user who wants to connect accounts');
-        
+
         // Clear the localStorage flag to prevent re-triggering
         localStorage.removeItem('wants_to_connect_accounts');
-        
+
         // Set the force flag first
         setForcePlaidReinitialize(true);
-        
+
         // Add a delay to ensure the component re-renders with the new prop
         setTimeout(() => {
           console.log('Timeout executed, checking ref:', {
             hasRef: !!plaidLinkButtonRef.current
           });
-          
+
           if (plaidLinkButtonRef.current) {
             console.log('Calling createLinkToken on PlaidLinkButton ref');
             try {
@@ -1111,7 +1036,7 @@ export default function ProfilePage() {
         }, 1000); // Increased delay to ensure state updates
       }
     }
-  }, [isDemo, loading, connectedAccounts.length]); // Removed forcePlaidReinitialize dependency to avoid infinite loops
+  }, [loading, connectedAccounts.length]); // Removed forcePlaidReinitialize dependency to avoid infinite loops
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -1121,20 +1046,15 @@ export default function ProfilePage() {
   };
 
   const handleDisconnectAccounts = async () => {
-    if (isDemo) {
-      setDeleteMessage('This is a demo only. In the real app, your accounts would have been disconnected.');
-      return;
-    }
-
     setIsDeleting(true);
     setDeleteMessage('');
-    
+
     try {
       const token = localStorage.getItem('auth_token');
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
-      
+
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
@@ -1162,7 +1082,7 @@ export default function ProfilePage() {
       }
 
       // Reload accounts to show they're disconnected
-      loadConnectedAccountsWithDemoMode(false);
+      loadConnectedAccounts();
     } catch (_error) {
       setDeleteMessage('An error occurred while disconnecting your accounts. Please try again.');
     } finally {
@@ -1171,21 +1091,15 @@ export default function ProfilePage() {
   };
 
   const handleDeleteAllData = async () => {
-    if (isDemo) {
-      setDeleteMessage('This is a demo only. In the real app, your account data would have been deleted.');
-      setShowDeleteConfirm(false);
-      return;
-    }
-
     setIsDeleting(true);
     setDeleteMessage('');
-    
+
     try {
       const token = localStorage.getItem('auth_token');
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
-      
+
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
@@ -1225,53 +1139,39 @@ export default function ProfilePage() {
     }
   };
 
-  // Don't render anything until we've determined if this is demo mode or not
-  if (!demoStatusDetermined || isDemo === undefined) {
-    return (
-      <div className="min-h-screen bg-[#f3f2e9] text-[#102319] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-[#5e6b63]">Loading your financial context…</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <>
-      <PageMeta 
-        title="Account Settings | Manage Ask Linc Profile" 
+      <PageMeta
+        title="Account Settings | Manage Ask Linc Profile"
         description="Take control of your Ask Linc experience. Manage your account settings, update personal information, review connected financial accounts, and customize your AI financial assistant preferences."
       />
       <div className="authenticated-site min-h-screen">
         <AuthenticatedPageHeader
           activePage="profile"
           eyebrow="Accounts & context"
-          title={isDemo ? 'Demo profile' : 'Your profile'}
-          email={!isDemo ? userEmail : undefined}
-          homeHref={isDemo ? '/demo' : '/app'}
-          onLogout={!isDemo ? () => {
+          title="Your profile"
+          email={userEmail}
+          homeHref="/app"
+          onLogout={() => {
             resetPlaidLinkInitialization();
             localStorage.removeItem('auth_token');
             resetUserIdentity();
             window.location.href = '/login';
-          } : undefined}
+          }}
         />
 
         <main className="mx-auto max-w-[1200px] p-5 py-10 sm:px-6 md:py-12">
           <div className="authenticated-intro mb-10"><h2>Keep your financial context current.</h2><p>Manage the accounts and household details that ground every Ask Linc answer.</p></div>
           {/* User Profile Section */}
-          {demoStatusDetermined && (
-            <UserProfile userId={userEmail ? 'user' : undefined} isDemo={isDemo} />
-          )}
-          
+          <UserProfile userId={userEmail ? 'user' : undefined} />
+
           {/* Account Management Section */}
           <div className="bg-gray-800 rounded-lg p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4">Your Connected Accounts (Plaid)</h2>
-            
+
             {/* Connect New Account */}
             <div className="mb-6">
-              <PlaidLinkButton 
+              <PlaidLinkButton
                 key={forcePlaidReinitialize ? 'force-reinit' : 'normal'}
                 onSuccess={() => {
                   // Refresh all data when an account is successfully linked
@@ -1280,18 +1180,17 @@ export default function ProfilePage() {
                   // Reset the force flag after successful connection
                   setForcePlaidReinitialize(false);
                 }}
-                isDemo={isDemo}
                 forceReinitialize={forcePlaidReinitialize}
                 updateModeTokenId={tokenStatuses.find(t => t.lastError === 'ITEM_LOGIN_REQUIRED')?.id}
                 ref={plaidLinkButtonRef}
               />
-              
+
               {/* Retry Status Messages */}
               {retryMessage && (
                 <div className={`mt-3 p-3 rounded-lg text-sm ${
-                  retryMessage.includes('✅') 
+                  retryMessage.includes('✅')
                     ? 'bg-green-900/20 border border-green-700 text-green-300'
-                    : retryMessage.includes('❌') 
+                    : retryMessage.includes('❌')
                     ? 'bg-red-900/20 border border-red-700 text-red-300'
                     : retryMessage.includes('⏰')
                     ? 'bg-yellow-900/20 border border-yellow-700 text-yellow-300'
@@ -1300,7 +1199,7 @@ export default function ProfilePage() {
                   {retryMessage}
                 </div>
               )}
-              
+
               {/* Retry Progress Indicator */}
               {isRetrying && (
                 <div className="mt-3 p-3 bg-blue-900/20 border border-blue-700 rounded-lg">
@@ -1329,13 +1228,13 @@ export default function ProfilePage() {
                   {/* Display connected accounts */}
                   {connectedAccounts.map((account) => {
                     // Find token status for this account's institution
-                    const tokenStatus = tokenStatuses.find(t => 
+                    const tokenStatus = tokenStatuses.find(t =>
                       t.institutionName === account.institution
                     );
-                    
+
                     return (
-                      <div 
-                        key={account.id} 
+                      <div
+                        key={account.id}
                         className="bg-gray-700 rounded-lg p-4 border border-gray-600"
                       >
                         <div className="flex justify-between items-start">
@@ -1363,7 +1262,7 @@ export default function ProfilePage() {
                             {/* Show error message if token is inactive */}
                             {tokenStatus && !tokenStatus.isActive && tokenStatus.lastError && (
                               <div className="text-xs text-red-400 mt-1">
-                                {tokenStatus.lastError === 'ITEM_LOGIN_REQUIRED' ? 
+                                {tokenStatus.lastError === 'ITEM_LOGIN_REQUIRED' ?
                                   'Re-authentication required' :
                                   tokenStatus.lastError}
                               </div>
@@ -1374,12 +1273,12 @@ export default function ProfilePage() {
                               {/* ✅ FIX: Use the correct balance field based on account type */}
                               {(() => {
                                 let balance;
-                                if (account.type === 'depository' || 
-                                    account.subtype === 'checking' || 
+                                if (account.type === 'depository' ||
+                                    account.subtype === 'checking' ||
                                     account.subtype === 'savings') {
                                   // For checking/savings accounts, use available balance
-                                  balance = account.balance?.available !== undefined && account.balance?.available !== null 
-                                    ? account.balance.available 
+                                  balance = account.balance?.available !== undefined && account.balance?.available !== null
+                                    ? account.balance.available
                                     : account.balance?.current || 0;
                                 } else {
                                   // For investment/credit accounts, use current balance
@@ -1398,14 +1297,14 @@ export default function ProfilePage() {
                   {tokenStatuses
                     .filter(token => {
                       // Find tokens that don't have any associated accounts
-                      const hasAccounts = connectedAccounts.some(account => 
+                      const hasAccounts = connectedAccounts.some(account =>
                         account.institution === token.institutionName
                       );
                       return !hasAccounts;
                     })
                     .map(token => (
-                      <div 
-                        key={token.id} 
+                      <div
+                        key={token.id}
                         className="bg-gray-800/50 rounded-lg p-4 border-2 border-red-500/30"
                       >
                         <div className="flex justify-between items-start">
@@ -1420,14 +1319,14 @@ export default function ProfilePage() {
                               No accounts available
                             </div>
                             <div className="text-xs text-red-400 mt-1">
-                              {token.lastError === 'ITEM_LOGIN_REQUIRED' ? 
+                              {token.lastError === 'ITEM_LOGIN_REQUIRED' ?
                                 'Re-authentication required - Click "Connect Account" above to reconnect' :
                                 token.lastError ? token.lastError :
                                 !token.isActive ? 'Connection inactive' :
                                 'No accounts available for this connection'}
                             </div>
                             <div className="text-xs text-gray-500 mt-1">
-                              Status: {token.isActive ? 'Active' : 'Inactive'} • 
+                              Status: {token.isActive ? 'Active' : 'Inactive'} •
                               Last checked: {token.lastChecked ? new Date(token.lastChecked).toLocaleString() : 'Never'}
                             </div>
                           </div>
@@ -1444,18 +1343,15 @@ export default function ProfilePage() {
           <div className="bg-gray-800 rounded-lg p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4">Your Connected Accounts (SnapTrade)</h2>
             <div className="mb-6">
-              <SnapTradeButton 
-                isDemo={isDemo}
+              <SnapTradeButton
                 snapTradeStatus={snapTradeStatus}
                 onAccountsUpdated={() => {
                   // Refresh investment data when SnapTrade accounts are updated
-                  if (!isDemo) {
-                    loadInvestmentData(false);
-                  }
-                }} 
+                  loadInvestmentData();
+                }}
               />
             </div>
-            
+
             {/* Connected SnapTrade Accounts List */}
             <div className="mb-6">
               {snapTradeHoldings && snapTradeHoldings.length > 0 ? (
@@ -1465,14 +1361,14 @@ export default function ProfilePage() {
                     {snapTradeHoldings.map((holding: Record<string, unknown>, index: number) => {
                       const account = holding.account as Record<string, unknown> | undefined;
                       if (!account) return null;
-                      
+
                       // Determine if SnapTrade connection is healthy
-                      const isHealthy = snapTradeStatus?.connected && 
-                                       (snapTradeStatus?.status === 'VALID' || 
+                      const isHealthy = snapTradeStatus?.connected &&
+                                       (snapTradeStatus?.status === 'VALID' ||
                                         snapTradeStatus?.status === 'valid');
-                      
+
                       return (
-                        <div 
+                        <div
                           key={index}
                           className="bg-gray-700 rounded-lg p-4 border border-gray-600"
                         >
@@ -1537,7 +1433,7 @@ export default function ProfilePage() {
                 </div>
               ) : null}
             </div>
-            
+
             {/* Supported Financial Institutions */}
             <div className="mt-6">
               <h3 className="text-sm font-medium text-gray-300 mb-3">Supported Financial Institutions</h3>
@@ -1570,21 +1466,18 @@ export default function ProfilePage() {
           </div>
 
           {/* Manual Accounts Section */}
-          {!isDemo && (
-            <div className="bg-gray-800 rounded-lg p-6 mb-6">
-              <h2 className="text-xl font-semibold mb-4">Manual Accounts</h2>
-              <ManualAccountList
-                accounts={manualAccounts}
-                onRefresh={loadManualAccounts}
-                isDemo={false}
-              />
-            </div>
-          )}
+          <div className="bg-gray-800 rounded-lg p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4">Manual Accounts</h2>
+            <ManualAccountList
+              accounts={manualAccounts}
+              onRefresh={loadManualAccounts}
+            />
+          </div>
 
           {/* NEW: Enhanced Investment Portfolio Section */}
           {investmentData && (
             <div className="mb-6">
-              <InvestmentPortfolio 
+              <InvestmentPortfolio
                 portfolio={{
                   totalValue: investmentData.analysis?.portfolio?.totalValue || 0,
                   assetAllocation: investmentData.analysis?.portfolio?.assetAllocation || [],
@@ -1593,22 +1486,20 @@ export default function ProfilePage() {
                 }}
                 holdings={investmentData.holdings || []}
                 transactions={investmentData.investment_transactions || []}
-                isDemo={isDemo}
               />
             </div>
           )}
 
           {/* Transaction History - Show ALL transactions */}
           <div className="mb-6">
-            <TransactionHistory ref={transactionHistoryRef} isDemo={isDemo} />
+            <TransactionHistory ref={transactionHistoryRef} />
           </div>
 
           {/* Subscription Management Section */}
-          {!isDemo && (
-            <div className="mb-6">
+          <div className="mb-6">
               <div className="bg-gray-800 rounded-lg p-6">
                 <h2 className="text-xl font-semibold mb-4">Subscription Management</h2>
-                
+
                 {/* Subscription Message */}
                 {subscriptionMessage && (
                   <div className="mb-4 p-3 bg-green-900/20 border border-green-700 rounded-lg">
@@ -1639,7 +1530,7 @@ export default function ProfilePage() {
                       </div>
                     </div>
                   </div>
-                  
+
                   {subscriptionStatus ? (
                     <div className="border border-gray-600 rounded-lg p-4 bg-gray-700">
                       <div className="mb-2">
@@ -1647,7 +1538,7 @@ export default function ProfilePage() {
                           <span className="text-sm font-medium text-gray-300">Status</span>
                           <span className={`px-2 py-1 text-xs rounded-full ${
                             subscriptionStatus.stripeCustomerId && ['active', 'trialing'].includes(subscriptionStatus.status || '')
-                              ? 'bg-green-600 text-white' 
+                              ? 'bg-green-600 text-white'
                               : subscriptionStatus.accessLevel === 'full'
                               ? 'bg-blue-600 text-white'
                               : 'bg-yellow-600 text-white'
@@ -1676,7 +1567,7 @@ export default function ProfilePage() {
                       </div>
                     </div>
                   )}
-                  
+
                   {/* Error Display */}
                   {error && (
                     <div className="border border-red-600 rounded-lg p-4 bg-red-900/20">
@@ -1687,8 +1578,7 @@ export default function ProfilePage() {
                   )}
                 </div>
               </div>
-            </div>
-          )}
+          </div>
 
           {/* Account Settings */}
           <div className="bg-gray-800 rounded-lg p-6">
@@ -1698,12 +1588,12 @@ export default function ProfilePage() {
                 <p className="text-gray-400 text-sm mb-4">
                   Your financial data is read-only and never stored permanently.
                 </p>
-                
+
                 <div className="space-y-4">
                   <div className="border border-gray-600 rounded-lg p-4">
                     <h4 className="font-medium mb-2">Disconnect Your Accounts</h4>
                     <p className="text-gray-400 text-sm mb-3">
-                      Remove all Plaid and SnapTrade connections and clear your financial data. 
+                      Remove all Plaid and SnapTrade connections and clear your financial data.
                       This will disconnect all linked financial accounts but keep your conversation history.
                     </p>
                     <button
@@ -1718,7 +1608,7 @@ export default function ProfilePage() {
                   <div className="border border-gray-600 rounded-lg p-4">
                     <h4 className="font-medium mb-2">Delete All Your Data</h4>
                     <p className="text-gray-400 text-sm mb-3">
-                      Permanently delete all your data including accounts, transactions, 
+                      Permanently delete all your data including accounts, transactions,
                       conversations, and Plaid and SnapTrade connections. This action cannot be undone.
                     </p>
                     <button
@@ -1733,8 +1623,8 @@ export default function ProfilePage() {
 
                 {deleteMessage && (
                   <div className={`mt-4 p-3 rounded-lg ${
-                    deleteMessage.includes('successfully') || deleteMessage.includes('This is a demo only')
-                      ? 'bg-green-900 border border-green-700 text-green-200' 
+                    deleteMessage.includes('successfully')
+                      ? 'bg-green-900 border border-green-700 text-green-200'
                       : 'bg-red-900 border border-red-700 text-red-200'
                   }`}>
                     {deleteMessage}

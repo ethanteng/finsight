@@ -21,12 +21,12 @@ describe('ProfileExtractor Unit Tests', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Set up the mock response
     mockCreate.mockResolvedValue({
       choices: [{ message: { content: 'Updated profile with new information' } }]
     });
-    
+
     extractor = new ProfileExtractor();
   });
 
@@ -88,7 +88,7 @@ describe('ProfileExtractor Unit Tests', () => {
 
     it('should handle OpenAI API errors gracefully', async () => {
       mockCreate.mockRejectedValue(new Error('API Error'));
-      
+
       const conversation = {
         id: 'conv-1',
         question: 'What\'s the best way to invest?',
@@ -110,7 +110,7 @@ describe('ProfileExtractor Unit Tests', () => {
       mockCreate.mockResolvedValue({
         choices: [{ message: { content: null } }]
       });
-      
+
       const conversation = {
         id: 'conv-1',
         question: 'How should I budget?',
@@ -148,7 +148,7 @@ describe('ProfileExtractor Unit Tests', () => {
 
     it('should return empty string when no existing profile and API fails', async () => {
       mockCreate.mockRejectedValue(new Error('API Error'));
-      
+
       const conversation = {
         id: 'conv-1',
         question: 'How do I start investing?',
@@ -516,7 +516,7 @@ describe('ProfileExtractor Unit Tests', () => {
   describe('Error Handling', () => {
     it('should handle network errors gracefully', async () => {
       mockCreate.mockRejectedValue(new Error('Network Error'));
-      
+
       const conversation = {
         id: 'conv-1',
         question: 'How do I budget?',
@@ -578,10 +578,10 @@ describe('ProfileExtractor Unit Tests', () => {
     });
   });
 
-  describe('Integration with Demo Data', () => {
-    it('should work with realistic demo conversations', async () => {
+  describe('Integration with deterministic fixtures', () => {
+    it('should work with realistic conversations', async () => {
       const conversation = {
-        id: 'demo-conv-1',
+        id: 'test-conv-1',
         question: 'How can I optimize my investment portfolio?',
         answer: 'I\'m Sarah Chen, 32, a software engineer in Austin, TX. I make $85,000 a year and have a 401(k) with $50,000. I\'m married with two kids and want to save for their college education.',
         createdAt: new Date('2024-01-15')
@@ -590,7 +590,7 @@ describe('ProfileExtractor Unit Tests', () => {
       const existingProfile = 'Sarah Chen, software engineer';
 
       const result = await extractor.extractAndUpdateProfile(
-        'demo-user-id',
+        'test-user-id',
         conversation,
         existingProfile
       );
@@ -609,14 +609,14 @@ describe('ProfileExtractor Unit Tests', () => {
 
     it('should handle financial planning conversations', async () => {
       const conversation = {
-        id: 'demo-conv-2',
+        id: 'test-conv-2',
         question: 'What\'s my retirement strategy?',
         answer: 'I\'m 45, work as a marketing director in Chicago, make $120,000, have $200,000 in retirement accounts, and want to retire at 65. I\'m conservative with investments.',
         createdAt: new Date('2024-01-15')
       };
 
       await extractor.extractAndUpdateProfile(
-        'demo-user-id',
+        'test-user-id',
         conversation
       );
 
@@ -631,4 +631,4 @@ describe('ProfileExtractor Unit Tests', () => {
       );
     });
   });
-}); 
+});

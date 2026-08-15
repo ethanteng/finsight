@@ -72,7 +72,6 @@ This document provides comprehensive documentation for the testing implementatio
 #### ✅ Security & Privacy Tests
 - **Plaid Security**: `plaid-security.test.ts` (20 tests)
 - **Privacy Logic**: `privacy-logic.test.ts` (10 tests)
-- **Demo Mode Security**: `demo-mode-security.test.ts` (8 tests)
 
 #### ✅ API & Integration Tests
 - **Admin Endpoints**: `admin-endpoints.test.ts` (12 tests)
@@ -179,8 +178,8 @@ If schema drift occurs (like the 2025-08-05 incident):
    DO $$
    BEGIN
        IF NOT EXISTS (
-           SELECT 1 FROM information_schema.columns 
-           WHERE table_name = 'user_profiles' 
+           SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'user_profiles'
            AND column_name = 'email'
        ) THEN
            ALTER TABLE "user_profiles" ADD COLUMN "email" TEXT;
@@ -259,7 +258,7 @@ npm run test:dual-data
 - **Factories**: Reusable test data factories
 
 ### Mock Data
-- **Demo Data**: Realistic financial data for testing
+- **Test Factories**: Deterministic financial records for repeatable tests
 - **API Mocks**: External API responses
 - **User Data**: Test user profiles and accounts
 
@@ -280,8 +279,8 @@ npm run test:dual-data
 #### 1. **Environment Detection & Isolation**
 ```typescript
 // Multiple safety checks prevent real API calls
-const isTestEnvironment = 
-  process.env.NODE_ENV === 'test' || 
+const isTestEnvironment =
+  process.env.NODE_ENV === 'test' ||
   process.env.GITHUB_ACTIONS ||
   process.env.CI;
 
@@ -296,8 +295,8 @@ if (isTestEnvironment) {
 **FRED Provider**:
 ```typescript
 // Enhanced safety check
-if (this.apiKey === 'test_fred_key' || 
-    this.apiKey.startsWith('test_') || 
+if (this.apiKey === 'test_fred_key' ||
+    this.apiKey.startsWith('test_') ||
     process.env.GITHUB_ACTIONS) {
   console.log('FRED: Using mock data in test/CI environment');
   return this.getMockFredData();
@@ -307,7 +306,7 @@ if (this.apiKey === 'test_fred_key' ||
 **Alpha Vantage Provider**:
 ```typescript
 // CI/CD safety check
-if (this.apiKey === 'your_alpha_vantage_api_key' || 
+if (this.apiKey === 'your_alpha_vantage_api_key' ||
     process.env.GITHUB_ACTIONS) {
   console.log('Alpha Vantage: Using mock data in test/CI environment');
   return this.getMockMarketData();
@@ -317,8 +316,8 @@ if (this.apiKey === 'your_alpha_vantage_api_key' ||
 **Search Provider**:
 ```typescript
 // All search methods protected
-if (this.config.apiKey === 'test_search_key' || 
-    this.config.apiKey.startsWith('test_') || 
+if (this.config.apiKey === 'test_search_key' ||
+    this.config.apiKey.startsWith('test_') ||
     process.env.GITHUB_ACTIONS) {
   return this.getMockSearchResults();
 }
@@ -445,8 +444,8 @@ export const MOCK_ALPHA_VANTAGE_DATA = { /* consistent structure */ };
 #### Issue: Environment Detection Failing
 **Solution**: Use multiple detection methods
 ```typescript
-const isTestEnvironment = 
-  process.env.NODE_ENV === 'test' || 
+const isTestEnvironment =
+  process.env.NODE_ENV === 'test' ||
   process.env.GITHUB_ACTIONS ||
   process.env.CI ||
   process.env.NODE_ENV === 'development' && process.env.USE_MOCKS === 'true';
@@ -480,7 +479,7 @@ const isTestEnvironment =
 
 ### GitHub Actions Workflow
 - **Trigger**: Push to main, pull requests
-- **Jobs**: 
+- **Jobs**:
   - Lint and test
   - Backend tests with coverage
   - Frontend build
@@ -621,7 +620,7 @@ git push origin main               # Security tests will pass in CI/CD
 
 #### **Tests Removed (Race Condition Issues):**
 - `real-plaid-security.test.ts` - Deleted entirely
-- `snaptrade-privacy-integration.test.ts` - Deleted entirely  
+- `snaptrade-privacy-integration.test.ts` - Deleted entirely
 - `comprehensive-security.test.ts` - Removed from config
 - `complete-security-suite.test.ts` - Removed from config
 
@@ -637,8 +636,7 @@ git push origin main               # Security tests will pass in CI/CD
 
 #### **Unit Tests Still Cover Core Security (43 suites, 551 tests):**
 - **`plaid-security.test.ts`** - Core Plaid security logic
-- **`privacy-security.test.ts`** - Privacy protection logic  
-- **`demo-mode-security.test.ts`** - Demo mode security
+- **`privacy-security.test.ts`** - Privacy protection logic
 - **`encrypted-user-service.test.ts`** - User data encryption
 - **`admin-auth.test.ts`** - Admin access controls
 - **`subscription-auth.test.ts`** - Subscription security
@@ -664,7 +662,7 @@ git push origin main               # Security tests will pass in CI/CD
 ### **Final Security Testing Status:**
 
 - **✅ 43 unit test suites** with **551 tests** - All passing
-- **✅ 4 stable integration test suites** with **35 tests** - All passing  
+- **✅ 4 stable integration test suites** with **35 tests** - All passing
 - **✅ Total: 586 security tests** covering all critical security aspects
 - **✅ CI/CD Pipeline**: Now passes consistently without race condition failures
 - **✅ Production Security**: Fully protected with comprehensive test coverage
@@ -672,7 +670,7 @@ git push origin main               # Security tests will pass in CI/CD
 ### **Key Benefits:**
 
 1. **🛡️ Secure**: All critical security logic still tested
-2. **🚀 Reliable**: CI/CD passes consistently  
+2. **🚀 Reliable**: CI/CD passes consistently
 3. **🔧 Maintainable**: No more flaky test failures
 4. **📊 Comprehensive**: 586 total security tests ensure complete coverage
 
@@ -710,7 +708,7 @@ describe('API Tests', () => {
       .post('/api/ask')
       .send({ question: 'What is my net worth?' })
       .expect(200);
-    
+
     expect(response.body).toHaveProperty('answer');
   });
 });
@@ -726,9 +724,9 @@ describe('Mock Tests', () => {
   it('should call OpenAI with correct parameters', async () => {
     const mockAskOpenAI = jest.mocked(askOpenAI);
     mockAskOpenAI.mockResolvedValue('Mock response');
-    
+
     await someFunction();
-    
+
     expect(mockAskOpenAI).toHaveBeenCalledWith(
       expect.stringContaining('test question')
     );
@@ -844,4 +842,4 @@ describe('Mock Tests', () => {
 - **✅ Profile Encryption Integration**: Re-enable end-to-end encryption tests - COMPLETED
 - **✅ Performance Testing**: Validate encryption impact on response times - COMPLETED
 - **✅ Migration Testing**: Test profile encryption migration script - COMPLETED
-- **✅ CI/CD Security Integration**: Security tests required before deployment - COMPLETED 
+- **✅ CI/CD Security Integration**: Security tests required before deployment - COMPLETED

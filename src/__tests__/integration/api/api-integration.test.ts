@@ -1,29 +1,46 @@
 import request from 'supertest';
 import { app } from '../../../index';
 import { PrismaClient } from '@prisma/client';
+import { generateToken } from '../../../auth/utils';
 
 const prisma = new PrismaClient();
+let authToken: string;
 
 describe('API Integration Tests', () => {
-  // Check if we're actually in GitHub Actions (not just CI=true set locally)
-  // Even if CI=true is set locally, we're still on macOS which has permission issues
-  const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' && 
+  // These tests exercise network-bound providers and run only in GitHub Actions.
+  const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' &&
                                      process.env.GITHUB_RUN_ID !== undefined;
-  
+  const shouldSkipNetworkTests = !isActuallyInGitHubActions;
+
+  beforeAll(async () => {
+    if (shouldSkipNetworkTests) return;
+
+    const user = await prisma.user.upsert({
+      where: { email: 'api-integration@example.com' },
+      update: { isActive: true, subscriptionStatus: 'active' },
+      create: {
+        email: 'api-integration@example.com',
+        passwordHash: 'integration-test-only',
+        tier: 'premium',
+        isActive: true,
+        subscriptionStatus: 'active',
+      },
+    });
+    authToken = generateToken({ userId: user.id, email: user.email, tier: user.tier });
+  });
+
   /**
    * Skip network tests locally - these require special permissions on macOS
-   * 
+   *
    * Issue: macOS requires special permissions to bind to 0.0.0.0, which supertest
    * tries to do when creating a test server. This causes EPERM errors locally.
-   * 
+   *
    * Solution: Skip these tests locally (not in CI/CD) since they will run properly
    * in CI/CD environments where permissions are configured correctly.
-   * 
+   *
    * Even if CI=true is set manually, we still skip on macOS to avoid EPERM errors.
    * This is a local vs production mismatch, not a real code issue.
    */
-  const shouldSkipNetworkTests = !isActuallyInGitHubActions;
-  
   // Helper to skip network tests locally
   const skipIfLocal = () => {
     if (shouldSkipNetworkTests) {
@@ -32,15 +49,25 @@ describe('API Integration Tests', () => {
     }
     return false;
   };
-  
+
   afterAll(async () => {
+    if (shouldSkipNetworkTests) {
+      await prisma.$disconnect();
+      return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { email: 'api-integration@example.com' } });
+    if (user) {
+      await prisma.conversation.deleteMany({ where: { userId: user.id } });
+      await prisma.user.delete({ where: { id: user.id } });
+    }
     await prisma.$disconnect();
   });
 
   describe('FRED API Integration', () => {
     it('should test FRED API key configuration', async () => {
       if (skipIfLocal()) return;
-      
+
       const response = await request(app)
         .get('/test/fred-api-key');
 
@@ -59,9 +86,9 @@ describe('API Integration Tests', () => {
 
     it('should test FRED economic indicators for different tiers', async () => {
       if (skipIfLocal()) return;
-      
+
       const tiers = ['starter', 'standard', 'premium'];
-      
+
       for (const tier of tiers) {
         const response = await request(app)
           .get(`/test/market-data/${tier}`);
@@ -71,17 +98,17 @@ describe('API Integration Tests', () => {
         expect(response.body).toHaveProperty('marketContext');
 
         const { marketContext } = response.body;
-        
+
         if (tier === 'starter') {
           // Starter should have no economic indicators
           expect(marketContext.economicIndicators).toBeUndefined();
         } else {
           // Standard and Premium should have economic indicators
           expect(marketContext.economicIndicators).toBeDefined();
-          
+
           if (marketContext.economicIndicators) {
             const { cpi, fedRate, mortgageRate, creditCardAPR } = marketContext.economicIndicators;
-            
+
             // Verify data structure
             expect(cpi).toHaveProperty('value');
             expect(cpi).toHaveProperty('date');
@@ -112,7 +139,7 @@ describe('API Integration Tests', () => {
 
     it('should test FRED API with real questions', async () => {
       if (skipIfLocal()) return;
-      
+
       const questions = [
         'What is the current inflation rate?',
         'What is the Fed Funds Rate?',
@@ -122,15 +149,14 @@ describe('API Integration Tests', () => {
       for (const question of questions) {
         const response = await request(app)
           .post('/ask')
-          .set('x-session-id', 'test-session-id')
+          .set('Authorization', `Bearer ${authToken}`)
           .send({
-            question,
-            isDemo: true // Use demo mode to bypass authentication
+            question
           });
 
         // Accept both 200 (success) and 500 (API failure with test credentials)
         expect([200, 500]).toContain(response.status);
-        
+
         if (response.status === 200) {
           expect(response.body).toHaveProperty('answer');
           // console.log(`Question: "${question}" - Answer: ${response.body.answer.substring(0, 100)}...`);
@@ -144,7 +170,7 @@ describe('API Integration Tests', () => {
   describe('Alpha Vantage API Integration', () => {
     it('should test Alpha Vantage API key configuration', async () => {
       if (skipIfLocal()) return;
-      
+
       const response = await request(app)
         .get('/test/alpha-vantage-api-key');
 
@@ -163,7 +189,7 @@ describe('API Integration Tests', () => {
 
     it('should test Alpha Vantage live market data for Premium tier', async () => {
       if (skipIfLocal()) return;
-      
+
       const response = await request(app)
         .get('/test/market-data/premium');
 
@@ -172,18 +198,18 @@ describe('API Integration Tests', () => {
       expect(response.body).toHaveProperty('marketContext');
 
       const { marketContext } = response.body;
-      
+
       // Premium should have both economic indicators and live market data
       expect(marketContext.economicIndicators).toBeDefined();
       expect(marketContext.liveMarketData).toBeDefined();
 
       if (marketContext.liveMarketData) {
         const { cdRates, treasuryYields, mortgageRates } = marketContext.liveMarketData;
-        
+
         // Verify CD rates structure
         expect(Array.isArray(cdRates)).toBe(true);
         expect(cdRates.length).toBeGreaterThan(0);
-        
+
         cdRates.forEach((cd: any) => {
           expect(cd).toHaveProperty('term');
           expect(cd).toHaveProperty('rate');
@@ -195,7 +221,7 @@ describe('API Integration Tests', () => {
         // Verify Treasury yields structure
         expect(Array.isArray(treasuryYields)).toBe(true);
         expect(treasuryYields.length).toBeGreaterThan(0);
-        
+
         treasuryYields.forEach((t: any) => {
           expect(t).toHaveProperty('term');
           expect(t).toHaveProperty('yield');
@@ -206,7 +232,7 @@ describe('API Integration Tests', () => {
         // Verify Mortgage rates structure
         expect(Array.isArray(mortgageRates)).toBe(true);
         expect(mortgageRates.length).toBeGreaterThan(0);
-        
+
         mortgageRates.forEach((m: any) => {
           expect(m).toHaveProperty('type');
           expect(m).toHaveProperty('rate');
@@ -228,7 +254,7 @@ describe('API Integration Tests', () => {
 
     it('should test Alpha Vantage with real questions for Premium tier', async () => {
       if (skipIfLocal()) return;
-      
+
       const questions = [
         'What are the current CD rates?',
         'What are the current treasury yields?',
@@ -238,15 +264,14 @@ describe('API Integration Tests', () => {
       for (const question of questions) {
         const response = await request(app)
           .post('/ask')
-          .set('x-session-id', 'test-session-id')
+          .set('Authorization', `Bearer ${authToken}`)
           .send({
-            question,
-            isDemo: true // Use demo mode to bypass authentication
+            question
           });
 
         // Accept both 200 (success) and 500 (API failure with test credentials)
         expect([200, 500]).toContain(response.status);
-        
+
         if (response.status === 200) {
           expect(response.body).toHaveProperty('answer');
           // console.log(`Premium Question: "${question}" - Answer: ${response.body.answer.substring(0, 100)}...`);
@@ -260,7 +285,7 @@ describe('API Integration Tests', () => {
   describe('Tier Access Control', () => {
     it('should verify tier access restrictions', async () => {
       if (skipIfLocal()) return;
-      
+
       const tierTests = [
         { tier: 'starter', shouldHaveEconomicData: false, shouldHaveLiveData: false },
         { tier: 'standard', shouldHaveEconomicData: true, shouldHaveLiveData: false },
@@ -302,7 +327,7 @@ describe('API Integration Tests', () => {
   describe('Cache and Performance', () => {
     it('should test cache functionality for API calls', async () => {
       if (skipIfLocal()) return;
-      
+
       // First call
       const response1 = await request(app)
         .get('/test/market-data/standard');
@@ -323,7 +348,7 @@ describe('API Integration Tests', () => {
 
     it('should test cache invalidation', async () => {
       if (skipIfLocal()) return;
-      
+
       // Get initial data
       const response1 = await request(app)
         .get('/test/market-data/standard');
@@ -368,27 +393,27 @@ describe('API Integration Tests', () => {
     //       });
 
     //     expect([200, 500]).toContain(response.status);
-        
+
     //     if (response.status === 200) {
     //       expect(response.body).toHaveProperty('answer');
     //       const answer = response.body.answer.toLowerCase();
-          
+
     //       // Should suggest upgrade instead of providing data
-    //       const shouldSuggestUpgrade = answer.includes('upgrade') || 
-    //                                  answer.includes('premium') || 
+    //       const shouldSuggestUpgrade = answer.includes('upgrade') ||
+    //                                  answer.includes('premium') ||
     //                                  answer.includes('plan') ||
     //                                  answer.includes('available on our');
-          
+
     //       expect(shouldSuggestUpgrade).toBe(true);
-          
+
     //       // Should NOT provide actual market data
-    //       const shouldNotProvideData = !answer.includes('5.25%') && 
-    //                                  !answer.includes('4.33%') && 
+    //       const shouldNotProvideData = !answer.includes('5.25%') &&
+    //                                  !answer.includes('4.33%') &&
     //                                  !answer.includes('321.5') &&
     //                                  !answer.includes('6.74%');
-          
+
     //       expect(shouldNotProvideData).toBe(true);
-          
+
     //       // console.log(`Starter tier "${question}": ${answer.substring(0, 100)}...`);
     //     }
     //   }
@@ -411,28 +436,28 @@ describe('API Integration Tests', () => {
     //       });
 
     //     expect([200, 500]).toContain(response.status);
-        
+
     //     if (response.status === 200) {
     //       expect(response.body).toHaveProperty('answer');
     //       const answer = response.body.answer.toLowerCase();
-          
+
     //       // Should provide actual data
-    //       const shouldProvideData = answer.includes('5.25%') || 
-    //                                answer.includes('4.33%') || 
+    //       const shouldProvideData = answer.includes('5.25%') ||
+    //                                answer.includes('4.33%') ||
     //                                answer.includes('cd rate') ||
     //                                answer.includes('fed rate') ||
     //                                answer.includes('fed funds rate');
-          
+
     //       expect(shouldProvideData).toBe(true);
-          
+
     //       // Should include source attribution
-    //       const shouldHaveSourceAttribution = answer.includes('source:') || 
+    //       const shouldHaveSourceAttribution = answer.includes('source:') ||
     //                                         answer.includes('sources:') ||
     //                                         answer.includes('federal reserve') ||
     //                                         answer.includes('alpha vantage');
-          
+
     //       expect(shouldHaveSourceAttribution).toBe(true);
-          
+
     //       // console.log(`Premium tier "${question}": ${answer.substring(0, 100)}...`);
     //     }
     //   }
@@ -455,28 +480,28 @@ describe('API Integration Tests', () => {
     //       });
 
     //     expect([200, 500]).toContain(response.status);
-        
+
     //     if (response.status === 200) {
     //       expect(response.body).toHaveProperty('answer');
     //       const answer = response.body.answer.toLowerCase();
-          
+
     //       // Should provide economic data
-    //       const shouldProvideEconomicData = answer.includes('4.33%') || 
+    //       const shouldProvideEconomicData = answer.includes('4.33%') ||
     //                                       answer.includes('fed rate') ||
     //                                       answer.includes('fed funds rate') ||
     //                                       answer.includes('321.5') ||
     //                                       answer.includes('cpi');
-          
+
     //       expect(shouldProvideEconomicData).toBe(true);
-          
+
     //       // Should include source attribution for FRED data
-    //       const shouldHaveSourceAttribution = answer.includes('source:') || 
+    //       const shouldHaveSourceAttribution = answer.includes('source:') ||
     //                                         answer.includes('sources:') ||
     //                                         answer.includes('federal reserve') ||
     //                                         answer.includes('fred');
-          
+
     //       expect(shouldHaveSourceAttribution).toBe(true);
-          
+
     //       // console.log(`Standard tier "${question}": ${answer.substring(0, 100)}...`);
     //     }
     //   }
@@ -499,26 +524,26 @@ describe('API Integration Tests', () => {
     //       });
 
     //     expect([200, 500]).toContain(response.status);
-        
+
     //     if (response.status === 200) {
     //       expect(response.body).toHaveProperty('answer');
     //       const answer = response.body.answer.toLowerCase();
-          
+
     //       // Should suggest upgrade for live market data
-    //       const shouldSuggestUpgrade = answer.includes('upgrade') || 
-    //                                  answer.includes('premium') || 
+    //       const shouldSuggestUpgrade = answer.includes('upgrade') ||
+    //                                  answer.includes('premium') ||
     //                                  answer.includes('live market data') ||
     //                                  answer.includes('available on our');
-          
+
     //       expect(shouldSuggestUpgrade).toBe(true);
-          
+
     //       // Should NOT provide actual live market data
-    //       const shouldNotProvideLiveData = !answer.includes('5.25%') && 
+    //       const shouldNotProvideLiveData = !answer.includes('5.25%') &&
     //                                      !answer.includes('cd rate') &&
     //                                      !answer.includes('treasury yield');
-          
+
     //       expect(shouldNotProvideLiveData).toBe(true);
-          
+
     //       // console.log(`Standard tier "${question}": ${answer.substring(0, 100)}...`);
     //     }
     //   }
@@ -528,29 +553,28 @@ describe('API Integration Tests', () => {
   describe('Source Attribution', () => {
     it('should include FRED source attribution for economic indicators', async () => {
       if (skipIfLocal()) return;
-      
+
       const response = await request(app)
         .post('/ask')
-        .set('x-session-id', 'test-session-id')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({
-          question: 'What is the current Fed rate?',
-          isDemo: true // Use demo mode to bypass authentication
+          question: 'What is the current Fed rate?'
         });
 
       expect([200, 500]).toContain(response.status);
-      
+
       if (response.status === 200) {
         expect(response.body).toHaveProperty('answer');
         const answer = response.body.answer;
-        
-        // Since we're using mocked responses in integration tests, 
+
+        // Since we're using mocked responses in integration tests,
         // we're testing that the system properly handles the request
         // and returns a response, not the specific content
         expect(typeof answer).toBe('string');
         expect(answer.length).toBeGreaterThan(0);
-        
+
         // console.log(`Source attribution test: ${answer.substring(0, 100)}...`);
-        
+
         // Note: In a real environment, the AI would include source attribution
         // This test verifies the system is working, not the AI response content
       }
@@ -558,29 +582,28 @@ describe('API Integration Tests', () => {
 
     it('should include Alpha Vantage source attribution for market data', async () => {
       if (skipIfLocal()) return;
-      
+
       const response = await request(app)
         .post('/ask')
-        .set('x-session-id', 'test-session-id')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({
-          question: 'What are the current CD rates?',
-          isDemo: true // Use demo mode to bypass authentication
+          question: 'What are the current CD rates?'
         });
 
       expect([200, 500]).toContain(response.status);
-      
+
       if (response.status === 200) {
         expect(response.body).toHaveProperty('answer');
         const answer = response.body.answer;
-        
-        // Since we're using mocked responses in integration tests, 
+
+        // Since we're using mocked responses in integration tests,
         // we're testing that the system properly handles the request
         // and returns a response, not the specific content
         expect(typeof answer).toBe('string');
         expect(answer.length).toBeGreaterThan(0);
-        
+
         // console.log(`Alpha Vantage source attribution test: ${answer.substring(0, 100)}...`);
-        
+
         // Note: In a real environment, the AI would include source attribution
         // This test verifies the system is working, not the AI response content
       }
@@ -597,59 +620,58 @@ describe('API Integration Tests', () => {
     //     });
 
     //   expect([200, 500]).toContain(response.status);
-      
+
     //   if (response.status === 200) {
     //     expect(response.body).toHaveProperty('answer');
     //     const answer = response.body.answer.toLowerCase();
-        
+
     //     // Should suggest upgrade
-    //     const shouldSuggestUpgrade = answer.includes('upgrade') || 
-    //                                answer.includes('premium') || 
+    //     const shouldSuggestUpgrade = answer.includes('upgrade') ||
+    //                                answer.includes('premium') ||
     //                                answer.includes('plan');
-        
+
     //     expect(shouldSuggestUpgrade).toBe(true);
-        
+
     //     // Should NOT include source attribution for upgrade suggestions
-    //     const shouldNotHaveSourceAttribution = !answer.includes('source:') && 
+    //     const shouldNotHaveSourceAttribution = !answer.includes('source:') &&
     //                                          !answer.includes('sources:') &&
     //                                          !answer.includes('federal reserve') &&
     //                                          !answer.includes('fred') &&
     //                                          !answer.includes('alpha vantage');
-        
+
     //     expect(shouldNotHaveSourceAttribution).toBe(true);
-        
+
     //     // console.log(`Upgrade suggestion test: ${answer.substring(0, 100)}...`);
     //   }
     // });
 
     it('should include both sources when using FRED and Alpha Vantage data', async () => {
       if (skipIfLocal()) return;
-      
+
       const response = await request(app)
         .post('/ask')
-        .set('x-session-id', 'test-session-id')
+        .set('Authorization', `Bearer ${authToken}`)
         .send({
-          question: 'What is the Fed rate and CD rates?',
-          isDemo: true // Use demo mode to bypass authentication
+          question: 'What is the Fed rate and CD rates?'
         });
 
       expect([200, 500]).toContain(response.status);
-      
+
       if (response.status === 200) {
         expect(response.body).toHaveProperty('answer');
         const answer = response.body.answer;
-        
-        // Since we're using mocked responses in integration tests, 
+
+        // Since we're using mocked responses in integration tests,
         // we're testing that the system properly handles the request
         // and returns a response, not the specific content
         expect(typeof answer).toBe('string');
         expect(answer.length).toBeGreaterThan(0);
-        
+
         // console.log(`Both sources test: ${answer.substring(0, 100)}...`);
-        
+
         // Note: In a real environment, the AI would include source attribution
         // This test verifies the system is working, not the AI response content
       }
     });
   });
-}); 
+});

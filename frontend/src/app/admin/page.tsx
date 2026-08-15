@@ -4,32 +4,6 @@ import MarkdownRenderer from '../../components/MarkdownRenderer';
 import PageMeta from '../../components/PageMeta';
 import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
 
-interface DemoConversation {
-  id: string;
-  question: string;
-  answer: string;
-  sessionId: string;
-  createdAt: string;
-  session: {
-    sessionId: string;
-    userAgent?: string;
-    createdAt: string;
-  };
-  feedback: Array<{
-    id: string;
-    score: number;
-    createdAt: string;
-  }>;
-}
-
-interface SessionStats {
-  sessionId: string;
-  conversationCount: number;
-  firstQuestion: string;
-  lastActivity: string;
-  userAgent?: string;
-}
-
 interface ProductionUser {
   userId: string;
   email: string;
@@ -105,18 +79,14 @@ interface MarketNewsContext {
 }
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'demo' | 'production' | 'users' | 'market-news' | 'ai-tone'>('demo');
-  
-  // Demo data state
-  const [demoConversations, setDemoConversations] = useState<DemoConversation[]>([]);
-  const [demoSessions, setDemoSessions] = useState<SessionStats[]>([]);
-  
+  const [activeTab, setActiveTab] = useState<'production' | 'users' | 'market-news' | 'ai-tone'>('production');
+
   // Production data state
   const [productionUsers, setProductionUsers] = useState<ProductionUser[]>([]);
   const [productionConversations, setProductionConversations] = useState<ProductionConversation[]>([]);
   const [userFinancialData, setUserFinancialData] = useState<Record<string, UserFinancialData>>({});
   const [loadingFinancialData, setLoadingFinancialData] = useState<Record<string, boolean>>({});
-  
+
   // User management state
   const [usersForManagement, setUsersForManagement] = useState<UserForManagement[]>([]);
   const [updatingTier, setUpdatingTier] = useState<string | null>(null);
@@ -129,18 +99,15 @@ export default function AdminPage() {
     ok: boolean;
     message: string;
   } | null>(null);
-  
+
   // Market news state
   const [marketNewsContexts, setMarketNewsContexts] = useState<Record<string, MarketNewsContext>>({});
   const [editingContext, setEditingContext] = useState<string | null>(null);
   const [editingText, setEditingText] = useState<string>('');
   const [refreshingContext, setRefreshingContext] = useState<string | null>(null);
-  const [refreshingDemo, setRefreshingDemo] = useState(false);
   const [refreshingProduction, setRefreshingProduction] = useState(false);
   const [refreshingUsers, setRefreshingUsers] = useState(false);
   const [refreshingAllContexts, setRefreshingAllContexts] = useState(false);
-  const [deletingSession, setDeletingSession] = useState<string | null>(null);
-  const [showDeleteSessionConfirm, setShowDeleteSessionConfirm] = useState<string | null>(null);
 
   // AI response tone state
   const [responseTone, setResponseTone] = useState<string>('');
@@ -154,7 +121,7 @@ export default function AdminPage() {
   const [editingToneText, setEditingToneText] = useState<string>('');
   const [savingTone, setSavingTone] = useState(false);
   const [toneNotice, setToneNotice] = useState<{ ok: boolean; message: string } | null>(null);
-  
+
   const [loading, setLoading] = useState(true);
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [error, setError] = useState('');
@@ -167,7 +134,7 @@ export default function AdminPage() {
   const getAuthHeaders = () => {
     const token = localStorage.getItem('auth_token');
     console.log('Auth token:', token ? token.substring(0, 20) + '...' : 'none');
-    
+
     // Decode JWT token to see user info
     if (token) {
       try {
@@ -178,79 +145,11 @@ export default function AdminPage() {
         console.error('Error decoding JWT:', err);
       }
     }
-    
+
     return {
       'Content-Type': 'application/json',
       ...(token && { 'Authorization': `Bearer ${token}` })
     };
-  };
-
-  const loadDemoData = useCallback(async () => {
-    try {
-      // Load demo sessions overview
-      const sessionsRes = await fetch(`${API_URL}/admin/demo-sessions`, {
-        headers: getAuthHeaders()
-      });
-      if (sessionsRes.ok) {
-        const sessionsData = await sessionsRes.json();
-        setDemoSessions(sessionsData.sessions);
-      } else if (sessionsRes.status === 401 || sessionsRes.status === 403) {
-        setError('Authentication required for admin access');
-      }
-
-      // Load demo conversations
-      const conversationsRes = await fetch(`${API_URL}/admin/demo-conversations`, {
-        headers: getAuthHeaders()
-      });
-      if (conversationsRes.ok) {
-        const conversationsData = await conversationsRes.json();
-        setDemoConversations(conversationsData.conversations);
-      } else if (conversationsRes.status === 401 || conversationsRes.status === 403) {
-        setError('Authentication required for admin access');
-      }
-    } catch (err) {
-      console.error('Demo data load error:', err);
-    }
-  }, [API_URL]);
-
-  const refreshDemoData = async () => {
-    setRefreshingDemo(true);
-    try {
-      await loadDemoData();
-    } catch (err) {
-      console.error('Demo data refresh error:', err);
-    } finally {
-      setRefreshingDemo(false);
-    }
-  };
-
-  const deleteDemoSession = async (sessionId: string) => {
-    setDeletingSession(sessionId);
-    try {
-      const response = await fetch(`${API_URL}/admin/demo-sessions/${sessionId}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders()
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Demo session deleted:', result.message);
-        // Refresh demo data to reflect the deletion
-        await loadDemoData();
-        setShowDeleteSessionConfirm(null);
-      } else if (response.status === 401 || response.status === 403) {
-        setError('Authentication required for admin access');
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Failed to delete demo session:', errorData);
-        setError('Failed to delete demo session');
-      }
-    } catch (err) {
-      console.error('Error deleting demo session:', err);
-      setError('Failed to delete demo session');
-    } finally {
-      setDeletingSession(null);
-    }
   };
 
   const loadProductionData = useCallback(async () => {
@@ -325,12 +224,12 @@ export default function AdminPage() {
     }
 
     setLoadingFinancialData(prev => ({ ...prev, [userId]: true }));
-    
+
     try {
       const response = await fetch(`${API_URL}/admin/user-financial-data/${userId}`, {
         headers: getAuthHeaders()
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         setUserFinancialData(prev => ({ ...prev, [userId]: data }));
@@ -351,16 +250,16 @@ export default function AdminPage() {
       console.log('Loading market news contexts...');
       const tiers = ['starter', 'standard', 'premium'];
       const contexts: Record<string, MarketNewsContext> = {};
-      
+
       for (const tier of tiers) {
         try {
           console.log(`Loading context for tier: ${tier}`);
           const response = await fetch(`${API_URL}/market-news/context/${tier}`, {
             headers: getAuthHeaders()
           });
-          
+
           console.log(`Context response for ${tier}: ${response.status}`);
-          
+
           if (response.ok) {
             const data = await response.json();
             contexts[tier] = data;
@@ -389,7 +288,7 @@ export default function AdminPage() {
           };
         }
       }
-      
+
       console.log('All contexts loaded:', contexts);
       setMarketNewsContexts(contexts);
     } catch (err) {
@@ -476,10 +375,9 @@ export default function AdminPage() {
   const loadAdminData = useCallback(async () => {
     setLoading(true);
     setError('');
-    
+
     try {
       await Promise.all([
-        loadDemoData(),
         loadProductionData(),
         loadUsersForManagement(),
         loadMarketNewsContexts(),
@@ -491,16 +389,15 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [loadDemoData, loadProductionData, loadUsersForManagement, loadMarketNewsContexts, loadResponseTone]);
+  }, [loadProductionData, loadUsersForManagement, loadMarketNewsContexts, loadResponseTone]);
 
   const refreshAllData = async () => {
     setRefreshingAll(true);
     setError('');
-    
+
     try {
       console.log('Starting refresh of all admin data...');
       await Promise.all([
-        loadDemoData(),
         loadProductionData(),
         loadUsersForManagement(),
         loadMarketNewsContexts(),
@@ -519,7 +416,7 @@ export default function AdminPage() {
     setRefreshingAllContexts(true);
     console.log('Starting refresh of all market contexts...');
     const tiers = ['starter', 'standard', 'premium'];
-    
+
     try {
       // Refresh all tiers in parallel
       await Promise.all(
@@ -529,9 +426,9 @@ export default function AdminPage() {
             method: 'POST',
             headers: getAuthHeaders()
           });
-          
+
           console.log(`Refresh response for ${tier}: ${response.status}`);
-          
+
           if (response.ok) {
             console.log(`Successfully refreshed ${tier} tier`);
           } else {
@@ -539,7 +436,7 @@ export default function AdminPage() {
           }
         })
       );
-      
+
       // After refreshing, reload the contexts
       await loadMarketNewsContexts();
       console.log('All market contexts refresh completed');
@@ -701,18 +598,18 @@ export default function AdminPage() {
         method: 'POST',
         headers: getAuthHeaders()
       });
-      
+
       console.log(`Refresh response status: ${response.status}`);
-      
+
       if (response.ok) {
         console.log('Refresh successful, reloading context...');
         // Reload the specific context
         const contextResponse = await fetch(`${API_URL}/market-news/context/${tier}`, {
           headers: getAuthHeaders()
         });
-        
+
         console.log(`Context reload status: ${contextResponse.status}`);
-        
+
         if (contextResponse.ok) {
           const data = await contextResponse.json();
           console.log('Context data received:', data);
@@ -750,7 +647,7 @@ export default function AdminPage() {
         headers: getAuthHeaders(),
         body: JSON.stringify({ contextText: editingText })
       });
-      
+
       if (response.ok) {
         setEditingContext(null);
         setEditingText('');
@@ -778,14 +675,14 @@ export default function AdminPage() {
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
   };
 
-  const getQuestionCategories = (conversations: (DemoConversation | ProductionConversation)[] | undefined) => {
+  const getQuestionCategories = (conversations: ProductionConversation[] | undefined) => {
     const categories: { [key: string]: number } = {};
-    
+
     if (!conversations) return categories;
-    
+
     conversations.forEach(conv => {
       const question = conv.question.toLowerCase();
-      
+
       if (question.includes('spend') || question.includes('expense') || question.includes('cost')) {
         categories['Spending Analysis'] = (categories['Spending Analysis'] || 0) + 1;
       } else if (question.includes('save') || question.includes('emergency fund') || question.includes('savings')) {
@@ -802,311 +699,13 @@ export default function AdminPage() {
         categories['Other'] = (categories['Other'] || 0) + 1;
       }
     });
-    
+
     return categories;
-  };
-
-  const renderDemoTab = () => {
-    const questionCategories = getQuestionCategories(demoConversations);
-    
-    return (
-      <div>
-        {/* Header with refresh button */}
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-semibold text-white">Demo Activity</h2>
-          <button
-            onClick={refreshDemoData}
-            disabled={refreshingDemo}
-            className={`px-4 py-2 rounded text-sm ${
-              refreshingDemo 
-                ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                : 'bg-green-600 hover:bg-green-700 text-white'
-            }`}
-            title="Refresh demo data only"
-          >
-            {refreshingDemo ? 'Refreshing...' : 'Refresh Demo Data'}
-          </button>
-        </div>
-
-        {/* Stats Overview */}
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-            <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-2xl font-semibold text-[#397052]">...</div>
-              <div className="text-gray-400 text-sm">Active Sessions</div>
-            </div>
-            <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-2xl font-semibold text-[#397052]">...</div>
-              <div className="text-gray-400 text-sm">Total Conversations</div>
-            </div>
-            <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-2xl font-semibold text-[#397052]">...</div>
-              <div className="text-gray-400 text-sm">Avg Conversations/Session</div>
-            </div>
-            <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-2xl font-semibold text-[#397052]">...</div>
-              <div className="text-gray-400 text-sm">Multi-Question Sessions</div>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-            <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-2xl font-semibold text-[#397052]">{demoSessions?.length || 0}</div>
-              <div className="text-gray-400 text-sm">Active Sessions</div>
-            </div>
-            <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-2xl font-semibold text-[#397052]">{demoConversations?.length || 0}</div>
-              <div className="text-gray-400 text-sm">Total Conversations</div>
-            </div>
-            <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-2xl font-semibold text-[#397052]">
-                {demoConversations?.length > 0 && demoSessions?.length > 0 ? Math.round(demoConversations.length / demoSessions.length) : 0}
-              </div>
-              <div className="text-gray-400 text-sm">Avg Conversations/Session</div>
-            </div>
-            <div className="bg-gray-800 rounded-lg p-4">
-              <div className="text-2xl font-semibold text-[#397052]">
-                {demoSessions?.length > 0 ? Math.round(demoSessions.filter(s => s.conversationCount > 1).length / demoSessions.length * 100) : 0}%
-              </div>
-              <div className="text-gray-400 text-sm">Multi-Question Sessions</div>
-            </div>
-          </div>
-        )}
-
-        {/* Question Categories */}
-        <div className="bg-gray-800 rounded-lg p-6 mb-8">
-          <h2 className="text-xl font-semibold mb-4">Question Categories</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {questionCategories && Object.entries(questionCategories)
-              .sort(([,a], [,b]) => b - a)
-              .map(([category, count]) => (
-                <div key={category} className="rounded-xl border border-[#102319]/10 bg-[#f8f7ef] p-3">
-                  <div className="text-lg font-semibold text-blue-400">{count}</div>
-                  <div className="text-sm text-gray-400">{category}</div>
-                </div>
-              ))}
-          </div>
-        </div>
-
-        {/* View Mode Toggle */}
-        <div className="flex space-x-4 mb-6">
-          <button
-            onClick={() => setViewMode('sessions')}
-            className={`px-4 py-2 rounded text-sm ${
-              viewMode === 'sessions' 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
-          >
-            Sessions Overview
-          </button>
-          <button
-            onClick={() => setViewMode('conversations')}
-            className={`px-4 py-2 rounded text-sm ${
-              viewMode === 'conversations' 
-                ? 'bg-blue-600 text-white' 
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
-          >
-            All Conversations
-          </button>
-        </div>
-
-        {/* Sessions View */}
-        {viewMode === 'sessions' && (
-          <div className="bg-gray-800 rounded-lg p-6">
-            <h2 className="text-xl font-semibold mb-4">Demo Sessions</h2>
-            <div className="space-y-4">
-              {demoSessions?.map((session) => (
-                <div 
-                  key={session.sessionId}
-                  className="bg-gray-700 rounded-lg p-4 cursor-pointer hover:bg-gray-600 transition-colors"
-                  onClick={() => setSelectedSession(selectedSession === session.sessionId ? null : session.sessionId)}
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="font-medium text-white mb-2">
-                        Session: {session.sessionId.substring(0, 8)}...
-                      </div>
-                      <div className="text-sm text-gray-400 mb-2">
-                        {session.conversationCount} conversations • {formatDate(session.lastActivity)}
-                      </div>
-                      <div className="text-sm text-gray-500 mb-2">
-                        First question: {truncateText(session.firstQuestion)}
-                      </div>
-                      {session.userAgent && (
-                        <div className="text-xs text-gray-600">
-                          {session.userAgent.substring(0, 50)}...
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-right flex flex-col items-end space-y-2">
-                      <div className="text-sm text-gray-400">
-                        {session.conversationCount} Q&A
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setShowDeleteSessionConfirm(session.sessionId);
-                        }}
-                        className="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors"
-                        title="Delete this demo session and all its conversations"
-                      >
-                        Delete Session
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {/* Show conversations for this session when expanded */}
-                  {selectedSession === session.sessionId && (
-                    <div className="mt-4 space-y-3">
-                      {demoConversations
-                        ?.filter(conv => conv.session.sessionId === session.sessionId)
-                        ?.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                        ?.map((conv) => (
-                          <div key={conv.id} className="bg-gray-600 rounded p-3 ml-4">
-                            <div className="text-sm font-medium text-blue-300 mb-1">Q:</div>
-                            <div className="text-sm text-gray-300 mb-2">{conv.question}</div>
-                            <div className="text-sm font-medium text-green-300 mb-1">A:</div>
-                            <div className="text-sm text-gray-300">
-                              <MarkdownRenderer>{truncateText(conv.answer, 200)}</MarkdownRenderer>
-                            </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              {formatDate(conv.createdAt)}
-                            </div>
-                            
-                            {/* Feedback Display */}
-                            {conv.feedback && conv.feedback.length > 0 && (
-                              <div className="mt-2">
-                                <div className="text-xs font-medium text-yellow-300 mb-1">Feedback:</div>
-                                <div className="flex items-center space-x-2">
-                                  {conv.feedback.map((fb) => (
-                                    <div key={fb.id} className="flex items-center space-x-1">
-                                      <span className="text-xs text-gray-400">Score:</span>
-                                      <span className={`text-xs font-medium px-2 py-1 rounded ${
-                                        fb.score >= 4 ? 'bg-green-600 text-white' :
-                                        fb.score >= 3 ? 'bg-yellow-600 text-white' :
-                                        'bg-red-600 text-white'
-                                      }`}>
-                                        {fb.score}/5
-                                      </span>
-                                      <span className="text-xs text-gray-500">
-                                        ({formatDate(fb.createdAt)})
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Conversations View */}
-        {viewMode === 'conversations' && (
-          <div className="bg-gray-800 rounded-lg p-6">
-            <h2 className="text-xl font-semibold mb-4">All Demo Conversations</h2>
-            <div className="space-y-4">
-              {demoConversations
-                ?.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                ?.map((conv) => (
-                  <div key={conv.id} className="bg-gray-700 rounded-lg p-4">
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="text-sm text-gray-400">
-                        Session: {conv.session.sessionId.substring(0, 8)}...
-                      </div>
-                      <div className="text-sm text-gray-400">
-                        {formatDate(conv.createdAt)}
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-3">
-                      <div>
-                        <div className="text-sm font-medium text-blue-300 mb-1">Question:</div>
-                        <div className="text-white">{conv.question}</div>
-                      </div>
-                      
-                      <div>
-                        <div className="text-sm font-medium text-green-300 mb-1">Answer:</div>
-                        <div className="text-gray-300">
-                          <MarkdownRenderer>{conv.answer}</MarkdownRenderer>
-                        </div>
-                      </div>
-                      
-                      {/* Feedback Display */}
-                      {conv.feedback && conv.feedback.length > 0 && (
-                        <div>
-                          <div className="text-sm font-medium text-yellow-300 mb-1">Feedback:</div>
-                          <div className="flex items-center space-x-2">
-                            {conv.feedback.map((fb) => (
-                              <div key={fb.id} className="flex items-center space-x-1">
-                                <span className="text-xs text-gray-400">Score:</span>
-                                <span className={`text-sm font-medium px-2 py-1 rounded ${
-                                  fb.score >= 4 ? 'bg-green-600 text-white' :
-                                  fb.score >= 3 ? 'bg-yellow-600 text-white' :
-                                  'bg-red-600 text-white'
-                                }`}>
-                                  {fb.score}/5
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  ({formatDate(fb.createdAt)})
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-        )}
-
-        {/* Delete Session Confirmation Modal */}
-        {showDeleteSessionConfirm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-gray-800 rounded-lg p-6 max-w-md mx-4">
-              <div className="text-white text-lg font-semibold mb-4">
-                Delete Demo Session?
-              </div>
-              <div className="text-gray-300 text-sm mb-6">
-                This will permanently delete the demo session and all {demoSessions?.find(s => s.sessionId === showDeleteSessionConfirm)?.conversationCount || 0} conversations associated with it.
-                <br /><br />
-                <strong>This action cannot be undone.</strong>
-              </div>
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => deleteDemoSession(showDeleteSessionConfirm)}
-                  disabled={deletingSession === showDeleteSessionConfirm}
-                  className="px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed"
-                >
-                  {deletingSession === showDeleteSessionConfirm ? 'Deleting...' : 'Yes, Delete Session'}
-                </button>
-                <button
-                  onClick={() => setShowDeleteSessionConfirm(null)}
-                  disabled={deletingSession === showDeleteSessionConfirm}
-                  className="px-4 py-2 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 disabled:bg-gray-500 disabled:cursor-not-allowed"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
   };
 
   const renderProductionTab = () => {
     const questionCategories = getQuestionCategories(productionConversations);
-    
+
     return (
       <div>
         {/* Header with refresh button */}
@@ -1116,8 +715,8 @@ export default function AdminPage() {
             onClick={refreshProductionData}
             disabled={refreshingProduction}
             className={`px-4 py-2 rounded text-sm ${
-              refreshingProduction 
-                ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+              refreshingProduction
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                 : 'bg-green-600 hover:bg-green-700 text-white'
             }`}
             title="Refresh production data only"
@@ -1182,8 +781,8 @@ export default function AdminPage() {
           <button
             onClick={() => setViewMode('sessions')}
             className={`px-4 py-2 rounded text-sm ${
-              viewMode === 'sessions' 
-                ? 'bg-blue-600 text-white' 
+              viewMode === 'sessions'
+                ? 'bg-blue-600 text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
@@ -1192,8 +791,8 @@ export default function AdminPage() {
           <button
             onClick={() => setViewMode('conversations')}
             className={`px-4 py-2 rounded text-sm ${
-              viewMode === 'conversations' 
-                ? 'bg-blue-600 text-white' 
+              viewMode === 'conversations'
+                ? 'bg-blue-600 text-white'
                 : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
             }`}
           >
@@ -1207,7 +806,7 @@ export default function AdminPage() {
             <h2 className="text-xl font-semibold mb-4">Production Users</h2>
             <div className="space-y-4">
               {productionUsers.map((user) => (
-                <div 
+                <div
                   key={user.userId}
                   className="bg-gray-700 rounded-lg p-4 cursor-pointer hover:bg-gray-600 transition-colors"
                   onClick={() => setSelectedSession(selectedSession === user.userId ? null : user.userId)}
@@ -1233,7 +832,7 @@ export default function AdminPage() {
                       </div>
                     </div>
                   </div>
-                  
+
                   {/* Show expanded view when clicked */}
                   {selectedSession === user.userId && (
                     <div className="mt-4 space-y-4">
@@ -1252,7 +851,7 @@ export default function AdminPage() {
                             {loadingFinancialData[user.userId] ? 'Loading...' : 'Load Financial Data'}
                           </button>
                         </div>
-                        
+
                         {userFinancialData[user.userId] ? (
                           <div className="space-y-3">
                             <div className="bg-gray-700 rounded p-3">
@@ -1266,13 +865,13 @@ export default function AdminPage() {
                                 </div>
                               )}
                             </div>
-                            
+
                             <div className="bg-gray-700 rounded p-3">
                               <div className="text-sm font-medium text-green-300 mb-2">Linked Financial Institutions</div>
                               <div className="text-sm text-gray-400 mb-2">
                                 {userFinancialData[user.userId].accessTokens} access tokens • {userFinancialData[user.userId].totalAccounts} total accounts
                               </div>
-                              
+
                               {userFinancialData[user.userId].institutions.length > 0 ? (
                                 <div className="space-y-2">
                                   {userFinancialData[user.userId].institutions.map((institution, idx) => (
@@ -1291,7 +890,7 @@ export default function AdminPage() {
                               ) : (
                                 <div className="text-sm text-gray-500 italic">No financial institutions linked</div>
                               )}
-                              
+
                               {userFinancialData[user.userId].lastSync && (
                                 <div className="text-xs text-gray-500 mt-2">
                                   Last sync: {formatDate(new Date(userFinancialData[user.userId].lastSync!).toISOString())}
@@ -1305,11 +904,11 @@ export default function AdminPage() {
                           </div>
                         )}
                       </div>
-                      
+
                       {/* Conversations Section */}
                       <div className="bg-gray-600 rounded-lg p-4">
                         <h3 className="text-lg font-semibold text-white mb-3">Conversations</h3>
-                        
+
                         {/* Check if there are conversations with missing user data */}
                         {productionConversations.some(conv => !conv.user) && (
                           <div className="bg-yellow-900 border border-yellow-700 rounded-lg p-2 mb-3">
@@ -1318,7 +917,7 @@ export default function AdminPage() {
                             </div>
                           </div>
                         )}
-                        
+
                         {productionConversations
                           .filter(conv => conv.user && conv.user.id === user.userId)
                           .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -1348,20 +947,20 @@ export default function AdminPage() {
         {viewMode === 'conversations' && (
           <div className="bg-gray-800 rounded-lg p-6">
             <h2 className="text-xl font-semibold mb-4">All Production Conversations</h2>
-            
+
             {/* Warning about conversations with missing user data */}
             {(() => {
               const conversationsWithMissingUsers = productionConversations.filter(conv => !conv.user).length;
               return conversationsWithMissingUsers > 0 ? (
                 <div className="bg-yellow-900 border border-yellow-700 rounded-lg p-3 mb-4">
                   <div className="text-yellow-200 text-sm">
-                    ⚠️ {conversationsWithMissingUsers} conversation{conversationsWithMissingUsers !== 1 ? 's' : ''} have missing user data and are not displayed. 
+                    ⚠️ {conversationsWithMissingUsers} conversation{conversationsWithMissingUsers !== 1 ? 's' : ''} have missing user data and are not displayed.
                     This may indicate a data integrity issue in the backend.
                   </div>
                 </div>
               ) : null;
             })()}
-            
+
             <div className="space-y-4">
               {productionConversations
                 .filter(conv => conv.user) // Filter out conversations with null users
@@ -1376,20 +975,20 @@ export default function AdminPage() {
                         {formatDate(conv.createdAt)}
                       </div>
                     </div>
-                    
+
                     <div className="space-y-3">
                       <div>
                         <div className="text-sm font-medium text-blue-300 mb-1">Question:</div>
                         <div className="text-white">{conv.question}</div>
                       </div>
-                      
+
                       <div>
                         <div className="text-sm font-medium text-green-300 mb-1">Answer:</div>
                         <div className="text-gray-300">
                           <MarkdownRenderer>{conv.answer}</MarkdownRenderer>
                         </div>
                       </div>
-                      
+
                       {/* Feedback Display */}
                       {conv.feedback && conv.feedback.length > 0 && (
                         <div>
@@ -1436,7 +1035,7 @@ export default function AdminPage() {
             onClick={refreshUsersData}
             disabled={refreshingUsers}
             className={`admin-button-primary ${
-              refreshingUsers 
+              refreshingUsers
                 ? 'cursor-not-allowed opacity-55'
                 : ''
             }`}
@@ -1474,8 +1073,8 @@ export default function AdminPage() {
               <div className="mt-1 text-xs font-medium text-[#66736b]">No access</div>
             </div>
           </div>
-          
-          {usersForManagement && usersForManagement.filter(u => 
+
+          {usersForManagement && usersForManagement.filter(u =>
             (['active', 'trialing'].includes(u.subscriptionStatus) && u.subscriptionMessage.includes('account setup incomplete')) ||
             (u.subscriptionStatus === 'incomplete' && u.subscriptionMessage.includes('setup incomplete'))
           ).length > 0 && (
@@ -1490,7 +1089,7 @@ export default function AdminPage() {
                 These users need to complete setup to access Ask Linc:
               </div>
               <div className="mt-2 text-xs text-gray-400">
-                {usersForManagement.filter(u => 
+                {usersForManagement.filter(u =>
                   (['active', 'trialing'].includes(u.subscriptionStatus) && u.subscriptionMessage.includes('account setup incomplete')) ||
                   (u.subscriptionStatus === 'incomplete' && u.subscriptionMessage.includes('setup incomplete'))
                 ).map(user => user.email).join(', ')}
@@ -1574,7 +1173,7 @@ export default function AdminPage() {
                         <div className="text-xs text-yellow-400">Updating...</div>
                       )}
                     </div>
-                    
+
                     {/* Ask Linc: rebuild cached financial snapshot (Plaid + SnapTrade) */}
                     <div className="flex flex-col gap-1 lg:items-end">
                       <button
@@ -1619,7 +1218,7 @@ export default function AdminPage() {
                         </button>
                       )}
                     </div>
-                    
+
                     {/* Account Deletion */}
                     <button
                       onClick={() => setShowDeleteConfirm(user.id)}
@@ -1631,7 +1230,7 @@ export default function AdminPage() {
                     </button>
                   </div>
                 </div>
-                
+
                 {/* Delete Confirmation Modal */}
                 {showDeleteConfirm === user.id && (
                   <div className="mt-4 rounded-xl border border-[#b84a3d]/22 bg-[#f8e8e3] p-4">
@@ -1770,7 +1369,7 @@ export default function AdminPage() {
 
   const renderMarketNewsTab = () => {
     const tiers = ['starter', 'standard', 'premium'];
-    
+
     return (
       <div className="space-y-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -1784,7 +1383,7 @@ export default function AdminPage() {
               onClick={() => refreshAllMarketContexts()}
               disabled={refreshingAllContexts}
               className={`admin-button-primary ${
-                refreshingAllContexts 
+                refreshingAllContexts
                   ? 'cursor-not-allowed opacity-55'
                   : ''
               }`}
@@ -1794,13 +1393,13 @@ export default function AdminPage() {
             </button>
           </div>
         </div>
-        
+
         <div className="grid grid-cols-1 gap-6">
           {tiers.map(tier => {
             const context = marketNewsContexts[tier];
             const isEditing = editingContext === tier;
             const isRefreshing = refreshingContext === tier;
-            
+
             return (
               <section key={tier} className="admin-panel overflow-hidden">
                 <div className="flex flex-col gap-3 border-b border-[#102319]/10 bg-[#fffdf5] px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -1813,7 +1412,7 @@ export default function AdminPage() {
                       onClick={() => refreshMarketContext(tier)}
                       disabled={isRefreshing}
                       className={`admin-button-primary text-sm ${
-                        isRefreshing 
+                        isRefreshing
                           ? 'cursor-not-allowed opacity-55'
                           : ''
                       }`}
@@ -1824,7 +1423,7 @@ export default function AdminPage() {
                       onClick={() => editMarketContext(tier)}
                       disabled={isEditing}
                       className={`admin-button-secondary text-sm ${
-                        isEditing 
+                        isEditing
                           ? 'cursor-not-allowed opacity-55'
                           : ''
                       }`}
@@ -1833,7 +1432,7 @@ export default function AdminPage() {
                     </button>
                   </div>
                 </div>
-                
+
                 <div className="p-5 sm:p-6">
                 {isEditing ? (
                   <div>
@@ -1876,7 +1475,7 @@ export default function AdminPage() {
                         </div>
                       )}
                     </div>
-                    
+
                     {context?.contextText ? (
                       <article className="market-news-article rounded-[20px] border border-[#102319]/10 bg-[#fffdf5] px-5 py-4 shadow-[0_14px_38px_rgba(16,35,25,.045)] sm:px-7 sm:py-6">
                         <MarkdownRenderer>{context.contextText}</MarkdownRenderer>
@@ -1886,7 +1485,7 @@ export default function AdminPage() {
                         No market context available for this tier.
                       </div>
                     )}
-                    
+
                     {context?.keyEvents && context.keyEvents.length > 0 && (
                       <div className="mt-5">
                         <p className="mb-3 text-[10px] font-extrabold uppercase tracking-[.14em] text-[#49725a]">Key events</p>
@@ -1957,8 +1556,8 @@ export default function AdminPage() {
 
   return (
     <>
-      <PageMeta 
-        title="Platform Administration | Ask Linc System Management" 
+      <PageMeta
+        title="Platform Administration | Ask Linc System Management"
         description="Administrative control center for Ask Linc. Monitor user activity, manage system performance, oversee platform operations, and access comprehensive administrative tools for platform management."
       />
       <div className="authenticated-site min-h-screen">
@@ -1972,19 +1571,9 @@ export default function AdminPage() {
         {/* Tab Navigation */}
         <div className="mb-8 flex gap-1 overflow-x-auto rounded-xl border border-[#102319]/10 bg-[#e9eee5] p-1">
           <button
-            onClick={() => setActiveTab('demo')}
-            className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
-              activeTab === 'demo' 
-                ? 'bg-[#102319] text-white shadow-sm'
-                : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'
-            }`}
-          >
-            Demo
-          </button>
-          <button
             onClick={() => setActiveTab('production')}
             className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
-              activeTab === 'production' 
+              activeTab === 'production'
                 ? 'bg-[#102319] text-white shadow-sm'
                 : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'
             }`}
@@ -1994,7 +1583,7 @@ export default function AdminPage() {
           <button
             onClick={() => setActiveTab('users')}
             className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
-              activeTab === 'users' 
+              activeTab === 'users'
                 ? 'bg-[#102319] text-white shadow-sm'
                 : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'
             }`}
@@ -2004,7 +1593,7 @@ export default function AdminPage() {
           <button
             onClick={() => setActiveTab('market-news')}
             className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
-              activeTab === 'market-news' 
+              activeTab === 'market-news'
                 ? 'bg-[#102319] text-white shadow-sm'
                 : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'
             }`}
@@ -2024,7 +1613,6 @@ export default function AdminPage() {
         </div>
 
         {/* Tab Content */}
-        {activeTab === 'demo' && renderDemoTab()}
         {activeTab === 'production' && renderProductionTab()}
         {activeTab === 'users' && renderUsersTab()}
         {activeTab === 'market-news' && renderMarketNewsTab()}

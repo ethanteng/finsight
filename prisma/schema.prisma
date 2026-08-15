@@ -158,27 +158,6 @@ model PrivacySettings {
   user              User     @relation(fields: [userId], references: [id])
 }
 
-model DemoSession {
-  id            String             @id @default(cuid())
-  sessionId     String             @unique
-  userAgent     String?
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-  conversations DemoConversation[]
-}
-
-model DemoConversation {
-  id               String      @id @default(cuid())
-  question         String
-  answer           String
-  sessionId        String
-  showTheMathData  Json?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-  session          DemoSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  feedback         Feedback[]
-}
-
 model UserProfile {
   id                     String                  @id @default(cuid())
   email                  String                  @unique
@@ -282,13 +261,11 @@ model MarketNewsHistory {
 }
 
 model Feedback {
-  id                 String            @id @default(cuid())
-  score              Int
-  createdAt          DateTime          @default(now())
-  conversationId     String?
-  demoConversationId String?
-  conversation       Conversation?     @relation(fields: [conversationId], references: [id])
-  demoConversation   DemoConversation? @relation(fields: [demoConversationId], references: [id])
+  id             String        @id @default(cuid())
+  score          Int
+  createdAt      DateTime      @default(now())
+  conversationId String?
+  conversation   Conversation? @relation(fields: [conversationId], references: [id])
 
   @@map("feedback")
 }
@@ -508,25 +485,25 @@ model RetirementAnalysis {
   id                    String   @id @default(cuid())
   userId                String
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   // Input snapshot (denormalized for reproducibility)
   analysisInput         Json     // Full RetirementAnalysisInput
   portfolioSnapshot     Json     // Holdings + securities at analysis time
-  
+
   // Computed metrics
   portfolioMetrics      Json     // Core metrics (equityAllocation, etc.)
   characteristics       Json     // Portfolio characteristics and tradeoffs (not risk levels)
   stressTestResults     Json     // Historical scenario results
   historicalImplications Json     // Pattern-based observations, not prescriptive recommendations
-  
+
   // Metadata
   computedAt            DateTime @default(now())
   dataQualityScore      Float    // 0-1 confidence in data completeness
   expiresAt             DateTime // When analysis becomes stale
-  
+
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
-  
+
   @@index([userId, computedAt])
   @@map("retirement_analyses")
 }
@@ -544,7 +521,7 @@ model AssetPriceHistory {
   volume         BigInt
   provider       String   // 'polygon', 'tiingo', 'alpha_vantage'
   cachedAt       DateTime @default(now())
-  
+
   @@unique([tickerSymbol, date, provider])
   @@index([tickerSymbol, date])
   @@map("asset_price_history")
@@ -562,6 +539,6 @@ model SecurityMetadata {
   isETF             Boolean  @default(false)
   provider          String   // 'fmp', 'inferred'
   lastUpdated       DateTime @default(now())
-  
+
   @@map("security_metadata")
 }

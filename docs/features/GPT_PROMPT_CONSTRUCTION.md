@@ -40,14 +40,14 @@ Mortgage rates: 30-year fixed: 7.12%, 15-year fixed: 6.45%
   - Build comprehensive insights by combining information across conversation turns
 
 ### 4. User Profile (Conditional)
-- **When**: Only for authenticated users (not demo mode)
+- **When**: Only for authenticated users
 - **Content**: Natural language profile built from conversations
 - **Purpose**: Personalize advice based on personal situation, family status, occupation, financial goals
 - **Source**: AI-extracted from previous conversations and Plaid data
 - **Example**:
 ```
 USER PROFILE:
-I am 35 years old with 2 children. I work as a software engineer earning $120k annually. 
+I am 35 years old with 2 children. I work as a software engineer earning $120k annually.
 My financial goals include saving for college and retirement. I have moderate risk tolerance.
 ```
 
@@ -55,7 +55,7 @@ My financial goals include saving for college and retirement. I have moderate ri
 - **Accounts**: List of all accounts with balances and types
 - **Recent Transactions**: Last 50 transactions with merchant names, categories, amounts, dates
 - **Investment Data**: Portfolio overview, asset allocation, holdings (Premium tier only)
-- **Source**: Plaid API or demo data
+- **Source**: Persisted Plaid data
 - **Format**:
 ```
 USER'S FINANCIAL DATA:

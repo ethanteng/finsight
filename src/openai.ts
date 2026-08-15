@@ -40,10 +40,8 @@ export async function askOpenAIWithEnhancedContext(
   question: string,
   conversationHistory: Conversation[] = [],
   userTier: UserTier | string = UserTier.STARTER,
-  isDemo = false,
   userId?: string,
-  model?: string,
-  demoProfile?: string
+  model?: string
 ): Promise<string> {
   const tier = typeof userTier === 'string' ? (userTier as UserTier) : userTier;
 
@@ -53,8 +51,7 @@ export async function askOpenAIWithEnhancedContext(
     const validation = validateUserPrompt(question, historyForValidation);
     if (!validation.allowed) {
       logRejectedPrompt(question, validation.reason || 'unknown', {
-        userId: isDemo ? undefined : userId,
-        sessionId: isDemo ? undefined : undefined,
+        userId,
       });
       const userMessage = getRejectionMessage(validation.reason);
       throw new PromptValidationError(
@@ -88,11 +85,9 @@ export async function askOpenAIWithEnhancedContext(
 
     const snapshot = await gatherContextSnapshot({
       userId,
-      isDemo,
       question,
       questionNeeds,
-      tier,
-      demoProfile
+      tier
     });
 
     await loadResponseToneConfig();
@@ -103,17 +98,17 @@ export async function askOpenAIWithEnhancedContext(
       contextInstruction
     });
 
-    // Log GPT context for debugging (only for authenticated users, not demo)
+    // Log GPT context for debugging for authenticated users.
     // ✅ IMPORTANT: This logs NON-ANONYMIZED data - all account names, transaction details,
     // institution names, merchant names, and profile information are logged as-is.
     // The snapshot from gatherContextSnapshot() uses getOriginalProfile() and raw account/transaction data.
-    if (userId && !isDemo && process.env.PERSIST_GPT_CONTEXT === 'true') {
+    if (userId && process.env.PERSIST_GPT_CONTEXT === 'true') {
       try {
         // Format summaries using non-anonymized data from snapshot
         const accountSummary = formatAccountSummary(snapshot.accounts);
         const transactionSummary = formatTransactionSummary(snapshot.bankingTransactions);
         const investmentSummary = snapshot.investments ? formatInvestmentSummary(snapshot.investments) : undefined;
-        
+
         await logGPTContext({
           userId,
           question,
@@ -165,7 +160,7 @@ export async function askOpenAIWithEnhancedContext(
       answer = outputValidation.sanitized;
     }
 
-    if (userId && !isDemo) {
+    if (userId) {
       try {
         const { ProfileManager } = await import('./profile/manager');
         const profileManager = new ProfileManager();
@@ -194,7 +189,6 @@ export async function askOpenAI(
   question: string,
   conversationHistory: Conversation[] = [],
   userTier: UserTier | string = UserTier.STARTER,
-  isDemo = false,
   userId?: string,
   model?: string
 ): Promise<string> {
@@ -202,7 +196,6 @@ export async function askOpenAI(
     question,
     conversationHistory,
     userTier,
-    isDemo,
     userId,
     model
   );
@@ -212,7 +205,6 @@ export async function askOpenAIForTests(
   question: string,
   conversationHistory: Conversation[] = [],
   userTier: UserTier | string = UserTier.STARTER,
-  isDemo = false,
   userId?: string,
   model = 'gpt-4o-mini'
 ): Promise<string> {
@@ -220,7 +212,6 @@ export async function askOpenAIForTests(
     question,
     conversationHistory,
     userTier,
-    isDemo,
     userId,
     model
   );

@@ -42,8 +42,6 @@ beforeEach(async () => {
   await testPrisma.encryptedEmailVerificationCode.deleteMany();
   await testPrisma.encryptedUserData.deleteMany();
   await testPrisma.encrypted_profile_data.deleteMany();
-  await testPrisma.demoConversation.deleteMany();  // Clean demo conversations first
-  await testPrisma.demoSession.deleteMany();       // Clean demo sessions
   await testPrisma.accessToken.deleteMany();
   await testPrisma.userProfile.deleteMany();
   await testPrisma.user.deleteMany();
@@ -58,12 +56,12 @@ describe('Complete Security Test Suite', () => {
   let user2: any;
   let user1JWT: string;
   let user2JWT: string;
-  
+
   beforeEach(async () => {
     // Create test users with unique emails to prevent conflicts
     const timestamp = Date.now();
     const randomId = Math.random().toString(36).substring(7);
-    
+
     user1 = await testPrisma.user.create({
       data: {
         email: `complete-security-user1-${timestamp}-${randomId}@test.com`,
@@ -72,7 +70,7 @@ describe('Complete Security Test Suite', () => {
         tier: 'FREE'
       }
     });
-    
+
     user2 = await testPrisma.user.create({
       data: {
         email: `complete-security-user2-${timestamp}-${randomId}@test.com`,
@@ -81,91 +79,91 @@ describe('Complete Security Test Suite', () => {
         tier: 'FREE'
       }
     });
-    
+
     // Create JWT tokens for testing - must match JWTPayload interface
     const jwt = require('jsonwebtoken');
     user1JWT = jwt.sign({ userId: user1.id, email: user1.email, tier: user1.tier }, process.env.JWT_SECRET || 'test-secret');
     user2JWT = jwt.sign({ userId: user2.id, email: user2.email, tier: user2.tier }, process.env.JWT_SECRET || 'test-secret');
   });
-  
+
   describe('Phase 1-4: Core Security Tests', () => {
     describe('Protected Endpoint Security', () => {
       test('should enforce authentication on /profile', async () => {
         // Test without authentication
         const unauthenticatedResponse = await request(testApp)
           .get('/profile');
-        
+
         expect(unauthenticatedResponse.status).toBe(401);
-        
+
         // Note: Full authentication test requires user to exist in main database
         // This test validates that authentication is enforced (401 returned)
         // The 401 response confirms the security middleware is working correctly
       });
-      
+
       test('should enforce authentication on /plaid/all-accounts', async () => {
         // Test without authentication
         const unauthenticatedResponse = await request(testApp)
           .get('/plaid/all-accounts');
-        
+
         expect(unauthenticatedResponse.status).toBe(401);
       });
-      
+
       test('should enforce authentication on /api/stripe/subscription-status', async () => {
         // Test without authentication
         const unauthenticatedResponse = await request(testApp)
           .get('/api/stripe/subscription-status');
-        
+
         expect(unauthenticatedResponse.status).toBe(401);
       });
     });
-    
+
     describe('Stripe Endpoint Security', () => {
       test('should enforce authentication on /api/stripe/check-feature-access', async () => {
         // Test without authentication
         const unauthenticatedResponse = await request(testApp)
           .post('/api/stripe/check-feature-access')
           .send({ requiredTier: 'premium' });
-        
+
         expect(unauthenticatedResponse.status).toBe(401);
       });
-      
+
       test('should handle webhook requests without authentication', async () => {
         // Test webhook endpoint without authentication (webhooks don't require user auth)
         const webhookResponse = await request(testApp)
           .post('/api/stripe/webhook')
           .send({ type: 'test', data: { object: { id: 'test' } } });
-        
+
         expect(webhookResponse.status).toBe(200);
       });
-      
+
       test('should allow public access to /api/stripe/plans', async () => {
         // Test public access
         const publicResponse = await request(testApp)
           .get('/api/stripe/plans');
-        
+
         expect(publicResponse.status).toBe(200);
       });
-      
+
       test('should allow public access to /api/stripe/config', async () => {
         // Test public access
         const publicResponse = await request(testApp)
           .get('/api/stripe/config');
-        
+
         expect(publicResponse.status).toBe(200);
       });
-      
+
       test('should handle webhook authentication properly', async () => {
         // Test webhook endpoint with proper headers
         const webhookResponse = await request(testApp)
           .post('/api/stripe/webhook')
           .set('stripe-signature', 'test-signature')
           .send({ type: 'test', data: { object: { id: 'test' } } });
-        
+
         // Webhooks should return 200 (no user authentication required)
         expect(webhookResponse.status).toBe(200);
       });
     });
-    
+
     describe('Cross-Service Security', () => {
       // TODO: Fix database setup issues - this test is failing due to unique constraint violations
       // The security logic itself is working correctly
@@ -177,38 +175,38 @@ describe('Complete Security Test Suite', () => {
         const user1Response = await request(testApp)
           .get('/profile')
           .set('Authorization', `Bearer ${user1JWT}`);
-        
+
         const user2Response = await request(testApp)
           .get('/profile')
           .set('Authorization', `Bearer ${user2JWT}`);
-        
+
         // Both should return 401 since we're not testing real authentication
         // This validates that the security middleware is working
         expect(user1Response.status).toBe(401);
         expect(user2Response.status).toBe(401);
       });
       */
-      
+
       test('should prevent privilege escalation through endpoint manipulation', async () => {
         // Test that users cannot escalate privileges by manipulating endpoints
         // This validates that security boundaries are properly enforced
         const response = await request(testApp)
           .get('/profile');
-        
+
         // Should return 401 for unauthenticated requests
         expect(response.status).toBe(401);
       });
     });
-    
+
     describe('Authentication Boundary Tests', () => {
       test('should reject requests with invalid JWT tokens', async () => {
         const response = await request(testApp)
           .get('/profile')
           .set('Authorization', 'Bearer invalid-token');
-        
+
         expect(response.status).toBe(401);
       });
-      
+
       test('should reject requests with expired JWT tokens', async () => {
         // Create an expired token
         const jwt = require('jsonwebtoken');
@@ -217,36 +215,36 @@ describe('Complete Security Test Suite', () => {
           process.env.JWT_SECRET || 'test-secret',
           { expiresIn: '-1h' }
         );
-        
+
         const response = await request(testApp)
           .get('/profile')
           .set('Authorization', `Bearer ${expiredToken}`);
-        
+
         expect(response.status).toBe(401);
       });
-      
+
       test('should reject requests without Authorization header', async () => {
         const response = await request(testApp)
           .get('/profile');
-        
+
         expect(response.status).toBe(401);
       });
     });
-    
+
     describe('Data Leakage Prevention', () => {
       test('should not expose internal database IDs in error messages', async () => {
         const response = await request(testApp)
           .get('/profile');
-        
+
         // Error response should not contain internal database IDs
         const responseText = JSON.stringify(response.body);
         expect(responseText).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/);
       });
-      
+
       test('should not expose Stripe internal IDs in public endpoints', async () => {
         const configResponse = await request(testApp)
           .get('/api/stripe/config');
-        
+
         // Check that response doesn't contain Stripe internal IDs
         const responseText = JSON.stringify(configResponse.body);
         expect(responseText).not.toMatch(/pi_[a-zA-Z0-9]+/);
@@ -254,12 +252,12 @@ describe('Complete Security Test Suite', () => {
       });
     });
   });
-  
+
   // Profile encryption tests require real database for complex encryption operations
   // These tests are thoroughly validated locally with real database
   // In CI environment, we skip them to avoid database connection issues
   const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
-  
+
   if (isCI) {
     describe.skip('Phase 5: Profile Encryption Security Tests', () => {
       // These tests are intentionally skipped in CI environment
@@ -273,52 +271,52 @@ describe('Complete Security Test Suite', () => {
     describe('Phase 5: Profile Encryption Security Tests', () => {
       const testEncryptionKey = 'test-encryption-key-32-bytes-long-here';
       const testEncryptionKey2 = 'test-encryption-key-2-32-bytes-long-here';
-      
+
       describe('ProfileEncryptionService Security', () => {
         let encryptionService: ProfileEncryptionService;
-        
+
         beforeEach(() => {
           encryptionService = new ProfileEncryptionService(testEncryptionKey);
         });
-        
+
         test('should encrypt and decrypt profile data correctly', () => {
           const testProfile = 'I am a 30-year-old software engineer earning $100,000 annually';
-          
+
           const encrypted = encryptionService.encrypt(testProfile);
-          
+
           // Verify encryption produces expected structure
           expect(encrypted).toHaveProperty('encryptedData');
           expect(encrypted).toHaveProperty('iv');
           expect(encrypted).toHaveProperty('tag');
           expect(encrypted).toHaveProperty('keyVersion');
           expect(encrypted.keyVersion).toBe(1);
-          
+
           // Verify encrypted data is different from plaintext
           expect(encrypted.encryptedData).not.toBe(testProfile);
           expect(encrypted.encryptedData).not.toContain('software engineer');
           expect(encrypted.encryptedData).not.toContain('$100,000');
-          
+
           // Verify decryption works
           const decrypted = encryptionService.decrypt(
             encrypted.encryptedData,
             encrypted.iv,
             encrypted.tag
           );
-          
+
           expect(decrypted).toBe(testProfile);
         });
-        
+
         test('should use different IVs for each encryption', () => {
           const testProfile = 'Test profile data';
-          
+
           const encrypted1 = encryptionService.encrypt(testProfile);
           const encrypted2 = encryptionService.encrypt(testProfile);
-          
+
           // Same plaintext should produce different encrypted data due to different IVs
           expect(encrypted1.encryptedData).not.toBe(encrypted2.encryptedData);
           expect(encrypted1.iv).not.toBe(encrypted2.iv);
           expect(encrypted1.tag).not.toBe(encrypted2.tag);
-          
+
           // But both should decrypt to the same plaintext
           const decrypted1 = encryptionService.decrypt(
             encrypted1.encryptedData,
@@ -330,28 +328,28 @@ describe('Complete Security Test Suite', () => {
             encrypted2.iv,
             encrypted2.tag
           );
-          
+
           expect(decrypted1).toBe(testProfile);
           expect(decrypted2).toBe(testProfile);
         });
-        
+
         test('should reject invalid encryption key', () => {
           expect(() => {
             new ProfileEncryptionService('short-key');
           }).toThrow('Invalid encryption key provided. Key must be at least 32 bytes long.');
-          
+
           expect(() => {
             new ProfileEncryptionService('');
           }).toThrow('Invalid encryption key provided. Key must be at least 32 bytes long.');
         });
-        
+
         test('should reject decryption with wrong key', () => {
           const testProfile = 'Sensitive profile information';
           const encrypted = encryptionService.encrypt(testProfile);
-          
+
           // Create service with different key
           const wrongKeyService = new ProfileEncryptionService(testEncryptionKey2);
-          
+
           expect(() => {
             wrongKeyService.decrypt(
               encrypted.encryptedData,
@@ -360,14 +358,14 @@ describe('Complete Security Test Suite', () => {
             );
           }).toThrow('Failed to decrypt profile data');
         });
-        
+
         test('should reject decryption with wrong IV', () => {
           const testProfile = 'Sensitive profile information';
           const encrypted = encryptionService.encrypt(testProfile);
-          
+
           // Use wrong IV
           const wrongIV = 'wrong-iv-16-bytes';
-          
+
           expect(() => {
             encryptionService.decrypt(
               encrypted.encryptedData,
@@ -376,14 +374,14 @@ describe('Complete Security Test Suite', () => {
             );
           }).toThrow('Failed to decrypt profile data');
         });
-        
+
         test('should reject decryption with wrong tag', () => {
           const testProfile = 'Sensitive profile information';
           const encrypted = encryptionService.encrypt(testProfile);
-          
+
           // Use wrong tag
           const wrongTag = 'wrong-tag-16-bytes';
-          
+
           expect(() => {
             encryptionService.decrypt(
               encrypted.encryptedData,
@@ -392,33 +390,33 @@ describe('Complete Security Test Suite', () => {
             );
           }).toThrow('Failed to decrypt profile data');
         });
-        
+
         test('should handle key rotation correctly', () => {
           const testProfile = 'Sensitive profile information';
           const encrypted = encryptionService.encrypt(testProfile);
-          
+
           // Verify key version is tracked
           expect(encrypted.keyVersion).toBe(1);
-          
+
           // Decryption should work with correct key
           const decrypted = encryptionService.decrypt(
             encrypted.encryptedData,
             encrypted.iv,
             encrypted.tag
           );
-          
+
           expect(decrypted).toBe(testProfile);
         });
       });
-      
+
       describe('Profile Encryption Integration Security', () => {
         test('should encrypt user profile data in database', async () => {
           const sensitiveProfile = 'I have $100,000 in savings';
-          
+
           // Create encryption service
           const encryptionService = new ProfileEncryptionService(testEncryptionKey);
           const encrypted = encryptionService.encrypt(sensitiveProfile);
-          
+
           // Create user profile first
           const profile = await testPrisma.userProfile.create({
             data: {
@@ -428,7 +426,7 @@ describe('Complete Security Test Suite', () => {
               profileText: sensitiveProfile
             }
           });
-          
+
           // Store encrypted data in separate table
           await testPrisma.encrypted_profile_data.create({
             data: {
@@ -441,29 +439,29 @@ describe('Complete Security Test Suite', () => {
               updatedAt: new Date()
             }
           });
-          
+
           // Verify data is encrypted
           const storedEncryptedData = await testPrisma.encrypted_profile_data.findUnique({
             where: { profileHash: profile.profileHash }
           });
-          
+
           expect(storedEncryptedData).toBeDefined();
           expect(storedEncryptedData!.encryptedData).not.toBe(sensitiveProfile);
           expect(storedEncryptedData!.encryptedData).not.toContain('$100,000');
         });
-        
+
         test('should prevent cross-user profile data access', async () => {
           const profile1 = 'User 1 profile: I earn $50,000 annually';
           const profile2 = 'User 2 profile: I earn $75,000 annually';
-          
+
           // Create encryption services for different users
           const user1EncryptionService = new ProfileEncryptionService(testEncryptionKey);
           const user2EncryptionService = new ProfileEncryptionService(testEncryptionKey2);
-          
+
           // Encrypt both profiles
           const encrypted1 = user1EncryptionService.encrypt(profile1);
           const encrypted2 = user2EncryptionService.encrypt(profile2);
-          
+
           // Create user profiles
           const userProfile1 = await testPrisma.userProfile.create({
             data: {
@@ -473,7 +471,7 @@ describe('Complete Security Test Suite', () => {
               profileText: profile1
             }
           });
-          
+
           const userProfile2 = await testPrisma.userProfile.create({
             data: {
               userId: user2.id,
@@ -482,7 +480,7 @@ describe('Complete Security Test Suite', () => {
               profileText: profile2
             }
           });
-          
+
           // Store encrypted data
           await testPrisma.encrypted_profile_data.create({
             data: {
@@ -495,7 +493,7 @@ describe('Complete Security Test Suite', () => {
               updatedAt: new Date()
             }
           });
-          
+
           await testPrisma.encrypted_profile_data.create({
             data: {
               id: `enc-${userProfile2.id}`,
@@ -507,12 +505,12 @@ describe('Complete Security Test Suite', () => {
               updatedAt: new Date()
             }
           });
-          
+
           // Verify User 1 cannot decrypt User 2's profile (different key)
           const storedEncryptedData2 = await testPrisma.encrypted_profile_data.findUnique({
             where: { profileHash: userProfile2.profileHash }
           });
-          
+
           expect(() => {
             user1EncryptionService.decrypt(
               storedEncryptedData2!.encryptedData,
@@ -520,12 +518,12 @@ describe('Complete Security Test Suite', () => {
               storedEncryptedData2!.tag
             );
           }).toThrow('Failed to decrypt profile data');
-          
+
           // Verify User 2 cannot decrypt User 1's profile (different key)
           const storedEncryptedData1 = await testPrisma.encrypted_profile_data.findUnique({
             where: { profileHash: userProfile1.profileHash }
           });
-          
+
           expect(() => {
             user2EncryptionService.decrypt(
               storedEncryptedData1!.encryptedData,
@@ -534,14 +532,14 @@ describe('Complete Security Test Suite', () => {
             );
           }).toThrow('Failed to decrypt profile data');
         });
-        
+
         test('should not leak sensitive profile information in error messages', async () => {
           const sensitiveProfile = 'I have $500,000 in savings and earn $200,000 annually';
-          
+
           // Create encryption service
           const encryptionService = new ProfileEncryptionService(testEncryptionKey);
           const encrypted = encryptionService.encrypt(sensitiveProfile);
-          
+
           // Create user profile first
           const profile = await testPrisma.userProfile.create({
             data: {
@@ -551,7 +549,7 @@ describe('Complete Security Test Suite', () => {
               profileText: sensitiveProfile
             }
           });
-          
+
           // Store encrypted data in separate table
           await testPrisma.encrypted_profile_data.create({
             data: {
@@ -564,15 +562,15 @@ describe('Complete Security Test Suite', () => {
               updatedAt: new Date()
             }
           });
-          
+
           // Simulate decryption error with wrong key
           const wrongKeyService = new ProfileEncryptionService(testEncryptionKey2);
-          
+
           try {
             const storedEncryptedData = await testPrisma.encrypted_profile_data.findUnique({
               where: { profileHash: profile.profileHash }
             });
-            
+
             wrongKeyService.decrypt(
               storedEncryptedData!.encryptedData,
               storedEncryptedData!.iv,
@@ -580,13 +578,13 @@ describe('Complete Security Test Suite', () => {
             );
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            
+
             // Error should not contain sensitive profile data
             expect(errorMessage).not.toContain('$500,000');
             expect(errorMessage).not.toContain('$200,000');
             expect(errorMessage).not.toContain('savings');
             expect(errorMessage).not.toContain('annually');
-            
+
             // Error should contain generic message
             expect(errorMessage).toContain('Failed to decrypt profile data');
           }
@@ -602,7 +600,7 @@ describe('Complete Security Test Suite', () => {
         // Test without authentication
         const unauthenticatedResponse = await request(testApp)
           .get('/snaptrade/status/user');
-        
+
         expect(unauthenticatedResponse.status).toBe(401);
       });
 
@@ -611,7 +609,7 @@ describe('Complete Security Test Suite', () => {
           .get('/snaptrade/status/user')
           .set('Authorization', 'Bearer invalid_token')
           .expect(401);
-        
+
         expect(response.body).toHaveProperty('error');
       });
 
@@ -619,7 +617,7 @@ describe('Complete Security Test Suite', () => {
         const response = await request(testApp)
           .get('/snaptrade/status/user')
           .set('Authorization', `Bearer ${user1JWT}`);
-        
+
         // Valid JWT should be accepted (returns 200 if user has SnapTrade, 404 if not)
         expect([200, 404]).toContain(response.status);
         if (response.status === 200) {
@@ -636,16 +634,16 @@ describe('Complete Security Test Suite', () => {
         const user1Response = await request(testApp)
           .get('/snaptrade/status/user')
           .set('Authorization', `Bearer ${user1JWT}`);
-        
+
         // User2 should only see their own SnapTrade data
         const user2Response = await request(testApp)
           .get('/snaptrade/status/user')
           .set('Authorization', `Bearer ${user2JWT}`);
-        
+
         // Both should get responses (200 or 404)
         expect([200, 404]).toContain(user1Response.status);
         expect([200, 404]).toContain(user2Response.status);
-        
+
         // If both have SnapTrade data, responses should be different
         if (user1Response.status === 200 && user2Response.status === 200) {
           expect(user1Response.body).not.toEqual(user2Response.body);
@@ -656,7 +654,7 @@ describe('Complete Security Test Suite', () => {
         const response = await request(testApp)
           .get('/snaptrade/status/user')
           .set('Authorization', `Bearer ${user1JWT}`);
-        
+
         // Should return 200 (if user has SnapTrade) or 404 (if not)
         expect([200, 404]).toContain(response.status);
       });
@@ -667,7 +665,7 @@ describe('Complete Security Test Suite', () => {
         const response = await request(testApp)
           .get('/snaptrade/accounts')
           .set('Authorization', `Bearer ${user1JWT}`);
-        
+
         // Should return 200 (if user has SnapTrade) or 404 (if not)
         expect([200, 404]).toContain(response.status);
       });
@@ -676,7 +674,7 @@ describe('Complete Security Test Suite', () => {
         const response = await request(testApp)
           .get('/snaptrade/holdings')
           .set('Authorization', `Bearer ${user1JWT}`);
-        
+
         // Should return 200 (if user has SnapTrade) or 404 (if not)
         expect([200, 404]).toContain(response.status);
       });
@@ -685,7 +683,7 @@ describe('Complete Security Test Suite', () => {
         const response = await request(testApp)
           .get('/snaptrade/activities')
           .set('Authorization', `Bearer ${user1JWT}`);
-        
+
         // Should return 200 (if user has SnapTrade) or 404 (if not)
         expect([200, 404]).toContain(response.status);
       });
@@ -702,20 +700,20 @@ describe('Complete Security Test Suite', () => {
             tier: 'FREE'
           }
         });
-        
+
         const jwt = require('jsonwebtoken');
         const newUserJWT = jwt.sign(
           { userId: newUser.id, email: newUser.email, tier: 'FREE' },
           process.env.JWT_SECRET || 'test-secret'
         );
-        
+
         const response = await request(testApp)
           .get('/snaptrade/accounts')
           .set('Authorization', `Bearer ${newUserJWT}`);
-        
+
         // Should return 404 for user without SnapTrade
         expect(response.status).toBe(404);
-        
+
         // Error message should not contain sensitive information
         if (response.body.error) {
           expect(response.body.error).not.toContain('userSecret');

@@ -74,12 +74,11 @@ Key standalone files in `src/`:
 - `plaid.ts` (139KB) — Plaid banking API integration (all Plaid routes)
 - `snaptrade.ts` (25KB) — SnapTrade investment API
 - `privacy.ts` (28KB) — Core privacy/tokenization logic
-- `demo-data.ts` — Mock financial data for demo mode
 
 ### Frontend (`/frontend/src/`)
 
 Next.js App Router structure:
-- **`app/`** — Pages and layouts. Protected area under `/app/*` (dashboard, finances, demo). Marketing pages at root level (blog, features, FAQ, etc.)
+- **`app/`** — Pages and layouts. Protected area under `/app/*` (dashboard and finances). Marketing pages are at the root level (blog, features, FAQ, etc.)
 - **`components/finances/`** — Financial overview, charts, analysis UI
 - **`components/transactions/`** — Transaction display and filtering
 - **`components/ui/`** — Reusable UI primitives (built on Radix UI + Tailwind)

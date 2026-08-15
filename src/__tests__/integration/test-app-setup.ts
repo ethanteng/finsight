@@ -7,15 +7,15 @@ import { verifyToken, extractTokenFromHeader } from '../../auth/utils';
 // Create a test app instance that doesn't depend on ANY external modules or database connections
 export function createTestApp() {
   const app = express();
-  
+
   // Add basic middleware
   app.use(express.json());
-  
+
   // Simple authentication middleware for testing
   const testAuthMiddleware = (req: any, res: any, next: any) => {
     try {
       const token = extractTokenFromHeader(req.headers.authorization);
-      
+
       if (!token) {
         return res.status(401).json({ error: 'No token provided' });
       }
@@ -37,10 +37,10 @@ export function createTestApp() {
       res.status(401).json({ error: 'Authentication error' });
     }
   };
-  
+
   // Add basic health endpoint for testing
   app.get('/health', (req, res) => {
-    res.json({ 
+    res.json({
       status: 'OK',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
@@ -48,36 +48,28 @@ export function createTestApp() {
       environment: process.env.NODE_ENV || 'test'
     });
   });
-  
+
   // Add root endpoint
   app.get('/', (req, res) => {
-    res.json({ 
+    res.json({
       message: 'Finsight Test API is running',
       timestamp: new Date().toISOString(),
       environment: 'test'
     });
   });
-  
+
   // Add mock Plaid endpoints for testing - these require authentication
   app.get('/plaid/all-accounts', testAuthMiddleware, (req: any, res) => {
     // Mock Plaid endpoint - return empty accounts for testing
     res.json({ accounts: [] });
   });
-  
 
-  
-  app.post('/plaid/create_link_token', (req, res) => {
-    // Mock Plaid link token creation
-    const { isDemo } = req.body;
-    const demoMode = isDemo || req.headers['x-demo-mode'] === 'true';
-    
-    if (demoMode) {
-      res.json({ link_token: 'demo-sandbox-link-token-12345' });
-    } else {
-      res.json({ link_token: 'production-link-token-67890' });
-    }
+
+
+  app.post('/plaid/create_link_token', testAuthMiddleware, (req, res) => {
+    res.json({ link_token: 'test-link-token-67890' });
   });
-  
+
   app.get('/plaid/accounts', testAuthMiddleware, (req: any, res) => {
     res.json({
       accounts: [
@@ -86,7 +78,7 @@ export function createTestApp() {
           name: 'Checking Account',
           type: 'depository',
           subtype: 'checking',
-          balances: { 
+          balances: {
             available: 5000,
             current: 5000,
             limit: null
@@ -99,7 +91,7 @@ export function createTestApp() {
           name: 'Savings Account',
           type: 'depository',
           subtype: 'savings',
-          balances: { 
+          balances: {
             available: 10000,
             current: 10000,
             limit: null
@@ -112,7 +104,7 @@ export function createTestApp() {
       request_id: 'accounts-request-123'
     });
   });
-  
+
   app.get('/plaid/transactions', testAuthMiddleware, (req: any, res) => {
     res.json({
       transactions: [
@@ -153,7 +145,7 @@ export function createTestApp() {
       request_id: 'transactions-request-123'
     });
   });
-  
+
   app.get('/plaid/liabilities', testAuthMiddleware, (req: any, res) => {
     res.json({
       liabilities: [{
@@ -190,10 +182,10 @@ export function createTestApp() {
       }]
     });
   });
-  
+
   app.post('/plaid/enrich/transactions', (req, res) => {
     const { transaction_ids, account_type } = req.body;
-    
+
     if (!transaction_ids || !Array.isArray(transaction_ids)) {
       return res.status(400).json({ error: 'transaction_ids array required' });
     }
@@ -239,7 +231,7 @@ export function createTestApp() {
       }]
     });
   });
-  
+
   app.get('/plaid/income', testAuthMiddleware, (req: any, res) => {
     res.json({
       income: [
@@ -274,17 +266,17 @@ export function createTestApp() {
       }
     });
   });
-  
+
   // Add mock market news endpoints for testing
   app.get('/market-news/context/:tier', (req, res) => {
     const { tier } = req.params;
-    
+
     // Return 404 for invalid tiers
     if (!['starter', 'standard', 'premium'].includes(tier)) {
       return res.status(404).json({ error: 'Invalid tier' });
     }
-    
-    res.json({ 
+
+    res.json({
       contextText: `Mock market context for ${tier} tier`,
       tier: tier,
       dataSources: ['FRED', 'Alpha Vantage', 'Search API'],
@@ -296,15 +288,15 @@ export function createTestApp() {
       lastUpdate: new Date().toISOString()
     });
   });
-  
+
   app.put('/admin/market-news/context/:tier', (req, res) => {
     res.status(401).json({ error: 'Authentication required' });
   });
-  
+
   app.get('/admin/market-news/history/:tier', (req, res) => {
     res.status(401).json({ error: 'Authentication required' });
   });
-  
+
   // Add mock Stripe endpoints for testing with proper authentication
   app.get('/api/stripe/subscription-status', testAuthMiddleware, (req: any, res) => {
     res.json({
@@ -315,7 +307,7 @@ export function createTestApp() {
       upgradeRequired: false
     });
   });
-  
+
   app.post('/api/stripe/check-feature-access', testAuthMiddleware, (req: any, res) => {
     res.json({
       access: true,
@@ -325,90 +317,87 @@ export function createTestApp() {
       upgradeRequired: false
     });
   });
-  
+
   app.get('/api/stripe/plans', (req, res) => {
     res.json({ plans: ['starter', 'standard', 'premium'] });
   });
-  
+
   app.get('/api/stripe/config', (req, res) => {
     res.json({ publishableKey: 'pk_test_mock' });
   });
-  
+
   app.post('/api/stripe/webhook', (req: any, res) => {
     // Mock webhook endpoint - no authentication required
     // In production, this would validate Stripe signature
     res.json({ received: true, authenticated: false });
   });
-  
+
   // Add mock ask endpoint for testing
-  app.post('/ask', async (req, res) => {
+  app.post('/ask', testAuthMiddleware, async (req, res) => {
     try {
-      const { question, isDemo, sessionId } = req.body;
-      
+      const { question } = req.body;
+
       if (!question) {
         return res.status(400).json({ error: 'Question is required' });
       }
 
       // Call the actual askOpenAIWithEnhancedContext function (which is mocked in tests)
-      const answer = await askOpenAIWithEnhancedContext(question, [], 'starter' as UserTier, isDemo);
-      
+      const answer = await askOpenAIWithEnhancedContext(question, [], 'starter' as UserTier);
+
       // ✅ No conversion needed - AI response already contains real data (no anonymization)
       const finalAnswer = answer;
-      
+
       res.json({
         answer: finalAnswer,
         sources: []
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Failed to process question',
         message: errorMessage
       });
     }
   });
-  
+
   // Add mock ask/display-real endpoint for testing
-  app.post('/ask/display-real', async (req, res) => {
+  app.post('/ask/display-real', testAuthMiddleware, async (req, res) => {
     try {
-      const { question, isDemo, sessionId } = req.body;
-      
+      const { question } = req.body;
+
       if (!question) {
         return res.status(400).json({ error: 'Question is required' });
       }
 
       // Call the actual askOpenAIWithEnhancedContext function (which is mocked in tests)
-      const answer = await askOpenAIWithEnhancedContext(question, [], 'starter' as UserTier, isDemo);
-      
+      const answer = await askOpenAIWithEnhancedContext(question, [], 'starter' as UserTier);
+
       // ✅ No conversion needed - AI response already contains real data (no anonymization)
       const finalAnswer = answer;
-      
+
       res.json({
         answer: finalAnswer,
         sources: []
       });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Failed to process question',
         message: errorMessage
       });
     }
   });
-  
+
   // Add mock test endpoints for testing
   app.get('/test/enhanced-market-context', async (req, res) => {
     try {
       const tier = (req.query.tier as string || 'starter') as UserTier;
-      const isDemo = req.query.isDemo === 'true';
-      
       // Call the actual orchestrator functions (which are mocked in tests)
-      const marketContextSummary = await dataOrchestrator.getMarketContextSummary(tier, isDemo);
+      const marketContextSummary = await dataOrchestrator.getMarketContextSummary(tier);
       const cacheStats = await dataOrchestrator.getCacheStats();
-      
-      res.json({ 
+
+      res.json({
         tier,
-        isDemo,
         marketContextSummary,
         contextLength: marketContextSummary.length,
         cacheStats,
@@ -419,18 +408,17 @@ export function createTestApp() {
       res.status(500).json({ error: errorMessage });
     }
   });
-  
+
   app.get('/test/current-tier', (req, res) => {
     const testTier = process.env.TEST_USER_TIER || 'starter';
-    res.json({ 
+    res.json({
       testTier,
       backendTier: testTier,
       message: `Testing with ${testTier} tier`,
-      tier: testTier,
-      isDemo: true
+      tier: testTier
     });
   });
-  
+
   app.get('/test/cache-stats', async (req, res) => {
     try {
       // Call the actual orchestrator function (which is mocked in tests)
@@ -441,22 +429,20 @@ export function createTestApp() {
       res.status(500).json({ error: errorMessage });
     }
   });
-  
+
   // Add missing test endpoints
   app.post('/test/refresh-market-context', async (req, res) => {
     try {
-      const { tier, isDemo } = req.body;
+      const { tier } = req.body;
       const actualTier = (tier || 'starter') as UserTier;
-      const actualIsDemo = isDemo || false;
-      
+
       // Call the actual orchestrator function (which is mocked in tests)
-      await dataOrchestrator.refreshMarketContext(actualTier, actualIsDemo);
+      await dataOrchestrator.refreshMarketContext(actualTier);
       const cacheStats = await dataOrchestrator.getCacheStats();
-      
-      res.json({ 
+
+      res.json({
         success: true,
         tier: actualTier,
-        isDemo: actualIsDemo,
         cacheStats,
         timestamp: new Date().toISOString()
       });
@@ -465,17 +451,17 @@ export function createTestApp() {
       res.status(500).json({ error: errorMessage });
     }
   });
-  
+
   app.post('/test/invalidate-cache', async (req, res) => {
     try {
       const { pattern } = req.body;
       const defaultPattern = 'economic_indicators';
       const actualPattern = pattern || defaultPattern;
-      
+
       // Call the actual orchestrator function (which is mocked in tests)
       await dataOrchestrator.invalidateCache(actualPattern);
-      
-      res.json({ 
+
+      res.json({
         message: `Cache invalidated for pattern: ${actualPattern}`,
         pattern: actualPattern
       });
@@ -484,7 +470,7 @@ export function createTestApp() {
       res.status(500).json({ error: errorMessage });
     }
   });
-  
+
   // Add Plaid investment endpoints for testing
   app.get('/plaid/investments/holdings', testAuthMiddleware, (req: any, res) => {
     res.json({
@@ -546,7 +532,7 @@ export function createTestApp() {
       }
     });
   });
-  
+
   app.get('/plaid/investments/transactions', testAuthMiddleware, (req, res) => {
     const { start_date, end_date } = req.query;
     res.json({
@@ -629,14 +615,14 @@ export function createTestApp() {
         totalAccounts: 1,
         totalTransactions: 2,
         totalSecurities: 1,
-        dateRange: { 
+        dateRange: {
           start_date: start_date || '2024-12-02',
           end_date: end_date || '2025-01-01'
         }
       }
     });
   });
-  
+
   app.get('/plaid/investments', testAuthMiddleware, (req, res) => {
     res.json({
       investments: [{
@@ -696,12 +682,12 @@ export function createTestApp() {
       }
     });
   });
-  
+
   // Add mock profile endpoint for testing
   app.get('/profile', (req, res) => {
     res.status(401).json({ error: 'Authentication required' });
   });
-  
+
   // In-memory SnapTrade user store for isolation tests
   const snapTradeUsers = new Map<string, {
     snapTradeUserId: string;
@@ -746,7 +732,7 @@ export function createTestApp() {
     // Only return existing records - don't auto-create for security tests
     // This ensures /snaptrade/accounts returns 404 for users not explicitly initialized
     if (!record) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         status: 'not_initialized',
         error: 'SnapTrade user not found. Please initialize first.'
       });
@@ -759,7 +745,7 @@ export function createTestApp() {
       updatedAt: record.updatedAt
     });
   });
-  
+
   app.get('/snaptrade/accounts', testAuthMiddleware, (req: any, res) => {
     const userId = req.user?.id;
     // Check if user exists in the map (must be explicitly initialized, not auto-created)
@@ -785,7 +771,7 @@ export function createTestApp() {
       }
     });
   });
-  
+
   app.get('/snaptrade/holdings', testAuthMiddleware, (req: any, res) => {
     const userId = req.user?.id;
     if (!userId || !snapTradeUsers.has(userId)) {
@@ -833,7 +819,7 @@ export function createTestApp() {
       }
     });
   });
-  
+
   app.get('/snaptrade/activities', testAuthMiddleware, (req: any, res) => {
     const userId = req.user?.id;
     if (!userId || !snapTradeUsers.has(userId)) {
@@ -862,7 +848,7 @@ export function createTestApp() {
       }
     });
   });
-  
+
   app.post('/snaptrade/init', testAuthMiddleware, (req: any, res) => {
     const userId = req.user?.id;
     if (!userId) {
@@ -891,7 +877,7 @@ export function createTestApp() {
       }
     });
   });
-  
+
   app.post('/snaptrade/login', testAuthMiddleware, (req: any, res) => {
     const userId = req.user?.id;
     if (!userId || !snapTradeUsers.has(userId)) {
@@ -909,7 +895,7 @@ export function createTestApp() {
       }
     });
   });
-  
+
   app.delete('/snaptrade/delete', testAuthMiddleware, (req: any, res) => {
     const userId = req.user?.id;
     if (!userId || !snapTradeUsers.has(userId)) {
@@ -927,7 +913,7 @@ export function createTestApp() {
       data: {}
     });
   });
-  
+
   return app;
 }
 

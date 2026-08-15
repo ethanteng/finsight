@@ -75,7 +75,7 @@ describe("marketing review fixes", () => {
     await user.type(screen.getByLabelText("FIRST NAME"), "Ethan");
     await user.type(screen.getByLabelText("EMAIL"), "ethan@example.com");
     await user.selectOptions(screen.getByLabelText("WHAT CAN WE HELP WITH?"), "Technical support");
-    await user.type(screen.getByLabelText("MESSAGE"), "The demo is not loading for me.");
+    await user.type(screen.getByLabelText("MESSAGE"), "The app is not loading for me.");
     await user.click(screen.getByRole("button", { name: /send message/i }));
 
     await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
@@ -89,7 +89,7 @@ describe("marketing review fixes", () => {
     });
     expect(payload).toEqual({
       email: "ethan@example.com",
-      message: "Name: Ethan\nTopic: Technical support\n\nThe demo is not loading for me.",
+      message: "Name: Ethan\nTopic: Technical support\n\nThe app is not loading for me.",
     });
     expect(await screen.findByRole("status")).toHaveTextContent("Thanks for reaching out.");
   });
