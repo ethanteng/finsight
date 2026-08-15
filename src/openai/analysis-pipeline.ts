@@ -28,7 +28,7 @@ import { canonicalizeResponseNumbers, validateResponseFacts } from './response-f
 import { validateCanonicalFactPack } from './canonical-facts';
 import { askOpenAIWithPreparedPrompt } from './openai-fallback-client';
 import { createHash } from 'crypto';
-import { recordLlmAnalysis, recordLlmAnalysisFailure } from '../observability/llm-metrics';
+import { recordLlmAnalysisFailure } from '../observability/llm-metrics';
 
 export interface RunAskLincAnalysisOptions {
   question: string;
@@ -338,8 +338,6 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       },
     },
   };
-
-  recordLlmAnalysis(showTheMathData.evidenceManifest);
 
   return {
     structuredResponse,

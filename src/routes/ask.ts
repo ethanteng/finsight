@@ -6,7 +6,7 @@ import { runAskLincAnalysis } from '../openai/analysis-pipeline';
 import { PromptValidationError } from '../openai/errors';
 import { loadShowTheMathEvidence } from '../openai/show-the-math-db-service';
 import { aiRateLimitMiddleware } from '../security/ai-rate-limiter';
-import { recordLlmAnalysisFailure } from '../observability/llm-metrics';
+import { recordLlmAnalysis, recordLlmAnalysisFailure } from '../observability/llm-metrics';
 
 const router = Router();
 
@@ -82,6 +82,9 @@ router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req,
         },
         select: { id: true },
       });
+      if (result.showTheMathData?.evidenceManifest) {
+        recordLlmAnalysis(result.showTheMathData.evidenceManifest);
+      }
       const payload = {
         answer: result.displayText,
         conversationId: conversation.id,
