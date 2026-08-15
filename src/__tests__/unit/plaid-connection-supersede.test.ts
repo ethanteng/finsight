@@ -178,23 +178,23 @@ describe('matchAccountsAcrossConnections', () => {
     expect(matchAccountsAcrossConnections(previous, current).fullyCovered).toBe(true);
   });
 
-  it('omits persisted observation times during exchange-time reconciliation', () => {
-    const previous = [{ ...account({ id: 'p1', name: 'Goal A', currentBalance: 250 }), balanceObservedAt: '2026-07-01T00:00:00Z' }];
-    const current = [{ ...account({ id: 'c1', name: 'Goal B', currentBalance: 250 }), balanceObservedAt: '2026-08-15T00:00:00Z' }];
+  it('does not balance-match a stale previous side even during exchange-time reconciliation', () => {
+    // At exchange time only the surviving side is freshly fetched; the previous side is read from
+    // the database and cannot be refreshed. Equality between a live balance and a weeks-old one is
+    // coincidence, and acting on it here would delete a real account and drop its history. The
+    // duplicate is left visible for the cleanup script instead.
+    const previous = [toConnectionAccount({
+      id: 'p1', plaidAccountId: 'old-1', persistentAccountId: null, name: 'Goal A',
+      type: 'investment', subtype: 'brokerage', mask: null, currentBalance: 250,
+      balanceLastFetched: null, lastSynced: new Date('2026-07-01T00:00:00Z')
+    })];
+    const current = [toConnectionAccount({
+      id: 'c1', plaidAccountId: 'new-1', persistentAccountId: null, name: 'Goal B',
+      type: 'investment', subtype: 'brokerage', mask: null, currentBalance: 250,
+      balanceLastFetched: null, lastSynced: new Date('2026-08-15T00:00:00Z')
+    })];
 
-    const asPersisted = (row: (typeof previous)[0]) =>
-      toConnectionAccount(
-        { ...row, balanceLastFetched: row.balanceObservedAt, lastSynced: row.balanceObservedAt },
-        { omitBalanceObservationTime: true }
-      );
-
-    const result = matchAccountsAcrossConnections(
-      previous.map(asPersisted),
-      current.map(asPersisted)
-    );
-
-    expect(result.fullyCovered).toBe(true);
-    expect(result.matches[0].strategy).toBe('balance');
+    expect(matchAccountsAcrossConnections(previous, current).fullyCovered).toBe(false);
   });
 
   it('still matches when only one side reports a mask', () => {

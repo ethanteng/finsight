@@ -258,11 +258,14 @@ type PrismaLike = {
  * Map a persisted Account row onto the matcher's input shape. Callers must use this rather than
  * passing rows through untyped - it is what carries `balanceObservedAt`, without which the balance
  * pass silently trusts stale balances.
+ *
+ * The observation time is carried even at exchange time. Only the SURVIVING side is freshly
+ * fetched there; the previous side is read from the database and cannot be refreshed - a re-linked
+ * Item no longer exposes the old account ids, and the old token is often broken (that is usually
+ * why the user re-linked). Comparing a live balance against a weeks-old one is not evidence, so a
+ * stale previous side is deliberately left unmatched and preserved rather than matched and deleted.
  */
-export function toConnectionAccount(
-  record: any,
-  options?: { omitBalanceObservationTime?: boolean }
-): ConnectionAccount {
+export function toConnectionAccount(record: any): ConnectionAccount {
   return {
     id: record.id,
     plaidAccountId: record.plaidAccountId,
@@ -272,9 +275,7 @@ export function toConnectionAccount(
     subtype: record.subtype,
     mask: record.mask,
     currentBalance: record.currentBalance,
-    balanceObservedAt: options?.omitBalanceObservationTime
-      ? null
-      : record.balanceLastFetched ?? record.lastSynced ?? null
+    balanceObservedAt: record.balanceLastFetched ?? record.lastSynced ?? null
   };
 }
 
@@ -290,11 +291,9 @@ export async function supersedeDuplicateInstitutionConnections(options: {
   keepTokenId: string;
   institutionName: string;
   dryRun?: boolean;
-  /** Both Items were just fetched during exchange; trust balance equality without timestamps. */
-  exchangeTimeMatch?: boolean;
   log?: (message: string) => void;
 }): Promise<SupersedeReport> {
-  const { prisma, userId, keepTokenId, institutionName, dryRun = false, exchangeTimeMatch = false } = options;
+  const { prisma, userId, keepTokenId, institutionName, dryRun = false } = options;
   const log = options.log ?? (() => {});
   const report: SupersedeReport = { superseded: [], skipped: [] };
 
@@ -310,9 +309,7 @@ export async function supersedeDuplicateInstitutionConnections(options: {
     log(`   ⏭️  No persisted accounts for the surviving connection yet - skipping supersede check`);
     return report;
   }
-  const mapAccount = (record: any) =>
-    toConnectionAccount(record, { omitBalanceObservationTime: exchangeTimeMatch });
-  const current = currentRecords.map(mapAccount);
+  const current = currentRecords.map(toConnectionAccount);
 
   // Candidate stale connections: other active tokens for this user at the same institution.
   // AccessToken.institutionName is backfilled lazily, so also match via the institution recorded
@@ -361,7 +358,7 @@ export async function supersedeDuplicateInstitutionConnections(options: {
       continue;
     }
 
-    const previous = previousRecords.map(mapAccount);
+    const previous = previousRecords.map(toConnectionAccount);
     const result = matchAccountsAcrossConnections(previous, current);
 
     if (!result.fullyCovered) {
