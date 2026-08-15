@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { normalizeAssetType } from '../lib/asset-class';
+import { normalizeLabel } from '../lib/label-normalization';
 
 interface Security {
   id: string;
@@ -372,7 +373,7 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                               {holding.security_name || holding.name || 'Unknown Security'}
                             </div>
                             <div className="text-sm text-gray-400">
-                              {holding.security_type || holding.type || 'Unknown Type'}
+                              {normalizeAssetType(holding.security_type || holding.type)}
                               {holding.ticker_symbol && ` • ${holding.ticker_symbol}`}
                             </div>
                             <div className="text-xs text-gray-500 mt-1">
@@ -418,7 +419,7 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                         {transaction.security_name || transaction.name || 'Unknown Security'}
                       </div>
                       <div className="text-sm text-gray-400">
-                        {transaction.snapTradeData?.activity_type || transaction.type} • {transaction.date}
+                        {normalizeLabel(transaction.snapTradeData?.activity_type || transaction.type)} • {transaction.date}
                         {transaction.ticker_symbol && ` • ${transaction.ticker_symbol}`}
                         {transaction.snapTradeData?.account_name && ` • ${transaction.snapTradeData.account_name}`}
                       </div>
@@ -436,7 +437,7 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                       {formatCurrency(Math.abs(transaction.amount || 0))}
                     </div>
                     <div className="text-sm text-gray-400">
-                      {transaction.snapTradeData?.activity_type || transaction.type}
+                      {normalizeLabel(transaction.snapTradeData?.activity_type || transaction.type)}
                     </div>
                   </div>
                 </div>

@@ -91,6 +91,12 @@ export function normalizeAssetType(rawType: unknown): string {
   return ASSET_TYPE_ALIASES[key] || normalizeLabel(key, UNKNOWN_ASSET_TYPE);
 }
 
+/** True when the raw type maps to a known asset class rather than a passthrough label. */
+export function hasAssetTypeAlias(rawType: unknown): boolean {
+  const key = caseFoldKey(rawType);
+  return Boolean(key) && key in ASSET_TYPE_ALIASES;
+}
+
 /**
  * Map a SnapTrade security-type description to a canonical asset class.
  *
@@ -99,11 +105,11 @@ export function normalizeAssetType(rawType: unknown): string {
  * would be mis-bucketed as Mutual Fund instead of Cash.
  */
 export function resolveAssetTypeWithHeuristics(rawType: unknown): string {
-  const direct = normalizeAssetType(rawType);
-  const titleCaseOnly = normalizeLabel(rawType, UNKNOWN_ASSET_TYPE);
-  if (direct !== titleCaseOnly) {
-    return direct;
-  }
+  // Check the table directly rather than inferring an alias hit by comparing the
+  // mapped value against the title-cased one: aliases that map to their own
+  // title case ("cash" -> "Cash") look like misses under that comparison, and it
+  // would break silently the moment such an alias also matched a heuristic.
+  if (hasAssetTypeAlias(rawType)) return normalizeAssetType(rawType);
 
   let refined = String(rawType ?? '');
   const typeNormalized = refined.toLowerCase();
