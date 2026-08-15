@@ -520,6 +520,21 @@ export const setupPlaidRoutes = (app: any) => {
         // Log it but still return the accounts (deduplication will happen in frontend as safety net)
       }
 
+      // ✅ Flag accounts the provider no longer reports (closed at the institution).
+      // Only when this response is built from persisted rows — if Plaid just returned
+      // an account in a live fetch, it is open by definition. Comparing a live list
+      // against a stale snapshot would mislabel re-authenticated accounts as closed
+      // (and hide the token re-auth prompt).
+      const { getAccountClosures, closureFor } = await import('./services/account-closure-service');
+      const usingPersistedPlaid = financialData.metadata?.dataSources?.plaid === 'persisted';
+      const closures = usingPersistedPlaid
+        ? await getAccountClosures(req.user.id, plaidOnlyAccounts as any[]).catch(error => {
+            // Never fail the accounts list over the closed-account annotation.
+            console.warn('/plaid/all-accounts: closed-account detection failed:', error);
+            return new Map();
+          })
+        : new Map();
+
       // ✅ Format accounts for frontend (matching expected format)
       // Trust FinancialDataService - it should have already deduplicated
       const formattedAccounts = plaidOnlyAccounts.map(account => {
@@ -527,6 +542,7 @@ export const setupPlaidRoutes = (app: any) => {
         // Use account_id or plaidAccountId as the primary ID for frontend
         const accountId = account.account_id || accountAny.plaidAccountId || accountAny.persistentAccountId || account.id;
         const mask = accountAny.mask || (accountId ? accountId.slice(-4) : '****');
+        const closure = closureFor(closures, accountAny);
 
         return {
           id: accountId, // Use account_id/plaidAccountId as the unique identifier
@@ -541,7 +557,9 @@ export const setupPlaidRoutes = (app: any) => {
             iso_currency_code: account.balance?.iso_currency_code ?? 'USD',
             unofficial_currency_code: account.balance?.unofficial_currency_code ?? null
           },
-          institution: account.institution
+          institution: account.institution,
+          isClosed: closure.isClosed,
+          lastSeenAt: closure.lastSeenAt
         };
       });
 
