@@ -121,14 +121,12 @@ describe('Comprehensive Security Test Suite', () => {
    */
   const shouldSkipNetworkTests = !isActuallyInGitHubActions;
 
-  // Helper to skip network tests locally
-  const skipIfLocal = () => {
-    if (shouldSkipNetworkTests) {
-      console.log('⏭️ Skipping network test locally - will run in CI/CD');
-      return true;
-    }
-    return false;
-  };
+  // Network-gated tests are registered through this alias so they report as
+  // SKIPPED rather than PASSED when they cannot run. The previous pattern was an
+  // `if (skipIfLocal()) return;` guard inside the body, which exited before any
+  // assertion — so a test that never ran still counted as a passing test.
+  const itNetwork = shouldSkipNetworkTests ? it.skip : it;
+
 
   let user1: any;
   let user2: any;
@@ -232,9 +230,7 @@ describe('Comprehensive Security Test Suite', () => {
   });
 
   describe('🔒 Plaid Endpoint Security Tests', () => {
-    it('should enforce authentication on /plaid/all-accounts', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should enforce authentication on /plaid/all-accounts', async () => {
       // Unauthenticated request should fail
       const unauthenticatedResponse = await request(app)
         .get('/plaid/all-accounts');
@@ -243,9 +239,7 @@ describe('Comprehensive Security Test Suite', () => {
       expect(unauthenticatedResponse.body.error).toContain('No token provided');
     });
 
-    it('should isolate user data on /plaid/all-accounts', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should isolate user data on /plaid/all-accounts', async () => {
       // User1 should only see their own data
       const user1Response = await request(app)
         .get('/plaid/all-accounts')
@@ -267,9 +261,7 @@ describe('Comprehensive Security Test Suite', () => {
       expect(user2Response.body.accounts).toEqual([]);
     });
 
-    it('should prevent cross-user data access on Plaid endpoints', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should prevent cross-user data access on Plaid endpoints', async () => {
       // User1 should not be able to access User2's data
       const user1Response = await request(app)
         .get('/plaid/all-accounts')
@@ -294,9 +286,7 @@ describe('Comprehensive Security Test Suite', () => {
   });
 
   describe('🔒 Stripe Endpoint Security Tests', () => {
-    it('should enforce authentication on /api/stripe/subscription-status', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should enforce authentication on /api/stripe/subscription-status', async () => {
       // Unauthenticated request should fail
       const unauthenticatedResponse = await request(app)
         .get('/api/stripe/subscription-status');
@@ -304,9 +294,7 @@ describe('Comprehensive Security Test Suite', () => {
       expect(unauthenticatedResponse.status).toBe(401);
     });
 
-    it('should enforce authentication on /api/stripe/check-feature-access', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should enforce authentication on /api/stripe/check-feature-access', async () => {
       // Unauthenticated request should fail
       const unauthenticatedResponse = await request(app)
         .post('/api/stripe/check-feature-access')
@@ -315,9 +303,7 @@ describe('Comprehensive Security Test Suite', () => {
       expect(unauthenticatedResponse.status).toBe(401);
     });
 
-    it('should isolate user subscription data on /api/stripe/subscription-status', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should isolate user subscription data on /api/stripe/subscription-status', async () => {
       // User1 should only see their own subscription data
       const user1Response = await request(app)
         .get('/api/stripe/subscription-status')
@@ -343,9 +329,7 @@ describe('Comprehensive Security Test Suite', () => {
       expect(user2Response.body.status).toBe('active');
     });
 
-    it('should prevent cross-user feature access checks', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should prevent cross-user feature access checks', async () => {
       // User1 should only check their own feature access
       const user1Response = await request(app)
         .post('/api/stripe/check-feature-access')
@@ -373,9 +357,7 @@ describe('Comprehensive Security Test Suite', () => {
       expect(user2Response.body.access).toBe(true); // Mocked to allow access
     });
 
-    it('should allow public access to /api/stripe/plans and /api/stripe/config', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should allow public access to /api/stripe/plans and /api/stripe/config', async () => {
       // Public endpoints should not require authentication
       const plansResponse = await request(app)
         .get('/api/stripe/plans');
@@ -394,9 +376,7 @@ describe('Comprehensive Security Test Suite', () => {
       expect(configResponse.body).not.toHaveProperty('error');
     });
 
-    it('should handle webhook authentication properly', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should handle webhook authentication properly', async () => {
       // Webhook endpoints should validate Stripe signatures
       const webhookPayload = {
         type: 'customer.subscription.updated',
@@ -413,24 +393,30 @@ describe('Comprehensive Security Test Suite', () => {
         .post('/api/stripe/webhook')
         .send(webhookPayload);
 
-      // Should return success or proper error handling for webhook processing
-      // Webhooks may return 200 even for invalid signatures depending on implementation
-      expect([200, 400, 401]).toContain(invalidWebhookResponse.status);
+      // The endpoint answers 200 so Stripe does not retry, and reports the
+      // verification outcome in the body. What matters for security is that an
+      // unsigned payload is never treated as authentic — so assert that, not the
+      // status code. The previous assertion accepted any of 200/400/401 and would
+      // have passed even if the webhook had been processed as genuine.
+      expect(invalidWebhookResponse.status).toBe(200);
+      expect(invalidWebhookResponse.body).toHaveProperty('authenticated', false);
 
-      // Request with proper Stripe signature (mocked) should succeed
-      const validWebhookResponse = await request(app)
+      // A forged signature must be rejected the same way. (This is not the
+      // success path: a genuine signature requires an HMAC over the raw body with
+      // the endpoint secret, which this suite does not have. So what is under test
+      // here is specifically that a bogus signature does not authenticate.)
+      const forgedSignatureResponse = await request(app)
         .post('/api/stripe/webhook')
         .set('stripe-signature', 'test-signature')
         .send(webhookPayload);
 
-      expect([200, 400]).toContain(validWebhookResponse.status);
+      expect(forgedSignatureResponse.status).toBe(200);
+      expect(forgedSignatureResponse.body).toHaveProperty('authenticated', false);
     });
   });
 
   describe('🔒 Cross-Service Security Tests', () => {
-    it('should maintain user isolation across Plaid and Stripe endpoints', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should maintain user isolation across Plaid and Stripe endpoints', async () => {
       // User1 should only access their own data across both services
       const user1PlaidResponse = await request(app)
         .get('/plaid/all-accounts')
@@ -462,9 +448,7 @@ describe('Comprehensive Security Test Suite', () => {
       expect(user2StripeResponse.body.tier).toBe('starter');
     });
 
-    it('should prevent privilege escalation through endpoint manipulation', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should prevent privilege escalation through endpoint manipulation', async () => {
       // User1 should not be able to access User2's data by manipulating requests
       const user1Response = await request(app)
         .get('/plaid/all-accounts')
@@ -488,9 +472,7 @@ describe('Comprehensive Security Test Suite', () => {
   });
 
   describe('🔒 Authentication Boundary Tests', () => {
-    it('should reject invalid JWT tokens on all protected endpoints', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should reject invalid JWT tokens on all protected endpoints', async () => {
       const invalidToken = 'invalid.jwt.token';
       const protectedEndpoints = [
         { method: 'GET', path: '/plaid/all-accounts' },
@@ -507,9 +489,7 @@ describe('Comprehensive Security Test Suite', () => {
       }
     });
 
-    it('should reject expired JWT tokens', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should reject expired JWT tokens', async () => {
       // Create an expired token
       const expiredToken = require('jsonwebtoken').sign(
         { userId: user1.id, email: user1.email, tier: 'starter' },
@@ -524,9 +504,7 @@ describe('Comprehensive Security Test Suite', () => {
       expect(response.status).toBe(401);
     });
 
-    it('should reject requests without Authorization header', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should reject requests without Authorization header', async () => {
       const protectedEndpoints = [
         '/plaid/all-accounts',
         '/api/stripe/subscription-status'
@@ -540,9 +518,7 @@ describe('Comprehensive Security Test Suite', () => {
   });
 
   describe('🔒 Data Leakage Prevention Tests', () => {
-    it('should not expose internal database IDs in responses', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should not expose internal database IDs in responses', async () => {
       const user1Response = await request(app)
         .get('/plaid/all-accounts')
         .set('Authorization', `Bearer ${user1JWT}`);
@@ -554,9 +530,7 @@ describe('Comprehensive Security Test Suite', () => {
       expect(responseBody).not.toContain(user2.id);
     });
 
-    it('should not expose Stripe internal IDs in public endpoints', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should not expose Stripe internal IDs in public endpoints', async () => {
       const configResponse = await request(app).get('/api/stripe/config');
       const plansResponse = await request(app).get('/api/stripe/plans');
 

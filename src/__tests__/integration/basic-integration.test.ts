@@ -18,19 +18,11 @@ describe('Basic Integration Tests', () => {
   });
 
   it('should have a working database connection', async () => {
-    // Test that we can connect to the database
-    try {
-      const accounts = await testPrisma.account.findMany();
-      expect(Array.isArray(accounts)).toBe(true);
-    } catch (error: any) {
-      // In CI/CD, the database might not be fully ready yet
-      if (error.message.includes('relation "account" does not exist')) {
-        console.log('ℹ️ Database tables not ready yet, skipping database test');
-        expect(true).toBe(true); // Pass the test
-      } else {
-        throw error; // Re-throw other errors
-      }
-    }
+    // A missing table means migrations did not run, which is exactly the failure
+    // this test exists to catch. The previous version caught that error and
+    // passed anyway, so the suite stayed green on an unmigrated database.
+    const accounts = await testPrisma.account.findMany();
+    expect(Array.isArray(accounts)).toBe(true);
   });
 
 });

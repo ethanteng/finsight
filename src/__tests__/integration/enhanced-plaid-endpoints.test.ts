@@ -21,15 +21,13 @@ describe('Enhanced Plaid Endpoints Integration Tests', () => {
    * Skip network tests locally - these require special permissions on macOS
    */
   const shouldSkipNetworkTests = !isActuallyInGitHubActions;
+
+  // Network-gated tests are registered through this alias so they report as
+  // SKIPPED rather than PASSED when they cannot run. The previous pattern was an
+  // `if (skipIfLocal()) return;` guard inside the body, which exited before any
+  // assertion — so a test that never ran still counted as a passing test.
+  const itNetwork = shouldSkipNetworkTests ? it.skip : it;
   
-  // Helper to skip network tests locally
-  const skipIfLocal = () => {
-    if (shouldSkipNetworkTests) {
-      console.log('⏭️ Skipping network test locally - will run in CI/CD');
-      return true;
-    }
-    return false;
-  };
   
   let testJWT: string;
 
@@ -45,8 +43,7 @@ describe('Enhanced Plaid Endpoints Integration Tests', () => {
   });
 
   describe('Liabilities Endpoint', () => {
-    it('should return liability information for all accounts', async () => {
-      if (skipIfLocal()) return;
+    itNetwork('should return liability information for all accounts', async () => {
       
       const app = await getTestApp();
       const response = await request(app)
@@ -79,8 +76,7 @@ describe('Enhanced Plaid Endpoints Integration Tests', () => {
   });
 
   describe('Transaction Enrichment Endpoint', () => {
-    it('should enrich transactions with merchant data', async () => {
-      if (skipIfLocal()) return;
+    itNetwork('should enrich transactions with merchant data', async () => {
       
       const transactionIds = ['t1', 't2', 't3'];
       
@@ -129,8 +125,7 @@ describe('Enhanced Plaid Endpoints Integration Tests', () => {
       expect(response.body.error).toBe('transaction_ids array required');
     });
 
-    it('should return error for invalid transaction_ids format', async () => {
-      if (skipIfLocal()) return;
+    itNetwork('should return error for invalid transaction_ids format', async () => {
       
       const app = await getTestApp();
       const response = await request(app)
@@ -144,8 +139,7 @@ describe('Enhanced Plaid Endpoints Integration Tests', () => {
   });
 
   describe('Income Endpoint', () => {
-    it('should return income information with analysis', async () => {
-      if (skipIfLocal()) return;
+    itNetwork('should return income information with analysis', async () => {
       
       const app = await getTestApp();
       const response = await request(app)
@@ -215,8 +209,7 @@ describe('Enhanced Plaid Endpoints Integration Tests', () => {
   });
 
   describe('Transactions Endpoint', () => {
-    it('should return transaction information with categories', async () => {
-      if (skipIfLocal()) return;
+    itNetwork('should return transaction information with categories', async () => {
       
       const app = await getTestApp();
       const response = await request(app)

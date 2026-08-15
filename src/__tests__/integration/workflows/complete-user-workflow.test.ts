@@ -21,14 +21,12 @@ describe('Complete User Workflow Tests', () => {
    */
   const shouldSkipNetworkTests = !isActuallyInGitHubActions;
 
-  // Helper to skip network tests locally
-  const skipIfLocal = () => {
-    if (shouldSkipNetworkTests) {
-      console.log('⏭️ Skipping network test locally - will run in CI/CD');
-      return true;
-    }
-    return false;
-  };
+  // Network-gated tests are registered through this alias so they report as
+  // SKIPPED rather than PASSED when they cannot run. The previous pattern was an
+  // `if (skipIfLocal()) return;` guard inside the body, which exited before any
+  // assertion — so a test that never ran still counted as a passing test.
+  const itNetwork = shouldSkipNetworkTests ? it.skip : it;
+
 
   // Use the enhanced mock database from the CI setup
   // This ensures we're testing the real security implementation with mock data
@@ -68,7 +66,6 @@ describe('Complete User Workflow Tests', () => {
     // User registration succeeds but user data isn't immediately available in CI
     it.skip('should complete full user workflow: register → login → connect accounts → ask questions', async () => {
       // Step 1: Register new user
-      if (skipIfLocal()) return;
 
       const testApp = await getApp();
       const registerResponse = await request(testApp)
@@ -191,11 +188,9 @@ describe('Complete User Workflow Tests', () => {
           question: 'What is my current balance?'
         });
 
-      // Accept both 200 (success) and 500 (API failure with test credentials)
-      expect([200, 500]).toContain(questionResponse.status);
-      if (questionResponse.status === 200) {
-        expect(questionResponse.body).toHaveProperty('answer');
-      }
+      // The AI pipeline is mocked in this config, so this step is deterministic.
+      expect(questionResponse.status).toBe(200);
+      expect(questionResponse.body).toHaveProperty('answer');
 
       // Step 7: Verify user data isolation
       const userData = await prisma.user.findUnique({
@@ -218,7 +213,6 @@ describe('Complete User Workflow Tests', () => {
     // This test fails in CI due to foreign key constraint violations when creating Conversation records
     it.skip('should maintain session persistence across multiple requests', async () => {
       // Register user
-      if (skipIfLocal()) return;
 
       const testApp = await getApp();
       const registerResponse = await request(testApp)
@@ -242,9 +236,10 @@ describe('Complete User Workflow Tests', () => {
 
       const responses = await Promise.all(requests);
 
-      // All requests should succeed with valid token
+      // All requests should succeed with a valid token. The previous assertion
+      // accepted 500 too, so it could not have detected them all failing.
       responses.forEach(response => {
-        expect([200, 500]).toContain(response.status);
+        expect(response.status).toBe(200);
       });
     });
   });

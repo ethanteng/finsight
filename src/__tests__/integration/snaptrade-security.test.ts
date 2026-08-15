@@ -47,6 +47,12 @@ describe('SnapTrade Security Tests', () => {
    */
   const shouldSkipNetworkTests = !isActuallyInGitHubActions;
 
+  // Network-gated tests are registered through this alias so they report as
+  // SKIPPED rather than PASSED when they cannot run. The previous pattern was an
+  // `if (skipIfLocal()) return;` guard inside the body, which exited before any
+  // assertion — so a test that never ran still counted as a passing test.
+  const itNetwork = shouldSkipNetworkTests ? it.skip : it;
+
   beforeEach(async () => {
     // Clean up before each test - order matters for foreign key constraints
     await testPrisma.encryptedEmailVerificationCode.deleteMany();
@@ -117,12 +123,7 @@ describe('SnapTrade Security Tests', () => {
   });
 
   describe('Authentication Enforcement', () => {
-    it('should reject unauthenticated access to /snaptrade/status/user', async () => {
-      if (shouldSkipNetworkTests) {
-        console.log('⏭️ Skipping network test locally - will run in CI/CD');
-        return;
-      }
-
+    itNetwork('should reject unauthenticated access to /snaptrade/status/user', async () => {
       const response = await request(app)
         .get('/snaptrade/status/user')
         .expect(401);
@@ -130,12 +131,7 @@ describe('SnapTrade Security Tests', () => {
       expect(response.body).toHaveProperty('error');
     });
 
-    it('should reject invalid JWT tokens for SnapTrade endpoints', async () => {
-      if (shouldSkipNetworkTests) {
-        console.log('⏭️ Skipping network test locally - will run in CI/CD');
-        return;
-      }
-
+    itNetwork('should reject invalid JWT tokens for SnapTrade endpoints', async () => {
       const response = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', 'Bearer invalid_token')
@@ -144,12 +140,7 @@ describe('SnapTrade Security Tests', () => {
       expect(response.body).toHaveProperty('error');
     });
 
-    it('should accept valid JWT tokens for SnapTrade endpoints', async () => {
-      if (shouldSkipNetworkTests) {
-        console.log('⏭️ Skipping network test locally - will run in CI/CD');
-        return;
-      }
-
+    itNetwork('should accept valid JWT tokens for SnapTrade endpoints', async () => {
       const response = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user1JWT}`);
@@ -160,12 +151,7 @@ describe('SnapTrade Security Tests', () => {
   });
 
   describe('User Data Isolation', () => {
-    it('should prevent User A from seeing User B SnapTrade data', async () => {
-      if (shouldSkipNetworkTests) {
-        console.log('⏭️ Skipping network test locally - will run in CI/CD');
-        return;
-      }
-
+    itNetwork('should prevent User A from seeing User B SnapTrade data', async () => {
       // User1 should only see their own SnapTrade data
       const user1Response = await request(app)
         .get('/snaptrade/status/user')
@@ -180,12 +166,7 @@ describe('SnapTrade Security Tests', () => {
       expect(user2Response.status).toBe(expectedMissingSnapTradeStatus);
     });
 
-    it('should only return SnapTrade data for authenticated user', async () => {
-      if (shouldSkipNetworkTests) {
-        console.log('⏭️ Skipping network test locally - will run in CI/CD');
-        return;
-      }
-
+    itNetwork('should only return SnapTrade data for authenticated user', async () => {
       const response = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user1JWT}`);
@@ -195,12 +176,7 @@ describe('SnapTrade Security Tests', () => {
   });
 
   describe('SnapTrade Endpoint Security', () => {
-    it('should test actual /snaptrade/status/user endpoint', async () => {
-      if (shouldSkipNetworkTests) {
-        console.log('⏭️ Skipping network test locally - will run in CI/CD');
-        return;
-      }
-
+    itNetwork('should test actual /snaptrade/status/user endpoint', async () => {
       const response = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user1JWT}`);
@@ -208,12 +184,7 @@ describe('SnapTrade Security Tests', () => {
       expect(response.status).toBe(expectedMissingSnapTradeStatus);
     });
 
-    it('should test actual /snaptrade/accounts endpoint', async () => {
-      if (shouldSkipNetworkTests) {
-        console.log('⏭️ Skipping network test locally - will run in CI/CD');
-        return;
-      }
-
+    itNetwork('should test actual /snaptrade/accounts endpoint', async () => {
       const response = await request(app)
         .get('/snaptrade/accounts')
         .set('Authorization', `Bearer ${user1JWT}`);
@@ -221,12 +192,7 @@ describe('SnapTrade Security Tests', () => {
       expect(response.status).toBe(expectedMissingSnapTradeStatus);
     });
 
-    it('should test actual /snaptrade/holdings endpoint', async () => {
-      if (shouldSkipNetworkTests) {
-        console.log('⏭️ Skipping network test locally - will run in CI/CD');
-        return;
-      }
-
+    itNetwork('should test actual /snaptrade/holdings endpoint', async () => {
       const response = await request(app)
         .get('/snaptrade/holdings')
         .set('Authorization', `Bearer ${user1JWT}`);
@@ -234,12 +200,7 @@ describe('SnapTrade Security Tests', () => {
       expect(response.status).toBe(expectedMissingSnapTradeStatus);
     });
 
-    it('should test actual /snaptrade/activities endpoint', async () => {
-      if (shouldSkipNetworkTests) {
-        console.log('⏭️ Skipping network test locally - will run in CI/CD');
-        return;
-      }
-
+    itNetwork('should test actual /snaptrade/activities endpoint', async () => {
       const response = await request(app)
         .get('/snaptrade/activities')
         .set('Authorization', `Bearer ${user1JWT}`);
@@ -249,12 +210,7 @@ describe('SnapTrade Security Tests', () => {
   });
 
   describe('Cross-User Security Validation', () => {
-    it('should validate that User A cannot access User B SnapTrade data through any endpoint', async () => {
-      if (shouldSkipNetworkTests) {
-        console.log('⏭️ Skipping network test locally - will run in CI/CD');
-        return;
-      }
-
+    itNetwork('should validate that User A cannot access User B SnapTrade data through any endpoint', async () => {
       // User1 tries to access their own data
       const user1OwnData = await request(app)
         .get('/snaptrade/status/user')
@@ -269,12 +225,7 @@ describe('SnapTrade Security Tests', () => {
       expect(user2OwnData.status).toBe(expectedMissingSnapTradeStatus);
     });
 
-    it('should prevent privilege escalation through SnapTrade endpoint manipulation', async () => {
-      if (shouldSkipNetworkTests) {
-        console.log('⏭️ Skipping network test locally - will run in CI/CD');
-        return;
-      }
-
+    itNetwork('should prevent privilege escalation through SnapTrade endpoint manipulation', async () => {
       // Test that users cannot manipulate endpoints to access other users' data
       const user1Response = await request(app)
         .get('/snaptrade/accounts')
@@ -290,12 +241,7 @@ describe('SnapTrade Security Tests', () => {
   });
 
   describe('Error Handling Security', () => {
-    it('should not leak sensitive SnapTrade information in error messages', async () => {
-      if (shouldSkipNetworkTests) {
-        console.log('⏭️ Skipping network test locally - will run in CI/CD');
-        return;
-      }
-
+    itNetwork('should not leak sensitive SnapTrade information in error messages', async () => {
       // Test with a user that doesn't have SnapTrade initialized
       const newUser = await testPrisma.user.create({
         data: createTestUser({
@@ -326,19 +272,20 @@ describe('SnapTrade Security Tests', () => {
       }
     });
 
-    it('should handle SnapTrade database errors securely', async () => {
-      if (shouldSkipNetworkTests) {
-        console.log('⏭️ Skipping network test locally - will run in CI/CD');
-        return;
-      }
-
+    itNetwork('should handle SnapTrade database errors securely', async () => {
       // Test error handling without exposing internal details
       const response = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user1JWT}`);
 
-      // Should handle errors gracefully (200, 404, or 401 for test isolation)
-      expect([200, 404, 401]).toContain(response.status);
+      // A user with no SnapTrade registration is rejected with 401 and a generic
+      // message. The point of this test is that the error does not leak internals,
+      // so assert both the status and the shape of the message — the previous
+      // assertion accepted 200 as well, so it could not tell rejection from access.
+      expect(response.status).toBe(401);
+      expect(response.body).toHaveProperty('error');
+      expect(response.body.error).not.toMatch(/prisma|sql|stack|at \s|node_modules/i);
+      expect(response.body).not.toHaveProperty('stack');
     });
   });
 });

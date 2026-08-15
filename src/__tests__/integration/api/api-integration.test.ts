@@ -12,6 +12,12 @@ describe('API Integration Tests', () => {
                                      process.env.GITHUB_RUN_ID !== undefined;
   const shouldSkipNetworkTests = !isActuallyInGitHubActions;
 
+  // Network-gated tests are registered through this alias so they report as
+  // SKIPPED rather than PASSED when they cannot run. The previous pattern was an
+  // `if (skipIfLocal()) return;` guard inside the body, which exited before any
+  // assertion — so a test that never ran still counted as a passing test.
+  const itNetwork = shouldSkipNetworkTests ? it.skip : it;
+
   beforeAll(async () => {
     if (shouldSkipNetworkTests) return;
 
@@ -41,14 +47,6 @@ describe('API Integration Tests', () => {
    * Even if CI=true is set manually, we still skip on macOS to avoid EPERM errors.
    * This is a local vs production mismatch, not a real code issue.
    */
-  // Helper to skip network tests locally
-  const skipIfLocal = () => {
-    if (shouldSkipNetworkTests) {
-      console.log('⏭️ Skipping network test locally - will run in CI/CD');
-      return true;
-    }
-    return false;
-  };
 
   afterAll(async () => {
     if (shouldSkipNetworkTests) {
@@ -65,9 +63,7 @@ describe('API Integration Tests', () => {
   });
 
   describe('FRED API Integration', () => {
-    it('should test FRED API key configuration', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should test FRED API key configuration', async () => {
       const response = await request(app)
         .get('/test/fred-api-key');
 
@@ -84,9 +80,7 @@ describe('API Integration Tests', () => {
       // });
     });
 
-    it('should test FRED economic indicators for different tiers', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should test FRED economic indicators for different tiers', async () => {
       const tiers = ['starter', 'standard', 'premium'];
 
       for (const tier of tiers) {
@@ -137,9 +131,7 @@ describe('API Integration Tests', () => {
       }
     });
 
-    it('should test FRED API with real questions', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should test FRED API with real questions', async () => {
       const questions = [
         'What is the current inflation rate?',
         'What is the Fed Funds Rate?',
@@ -154,23 +146,17 @@ describe('API Integration Tests', () => {
             question
           });
 
-        // Accept both 200 (success) and 500 (API failure with test credentials)
-        expect([200, 500]).toContain(response.status);
-
-        if (response.status === 200) {
-          expect(response.body).toHaveProperty('answer');
-          // console.log(`Question: "${question}" - Answer: ${response.body.answer.substring(0, 100)}...`);
-        } else {
-          expect(response.body).toHaveProperty('error');
-        }
+        // The AI pipeline is mocked in this config (see integration/setup.ts), so
+        // this endpoint is deterministic — a 500 here is a real regression.
+        expect(response.status).toBe(200);
+        expect(response.body).toHaveProperty('answer');
+        // console.log(`Question: "${question}" - Answer: ${response.body.answer.substring(0, 100)}...`);
       }
     });
   });
 
   describe('Alpha Vantage API Integration', () => {
-    it('should test Alpha Vantage API key configuration', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should test Alpha Vantage API key configuration', async () => {
       const response = await request(app)
         .get('/test/alpha-vantage-api-key');
 
@@ -187,9 +173,7 @@ describe('API Integration Tests', () => {
       // });
     });
 
-    it('should test Alpha Vantage live market data for Premium tier', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should test Alpha Vantage live market data for Premium tier', async () => {
       const response = await request(app)
         .get('/test/market-data/premium');
 
@@ -252,9 +236,7 @@ describe('API Integration Tests', () => {
       }
     });
 
-    it('should test Alpha Vantage with real questions for Premium tier', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should test Alpha Vantage with real questions for Premium tier', async () => {
       const questions = [
         'What are the current CD rates?',
         'What are the current treasury yields?',
@@ -269,23 +251,17 @@ describe('API Integration Tests', () => {
             question
           });
 
-        // Accept both 200 (success) and 500 (API failure with test credentials)
-        expect([200, 500]).toContain(response.status);
-
-        if (response.status === 200) {
-          expect(response.body).toHaveProperty('answer');
-          // console.log(`Premium Question: "${question}" - Answer: ${response.body.answer.substring(0, 100)}...`);
-        } else {
-          expect(response.body).toHaveProperty('error');
-        }
+        // The AI pipeline is mocked in this config (see integration/setup.ts), so
+        // this endpoint is deterministic — a 500 here is a real regression.
+        expect(response.status).toBe(200);
+        expect(response.body).toHaveProperty('answer');
+        // console.log(`Premium Question: "${question}" - Answer: ${response.body.answer.substring(0, 100)}...`);
       }
     });
   });
 
   describe('Tier Access Control', () => {
-    it('should verify tier access restrictions', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should verify tier access restrictions', async () => {
       const tierTests = [
         { tier: 'starter', shouldHaveEconomicData: false, shouldHaveLiveData: false },
         { tier: 'standard', shouldHaveEconomicData: true, shouldHaveLiveData: false },
@@ -325,9 +301,7 @@ describe('API Integration Tests', () => {
   });
 
   describe('Cache and Performance', () => {
-    it('should test cache functionality for API calls', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should test cache functionality for API calls', async () => {
       // First call
       const response1 = await request(app)
         .get('/test/market-data/standard');
@@ -346,9 +320,7 @@ describe('API Integration Tests', () => {
       // console.log('Cache test: Both responses identical (cached)');
     });
 
-    it('should test cache invalidation', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should test cache invalidation', async () => {
       // Get initial data
       const response1 = await request(app)
         .get('/test/market-data/standard');
@@ -551,9 +523,7 @@ describe('API Integration Tests', () => {
   });
 
   describe('Source Attribution', () => {
-    it('should include FRED source attribution for economic indicators', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should include FRED source attribution for economic indicators', async () => {
       const response = await request(app)
         .post('/ask/display-real')
         .set('Authorization', `Bearer ${authToken}`)
@@ -561,28 +531,25 @@ describe('API Integration Tests', () => {
           question: 'What is the current Fed rate?'
         });
 
-      expect([200, 500]).toContain(response.status);
+      // The AI pipeline is mocked in this config (see integration/setup.ts), so
+      // this endpoint is deterministic — a 500 here is a real regression.
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('answer');
+      const answer = response.body.answer;
 
-      if (response.status === 200) {
-        expect(response.body).toHaveProperty('answer');
-        const answer = response.body.answer;
+      // Since we're using mocked responses in integration tests,
+      // we're testing that the system properly handles the request
+      // and returns a response, not the specific content
+      expect(typeof answer).toBe('string');
+      expect(answer.length).toBeGreaterThan(0);
 
-        // Since we're using mocked responses in integration tests,
-        // we're testing that the system properly handles the request
-        // and returns a response, not the specific content
-        expect(typeof answer).toBe('string');
-        expect(answer.length).toBeGreaterThan(0);
+      // console.log(`Source attribution test: ${answer.substring(0, 100)}...`);
 
-        // console.log(`Source attribution test: ${answer.substring(0, 100)}...`);
-
-        // Note: In a real environment, the AI would include source attribution
-        // This test verifies the system is working, not the AI response content
-      }
+      // Note: In a real environment, the AI would include source attribution
+      // This test verifies the system is working, not the AI response content
     });
 
-    it('should include Alpha Vantage source attribution for market data', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should include Alpha Vantage source attribution for market data', async () => {
       const response = await request(app)
         .post('/ask/display-real')
         .set('Authorization', `Bearer ${authToken}`)
@@ -590,23 +557,22 @@ describe('API Integration Tests', () => {
           question: 'What are the current CD rates?'
         });
 
-      expect([200, 500]).toContain(response.status);
+      // The AI pipeline is mocked in this config (see integration/setup.ts), so
+      // this endpoint is deterministic — a 500 here is a real regression.
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('answer');
+      const answer = response.body.answer;
 
-      if (response.status === 200) {
-        expect(response.body).toHaveProperty('answer');
-        const answer = response.body.answer;
+      // Since we're using mocked responses in integration tests,
+      // we're testing that the system properly handles the request
+      // and returns a response, not the specific content
+      expect(typeof answer).toBe('string');
+      expect(answer.length).toBeGreaterThan(0);
 
-        // Since we're using mocked responses in integration tests,
-        // we're testing that the system properly handles the request
-        // and returns a response, not the specific content
-        expect(typeof answer).toBe('string');
-        expect(answer.length).toBeGreaterThan(0);
+      // console.log(`Alpha Vantage source attribution test: ${answer.substring(0, 100)}...`);
 
-        // console.log(`Alpha Vantage source attribution test: ${answer.substring(0, 100)}...`);
-
-        // Note: In a real environment, the AI would include source attribution
-        // This test verifies the system is working, not the AI response content
-      }
+      // Note: In a real environment, the AI would include source attribution
+      // This test verifies the system is working, not the AI response content
     });
 
     // TIER ENFORCEMENT DISABLED - Test disabled since AI now provides data instead of upgrade suggestions
@@ -645,9 +611,7 @@ describe('API Integration Tests', () => {
     //   }
     // });
 
-    it('should include both sources when using FRED and Alpha Vantage data', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should include both sources when using FRED and Alpha Vantage data', async () => {
       const response = await request(app)
         .post('/ask/display-real')
         .set('Authorization', `Bearer ${authToken}`)
@@ -655,23 +619,22 @@ describe('API Integration Tests', () => {
           question: 'What is the Fed rate and CD rates?'
         });
 
-      expect([200, 500]).toContain(response.status);
+      // The AI pipeline is mocked in this config (see integration/setup.ts), so
+      // this endpoint is deterministic — a 500 here is a real regression.
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('answer');
+      const answer = response.body.answer;
 
-      if (response.status === 200) {
-        expect(response.body).toHaveProperty('answer');
-        const answer = response.body.answer;
+      // Since we're using mocked responses in integration tests,
+      // we're testing that the system properly handles the request
+      // and returns a response, not the specific content
+      expect(typeof answer).toBe('string');
+      expect(answer.length).toBeGreaterThan(0);
 
-        // Since we're using mocked responses in integration tests,
-        // we're testing that the system properly handles the request
-        // and returns a response, not the specific content
-        expect(typeof answer).toBe('string');
-        expect(answer.length).toBeGreaterThan(0);
+      // console.log(`Both sources test: ${answer.substring(0, 100)}...`);
 
-        // console.log(`Both sources test: ${answer.substring(0, 100)}...`);
-
-        // Note: In a real environment, the AI would include source attribution
-        // This test verifies the system is working, not the AI response content
-      }
+      // Note: In a real environment, the AI would include source attribution
+      // This test verifies the system is working, not the AI response content
     });
   });
 });

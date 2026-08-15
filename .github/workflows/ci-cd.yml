@@ -58,7 +58,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
 
       - name: Install dependencies
@@ -193,7 +193,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
 
       - name: Install dependencies
@@ -266,7 +266,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
 
       - name: Install frontend dependencies
@@ -316,7 +316,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
 
       - name: Install dependencies
@@ -427,7 +427,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
 
       - name: Install dependencies
@@ -559,22 +559,15 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
 
+      # Backend dependencies only. The frontend is not built here — see below.
       - name: Install dependencies
         run: |
           for i in 1 2 3; do
             echo "Attempt $i of 3: Installing dependencies..."
             if npm ci --prefer-offline --no-audit --include=dev; then break; fi
-            if [ $i -eq 3 ]; then echo "Failed after 3 attempts"; exit 1; fi
-            echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
-            sleep $((i * 10))
-          done
-          cd frontend
-          for i in 1 2 3; do
-            echo "Attempt $i of 3: Installing frontend dependencies..."
-            if npm ci --prefer-offline --no-audit; then break; fi
             if [ $i -eq 3 ]; then echo "Failed after 3 attempts"; exit 1; fi
             echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
             sleep $((i * 10))
@@ -588,10 +581,15 @@ jobs:
           npm run type-check
           npm run build:backend
 
-      - name: Verify frontend build
-        run: |
-          cd frontend
-          npm run build
+      # The frontend build is NOT repeated here. `frontend-build` already runs
+      # `next build` on this exact commit and is a required `needs` of this job,
+      # so the deploy gate still holds — a frontend build failure means this job
+      # never runs. Rebuilding cost ~90s to recompute a known result.
+      #
+      # Passing `.next` through as an artifact was considered and rejected: this
+      # job never consumes the output, so uploading and downloading a build it
+      # only throws away would prove nothing that the `needs` edge does not
+      # already prove, at similar cost.
 
   # Production Migration (only on main branch)
   migrate-prod:
@@ -606,7 +604,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
 
       - name: Install dependencies

@@ -1,8 +1,11 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
+  // plaid-security-integration is run by jest.real-security.config.js (the
+  // `test:real-security` step, which runs immediately before this one in the
+  // security-tests job). Listing it here as well ran it twice inside a single
+  // job, on top of a third execution in the integration suite.
   testMatch: [
-    '**/__tests__/integration/plaid-security-integration.test.ts',
     '**/__tests__/integration/comprehensive-security.test.ts'
   ],
   setupFilesAfterEnv: [

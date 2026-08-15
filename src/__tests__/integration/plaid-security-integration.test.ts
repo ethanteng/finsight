@@ -27,14 +27,10 @@ describe('Plaid Security Integration Tests', () => {
    */
   const shouldSkipNetworkTests = !isActuallyInGitHubActions;
 
-  // Helper to skip network tests locally
-  const skipIfLocal = () => {
-    if (shouldSkipNetworkTests) {
-      console.log('⏭️ Skipping network test locally - will run in CI/CD');
-      return true;
-    }
-    return false;
-  };
+  // Network-gated tests are registered through this alias so they report as
+  // SKIPPED rather than PASSED when they cannot run.
+  const itNetwork = shouldSkipNetworkTests ? it.skip : it;
+
 
   let user1: any;
   let user2: any;
@@ -134,9 +130,7 @@ describe('Plaid Security Integration Tests', () => {
   });
 
   describe('User Data Isolation Tests', () => {
-    it('should prevent new user from seeing another user\'s account data', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should prevent new user from seeing another user\'s account data', async () => {
       // This simulates the exact scenario you encountered:
       // User2 creates a new account, hasn't linked any banks yet,
       // but somehow sees User1's account data
@@ -161,9 +155,7 @@ describe('Plaid Security Integration Tests', () => {
       }
     });
 
-    it('should only return data for the authenticated user', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should only return data for the authenticated user', async () => {
       // User1 asks about their accounts
       const user1Response = await request(testApp)
         .get('/plaid/all-accounts')
@@ -190,9 +182,7 @@ describe('Plaid Security Integration Tests', () => {
       expect(Array.isArray(user2Response.body.accounts)).toBe(true);
     });
 
-    it('should handle user with no linked accounts correctly', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should handle user with no linked accounts correctly', async () => {
       // Create a third user with no linked accounts
       const user3 = await testPrisma.user.create({
         data: createTestUser({
@@ -225,9 +215,7 @@ describe('Plaid Security Integration Tests', () => {
   });
 
   describe('Token Access Control Tests', () => {
-    it('should only access tokens belonging to the authenticated user', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should only access tokens belonging to the authenticated user', async () => {
       // Test that users can only access their own data
       // This verifies the real security implementation is working
 
@@ -281,6 +269,10 @@ describe('Authentication Boundary Tests (Independent)', () => {
   const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' &&
                                      process.env.GITHUB_RUN_ID !== undefined;
   const shouldSkipNetworkTests = !isActuallyInGitHubActions;
+
+  // Network-gated tests are registered through this alias so they report as
+  // SKIPPED rather than PASSED when they cannot run.
+  const itNetwork = shouldSkipNetworkTests ? it.skip : it;
   const skipIfLocal = () => {
     if (shouldSkipNetworkTests) {
       console.log('⏭️ Skipping network test locally - will run in CI/CD');
@@ -289,18 +281,14 @@ describe('Authentication Boundary Tests (Independent)', () => {
     return false;
   };
 
-  it('should reject requests without valid authentication', async () => {
-    if (skipIfLocal()) return;
-
+  itNetwork('should reject requests without valid authentication', async () => {
     const response = await request(testApp)
       .get('/plaid/all-accounts');
 
     expect(response.status).toBe(401);
   });
 
-  it('should reject requests with invalid JWT', async () => {
-    if (skipIfLocal()) return;
-
+  itNetwork('should reject requests with invalid JWT', async () => {
     const response = await request(testApp)
       .get('/plaid/all-accounts')
       .set('Authorization', 'Bearer invalid-jwt-token');
@@ -308,9 +296,7 @@ describe('Authentication Boundary Tests (Independent)', () => {
     expect(response.status).toBe(401);
   });
 
-  it('should reject requests with expired JWT', async () => {
-    if (skipIfLocal()) return;
-
+  itNetwork('should reject requests with expired JWT', async () => {
     // Create an expired JWT (this would require JWT library mocking)
     const expiredJWT = 'expired.jwt.token';
 
@@ -328,6 +314,10 @@ describe('Error Handling Security Tests', () => {
   const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' &&
                                      process.env.GITHUB_RUN_ID !== undefined;
   const shouldSkipNetworkTests = !isActuallyInGitHubActions;
+
+  // Network-gated tests are registered through this alias so they report as
+  // SKIPPED rather than PASSED when they cannot run.
+  const itNetwork = shouldSkipNetworkTests ? it.skip : it;
   const skipIfLocal = () => {
     if (shouldSkipNetworkTests) {
       console.log('⏭️ Skipping network test locally - will run in CI/CD');
@@ -336,9 +326,7 @@ describe('Error Handling Security Tests', () => {
     return false;
   };
 
-  it('should not leak sensitive information in error messages', async () => {
-    if (skipIfLocal()) return;
-
+  itNetwork('should not leak sensitive information in error messages', async () => {
     // Test error responses don't contain sensitive data
     const response = await request(testApp)
       .get('/plaid/all-accounts')
