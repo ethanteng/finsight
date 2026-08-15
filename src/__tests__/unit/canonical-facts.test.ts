@@ -53,6 +53,23 @@ describe('buildCanonicalFactPack', () => {
     ]));
   });
 
+  it('supplies category spending without loading the raw transaction rows', () => {
+    // byCategory is persisted with every snapshot, so a cash-flow question can
+    // be grounded on the breakdown even when the prompt carries no transactions.
+    const data = snapshot();
+    data.bankingTransactions = [];
+    const question = 'How much do I spend each month?';
+    const needs = analyzeQuestionNeeds(question);
+    const pack = buildCanonicalFactPack(data, question, needs);
+
+    expect(needs.needsTransactionDetails).toBe(false);
+    expect(pack.facts.find((fact) => fact.id === 'category_spending_dining')).toMatchObject({
+      value: 32,
+      unit: 'usd',
+    });
+    expect(pack.facts.some((fact) => fact.id.startsWith('expense_transaction_'))).toBe(false);
+  });
+
   it('treats a whole-position review as a broad question', () => {
     const data = snapshot();
     // Nothing here names income or spending, so only breadth detection can pull

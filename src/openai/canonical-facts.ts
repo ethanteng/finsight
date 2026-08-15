@@ -293,6 +293,13 @@ export function buildCanonicalFactPack(
         aggregate.inputFactIds
       );
     }
+  }
+
+  // Category totals come from the transaction summary, which is persisted with
+  // every snapshot and loaded for every question. Gating them behind the raw
+  // transaction rows left cash-flow questions with two monthly averages and no
+  // grounded way to say what those averages are made of.
+  if (includeCashFlow || needs.needsTransactionDetails) {
     // Sum before emitting: the fact id is case-folded, so categories that differ
     // only in spelling map to one id and the last one written would replace the rest.
     const mergedCategories = mergeLabelKeyedTotals(
