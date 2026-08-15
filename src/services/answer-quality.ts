@@ -9,18 +9,12 @@
  * rather than inferred from aggregate rates.
  */
 
-import type { EvidenceManifest } from '../openai/show-the-math-types';
-
-/** Context tiers still decided by question routing rather than loaded every time. */
-export const ROUTED_CONTEXT = [
-  'accountsIncluded',
-  'transactionDetailsIncluded',
-  'investmentDetailsIncluded',
-  'marketContextRequested',
-  'searchContextRequested',
-] as const;
-
-export type RoutedContext = (typeof ROUTED_CONTEXT)[number];
+import {
+  ROUTED_CONTEXT_TIERS,
+  widenedContextTiers,
+  type EvidenceManifest,
+  type RoutedContextTier,
+} from '../openai/show-the-math-types';
 
 export interface AnswerQualityConversation {
   id: string;
@@ -39,8 +33,10 @@ interface Observation {
   grounded: boolean;
   escalated: boolean;
   /** What routing selected, before any widening. */
-  routedSelection: Partial<Record<RoutedContext, boolean>>;
-  withheld: RoutedContext[];
+  routedSelection: Partial<Record<RoutedContextTier, boolean>>;
+  withheld: RoutedContextTier[];
+  /** Tiers the retry's widening switched on — the ones an escalation implicates. */
+  widened: RoutedContextTier[];
   unsupportedValues: number;
 }
 
@@ -86,7 +82,7 @@ function toObservation(conversation: AnswerQualityConversation): Observation | n
   // Score the selection routing predicted, not the widened read that corrected
   // it — a recovery is evidence the prediction was wrong, not that it was right.
   const routedSelection = (manifest.routedContextSelection ?? manifest.contextSelection ?? {}) as
-    Partial<Record<RoutedContext, boolean>>;
+    Partial<Record<RoutedContextTier, boolean>>;
   const deterministic = manifest.validation?.deterministic;
   const escalated = manifest.contextEscalated === true;
 
@@ -100,28 +96,32 @@ function toObservation(conversation: AnswerQualityConversation): Observation | n
     grounded: deterministic?.valid !== false,
     escalated,
     routedSelection,
-    withheld: ROUTED_CONTEXT.filter((tier) => routedSelection[tier] === false),
+    withheld: ROUTED_CONTEXT_TIERS.filter((tier) => routedSelection[tier] === false),
+    widened: escalated ? widenedContextTiers(manifest) : [],
     unsupportedValues: (deterministic?.issues || []).filter((issue) =>
       issue.endsWith('is not present in the canonical fact pack.')).length,
   };
 }
 
 /**
- * An answer "missed" when it failed to ground under the context routing chose.
- * An escalated request counts even if the widened retry succeeded, because the
- * escalation is the record of routing having guessed wrong.
+ * An answer "missed" a tier when it failed to ground under the context routing
+ * chose, or when the retry had to switch that specific tier on. A successful
+ * escalation still counts, because the widening is the record of routing having
+ * guessed wrong — but only against the tiers it actually widened.
  */
-function missed(observation: Observation): boolean {
-  return !observation.grounded || observation.escalated;
+function missed(observation: Observation, tier: RoutedContextTier): boolean {
+  return !observation.grounded || observation.widened.includes(tier);
 }
 
-function aggregate(observations: Observation[]): Aggregate {
+function aggregate(observations: Observation[], tier: RoutedContextTier): Aggregate {
   const ratings = observations
     .map((observation) => observation.rating)
     .filter((rating): rating is number => rating !== null);
   return {
     samples: observations.length,
-    missRate: observations.length === 0 ? null : round(observations.filter(missed).length / observations.length),
+    missRate: observations.length === 0
+      ? null
+      : round(observations.filter((observation) => missed(observation, tier)).length / observations.length),
     ratedSamples: ratings.length,
     averageRating: round(average(ratings), 2),
   };
@@ -149,7 +149,7 @@ export interface AnswerQualityReport {
     byOutcome: Record<'passed' | 'salvaged' | 'replaced', ReturnType<typeof ratingFor>>;
     byEscalation: Record<'escalated' | 'notEscalated', ReturnType<typeof ratingFor>>;
   };
-  routing: Record<RoutedContext, {
+  routing: Record<RoutedContextTier, {
     withheld: Aggregate;
     supplied: Aggregate;
     /** Positive means answers failed to ground more often when this was withheld. */
@@ -173,11 +173,11 @@ export function buildAnswerQualityReport(
   const outcomeGroup = (outcome: Observation['outcome']) =>
     ratingFor(observations.filter((observation) => observation.outcome === outcome));
 
-  const routing = Object.fromEntries(ROUTED_CONTEXT.map((tier) => {
+  const routing = Object.fromEntries(ROUTED_CONTEXT_TIERS.map((tier) => {
     const withheld = observations.filter((observation) => observation.routedSelection[tier] === false);
     const supplied = observations.filter((observation) => observation.routedSelection[tier] === true);
-    const withheldAggregate = aggregate(withheld);
-    const suppliedAggregate = aggregate(supplied);
+    const withheldAggregate = aggregate(withheld, tier);
+    const suppliedAggregate = aggregate(supplied, tier);
     const bothMeasured = withheldAggregate.missRate !== null && suppliedAggregate.missRate !== null;
     const bothRated = withheldAggregate.averageRating !== null && suppliedAggregate.averageRating !== null;
     return [tier, {

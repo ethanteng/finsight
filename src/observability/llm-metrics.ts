@@ -1,4 +1,9 @@
-import type { EvidenceManifest } from '../openai/show-the-math-types';
+import {
+  ROUTED_CONTEXT_TIERS,
+  widenedContextTiers,
+  type EvidenceManifest,
+  type RoutedContextTier,
+} from '../openai/show-the-math-types';
 
 const MAX_SAMPLES = 500;
 export const LLM_BASELINE_MIN_SAMPLES = 100;
@@ -11,17 +16,6 @@ export const LLM_PERFORMANCE_TARGETS = {
   deterministicGroundingRate: 1,
 } as const;
 
-/** Context tiers that are still decided by question routing rather than always loaded. */
-const ROUTED_CONTEXT = [
-  'accountsIncluded',
-  'transactionDetailsIncluded',
-  'investmentDetailsIncluded',
-  'marketContextRequested',
-  'searchContextRequested',
-] as const;
-
-type RoutedContext = (typeof ROUTED_CONTEXT)[number];
-
 type Sample = {
   at: string;
   success: boolean;
@@ -33,8 +27,9 @@ type Sample = {
   totalMs?: number;
   grounded?: boolean;
   outcome?: 'passed' | 'salvaged' | 'replaced';
-  contextSelection?: Partial<Record<RoutedContext, boolean>>;
+  contextSelection?: Partial<Record<RoutedContextTier, boolean>>;
   contextEscalated?: boolean;
+  widenedContext?: RoutedContextTier[];
   fallbackUsed: boolean;
   retryUsed: boolean;
 };
@@ -88,6 +83,7 @@ export function recordLlmAnalysis(manifest: EvidenceManifest, success = true): v
     // Score what routing predicted, not the widened read that corrected it.
     contextSelection: manifest.routedContextSelection ?? manifest.contextSelection,
     contextEscalated: manifest.contextEscalated,
+    widenedContext: widenedContextTiers(manifest),
     fallbackUsed: manifest.modelCalls.some(call => call.provider === 'openai'),
     retryUsed: manifest.modelCalls.some(call => call.phase === 'retry'),
   };
@@ -120,7 +116,9 @@ export function recordLlmAnalysisFailure(totalMs: number): void {
  * A miss is scored against the selection routing made, so an escalated request
  * counts as a miss even when the widened retry went on to succeed — the recovery
  * is the evidence that the prediction was wrong, and letting a successful
- * recovery erase it would hide exactly what this measures.
+ * recovery erase it would hide exactly what this measures. It counts only
+ * against the tiers the widening actually switched on: escalation never reaches
+ * for market or search context, so charging those with it would invent a signal.
  *
  * This is a correlation, not a diagnosis — a tier can be withheld correctly and
  * still sit next to failures. Treat a persistent positive gap as a prompt to go
@@ -128,15 +126,16 @@ export function recordLlmAnalysisFailure(totalMs: number): void {
  */
 function routingSignals() {
   const scored = samples.filter((sample) => sample.contextSelection && sample.grounded !== undefined);
-  const missed = (sample: Sample) => !sample.grounded || sample.contextEscalated === true;
-  const missRate = (subset: Sample[]) =>
-    subset.length === 0 ? null : subset.filter(missed).length / subset.length;
+  const missed = (sample: Sample, tier: RoutedContextTier) =>
+    !sample.grounded || (sample.widenedContext || []).includes(tier);
+  const missRate = (subset: Sample[], tier: RoutedContextTier) =>
+    subset.length === 0 ? null : subset.filter((sample) => missed(sample, tier)).length / subset.length;
 
-  return Object.fromEntries(ROUTED_CONTEXT.map((flag) => {
+  return Object.fromEntries(ROUTED_CONTEXT_TIERS.map((flag) => {
     const withheld = scored.filter((sample) => sample.contextSelection![flag] === false);
     const supplied = scored.filter((sample) => sample.contextSelection![flag] === true);
-    const withheldRate = missRate(withheld);
-    const suppliedRate = missRate(supplied);
+    const withheldRate = missRate(withheld, flag);
+    const suppliedRate = missRate(supplied, flag);
     return [flag, {
       withheld: { samples: withheld.length, missRate: withheldRate },
       supplied: { samples: supplied.length, missRate: suppliedRate },

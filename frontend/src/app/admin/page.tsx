@@ -107,6 +107,8 @@ export default function AdminPage() {
   const [editingText, setEditingText] = useState<string>('');
   const [refreshingContext, setRefreshingContext] = useState<string | null>(null);
   const [refreshingProduction, setRefreshingProduction] = useState(false);
+  // Bumped so the answer-quality panel reloads with the rest of the tab.
+  const [qualityRefreshToken, setQualityRefreshToken] = useState(0);
   const [refreshingUsers, setRefreshingUsers] = useState(false);
   const [refreshingAllContexts, setRefreshingAllContexts] = useState(false);
 
@@ -184,6 +186,8 @@ export default function AdminPage() {
   const refreshProductionData = async () => {
     setRefreshingProduction(true);
     try {
+      // Keep the answer-quality panel in step with the rest of the tab.
+      setQualityRefreshToken((token) => token + 1);
       await loadProductionData();
     } catch (err) {
       console.error('Production data refresh error:', err);
@@ -801,7 +805,11 @@ export default function AdminPage() {
           </button>
         </div>
 
-        <AnswerQualityPanel apiUrl={API_URL} getAuthHeaders={getAuthHeaders} />
+        <AnswerQualityPanel
+          apiUrl={API_URL}
+          getAuthHeaders={getAuthHeaders}
+          refreshToken={qualityRefreshToken}
+        />
 
         {/* Users View */}
         {viewMode === 'sessions' && (

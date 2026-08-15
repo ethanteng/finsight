@@ -74,9 +74,11 @@ describe('answer quality report', () => {
     expect(tier.ratingPenaltyWhenWithheld).toBe(3);
   });
 
-  it('counts a successful escalation as a routing miss', () => {
+  it('counts a successful escalation as a miss only against the tiers it widened', () => {
     // The widened retry produced a grounded, well-rated answer. That is a good
-    // outcome and still evidence that routing withheld something it needed.
+    // outcome and still evidence that routing withheld the investments it needed
+    // — but escalation never reaches for market or search context, which were
+    // withheld here for entirely ordinary reasons.
     const report = buildAnswerQualityReport([
       conversation({ id: 'a', question: 'Am I on track', minute: 1, rating: 5, escalated: true, routed: { investmentDetailsIncluded: false } }),
     ]);
@@ -84,8 +86,11 @@ describe('answer quality report', () => {
     expect(report.quality.groundedRate).toBe(1);
     expect(report.quality.escalationRate).toBe(1);
     expect(report.routing.investmentDetailsIncluded.withheld).toMatchObject({ samples: 1, missRate: 1 });
+    expect(report.routing.marketContextRequested.withheld).toMatchObject({ samples: 1, missRate: 0 });
+    expect(report.routing.searchContextRequested.withheld).toMatchObject({ samples: 1, missRate: 0 });
     expect(report.recent[0]).toMatchObject({
       escalated: true,
+      widened: ['investmentDetailsIncluded'],
       withheld: expect.arrayContaining(['investmentDetailsIncluded']),
     });
     // The widened read is not what gets scored.

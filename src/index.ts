@@ -869,6 +869,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         const prisma = getPrismaClient();
 
         const limit = Math.min(Math.max(Number(req.query.limit) || 500, 1), 2000);
+        const recentLimit = Math.min(Math.max(Number(req.query.recent) || 50, 1), limit);
         const conversations = await prisma.conversation.findMany({
           where: { userId: { not: null } },
           select: {
@@ -882,7 +883,7 @@ app.get('/sync/status', async (req: Request, res: Response) => {
           take: limit,
         });
 
-        res.json(buildAnswerQualityReport(conversations as any));
+        res.json(buildAnswerQualityReport(conversations as any, recentLimit));
       } catch (error) {
         console.error('Error building answer quality report:', error);
         if (error instanceof Error) {

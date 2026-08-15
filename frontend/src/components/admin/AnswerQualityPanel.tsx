@@ -88,10 +88,13 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 export default function AnswerQualityPanel({
   apiUrl,
   getAuthHeaders,
+  refreshToken = 0,
 }: {
   /** Matches the admin page, where NEXT_PUBLIC_API_URL may be unset. */
   apiUrl: string | undefined;
   getAuthHeaders: () => Record<string, string>;
+  /** Bumped by the tab's refresh button so the panel cannot drift from it. */
+  refreshToken?: number;
 }) {
   const [report, setReport] = useState<AnswerQualityReport | null>(null);
   const [loading, setLoading] = useState(false);
@@ -120,7 +123,7 @@ export default function AnswerQualityPanel({
     }
   }, [apiUrl]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshToken]);
 
   return (
     <div className="bg-gray-800 rounded-lg p-6 mb-6">
