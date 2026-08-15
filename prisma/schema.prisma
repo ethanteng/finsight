@@ -9,35 +9,35 @@ datasource db {
 }
 
 model User {
-  id                       String                    @id @default(cuid())
-  email                    String                    @unique
-  passwordHash             String
-  tier                     String                    @default("premium")
-  isActive                 Boolean                   @default(true)
-  emailVerified            Boolean                   @default(false)
-  lastLoginAt              DateTime?
-  createdAt                DateTime                  @default(now())
-  updatedAt                DateTime                  @updatedAt
-  timeZone                 String                    @default("UTC")
-  stripeCustomerId         String?
-  subscriptionStatus       String                    @default("inactive")
-  monthlyIncomeOverride    Float?
-  monthlyExpenseOverride   Float?
-  accessTokens             AccessToken[]
-  accounts                 Account[]
-  manualAccounts           ManualAccount[]
-  conversations            Conversation[]
-  privacySettings          PrivacySettings?
-  syncStatuses             SyncStatus[]
-  emailVerificationCodes   EmailVerificationCode[]
-  encryptedUserData        EncryptedUserData?
-  passwordResetTokens      PasswordResetToken[]
-  snapTradeUser            SnapTradeUser?
-  subscriptions            Subscription[]
-  profile                  UserProfile?
+  id                     String                  @id @default(cuid())
+  email                  String                  @unique
+  passwordHash           String
+  tier                   String                  @default("premium")
+  isActive               Boolean                 @default(true)
+  emailVerified          Boolean                 @default(false)
+  lastLoginAt            DateTime?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  timeZone               String                  @default("UTC")
+  stripeCustomerId       String?
+  subscriptionStatus     String                  @default("inactive")
+  monthlyIncomeOverride  Float?
+  monthlyExpenseOverride Float?
+  accessTokens           AccessToken[]
+  accounts               Account[]
+  manualAccounts         ManualAccount[]
+  conversations          Conversation[]
+  privacySettings        PrivacySettings?
+  syncStatuses           SyncStatus[]
+  emailVerificationCodes EmailVerificationCode[]
+  encryptedUserData      EncryptedUserData?
+  passwordResetTokens    PasswordResetToken[]
+  snapTradeUser          SnapTradeUser?
+  subscriptions          Subscription[]
+  profile                UserProfile?
   financialSummarySnapshot FinancialSummarySnapshot?
-  financialSummaryHistory  FinancialSummaryHistory[]
-  retirementAnalyses       RetirementAnalysis[]
+  financialSummaryHistory FinancialSummaryHistory[]
+  retirementAnalyses     RetirementAnalysis[]
 
   @@map("users")
 }
@@ -72,25 +72,25 @@ model Account {
 }
 
 model AccessToken {
-  id                    String    @id @default(cuid())
-  token                 String    @unique
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-  itemId                String?
-  lastRefreshed         DateTime?
-  userId                String?
-  user                  User?     @relation(fields: [userId], references: [id])
-  accounts              Account[]
-  isActive              Boolean   @default(true)
-  lastError             String?
-  lastChecked           DateTime?
-  institutionName       String?
-  transactionSyncCursor String? // Cursor for Plaid transactionsSync API
-  lastTransactionSync   DateTime? // Timestamp of last successful transaction sync
+  id                   String    @id @default(cuid())
+  token                String    @unique
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  itemId               String?
+  lastRefreshed        DateTime?
+  userId               String?
+  user                 User?     @relation(fields: [userId], references: [id])
+  accounts             Account[]
+  isActive             Boolean   @default(true)
+  lastError            String?
+  lastChecked          DateTime?
+  institutionName      String?
+  transactionSyncCursor String?  // Cursor for Plaid transactionsSync API
+  lastTransactionSync  DateTime? // Timestamp of last successful transaction sync
   // Set when a re-link replaced this connection. Permanent, unlike isActive/lastError, which
   // token revalidation resets on a successful Plaid call. A superseded Item usually still works
   // at Plaid, so only this flag distinguishes "replaced" from "temporarily broken".
-  supersededAt          DateTime?
+  supersededAt         DateTime?
 
   @@index([userId, supersededAt])
 }
@@ -110,9 +110,9 @@ model Transaction {
   id                   String    @id @default(cuid())
   plaidTransactionId   String    @unique
   accountId            String
-  amount               Float // Legacy/display amount; do not use for financial aggregation
-  sourceAmount         Float? // Untouched provider amount for reconciliation
-  cashFlowAmount       Float? // User perspective: inflow positive, outflow negative
+  amount               Float     // Legacy/display amount; do not use for financial aggregation
+  sourceAmount         Float?    // Untouched provider amount for reconciliation
+  cashFlowAmount       Float?    // User perspective: inflow positive, outflow negative
   date                 DateTime
   name                 String
   category             String?
@@ -365,9 +365,9 @@ model SnapTradeUser {
 }
 
 model SnapTradeActivity {
-  id                 String        @id @default(cuid())
+  id                 String         @id @default(cuid())
   snapTradeUserId    String
-  activityId         String        @unique
+  activityId         String         @unique
   accountId          String?
   amount             Float?
   currency           String?
@@ -385,68 +385,68 @@ model SnapTradeActivity {
   aiCategory         String?
   aiCategoryReason   String?
   categoryComparedAt DateTime?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
-  snapTradeUser      SnapTradeUser @relation(fields: [snapTradeUserId], references: [id], onDelete: Cascade)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  snapTradeUser      SnapTradeUser  @relation(fields: [snapTradeUserId], references: [id], onDelete: Cascade)
 
   @@map("snaptrade_activities")
 }
 
 /// Cached, single source of truth snapshot for frontend and GPT consumption
 model FinancialSummarySnapshot {
-  id                String    @id @default(cuid())
-  userId            String    @unique
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  computedAt        DateTime
-  asOf              DateTime?
-  status            String?
-  reportingCurrency String    @default("USD")
+  id                   String   @id @default(cuid())
+  userId               String   @unique
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  computedAt           DateTime
+  asOf                 DateTime?
+  status               String?
+  reportingCurrency    String   @default("USD")
 
   // Summary sections
-  financialOverview   Json // { netWorth, totalCash, totalInvestments, totalDebt, homeValue }
-  investmentPortfolio Json // { totalValue, holdingCount, securityCount, assetAllocation }
+  financialOverview     Json    // { netWorth, totalCash, totalInvestments, totalDebt, homeValue }
+  investmentPortfolio   Json    // { totalValue, holdingCount, securityCount, assetAllocation }
 
   // Full data for GPT / deep dives (optional in summary view)
-  accounts            Json?
-  holdings            Json?
-  securities          Json?
-  transactions        Json? // windowed by TRANSACTION_HISTORY_DAYS
-  transactionsSummary Json? // aggregates for income/expenses/categories/monthlies over window
-  activities          Json? // investment activities windowed by INVESTMENT_HISTORY_YEARS
+  accounts              Json?
+  holdings              Json?
+  securities            Json?
+  transactions          Json?   // windowed by TRANSACTION_HISTORY_DAYS
+  transactionsSummary   Json?   // aggregates for income/expenses/categories/monthlies over window
+  activities            Json?   // investment activities windowed by INVESTMENT_HISTORY_YEARS
 
   // Metadata (includes window sizes and balance refresh info)
-  meta               Json?
-  quality            Json?
-  sourceObservations Json?
+  meta                 Json?
+  quality              Json?
+  sourceObservations   Json?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   @@map("financial_summary_snapshots")
 }
 
 /// Historical snapshots of financial metrics for trend analysis
 model FinancialSummaryHistory {
-  id                String    @id @default(cuid())
-  userId            String
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  computedAt        DateTime
-  asOf              DateTime?
-  status            String?
-  reportingCurrency String    @default("USD")
-  netWorth          Float
-  totalCash         Float
-  totalInvestments  Float
-  totalDebt         Float
-  homeValue         Float?
-  totalAssets       Float?
-  totalLiabilities  Float?
-  observationDate   DateTime?
-  observationKind   String    @default("daily")
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  computedAt       DateTime
+  asOf             DateTime?
+  status           String?
+  reportingCurrency String  @default("USD")
+  netWorth         Float
+  totalCash        Float
+  totalInvestments Float
+  totalDebt       Float
+  homeValue        Float?
+  totalAssets      Float?
+  totalLiabilities Float?
+  observationDate  DateTime?
+  observationKind  String   @default("daily")
   observationReason String?
-  timeZone          String    @default("UTC")
-  dailyKey          String?   @unique
-  createdAt         DateTime  @default(now())
+  timeZone         String   @default("UTC")
+  dailyKey         String?  @unique
+  createdAt        DateTime @default(now())
 
   @@index([userId, computedAt])
   @@index([userId, observationKind, observationDate])
@@ -460,7 +460,7 @@ model ManualAccount {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
   amount    Float
-  type      String // 'cash', 'investment', or 'debt'
+  type      String   // 'cash', 'investment', or 'debt'
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -470,27 +470,27 @@ model ManualAccount {
 
 /// Retirement portfolio analysis results
 model RetirementAnalysis {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                    String   @id @default(cuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Input snapshot (denormalized for reproducibility)
-  analysisInput     Json // Full RetirementAnalysisInput
-  portfolioSnapshot Json // Holdings + securities at analysis time
+  analysisInput         Json     // Full RetirementAnalysisInput
+  portfolioSnapshot     Json     // Holdings + securities at analysis time
 
   // Computed metrics
-  portfolioMetrics       Json // Core metrics (equityAllocation, etc.)
-  characteristics        Json // Portfolio characteristics and tradeoffs (not risk levels)
-  stressTestResults      Json // Historical scenario results
-  historicalImplications Json // Pattern-based observations, not prescriptive recommendations
+  portfolioMetrics      Json     // Core metrics (equityAllocation, etc.)
+  characteristics       Json     // Portfolio characteristics and tradeoffs (not risk levels)
+  stressTestResults     Json     // Historical scenario results
+  historicalImplications Json     // Pattern-based observations, not prescriptive recommendations
 
   // Metadata
-  computedAt       DateTime @default(now())
-  dataQualityScore Float // 0-1 confidence in data completeness
-  expiresAt        DateTime // When analysis becomes stale
+  computedAt            DateTime @default(now())
+  dataQualityScore      Float    // 0-1 confidence in data completeness
+  expiresAt             DateTime // When analysis becomes stale
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   @@index([userId, computedAt])
   @@map("retirement_analyses")
@@ -499,16 +499,16 @@ model RetirementAnalysis {
 /// Historical asset price data cache
 model AssetPriceHistory {
   id            String   @id @default(cuid())
-  tickerSymbol  String
-  date          DateTime
-  open          Float
-  high          Float
-  low           Float
-  close         Float
-  adjustedClose Float? // Dividend/split adjusted (from Tiingo)
-  volume        BigInt
-  provider      String // 'polygon', 'tiingo', 'alpha_vantage'
-  cachedAt      DateTime @default(now())
+  tickerSymbol   String
+  date           DateTime
+  open           Float
+  high           Float
+  low            Float
+  close          Float
+  adjustedClose  Float?   // Dividend/split adjusted (from Tiingo)
+  volume         BigInt
+  provider       String   // 'polygon', 'tiingo', 'alpha_vantage'
+  cachedAt       DateTime @default(now())
 
   @@unique([tickerSymbol, date, provider])
   @@index([tickerSymbol, date])
@@ -517,16 +517,16 @@ model AssetPriceHistory {
 
 /// Security metadata cache (ETF/fund classifications)
 model SecurityMetadata {
-  id              String   @id @default(cuid())
-  tickerSymbol    String   @unique
-  securityName    String
-  assetClass      String? // 'Equity', 'Fixed Income', 'Cash'
-  fundCategory    String? // 'Large Cap Blend', etc.
-  expenseRatio    Float?
-  geographicFocus String? // 'US', 'International', 'Global'
-  isETF           Boolean  @default(false)
-  provider        String // 'fmp', 'inferred'
-  lastUpdated     DateTime @default(now())
+  id                String   @id @default(cuid())
+  tickerSymbol      String   @unique
+  securityName      String
+  assetClass        String?  // 'Equity', 'Fixed Income', 'Cash'
+  fundCategory      String?  // 'Large Cap Blend', etc.
+  expenseRatio      Float?
+  geographicFocus   String?  // 'US', 'International', 'Global'
+  isETF             Boolean  @default(false)
+  provider          String   // 'fmp', 'inferred'
+  lastUpdated       DateTime @default(now())
 
   @@map("security_metadata")
 }
