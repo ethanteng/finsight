@@ -173,4 +173,48 @@ describe('finances overview contract', () => {
       'currency-mismatch',
     ]);
   });
+
+  it('flags a renamed manual account as out of sync until the snapshot is rebuilt', () => {
+    const overview = buildFinancesOverview({
+      snapshot,
+      manualAccounts: [{
+        id: 'manual-cash', name: 'Travel Wallet', amount: 100, type: 'cash',
+        createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
+      }],
+    });
+
+    expect(overview.warnings.map(warning => warning.code)).toContain('manual-accounts-out-of-sync');
+    // The list itself reads live, so the new name is visible immediately.
+    expect(overview.manualAccounts[0].name).toBe('Travel Wallet');
+  });
+
+  it('flags an edited manual account amount as out of sync until the snapshot is rebuilt', () => {
+    const overview = buildFinancesOverview({
+      snapshot,
+      manualAccounts: [{
+        id: 'manual-cash', name: 'Wallet', amount: 250, type: 'cash',
+        createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
+      }],
+    });
+
+    expect(overview.warnings.map(warning => warning.code)).toContain('manual-accounts-out-of-sync');
+  });
+
+  it('treats a debt manual account as aligned despite the snapshot storing a positive magnitude', () => {
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        accounts: [{
+          account_id: 'manual-manual-debt', name: 'Personal Loan', type: 'loan', subtype: 'loan',
+          source: 'manual', balance: { current: 5000, iso_currency_code: 'USD' },
+        }],
+      },
+      manualAccounts: [{
+        id: 'manual-debt', name: 'Personal Loan', amount: 5000, type: 'debt',
+        createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-01T00:00:00.000Z',
+      }],
+    });
+
+    expect(overview.warnings.map(warning => warning.code)).not.toContain('manual-accounts-out-of-sync');
+  });
 });

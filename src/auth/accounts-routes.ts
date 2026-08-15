@@ -67,9 +67,13 @@ router.put('/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
       data: { name: name.trim() },
     });
 
-    await FinancialRevisionService.recompute(userId, { history: { kind: 'none' } }).catch(err => {
-      console.error('Failed to refresh snapshot after updating account name:', err);
-    });
+    // Same reasoning as the manual-account routes: the rename is already durable, and a
+    // full provider re-read would keep the response (and the UI) waiting tens of seconds.
+    FinancialRevisionService.schedule(
+      userId,
+      { history: { kind: 'none' } },
+      'account-renamed'
+    );
 
     res.json({
       success: true,

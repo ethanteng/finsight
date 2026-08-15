@@ -20,8 +20,6 @@ interface HomeValueCardProps {
 
 interface HomeValueMutationResponse {
   homeData: HomeData;
-  snapshotRefreshed?: boolean;
-  warning?: string;
 }
 
 export default function HomeValueCard({ 
@@ -34,7 +32,6 @@ export default function HomeValueCard({
   const [editValue, setEditValue] = useState(homeData.value.toString());
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [warning, setWarning] = useState<string | null>(null);
 
   // Sync editValue with homeData.value when it changes (e.g., after save)
   useEffect(() => {
@@ -71,7 +68,6 @@ export default function HomeValueCard({
 
     setIsSaving(true);
     setError(null);
-    setWarning(null);
 
     try {
       const token = localStorage.getItem('auth_token');
@@ -93,16 +89,12 @@ export default function HomeValueCard({
 
       const data = await response.json() as HomeValueMutationResponse;
 
-      if (data.snapshotRefreshed === false) {
-        setWarning(data.warning || 'Your home setting was saved, but totals could not be refreshed. Use Refresh totals to try again.');
-        setIsEditing(false);
-        return;
-      }
-      
+      // The value is saved; the canonical snapshot that feeds the totals is rebuilt in the
+      // background. The owner decides how to present the gap.
       if (onValueUpdate) {
         onValueUpdate(data.homeData);
       }
-      
+
       setIsEditing(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update home value');
@@ -114,7 +106,6 @@ export default function HomeValueCard({
   const handleReset = async () => {
     setIsSaving(true);
     setError(null);
-    setWarning(null);
 
     try {
       const token = localStorage.getItem('auth_token');
@@ -135,16 +126,10 @@ export default function HomeValueCard({
 
       const data = await response.json() as HomeValueMutationResponse;
 
-      if (data.snapshotRefreshed === false) {
-        setWarning(data.warning || 'Your home setting was saved, but totals could not be refreshed. Use Refresh totals to try again.');
-        setIsEditing(false);
-        return;
-      }
-      
       if (onValueUpdate) {
         onValueUpdate(data.homeData);
       }
-      
+
       setIsEditing(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reset home value');
@@ -193,11 +178,6 @@ export default function HomeValueCard({
           {error && (
             <div role="alert" className="rounded border border-red-700/50 bg-red-900/30 p-3 text-sm text-red-300">
               {error}
-            </div>
-          )}
-          {warning && (
-            <div role="status" className="rounded border border-amber-700/40 bg-amber-900/20 p-3 text-sm text-amber-200">
-              {warning}
             </div>
           )}
           {homeData.address && (

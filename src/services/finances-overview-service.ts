@@ -73,6 +73,8 @@ export interface FinancesOverviewInput {
   };
   currentHome?: FinancesHomeData | null;
   userTimeZone?: string | null;
+  /** True when a newer revision is already scheduled, running, or queued for this user. */
+  rebuildPending?: boolean;
 }
 
 export interface FinancesAccountGroup {
@@ -89,6 +91,11 @@ export interface FinancesOverview {
     asOf: string | null;
     status: FinancesSnapshotStatus;
     reportingCurrency: string;
+    /**
+     * A newer revision is already on its way, so these values are not the final word for
+     * the edits made so far. Process-local on the server: false means "none known here".
+     */
+    rebuildPending: boolean;
   };
   warnings: Array<{ code: string; message: string }>;
   financialOverview: {
@@ -336,13 +343,24 @@ export function buildFinancesOverview(input: FinancesOverviewInput): FinancesOve
     warnings.push({ code: 'home-metadata-out-of-sync', message: 'Home details changed after this financial snapshot; refresh totals to align them.' });
   }
 
-  const snapshotManualIds = new Set(
+  const snapshotManualAccounts = new Map(
     [...groups.cash, ...groups.investments, ...groups.debt, ...groups.other]
       .filter(account => account.source === 'manual')
-      .map(accountId)
+      .map(account => [accountId(account), account] as const)
   );
-  const manualAccountsAligned = manualAccounts.every(account => snapshotManualIds.has(`manual-${account.id}`))
-    && snapshotManualIds.size === manualAccounts.length;
+  // Membership alone misses renames and amount edits, which leave the id set unchanged
+  // while the snapshot still carries the old name and balance. Compare the values too so
+  // the warning stays honest until the background revision catches up. Debt and mortgage
+  // are stored as positive magnitudes in the snapshot, so compare magnitudes.
+  const manualAccountsAligned = snapshotManualAccounts.size === manualAccounts.length
+    && manualAccounts.every(account => {
+      const snapshotAccount = snapshotManualAccounts.get(`manual-${account.id}`);
+      if (!snapshotAccount) return false;
+      if (snapshotAccount.name !== account.name) return false;
+      const snapshotBalance = accountBalance(snapshotAccount);
+      if (snapshotBalance === null) return false;
+      return Math.abs(snapshotBalance - Math.abs(account.amount)) < 0.01;
+    });
   if (!manualAccountsAligned) {
     warnings.push({ code: 'manual-accounts-out-of-sync', message: 'Manual accounts changed after this financial snapshot; refresh totals to align them.' });
   }
@@ -357,6 +375,7 @@ export function buildFinancesOverview(input: FinancesOverviewInput): FinancesOve
       reportingCurrency: typeof snapshot.reportingCurrency === 'string'
         ? snapshot.reportingCurrency
         : 'USD',
+      rebuildPending: Boolean(input.rebuildPending),
     },
     warnings,
     financialOverview: {

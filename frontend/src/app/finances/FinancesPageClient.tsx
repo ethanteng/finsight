@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, BarChart3, Building2, Landmark, ShieldCheck, TrendingUp } from 'lucide-react';
@@ -22,6 +22,38 @@ import {
 
 const ManualAccountList = lazy(() => import('../../components/ManualAccountList'));
 const AccountDetailModal = lazy(() => import('../../components/finances/AccountDetailModal'));
+
+// Account edits return as soon as they are durable; the canonical snapshot they feed is
+// rebuilt in the background because it re-reads every connected provider. Poll the
+// overview until that new revision lands so totals catch up without a manual reload.
+const REVISION_POLL_INTERVAL_MS = 2000;
+// How long to wait when the server reports nothing in flight, and the hard ceiling for a
+// rebuild it says is still running.
+const REVISION_POLL_ATTEMPTS = 30;
+const REVISION_POLL_MAX_ATTEMPTS = 150;
+
+type SavedHomeValue = {
+  address: string;
+  value: number;
+  valueLow: number | null;
+  valueHigh: number | null;
+  lastUpdated: string;
+  isManualOverride?: boolean;
+};
+
+type PendingHome = {
+  baselineRevision: string | null;
+  home: FinancesOverview['home'];
+};
+
+// An edit is settled once the snapshot has moved past the revision it was made against and
+// the server has no further rebuild scheduled. `rebuildPending` is process-local, so an
+// older backend or a request served by another instance simply falls back to the revision
+// check rather than polling forever.
+function isReconciled(overview: FinancesOverview, baselineRevision: string | null): boolean {
+  if (overview.revision.rebuildPending) return false;
+  return overview.revision.computedAt !== baselineRevision;
+}
 
 function FinancesEmptyState({ onLogout }: { onLogout: () => void }) {
   return (
@@ -133,31 +165,52 @@ export default function FinancesPageClient() {
     kind: 'success' | 'warning' | 'error';
     text: string;
   } | null>(null);
+  const [awaitingRevision, setAwaitingRevision] = useState(false);
+  const [revisionStalled, setRevisionStalled] = useState(false);
   const router = useRouter();
+  const revisionRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+  const pendingHomeRef = useRef<PendingHome | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
-  const loadOverview = useCallback(async () => {
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const loadOverview = useCallback(async (): Promise<FinancesOverview | null> => {
     const token = localStorage.getItem('auth_token');
     if (!token) {
       router.push('/login');
-      return;
+      return null;
     }
     const response = await fetch(`${API_URL}/api/finances/overview`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (response.status === 204) {
       setOverview(null);
-      return;
+      return null;
     }
     if (response.status === 401) {
       router.push('/login');
-      return;
+      return null;
     }
     if (!response.ok) throw new Error('Failed to load financial data');
     const data = await response.json() as FinancesOverview;
     syncStoredUserTimeZoneFromAuthUser({ timeZone: data.userTimeZone });
-    setOverview(data);
+
+    const pendingHome = pendingHomeRef.current;
+    const resolved = pendingHome && !isReconciled(data, pendingHome.baselineRevision)
+      ? { ...data, home: pendingHome.home }
+      : data;
+    if (pendingHome && resolved === data) pendingHomeRef.current = null;
+
+    setOverview(resolved);
+    revisionRef.current = data.revision.computedAt;
+    return data;
   }, [API_URL, router]);
 
   useEffect(() => {
@@ -203,8 +256,62 @@ export default function FinancesPageClient() {
     void loadFinancialData();
   }, [API_URL, loadOverview, router]);
 
-  const refreshAccounts = loadOverview;
-  const refreshManualAccounts = loadOverview;
+  // Reload right away so the edit is visible (manual accounts and names read straight from
+  // the database), then keep polling until the background snapshot rebuild publishes a new
+  // revision so the derived totals and account groups line up too.
+  const refreshAfterAccountEdit = useCallback(async () => {
+    const baselineRevision = revisionRef.current;
+    setRevisionStalled(false);
+    const immediate = await loadOverview().catch(() => null);
+    // A revision that already moved past the baseline settles this edit only if the server
+    // has nothing further queued. Back-to-back edits land in separate rebuilds, so the
+    // first one publishing is not the end of the story.
+    if (!immediate || !isReconciled(immediate, baselineRevision)) {
+      setAwaitingRevision(true);
+      try {
+        for (let attempt = 0; attempt < REVISION_POLL_MAX_ATTEMPTS; attempt += 1) {
+          await new Promise(resolve => setTimeout(resolve, REVISION_POLL_INTERVAL_MS));
+          if (!mountedRef.current) return;
+          // A transient failure costs an attempt; it is not a reason to stop watching for
+          // a rebuild that is still on its way.
+          const next = await loadOverview().catch(() => null);
+          if (next && isReconciled(next, baselineRevision)) return;
+          // A user with many connected providers can take longer than the default window
+          // to re-read them all. Keep waiting while the server says work is still in
+          // flight; the shorter window only bounds the case where nothing is known to be
+          // running, and the outer cap bounds a flag that never clears.
+          if (attempt + 1 >= REVISION_POLL_ATTEMPTS && !next?.revision.rebuildPending) break;
+        }
+        // The rebuild never published. Say so rather than leaving stale totals unexplained.
+        if (mountedRef.current) setRevisionStalled(true);
+      } finally {
+        if (mountedRef.current) setAwaitingRevision(false);
+      }
+    }
+  }, [loadOverview]);
+
+  const refreshAccounts = refreshAfterAccountEdit;
+  const refreshManualAccounts = refreshAfterAccountEdit;
+
+  // Unlike manual accounts, the home card is fed by the snapshot rather than read live, so
+  // reloading before the rebuild lands would snap the value back to the old one. Hold the
+  // value the server just saved — flagged as not yet reflected in the snapshot — over every
+  // reload until a new revision arrives, then reconcile like any other edit.
+  const refreshAfterHomeEdit = useCallback(async (savedHome: SavedHomeValue) => {
+    pendingHomeRef.current = {
+      baselineRevision: revisionRef.current,
+      home: {
+        address: savedHome.address,
+        value: savedHome.value,
+        valueLow: savedHome.valueLow,
+        valueHigh: savedHome.valueHigh,
+        lastUpdated: savedHome.lastUpdated,
+        isManualOverride: Boolean(savedHome.isManualOverride),
+        isSnapshotAligned: false,
+      },
+    };
+    await refreshAfterAccountEdit();
+  }, [refreshAfterAccountEdit]);
 
   const refreshSummary = useCallback(async () => {
     try {
@@ -224,6 +331,7 @@ export default function FinancesPageClient() {
       const body = await res.json().catch(() => ({}));
       if (res.ok) {
         await loadOverview();
+        setRevisionStalled(false);
         setRefreshSummaryMessage(body.status === 'current'
           ? { kind: 'success', text: 'Totals refreshed from your connected providers.' }
           : { kind: 'warning', text: 'Refresh completed, but some connected-source data is stale or unavailable.' });
@@ -280,6 +388,15 @@ export default function FinancesPageClient() {
     return <FinancesEmptyState onLogout={handleLogout} />;
   }
 
+  // While the background rebuild is being polled for, the out-of-sync notice would just be
+  // telling the user to do what the page is already doing.
+  const visibleWarnings = awaitingRevision
+    ? overview.warnings.filter(warning =>
+        warning.code !== 'manual-accounts-out-of-sync' &&
+        warning.code !== 'home-metadata-out-of-sync'
+      )
+    : overview.warnings;
+
   const findAccountById = (accountId: string): FinancesAccount | null => {
     const allAccounts = [
       ...overview.accountGroups.cash.accounts,
@@ -309,10 +426,21 @@ export default function FinancesPageClient() {
             <span>Source data as of {new Date(overview.revision.asOf).toLocaleString()}</span>
           )}
           <span>Snapshot computed {new Date(overview.revision.computedAt).toLocaleString()}</span>
+          {awaitingRevision && (
+            <span role="status" className="inline-flex items-center gap-2 font-medium text-[#102319]">
+              <span className="h-3 w-3 animate-spin rounded-full border-b-2 border-[#102319]" aria-hidden="true" />
+              Updating totals with your change…
+            </span>
+          )}
         </div>
-        {overview.warnings.length > 0 && (
+        {revisionStalled && !awaitingRevision && (
+          <div role="status" className="rounded-xl border border-[#d4a72c]/30 bg-[#fff3ce] px-4 py-3 text-sm font-medium text-[#76510f]">
+            Your change was saved, but totals have not caught up yet. Use Refresh totals to try again.
+          </div>
+        )}
+        {visibleWarnings.length > 0 && (
           <div className="space-y-2" role="status" aria-label="Financial data warnings">
-            {overview.warnings.map(warning => (
+            {visibleWarnings.map(warning => (
               <div key={warning.code} className="rounded-xl border border-[#d4a72c]/30 bg-[#fff3ce] px-4 py-3 text-sm font-medium text-[#76510f]">
                 {warning.message}
               </div>
@@ -453,7 +581,7 @@ export default function FinancesPageClient() {
             homeData={overview.home}
             isExpanded={isHomeValueExpanded}
             onToggle={() => setIsHomeValueExpanded(!isHomeValueExpanded)}
-            onValueUpdate={() => { void loadOverview(); }}
+            onValueUpdate={(savedHome) => { void refreshAfterHomeEdit(savedHome); }}
           />
         )}
 
