@@ -57,10 +57,9 @@ export function describeMissingRetirementInputs(needsInfo: RetirementNeedsInfo |
   }
 
   const missing = (needsInfo.missingParams || []).filter((param) => param in MISSING_INPUT_PROMPTS);
-  if (missing.length === 0) {
-    // Something else blocked it — holdings, or the analysis service itself.
-    return needsInfo.unavailableReason ? null : null;
-  }
+  // Something else blocked it — holdings, or the analysis service itself. Those
+  // are described by the caller, which knows which of them the user can fix.
+  if (missing.length === 0) return null;
 
   const asks = missing.map((param) => MISSING_INPUT_PROMPTS[param]);
   const list = asks.length === 1

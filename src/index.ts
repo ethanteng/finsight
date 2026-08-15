@@ -2423,18 +2423,29 @@ app.put('/admin/ai/routing-vocabulary', adminAuth, async (req: Request, res: Res
 
     const adminUser = (req as Request & { user?: { email?: string } }).user?.email || 'admin';
     const prisma = getPrismaClient();
+    const existing = await prisma.aiPromptConfig.findUnique({ where: { id: AI_PROMPT_CONFIG_ID } });
+    const storedTerms = (existing as { routingTerms?: unknown } | null)?.routingTerms;
+
+    // Merge rather than replace: the admin UI sends every category, but a
+    // partial API call should edit the categories it names, not silently drop
+    // the rest. An explicit empty array still clears a category.
+    const merged = {
+      ...(storedTerms && typeof storedTerms === 'object' && !Array.isArray(storedTerms) ? storedTerms : {}),
+      ...cleaned,
+    };
+
     const saved = await prisma.aiPromptConfig.upsert({
       where: { id: AI_PROMPT_CONFIG_ID },
-      update: { routingTerms: cleaned, lastEditedBy: adminUser },
+      update: { routingTerms: merged, lastEditedBy: adminUser },
       create: {
         id: AI_PROMPT_CONFIG_ID,
         responseTone: DEFAULT_RESPONSE_TONE,
-        routingTerms: cleaned,
+        routingTerms: merged,
         lastEditedBy: adminUser,
       },
     });
 
-    res.json({ terms: setActiveRoutingTerms(cleaned), updatedAt: saved.updatedAt });
+    res.json({ terms: setActiveRoutingTerms(merged), updatedAt: saved.updatedAt });
   } catch (error) {
     console.error('Error updating routing vocabulary:', error);
     Sentry.captureException(error instanceof Error ? error : new Error(String(error)));
