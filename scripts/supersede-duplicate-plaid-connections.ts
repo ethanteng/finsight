@@ -11,9 +11,11 @@
  * connection's accounts fully cover the older one's. Partial coverage means two genuinely
  * different logins at the same institution (personal vs business, say), and both are left alone.
  *
- * Superseding a connection migrates its transactions onto the matched surviving accounts, deletes
- * the duplicate Account rows, and marks the AccessToken isActive=false with
- * lastError='SUPERSEDED_BY_RELINK'.
+ * Superseding a connection DROPS the duplicate accounts' transactions, deletes the duplicate
+ * Account rows, and marks the AccessToken isActive=false with lastError='SUPERSEDED_BY_RELINK'.
+ * The history is dropped rather than migrated because Plaid transaction ids are Item-scoped: the
+ * surviving Item re-imports the same activity under new ids, and persistence dedupes only on
+ * plaidTransactionId, so keeping both copies would double expenses and income.
  *
  * Usage:
  *   npx ts-node scripts/supersede-duplicate-plaid-connections.ts            # dry run (default)
@@ -119,7 +121,7 @@ async function main() {
 
   const affectedUserIds = new Set<string>();
   let totalAccountsRemoved = 0;
-  let totalTransactionsMigrated = 0;
+  let totalTransactionsDropped = 0;
   let totalSkipped = 0;
 
   for (const { userId, institution, tokens: group } of duplicateGroups) {
@@ -146,12 +148,12 @@ async function main() {
             where: { accountId: { in: previous.map(a => a.id) } }
           });
           const strategies = [...new Set(result.matches.map(m => m.strategy))].join(', ');
-          console.log(`   🔻 Would supersede ${candidate.id} (item ${candidate.itemId}): remove ${result.matches.length} account(s), migrate ${txCount} transaction(s) [matched by ${strategies}]`);
+          console.log(`   🔻 Would supersede ${candidate.id} (item ${candidate.itemId}): remove ${result.matches.length} account(s), drop ${txCount} stale transaction(s) [matched by ${strategies}]`);
           for (const match of result.matches) {
             console.log(`        "${match.previous.name}" → "${match.current.name}" (${match.strategy})`);
           }
           totalAccountsRemoved += result.matches.length;
-          totalTransactionsMigrated += txCount;
+          totalTransactionsDropped += txCount;
         } else {
           console.log(`   ⏭️  Would KEEP ${candidate.id} (item ${candidate.itemId}) - ${result.unmatchedPrevious.length}/${previous.length} accounts unmatched: ${result.unmatchedPrevious.map(a => a.name).join(', ')}`);
           totalSkipped++;
@@ -171,7 +173,7 @@ async function main() {
 
     for (const superseded of report.superseded) {
       totalAccountsRemoved += superseded.accountsRemoved;
-      totalTransactionsMigrated += superseded.transactionsMigrated;
+      totalTransactionsDropped += superseded.transactionsDropped;
       affectedUserIds.add(userId);
     }
     totalSkipped += report.skipped.length;
@@ -193,7 +195,7 @@ async function main() {
 
   console.log(apply ? '✅ Cleanup complete!' : '✅ Dry run complete!');
   console.log(`   - ${apply ? 'Removed' : 'Would remove'} ${totalAccountsRemoved} duplicate account(s)`);
-  console.log(`   - ${apply ? 'Migrated' : 'Would migrate'} ${totalTransactionsMigrated} transaction(s)`);
+  console.log(`   - ${apply ? 'Dropped' : 'Would drop'} ${totalTransactionsDropped} stale transaction(s) (the surviving Item re-imports them)`);
   console.log(`   - ${totalSkipped} connection(s) left active (separate logins at the same institution)`);
   if (!apply) console.log('\nRe-run with --apply to write these changes.');
 }

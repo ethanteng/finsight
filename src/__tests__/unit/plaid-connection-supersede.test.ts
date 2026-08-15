@@ -161,7 +161,7 @@ describe('supersedeDuplicateInstitutionConnections', () => {
     otherTokens: any[];
   }) => {
     const deleted: string[] = [];
-    const migrations: Array<{ from: string; to: string }> = [];
+    const droppedTransactionsFor: string[] = [];
     const tokenUpdates: Array<{ id: string; data: any }> = [];
 
     const prisma = {
@@ -180,22 +180,22 @@ describe('supersedeDuplicateInstitutionConnections', () => {
         })
       },
       transaction: {
-        updateMany: jest.fn(async ({ where, data }: any) => {
-          migrations.push({ from: where.accountId, to: data.accountId });
+        deleteMany: jest.fn(async ({ where }: any) => {
+          droppedTransactionsFor.push(where.accountId);
           return { count: 3 };
         })
       }
     };
 
-    return { prisma, deleted, migrations, tokenUpdates };
+    return { prisma, deleted, droppedTransactionsFor, tokenUpdates };
   };
 
   const currentAccounts = [
     { id: 'c1', plaidAccountId: 'new-1', persistentAccountId: null, name: 'Roth IRA', type: 'investment', subtype: 'roth', mask: null, currentBalance: 100 }
   ];
 
-  it('migrates transactions, removes duplicates, and deactivates the superseded token', async () => {
-    const { prisma, deleted, migrations, tokenUpdates } = buildPrisma({
+  it('drops stale transactions, removes duplicates, and deactivates the superseded token', async () => {
+    const { prisma, deleted, droppedTransactionsFor, tokenUpdates } = buildPrisma({
       currentAccounts,
       otherTokens: [{
         id: 'stale-token',
@@ -212,16 +212,19 @@ describe('supersedeDuplicateInstitutionConnections', () => {
       institutionName: 'Betterment'
     });
 
-    expect(migrations).toEqual([{ from: 'p1', to: 'c1' }]);
+    // Dropped, never re-pointed: the replacement Item re-imports this history under new ids, and
+    // persistence dedupes only on plaidTransactionId, so carrying it over would double-count.
+    expect(droppedTransactionsFor).toEqual(['p1']);
+    expect(prisma.transaction.deleteMany).toHaveBeenCalledWith({ where: { accountId: 'p1' } });
     expect(deleted).toEqual(['p1']);
     expect(tokenUpdates).toEqual([{ id: 'stale-token', data: { isActive: false, lastError: SUPERSEDED_ERROR_CODE } }]);
     expect(report.superseded).toHaveLength(1);
-    expect(report.superseded[0].transactionsMigrated).toBe(3);
+    expect(report.superseded[0].transactionsDropped).toBe(3);
     expect(report.skipped).toHaveLength(0);
   });
 
   it('leaves a partially covered connection active and untouched', async () => {
-    const { prisma, deleted, migrations, tokenUpdates } = buildPrisma({
+    const { prisma, deleted, droppedTransactionsFor, tokenUpdates } = buildPrisma({
       currentAccounts,
       otherTokens: [{
         id: 'other-login',
@@ -238,7 +241,7 @@ describe('supersedeDuplicateInstitutionConnections', () => {
       institutionName: 'Betterment'
     });
 
-    expect(migrations).toEqual([]);
+    expect(droppedTransactionsFor).toEqual([]);
     expect(deleted).toEqual([]);
     expect(tokenUpdates).toEqual([]);
     expect(report.superseded).toHaveLength(0);
@@ -298,7 +301,7 @@ describe('supersedeDuplicateInstitutionConnections', () => {
   });
 
   it('writes nothing in dry-run mode but still reports what would change', async () => {
-    const { prisma, deleted, migrations, tokenUpdates } = buildPrisma({
+    const { prisma, deleted, droppedTransactionsFor, tokenUpdates } = buildPrisma({
       currentAccounts,
       otherTokens: [{
         id: 'stale-token',
@@ -316,7 +319,7 @@ describe('supersedeDuplicateInstitutionConnections', () => {
       dryRun: true
     });
 
-    expect(migrations).toEqual([]);
+    expect(droppedTransactionsFor).toEqual([]);
     expect(deleted).toEqual([]);
     expect(tokenUpdates).toEqual([]);
     expect(report.superseded).toHaveLength(1);

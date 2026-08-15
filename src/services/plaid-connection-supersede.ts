@@ -12,6 +12,14 @@
  * supersedes the old connection when the new one covers ALL of its accounts. Partial coverage
  * means the two Items are genuinely different logins at the same institution (e.g. personal and
  * business at the same bank), and both are left active.
+ *
+ * Superseding DROPS the previous connection's transactions rather than migrating them. Plaid
+ * transaction IDs are Item-scoped, so the replacement Item re-imports the same history under new
+ * `plaidTransactionId`s on its first cursor-less `transactionsSync`. Persistence dedupes only on
+ * that column, so carrying the old rows across would leave two copies of the same spending and
+ * double both expenses and income. The replacement's copy is also the fresher one - it reflects
+ * the institution's current categorization and any post-hoc corrections. The tradeoff is that
+ * history older than the replacement Item's available window is not carried over.
  */
 
 export type MatchStrategy = 'persistent-id' | 'mask' | 'name' | 'balance';
@@ -95,8 +103,8 @@ function hasConflictingStableIdentifier(a: ConnectionAccount, b: ConnectionAccou
 
 /**
  * Match by a key that must be unambiguous on BOTH sides. A key held by two previous accounts or
- * two current accounts is skipped rather than guessed - a wrong match migrates transactions onto
- * the wrong account and deletes real data.
+ * two current accounts is skipped rather than guessed - a wrong match deletes a real account and
+ * its history.
  */
 function matchByKey(
   previous: ConnectionAccount[],
@@ -183,7 +191,7 @@ export type SupersededConnection = {
   tokenId: string;
   itemId: string | null;
   accountsRemoved: number;
-  transactionsMigrated: number;
+  transactionsDropped: number;
   strategies: MatchStrategy[];
 };
 
@@ -210,7 +218,7 @@ type PrismaLike = {
     update: (args: any) => Promise<any>;
   };
   transaction: {
-    updateMany: (args: any) => Promise<{ count: number }>;
+    deleteMany: (args: any) => Promise<{ count: number }>;
   };
 };
 
@@ -229,8 +237,9 @@ function toConnectionAccount(record: any): ConnectionAccount {
 
 /**
  * Deactivate any other active connection to `institutionName` whose accounts are fully covered by
- * the connection identified by `keepTokenId`, migrating transactions onto the surviving accounts
- * first. Connections that are not fully covered are reported in `skipped` and left untouched.
+ * the connection identified by `keepTokenId`, dropping the superseded accounts' stale transactions
+ * (the replacement Item re-imports them). Connections that are not fully covered are reported in
+ * `skipped` and left untouched.
  */
 export async function supersedeDuplicateInstitutionConnections(options: {
   prisma: PrismaLike;
@@ -298,7 +307,7 @@ export async function supersedeDuplicateInstitutionConnections(options: {
       }
       report.superseded.push({
         tokenId: token.id, itemId: token.itemId, accountsRemoved: 0,
-        transactionsMigrated: 0, strategies: []
+        transactionsDropped: 0, strategies: []
       });
       continue;
     }
@@ -322,15 +331,15 @@ export async function supersedeDuplicateInstitutionConnections(options: {
       continue;
     }
 
-    let transactionsMigrated = 0;
+    let transactionsDropped = 0;
     if (!dryRun) {
       const applySupersede = async (db: PrismaLike) => {
+        // Drop, don't migrate: the replacement Item re-imports this history under new ids.
         for (const match of result.matches) {
-          const migrated = await db.transaction.updateMany({
-            where: { accountId: match.previous.id },
-            data: { accountId: match.current.id }
+          const dropped = await db.transaction.deleteMany({
+            where: { accountId: match.previous.id }
           });
-          transactionsMigrated += migrated.count;
+          transactionsDropped += dropped.count;
         }
         for (const match of result.matches) {
           await db.account.delete({ where: { id: match.previous.id } });
@@ -351,14 +360,14 @@ export async function supersedeDuplicateInstitutionConnections(options: {
     const strategies = [...new Set(result.matches.map(match => match.strategy))];
     log(
       `   ✅ Superseded connection ${token.id} (item ${token.itemId}): removed ` +
-      `${result.matches.length} duplicate account(s), migrated ${transactionsMigrated} transaction(s) ` +
+      `${result.matches.length} duplicate account(s), dropped ${transactionsDropped} stale transaction(s) ` +
       `[matched by ${strategies.join(', ')}]`
     );
     report.superseded.push({
       tokenId: token.id,
       itemId: token.itemId,
       accountsRemoved: result.matches.length,
-      transactionsMigrated,
+      transactionsDropped,
       strategies
     });
   }

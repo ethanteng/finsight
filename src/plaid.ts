@@ -738,18 +738,20 @@ export const setupPlaidRoutes = (app: any) => {
                   );
                   console.log(`Reconciling ${staleOwnAccounts.length} stale account(s) from the previous ${institutionName} Item`);
                   for (const match of matches) {
-                    const migrated = await getPrismaClient().transaction.updateMany({
-                      where: { accountId: match.previous.id },
-                      data: { accountId: match.current.id }
+                    // Drop the stale history rather than carrying it over: Plaid transaction ids are
+                    // Item-scoped, so the replacement re-imports the same activity under new ids and
+                    // persistence (keyed on plaidTransactionId) would keep both copies.
+                    const dropped = await getPrismaClient().transaction.deleteMany({
+                      where: { accountId: match.previous.id }
                     });
-                    if (migrated.count > 0) {
-                      console.log(`   Migrated ${migrated.count} transactions from ${match.previous.name} (matched by ${match.strategy})`);
+                    if (dropped.count > 0) {
+                      console.log(`   Dropped ${dropped.count} stale transactions from ${match.previous.name} (matched by ${match.strategy}) - the new Item re-imports them`);
                     }
                     await getPrismaClient().account.delete({ where: { id: match.previous.id } });
                     reconciliationChanged = true;
                   }
                   for (const orphan of unmatchedPrevious) {
-                    console.warn(`   Keeping ${orphan.name} (${orphan.type}/${orphan.subtype}) - no match in the new Item, preserving to avoid transaction loss`);
+                    console.warn(`   Keeping ${orphan.name} (${orphan.type}/${orphan.subtype}) - no match in the new Item, preserving it and its history`);
                   }
                 }
               }
