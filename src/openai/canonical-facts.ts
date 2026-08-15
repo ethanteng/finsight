@@ -1,4 +1,5 @@
 import type { FinancialContextSnapshot, QuestionNeeds } from './types';
+import { mergeAssetAllocation } from '../services/asset-class';
 
 export type CanonicalFactUnit = 'usd' | 'percent' | 'months' | 'years' | 'age' | 'count' | 'ratio';
 
@@ -335,7 +336,9 @@ export function buildCanonicalFactPack(
       : 'investments.holdingCount';
     addSnapshotFact('portfolio_value', 'Portfolio value', portfolioValue, 'usd', portfolioValueSource);
     addSnapshotFact('portfolio_holding_count', 'Portfolio holding count', holdingCount, 'count', holdingCountSource);
-    for (const allocation of portfolio?.assetAllocation || []) {
+    // Merge before emitting: the fact id is case-folded, so "etf" and "ETF" rows
+    // collide and the last one written would silently replace the other.
+    for (const allocation of mergeAssetAllocation(portfolio?.assetAllocation)) {
       const id = allocation.type.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
       addSnapshotFact(`allocation_value_${id}`, `${allocation.type} allocation value`, allocation.value, 'usd', `financialSummary.investmentPortfolio.assetAllocation.${id}.value`);
       addSnapshotFact(`allocation_${id}`, `${allocation.type} allocation`, allocation.percentage, 'percent', `financialSummary.investmentPortfolio.assetAllocation.${id}.percentage`);

@@ -97,3 +97,37 @@ export function normalizeAssetType(rawType: unknown): string {
   if (!key) return UNKNOWN_ASSET_TYPE;
   return ASSET_TYPE_ALIASES[key] || labelFromKey(key);
 }
+
+export interface AssetAllocationRow {
+  type: string;
+  value: number;
+  percentage: number;
+}
+
+/**
+ * Combine allocation rows that describe the same asset class.
+ *
+ * Consumers key allocation by type — canonical facts derive a fact id from it,
+ * and a Map keyed on that id drops every row but the last. Merging first means a
+ * snapshot persisted before types were normalized still yields one fact per
+ * asset class carrying the full value, rather than silently reporting whichever
+ * spelling happened to be written last.
+ */
+export function mergeAssetAllocation(
+  rows: readonly Partial<AssetAllocationRow>[] | undefined | null
+): AssetAllocationRow[] {
+  const merged = new Map<string, AssetAllocationRow>();
+  for (const row of rows || []) {
+    const type = normalizeAssetType(row?.type);
+    const value = Number.isFinite(row?.value) ? (row!.value as number) : 0;
+    const percentage = Number.isFinite(row?.percentage) ? (row!.percentage as number) : 0;
+    const existing = merged.get(type);
+    if (existing) {
+      existing.value += value;
+      existing.percentage += percentage;
+    } else {
+      merged.set(type, { type, value, percentage });
+    }
+  }
+  return Array.from(merged.values());
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals';
-import { normalizeAssetType } from '../../services/asset-class';
+import { mergeAssetAllocation, normalizeAssetType } from '../../services/asset-class';
 
 describe('normalizeAssetType', () => {
   it('collapses provider casing differences onto one label', () => {
@@ -38,5 +38,40 @@ describe('normalizeAssetType', () => {
 
   it('leaves the manual investments bucket untouched', () => {
     expect(normalizeAssetType('Manual Investments')).toBe('Manual Investments');
+  });
+});
+
+describe('mergeAssetAllocation', () => {
+  it('sums rows that describe the same asset class', () => {
+    expect(
+      mergeAssetAllocation([
+        { type: 'ETF', value: 400, percentage: 40 },
+        { type: 'etf', value: 100, percentage: 10 },
+        { type: 'Cash', value: 500, percentage: 50 },
+      ])
+    ).toEqual([
+      { type: 'ETF', value: 500, percentage: 50 },
+      { type: 'Cash', value: 500, percentage: 50 },
+    ]);
+  });
+
+  it('keeps distinct asset classes apart and tolerates missing numbers', () => {
+    expect(
+      mergeAssetAllocation([
+        { type: 'Equity', value: 100, percentage: 50 },
+        { type: 'Fixed Income', value: 100, percentage: 50 },
+        { type: 'Cash' },
+      ])
+    ).toEqual([
+      { type: 'Equity', value: 100, percentage: 50 },
+      { type: 'Fixed Income', value: 100, percentage: 50 },
+      { type: 'Cash', value: 0, percentage: 0 },
+    ]);
+  });
+
+  it('returns an empty list for missing input', () => {
+    expect(mergeAssetAllocation(undefined)).toEqual([]);
+    expect(mergeAssetAllocation(null)).toEqual([]);
+    expect(mergeAssetAllocation([])).toEqual([]);
   });
 });

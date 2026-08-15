@@ -10,6 +10,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AskLincResponse } from './structured-response';
 import { FinancialContextSnapshot } from './types';
+import { mergeAssetAllocation } from '../services/asset-class';
 
 const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '';
 const DEFAULT_MODEL = process.env.GEMINI_VALIDATION_MODEL || 'gemini-3-flash-preview';
@@ -84,9 +85,10 @@ function buildSnapshotSummaryForValidation(snapshot: FinancialContextSnapshot): 
     parts.push(
       `Investment portfolio: totalValue=${invPortfolio.totalValue}, holdingsCount=${invPortfolio.holdingsCount}`
     );
-    if (invPortfolio.assetAllocation?.length) {
+    const allocation = mergeAssetAllocation(invPortfolio.assetAllocation);
+    if (allocation.length) {
       parts.push(
-        `Asset allocation: ${invPortfolio.assetAllocation.map((a) => `${a.type}=${a.value} (${a.percentage}%)`).join(', ')}`
+        `Asset allocation: ${allocation.map((a) => `${a.type}=${a.value} (${a.percentage}%)`).join(', ')}`
       );
     }
   }

@@ -1,6 +1,6 @@
 import { getPrismaClient } from '../prisma-client';
 import { ProfileManager } from './manager';
-import { normalizeAssetType } from '../services/asset-class';
+import { normalizeAssetType, mergeAssetAllocation } from '../services/asset-class';
 
 export interface InvestmentProfile {
   totalPortfolioValue: number;
@@ -360,7 +360,7 @@ const generateInvestmentInsights = (portfolio: any, activity: any): string => {
     `- Total Portfolio Value: $${portfolio.totalValue?.toLocaleString() || '0'}`,
     `- Number of Holdings: ${portfolio.holdingCount || 0}`,
     `- Number of Securities: ${portfolio.securityCount || 0}`,
-    `- Asset Allocation: ${portfolio.assetAllocation?.map((a: any) => `${a.type}: ${a.percentage?.toFixed(1)}%`).join(', ') || 'N/A'}`,
+    `- Asset Allocation: ${mergeAssetAllocation(portfolio.assetAllocation).map(a => `${a.type}: ${a.percentage.toFixed(1)}%`).join(', ') || 'N/A'}`,
     ``,
     `Investment Activity:`,
     `- Total Transactions: ${activity.totalTransactions || 0}`,
