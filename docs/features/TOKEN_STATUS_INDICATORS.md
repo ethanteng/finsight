@@ -36,7 +36,24 @@ This feature displays real-time connection status for linked Plaid and SnapTrade
 - Account number (if available)
 - Connection status (always active if account is returned in holdings)
 
-### 3. Token Validation in AI Context
+### 3. Closed Account Indicator
+
+**Display:**
+- A `Closed` badge next to the account name
+- Dimmed row, sorted below the accounts that still count
+- Sub-line: "Closed — not included in your Finances totals" with the date the account was last reported
+- The balance is labelled "Last known balance"
+- The connection ✓/✗ indicator is hidden, since it says nothing about a closed account
+
+**Why it exists:**
+Plaid stops returning an account once it is closed at the institution. The Finances page is built from the canonical snapshot, which is always produced from a live provider fetch, so closed accounts drop off it on their own. The profile list is allowed to serve persisted Plaid rows (`loadPersistedPlaidData`), and those rows outlive the account — without this indicator a closed account looks identical to an active one.
+
+**How it is detected** (`src/services/account-closure-service.ts`):
+An account is reported closed only when the latest snapshot exists, was built without a Plaid provider error, and does not contain the account, *and* the account has a persisted row that predates the snapshot. Those guards keep a missing, degraded, or simply older snapshot from mislabelling a live account; manual accounts and newly linked accounts are never flagged.
+
+`GET /plaid/all-accounts` returns `isClosed` and `lastSeenAt` per account. Detection failures are logged and fall back to treating every account as open.
+
+### 4. Token Validation in AI Context
 
 **Backend Integration:**
 The `openai.ts` module now validates Plaid tokens before fetching account data:
@@ -86,6 +103,14 @@ Your Connected Accounts (Plaid)
 │ Broker Name • investment • brokerage    │
 │ Re-authentication required              │
 │ Balance: $45,678.90                     │
+└─────────────────────────────────────────┘
+
+┌─────────────────────────────────────────┐
+│ Old Savings  [Closed]                   │
+│ Bank Name • depository • savings        │
+│ Closed — not included in your Finances  │
+│ totals • Last reported 3/4/2026         │
+│ $0.09  (Last known balance)             │
 └─────────────────────────────────────────┘
 ```
 
@@ -286,6 +311,11 @@ async function validatePlaidToken(accessToken: string): Promise<boolean> {
 - `prisma/schema.prisma` - Database schema
 
 ## Changelog
+
+### 2026-08-15
+- ✅ Added closed-account detection (`src/services/account-closure-service.ts`)
+- ✅ `GET /plaid/all-accounts` now returns `isClosed` and `lastSeenAt` per account
+- ✅ Profile account list badges, dims, and sorts closed accounts
 
 ### 2025-10-20
 - ✅ Added `isActive`, `lastError`, `lastChecked`, `institutionName` fields to `AccessToken` model

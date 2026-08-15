@@ -24,6 +24,10 @@ interface Account {
     iso_currency_code: string;
   };
   institution?: string;
+  /** True when the provider no longer reports the account (closed at the institution). */
+  isClosed?: boolean;
+  /** Last time a provider refresh saw the account, when known. */
+  lastSeenAt?: string | null;
 }
 
 interface SnapTradeData {
@@ -1027,6 +1031,19 @@ export default function ProfilePage() {
     }).format(amount);
   };
 
+  const formatLastSeen = (value?: string | null) => {
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString();
+  };
+
+  // Closed accounts stay in the list for reference but sit below the ones that
+  // still count toward the Finances totals.
+  const sortedConnectedAccounts = [...connectedAccounts].sort(
+    (a, b) => Number(Boolean(a.isClosed)) - Number(Boolean(b.isClosed))
+  );
+  const closedAccountCount = connectedAccounts.filter(account => account.isClosed).length;
+
   const handleDisconnectAccounts = async () => {
     setIsDeleting(true);
     setDeleteMessage('');
@@ -1207,24 +1224,41 @@ export default function ProfilePage() {
                 </div>
               ) : (
                 <div className="space-y-3">
+                  {closedAccountCount > 0 && (
+                    <div className="text-xs text-gray-400 mb-1">
+                      {closedAccountCount === 1
+                        ? '1 account is closed and is not included in your Finances totals.'
+                        : `${closedAccountCount} accounts are closed and are not included in your Finances totals.`}
+                    </div>
+                  )}
                   {/* Display connected accounts */}
-                  {connectedAccounts.map((account) => {
+                  {sortedConnectedAccounts.map((account) => {
                     // Find token status for this account's institution
                     const tokenStatus = tokenStatuses.find(t =>
                       t.institutionName === account.institution
                     );
+                    const isClosed = Boolean(account.isClosed);
+                    const lastSeen = formatLastSeen(account.lastSeenAt);
 
                     return (
                       <div
                         key={account.id}
-                        className="bg-gray-700 rounded-lg p-4 border border-gray-600"
+                        className={`bg-gray-700 rounded-lg p-4 border border-gray-600${isClosed ? ' opacity-60' : ''}`}
                       >
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
                               <div className="font-medium text-white">{account.name}</div>
-                              {/* Token Status Indicator */}
-                              {tokenStatus && (
+                              {isClosed && (
+                                <span
+                                  className="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-900/20 text-yellow-300 border border-yellow-700"
+                                  title="This account is no longer reported by the institution"
+                                >
+                                  Closed
+                                </span>
+                              )}
+                              {/* Token Status Indicator - a closed account says nothing about the connection */}
+                              {tokenStatus && !isClosed && (
                                 <div className="flex items-center gap-1">
                                   {tokenStatus.isActive ? (
                                     <span className="text-green-400" title="Connection active">
@@ -1241,8 +1275,14 @@ export default function ProfilePage() {
                             <div className="text-sm text-gray-400">
                               {account.institution && `${account.institution} • `}{account.type} • {account.subtype}
                             </div>
+                            {isClosed && (
+                              <div className="text-xs text-yellow-300 mt-1">
+                                Closed — not included in your Finances totals
+                                {lastSeen ? ` • Last reported ${lastSeen}` : ''}
+                              </div>
+                            )}
                             {/* Show error message if token is inactive */}
-                            {tokenStatus && !tokenStatus.isActive && tokenStatus.lastError && (
+                            {tokenStatus && !isClosed && !tokenStatus.isActive && tokenStatus.lastError && (
                               <div className="text-xs text-red-400 mt-1">
                                 {tokenStatus.lastError === 'ITEM_LOGIN_REQUIRED' ?
                                   'Re-authentication required' :
@@ -1269,6 +1309,9 @@ export default function ProfilePage() {
                                 return formatCurrency(balance);
                               })()}
                             </div>
+                            {isClosed && (
+                              <div className="text-xs text-gray-400">Last known balance</div>
+                            )}
                           </div>
                         </div>
                       </div>
