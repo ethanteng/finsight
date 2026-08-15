@@ -1,6 +1,7 @@
 import {
   getLlmMetricsSnapshot,
   recordLlmAnalysis,
+  recordLlmAnalysisFailure,
   resetLlmMetricsForTests,
 } from '../../observability/llm-metrics';
 import type { EvidenceManifest } from '../../openai/show-the-math-types';
@@ -69,12 +70,13 @@ describe('LLM stage metrics', () => {
     recordLlmAnalysis(manifest('passed', true));
     recordLlmAnalysis(manifest('salvaged', false));
     recordLlmAnalysis(manifest('replaced', false));
+    recordLlmAnalysisFailure(50);
 
     const quality = getLlmMetricsSnapshot().quality;
-    // One of three answers was fully grounded, but two of three reached the user.
+    // One of four requests was fully grounded; two of four reached the user.
     expect(quality.deterministicGroundingRate).toBeCloseTo(1 / 3);
-    expect(quality.answerDeliveredRate).toBeCloseTo(2 / 3);
-    expect(quality.salvageRate).toBeCloseTo(1 / 3);
+    expect(quality.answerDeliveredRate).toBeCloseTo(2 / 4);
+    expect(quality.salvageRate).toBeCloseTo(1 / 4);
   });
 
   it('reports stage percentiles and quality rates', () => {

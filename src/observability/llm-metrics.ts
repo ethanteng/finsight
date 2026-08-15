@@ -193,7 +193,7 @@ export function getLlmMetricsSnapshot() {
       // deterministicGroundingRate measures the model: any ungrounded figure
       // counts against it, even when the user still got a usable answer. These
       // two measure what reached the user.
-      answerDeliveredRate: rate(sample => sample.outcome !== 'replaced'),
+      answerDeliveredRate: rate(sample => sample.success && (sample.outcome ?? 'passed') !== 'replaced'),
       salvageRate: rate(sample => sample.outcome === 'salvaged'),
       contextEscalationRate: rate(sample => sample.contextEscalated === true),
     },
