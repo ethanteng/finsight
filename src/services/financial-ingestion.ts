@@ -27,7 +27,7 @@ export async function ingestFinancialData(
 
   if (staleAccount || options.forceBalanceRefresh) {
     const tokens = await prisma.accessToken.findMany({
-      where: { userId, isActive: true },
+      where: { userId, isActive: true, supersededAt: null },
       select: { token: true, id: true },
     });
     const refreshErrors: Error[] = [];
