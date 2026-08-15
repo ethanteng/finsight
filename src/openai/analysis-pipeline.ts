@@ -337,7 +337,11 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       // Keep the grounded part of the answer; the placeholder is the last resort.
       structuredResponse = salvageUngroundedResponse(structuredResponse, factPack, groundingResult);
       deterministicOutcome = structuredResponse.summary === UNVERIFIABLE_SUMMARY ? 'replaced' : 'salvaged';
-    } else {
+    }
+
+    // Salvaged prose reaches the user, so it owes the same secondary check as a
+    // retry that passed outright. Only the placeholder has nothing left to check.
+    if (deterministicOutcome !== 'replaced') {
       const postRetryIssues = await runSecondaryValidation('retry');
       if (postRetryIssues.length > 0) {
         console.error('Ask Linc: Retry passed grounding but secondary validation still flagged issues:', postRetryIssues);

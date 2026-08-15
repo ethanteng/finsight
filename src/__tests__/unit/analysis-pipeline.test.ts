@@ -171,6 +171,31 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(result.showTheMathData?.evidenceManifest.validation.deterministic.outcome).toBe('salvaged');
   });
 
+  it('still runs secondary validation on a salvaged retry', async () => {
+    // Salvaged prose reaches the user, so the reasoning checks Gemini performs
+    // must not be skipped just because the deterministic pass failed.
+    mockedAskClaude.mockResolvedValue(JSON.stringify({
+      summary: 'Your retirement plan is on track. A $999,999 windfall would help.',
+      insights: [],
+      suggested_actions: [],
+    }));
+    mockedValidateWithGemini
+      .mockResolvedValueOnce({ valid: false, issues: ['Unsupported conclusion.'] })
+      .mockResolvedValueOnce({ valid: false, issues: ['Still an unsupported conclusion.'] });
+
+    const result = await runAskLincAnalysis({
+      question: 'Am I on track for retirement?',
+      userId: 'user-1',
+      enableValidation: true,
+    });
+
+    expect(mockedValidateWithGemini).toHaveBeenCalledTimes(2);
+    expect(result.structuredResponse.summary).toBe(
+      'I could not verify the generated answer against your current financial snapshot. Please try the question again.'
+    );
+    expect(result.showTheMathData?.evidenceManifest.validation.deterministic.outcome).toBe('replaced');
+  });
+
   it('sends one example of every failure kind back to the retry', async () => {
     mockedAskClaude.mockResolvedValue(JSON.stringify({
       summary: 'Your net worth is $999. Growth was 47%. You could add 250,000 to savings.',

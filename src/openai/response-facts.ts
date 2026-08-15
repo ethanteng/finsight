@@ -139,6 +139,14 @@ interface ProseClaim {
   calendarYear: boolean;
 }
 
+// A bare number below the floor is still money when the sentence says so:
+// "afford 900 per month" is a claim, "save 3 years of expenses" is not.
+const MONEY_VERB_BEFORE =
+  /\b(?:afford|save|saves|saving|spend|spends|spending|pay|pays|paying|contribute|contributes|contributing|withdraw|withdraws|withdrawing|invest|invests|investing|budget|budgeting|cost|costs|costing|owe|owes)\s+(?:about\s+|roughly\s+|around\s+|another\s+|up\s+to\s+|an?\s+extra\s+)?$/i;
+const PER_PERIOD_AFTER = /^\s*(?:\/|per\s+|an?\s+|each\s+|every\s+)(?:month|year|week|quarter|day|paycheck|pay\s+period)\b/i;
+const NON_MONEY_NOUN_AFTER =
+  /^\s*(?:years?|months?|weeks?|days?|decades?|times|holdings?|accounts?|positions?|shares?|securities|funds?|people|percent|percentage)\b/i;
+
 const NUMBER_PATTERN = /\d[\d,]*(?:\.\d+)?/g;
 const MAGNITUDE_WORD = /^\s*(thousand|million|billion)\b/i;
 // An attached (or single-space) k/m/b only. Without this, "40 mix" reads as
@@ -193,6 +201,10 @@ function scanProseClaims(prose: string): ProseClaim[] {
 
     const written = Number(digits.replace(/,/g, ''));
     const value = (negative ? -1 : 1) * written * multiplier;
+    if (!unit && !NON_MONEY_NOUN_AFTER.test(after) &&
+      (MONEY_VERB_BEFORE.test(before) || PER_PERIOD_AFTER.test(after))) {
+      unit = 'usd';
+    }
     claims.push({
       value,
       unit,
@@ -291,6 +303,11 @@ export function validateResponseFacts(
   };
 }
 
+/** "U.S." and "e.g." end in a single letter; a real sentence rarely does. */
+function isAbbreviationPeriod(text: string, index: number, punctuation: string): boolean {
+  return punctuation === '.' && /(?:^|[^A-Za-z])[A-Za-z]$/.test(text.slice(0, index));
+}
+
 /**
  * Split on sentence punctuation that ends a sentence. A period inside "$1.92"
  * is followed by a digit, so decimals stay intact.
@@ -299,12 +316,19 @@ function splitSentences(text: string): string[] {
   const sentences: string[] = [];
   let start = 0;
   for (const match of text.matchAll(/[.!?]+(?=\s|$)/g)) {
-    const end = (match.index ?? 0) + match[0].length;
+    const index = match.index ?? 0;
+    if (isAbbreviationPeriod(text, index, match[0])) continue;
+    const end = index + match[0].length;
     sentences.push(text.slice(start, end));
     start = end;
   }
   if (start < text.length) sentences.push(text.slice(start));
   return sentences;
+}
+
+/** Guards against a stray fragment ("U.S.") passing for a surviving answer. */
+function hasSubstantiveContent(text: string): boolean {
+  return (text.match(/[A-Za-z0-9$][^\s]*/g) || []).length >= 3;
 }
 
 /** Drop only the sentences carrying an unverifiable number; keep the rest. */
@@ -356,7 +380,7 @@ export function salvageUngroundedResponse(
 ): AskLincResponse {
   const base = omitInvalidKeyNumbers(response, result.invalidKeyNumbers);
   const { response: stripped, removed } = stripUnverifiedProse(base, pack);
-  if (!stripped.summary?.trim()) return sanitizeUngroundedResponse(base, result);
+  if (!hasSubstantiveContent(stripped.summary || '')) return sanitizeUngroundedResponse(base, result);
   // Nothing was cut from the prose, so dropping the miscited key numbers was enough.
   if (removed === 0) return stripped;
   return { ...stripped, summary: `${stripped.summary.trim()}\n\n${UNVERIFIED_PROSE_NOTICE}` };

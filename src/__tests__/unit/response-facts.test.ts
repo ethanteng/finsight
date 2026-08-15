@@ -56,6 +56,16 @@ describe('canonical response facts', () => {
     expect(validateResponseFacts({ summary: planning }, pack).valid).toBe(true);
   });
 
+  it('reads a small bare number as money when the sentence says so', () => {
+    expect(validateResponseFacts({ summary: 'You can afford 900 per month.' }, pack).issues).toContain(
+      'User-facing usd value 900 is not present in the canonical fact pack.'
+    );
+    expect(validateResponseFacts({ summary: 'You could save 250 a month.' }, pack).valid).toBe(false);
+    // The same small numbers stay prose when they measure time or count things.
+    expect(validateResponseFacts({ summary: 'You could save 3 years of expenses.' }, pack).valid).toBe(true);
+    expect(validateResponseFacts({ summary: 'You pay into 4 accounts.' }, pack).valid).toBe(true);
+  });
+
   it('checks both ends of a money range', () => {
     const result = validateResponseFacts({ summary: 'Keep a $50,000-100,000 buffer.' }, pack);
     expect(result.issues).toEqual(expect.arrayContaining([
@@ -184,6 +194,14 @@ describe('rounded canonical values', () => {
       insights: [],
       suggested_actions: [],
     });
+  });
+
+  it('does not pass an abbreviation off as a surviving summary', () => {
+    // "U.S." must not read as a complete sentence that outlived the strip.
+    const response = { summary: 'U.S. stocks could lose $999,999 next year.' };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.summary).toBe(UNVERIFIABLE_SUMMARY);
   });
 
   it('keeps a verified answer when only a key number was miscited', () => {
