@@ -196,6 +196,23 @@ describe('rounded canonical values', () => {
     });
   });
 
+  it('removes a sentence left pointing at one it just dropped', () => {
+    // Reported from production: stripping "equities are 59%" left "That's
+    // risky…" behind, and the secondary validator flagged the fragment.
+    const response = {
+      summary: 'Your portfolio is worth $1.92 million. Equities are 59% of it. That is risky this close to retirement.',
+      insights: ['Cash is $75,038.94. It could cover more months than that.'],
+      suggested_actions: ['Keep contributing.'],
+    };
+    const salvaged = salvageUngroundedResponse(response, pack, validateResponseFacts(response, pack));
+
+    expect(salvaged.summary).toContain('$1.92 million');
+    expect(salvaged.summary).not.toContain('59%');
+    expect(salvaged.summary).not.toContain('That is risky');
+    // A dependent opener whose antecedent survived is kept.
+    expect(salvaged.insights).toEqual(['Cash is $75,038.94. It could cover more months than that.']);
+  });
+
   it('does not pass an abbreviation off as a surviving summary', () => {
     // "U.S." must not read as a complete sentence that outlived the strip.
     const response = { summary: 'U.S. stocks could lose $999,999 next year.' };

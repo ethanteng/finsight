@@ -341,15 +341,32 @@ function hasSubstantiveContent(text: string): boolean {
   return (text.match(/[A-Za-z0-9$][^\s]*/g) || []).length >= 3;
 }
 
+/**
+ * A sentence that opens by pointing back at the one before it. "Your equity
+ * allocation is 59%. That's risky this close to retirement." — remove the first
+ * and the second is left referring to nothing.
+ */
+const DEPENDENT_OPENER =
+  /^\s*(?:that|this|these|those|it|they|them|its|their|which|such|so|hence|therefore|doing so|as a result|that said|either way|both)\b/i;
+
 /** Drop only the sentences carrying an unverifiable number; keep the rest. */
 function stripSentences(text: string, pack: CanonicalFactPack): { text: string; removed: number } {
   const kept: string[] = [];
   let removed = 0;
+  let previousRemoved = false;
   for (const sentence of splitSentences(text)) {
     if (sentence.trim() && unsupportedClaims(sentence, pack).length > 0) {
       removed++;
+      previousRemoved = true;
       continue;
     }
+    // Its antecedent just went; on its own it reads as a fragment, and a
+    // reviewer or a user will read it as one.
+    if (previousRemoved && sentence.trim() && DEPENDENT_OPENER.test(sentence)) {
+      removed++;
+      continue;
+    }
+    previousRemoved = false;
     kept.push(sentence);
   }
   // Close the gaps left by removed sentences without flattening paragraphs.
