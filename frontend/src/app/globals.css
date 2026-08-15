@@ -410,6 +410,37 @@
 .authenticated-site .admin-button-danger-subtle { border: 1px solid rgb(139 48 39 / .25); background: #f8e8e3; color: #8b3027; }
 .authenticated-site .admin-button-danger-subtle:hover { background: #f3d9d2; }
 
+/* Shared confirm/message dialogs render inline in the React tree, so the product
+   shell restyles them here instead of the component carrying two palettes. */
+.authenticated-site .ui-dialog-panel,
+.app-workspace .ui-dialog-panel {
+  border-color: rgb(16 35 25 / .14);
+  border-radius: 1.25rem;
+  background: var(--auth-cream);
+  color: var(--auth-ink);
+  box-shadow: 0 24px 60px rgb(16 35 25 / .18);
+}
+.authenticated-site .ui-dialog-title,
+.app-workspace .ui-dialog-title { color: var(--auth-ink); }
+.authenticated-site .ui-dialog-message,
+.app-workspace .ui-dialog-message { color: #66736b; }
+.authenticated-site .ui-dialog-confirm,
+.app-workspace .ui-dialog-confirm { background: var(--auth-ink); color: white; }
+.authenticated-site .ui-dialog-confirm:hover,
+.app-workspace .ui-dialog-confirm:hover { background: var(--auth-forest); }
+.authenticated-site .ui-dialog-confirm-danger,
+.app-workspace .ui-dialog-confirm-danger { background: #9b4137; color: white; }
+.authenticated-site .ui-dialog-confirm-danger:hover,
+.app-workspace .ui-dialog-confirm-danger:hover { background: #8b3027; }
+.authenticated-site .ui-dialog-cancel,
+.app-workspace .ui-dialog-cancel {
+  border-color: rgb(16 35 25 / .18);
+  background: #fffdf5;
+  color: var(--auth-ink);
+}
+.authenticated-site .ui-dialog-cancel:hover,
+.app-workspace .ui-dialog-cancel:hover { background: #ecece4; color: var(--auth-ink); }
+
 /* Market context uses the shared Markdown renderer, whose defaults are dark.
    This scope gives the modal a light editorial treatment without affecting
    answer content elsewhere in the product. */

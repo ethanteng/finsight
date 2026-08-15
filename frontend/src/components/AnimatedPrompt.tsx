@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Typewriter from 'typewriter-effect';
 import { pushBeginCheckout } from '@/lib/dataLayer';
+import { useDialog } from '@/components/ui/dialog';
 
 const QUESTIONS = [
   "What part of my retirement plan breaks first if interest rates stay high longer than expected?",
@@ -33,6 +34,7 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef, questions
   const questions = customQuestions ?? QUESTIONS;
   const typewriterRef = useRef<{ state: { elements: { wrapper: HTMLElement } } } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const { showError, dialog } = useDialog();
 
   const handleCheckout = async () => {
     pushBeginCheckout();
@@ -57,10 +59,10 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef, questions
       }
 
       const err = await response.json();
-      alert(err.error || 'Failed to create checkout session. Please try again.');
+      void showError(err.error || 'Failed to create checkout session. Please try again.');
     } catch (error) {
       console.error('Error creating checkout session:', error);
-      alert('An error occurred. Please try again.');
+      void showError('An error occurred. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -147,6 +149,7 @@ const AnimatedPrompt = ({ nestedInLink = false, getCurrentQuestionRef, questions
           }}
         />
       </div>
+    {dialog}
     </div>
   );
 };

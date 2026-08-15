@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import InvestmentPortfolio from '../InvestmentPortfolio';
+import { useDialog } from '../ui/dialog';
 import type {
   FinancesAccount,
   FinancesAccountDetails,
@@ -58,6 +59,7 @@ export default function AccountDetailModal({
   const [displayName, setDisplayName] = useState(account.name || 'Unknown Account');
   const [editName, setEditName] = useState(account.name || '');
   const [isSavingName, setIsSavingName] = useState(false);
+  const { showError, dialog } = useDialog();
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
   const isInvestment = account.type?.toLowerCase() === 'investment';
@@ -118,7 +120,7 @@ export default function AccountDetailModal({
       setIsEditingName(false);
       await onAccountRenamed?.();
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to rename account');
+      void showError(error instanceof Error ? error.message : 'Failed to rename account');
     } finally {
       setIsSavingName(false);
     }
@@ -211,6 +213,8 @@ export default function AccountDetailModal({
           )}
         </div>
       </div>
+
+      {dialog}
     </div>
   );
 }

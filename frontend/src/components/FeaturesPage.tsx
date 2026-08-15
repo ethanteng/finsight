@@ -7,10 +7,12 @@ import { useState } from 'react';
 import RealMathCallout from './RealMathCallout';
 import SiteFooter from './SiteFooter';
 import SiteHeader from './SiteHeader';
+import { useDialog } from '@/components/ui/dialog';
 
 
 const FeaturesPage = () => {
   const [isLoading, setIsLoading] = useState<string | null>(null);
+  const { showError, dialog } = useDialog();
 
   const handleBuyClick = async (planId: string) => {
     pushBeginCheckout();
@@ -38,11 +40,11 @@ const FeaturesPage = () => {
       } else {
         const error = await response.json();
         console.error('Failed to create checkout session:', error);
-        alert('Failed to create checkout session. Please try again.');
+        void showError('Failed to create checkout session. Please try again.');
       }
     } catch (error) {
       console.error('Error creating checkout session:', error);
-      alert('An error occurred. Please try again.');
+      void showError('An error occurred. Please try again.');
     } finally {
       setIsLoading(null);
     }
@@ -417,6 +419,7 @@ const FeaturesPage = () => {
         </div>
       </section>
       <SiteFooter />
+      {dialog}
     </div>
   );
 };

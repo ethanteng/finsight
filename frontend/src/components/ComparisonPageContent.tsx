@@ -8,9 +8,11 @@ import { Button } from "./ui/button";
 import type { ComparisonPage } from "@/lib/comparisons";
 import { COMPARISONS } from "@/lib/comparisons";
 import { pushBeginCheckout } from "@/lib/dataLayer";
+import { useDialog } from '@/components/ui/dialog';
 
 export default function ComparisonPageContent({ page }: { page: ComparisonPage }) {
   const [isLoading, setIsLoading] = useState(false);
+  const { showError, dialog } = useDialog();
 
   const handleBuyClick = async () => {
     pushBeginCheckout();
@@ -35,10 +37,10 @@ export default function ComparisonPageContent({ page }: { page: ComparisonPage }
       }
 
       const err = await response.json();
-      alert(err.error || "Failed to create checkout session. Please try again.");
+      void showError(err.error || "Failed to create checkout session. Please try again.");
     } catch (error) {
       console.error("Error creating checkout session:", error);
-      alert("An error occurred. Please try again.");
+      void showError("An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -116,6 +118,7 @@ export default function ComparisonPageContent({ page }: { page: ComparisonPage }
         </section>
       </main>
       <SiteFooter />
+      {dialog}
     </div>
   );
 }

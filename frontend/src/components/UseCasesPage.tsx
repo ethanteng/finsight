@@ -6,6 +6,7 @@ import { Button } from "./ui/button";
 import SiteFooter from "./SiteFooter";
 import SiteHeader from "./SiteHeader";
 import { pushBeginCheckout } from "@/lib/dataLayer";
+import { useDialog } from '@/components/ui/dialog';
 
 const USE_CASES = [
   { href: "/use-cases/retirement", label: "Retirement Planning", description: "See how Ask Linc analyzes retirement readiness, withdrawal rates, and portfolio sustainability.", icon: PiggyBank },
@@ -16,6 +17,7 @@ const USE_CASES = [
 
 export default function UseCasesPage() {
   const [isLoading, setIsLoading] = useState(false);
+  const { showError, dialog } = useDialog();
 
   const handleBuyClick = async () => {
     pushBeginCheckout();
@@ -40,10 +42,10 @@ export default function UseCasesPage() {
       }
 
       const err = await response.json();
-      alert(err.error || "Failed to create checkout session. Please try again.");
+      void showError(err.error || "Failed to create checkout session. Please try again.");
     } catch (error) {
       console.error("Error creating checkout session:", error);
-      alert("An error occurred. Please try again.");
+      void showError("An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -105,6 +107,7 @@ export default function UseCasesPage() {
         </div>
       </section>
       <SiteFooter />
+      {dialog}
     </div>
   );
 }

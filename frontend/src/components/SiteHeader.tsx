@@ -5,10 +5,12 @@ import Link from 'next/link';
 import { Button } from './ui/button';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 import { USE_CASE_LINKS, COMPARE_LINKS } from '@/lib/site-nav';
+import { useDialog } from '@/components/ui/dialog';
 
 export default function SiteHeader() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isLoading, setIsLoading] = useState<string | null>(null);
+  const { showError, dialog } = useDialog();
   const [isUseCasesOpen, setIsUseCasesOpen] = useState(false);
   const [isCompareOpen, setIsCompareOpen] = useState(false);
 
@@ -31,11 +33,11 @@ export default function SiteHeader() {
         window.location.href = url;
       } else {
         const err = await response.json();
-        alert(err.error || 'Failed to create checkout session. Please try again.');
+        void showError(err.error || 'Failed to create checkout session. Please try again.');
       }
     } catch (err) {
       console.error(err);
-      alert('An error occurred. Please try again.');
+      void showError('An error occurred. Please try again.');
     } finally {
       setIsLoading(null);
     }
@@ -217,6 +219,7 @@ export default function SiteHeader() {
           </div>
         </div>
       )}
+      {dialog}
     </nav>
   );
 }

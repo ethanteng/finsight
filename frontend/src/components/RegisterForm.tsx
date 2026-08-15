@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import SiteFooter from './SiteFooter';
 import { pushBeginCheckout } from '@/lib/dataLayer';
+import { useDialog } from '@/components/ui/dialog';
 
 interface SubscriptionContext {
   subscription: string;
@@ -18,6 +19,7 @@ function RegisterFormContent() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const { showError, dialog } = useDialog();
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [error, setError] = useState('');
   const [subscriptionContext, setSubscriptionContext] = useState<SubscriptionContext | null>(null);
@@ -67,10 +69,10 @@ function RegisterFormContent() {
       }
 
       const err = await response.json();
-      alert(err.error || 'Failed to create checkout session. Please try again.');
+      void showError(err.error || 'Failed to create checkout session. Please try again.');
     } catch (err) {
       console.error(err);
-      alert('An error occurred. Please try again.');
+      void showError('An error occurred. Please try again.');
     } finally {
       setIsCheckoutLoading(false);
     }
@@ -248,6 +250,7 @@ function RegisterFormContent() {
       </div>
       </div>
       <SiteFooter />
+      {dialog}
     </div>
   );
 }
