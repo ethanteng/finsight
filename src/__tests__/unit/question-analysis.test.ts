@@ -133,6 +133,14 @@ describe('question-aware LLM context routing', () => {
     ]) {
       expect(analyzeQuestionNeeds(question)).toMatchObject({ needsTransactionDetails: false });
     }
+
+    // "on track" is a progress idiom, not "spending on [category]".
+    for (const question of [
+      'Am I spending on track to retire?',
+      'Is my spending on track for retirement?',
+    ]) {
+      expect(analyzeQuestionNeeds(question)).toMatchObject({ needsTransactionDetails: false });
+    }
   });
 
   it('does not load transactions for questions that merely say "money"', () => {

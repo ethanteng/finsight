@@ -53,8 +53,9 @@ function analyzeSingleQuestion(question: string): QuestionNeeds {
     /\b(recent|latest|largest|individual|specific)\s+(spend|spending|expense|expenses|income)\b/.test(qLower) ||
     // "spending on dining out" names a category, so it needs the breakdown.
     // Matching the preposition keeps that separate from "my monthly spending",
-    // which is answered by a single number.
-    /\bspend(?:ing)?\s+(?:at|with|from|on)\b/.test(qLower) ||
+    // which is answered by a single number. Exclude "on track" — that idiom is
+    // about progress toward a goal, not spending on a category.
+    /\bspend(?:ing)?\s+(?:at|with|from|on(?!\s+track))\b/.test(qLower) ||
     evaluatesSpending;
 
   const needsMonthlyCashFlow =
