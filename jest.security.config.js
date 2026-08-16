@@ -15,7 +15,9 @@ module.exports = {
   ],
   setupFilesAfterEnv: [
     '<rootDir>/src/__tests__/integration/security-test-setup.ts',
-    '<rootDir>/src/__tests__/setup/test-database.ts'
+    // Security suites import testPrisma from test-database-ci; use the same module here
+    // so hooks register once and privacySettings is cleared before user deletes.
+    '<rootDir>/src/__tests__/setup/test-database-ci.ts'
   ],
   testTimeout: 60000, // 60 seconds for security tests
   // Serialized: these suites share one PostgreSQL database and their hooks call
