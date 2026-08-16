@@ -2481,6 +2481,28 @@ app.post('/admin/ai/routing-preview', adminAuth, async (req: Request, res: Respo
   }
 });
 
+/**
+ * Turn a Prisma failure into an ops-actionable message when the cause is a
+ * migration that has not been applied. Without this the model endpoints return
+ * a bare 500 and the missing `models` column looks like a code bug.
+ */
+function modelConfigErrorMessage(error: unknown, fallback: string): string {
+  const message = error instanceof Error ? error.message : '';
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? (error as { code?: string }).code
+      : undefined;
+  // P2021: table missing. P2022: column missing — the shape this migration takes.
+  const missingSchema =
+    code === 'P2021' ||
+    code === 'P2022' ||
+    message.includes('ai_prompt_config') ||
+    message.includes('does not exist');
+  return missingSchema
+    ? 'Database migration missing (ai_prompt_config.models column). Run prisma migrate deploy on production, then retry.'
+    : fallback;
+}
+
 // Admin: Read the configured models, with each one checked against what the
 // provider actually serves right now.
 app.get('/admin/ai/models', adminAuth, async (req: Request, res: Response) => {
@@ -2507,7 +2529,7 @@ app.get('/admin/ai/models', adminAuth, async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error reading model config:', error);
     Sentry.captureException(error instanceof Error ? error : new Error(String(error)));
-    res.status(500).json({ error: 'Failed to read model config' });
+    res.status(500).json({ error: modelConfigErrorMessage(error, 'Failed to read model config') });
   }
 });
 
@@ -2586,7 +2608,7 @@ app.put('/admin/ai/models', adminAuth, async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error updating model config:', error);
     Sentry.captureException(error instanceof Error ? error : new Error(String(error)));
-    res.status(500).json({ error: 'Failed to update model config' });
+    res.status(500).json({ error: modelConfigErrorMessage(error, 'Failed to update model config') });
   }
 });
 
