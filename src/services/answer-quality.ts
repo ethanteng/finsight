@@ -289,6 +289,15 @@ function reasonsFor(observations: readonly Observation[]): ScorecardReason[] {
       },
     },
     {
+      // The salvage and replace buckets already carry every other untraceable
+      // answer, so this bucket is what keeps a passed-but-unsourced answer from
+      // being graded yellow and then explained by nothing.
+      id: 'unsupportedValues',
+      label: 'Answers that used numbers we could not trace to a source',
+      severity: 'yellow',
+      matches: (observation) => observation.outcome === 'passed' && observation.unsupportedValues > 0,
+    },
+    {
       id: 'mixedRating',
       label: 'Answers the user rated 3 out of 5',
       severity: 'yellow',
@@ -323,8 +332,17 @@ export interface Scorecard {
   headline: string;
   answers: number;
   counts: Record<Grade, number>;
-  /** Against the previous, equally sized batch of answers. Null when too small to say. */
-  trend: { previousScore: number; delta: number; comparedAnswers: number } | null;
+  /**
+   * The newest batch of answers against the one before it. Both batch scores are
+   * reported because neither equals `score` above, which averages the whole
+   * window — a trend shown as a bare delta would read as if the headline moved.
+   */
+  trend: {
+    recentScore: number;
+    previousScore: number;
+    delta: number;
+    comparedAnswers: number;
+  } | null;
   reasons: ScorecardReason[];
 }
 
@@ -338,7 +356,7 @@ function trendFor(observations: readonly Observation[]): Scorecard['trend'] {
   const recent = scoreOf(observations.slice(0, batch));
   const previous = scoreOf(observations.slice(batch, batch * 2));
   if (recent === null || previous === null) return null;
-  return { previousScore: previous, delta: recent - previous, comparedAnswers: batch };
+  return { recentScore: recent, previousScore: previous, delta: recent - previous, comparedAnswers: batch };
 }
 
 function headlineFor(score: number | null, counts: Record<Grade, number>, answers: number): string {

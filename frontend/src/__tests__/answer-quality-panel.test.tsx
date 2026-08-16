@@ -16,7 +16,7 @@ function report(overrides: Record<string, unknown> = {}) {
       headline: '3 of the last 6 answers were solid, but 2 came out shaky and 1 went wrong.',
       answers: 6,
       counts: { green: 3, yellow: 2, red: 1 },
-      trend: { previousScore: 80, delta: -18, comparedAnswers: 3 },
+      trend: { recentScore: 62, previousScore: 80, delta: -18, comparedAnswers: 3 },
       reasons: [
         {
           id: 'replaced',
@@ -88,7 +88,9 @@ describe('AnswerQualityPanel', () => {
     expect(await screen.findByText('62')).toBeInTheDocument();
     expect(screen.getByText('Needs attention')).toBeInTheDocument();
     expect(screen.getByText(/3 of the last 6 answers were solid/)).toBeInTheDocument();
-    expect(screen.getByText('▼ 18 pts vs the previous 3 answers')).toBeInTheDocument();
+    // Both batch scores are named, because the headline score averages the whole
+    // window and a bare delta beside it would read as the headline moving.
+    expect(screen.getByText('▼ 18 pts — last 3 scored 62, previous 3 scored 80')).toBeInTheDocument();
     expect(screen.getByText('Good: 3')).toBeInTheDocument();
     expect(screen.getByText('Answers that needed a second attempt to find the right data')).toBeInTheDocument();
     expect(screen.getByText('usually went back for investment holdings')).toBeInTheDocument();
@@ -113,6 +115,26 @@ describe('AnswerQualityPanel', () => {
     await screen.findByText('62');
     expect(screen.getByText('We could not back up the answer, so it was replaced')).toBeInTheDocument();
     expect(screen.getByText('1/5')).toBeInTheDocument();
+  });
+
+  it('does not credit a user verdict nobody gave when nothing has been rated', async () => {
+    mockReport(report({
+      scorecard: {
+        score: 100,
+        status: 'green',
+        headline: '4 of the last 4 answers were solid and none went wrong.',
+        answers: 4,
+        counts: { green: 4, yellow: 0, red: 0 },
+        trend: null,
+        reasons: [],
+      },
+      window: { from: null, to: null, conversations: 4, withManifest: 4, rated: 0 },
+      recent: [],
+    }));
+    render(<AnswerQualityPanel apiUrl="https://api.test" getAuthHeaders={() => ({})} />);
+
+    expect(await screen.findByText(/none have been rated by a user yet/)).toBeInTheDocument();
+    expect(screen.queryByText(/well rated/)).not.toBeInTheDocument();
   });
 
   it('says so plainly when there is nothing to score yet', async () => {

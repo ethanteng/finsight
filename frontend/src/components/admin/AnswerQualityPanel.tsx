@@ -55,7 +55,7 @@ interface Scorecard {
   headline: string;
   answers: number;
   counts: Record<Grade, number>;
-  trend: { previousScore: number; delta: number; comparedAnswers: number } | null;
+  trend: { recentScore: number; previousScore: number; delta: number; comparedAnswers: number } | null;
   reasons: ScorecardReason[];
 }
 
@@ -127,15 +127,18 @@ function GradeBar({ counts, total }: { counts: Record<Grade, number>; total: num
   );
 }
 
+/**
+ * Names both batch scores. The headline score averages the whole window, so a
+ * bare delta beside it would read as if the headline itself had moved.
+ */
 function TrendNote({ trend }: { trend: Scorecard['trend'] }) {
   if (!trend) return null;
-  if (trend.delta === 0) {
-    return <span className="text-sm text-gray-400">Flat vs the previous {trend.comparedAnswers} answers</span>;
-  }
+  const batches = `last ${trend.comparedAnswers} scored ${trend.recentScore}, previous ${trend.comparedAnswers} scored ${trend.previousScore}`;
+  if (trend.delta === 0) return <span className="text-sm text-gray-400">Flat — {batches}</span>;
   const improving = trend.delta > 0;
   return (
     <span className={`text-sm ${improving ? 'text-green-300' : 'text-red-300'}`}>
-      {improving ? '▲' : '▼'} {Math.abs(trend.delta)} pts vs the previous {trend.comparedAnswers} answers
+      {improving ? '▲' : '▼'} {Math.abs(trend.delta)} pts — {batches}
     </span>
   );
 }
@@ -244,7 +247,11 @@ export default function AnswerQualityPanel({
           <div className="space-y-2 mb-6">
             {scorecard.reasons.length === 0 && (
               <div className="text-sm text-gray-400">
-                Nothing — every graded answer came back verified and well rated.
+                {/* Unrated answers grade green on verification alone, so this must
+                    not claim a user verdict that nobody gave. */}
+                {report.window.rated === 0
+                  ? 'Nothing — every answer came back verified, though none have been rated by a user yet.'
+                  : 'Nothing — every graded answer came back verified and well rated.'}
               </div>
             )}
             {scorecard.reasons.map((reason) => (

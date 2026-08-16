@@ -218,14 +218,39 @@ describe('answer quality report', () => {
         .toBe('usually went back for investment holdings');
     });
 
+    it('gives every downgraded answer a reason to appear under', () => {
+      // One answer of each shape that costs points, including the awkward case
+      // of an answer that passed but still cited a number we cannot source.
+      const report = buildAnswerQualityReport([
+        conversation({ id: 'a', question: 'replaced', minute: 5, valid: false, outcome: 'replaced' }),
+        conversation({ id: 'b', question: 'salvaged', minute: 4, valid: false, outcome: 'salvaged' }),
+        conversation({ id: 'c', question: 'retried', minute: 3, escalated: true, routed: { investmentDetailsIncluded: false } }),
+        conversation({
+          id: 'd', question: 'passed but unsourced', minute: 2, outcome: 'passed',
+          issues: ['User-facing usd value 250000 is not present in the canonical fact pack.'],
+        }),
+        conversation({ id: 'e', question: 'rated three', minute: 1, rating: 3 }),
+      ]);
+
+      expect(report.scorecard.counts).toEqual({ green: 0, yellow: 4, red: 1 });
+      const covered = new Set(report.scorecard.reasons.map((reason) => reason.id));
+      expect(covered).toEqual(new Set(['replaced', 'salvaged', 'escalated', 'unsupportedValues', 'mixedRating']));
+      expect(report.scorecard.reasons.find((reason) => reason.id === 'unsupportedValues'))
+        .toMatchObject({ answers: 1, example: { id: 'd', question: 'passed but unsourced' } });
+    });
+
     it('compares the recent batch with the one before it once there is enough to compare', () => {
       const older = [1, 2, 3, 4, 5].map((minute) => conversation({
         id: `old${minute}`, question: 'q', minute, rating: 1, valid: false, outcome: 'replaced',
       }));
       const recent = [6, 7, 8, 9, 10].map((minute) => conversation({ id: `new${minute}`, question: 'q', minute, rating: 5 }));
 
-      expect(buildAnswerQualityReport([...older, ...recent]).scorecard.trend)
-        .toEqual({ previousScore: 0, delta: 100, comparedAnswers: 5 });
+      // Both batch scores are reported: the headline score averages the whole
+      // window (50 here), so a bare +100 delta beside it would not add up.
+      const report = buildAnswerQualityReport([...older, ...recent]);
+      expect(report.scorecard.score).toBe(50);
+      expect(report.scorecard.trend)
+        .toEqual({ recentScore: 100, previousScore: 0, delta: 100, comparedAnswers: 5 });
       // Nine answers cannot be split into two batches of five.
       expect(buildAnswerQualityReport([...older, ...recent.slice(1)]).scorecard.trend).toBeNull();
     });
