@@ -143,7 +143,7 @@ export default function AppPageClient() {
       <header className="sticky top-0 z-40 flex h-16 items-center border-b border-[#102319]/10 bg-[#f3f2e9]/95 px-4 backdrop-blur lg:hidden">
         <button onClick={() => setMobileNavOpen(!mobileNavOpen)} className="rounded-full p-2 hover:bg-[#102319]/5" aria-label="Toggle navigation">{mobileNavOpen ? <X /> : <Menu />}</button>
         <span className="ml-3 flex items-center gap-2 text-lg font-extrabold tracking-[-.04em]"><span className="grid h-8 w-8 place-items-center rounded-[9px_9px_9px_2px] bg-[#102319] text-sm font-extrabold text-[#d9ff6f]">L</span>Ask Linc</span>
-        <button onClick={() => setSelectedPrompt(null)} className="ml-auto rounded-full bg-[#d9ff6f] p-2 text-[#102319]" aria-label="Start a new decision"><Plus /></button>
+        <button onClick={() => { setSelectedPrompt(null); setNewDecisionNonce(nonce => nonce + 1); }} className="ml-auto rounded-full bg-[#d9ff6f] p-2 text-[#102319]" aria-label="Start a new decision"><Plus /></button>
       </header>
 
       <aside className={`${mobileNavOpen ? 'flex' : 'hidden'} fixed inset-y-16 left-0 z-30 w-full flex-col bg-[#102319] text-[#f8f4e9] lg:inset-y-0 lg:flex lg:w-72`}>
