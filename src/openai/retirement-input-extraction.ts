@@ -151,6 +151,11 @@ export function validateExtractedInputs(raw: unknown): ExtractedRetirementInputs
   return result;
 }
 
+/** True when the model reported at least one input value (not just empty sources). */
+export function hasExtractedRetirementValues(inputs: ExtractedRetirementInputs): boolean {
+  return FIELDS.some((field) => inputs[field] != null);
+}
+
 /**
  * @param question the message being answered
  * @param priorTurns earlier turns of this decision, newest first
@@ -179,7 +184,10 @@ export async function extractRetirementInputs(
 
     const content = response.choices[0]?.message?.content;
     if (!content) return null;
-    return validateExtractedInputs(JSON.parse(content));
+    const validated = validateExtractedInputs(JSON.parse(content));
+    // An all-null payload is still a successful API call but carries no inputs;
+    // treat it like a failed extraction so the pattern matcher can run.
+    return hasExtractedRetirementValues(validated) ? validated : null;
   } catch (error) {
     // Never fatal: the pattern matcher still runs, and a missing input is
     // reported to the user as missing rather than surfacing as a failed answer.

@@ -7,6 +7,7 @@
 
 import {
   buildExtractionTranscript,
+  hasExtractedRetirementValues,
   validateExtractedInputs,
 } from '../../openai/retirement-input-extraction';
 
@@ -111,5 +112,33 @@ describe('validateExtractedInputs', () => {
       expect(result.annualWithdrawalAmount).toBeUndefined();
       expect(result.sources).toEqual({});
     }
+  });
+});
+
+describe('hasExtractedRetirementValues', () => {
+  it('is false when every field is missing so the caller can fall back to patterns', () => {
+    expect(hasExtractedRetirementValues(validateExtractedInputs({ sources: {} }))).toBe(false);
+    expect(
+      hasExtractedRetirementValues(
+        validateExtractedInputs({
+          currentAge: null,
+          retirementAge: null,
+          annualWithdrawalAmount: null,
+          withdrawalStartAge: null,
+          lifeExpectancy: null,
+          sources: {
+            currentAge: null,
+            retirementAge: null,
+            annualWithdrawalAmount: null,
+            withdrawalStartAge: null,
+            lifeExpectancy: null,
+          },
+        })
+      )
+    ).toBe(false);
+  });
+
+  it('is true when at least one value survived validation', () => {
+    expect(hasExtractedRetirementValues(validateExtractedInputs({ retirementAge: 62 }))).toBe(true);
   });
 });
