@@ -7,7 +7,11 @@
 import Anthropic from '@anthropic-ai/sdk';
 import * as Sentry from '@sentry/node';
 import { buildFinancialReasoningPrompt, FinancialReasoningPromptInput } from './financial-reasoning-prompt';
-import { getActiveModel } from './model-config';
+import {
+  getActiveGenerationSetting,
+  getActiveModel,
+  getActiveNumericGenerationSetting,
+} from './model-config';
 
 let anthropicClient: Anthropic | null = null;
 
@@ -29,13 +33,13 @@ export interface AskClaudeOptions {
 
 export const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
 
-/** Shared by the primary Claude path and the OpenAI fallback so both honor the same ceiling. */
+/**
+ * Anthropic requires `max_tokens`, so this slot's setting is not omittable and
+ * an unusable stored value still has to resolve to a number.
+ */
 export function resolveAskLincMaxOutputTokens(): number {
-  const value = Number.parseInt(
-    process.env.ASK_LINC_MAX_OUTPUT_TOKENS || String(DEFAULT_MAX_OUTPUT_TOKENS),
-    10
-  );
-  return Number.isFinite(value) && value > 0 ? value : DEFAULT_MAX_OUTPUT_TOKENS;
+  const value = getActiveNumericGenerationSetting('analysis', 'maxOutputTokens');
+  return value !== null && value > 0 ? value : DEFAULT_MAX_OUTPUT_TOKENS;
 }
 
 /**
@@ -43,11 +47,25 @@ export function resolveAskLincMaxOutputTokens(): number {
  * moved underneath us: omitting it meant "no thinking" on Sonnet 4.5 and means
  * adaptive thinking on Sonnet 5. Since `max_tokens` bounds thinking and answer
  * together, that silently shortened the answer budget the day the analysis slot
- * changed. Medium effort pulls the spend back below the `high` default while
- * keeping the reasoning that grounds a numbers-heavy answer.
+ * changed. The values come from the admin config so tuning cost and latency
+ * does not need a deploy; see GENERATION_SETTINGS for the defaults.
  */
-const THINKING_CONFIG = { type: 'adaptive' } as const;
-const EFFORT_CONFIG = { effort: 'medium' } as const;
+const DISABLED_THINKING = { type: 'disabled' } as const;
+const ADAPTIVE_THINKING = { type: 'adaptive' } as const;
+
+/**
+ * The SDK types effort as a literal union, so the configured string has to be
+ * narrowed back to it. The config is the source of truth for what an admin may
+ * pick; this list only has to agree with it, and an unrecognised value falls
+ * back rather than being sent through as an unchecked string.
+ */
+type EffortLevel = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+const EFFORT_LEVELS: readonly string[] = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+function resolveEffort(): EffortLevel {
+  const value = getActiveGenerationSetting('analysis', 'effort');
+  return EFFORT_LEVELS.includes(value) ? (value as EffortLevel) : 'medium';
+}
 
 /**
  * Adaptive thinking and `output_config.effort` arrived with the 4.6 generation;
@@ -74,11 +92,23 @@ export function supportsAdaptiveThinking(model: string): boolean {
 
 /** The reasoning parameters this model accepts — empty for pre-4.6 models. */
 function reasoningParams(model: string): {
-  thinking?: typeof THINKING_CONFIG;
-  output_config?: typeof EFFORT_CONFIG;
+  thinking?: typeof ADAPTIVE_THINKING | typeof DISABLED_THINKING;
+  output_config?: { effort: EffortLevel };
 } {
   if (!supportsAdaptiveThinking(model)) return {};
-  return { thinking: THINKING_CONFIG, output_config: EFFORT_CONFIG };
+
+  // Effort is deliberately omitted when thinking is off. It is the setting that
+  // tunes how much thinking happens, so it has nothing to act on — and the
+  // combination is rejected outright above `high` on some models, which would
+  // take the primary provider down for a setting that was doing nothing.
+  if (getActiveGenerationSetting('analysis', 'thinking') === 'disabled') {
+    return { thinking: DISABLED_THINKING };
+  }
+
+  return {
+    thinking: ADAPTIVE_THINKING,
+    output_config: { effort: resolveEffort() },
+  };
 }
 
 /**

@@ -11,7 +11,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AskLincResponse } from './structured-response';
 import { FinancialContextSnapshot } from './types';
 import { mergeAssetAllocation } from '../services/asset-class';
-import { getActiveModel } from './model-config';
+import { getActiveModel, getActiveNumericGenerationSetting } from './model-config';
 
 const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '';
 
@@ -170,7 +170,20 @@ export async function validateWithGemini(
 
   try {
     const client = getClient();
-    const model = client.getGenerativeModel({ model: getActiveModel('validation') });
+    // Until these settings existed the review ran on Gemini's own defaults with
+    // no generationConfig at all, so both ship as `off` and nothing is sent
+    // unless an admin asks for it.
+    const temperature = getActiveNumericGenerationSetting('validation', 'temperature');
+    const maxOutputTokens = getActiveNumericGenerationSetting('validation', 'maxOutputTokens');
+    const generationConfig = {
+      ...(temperature === null ? {} : { temperature }),
+      ...(maxOutputTokens === null ? {} : { maxOutputTokens }),
+    };
+
+    const model = client.getGenerativeModel({
+      model: getActiveModel('validation'),
+      ...(Object.keys(generationConfig).length === 0 ? {} : { generationConfig }),
+    });
 
     const snapshotSummary = buildSnapshotSummaryForValidation(context.snapshot);
     console.log('Ask Linc: Gemini validation prompt includes snapshot summary, length:', snapshotSummary.length);
