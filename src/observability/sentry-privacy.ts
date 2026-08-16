@@ -4,7 +4,7 @@ const FILTERED = '[Filtered]';
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const IPV4_RE = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
 const UUID_RE = /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi;
-const BEARER_RE = /\b(Bearer\s+)[A-Z0-9._~+\/-]+=*/gi;
+const BEARER_RE = /\b(Bearer\s+)[A-Z0-9._~+/-]+=*/gi;
 const SENSITIVE_KEY_RE = /(?:^|[_-])(authorization|cookie|password|secret|api[_-]?key|access[_-]?token|refresh[_-]?token|user[_-]?id|session[_-]?id|email|ip(?:[_-]?address)?|street|postal|question|answer|prompt|conversation|financial|account[_-]?number|routing[_-]?number)(?:$|[_-])/i;
 
 function stripUrlQuery(value: string): string {
