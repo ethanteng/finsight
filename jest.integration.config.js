@@ -3,7 +3,11 @@ module.exports = {
   testEnvironment: 'node',
   testMatch: [
     '**/__tests__/integration/**/*.test.ts',
-    '**/__tests__/integration/**/*.spec.ts'
+    '**/__tests__/integration/**/*.spec.ts',
+    // src/__tests__/auth was excluded from every config, so 39 tests never ran
+    // anywhere and quietly rotted. They need a database and supertest, which this
+    // config already provides.
+    '**/__tests__/auth/**/*.test.ts'
   ],
   // Keep in sync with jest.integration.ci.config.js — security suites are owned
   // by the security configs, which run them without this config's plaidClient stub.

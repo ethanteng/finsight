@@ -71,24 +71,23 @@ run_test "CI Environment" "CI=true GITHUB_ACTIONS=true" "pass" || exit 1
 # Test 2: Normal local environment (should pass)
 run_test "Local Environment" "" "pass" || exit 1
 
-# Test 3: Database fallback (should pass with mock when database unavailable)
-run_test "Database Fallback" "DATABASE_URL=postgresql://invalid:invalid@localhost:9999/invalid CI=true" "pass" || exit 1
+# Test 3: An unreachable database must FAIL in CI mode. This used to assert the
+# opposite — that the suite stayed green by falling back to an in-memory mock —
+# which is exactly the behaviour that made the security tests unable to fail.
+run_test "Unreachable database is fatal in CI" "DATABASE_URL=postgresql://invalid:invalid@localhost:9999/invalid CI=true" "fail" || exit 1
 
 # Test 4: Run specific problematic tests
 echo -e "\n${YELLOW}🎯 Running previously problematic tests...${NC}"
 CI=true GITHUB_ACTIONS=true npm run test:integration:ci -- --testPathPattern="plaid-security|market-news" || exit 1
 
-# Test 5: Profile Encryption Tests (need real database)
-echo -e "\n${YELLOW}🔒 Running Profile Encryption Tests with real database...${NC}"
-echo -e "${YELLOW}   - Profile Encryption Security (real DB)${NC}"
-npm run test:security:ci -- --testPathPattern="profile-encryption-security" || exit 1
+# Test 5 & 6: the two security commands the workflow actually runs, in order.
+# These replace separate profile-encryption / complete-security / plaid-security
+# invocations that went through configs the workflow never called.
+echo -e "\n${YELLOW}🔒 Running Security Tests (same commands as ci-cd.yml)...${NC}"
+echo -e "${YELLOW}   - Real security suites (unmocked Plaid client)${NC}"
+CI=true GITHUB_ACTIONS=true npm run test:real-security || exit 1
 
-# Test 6: Security Tests (CRITICAL for CI/CD)
-echo -e "\n${YELLOW}🔒 Running Security Tests...${NC}"
-echo -e "${YELLOW}   - Complete Security Suite${NC}"
-CI=true GITHUB_ACTIONS=true npm run test:complete-security || exit 1
-
-echo -e "${YELLOW}   - Plaid Security Integration${NC}"
-CI=true GITHUB_ACTIONS=true npm run test:integration:ci -- --testPathPattern="plaid-security" || exit 1
+echo -e "${YELLOW}   - Core security suites${NC}"
+CI=true GITHUB_ACTIONS=true npm run test:security || exit 1
 
 echo -e "\n${GREEN}🎉 All tests passed! Safe to push to CI/CD.${NC}"

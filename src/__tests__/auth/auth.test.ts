@@ -22,8 +22,12 @@ const mockPrisma = {
   }
 };
 
-// Mock the getPrismaClient function
-jest.mock('../../index', () => ({
+// Mock the getPrismaClient function.
+// This mocked '../../index' until getPrismaClient moved to '../../prisma-client';
+// src/index.ts no longer exports it at all, so the mock silently did nothing and
+// the middleware reached the real client. Undetected because this suite was not
+// wired into any config CI runs.
+jest.mock('../../prisma-client', () => ({
   getPrismaClient: () => mockPrisma
 }));
 
