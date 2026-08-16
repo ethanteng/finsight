@@ -136,6 +136,8 @@ describe('question-aware LLM context routing', () => {
       'Factor in Social Security and Medicare into my retirement plan.',
       'Can you look up the current Medicare Part B premium?',
       'I do not know the figure — look it up.',
+      // Naming a web search outright is not overridden by the own-data test.
+      'Search the web for my Social Security amount.',
     ]) {
       expect(analyzeQuestionNeeds(question)).toMatchObject({ needsSearchContext: true });
     }
@@ -144,6 +146,10 @@ describe('question-aware LLM context routing', () => {
     for (const question of [
       'Look up my Amazon charges from last month.',
       'Look up your bank transactions from last week.',
+      // The possessive moves. A lookahead for the next token after "look up"
+      // misses both of these, and they are the user's own data all the same.
+      'Look up in my transactions what I paid Amazon.',
+      'Look up Amazon in my transactions.',
       'How much Google stock do I own?',
     ]) {
       expect(analyzeQuestionNeeds(question)).toMatchObject({ needsSearchContext: false });

@@ -37,16 +37,27 @@ function analyzeSingleQuestion(question: string): QuestionNeeds {
   // good numbers for my Social Security benefit" — the request named no rate, so
   // the one question that explicitly asked to search was answered without it.
   //
-  // Kept to phrasings that can only mean "go outside". A possessive after "look
-  // up" points at the user's own data ("look up my Amazon charges"), and "how
-  // much Google do I own" is a holdings question, so a bare "google" is not the
-  // signal either.
+  // Kept to phrasings that can only mean "go outside". "How much Google do I
+  // own" is a holdings question, so a bare "google" is not the signal.
+  //
+  // "Look up" is the ambiguous one: it points outside in "look up the Medicare
+  // premium" and at the user's own data in "look up my Amazon charges". A
+  // lookahead for the next token is not enough, because the possessive moves —
+  // "look up in my transactions what I paid Amazon" puts it three words later.
+  // So the test is whether the sentence names the user's own data anywhere,
+  // which is what "my transactions" and "our accounts" always mean. Naming a
+  // web search outright is never overridden by this: "search the web for my
+  // Social Security amount" is still a search.
+  const namesOwnData =
+    /\b(?:my|our|your|their)\s+(?:\w+\s+){0,2}?(?:account|accounts|transaction|transactions|balance|balances|statement|statements|holding|holdings|portfolio|spending|charges|purchases|history)\b/.test(qLower);
+
   const asksForLookup =
     /\b(?:web|internet|online)\s+search\b/.test(qLower) ||
     /\bsearch\s+(?:the\s+)?(?:web|internet|online)\b/.test(qLower) ||
-    /\blook\s+(?:it|this|that|those|them)\s+up\b/.test(qLower) ||
-    /\blook\s+up\b(?!\s+(?:my|our|your|their)\b)/.test(qLower) ||
-    /\bgoogle\s+(?:it|this|that)\b/.test(qLower);
+    /\bgoogle\s+(?:it|this|that)\b/.test(qLower) ||
+    (!namesOwnData &&
+      (/\blook\s+(?:it|this|that|those|them)\s+up\b/.test(qLower) ||
+        /\blook\s+up\b(?!\s+(?:my|our|your|their)\b)/.test(qLower)));
 
   const needsSearchContext =
     matchesCategory('searchContext', qLower) ||

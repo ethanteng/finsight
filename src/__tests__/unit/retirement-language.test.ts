@@ -36,7 +36,12 @@ const RETIREMENT_PHRASINGS = [
   'am I going to outlive my savings?',
   'how long can I live off my investments?',
   'how long will my 401k last?',
+  'how long will my 401(k) last?',
   'how long will my IRA last?',
+  // The duration on the other side of the asset — how people ask it once they
+  // already have a number in mind.
+  'will my savings last 20 years?',
+  'will my savings last until I am 90?',
 ];
 
 const NON_RETIREMENT_PHRASINGS = [
@@ -49,6 +54,13 @@ const NON_RETIREMENT_PHRASINGS = [
   // Same shape, different question: an emergency fund is drawn down by a job
   // loss, and the projection would answer by asking for a retirement age.
   'how long will my emergency fund last if I lose my job?',
+  // "last" as the time idiom, not as running out. A duration, an asset and the
+  // word "last" appear here in the right order and mean nothing of the kind.
+  'how many months of savings did I use last year?',
+  'how much did I add to my savings last month?',
+  // Living on an income is a question about that income. Requiring the asset
+  // after "live off/on" is what separates it from living off a portfolio.
+  'how long can I live on welfare?',
 ];
 
 describe('retirement language', () => {

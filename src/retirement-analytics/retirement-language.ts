@@ -30,16 +30,28 @@ const DEBT_PAYOFF =
  * either order, with anything between them. Naming the assets is what keeps
  * "how long will my mortgage last" out; that one is a loan term.
  */
-const ASSET = String.raw`(?:money|savings|portfolio|nest\s+egg|assets?|investments?|funds?|cash|401k|403b|iras?|roth\s+iras?|brokerage(?:\s+account)?s?)`;
+const ASSET = String.raw`(?:money|savings|portfolio|nest\s+egg|assets?|investments?|funds?|cash|401\(?k\)?|403\(?b\)?|iras?|roth\s+iras?|brokerage(?:\s+account)?s?)`;
 const DURATION = String.raw`(?:how\s+long|how\s+much\s+longer|how\s+many\s+(?:more\s+)?(?:years|months))`;
+/**
+ * Running out. "last" has to refuse the time idiom: without this, "how many
+ * months of savings did I use last year" is a duration, an asset and the word
+ * "last" in the right order, and routes as a runway question.
+ */
+const DEPLETES = String.raw`(?:lasts?(?!\s+(?:month|months|year|years|week|weeks|quarter|night|time|few|couple))|hold\s+out|holds\s+out|hold\s+up|holds\s+up|stretch(?:es)?)`;
 /** Bounded, and stops at sentence punctuation so it cannot span two questions. */
 const GAP = String.raw`[^?!.]{0,60}?`;
 
 const RUNWAY_PATTERNS = [
   // "how long will my money last", "how many years will the portfolio hold out"
-  new RegExp(String.raw`\b${DURATION}\b${GAP}\b${ASSET}\b${GAP}\b(?:last|lasts|hold\s+out|hold\s+up|stretch)\b`, 'i'),
-  // "how long can I live off my savings"
-  new RegExp(String.raw`\b${DURATION}\b${GAP}\blive\s+(?:off|on)\b`, 'i'),
+  new RegExp(String.raw`\b${DURATION}\b${GAP}\b${ASSET}\b${GAP}\b${DEPLETES}\b`, 'i'),
+  // "will my savings last 20 years?", "will the portfolio last until I am 90?".
+  // The same question with the duration on the other side of the asset, which is
+  // how people ask it when they already have a number in mind.
+  new RegExp(String.raw`\b(?:will|would|can|could|is|are)\b${GAP}\b(?:my|our|the)\s+${ASSET}\b${GAP}\b${DEPLETES}\b`, 'i'),
+  // "how long can I live off my savings". The asset is required: living on a
+  // pension, on welfare, or on one income is a question about that income, and
+  // the projection would answer it by asking for a portfolio.
+  new RegExp(String.raw`\b${DURATION}\b${GAP}\blive\s+(?:off|on)\b${GAP}\b${ASSET}\b`, 'i'),
   // "will I run out of money?", "am I going to outlive my savings?"
   new RegExp(String.raw`\brun(?:ning)?\s+out\s+of\s+(?:my\s+|our\s+|the\s+)?${ASSET}\b`, 'i'),
   new RegExp(String.raw`\boutliv\w*\s+(?:my|our|the)\s+${ASSET}\b`, 'i'),

@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { UserTier } from '../data/types';
+import { getPrismaClient } from '../prisma-client';
 import { MarketNewsAggregator } from './aggregator';
 import { MarketNewsSynthesizer, MarketNewsContext } from './synthesizer';
 import { MarketNewsData } from './aggregator';
@@ -8,11 +9,16 @@ export class MarketNewsManager {
   private aggregator: MarketNewsAggregator;
   private synthesizer: MarketNewsSynthesizer;
   public prisma: PrismaClient;
-  
+
   constructor() {
     this.aggregator = new MarketNewsAggregator();
     this.synthesizer = new MarketNewsSynthesizer();
-    this.prisma = new PrismaClient();
+    // The shared client, not a new one. A manager is constructed per request in
+    // the answer path, and its own PrismaClient was never disconnected — one
+    // connection pool per question. That was survivable while market context was
+    // reached by almost nothing; routing every retirement question here is what
+    // would have turned it into refused connections.
+    this.prisma = getPrismaClient();
   }
   
   async updateMarketContext(tier: UserTier): Promise<void> {
