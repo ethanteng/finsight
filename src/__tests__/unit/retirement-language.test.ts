@@ -35,6 +35,8 @@ const RETIREMENT_PHRASINGS = [
   'will I run out of money?',
   'am I going to outlive my savings?',
   'how long can I live off my investments?',
+  'how long will my 401k last?',
+  'how long will my IRA last?',
 ];
 
 const NON_RETIREMENT_PHRASINGS = [
