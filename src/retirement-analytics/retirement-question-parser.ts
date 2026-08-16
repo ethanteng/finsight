@@ -164,6 +164,35 @@ function extractBareSpendingAnswer(question: string): number | undefined {
   return annual >= MIN_BARE_ANNUAL_AMOUNT ? annual : undefined;
 }
 
+/**
+ * Amount-only replies from an earlier turn: "$125k a year", "125,000". The
+ * topical gate blocks period-only wording from unrelated salary sentences, but
+ * a short reply whose whole content is the number should still carry into a
+ * later "re-run my retirement analysis".
+ */
+function extractPriorTurnSpendingAmount(question: string): number | undefined {
+  const trimmed = question.trim();
+  if (!trimmed || trimmed.length > 60 || /\?\s*$/.test(trimmed)) return undefined;
+  if (EARNINGS_FRAMING.test(trimmed)) return undefined;
+
+  const bare = extractBareSpendingAnswer(trimmed);
+  if (bare != null) return bare;
+
+  const match = trimmed.match(
+    /^(?:yes[,.\s!]*|yeah[,.\s!]*|correct[,.\s!]*|confirm(?:ed)?[,.\s!]*|i\s+(?:can\s+)?confirm[,.\s!]*)*(?:about\s+)?(?:\$?\s*)?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*(k|thousand|million)?\s*(?:\/\s*(?:yr|year)|per\s+year|a\s+year|each\s+year|annually|yearly)?\s*[.]?\s*$/i
+  );
+  if (!match) return undefined;
+
+  const amount = parseFloat(match[1].replace(/,/g, ''));
+  if (!Number.isFinite(amount) || amount <= 0) return undefined;
+
+  const suffix = match[2]?.toLowerCase();
+  const multiplier =
+    suffix === 'million' ? 1_000_000 : suffix === 'k' || suffix === 'thousand' ? 1_000 : 1;
+  const annual = amount * multiplier;
+  return annual >= MIN_BARE_ANNUAL_AMOUNT ? annual : undefined;
+}
+
 function firstNumber(qLower: string, patterns: readonly RegExp[]): number | undefined {
   for (const pattern of patterns) {
     const match = qLower.match(pattern);
@@ -263,6 +292,9 @@ export function parseRetirementConversation(
     const older = extractParams(previous, {
       requireSpendingFraming: !mentionsRetirement(previous.toLowerCase()),
     });
+    if (!older.annualWithdrawalAmount && !mentionsRetirement(previous.toLowerCase())) {
+      older.annualWithdrawalAmount = extractPriorTurnSpendingAmount(previous);
+    }
     merged.currentAge = merged.currentAge ?? older.currentAge;
     merged.retirementAge = merged.retirementAge ?? older.retirementAge;
     merged.annualWithdrawalAmount = merged.annualWithdrawalAmount ?? older.annualWithdrawalAmount;

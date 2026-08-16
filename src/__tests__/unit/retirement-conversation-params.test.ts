@@ -157,6 +157,20 @@ describe('parseRetirementConversation', () => {
     expect(result.annualWithdrawalAmount).toBe(125_000);
   });
 
+  it('carries a short amount reply from an earlier turn into a re-run request', () => {
+    for (const prior of ['$125K a year', '125,000', '125k']) {
+      expect(
+        parseRetirementConversation('Re-run my retirement analysis.', [prior]).annualWithdrawalAmount
+      ).toBe(125_000);
+    }
+  });
+
+  it('does not carry a salary sentence forward even when it is short', () => {
+    expect(
+      parseRetirementConversation('Can I retire at 65?', ['I earn $200k a year']).annualWithdrawalAmount
+    ).toBeUndefined();
+  });
+
   it('trusts any wording from an earlier turn that is explicitly about retiring', () => {
     const result = parseRetirementConversation('Re-run that analysis.', [
       'I am planning on spending about $150K per year in retirement.',
