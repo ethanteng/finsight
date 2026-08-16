@@ -68,6 +68,9 @@ describe('question-aware LLM context routing', () => {
     expect(analyzeQuestionNeeds('125,000', ['Re-run my retirement analysis.'])).toMatchObject({
       needsRetirement: true,
     });
+    expect(analyzeQuestionNeeds('125000', ['Re-run my retirement analysis.'])).toMatchObject({
+      needsRetirement: true,
+    });
   });
 
   it('does not inherit unrelated data needs for a standalone question', () => {

@@ -127,6 +127,29 @@ function extractAnnualWithdrawalAmount(
   return undefined;
 }
 
+/**
+ * A reply whose whole content is the number the assistant just asked for:
+ * "125,000", "125k", "about $125000". Routing already treats these as
+ * contextual follow-ups; without this they still parse as missing amounts.
+ */
+function extractBareSpendingAnswer(question: string): number | undefined {
+  const trimmed = question.trim();
+  if (!trimmed || trimmed.length > 100 || /\?\s*$/.test(trimmed)) return undefined;
+
+  const match = trimmed.match(
+    /^(?:yes[,.\s!]*|yeah[,.\s!]*|correct[,.\s!]*|confirm(?:ed)?[,.\s!]*|i\s+(?:can\s+)?confirm[,.\s!]*)*(?:about\s+)?(?:\$?\s*)?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*(k|thousand|million)?\s*[.]?\s*$/i
+  );
+  if (!match) return undefined;
+
+  const amount = parseFloat(match[1].replace(/,/g, ''));
+  if (!Number.isFinite(amount) || amount <= 0) return undefined;
+
+  const suffix = match[2]?.toLowerCase();
+  const multiplier =
+    suffix === 'million' ? 1_000_000 : suffix === 'k' || suffix === 'thousand' ? 1_000 : 1;
+  return amount * multiplier;
+}
+
 function firstNumber(qLower: string, patterns: readonly RegExp[]): number | undefined {
   for (const pattern of patterns) {
     const match = qLower.match(pattern);
@@ -149,7 +172,10 @@ function extractParams(
 
   const currentAge = extractCurrentAge(qLower) ?? undefined;
   const retirementAge = extractRetirementAge(qLower) ?? undefined;
-  const annualWithdrawalAmount = extractAnnualWithdrawalAmount(qLower, options.requireSpendingFraming);
+  let annualWithdrawalAmount = extractAnnualWithdrawalAmount(qLower, options.requireSpendingFraming);
+  if (!annualWithdrawalAmount && !options.requireSpendingFraming) {
+    annualWithdrawalAmount = extractBareSpendingAnswer(question);
+  }
 
   // Withdrawals start at retirement unless the question says otherwise.
   const withdrawalStartAge = firstNumber(qLower, WITHDRAWAL_START_PATTERNS) ?? retirementAge;

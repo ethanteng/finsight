@@ -102,7 +102,14 @@ function analyzeSingleQuestion(question: string): QuestionNeeds {
  */
 function isValueAnswer(normalized: string): boolean {
   if (/\?\s*$/.test(normalized)) return false;
-  return /\$\s?\d|\b\d{1,3}(?:,\d{3})+\b|\b\d+\s*k\b|^(?:at\s+|age\s+)?\d{2}\b/.test(normalized);
+  if (/^(?:at\s+|age\s+)?\d{2}\b/.test(normalized)) return true;
+  if (
+    /^(?:about\s+)?(?:\$?\s*)?\d{1,3}(?:,\d{3})+(?:\.\d+)?\s*(?:k|thousand|million)?\s*$/.test(normalized) ||
+    /^(?:about\s+)?(?:\$?\s*)?\d{4,7}(?:\.\d+)?\s*(?:k|thousand|million)?\s*$/.test(normalized)
+  ) {
+    return true;
+  }
+  return /\$\s?\d|\b\d{1,3}(?:,\d{3})+\b|\b\d+\s*k\b/.test(normalized);
 }
 
 function isContextualFollowUp(question: string): boolean {

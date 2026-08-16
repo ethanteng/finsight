@@ -43,6 +43,18 @@ describe('annual spending wording', () => {
     ).toBe(150_000);
   });
 
+  it('reads a bare comma-formatted reply as the annual spend', () => {
+    expect(parseRetirementConversation('125,000', ['Re-run my retirement analysis.']).annualWithdrawalAmount).toBe(
+      125_000
+    );
+    expect(parseRetirementConversation('125000', ['Re-run my retirement analysis.']).annualWithdrawalAmount).toBe(
+      125_000
+    );
+    expect(parseRetirementConversation('125k', ['Re-run my retirement analysis.']).annualWithdrawalAmount).toBe(
+      125_000
+    );
+  });
+
   it('does not read a monthly figure as the annual spend', () => {
     const result = parseRetirementQuestion(
       'What if we pay off our mortgage before retirement? That would drop our monthly expenses by around $2,100.'
