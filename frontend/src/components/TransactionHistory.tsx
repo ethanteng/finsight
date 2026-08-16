@@ -1,9 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
+import TransactionCategoryModal, {
+  type TransactionCategorySubject,
+} from './transactions/TransactionCategoryModal';
 
 interface Transaction {
   id: string;
+  /** Provider transaction id. Absent when the snapshot row carried no usable id. */
+  provider_id?: string;
   account_id: string;
   amount: number;
   date: string;
@@ -11,6 +16,8 @@ interface Transaction {
   merchant_name?: string;
   category?: string[];
   category_id?: string;
+  /** 'user' when the category was chosen in the category modal rather than by the provider. */
+  category_source?: string;
   pending: boolean;
   payment_channel?: string;
   transaction_type?: string; // From categorization service: income, expense, transfer_in, transfer_out, buy, sell, etc.
@@ -35,16 +42,37 @@ interface Transaction {
   };
 }
 
+// The list is sized to show at least 25 transactions without scrolling. A condensed row
+// is two lines inside 8px of padding (~58px) and rows sit 6px apart; a row whose chips
+// wrap to a third line simply pushes the 25th one under the fold.
+const VISIBLE_ROWS = 25;
+const ROW_HEIGHT_PX = 58;
+const ROW_GAP_PX = 6;
+const LIST_MAX_HEIGHT_PX = VISIBLE_ROWS * ROW_HEIGHT_PX + (VISIBLE_ROWS - 1) * ROW_GAP_PX;
+
+/** `FOOD_AND_DRINK_COFFEE` -> `Food And Drink Coffee`. */
+function titleCase(value: string): string {
+  return value.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+}
+
+/** Plaid leaves placeholder values in category arrays; those are not worth a chip. */
+function meaningfulCategories(categories: string[] | undefined): string[] {
+  if (!Array.isArray(categories)) return [];
+  return categories.filter(cat => cat && cat.trim() !== '' && cat !== '0');
+}
+
 export default forwardRef<{ refresh: () => void }, object>(function TransactionHistory(_props, ref) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [dateRange, setDateRange] = useState('90');
+  const [editingTransaction, setEditingTransaction] = useState<TransactionCategorySubject | null>(null);
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
   type SnapshotTransaction = {
     transaction_id?: string;
+    investment_transaction_id?: string;
     id?: string;
     account_id: string;
     amount: number | string;
@@ -52,6 +80,7 @@ export default forwardRef<{ refresh: () => void }, object>(function TransactionH
     name: string;
     merchant_name?: string;
     category?: string[] | string;
+    category_source?: string;
     pending?: boolean;
     transaction_type?: string;
     enriched_data?: {
@@ -111,13 +140,17 @@ export default forwardRef<{ refresh: () => void }, object>(function TransactionH
         const snapshotTx: SnapshotTransaction[] = Array.isArray(data.transactions) ? data.transactions as SnapshotTransaction[] : [];
         // Ensure each transaction has an id
         const normalized = snapshotTx.map((t) => ({
-          id: t.transaction_id || t.id || `${t.account_id}-${t.date}-${t.name}`,
+          id: t.transaction_id || t.investment_transaction_id || t.id || `${t.account_id}-${t.date}-${t.name}`,
+          // Only a real provider id can be used to save a category; the composite
+          // fallback above exists purely to keep React keys unique.
+          provider_id: t.transaction_id || t.investment_transaction_id || t.id,
           account_id: t.account_id,
           amount: typeof t.amount === 'number' ? t.amount : Number(t.amount || 0),
           date: t.date,
           name: t.name,
           merchant_name: t.merchant_name,
           category: Array.isArray(t.category) ? t.category : (typeof t.category === 'string' ? [t.category] : []),
+          category_source: t.category_source,
           pending: Boolean(t.pending),
           transaction_type: t.transaction_type,
           enriched_data: t.enriched_data
@@ -157,15 +190,45 @@ export default forwardRef<{ refresh: () => void }, object>(function TransactionH
     });
   }, [transactions]);
 
-  // Filter transactions based on date range and always show pending
+  // Applies a category saved in the modal without re-fetching the whole snapshot; the
+  // backend has already patched the stored snapshot, so a later refresh agrees with this.
+  const handleCategorySaved = useCallback(
+    (transactionId: string, category: string[], isUserCategory: boolean, transactionType?: string) => {
+      setTransactions(previous =>
+        previous.map(transaction =>
+          transaction.provider_id === transactionId
+            ? {
+                ...transaction,
+                category,
+                category_source: isUserCategory ? 'user' : undefined,
+                transaction_type: transactionType ?? transaction.transaction_type,
+              }
+            : transaction
+        )
+      );
+    },
+    []
+  );
+
+  // Filter transactions based on date range, newest transaction date first.
   const filteredTransactions = useMemo(() => {
     const daysAgo = new Date();
     daysAgo.setDate(daysAgo.getDate() - parseInt(dateRange));
 
-    return transactions.filter(transaction => {
-      const transactionDate = new Date(transaction.date);
-      return transactionDate >= daysAgo;
-    });
+    return transactions
+      .filter(transaction => {
+        const transactionDate = new Date(transaction.date);
+        return transactionDate >= daysAgo;
+      })
+      .sort((a, b) => {
+        const aTime = new Date(a.date).getTime();
+        const bTime = new Date(b.date).getTime();
+        // Keep undated/unparseable rows at the end rather than scattering them.
+        if (Number.isNaN(aTime) && Number.isNaN(bTime)) return 0;
+        if (Number.isNaN(aTime)) return 1;
+        if (Number.isNaN(bTime)) return -1;
+        return bTime - aTime;
+      });
   }, [transactions, dateRange]);
 
   return (
@@ -207,181 +270,200 @@ export default forwardRef<{ refresh: () => void }, object>(function TransactionH
           No transactions found for the selected date range.
         </div>
       ) : (
-        <div className="space-y-3 max-h-96 overflow-y-auto">
-          {filteredTransactions.map((transaction) => {
-            const hasEnrichedData = transaction.enriched_data && Object.keys(transaction.enriched_data).length > 0;
-            return (
-            <div
-              key={transaction.id}
-              className={`rounded-xl border border-[#102319]/10 bg-[#f8f7ef] p-4 shadow-[inset_3px_0_0_var(--transaction-accent)] ${
-                transaction.amount < 0 ? '[--transaction-accent:#b56a5f]' : '[--transaction-accent:#6f9b7e]'
-              } ${hasEnrichedData ? 'ring-1 ring-[#397052]/15' : ''}`}
-            >
-              {/* Enriched data indicator */}
-              {hasEnrichedData && (
-                <div className="flex items-center gap-1 mb-2">
-                  <div className="h-2 w-2 rounded-full bg-[#397052]"></div>
-                  <span className="text-xs font-medium text-[#397052]">Enhanced Data Available</span>
-                </div>
-              )}
+        <>
+          <p className="mb-2 text-xs text-gray-400">
+            Select a transaction to change its category.
+          </p>
+          <div
+            className="space-y-1.5 overflow-y-auto pr-1"
+            style={{ maxHeight: LIST_MAX_HEIGHT_PX }}
+          >
+            {filteredTransactions.map((transaction) => {
+              const hasEnrichedData = transaction.enriched_data && Object.keys(transaction.enriched_data).length > 0;
+              const isUserCategory = transaction.category_source === 'user';
+              const basicCategories = meaningfulCategories(transaction.category);
+              // A category the user picked replaces the provider's, so showing the
+              // superseded enriched categories alongside it would just contradict them.
+              const enhancedCategories = isUserCategory
+                ? []
+                : meaningfulCategories(transaction.enriched_data?.category);
+              const displayName = transaction.enriched_data?.merchant_name ||
+                transaction.merchant_name ||
+                transaction.name;
+              // Saving a category needs the provider id; rows that only have the
+              // synthesized fallback key cannot be edited.
+              const editable = Boolean(transaction.provider_id);
+              const openEditor = () => {
+                if (!transaction.provider_id) return;
+                setEditingTransaction({
+                  id: transaction.provider_id,
+                  name: displayName,
+                  date: transaction.date,
+                  amount: transaction.amount,
+                  category: basicCategories,
+                  isUserCategory,
+                });
+              };
 
-              <div className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
-                  {/* Header row with merchant name and logo */}
-                  <div className="flex items-center gap-3 mb-2">
-                    {/* Merchant logo */}
-                    {transaction.enriched_data?.logo_url && (
-                      <img
-                        src={transaction.enriched_data.logo_url}
-                        alt={`${transaction.enriched_data?.merchant_name || transaction.name} logo`}
-                        className="w-8 h-8 rounded object-contain bg-white p-1 flex-shrink-0"
-                        onError={(e) => {
-                          // Hide broken images
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    )}
-
-                    {/* Merchant name */}
-                    <div className="font-medium text-white truncate">
-                      {transaction.enriched_data?.merchant_name ||
-                       transaction.merchant_name ||
-                       transaction.name}
-                    </div>
-                  </div>
-
-                    {/* Date and categories row */}
-                  <div className="mb-3">
-                    {/* Date */}
-                    <div className="text-sm text-gray-400 mb-2">
-                      {new Date(transaction.date).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric'
-                      })}
-                    </div>
-
-                    {/* Transaction Type - Only show if it's from our categorization service (not Plaid's payment method) */}
-                    {/* Plaid's transaction_type is payment method (place, digital, etc.) - we don't want to show that */}
-                    {/* Our categorization service sets transaction_type to income, expense, transfer_in, etc. */}
-                    {transaction.transaction_type &&
-                     !['place', 'special', 'digital', 'atm', 'other'].includes(transaction.transaction_type.toLowerCase()) && (
-                      <div className="mb-2">
-                        <span className="inline-block rounded-full border border-[#397052]/20 bg-[#c9f2df]/55 px-2.5 py-1 text-xs font-semibold text-[#285c43]">
-                          {transaction.transaction_type.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
-                        </span>
+              return (
+                <div
+                  key={transaction.id}
+                  role={editable ? 'button' : undefined}
+                  tabIndex={editable ? 0 : undefined}
+                  aria-label={editable ? `Change category for ${displayName}` : undefined}
+                  onClick={editable ? openEditor : undefined}
+                  onKeyDown={editable ? (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      openEditor();
+                    }
+                  } : undefined}
+                  className={`rounded-lg border border-[#102319]/10 bg-[#f8f7ef] px-2.5 py-2 shadow-[inset_3px_0_0_var(--transaction-accent)] ${
+                    transaction.amount < 0 ? '[--transaction-accent:#b56a5f]' : '[--transaction-accent:#6f9b7e]'
+                  } ${hasEnrichedData ? 'ring-1 ring-[#397052]/15' : ''} ${
+                    editable ? 'cursor-pointer transition-colors hover:bg-[#f1efe2] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#397052]' : ''
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      {/* Merchant logo, name, and the enriched-data indicator on one line */}
+                      <div className="flex items-center gap-2">
+                        {transaction.enriched_data?.logo_url && (
+                          <img
+                            src={transaction.enriched_data.logo_url}
+                            alt={`${displayName} logo`}
+                            className="h-5 w-5 flex-shrink-0 rounded bg-white object-contain p-0.5"
+                            onError={(e) => {
+                              // Hide broken images
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        )}
+                        <span className="truncate text-sm font-medium text-white">{displayName}</span>
+                        {hasEnrichedData && (
+                          <span className="flex flex-shrink-0 items-center gap-1 text-[11px] font-medium text-[#397052]">
+                            <span className="h-1.5 w-1.5 rounded-full bg-[#397052]" />
+                            Enhanced Data Available
+                          </span>
+                        )}
                       </div>
-                    )}
 
-                    {/* Categories section */}
-                    <div className="space-y-2">
-                      {/* Show meaningful categories if available */}
-                      {transaction.enriched_data?.category &&
-                       Array.isArray(transaction.enriched_data.category) &&
-                       transaction.enriched_data.category.length > 0 &&
-                       transaction.enriched_data.category.some(cat => cat && cat.trim() !== '' && cat !== '0') ? (
-                        <div>
-                          <span className="text-xs font-medium text-[#5e6b63]">Enhanced Categories:</span>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {transaction.enriched_data.category
-                              .filter(cat => cat && cat.trim() !== '' && cat !== '0')
-                              .map((cat, index) => (
-                                <span
-                                  key={index}
-                                  className="inline-block rounded-full border border-[#397052]/18 bg-[#edf3e9] px-2.5 py-1 text-xs text-[#365d49]"
-                                >
-                                  {cat.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
-                                </span>
-                              ))}
-                          </div>
-                        </div>
-                      ) : null}
+                      {/* Date, transaction type, categories, and enriched metadata share one wrapping line */}
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-gray-400">
+                        <span>
+                          {new Date(transaction.date).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          })}
+                        </span>
 
-                      {/* Show basic Plaid categories if available */}
-                      {transaction.category &&
-                       Array.isArray(transaction.category) &&
-                       transaction.category.length > 0 &&
-                       transaction.category.some(cat => cat && cat.trim() !== '' && cat !== '0') ? (
-                        <div>
-                          <span className="text-gray-400 font-medium text-xs">Basic Categories:</span>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {transaction.category
-                              .filter(cat => cat && cat.trim() !== '' && cat !== '0')
-                              .map((cat, index) => (
-                                <span
-                                  key={index}
-                                  className="inline-block rounded-full border border-[#102319]/12 bg-[#ecece4] px-2.5 py-1 text-xs text-[#56635b]"
-                                >
-                                  {cat.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
-                                </span>
-                              ))}
-                          </div>
-                        </div>
-                      ) : null}
+                        {/* Transaction Type - Only show if it's from our categorization service (not Plaid's payment method) */}
+                        {/* Plaid's transaction_type is payment method (place, digital, etc.) - we don't want to show that */}
+                        {/* Our categorization service sets transaction_type to income, expense, transfer_in, etc. */}
+                        {transaction.transaction_type &&
+                         !['place', 'special', 'digital', 'atm', 'other'].includes(transaction.transaction_type.toLowerCase()) && (
+                          <span className="rounded-full border border-[#397052]/20 bg-[#c9f2df]/55 px-2 py-0.5 font-semibold text-[#285c43]">
+                            {titleCase(transaction.transaction_type)}
+                          </span>
+                        )}
 
-                      {/* Show message when no categories are available */}
-                      {(!transaction.enriched_data?.category || transaction.enriched_data.category.length === 0) &&
-                       (!transaction.category || transaction.category.length === 0) && (
-                        <div className="text-xs text-gray-500 italic">
-                          No category information available
-                        </div>
+                        {enhancedCategories.length > 0 && (
+                          <>
+                            <span className="font-medium text-[#5e6b63]">Enhanced Categories:</span>
+                            {enhancedCategories.map((cat, index) => (
+                              <span
+                                key={`enhanced-${index}`}
+                                className="rounded-full border border-[#397052]/18 bg-[#edf3e9] px-2 py-0.5 text-[#365d49]"
+                              >
+                                {titleCase(cat)}
+                              </span>
+                            ))}
+                          </>
+                        )}
+
+                        {basicCategories.length > 0 && (
+                          <>
+                            <span className={`font-medium ${isUserCategory ? 'text-[#285c43]' : 'text-gray-400'}`}>
+                              {isUserCategory ? 'Your Categories:' : 'Basic Categories:'}
+                            </span>
+                            {basicCategories.map((cat, index) => (
+                              <span
+                                key={`basic-${index}`}
+                                className={`rounded-full border px-2 py-0.5 ${
+                                  isUserCategory
+                                    ? 'border-[#397052]/25 bg-[#c9f2df]/55 text-[#285c43]'
+                                    : 'border-[#102319]/12 bg-[#ecece4] text-[#56635b]'
+                                }`}
+                              >
+                                {titleCase(cat)}
+                              </span>
+                            ))}
+                          </>
+                        )}
+
+                        {enhancedCategories.length === 0 && basicCategories.length === 0 && (
+                          <span className="italic text-gray-500">No category information available</span>
+                        )}
+
+                        {/* Website link */}
+                        {transaction.enriched_data?.website && (
+                          <span className="flex items-center text-gray-500">
+                            <svg className="mr-1 h-3 w-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M4.083 9h1.946c.089-1.546.383-2.97.837-4.118A6.004 6.004 0 004.083 9zM10 2a8 8 0 100 16 8 8 0 000-16zm0 2c-.076 0-.232.032-.465.262-.238.234-.497.623-.737 1.182-.389.907-.673 2.142-.766 3.556h3.936c-.093-1.414-.377-2.649-.766-3.556-.24-.56-.5-.948-.737-1.182C10.232 4.032 10.076 4 10 4zM3.552 12.049c.233.39.574.689.944.951.562.392 1.313.956 2.165 1.603C7.825 15.449 8.948 16 10 16c1.053 0 2.172-.551 3.338 1.397-.853.647 1.603 1.211 2.165 1.603.37-.263-.711.561-.944-.951.416-.693.676-1.456.676-2.049s-.26-1.356-.676-2.049c-.233-.39-.574-.689-.944-.951-.562-.392-1.313-.956-2.165-1.603C12.175 4.551 11.053 4 10 4c-1.053 0-2.172.551-3.338 1.397-.853.647-1.603 1.211-2.165 1.603-.37.263-.711.561-.944.951C4.26 8.644 4 9.407 4 10s.26 1.356.676 2.049z" clipRule="evenodd" />
+                            </svg>
+                            <a
+                              href={transaction.enriched_data.website.startsWith('http') ? transaction.enriched_data.website : `https://${transaction.enriched_data.website}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(event) => event.stopPropagation()}
+                              className="text-[#397052] underline hover:text-[#102319]"
+                            >
+                              {transaction.enriched_data.website}
+                            </a>
+                          </span>
+                        )}
+
+                        {/* Additional enriched metadata */}
+                        {transaction.enriched_data?.domain && (
+                          <span className="text-gray-500">🌐 {transaction.enriched_data.domain}</span>
+                        )}
+                        {transaction.enriched_data?.brand_name && (
+                          <span className="text-gray-500">🏷️ {transaction.enriched_data.brand_name}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex-shrink-0 text-right">
+                      <div className={`text-base font-semibold leading-tight ${
+                        transaction.amount < 0 ? 'text-[#8b4137]' : 'text-[#28704d]'
+                      }`}>
+                        {transaction.amount < 0 ? '' : '+'}${Math.abs(transaction.amount).toFixed(2)}
+                      </div>
+                      {transaction.pending && (
+                        <div className="text-[11px] text-[#76510f]">Pending</div>
                       )}
                     </div>
                   </div>
-
-                  {/* Enriched metadata row */}
-                  <div className="space-y-1">
-                    {/* Website link */}
-                    {transaction.enriched_data?.website && (
-                      <div className="flex items-center text-xs text-gray-500">
-                        <svg className="w-3 h-3 mr-1 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M4.083 9h1.946c.089-1.546.383-2.97.837-4.118A6.004 6.004 0 004.083 9zM10 2a8 8 0 100 16 8 8 0 000-16zm0 2c-.076 0-.232.032-.465.262-.238.234-.497.623-.737 1.182-.389.907-.673 2.142-.766 3.556h3.936c-.093-1.414-.377-2.649-.766-3.556-.24-.56-.5-.948-.737-1.182C10.232 4.032 10.076 4 10 4zM3.552 12.049c.233.39.574.689.944.951.562.392 1.313.956 2.165 1.603C7.825 15.449 8.948 16 10 16c1.053 0 2.172-.551 3.338 1.397-.853.647 1.603 1.211 2.165 1.603.37-.263-.711.561-.944-.951.416-.693.676-1.456.676-2.049s-.26-1.356-.676-2.049c-.233-.39-.574-.689-.944-.951-.562-.392-1.313-.956-2.165-1.603C12.175 4.551 11.053 4 10 4c-1.053 0-2.172.551-3.338 1.397-.853.647-1.603 1.211-2.165 1.603-.37.263-.711.561-.944.951C4.26 8.644 4 9.407 4 10s.26 1.356.676 2.049z" clipRule="evenodd" />
-                        </svg>
-                        <a
-                          href={transaction.enriched_data.website.startsWith('http') ? transaction.enriched_data.website : `https://${transaction.enriched_data.website}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[#397052] underline hover:text-[#102319]"
-                        >
-                          {transaction.enriched_data.website}
-                        </a>
-                      </div>
-                    )}
-
-                    {/* Additional enriched metadata */}
-                    {(transaction.enriched_data?.domain || transaction.enriched_data?.brand_name) && (
-                      <div className="text-xs text-gray-500">
-                        {transaction.enriched_data?.domain && (
-                          <span className="mr-3">🌐 {transaction.enriched_data.domain}</span>
-                        )}
-                        {transaction.enriched_data?.brand_name && (
-                          <span>🏷️ {transaction.enriched_data.brand_name}</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
                 </div>
-
-                <div className="text-right ml-4 flex-shrink-0">
-                  <div className={`font-semibold text-lg ${
-                    transaction.amount < 0 ? 'text-[#8b4137]' : 'text-[#28704d]'
-                  }`}>
-                    {transaction.amount < 0 ? '' : '+'}${Math.abs(transaction.amount).toFixed(2)}
-                  </div>
-                  {transaction.pending && (
-                    <div className="mt-1 text-xs text-[#76510f]">Pending</div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )})}
-        </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {transactions.length > 0 && (
         <div className="text-center text-gray-400 mt-4">
           Showing {filteredTransactions.length} of {transactions.length} transactions
         </div>
+      )}
+
+      {editingTransaction && (
+        <TransactionCategoryModal
+          transaction={editingTransaction}
+          onClose={() => setEditingTransaction(null)}
+          onSaved={handleCategorySaved}
+        />
       )}
     </div>
   );

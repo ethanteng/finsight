@@ -1,4 +1,6 @@
 import type { FinancialContextSnapshot, QuestionNeeds } from './types';
+import { mergeAssetAllocation } from '../services/asset-class';
+import { mergeLabelKeyedTotals } from '../services/label-normalization';
 
 export type CanonicalFactUnit = 'usd' | 'percent' | 'months' | 'years' | 'age' | 'count' | 'ratio';
 
@@ -35,27 +37,6 @@ function isoString(value: Date | string | null | undefined): string | undefined 
 
 function finite(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
-}
-
-function cashFlowQuestion(question: string): boolean {
-  return /\b(income|pay|spend|spending|expense|expenses|cash[ -]?flow|budget|saving|savings|runway|emergency fund)\b/i.test(question);
-}
-
-function financialDecisionQuestion(question: string): boolean {
-  return /\b(afford|affordable|buy|purchase|down payment|pay down|pay off|should i|compare|versus|vs\.?|better option)\b/i.test(question);
-}
-
-function broadFinancialQuestion(question: string, needs: QuestionNeeds): boolean {
-  if (/\b(overall|financial picture|how am i doing|finances|financial health)\b/i.test(question)) return true;
-  const hasSpecificContext = needs.needsAccountDetails || needs.needsTransactionDetails ||
-    needs.needsInvestments || needs.needsRetirement || needs.needsHomeValue ||
-    needs.needsMarketContext || needs.needsSearchContext;
-  const namesSpecificMetric = /\b(net worth|cash|liquidity|income|pay|spend|spending|expense|expenses|cash[ -]?flow|budget|saving|savings|debt|loan|mortgage|portfolio|investment)\b/i.test(question);
-  return !hasSpecificContext && !namesSpecificMetric;
-}
-
-function includesAny(question: string, pattern: RegExp): boolean {
-  return pattern.test(question);
 }
 
 function safeFactId(value: string): string {
@@ -196,63 +177,53 @@ export function buildCanonicalFactPack(
     });
   };
 
+  // Everything below this point is derived from snapshot columns that
+  // getFinancialSnapshotForAnalysis selects on every read — financialOverview,
+  // transactionsSummary, and investmentPortfolio — plus the cash-flow averages
+  // that gatherContextSnapshot always computes. Predicting which of them a
+  // question needs saves no query and no fetch; it only decides whether the
+  // model can cite a number it can already see. Two production bugs came from
+  // guessing wrong, so these facts are no longer routed at all.
   const overview = snapshot.financialSummary?.financialOverview;
   if (overview) {
-    const broad = broadFinancialQuestion(question, needs);
-    const decision = financialDecisionQuestion(question);
-    if (broad || decision || includesAny(question, /\b(net worth|assets?|liabilities|financial position)\b/i)) {
-      addSnapshotFact('net_worth', 'Net worth', overview.netWorth, 'usd', 'financialSummary.financialOverview.netWorth');
-    }
-    if (broad || decision || includesAny(question, /\b(cash|liquid|liquidity|emergency fund)\b/i)) {
-      addSnapshotFact('total_cash', 'Total cash', overview.totalCash, 'usd', 'financialSummary.financialOverview.totalCash');
-    }
-    if (broad || needs.needsInvestments || needs.needsRetirement) {
-      addSnapshotFact('total_investments', 'Total investments', overview.totalInvestments, 'usd', 'financialSummary.financialOverview.totalInvestments');
-    }
-    if (broad || decision || includesAny(question, /\b(debt|debts|loan|loans|mortgage|credit card|liabilities)\b/i)) {
-      addSnapshotFact('total_debt', 'Total debt', overview.totalDebt, 'usd', 'financialSummary.financialOverview.totalDebt');
-    }
-    if (overview.homeValue !== null && (needs.needsHomeValue || broadFinancialQuestion(question, needs))) {
-      addSnapshotFact('home_value', 'Home value', overview.homeValue, 'usd', 'financialSummary.financialOverview.homeValue');
-    }
+    addSnapshotFact('net_worth', 'Net worth', overview.netWorth, 'usd', 'financialSummary.financialOverview.netWorth');
+    addSnapshotFact('total_cash', 'Total cash', overview.totalCash, 'usd', 'financialSummary.financialOverview.totalCash');
+    addSnapshotFact('total_investments', 'Total investments', overview.totalInvestments, 'usd', 'financialSummary.financialOverview.totalInvestments');
+    addSnapshotFact('total_debt', 'Total debt', overview.totalDebt, 'usd', 'financialSummary.financialOverview.totalDebt');
+    addSnapshotFact('home_value', 'Home value', overview.homeValue, 'usd', 'financialSummary.financialOverview.homeValue');
   }
 
-  const includeCashFlow = cashFlowQuestion(question) || financialDecisionQuestion(question) || broadFinancialQuestion(question, needs);
-  if (includeCashFlow) {
-    addSnapshotFact('average_monthly_income', 'Average monthly income', snapshot.averageMonthlyIncome, 'usd', 'contextSnapshot.averageMonthlyIncome');
-    addSnapshotFact('average_monthly_expenses', 'Average monthly expenses', snapshot.averageMonthlyExpense, 'usd', 'contextSnapshot.averageMonthlyExpense');
-    const income = facts.get('average_monthly_income')?.value;
-    const expenses = facts.get('average_monthly_expenses')?.value;
-    if (income !== undefined && expenses !== undefined) {
-      const operatingCashFlow = income - expenses;
+  addSnapshotFact('average_monthly_income', 'Average monthly income', snapshot.averageMonthlyIncome, 'usd', 'contextSnapshot.averageMonthlyIncome');
+  addSnapshotFact('average_monthly_expenses', 'Average monthly expenses', snapshot.averageMonthlyExpense, 'usd', 'contextSnapshot.averageMonthlyExpense');
+  const income = facts.get('average_monthly_income')?.value;
+  const expenses = facts.get('average_monthly_expenses')?.value;
+  if (income !== undefined && expenses !== undefined) {
+    const operatingCashFlow = income - expenses;
+    addCalculatedFact(
+      'average_monthly_operating_cash_flow',
+      'Average monthly operating cash flow',
+      operatingCashFlow,
+      'usd',
+      'average_monthly_income - average_monthly_expenses',
+      ['average_monthly_income', 'average_monthly_expenses']
+    );
+    if (income > 0) {
       addCalculatedFact(
-        'average_monthly_operating_cash_flow',
-        'Average monthly operating cash flow',
-        operatingCashFlow,
-        'usd',
-        'average_monthly_income - average_monthly_expenses',
-        ['average_monthly_income', 'average_monthly_expenses']
+        'savings_rate',
+        'Savings rate',
+        (operatingCashFlow / income) * 100,
+        'percent',
+        '(average_monthly_operating_cash_flow / average_monthly_income) * 100',
+        ['average_monthly_operating_cash_flow', 'average_monthly_income']
       );
-      if (income > 0) {
-        addCalculatedFact(
-          'savings_rate',
-          'Savings rate',
-          (operatingCashFlow / income) * 100,
-          'percent',
-          '(average_monthly_operating_cash_flow / average_monthly_income) * 100',
-          ['average_monthly_operating_cash_flow', 'average_monthly_income']
-        );
-      }
     }
   }
 
-  if (needs.needsMonthlyCashFlow) {
-    for (const [month, values] of Object.entries(snapshot.transactionSummary?.byMonth || {})) {
-      const safeMonth = month.replace(/[^0-9-]/g, '');
-      addSnapshotFact(`income_${safeMonth}`, `Income for ${month}`, values.income, 'usd', `transactionSummary.byMonth.${month}.income`);
-      addSnapshotFact(`expenses_${safeMonth}`, `Expenses for ${month}`, values.expense, 'usd', `transactionSummary.byMonth.${month}.expense`);
-      addSnapshotFact(`operating_cash_flow_${safeMonth}`, `Operating cash flow for ${month}`, values.operatingCashFlow, 'usd', `transactionSummary.byMonth.${month}.operatingCashFlow`);
-    }
+  for (const [month, values] of Object.entries(snapshot.transactionSummary?.byMonth || {})) {
+    const safeMonth = month.replace(/[^0-9-]/g, '');
+    addSnapshotFact(`income_${safeMonth}`, `Income for ${month}`, values.income, 'usd', `transactionSummary.byMonth.${month}.income`);
+    addSnapshotFact(`expenses_${safeMonth}`, `Expenses for ${month}`, values.expense, 'usd', `transactionSummary.byMonth.${month}.expense`);
+    addSnapshotFact(`operating_cash_flow_${safeMonth}`, `Operating cash flow for ${month}`, values.operatingCashFlow, 'usd', `transactionSummary.byMonth.${month}.operatingCashFlow`);
   }
 
   if (needs.needsTransactionDetails) {
@@ -296,15 +267,31 @@ export function buildCanonicalFactPack(
         aggregate.inputFactIds
       );
     }
-    for (const [category, amount] of Object.entries(snapshot.transactionSummary?.byCategory || {})) {
-      addSnapshotFact(
-        `category_spending_${safeFactId(category)}`,
-        `${category} spending`,
-        amount,
-        'usd',
-        `transactionSummary.byCategory.${category}`
-      );
-    }
+  }
+
+  // Sum before emitting: the fact id is case-folded, so categories that differ
+  // only in spelling map to one id and the last one written would replace the rest.
+  const mergedCategories = mergeLabelKeyedTotals(
+    snapshot.transactionSummary?.byCategory,
+    'Uncategorized'
+  );
+  // These are totals across the snapshot's transaction window (a year by
+  // default), while the income and expense facts beside them are monthly
+  // averages. Name the period, or the model has no way to tell the two apart
+  // and can report a year of dining as a monthly figure.
+  const windowMonths = Object.keys(snapshot.transactionSummary?.byMonth || {}).length;
+  const period = windowMonths > 0
+    ? `over the last ${windowMonths} month${windowMonths === 1 ? '' : 's'}`
+    : 'over the full transaction window';
+  for (const [category, amount] of Object.entries(mergedCategories)) {
+    const categoryId = safeFactId(category) || 'uncategorized';
+    addSnapshotFact(
+      `category_spending_${categoryId}`,
+      `${category} spending ${period} (total, not a monthly average)`,
+      amount,
+      'usd',
+      `transactionSummary.byCategory.${categoryId}`
+    );
   }
 
   if (needs.needsAccountDetails) {
@@ -323,23 +310,28 @@ export function buildCanonicalFactPack(
     }
   }
 
+  const portfolio = snapshot.financialSummary?.investmentPortfolio;
+  const portfolioValue = portfolio?.totalValue ?? snapshot.investments?.totalValue;
+  const portfolioValueSource = portfolio?.totalValue !== undefined
+    ? 'financialSummary.investmentPortfolio.totalValue'
+    : 'investments.totalValue';
+  const holdingCount = portfolio?.holdingCount ?? portfolio?.holdingsCount ?? snapshot.investments?.holdingCount;
+  const holdingCountSource = portfolio?.holdingCount !== undefined || portfolio?.holdingsCount !== undefined
+    ? 'financialSummary.investmentPortfolio.holdingCount'
+    : 'investments.holdingCount';
+  addSnapshotFact('portfolio_value', 'Portfolio value', portfolioValue, 'usd', portfolioValueSource);
+  addSnapshotFact('portfolio_holding_count', 'Portfolio holding count', holdingCount, 'count', holdingCountSource);
+  // Merge before emitting: the fact id is case-folded, so "etf" and "ETF" rows
+  // collide and the last one written would silently replace the other.
+  for (const allocation of mergeAssetAllocation(portfolio?.assetAllocation)) {
+    const id = allocation.type.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    addSnapshotFact(`allocation_value_${id}`, `${allocation.type} allocation value`, allocation.value, 'usd', `financialSummary.investmentPortfolio.assetAllocation.${id}.value`);
+    addSnapshotFact(`allocation_${id}`, `${allocation.type} allocation`, allocation.percentage, 'percent', `financialSummary.investmentPortfolio.assetAllocation.${id}.percentage`);
+  }
+
+  // Individual holdings are a different matter: they come from the holdings
+  // column, which is only selected when the question routed to investments.
   if (needs.needsInvestments || needs.needsRetirement) {
-    const portfolio = snapshot.financialSummary?.investmentPortfolio;
-    const portfolioValue = portfolio?.totalValue ?? snapshot.investments?.totalValue;
-    const portfolioValueSource = portfolio?.totalValue !== undefined
-      ? 'financialSummary.investmentPortfolio.totalValue'
-      : 'investments.totalValue';
-    const holdingCount = portfolio?.holdingCount ?? portfolio?.holdingsCount ?? snapshot.investments?.holdingCount;
-    const holdingCountSource = portfolio?.holdingCount !== undefined || portfolio?.holdingsCount !== undefined
-      ? 'financialSummary.investmentPortfolio.holdingCount'
-      : 'investments.holdingCount';
-    addSnapshotFact('portfolio_value', 'Portfolio value', portfolioValue, 'usd', portfolioValueSource);
-    addSnapshotFact('portfolio_holding_count', 'Portfolio holding count', holdingCount, 'count', holdingCountSource);
-    for (const allocation of portfolio?.assetAllocation || []) {
-      const id = allocation.type.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-      addSnapshotFact(`allocation_value_${id}`, `${allocation.type} allocation value`, allocation.value, 'usd', `financialSummary.investmentPortfolio.assetAllocation.${id}.value`);
-      addSnapshotFact(`allocation_${id}`, `${allocation.type} allocation`, allocation.percentage, 'percent', `financialSummary.investmentPortfolio.assetAllocation.${id}.percentage`);
-    }
     const holdings = snapshot.investments?.holdings || [];
     const matchedHoldings = holdings.filter((holding) => {
       const ticker = holding.ticker_symbol?.trim();

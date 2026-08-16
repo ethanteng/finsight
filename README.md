@@ -235,7 +235,7 @@ PERSIST_GPT_CONTEXT="false"             # Toggle GPT context logging to /opt/ren
 # Ask Linc canonical-facts pipeline (Claude primary, OpenAI provider fallback)
 ANTHROPIC_API_KEY="your_anthropic_api_key"  # Required for Ask Linc analysis
 ENABLE_RESPONSE_VALIDATION="false"      # Optional: validate Claude responses with Gemini
-ASK_LINC_MAX_OUTPUT_TOKENS="8192"       # Optional: maximum primary/fallback output tokens (default: 8192)
+ASK_LINC_MAX_OUTPUT_TOKENS="16000"      # Optional: default max output tokens for primary/fallback (the admin panel overrides it per slot)
 OPENAI_FALLBACK_MODEL="gpt-4o"          # Optional: fallback model; reuses the prepared context pack
 
 # Gemini (market news synthesis + optional validation)

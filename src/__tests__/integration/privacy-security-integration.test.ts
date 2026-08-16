@@ -434,12 +434,18 @@ describe('Privacy Endpoints Integration Security', () => {
       });
   */
 
-  // Simple test to keep the test suite valid while race condition tests are commented out
-  describe('Privacy Security (Race Condition Management)', () => {
-    it('should have privacy security tests available for individual testing', () => {
-      // This test ensures the test suite is valid while race condition tests are commented out
-      // The actual privacy security tests can be run individually when needed
-      expect(true).toBe(true);
+  // Every test in this file is inside the /* */ blocks above, commented out with
+  // the note "passes when run individually but fails in full test suite". The only
+  // registered test used to be a stub asserting expect(true).toBe(true), so this
+  // file reported as a passing security suite while covering nothing.
+  //
+  // Registering the gap as an explicit skip instead: the report now shows privacy
+  // endpoint security as NOT covered, rather than silently green. Restoring these
+  // needs the cross-test race (shared users/accounts torn down in afterEach while
+  // other suites run) fixed first — see PR discussion.
+  describe('Privacy endpoint security', () => {
+    it.skip('privacy endpoint security tests are disabled pending a fix for the cross-test race', () => {
+      // Intentionally empty: see the commented blocks above for the real bodies.
     });
   });
 });

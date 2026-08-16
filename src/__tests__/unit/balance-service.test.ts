@@ -58,20 +58,62 @@ describe('BalanceService connection scoping', () => {
         currentBalance: 1000,
         limit: null,
         currency: 'USD',
-        balanceLastFetched: new Date('2026-08-14T00:00:00.000Z'),
+        balanceLastFetched: new Date(),
       },
     ]);
 
     const result = await BalanceService.getAccountBalances('access-token-a', plaidClient, false);
 
     expect(mockPrisma.account.findMany).toHaveBeenCalledWith({
-      where: {
-        accessTokenId: 'token-record-a',
-        balanceLastFetched: { gte: expect.any(Date) },
-      },
+      where: { accessTokenId: 'token-record-a' },
     });
     expect(plaidClient.accountsBalanceGet).not.toHaveBeenCalled();
     expect(result.map((balance) => balance.account_id)).toEqual(['account-a']);
+  });
+
+  it('refreshes from Plaid when any account on the connection has gone stale', async () => {
+    mockPrisma.account.findMany.mockResolvedValue([
+      {
+        plaidAccountId: 'account-a',
+        availableBalance: 900,
+        currentBalance: 1000,
+        limit: null,
+        currency: 'USD',
+        balanceLastFetched: new Date(),
+      },
+      {
+        plaidAccountId: 'account-b',
+        availableBalance: 10,
+        currentBalance: 20,
+        limit: null,
+        currency: 'USD',
+        // Two months stale: serving the fresh sibling alone would hide this
+        // account and cache the partial set for the rest of the day.
+        balanceLastFetched: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
+      },
+    ]);
+
+    const result = await BalanceService.getAccountBalances('access-token-a', plaidClient, false);
+
+    expect(plaidClient.accountsBalanceGet).toHaveBeenCalledTimes(1);
+    expect(result.map((balance) => balance.account_id)).toEqual(['account-a']);
+  });
+
+  it('refreshes from Plaid when an account has never had a balance fetched', async () => {
+    mockPrisma.account.findMany.mockResolvedValue([
+      {
+        plaidAccountId: 'account-a',
+        availableBalance: null,
+        currentBalance: null,
+        limit: null,
+        currency: 'USD',
+        balanceLastFetched: null,
+      },
+    ]);
+
+    await BalanceService.getAccountBalances('access-token-a', plaidClient, false);
+
+    expect(plaidClient.accountsBalanceGet).toHaveBeenCalledTimes(1);
   });
 
   it('updates only accounts owned by the refreshed connection and repairs safe legacy rows', async () => {

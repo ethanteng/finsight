@@ -8,6 +8,7 @@ import { pushBeginCheckout } from "@/lib/dataLayer";
 import SiteFooter from "./SiteFooter";
 import SiteHeader from "./SiteHeader";
 import type { GhostPost } from "@/lib/ghost";
+import { useDialog } from '@/components/ui/dialog';
 
 
 const RETIREMENT_EXAMPLE = {
@@ -122,6 +123,7 @@ interface RetirementUseCasePageProps {
 
 export default function RetirementUseCasePage({ retirementPosts = [] }: RetirementUseCasePageProps) {
   const [isLoading, setIsLoading] = useState<string | null>(null);
+  const { showError, dialog } = useDialog();
 
   const handleBuyClick = async (planId: string) => {
     pushBeginCheckout();
@@ -145,11 +147,11 @@ export default function RetirementUseCasePage({ retirementPosts = [] }: Retireme
         window.location.href = url;
       } else {
         const err = await response.json();
-        alert(err.error || "Failed to create checkout session. Please try again.");
+        void showError(err.error || "Failed to create checkout session. Please try again.");
       }
     } catch (err) {
       console.error(err);
-      alert("An error occurred. Please try again.");
+      void showError("An error occurred. Please try again.");
     } finally {
       setIsLoading(null);
     }
@@ -422,6 +424,7 @@ export default function RetirementUseCasePage({ retirementPosts = [] }: Retireme
         </div>
       </section>
       <SiteFooter />
+      {dialog}
     </div>
   );
 }

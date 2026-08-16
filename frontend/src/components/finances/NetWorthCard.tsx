@@ -1,15 +1,15 @@
 "use client";
 
+import type { ReactNode } from 'react';
+
 interface NetWorthCardProps {
   netWorth: number;
-  totalCash: number;
-  totalInvestments: number;
-  totalDebt: number;
-  homeValue: number | null;
+  footer?: ReactNode;
 }
 
 export default function NetWorthCard({
-  netWorth
+  netWorth,
+  footer
 }: NetWorthCardProps) {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -29,6 +29,9 @@ export default function NetWorthCard({
           {formatCurrency(netWorth)}
         </div>
         <p className="mt-4 max-w-xl text-sm leading-6 text-white/60">Assets, investments, and property less connected debt.</p>
+        {footer && (
+          <div className="mt-6 border-t border-white/10 pt-4">{footer}</div>
+        )}
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { ArrowRight, Brain, Check, CircleAlert, LoaderCircle, LockKeyhole, ShieldCheck } from 'lucide-react';
 import SiteFooter from './SiteFooter';
 import { getBrowserTimeZone, setStoredUserTimeZone } from '@/lib/browser-time-zone';
+import { useDialog } from '@/components/ui/dialog';
 
 interface SubscriptionContext {
   subscription: string;
@@ -19,6 +20,7 @@ function LoginFormContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const { showError, dialog } = useDialog();
   const [isCheckoutLoading, setIsCheckoutLoading] = useState(false);
   const [error, setError] = useState('');
   const [subscriptionContext, setSubscriptionContext] = useState<SubscriptionContext | null>(null);
@@ -137,11 +139,11 @@ function LoginFormContent() {
       } else {
         const error = await response.json();
         console.error('Failed to create checkout session:', error);
-        alert('Failed to create checkout session. Please try again.');
+        void showError('Failed to create checkout session. Please try again.');
       }
     } catch (error) {
       console.error('Error creating checkout session:', error);
-      alert('An error occurred. Please try again.');
+      void showError('An error occurred. Please try again.');
     } finally {
       setIsCheckoutLoading(false);
     }
@@ -282,6 +284,7 @@ function LoginFormContent() {
         </div>
       </main>
       <SiteFooter variant="auth" />
+      {dialog}
     </div>
   );
 }

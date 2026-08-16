@@ -11,6 +11,7 @@ import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 import SiteFooter from './SiteFooter';
+import { useDialog } from '@/components/ui/dialog';
 
 const RETIREMENT_QUESTIONS = [
   "Analyze my current portfolio and show me how likely I will be able to retire by 50, 55, 60, and 62. Explain in detail why a scenario(s) is or not likely.",
@@ -57,6 +58,7 @@ const USE_CASE_LINKS = [
 
 const RetirementReadinessPage = () => {
   const [isLoading, setIsLoading] = useState<string | null>(null);
+  const { showError, dialog } = useDialog();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUseCasesOpen, setIsUseCasesOpen] = useState(false);
   const [howItWorksInView, setHowItWorksInView] = useState(false);
@@ -124,11 +126,11 @@ const RetirementReadinessPage = () => {
       } else {
         const error = await response.json();
         console.error('Failed to create checkout session:', error);
-        alert('Failed to create checkout session. Please try again.');
+        void showError('Failed to create checkout session. Please try again.');
       }
     } catch (error) {
       console.error('Error creating checkout session:', error);
-      alert('An error occurred. Please try again.');
+      void showError('An error occurred. Please try again.');
     } finally {
       setIsLoading(null);
     }
@@ -656,6 +658,7 @@ const RetirementReadinessPage = () => {
         </div>
       </section> */}
       <SiteFooter />
+      {dialog}
     </div>
   );
 };

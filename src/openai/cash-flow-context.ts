@@ -1,3 +1,4 @@
+import { mergeLabelKeyedTotals } from '../services/label-normalization';
 import { averageCanonicalTransactionSummary } from '../services/transaction-summary-service';
 import type { FinancialContextSnapshot } from './types';
 
@@ -29,8 +30,7 @@ export function buildCanonicalCashFlowAnalyses(
   const expenseTotal = finite(summary?.expenseTotal);
   const exclusions = (summary?.unclassifiedTransactionIds?.length || 0)
     + (summary?.currencyMismatchTransactionIds?.length || 0);
-  const topCategories = Object.entries(summary?.byCategory || {})
-    .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]))
+  const topCategories = Object.entries(mergeLabelKeyedTotals(summary?.byCategory, 'Uncategorized'))
     .sort((left, right) => right[1] - left[1])
     .slice(0, 5)
     .map(([label, value]) => `${label}: $${value.toFixed(2)}`)

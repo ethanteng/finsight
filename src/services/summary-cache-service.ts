@@ -141,24 +141,56 @@ export class SummaryCacheService {
 
   static async refreshAllUsers() {
     const prisma = getPrismaClient();
+    // Refresh every user with any financial data source, not just Plaid. A user with
+    // only SnapTrade, only manual accounts, or only a home value has no AccessToken row,
+    // so gating on accessTokens alone skipped them entirely: no snapshot rebuild and no
+    // daily history row for trend tracking.
+    //
+    // SnapTrade auto-init creates a registration row before a brokerage is linked
+    // (SnapTradeButton calls /snaptrade/init on mount), so registration alone would pull
+    // in users with nothing connected. Brokerage evidence has to come from a source this
+    // cron does not write, or selection becomes circular: persisted `snaptrade-` accounts
+    // need Plaid banking transactions, and SnapTradeActivity rows need categorize: true,
+    // which only refreshAllUsers passes -- a SnapTrade-only user would never qualify.
+    //
+    // The persisted snapshot is the non-circular signal. Every login writes one through
+    // recomputeIfStale, so holdings and home value are already recorded there. That also
+    // covers home data, which lives in the (often encrypted) profile text and cannot be
+    // filtered in SQL. Snapshot existence alone means nothing -- every login writes one.
     const userIds = await prisma.user.findMany({
       where: {
-        accessTokens: { some: { isActive: true } },
+        OR: [
+          { accessTokens: { some: { isActive: true } } },
+          { snapTradeUser: { is: { activities: { some: {} } } } },
+          { manualAccounts: { some: {} } },
+          {
+            financialSummarySnapshot: {
+              is: {
+                OR: [
+                  { investmentPortfolio: { path: ['holdingCount'], gt: 0 } },
+                  { financialOverview: { path: ['homeValue'], gt: 0 } },
+                ],
+              },
+            },
+          },
+        ],
       },
       select: { id: true },
     });
 
-    let processed = 0;
+    // Report which users were covered so callers that refreshed other inputs
+    // can recompute anyone this pass did not reach.
+    const processedUserIds: string[] = [];
     for (const u of userIds) {
       try {
         // Cron: run full categorization for richer GPT context
         await this.computeForUser(u.id, { categorize: true });
-        processed++;
+        processedUserIds.push(u.id);
       } catch (err) {
         console.error(`SummaryCacheService: Failed to refresh snapshot for user ${u.id}`, err);
       }
     }
-    return { success: true, usersProcessed: processed };
+    return { success: true, usersProcessed: processedUserIds.length, processedUserIds };
   }
 
 }

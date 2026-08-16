@@ -8,6 +8,7 @@ import { dataOrchestrator } from './data/orchestrator';
 import authRoutes from './auth/routes';
 import manualAccountsRoutes from './auth/manual-accounts-routes';
 import accountsRoutes from './auth/accounts-routes';
+import transactionCategoriesRoutes from './auth/transaction-categories-routes';
 import financesRoutes from './auth/finances-routes';
 import stripeRoutes from './routes/stripe';
 import aiRoutes from './routes/ai';
@@ -201,6 +202,9 @@ app.use('/api/manual-accounts', manualAccountsRoutes);
 
 // Setup Accounts routes (for Plaid and SnapTrade accounts)
 app.use('/api/accounts', accountsRoutes);
+
+// Setup user-chosen transaction category routes
+app.use('/api/transaction-categories', transactionCategoriesRoutes);
 
 // Setup the revisioned Finances overview and lazy account-detail routes
 app.use('/api/finances', financesRoutes);
@@ -838,6 +842,42 @@ app.get('/sync/status', async (req: Request, res: Response) => {
         }
 
         res.status(500).json({ error: 'Failed to fetch production sessions' });
+      }
+    });
+
+    // Answer quality joined to context routing and user ratings. Reads the
+    // persisted evidence manifests rather than the process-local metrics, so it
+    // survives deploys and can be read against the questions that produced it.
+    app.get('/admin/answer-quality', adminAuth, async (req: Request, res: Response) => {
+      try {
+        const { getPrismaClient } = await import('./prisma-client');
+        const { buildAnswerQualityReport } = await import('./services/answer-quality');
+        const prisma = getPrismaClient();
+
+        const limit = Math.min(Math.max(Number(req.query.limit) || 500, 1), 2000);
+        const recentLimit = Math.min(Math.max(Number(req.query.recent) || 50, 1), limit);
+        const conversations = await prisma.conversation.findMany({
+          where: { userId: { not: null } },
+          select: {
+            id: true,
+            question: true,
+            createdAt: true,
+            showTheMathData: true,
+            feedback: { select: { score: true, createdAt: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+        });
+
+        res.json(buildAnswerQualityReport(conversations as any, recentLimit));
+      } catch (error) {
+        console.error('Error building answer quality report:', error);
+        if (error instanceof Error) {
+          Sentry.captureException(error);
+        } else {
+          Sentry.captureMessage('Unknown error in admin answer quality endpoint', 'error');
+        }
+        res.status(500).json({ error: 'Failed to build answer quality report' });
       }
     });
 
@@ -1602,24 +1642,25 @@ function serializeHomeData(homeData: PersistedHomeData) {
   };
 }
 
+// The setting itself is already durable when this runs. Rebuilding the canonical snapshot
+// re-reads every connected provider and takes tens of seconds, so it happens in the
+// background — the same as POST /profile/home and /profile/home/refresh. Clients see the
+// saved value immediately from the mutation response and reconcile totals against the next
+// snapshot revision.
 async function refreshSnapshotAfterHomeMutation(
   userId: string,
   reason: 'home-value-override-set' | 'home-value-override-removed' | 'home-value-removed'
-): Promise<{ snapshotRefreshed: boolean; warning?: string }> {
+): Promise<void> {
   try {
     const { FinancialRevisionService } = await import('./services/financial-revision-service');
-    await FinancialRevisionService.recompute(userId, {
-      categorize: false,
-      history: { kind: 'material', reason },
-    });
-    return { snapshotRefreshed: true };
+    FinancialRevisionService.schedule(
+      userId,
+      { categorize: false, history: { kind: 'material', reason } },
+      reason
+    );
   } catch (error) {
-    console.error(`Home setting was saved but financial snapshot refresh failed for user ${userId}:`, error);
+    console.error(`Home setting was saved but the snapshot refresh could not be scheduled for user ${userId}:`, error);
     Sentry.captureException(error);
-    return {
-      snapshotRefreshed: false,
-      warning: 'Your home setting was saved, but totals could not be refreshed. Use Refresh totals to try again.',
-    };
   }
 }
 
@@ -1637,14 +1678,10 @@ app.put('/profile/home/value', requireAuth, async (req: Request, res: Response) 
 
     // Update manual override
     const homeData = await profileManager.updateManualHomeValue(req.user!.id, value);
-    const refresh = await refreshSnapshotAfterHomeMutation(
-      req.user!.id,
-      'home-value-override-set'
-    );
+    await refreshSnapshotAfterHomeMutation(req.user!.id, 'home-value-override-set');
 
     res.json({
       success: true,
-      ...refresh,
       homeData: serializeHomeData(homeData),
     });
   } catch (error) {
@@ -1668,14 +1705,10 @@ app.delete('/profile/home/value', requireAuth, async (req: Request, res: Respons
 
     // Remove manual override
     const homeData = await profileManager.removeManualHomeValue(req.user!.id);
-    const refresh = await refreshSnapshotAfterHomeMutation(
-      req.user!.id,
-      'home-value-override-removed'
-    );
+    await refreshSnapshotAfterHomeMutation(req.user!.id, 'home-value-override-removed');
 
     res.json({
       success: true,
-      ...refresh,
       homeData: serializeHomeData(homeData),
     });
   } catch (error) {
@@ -1697,9 +1730,9 @@ app.delete('/profile/home', requireAuth, async (req: Request, res: Response) => 
     const profileManager = new ProfileManager();
 
     await profileManager.removeHomeData(req.user!.id);
-    const refresh = await refreshSnapshotAfterHomeMutation(req.user!.id, 'home-value-removed');
+    await refreshSnapshotAfterHomeMutation(req.user!.id, 'home-value-removed');
 
-    res.json({ success: true, ...refresh });
+    res.json({ success: true });
   } catch (error) {
     console.error('Failed to remove home data:', error);
 
@@ -2120,6 +2153,16 @@ app.post('/api/refresh-summary', requireAuth, async (req: Request, res: Response
     const userId = req.user!.id;
     // A user-initiated refresh means live provider balances, not merely a new
     // snapshot over values still inside the normal freshness window.
+    // Refresh the home estimate first so the recompute below picks it up in the
+    // same revision. A manual override and a recent estimate are both skipped
+    // inside the service, and a RentCast failure must not fail the refresh —
+    // the rest of the snapshot is still worth producing.
+    try {
+      const { HomeValueRefreshService } = await import('./services/home-value-refresh');
+      await new HomeValueRefreshService().refreshUserHomeValue(userId);
+    } catch (error) {
+      console.warn('Refresh summary: home value refresh failed (non-fatal):', error);
+    }
     const { FinancialRevisionService } = await import('./services/financial-revision-service');
     // Fast path: skip heavy categorization to avoid request timeouts
     const payload = await FinancialRevisionService.recompute(userId, {
@@ -2302,6 +2345,341 @@ app.get('/admin/ai/response-tone', adminAuth, async (req: Request, res: Response
       Sentry.captureMessage('Unknown error in admin AI response tone GET endpoint', 'error');
     }
     res.status(500).json({ error: 'Failed to fetch AI response tone' });
+  }
+});
+
+// Admin: Read the question-routing vocabulary
+app.get('/admin/ai/routing-vocabulary', adminAuth, async (_req: Request, res: Response) => {
+  try {
+    const {
+      DEFAULT_ROUTING_TERMS, ROUTING_CATEGORY_META, loadRoutingVocabulary, getActiveRoutingTerms,
+    } = await import('./openai/routing-vocabulary');
+    const { AI_PROMPT_CONFIG_ID } = await import('./openai/prompt-config');
+    const { getPrismaClient } = await import('./prisma-client');
+
+    await loadRoutingVocabulary(true);
+    const config = await getPrismaClient().aiPromptConfig.findUnique({
+      where: { id: AI_PROMPT_CONFIG_ID },
+    });
+
+    res.json({
+      categories: ROUTING_CATEGORY_META,
+      terms: getActiveRoutingTerms(),
+      defaultTerms: DEFAULT_ROUTING_TERMS,
+      isDefault: !(config as { routingTerms?: unknown } | null)?.routingTerms,
+      lastEditedBy: config?.lastEditedBy || null,
+      updatedAt: config?.updatedAt || null,
+    });
+  } catch (error) {
+    console.error('Error fetching routing vocabulary:', error);
+    Sentry.captureException(error instanceof Error ? error : new Error(String(error)));
+    res.status(500).json({ error: 'Failed to fetch routing vocabulary' });
+  }
+});
+
+// Admin: Update the question-routing vocabulary
+app.put('/admin/ai/routing-vocabulary', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { terms } = req.body;
+    if (!terms || typeof terms !== 'object' || Array.isArray(terms)) {
+      return res.status(400).json({ error: 'terms must be an object of category -> string[]' });
+    }
+
+    const { ROUTING_CATEGORIES, setActiveRoutingTerms, compileTerm } =
+      await import('./openai/routing-vocabulary');
+    const { AI_PROMPT_CONFIG_ID, DEFAULT_RESPONSE_TONE } = await import('./openai/prompt-config');
+    const { getPrismaClient } = await import('./prisma-client');
+
+    // Validate before persisting: a term that compiles to nothing is a typo the
+    // admin should see now, not a category that silently stops matching.
+    const cleaned: Record<string, string[]> = {};
+    for (const category of ROUTING_CATEGORIES) {
+      const value = (terms as Record<string, unknown>)[category];
+      if (value === undefined) continue;
+      if (!Array.isArray(value) || value.some((term) => typeof term !== 'string')) {
+        return res.status(400).json({ error: `${category} must be an array of strings` });
+      }
+      const list = (value as string[]).map((term) => term.trim()).filter(Boolean);
+      const unusable = list.filter((term) => compileTerm(term) === null);
+      if (unusable.length > 0) {
+        return res.status(400).json({ error: `${category} has unusable terms: ${unusable.join(', ')}` });
+      }
+      cleaned[category] = Array.from(new Set(list));
+    }
+
+    const adminUser = (req as Request & { user?: { email?: string } }).user?.email || 'admin';
+    const prisma = getPrismaClient();
+    const existing = await prisma.aiPromptConfig.findUnique({ where: { id: AI_PROMPT_CONFIG_ID } });
+    const storedTerms = (existing as { routingTerms?: unknown } | null)?.routingTerms;
+
+    // Merge rather than replace: the admin UI sends every category, but a
+    // partial API call should edit the categories it names, not silently drop
+    // the rest. An explicit empty array still clears a category.
+    const merged = {
+      ...(storedTerms && typeof storedTerms === 'object' && !Array.isArray(storedTerms) ? storedTerms : {}),
+      ...cleaned,
+    };
+
+    const saved = await prisma.aiPromptConfig.upsert({
+      where: { id: AI_PROMPT_CONFIG_ID },
+      update: { routingTerms: merged, lastEditedBy: adminUser },
+      create: {
+        id: AI_PROMPT_CONFIG_ID,
+        responseTone: DEFAULT_RESPONSE_TONE,
+        routingTerms: merged,
+        lastEditedBy: adminUser,
+      },
+    });
+
+    res.json({ terms: setActiveRoutingTerms(merged), updatedAt: saved.updatedAt });
+  } catch (error) {
+    console.error('Error updating routing vocabulary:', error);
+    Sentry.captureException(error instanceof Error ? error : new Error(String(error)));
+    res.status(500).json({ error: 'Failed to update routing vocabulary' });
+  }
+});
+
+// Admin: See how a question routes, and which terms matched
+app.post('/admin/ai/routing-preview', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { question, recentQuestions } = req.body;
+    if (typeof question !== 'string' || !question.trim()) {
+      return res.status(400).json({ error: 'question must be a non-empty string' });
+    }
+    // Optional, and optional on purpose: a short follow-up ("$125k a year",
+    // "yes") inherits the previous turn's needs, so previewing it alone shows
+    // routing that production would never produce. Callers that do not send
+    // history keep the old single-question behaviour.
+    if (recentQuestions !== undefined && !Array.isArray(recentQuestions)) {
+      return res.status(400).json({ error: 'recentQuestions must be an array of strings' });
+    }
+    const priorQuestions: string[] = Array.isArray(recentQuestions)
+      ? recentQuestions.filter((entry: unknown): entry is string => typeof entry === 'string')
+      : [];
+
+    const { ROUTING_CATEGORIES, loadRoutingVocabulary, matchingTerms } =
+      await import('./openai/routing-vocabulary');
+    const { analyzeQuestionNeeds } = await import('./openai/question-analysis');
+
+    await loadRoutingVocabulary(true);
+    const lowered = question.toLowerCase();
+
+    res.json({
+      needs: analyzeQuestionNeeds(question, priorQuestions),
+      matches: Object.fromEntries(
+        ROUTING_CATEGORIES.map((category) => [category, matchingTerms(category, lowered)])
+      ),
+    });
+  } catch (error) {
+    console.error('Error previewing question routing:', error);
+    Sentry.captureException(error instanceof Error ? error : new Error(String(error)));
+    res.status(500).json({ error: 'Failed to preview question routing' });
+  }
+});
+
+/**
+ * Turn a Prisma failure into an ops-actionable message when the cause is a
+ * migration that has not been applied. Without this the model endpoints return
+ * a bare 500 and the missing `models` column looks like a code bug.
+ */
+function modelConfigErrorMessage(error: unknown, fallback: string): string {
+  const message = error instanceof Error ? error.message : '';
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? (error as { code?: string }).code
+      : undefined;
+  // P2021: table missing. P2022: column missing — the shape this migration takes.
+  const missingSchema =
+    code === 'P2021' ||
+    code === 'P2022' ||
+    message.includes('ai_prompt_config') ||
+    message.includes('does not exist');
+  return missingSchema
+    ? 'Database migration missing (ai_prompt_config schema). Run prisma migrate deploy on production, then retry.'
+    : fallback;
+}
+
+// Admin: Read the configured models, with each one checked against what the
+// provider actually serves right now.
+app.get('/admin/ai/models', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { getActiveGenerationSettings, getActiveModelConfig, loadModelConfig, MODEL_PROVIDERS } =
+      await import('./openai/model-config');
+    const { getAllProviderCatalogs, verifyAgainstCatalog } = await import('./openai/model-catalog');
+
+    await loadModelConfig(true);
+    const refresh = req.query.refresh === 'true';
+    const catalogs = await getAllProviderCatalogs(refresh);
+    const catalogByProvider = new Map(catalogs.map(catalog => [catalog.provider, catalog]));
+
+    res.json({
+      slots: getActiveModelConfig().map(slot => ({
+        ...slot,
+        verification: verifyAgainstCatalog(catalogByProvider.get(slot.provider)!, slot.model),
+      })),
+      generationSettings: getActiveGenerationSettings(),
+      providers: Object.values(MODEL_PROVIDERS).map(provider => ({
+        ...provider,
+        ...catalogByProvider.get(provider.id)!,
+      })),
+    });
+  } catch (error) {
+    console.error('Error reading model config:', error);
+    Sentry.captureException(error instanceof Error ? error : new Error(String(error)));
+    res.status(500).json({ error: modelConfigErrorMessage(error, 'Failed to read model config') });
+  }
+});
+
+// Admin: Update the model used in each pipeline slot
+app.put('/admin/ai/models', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { models, generationSettings, allowUnlisted } = req.body;
+    if (!models || typeof models !== 'object' || Array.isArray(models)) {
+      return res.status(400).json({ error: 'models must be an object of slot -> model id' });
+    }
+    // Optional so a client that predates generation settings keeps working; an
+    // omitted key leaves the stored settings alone rather than clearing them.
+    if (
+      generationSettings !== undefined &&
+      (!generationSettings || typeof generationSettings !== 'object' || Array.isArray(generationSettings))
+    ) {
+      return res
+        .status(400)
+        .json({ error: 'generationSettings must be an object of setting -> value' });
+    }
+
+    const {
+      MODEL_SLOTS,
+      generationSettingsForSlot,
+      isGenerationSettingId,
+      isModelSlotId,
+      isPlausibleModelId,
+      isValidGenerationSettingValue,
+      setActiveGenerationSettings,
+      setActiveModelOverrides,
+      slotDefault,
+    } = await import('./openai/model-config');
+    const { AI_PROMPT_CONFIG_ID, DEFAULT_RESPONSE_TONE } = await import('./openai/prompt-config');
+    const { getProviderCatalog, verifyAgainstCatalog } = await import('./openai/model-catalog');
+    const { getPrismaClient } = await import('./prisma-client');
+
+    const submitted = models as Record<string, unknown>;
+    for (const key of Object.keys(submitted)) {
+      if (!isModelSlotId(key)) {
+        return res.status(400).json({ error: `Unknown model slot: ${key}` });
+      }
+    }
+
+    // An empty value clears the override so the slot falls back to its
+    // environment variable or shipped default.
+    const cleaned: Record<string, string> = {};
+    for (const slot of MODEL_SLOTS) {
+      const value = submitted[slot.id];
+      if (value === undefined) continue;
+      if (typeof value !== 'string') {
+        return res.status(400).json({ error: `${slot.id} must be a string` });
+      }
+      const trimmed = value.trim();
+      if (trimmed.length === 0) continue;
+      if (!isPlausibleModelId(trimmed)) {
+        return res.status(400).json({
+          error: `"${trimmed}" is not a model id. Enter the id exactly as the provider publishes it, e.g. claude-opus-4-8.`,
+        });
+      }
+      // Only reject against a catalog we could actually read: an unreachable
+      // provider must not look like a typo in the admin's input.
+      const verification = verifyAgainstCatalog(await getProviderCatalog(slot.provider), trimmed);
+      if (verification.status === 'not_served' && allowUnlisted !== true) {
+        return res.status(400).json({
+          error: `${slot.label}: "${trimmed}" is not a model your API key can call. Check the provider's model list, or save again with "use anyway" if you know it is valid.`,
+          slot: slot.id,
+          unlisted: true,
+        });
+      }
+      cleaned[slot.id] = trimmed;
+    }
+
+    // slot -> setting -> value, matching how the panel groups them.
+    const submittedSettings = (generationSettings ?? {}) as Record<string, unknown>;
+    for (const key of Object.keys(submittedSettings)) {
+      if (!isModelSlotId(key)) {
+        return res.status(400).json({ error: `Unknown model slot in generationSettings: ${key}` });
+      }
+    }
+
+    const cleanedSettings: Record<string, Record<string, string>> = {};
+    for (const slot of MODEL_SLOTS) {
+      const submittedForSlot = submittedSettings[slot.id];
+      if (submittedForSlot === undefined) continue;
+      if (!submittedForSlot || typeof submittedForSlot !== 'object' || Array.isArray(submittedForSlot)) {
+        return res.status(400).json({ error: `generationSettings.${slot.id} must be an object` });
+      }
+      const perSlotSubmitted = submittedForSlot as Record<string, unknown>;
+      for (const key of Object.keys(perSlotSubmitted)) {
+        if (!isGenerationSettingId(key)) {
+          return res.status(400).json({ error: `Unknown generation setting: ${slot.id}.${key}` });
+        }
+      }
+
+      const perSlot: Record<string, string> = {};
+      for (const setting of generationSettingsForSlot(slot.id)) {
+        const value = perSlotSubmitted[setting.id];
+        if (value === undefined) continue;
+        if (typeof value !== 'string') {
+          return res.status(400).json({ error: `${slot.id}.${setting.id} must be a string` });
+        }
+        const trimmed = value.trim();
+        // Empty clears the override, exactly as it does for a model slot.
+        if (trimmed.length === 0) continue;
+        if (!isValidGenerationSettingValue(setting, trimmed)) {
+          const allowed =
+            setting.kind === 'enum'
+              ? `one of ${(setting.options ?? []).join(', ')}`
+              : `${setting.kind === 'integer' ? 'a whole number' : 'a number'} between ${setting.min} and ${setting.max}`;
+          return res.status(400).json({
+            error: `${slot.label} — ${setting.label}: "${trimmed}" is not valid. Expected ${allowed}${setting.omittable ? ', or off to leave the parameter out of the request' : ''}.`,
+            slot: slot.id,
+            setting: setting.id,
+          });
+        }
+        perSlot[setting.id] = trimmed;
+      }
+      if (Object.keys(perSlot).length > 0) cleanedSettings[slot.id] = perSlot;
+    }
+
+    const adminUser = req.user?.email || 'admin';
+    const prisma = getPrismaClient();
+    const saved = await prisma.aiPromptConfig.upsert({
+      where: { id: AI_PROMPT_CONFIG_ID },
+      update: {
+        models: cleaned,
+        lastEditedBy: adminUser,
+        ...(generationSettings === undefined ? {} : { generationSettings: cleanedSettings }),
+      },
+      create: {
+        id: AI_PROMPT_CONFIG_ID,
+        responseTone: DEFAULT_RESPONSE_TONE,
+        models: cleaned,
+        generationSettings: cleanedSettings,
+        lastEditedBy: adminUser,
+      },
+    });
+
+    // Replace rather than merge: the panel always submits every slot, and a
+    // cleared field has to be able to remove an override.
+    const active = setActiveModelOverrides(cleaned);
+    if (generationSettings !== undefined) setActiveGenerationSettings(cleanedSettings);
+    res.json({
+      models: Object.fromEntries(
+        MODEL_SLOTS.map(slot => [slot.id, active[slot.id] ?? slotDefault(slot)])
+      ),
+      ...(generationSettings === undefined ? {} : { generationSettings: cleanedSettings }),
+      updatedAt: saved.updatedAt,
+    });
+  } catch (error) {
+    console.error('Error updating model config:', error);
+    Sentry.captureException(error instanceof Error ? error : new Error(String(error)));
+    res.status(500).json({ error: modelConfigErrorMessage(error, 'Failed to update model config') });
   }
 });
 

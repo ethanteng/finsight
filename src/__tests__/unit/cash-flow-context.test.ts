@@ -28,7 +28,7 @@ describe('buildCanonicalCashFlowAnalyses', () => {
     expect(result.incomeResult?.averageMonthly).toBe(6_000);
     expect(result.expenseResult?.averageMonthly).toBe(3_750);
     expect(result.expenseResult?.text).toContain('Excluded Transactions: 2');
-    expect(result.expenseResult?.text).toContain('RENT: $5000.00, GROCERIES: $2000.00');
+    expect(result.expenseResult?.text).toContain('Rent: $5000.00, Groceries: $2000.00');
   });
 
   it('honors manual overrides without replacing canonical totals', () => {
@@ -50,6 +50,23 @@ describe('buildCanonicalCashFlowAnalyses', () => {
     expect(result.monthlyAnalysis).toContain(
       '2026-02: income $7000.00, expenses $4500.00, operating cash flow $2500.00'
     );
+  });
+
+  it('merges split category spellings before ranking top categories', () => {
+    const splitSummary = {
+      ...summary,
+      byCategory: {
+        'Food and Drink': 1_200,
+        'Food And Drink': 800,
+        Rent: 500,
+      },
+    };
+
+    const result = buildCanonicalCashFlowAnalyses(splitSummary);
+
+    expect(result.expenseResult?.text).toContain('Food And Drink: $2000.00');
+    expect(result.expenseResult?.text).toContain('Rent: $500.00');
+    expect(result.expenseResult?.text).not.toContain('Food and Drink: $1200.00');
   });
 
   it('builds broad-question cash-flow context from deterministic transaction factories', () => {

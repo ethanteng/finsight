@@ -6,6 +6,8 @@ import { FinancialDataService } from './services/financial-data-service';
 import { SnapTradeService } from './snaptrade';
 import { TransactionSyncService } from './services/transaction-sync-service';
 import { matchAccountsAcrossConnections, toConnectionAccount } from './services/plaid-connection-supersede';
+import { normalizeAssetType } from './services/asset-class';
+import { normalizeLabel } from './services/label-normalization';
 
 // Initialize Prisma client lazily to avoid import issues during ts-node startup
 let prisma: PrismaClient | null = null;
@@ -103,35 +105,6 @@ if (process.env.NODE_ENV === 'test' || process.env.GITHUB_ACTIONS) {
     } as any;
   };
 }
-
-// Enhanced data processing for production Plaid data
-const processAccountData = (account: any) => {
-  // Ensure we have valid balance data
-  const balances = account.balances || {};
-
-  return {
-    id: account.account_id,
-    name: account.name,
-    type: account.type,
-    subtype: account.subtype,
-    mask: account.mask,
-    balance: {
-      available: balances.available ?? 0,
-      current: balances.current ?? 0,
-      limit: balances.limit ?? null,
-      iso_currency_code: balances.iso_currency_code ?? 'USD',
-      unofficial_currency_code: balances.unofficial_currency_code ?? null
-    },
-    // Enhanced metadata for production
-    verification_status: account.verification_status,
-    last_updated_datetime: account.last_updated_datetime,
-    // Investment-specific data
-    securities: account.securities || [],
-    holdings: account.holdings || [],
-    // Income-specific data
-    income_verification: account.income_verification || null
-  };
-};
 
 export const processTransactionData = (transaction: any) => {
   // ✅ Extract basic categories from personal_finance_category if legacy category is empty
@@ -285,7 +258,7 @@ const analyzePortfolio = (holdings: any[], securities: any[]) => {
 
   const assetAllocation = holdings.reduce((allocation, holding) => {
     const security = securityMap.get(holding.security_id);
-    const assetType = security?.type || 'Unknown';
+    const assetType = normalizeAssetType(security?.type || holding.security_type);
 
     if (!allocation[assetType]) {
       allocation[assetType] = 0;
@@ -316,7 +289,9 @@ const analyzePortfolio = (holdings: any[], securities: any[]) => {
 
 const analyzeInvestmentActivity = (transactions: any[]) => {
   const activityByType = transactions.reduce((activity, transaction) => {
-    const type = transaction.type || 'Unknown';
+    // Plaid types are lowercase ("buy"), SnapTrade activity types uppercase
+    // ("BUY") — group on one label so a merged feed reports one bucket per type.
+    const type = normalizeLabel(transaction.type);
     if (!activity[type]) {
       activity[type] = { count: 0, totalAmount: 0 };
     }
@@ -520,6 +495,21 @@ export const setupPlaidRoutes = (app: any) => {
         // Log it but still return the accounts (deduplication will happen in frontend as safety net)
       }
 
+      // ✅ Flag accounts the provider no longer reports (closed at the institution).
+      // Only when this response is built from persisted rows — if Plaid just returned
+      // an account in a live fetch, it is open by definition. Comparing a live list
+      // against a stale snapshot would mislabel re-authenticated accounts as closed
+      // (and hide the token re-auth prompt).
+      const { getAccountClosures, closureFor } = await import('./services/account-closure-service');
+      const usingPersistedPlaid = financialData.metadata?.dataSources?.plaid === 'persisted';
+      const closures = usingPersistedPlaid
+        ? await getAccountClosures(req.user.id, plaidOnlyAccounts as any[]).catch(error => {
+            // Never fail the accounts list over the closed-account annotation.
+            console.warn('/plaid/all-accounts: closed-account detection failed:', error);
+            return new Map();
+          })
+        : new Map();
+
       // ✅ Format accounts for frontend (matching expected format)
       // Trust FinancialDataService - it should have already deduplicated
       const formattedAccounts = plaidOnlyAccounts.map(account => {
@@ -527,6 +517,7 @@ export const setupPlaidRoutes = (app: any) => {
         // Use account_id or plaidAccountId as the primary ID for frontend
         const accountId = account.account_id || accountAny.plaidAccountId || accountAny.persistentAccountId || account.id;
         const mask = accountAny.mask || (accountId ? accountId.slice(-4) : '****');
+        const closure = closureFor(closures, accountAny);
 
         return {
           id: accountId, // Use account_id/plaidAccountId as the unique identifier
@@ -535,13 +526,18 @@ export const setupPlaidRoutes = (app: any) => {
           subtype: account.subtype,
           mask: mask,
           balance: {
-            available: account.balance?.available ?? 0,
-            current: account.balance?.current ?? 0,
+            // Never coerce a missing balance to 0: an account the provider did not
+            // report a balance for is unknown, not empty, and 0 both reads as a real
+            // balance and shadows the current/available fallback on the client.
+            available: account.balance?.available ?? null,
+            current: account.balance?.current ?? null,
             limit: account.balance?.limit ?? null,
             iso_currency_code: account.balance?.iso_currency_code ?? 'USD',
             unofficial_currency_code: account.balance?.unofficial_currency_code ?? null
           },
-          institution: account.institution
+          institution: account.institution,
+          isClosed: closure.isClosed,
+          lastSeenAt: closure.lastSeenAt
         };
       });
 

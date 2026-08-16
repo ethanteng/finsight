@@ -3,6 +3,9 @@ import { useState, useEffect, useCallback } from 'react';
 import MarkdownRenderer from '../../components/MarkdownRenderer';
 import PageMeta from '../../components/PageMeta';
 import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
+import AnswerQualityPanel from '../../components/admin/AnswerQualityPanel';
+import RoutingVocabularyPanel from '../../components/admin/RoutingVocabularyPanel';
+import ModelConfigPanel from '../../components/admin/ModelConfigPanel';
 
 interface ProductionUser {
   userId: string;
@@ -79,7 +82,7 @@ interface MarketNewsContext {
 }
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'production' | 'users' | 'market-news' | 'ai-tone'>('production');
+  const [activeTab, setActiveTab] = useState<'production' | 'users' | 'market-news' | 'ai-settings'>('production');
 
   // Production data state
   const [productionUsers, setProductionUsers] = useState<ProductionUser[]>([]);
@@ -106,6 +109,8 @@ export default function AdminPage() {
   const [editingText, setEditingText] = useState<string>('');
   const [refreshingContext, setRefreshingContext] = useState<string | null>(null);
   const [refreshingProduction, setRefreshingProduction] = useState(false);
+  // Bumped so the answer-quality panel reloads with the rest of the tab.
+  const [qualityRefreshToken, setQualityRefreshToken] = useState(0);
   const [refreshingUsers, setRefreshingUsers] = useState(false);
   const [refreshingAllContexts, setRefreshingAllContexts] = useState(false);
 
@@ -183,6 +188,8 @@ export default function AdminPage() {
   const refreshProductionData = async () => {
     setRefreshingProduction(true);
     try {
+      // Keep the answer-quality panel in step with the rest of the tab.
+      setQualityRefreshToken((token) => token + 1);
       await loadProductionData();
     } catch (err) {
       console.error('Production data refresh error:', err);
@@ -800,6 +807,12 @@ export default function AdminPage() {
           </button>
         </div>
 
+        <AnswerQualityPanel
+          apiUrl={API_URL}
+          getAuthHeaders={getAuthHeaders}
+          refreshToken={qualityRefreshToken}
+        />
+
         {/* Users View */}
         {viewMode === 'sessions' && (
           <div className="bg-gray-800 rounded-lg p-6">
@@ -1272,7 +1285,7 @@ export default function AdminPage() {
     );
   };
 
-  const renderAiToneTab = () => {
+  const renderAiSettingsTab = () => {
     const isCustomized = !toneMeta.isDefault;
 
     return (
@@ -1363,6 +1376,9 @@ export default function AdminPage() {
             </div>
           )}
         </div>
+
+        <ModelConfigPanel apiUrl={API_URL} getAuthHeaders={getAuthHeaders} />
+        <RoutingVocabularyPanel apiUrl={API_URL} getAuthHeaders={getAuthHeaders} />
       </div>
     );
   };
@@ -1601,14 +1617,14 @@ export default function AdminPage() {
             Market News
           </button>
           <button
-            onClick={() => setActiveTab('ai-tone')}
+            onClick={() => setActiveTab('ai-settings')}
             className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
-              activeTab === 'ai-tone'
+              activeTab === 'ai-settings'
                 ? 'bg-[#102319] text-white shadow-sm'
                 : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'
             }`}
           >
-            AI Tone
+            AI Settings
           </button>
         </div>
 
@@ -1616,7 +1632,7 @@ export default function AdminPage() {
         {activeTab === 'production' && renderProductionTab()}
         {activeTab === 'users' && renderUsersTab()}
         {activeTab === 'market-news' && renderMarketNewsTab()}
-        {activeTab === 'ai-tone' && renderAiToneTab()}
+        {activeTab === 'ai-settings' && renderAiSettingsTab()}
         </div>
       </div>
     </>

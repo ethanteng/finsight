@@ -22,6 +22,8 @@ export interface EvidenceManifest {
   snapshot: { computedAt?: string; asOf?: string; status?: string };
   facts: CanonicalFact[];
   contextSelection?: Record<string, boolean>;
+  /** Set when a retry widened the context beyond what routing selected. */
+  contextEscalated?: boolean;
   modelCalls: Array<{
     phase: 'initial' | 'retry';
     provider: 'claude' | 'openai';
@@ -37,7 +39,12 @@ export interface EvidenceManifest {
     totalMs: number;
   };
   validation: {
-    deterministic: { valid: boolean; issues: string[] };
+    deterministic: {
+      valid: boolean;
+      issues: string[];
+      /** Absent on manifests generated before salvage was introduced. */
+      outcome?: 'passed' | 'salvaged' | 'replaced';
+    };
     secondary?: Array<{ phase: 'initial' | 'retry'; valid: boolean; issues: string[] }>;
   };
   evidenceRefs: {
@@ -135,6 +142,7 @@ export function ShowTheMathContent({ data }: { data: Partial<ShowTheMathData> | 
         <JsonBlock value={{
           snapshot: manifest.snapshot,
           contextSelection: manifest.contextSelection,
+          ...(manifest.contextEscalated && { contextEscalated: true }),
           evidenceRefs: manifest.evidenceRefs,
         }} />
       </CollapsibleSection>

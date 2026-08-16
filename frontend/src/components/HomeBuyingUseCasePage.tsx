@@ -8,6 +8,7 @@ import { pushBeginCheckout } from "@/lib/dataLayer";
 import SiteFooter from "./SiteFooter";
 import SiteHeader from "./SiteHeader";
 import type { GhostPost } from "@/lib/ghost";
+import { useDialog } from '@/components/ui/dialog';
 
 
 const HOME_BUYING_EXAMPLE = {
@@ -41,6 +42,7 @@ interface HomeBuyingUseCasePageProps {
 
 export default function HomeBuyingUseCasePage({ homeBuyingPosts = [] }: HomeBuyingUseCasePageProps) {
   const [isLoading, setIsLoading] = useState<string | null>(null);
+  const { showError, dialog } = useDialog();
 
   const handleBuyClick = async (planId: string) => {
     pushBeginCheckout();
@@ -64,11 +66,11 @@ export default function HomeBuyingUseCasePage({ homeBuyingPosts = [] }: HomeBuyi
         window.location.href = url;
       } else {
         const err = await response.json();
-        alert(err.error || "Failed to create checkout session. Please try again.");
+        void showError(err.error || "Failed to create checkout session. Please try again.");
       }
     } catch (err) {
       console.error(err);
-      alert("An error occurred. Please try again.");
+      void showError("An error occurred. Please try again.");
     } finally {
       setIsLoading(null);
     }
@@ -215,6 +217,7 @@ export default function HomeBuyingUseCasePage({ homeBuyingPosts = [] }: HomeBuyi
         </div>
       </section>
       <SiteFooter />
+      {dialog}
     </div>
   );
 }

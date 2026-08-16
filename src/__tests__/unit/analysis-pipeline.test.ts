@@ -1,4 +1,6 @@
-import { runAskLincAnalysis } from '../../openai/analysis-pipeline';
+import { runAskLincAnalysis, selectValidationFeedback } from '../../openai/analysis-pipeline';
+import { UNVERIFIED_PROSE_NOTICE } from '../../openai/response-facts';
+import { SECONDARY_REVIEW_CAVEAT } from '../../openai/response-grounding';
 import { gatherContextSnapshot } from '../../openai/context-service';
 import { askClaude } from '../../openai/claude-client';
 import { validateWithGemini } from '../../openai/response-validator';
@@ -151,6 +153,179 @@ describe('runAskLincAnalysis validation routing', () => {
     });
   });
 
+  it('keeps the verified part of an answer when the retry is only partly wrong', async () => {
+    mockedAskClaude.mockResolvedValue(JSON.stringify({
+      summary: 'Your net worth is $100. You should also expect $999 next year.',
+      insights: ['Cash is $80.'],
+      suggested_actions: ['Move $999 into savings.'],
+    }));
+
+    const result = await runAskLincAnalysis({
+      question: 'What is my net worth?',
+      userId: 'user-1',
+      enableValidation: true,
+    });
+
+    expect(result.structuredResponse.summary).toBe(`Your net worth is $100.\n\n${UNVERIFIED_PROSE_NOTICE}`);
+    expect(result.structuredResponse.insights).toEqual(['Cash is $80.']);
+    expect(result.structuredResponse.suggested_actions).toEqual([]);
+    expect(result.showTheMathData?.evidenceManifest.validation.deterministic.outcome).toBe('salvaged');
+  });
+
+  it('still runs secondary validation on a salvaged retry', async () => {
+    // Salvaged prose reaches the user, so the reasoning checks Gemini performs
+    // must not be skipped just because the deterministic pass failed.
+    mockedAskClaude.mockResolvedValue(JSON.stringify({
+      summary: 'Your retirement plan is on track. A $999,999 windfall would help.',
+      insights: [],
+      suggested_actions: [],
+    }));
+    mockedValidateWithGemini
+      .mockResolvedValueOnce({ valid: false, issues: ['Unsupported conclusion.'] })
+      .mockResolvedValueOnce({ valid: false, issues: ['Still an unsupported conclusion.'] });
+
+    const result = await runAskLincAnalysis({
+      question: 'Am I on track for retirement?',
+      userId: 'user-1',
+      enableValidation: true,
+    });
+
+    expect(mockedValidateWithGemini).toHaveBeenCalledTimes(2);
+    // Salvaged and then objected to: the verified sentence survives carrying
+    // both notices, rather than the user getting nothing after two model calls.
+    expect(result.structuredResponse.summary).toBe(
+      `Your retirement plan is on track.\n\n${UNVERIFIED_PROSE_NOTICE}\n\n${SECONDARY_REVIEW_CAVEAT}`
+    );
+    expect(result.showTheMathData?.evidenceManifest.validation.deterministic.outcome).toBe('salvaged');
+    expect(result.showTheMathData?.evidenceManifest.secondaryCaveat).toBe(true);
+  });
+
+  it('asks for the input that blocked the retirement projection', async () => {
+    // The missing input was only ever described to the model, buried in the
+    // context pack. The user is the one who can supply it.
+    mockedGatherContext.mockResolvedValue({
+      ...snapshot(),
+      retirementAnalysisNeedsInfo: {
+        missingParams: ['annualWithdrawalAmount'],
+        detectedParams: {},
+      },
+    } as any);
+    mockedAskClaude.mockResolvedValue(JSON.stringify({
+      summary: 'Your net worth is $100.',
+      insights: [],
+      suggested_actions: [],
+    }));
+
+    const result = await runAskLincAnalysis({ question: 'Am I on track for retirement?', userId: 'user-1' });
+
+    expect(result.structuredResponse.summary).toContain('Your net worth is $100.');
+    expect(result.structuredResponse.summary).toContain('how much you expect to spend per year once retired');
+    expect(result.structuredResponse.summary).toContain('Reply with that');
+    expect(result.displayText).toContain('Reply with that');
+  });
+
+  it('widens the context when the first answer reached for a number it was not given', async () => {
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your largest holding is worth $250,000.',
+        insights: [],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $100.',
+        insights: [],
+        suggested_actions: [],
+      }));
+
+    const result = await runAskLincAnalysis({ question: 'What is my net worth?', userId: 'user-1' });
+
+    // Routing selected none of the detail tiers; the retry asked for all of them.
+    expect(mockedGatherContext).toHaveBeenCalledTimes(2);
+    expect(mockedGatherContext.mock.calls[0][0].questionNeeds).toMatchObject({
+      needsAccountDetails: false,
+      needsInvestments: false,
+    });
+    expect(mockedGatherContext.mock.calls[1][0].questionNeeds).toMatchObject({
+      needsAccountDetails: true,
+      needsTransactionDetails: true,
+      needsInvestments: true,
+      needsRetirement: true,
+    });
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+  });
+
+  it('keeps the first answer when widening the context grounds it', async () => {
+    // $80 is total_cash, which the fact pack only gained on the widened read.
+    // Re-judging against it means no second model call, and no feedback telling
+    // the model to drop a number that is now supported.
+    mockedGatherContext
+      .mockResolvedValueOnce({ ...snapshot(), financialSummary: { financialOverview: { netWorth: 100, totalCash: null, totalInvestments: 20, totalDebt: 0, homeValue: null } } } as any)
+      .mockResolvedValueOnce(snapshot());
+    mockedAskClaude.mockResolvedValue(JSON.stringify({
+      summary: 'You are holding $80 in cash.',
+      insights: [],
+      suggested_actions: [],
+    }));
+
+    const result = await runAskLincAnalysis({ question: 'What is my net worth?', userId: 'user-1' });
+
+    expect(mockedAskClaude).toHaveBeenCalledTimes(1);
+    expect(result.structuredResponse.summary).toBe('You are holding $80 in cash.');
+    expect(result.showTheMathData?.evidenceManifest.validation.deterministic.valid).toBe(true);
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+    // Routing metrics must still see what routing originally chose.
+    expect(result.showTheMathData?.evidenceManifest.routedContextSelection).toMatchObject({
+      accountsIncluded: false,
+    });
+  });
+
+  it('does not widen the context when every tier is already loaded', async () => {
+    mockedAskClaude.mockResolvedValue(JSON.stringify({
+      summary: 'Your portfolio could reach $250,000.',
+      insights: [],
+      suggested_actions: [],
+    }));
+
+    // This question routes to accounts, transactions, investments, and retirement.
+    const result = await runAskLincAnalysis({
+      question: 'Evaluate my spending and my portfolio as I plan on retiring soon.',
+      userId: 'user-1',
+    });
+
+    expect(mockedGatherContext).toHaveBeenCalledTimes(1);
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBeUndefined();
+  });
+
+  it('keeps the retry when widening the context fails', async () => {
+    mockedGatherContext
+      .mockResolvedValueOnce(snapshot())
+      .mockRejectedValueOnce(new Error('snapshot read failed'));
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({ summary: 'Your holding is worth $250,000.' }))
+      .mockResolvedValueOnce(JSON.stringify({ summary: 'Your net worth is $100.' }));
+
+    const result = await runAskLincAnalysis({ question: 'What is my net worth?', userId: 'user-1' });
+
+    expect(mockedAskClaude).toHaveBeenCalledTimes(2);
+    expect(result.structuredResponse.summary).toBe('Your net worth is $100.');
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBeUndefined();
+  });
+
+  it('sends one example of every failure kind back to the retry', async () => {
+    mockedAskClaude.mockResolvedValue(JSON.stringify({
+      summary: 'Your net worth is $999. Growth was 47%. You could add 250,000 to savings.',
+      insights: [],
+      suggested_actions: [],
+    }));
+
+    await runAskLincAnalysis({ question: 'What is my net worth?', userId: 'user-1' });
+
+    const retryMessage = mockedAskClaude.mock.calls[1][1];
+    expect(retryMessage).toContain('usd value 999');
+    expect(retryMessage).toContain('percent value 47');
+    expect(retryMessage).toContain('numeric value 250000');
+  });
+
   it('re-runs secondary validation after a retry for complex questions', async () => {
     mockedAskClaude
       .mockResolvedValueOnce(JSON.stringify({
@@ -177,7 +352,60 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(mockedValidateWithGemini).toHaveBeenCalledTimes(2);
   });
 
-  it('returns a safe response when Gemini also rejects the Claude retry', async () => {
+  it('ships a grounded answer with a caveat when Gemini objects to the retry', async () => {
+    // Every figure has been checked; the objection is about reasoning. Spending
+    // 80 seconds and returning nothing was the worse outcome.
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({ summary: 'Initial retirement answer.' }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $100.',
+        insights: ['Cash is $80.'],
+        suggested_actions: ['Review your allocation.'],
+      }));
+    mockedValidateWithGemini
+      .mockResolvedValueOnce({ valid: false, issues: ['Initial answer is unsupported.'] })
+      .mockResolvedValueOnce({ valid: false, issues: ['The recommendation ignores the cash position.'] });
+
+    const result = await runAskLincAnalysis({
+      question: 'Am I on track for retirement?',
+      userId: 'user-1',
+      enableValidation: true,
+    });
+
+    expect(result.structuredResponse.summary).toBe(`Your net worth is $100.\n\n${SECONDARY_REVIEW_CAVEAT}`);
+    expect(result.structuredResponse.insights).toEqual(['Cash is $80.']);
+    expect(result.structuredResponse.suggested_actions).toEqual(['Review your allocation.']);
+    expect(result.showTheMathData?.evidenceManifest.secondaryCaveat).toBe(true);
+    // The objection itself stays in the evidence, not in the user's answer.
+    expect(result.structuredResponse.summary).not.toContain('ignores the cash position');
+    expect(result.showTheMathData?.evidenceManifest.validation.secondary).toEqual([
+      { phase: 'initial', valid: false, issues: ['Initial answer is unsupported.'] },
+      { phase: 'retry', valid: false, issues: ['The recommendation ignores the cash position.'] },
+    ]);
+  });
+
+  it('still replaces an answer that could not be grounded at all', async () => {
+    // The caveat is for verified figures with contested reasoning. Nothing
+    // verified survives here, so the placeholder is still correct.
+    mockedAskClaude.mockResolvedValue(JSON.stringify({
+      summary: 'Your net worth is $999.',
+      insights: ['This is also based on $999.'],
+      suggested_actions: ['Act on the incorrect result.'],
+    }));
+
+    const result = await runAskLincAnalysis({
+      question: 'What is my net worth?',
+      userId: 'user-1',
+      enableValidation: true,
+    });
+
+    expect(result.structuredResponse.summary).toBe(
+      'I could not verify the generated answer against your current financial snapshot. Please try the question again.'
+    );
+    expect(result.showTheMathData?.evidenceManifest.validation.deterministic.outcome).toBe('replaced');
+  });
+
+  it('keeps the secondary validator prompt and raw output out of the evidence', async () => {
     mockedAskClaude
       .mockResolvedValueOnce(JSON.stringify({
         summary: 'Initial retirement answer.',
@@ -209,12 +437,7 @@ describe('runAskLincAnalysis validation routing', () => {
       enableValidation: true,
     });
 
-    expect(result.structuredResponse).toEqual({
-      summary: 'I could not verify the generated answer against your current financial snapshot. Please try the question again.',
-      key_numbers: undefined,
-      insights: [],
-      suggested_actions: [],
-    });
+    expect(result.structuredResponse.summary).toContain(SECONDARY_REVIEW_CAVEAT);
     expect(result.showTheMathData?.evidenceManifest.validation.secondary).toEqual([
       { phase: 'initial', valid: false, issues: ['Initial answer is unsupported.'] },
       { phase: 'retry', valid: false, issues: ['Retry is still unsupported.'] },
@@ -260,5 +483,53 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(userMessage).not.toContain('Question 2');
     expect(userMessage.indexOf('Question 3')).toBeLessThan(userMessage.indexOf('Question 4'));
     expect(userMessage.indexOf('Question 4')).toBeLessThan(userMessage.indexOf('Question 5'));
+  });
+
+  it('hands the earlier turns to context gathering, newest first', async () => {
+    // Analysis inputs arrive a turn or two before the question that needs them
+    // ("drop our spending to $125K" … "re-run my retirement analysis"). Context
+    // gathering only ever saw the last message, so it asked for numbers the
+    // user had already given.
+    mockedAskClaude.mockResolvedValue(JSON.stringify({ summary: 'Current answer.' }));
+    const history = [1, 2, 3].map((day) => ({
+      id: String(day),
+      question: `Question ${day}`,
+      answer: `Answer ${day}`,
+      createdAt: new Date(`2026-08-0${day}T00:00:00.000Z`),
+    }));
+
+    await runAskLincAnalysis({ question: 'Re-run it.', userId: 'user-1', conversationHistory: history });
+
+    // The answers travel with the questions: a reply like "62" only has a
+    // meaning next to the question it answered.
+    expect(mockedGatherContext.mock.calls[0][0].recentTurns).toEqual([
+      { question: 'Question 3', answer: 'Answer 3' },
+      { question: 'Question 2', answer: 'Answer 2' },
+      { question: 'Question 1', answer: 'Answer 1' },
+    ]);
+  });
+});
+
+describe('selectValidationFeedback', () => {
+  const issues = [
+    ...Array.from({ length: 20 }, (_, i) => `User-facing usd value ${i} is not present in the canonical fact pack.`),
+    'User-facing percent value 68 is not present in the canonical fact pack.',
+    'User-facing numeric value 250000 is not present in the canonical fact pack.',
+    'net_worth does not cite a canonical fact.',
+  ];
+
+  it('covers every kind of failure before repeating one', () => {
+    const selected = selectValidationFeedback(issues, 6);
+    expect(selected.slice(0, 4)).toEqual([
+      'User-facing usd value 0 is not present in the canonical fact pack.',
+      'User-facing percent value 68 is not present in the canonical fact pack.',
+      'User-facing numeric value 250000 is not present in the canonical fact pack.',
+      'net_worth does not cite a canonical fact.',
+    ]);
+    expect(selected[selected.length - 1]).toContain('17 further issue(s)');
+  });
+
+  it('returns every issue unchanged when they all fit', () => {
+    expect(selectValidationFeedback(issues.slice(20), 12)).toEqual(issues.slice(20));
   });
 });

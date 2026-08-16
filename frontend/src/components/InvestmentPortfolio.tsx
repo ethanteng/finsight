@@ -2,6 +2,8 @@
 
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { normalizeAssetType } from '../lib/asset-class';
+import { normalizeLabel } from '../lib/label-normalization';
 
 interface Security {
   id: string;
@@ -127,8 +129,21 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
   const getAssetAllocationArray = () => {
     if (!portfolio.assetAllocation) return [];
 
-    return portfolio.assetAllocation
-      .sort((a, b) => b.value - a.value);
+    // Defensive merge: if a producer still sends the same asset class under
+    // different spellings ("etf" and "ETF"), show one row instead of two.
+    const merged = new Map<string, { type: string; value: number; percentage: number }>();
+    portfolio.assetAllocation.forEach(allocation => {
+      const type = normalizeAssetType(allocation.type);
+      const existing = merged.get(type);
+      if (existing) {
+        existing.value += allocation.value;
+        existing.percentage += allocation.percentage;
+      } else {
+        merged.set(type, { type, value: allocation.value, percentage: allocation.percentage });
+      }
+    });
+
+    return Array.from(merged.values()).sort((a, b) => b.value - a.value);
   };
 
   // Bar chart data for holdings
@@ -358,7 +373,7 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                               {holding.security_name || holding.name || 'Unknown Security'}
                             </div>
                             <div className="text-sm text-gray-400">
-                              {holding.security_type || holding.type || 'Unknown Type'}
+                              {normalizeAssetType(holding.security_type || holding.type)}
                               {holding.ticker_symbol && ` • ${holding.ticker_symbol}`}
                             </div>
                             <div className="text-xs text-gray-500 mt-1">
@@ -397,14 +412,14 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3 flex-1">
                     <div className="text-2xl">
-                      {getAssetTypeIcon(transaction.security_type || transaction.type || 'Unknown')}
+                      {getAssetTypeIcon(normalizeAssetType(transaction.security_type || transaction.type))}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-white truncate">
                         {transaction.security_name || transaction.name || 'Unknown Security'}
                       </div>
                       <div className="text-sm text-gray-400">
-                        {transaction.snapTradeData?.activity_type || transaction.type} • {transaction.date}
+                        {normalizeLabel(transaction.snapTradeData?.activity_type || transaction.type)} • {transaction.date}
                         {transaction.ticker_symbol && ` • ${transaction.ticker_symbol}`}
                         {transaction.snapTradeData?.account_name && ` • ${transaction.snapTradeData.account_name}`}
                       </div>
@@ -422,7 +437,7 @@ export default function InvestmentPortfolio({ portfolio, holdings, transactions 
                       {formatCurrency(Math.abs(transaction.amount || 0))}
                     </div>
                     <div className="text-sm text-gray-400">
-                      {transaction.snapTradeData?.activity_type || transaction.type}
+                      {normalizeLabel(transaction.snapTradeData?.activity_type || transaction.type)}
                     </div>
                   </div>
                 </div>

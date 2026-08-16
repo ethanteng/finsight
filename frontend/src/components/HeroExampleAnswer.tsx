@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { pushBeginCheckout } from "@/lib/dataLayer";
+import { useDialog } from '@/components/ui/dialog';
 
 /**
  * Static product "after-state" for the homepage hero — a real reasoning answer
@@ -12,6 +13,7 @@ const HERO_ANSWER_ALT =
 
 export default function HeroExampleAnswer() {
   const [isLoading, setIsLoading] = useState(false);
+  const { showError, dialog } = useDialog();
 
   const handleGetStarted = async () => {
     pushBeginCheckout();
@@ -36,10 +38,10 @@ export default function HeroExampleAnswer() {
       }
 
       const err = await response.json();
-      alert(err.error || "Failed to create checkout session. Please try again.");
+      void showError(err.error || "Failed to create checkout session. Please try again.");
     } catch (error) {
       console.error("Error creating checkout session:", error);
-      alert("An error occurred. Please try again.");
+      void showError("An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -128,6 +130,7 @@ export default function HeroExampleAnswer() {
       </div>
       </div>
       <figcaption className="sr-only">{HERO_ANSWER_ALT}</figcaption>
+      {dialog}
     </figure>
   );
 }

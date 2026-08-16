@@ -3,9 +3,11 @@ import { Button } from "@/components/ui/button";
 import { pushBeginCheckout } from '@/lib/dataLayer';
 import { CheckCircle } from "lucide-react";
 import { useState } from "react";
+import { useDialog } from '@/components/ui/dialog';
 
 export const Pricing = () => {
   const [isLoading, setIsLoading] = useState(false);
+  const { showError, dialog } = useDialog();
 
   const handleBuyClick = async () => {
     pushBeginCheckout();
@@ -33,11 +35,11 @@ export const Pricing = () => {
       } else {
         const error = await response.json();
         console.error('Failed to create checkout session:', error);
-        alert('Failed to create checkout session. Please try again.');
+        void showError('Failed to create checkout session. Please try again.');
       }
     } catch (error) {
       console.error('Error creating checkout session:', error);
-      alert('An error occurred. Please try again.');
+      void showError('An error occurred. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -106,6 +108,7 @@ export const Pricing = () => {
           </div>
         </div>
       </div>
+      {dialog}
     </section>
   );
 };

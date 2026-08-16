@@ -8,10 +8,16 @@ module.exports = {
     '**/__tests__/integration/snaptrade-security.test.ts'
   ],
   setupFilesAfterEnv: [
-    '<rootDir>/src/__tests__/setup/test-database.ts'
+    '<rootDir>/src/__tests__/setup/test-database-ci.ts'
   ],
   setupFiles: ['<rootDir>/src/__tests__/setup/load-env.ts'],
   testTimeout: 60000,
+  // Serialized: these suites share one PostgreSQL database and their hooks call
+  // unscoped deleteMany(), so parallel workers would delete each other's fixtures
+  // between fixture creation and the request under test. This was harmless while CI
+  // substituted a per-worker in-memory mock whose deleteMany was a no-op; it is not
+  // now. Matches maxWorkers on the unit and integration configs.
+  maxWorkers: 1,
   
   // 🔒 CRITICAL: No mocking of security logic
   moduleNameMapper: {

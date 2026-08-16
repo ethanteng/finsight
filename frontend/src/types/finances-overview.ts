@@ -42,6 +42,8 @@ export interface FinancesOverview {
     asOf: string | null;
     status: 'current' | 'stale' | 'partial' | 'unavailable';
     reportingCurrency: string;
+    /** A newer revision is already scheduled, running, or queued on the server. */
+    rebuildPending?: boolean;
   };
   warnings: Array<{ code: string; message: string }>;
   financialOverview: {

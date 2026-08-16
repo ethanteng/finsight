@@ -48,11 +48,40 @@ describe('question-aware LLM context routing', () => {
       needsRetirement: true,
       needsSecondaryValidation: true,
     });
+    expect(
+      analyzeQuestionNeeds('Yes, I can confirm $125K as my target annual spending', [
+        'Re-run my retirement analysis.',
+      ])
+    ).toMatchObject({
+      needsRetirement: true,
+      needsSecondaryValidation: true,
+    });
+  });
+
+  it('inherits data needs for a bare value answer', () => {
+    // The reply to "how much do you expect to spend per year?" is often just
+    // the number. It names no topic, so on its own words it routes as a
+    // generic question and the analysis waiting on it never runs.
+    expect(analyzeQuestionNeeds('$125K a year', ['Re-run my retirement analysis.'])).toMatchObject({
+      needsRetirement: true,
+    });
+    expect(analyzeQuestionNeeds('125,000', ['Re-run my retirement analysis.'])).toMatchObject({
+      needsRetirement: true,
+    });
+    expect(analyzeQuestionNeeds('125000', ['Re-run my retirement analysis.'])).toMatchObject({
+      needsRetirement: true,
+    });
   });
 
   it('does not inherit unrelated data needs for a standalone question', () => {
     expect(analyzeQuestionNeeds('What is my net worth?', ['Show all my accounts.'])).toMatchObject({
       needsAccountDetails: false,
+    });
+    // Carries an amount, but asks its own question — not an answer to the last one.
+    expect(
+      analyzeQuestionNeeds('Can I afford a $50k car?', ['Am I on track to retire at 68?'])
+    ).toMatchObject({
+      needsRetirement: false,
     });
   });
 
@@ -77,6 +106,96 @@ describe('question-aware LLM context routing', () => {
       needsRetirement: true,
       needsUserProfile: true,
       needsSecondaryValidation: true,
+    });
+  });
+
+  it('recognizes every form of the word "retire"', () => {
+    // "retiring" contains neither "retire" nor "retirement", so the substring
+    // checks this replaced withheld the retirement analysis from the question
+    // that reported this bug.
+    for (const question of [
+      'What is my goal of retiring by age 62 or sooner?',
+      'I retired last year — how am I doing?',
+      'As a retiree, what should I watch?',
+      'When can I stop working?',
+      'Is my nest egg big enough?',
+    ]) {
+      expect(analyzeQuestionNeeds(question)).toMatchObject({
+        needsRetirement: true,
+        needsUserProfile: true,
+        needsSecondaryValidation: true,
+      });
+    }
+  });
+
+  it('loads the spending breakdown when asked to evaluate spending', () => {
+    const question = 'Evaluate my entire financial portfolio, including my income and spending. ' +
+      'Give me your assessment of its strengths and weaknesses, especially as it relates to ' +
+      'my goal of retiring by age 62 or sooner.';
+    expect(analyzeQuestionNeeds(question)).toMatchObject({
+      needsTransactionDetails: true,
+      needsRetirement: true,
+      needsInvestments: true,
+    });
+
+    expect(analyzeQuestionNeeds('Where is my money going?')).toMatchObject({ needsTransactionDetails: true });
+    expect(analyzeQuestionNeeds('Where does all my money go?')).toMatchObject({ needsTransactionDetails: true });
+    expect(analyzeQuestionNeeds('How can I reduce my expenses?')).toMatchObject({ needsTransactionDetails: true });
+    // A plain total is still answered from the monthly summary.
+    expect(analyzeQuestionNeeds('How much do I spend each month?')).toMatchObject({ needsTransactionDetails: false });
+  });
+
+  it('loads the breakdown when spending is named against a category', () => {
+    // "spending on dining out" asks what the total is made of; "my monthly
+    // spending" asks for the total itself.
+    for (const question of [
+      'How much am I spending on dining out?',
+      'What do I spend on groceries?',
+      'How much am I spending at Costco?',
+    ]) {
+      expect(analyzeQuestionNeeds(question)).toMatchObject({ needsTransactionDetails: true });
+    }
+
+    for (const question of [
+      'What is my average monthly spending?',
+      'How much do I spend each month?',
+    ]) {
+      expect(analyzeQuestionNeeds(question)).toMatchObject({ needsTransactionDetails: false });
+    }
+
+    // "on track" is a progress idiom, not "spending on [category]".
+    for (const question of [
+      'Am I spending on track to retire?',
+      'Is my spending on track for retirement?',
+    ]) {
+      expect(analyzeQuestionNeeds(question)).toMatchObject({ needsTransactionDetails: false });
+    }
+
+    // Past tense asks the same question of the same data.
+    expect(analyzeQuestionNeeds('What did I spent on groceries?')).toMatchObject({
+      needsTransactionDetails: true,
+    });
+  });
+
+  it('does not load transactions for questions that merely say "money"', () => {
+    // "money" plus a review verb is not a spending question; loading the raw
+    // rows for these costs latency and puts unrelated detail in the prompt.
+    for (const question of [
+      'Review where my money is invested.',
+      'Assess how much money I need to retire.',
+      'Where is my money?',
+    ]) {
+      expect(analyzeQuestionNeeds(question)).toMatchObject({ needsTransactionDetails: false });
+    }
+  });
+
+  it('separates retiring a debt from retiring from work', () => {
+    expect(analyzeQuestionNeeds('Should I retire my mortgage early?')).toMatchObject({
+      needsRetirement: false,
+    });
+    // Both senses in one question still routes as retirement.
+    expect(analyzeQuestionNeeds('Should I retire my mortgage early so I can retire at 62?')).toMatchObject({
+      needsRetirement: true,
     });
   });
 

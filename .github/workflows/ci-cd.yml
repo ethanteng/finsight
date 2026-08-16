@@ -3,6 +3,11 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [ main ]
+    # Marketing/content-only paths are handled by fast-deploy.yml. Keep this list in
+    # sync with the `paths` list there: any path in one must be in the other, or a
+    # change either runs both pipelines (racing two production deploys) or neither.
+    # Application code, build config and dependency manifests deliberately are NOT
+    # here — they must go through the full test suite before shipping.
     paths-ignore:
       - 'frontend/src/app/page.tsx'
       - 'frontend/src/app/contact/**'
@@ -10,13 +15,11 @@ on:
       - 'frontend/src/app/privacy/**'
       - 'frontend/src/app/terms/**'
       - 'frontend/src/app/blog/**'
-      - 'frontend/src/app/finances/**'
       - 'frontend/src/app/use-cases/**'
       - 'frontend/src/app/prompts/**'
       - 'frontend/src/app/buying-a-house/**'
       - 'frontend/src/app/retirement-readiness/**'
       - 'frontend/src/app/features/**'
-      - 'frontend/src/components/finances/**'
       - 'frontend/src/components/NewHomepage.tsx'
       - 'frontend/src/components/UseCasesPage.tsx'
       - 'frontend/src/components/RetirementUseCasePage.tsx'
@@ -28,22 +31,28 @@ on:
       - 'frontend/src/components/BuyingAHousePage.tsx'
       - 'frontend/src/components/FeaturesPage.tsx'
       - 'frontend/src/components/StructuredData.tsx'
-      - 'frontend/src/app/app/AppPageClient.tsx'
       - 'frontend/src/lib/ghost.ts'
       - 'frontend/src/lib/promptExamples.ts'
-      - 'frontend/next.config.ts'
       - 'frontend/src/app/globals.css'
       - 'frontend/tailwind.config.js'
-      - 'frontend/package.json'
       - 'frontend/public/sitemap.xml'
       - 'frontend/public/robots.txt'
   pull_request:
     branches: [ main ]
   workflow_dispatch:
 
+# Supersede in-flight runs for a branch that gets pushed again. PR runs are safe to
+# cancel; runs on main are not, because they can be mid-deploy.
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Code Quality & Security
   lint-and-test:
+    # Bounded so a hung job fails in minutes rather than burning the
+    # 360-minute default. Longest observed run of any job here is ~2.5 min.
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -52,7 +61,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
 
       - name: Install dependencies
@@ -165,6 +174,9 @@ jobs:
 
   # Backend Tests
   backend-tests:
+    # Bounded so a hung job fails in minutes rather than burning the
+    # 360-minute default. Longest observed run of any job here is ~2.5 min.
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -187,7 +199,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
 
       - name: Install dependencies
@@ -252,6 +264,9 @@ jobs:
 
   # Frontend Build
   frontend-build:
+    # Bounded so a hung job fails in minutes rather than burning the
+    # 360-minute default. Longest observed run of any job here is ~2.5 min.
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -260,7 +275,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
 
       - name: Install frontend dependencies
@@ -274,15 +289,25 @@ jobs:
             sleep $((i * 10))
           done
 
+      - name: Run frontend tests
+        run: |
+          cd frontend
+          npm test -- --ci
+
       - name: Build frontend
         run: |
           cd frontend
           npm run build
 
   # Integration Tests
+  # No `needs`: this job does its own checkout, install and database setup, so it
+  # shares no artifact with the unit-test or frontend jobs. Running it in parallel
+  # keeps a frontend build failure from masking integration results.
   integration-tests:
+    # Bounded so a hung job fails in minutes rather than burning the
+    # 360-minute default. Longest observed run of any job here is ~2.5 min.
+    timeout-minutes: 15
     runs-on: ubuntu-latest
-    needs: [backend-tests, frontend-build]
     services:
       postgres:
         image: postgres:15
@@ -303,7 +328,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
 
       - name: Install dependencies
@@ -390,9 +415,13 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   # 🔒 Security Testing (NEW - January 2025)
+  # No `needs`: like integration-tests, this job is self-contained. build-verification
+  # still gates on it, so nothing deploys until security tests pass.
   security-tests:
+    # Bounded so a hung job fails in minutes rather than burning the
+    # 360-minute default. Longest observed run of any job here is ~2.5 min.
+    timeout-minutes: 15
     runs-on: ubuntu-latest
-    needs: [backend-tests, frontend-build, integration-tests]
     services:
       postgres:
         image: postgres:15
@@ -413,7 +442,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
 
       - name: Install dependencies
@@ -527,6 +556,9 @@ jobs:
 
   # Build Verification
   build-verification:
+    # Bounded so a hung job fails in minutes rather than burning the
+    # 360-minute default. Longest observed run of any job here is ~2.5 min.
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     needs: [lint-and-test, backend-tests, frontend-build, integration-tests, security-tests]
     steps:
@@ -545,22 +577,15 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
 
+      # Backend dependencies only. The frontend is not built here — see below.
       - name: Install dependencies
         run: |
           for i in 1 2 3; do
             echo "Attempt $i of 3: Installing dependencies..."
             if npm ci --prefer-offline --no-audit --include=dev; then break; fi
-            if [ $i -eq 3 ]; then echo "Failed after 3 attempts"; exit 1; fi
-            echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
-            sleep $((i * 10))
-          done
-          cd frontend
-          for i in 1 2 3; do
-            echo "Attempt $i of 3: Installing frontend dependencies..."
-            if npm ci --prefer-offline --no-audit; then break; fi
             if [ $i -eq 3 ]; then echo "Failed after 3 attempts"; exit 1; fi
             echo "Attempt $i failed, retrying in $((i * 10)) seconds..."
             sleep $((i * 10))
@@ -574,13 +599,21 @@ jobs:
           npm run type-check
           npm run build:backend
 
-      - name: Verify frontend build
-        run: |
-          cd frontend
-          npm run build
+      # The frontend build is NOT repeated here. `frontend-build` already runs
+      # `next build` on this exact commit and is a required `needs` of this job,
+      # so the deploy gate still holds — a frontend build failure means this job
+      # never runs. Rebuilding cost ~90s to recompute a known result.
+      #
+      # Passing `.next` through as an artifact was considered and rejected: this
+      # job never consumes the output, so uploading and downloading a build it
+      # only throws away would prove nothing that the `needs` edge does not
+      # already prove, at similar cost.
 
   # Production Migration (only on main branch)
   migrate-prod:
+    # Generous: this job sits behind the production environment's manual approval,
+    # so the clock includes however long a human takes to click approve.
+    timeout-minutes: 30
     needs: [build-verification]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -592,7 +625,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
 
       - name: Install dependencies
@@ -612,9 +645,18 @@ jobs:
 
   # Deployment (only on main branch)
   deploy:
+    # Covers the Vercel build and the Render webhook round trip, which are slower
+    # and less predictable than anything in the test jobs.
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     needs: [migrate-prod]
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    # Shared with fast-deploy.yml's deploy job: both target the same Vercel project
+    # and Render service, so they must queue rather than overlap. Never cancelled —
+    # aborting mid-deploy is worse than waiting.
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

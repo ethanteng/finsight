@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowUp, Calculator, CheckCircle2, Database, Download, FileText, LoaderCircle, MessageSquarePlus, Sparkles } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import { useAnalytics } from './Analytics';
@@ -12,13 +12,23 @@ interface PromptHistory {
   id: string;
   question: string;
   answer: string;
+  threadId?: string | null;
   timestamp: number;
 }
 
 interface FinanceQAProps {
   onNewAnswer?: (question: string, answer: string) => void;
   selectedPrompt?: PromptHistory | null;
-  onNewQuestion?: () => void;
+  /** Bumped every time "New decision" is clicked, including when nothing is selected. */
+  newDecisionNonce?: number;
+}
+
+/** randomUUID needs a secure context; the fallback keeps non-HTTPS dev working. */
+function newThreadId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 const PLACEHOLDER_QUESTIONS = [
@@ -34,7 +44,7 @@ const PLACEHOLDER_QUESTIONS = [
   "Given everything going on right now, am I actually doing okay?"
 ];
 
-export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: _onNewQuestion }: FinanceQAProps) {
+export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonce = 0 }: FinanceQAProps) {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(false);
@@ -42,6 +52,15 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   const [userTier, setUserTier] = useState<string>('starter');
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  // The line of questioning this composer is in. "New decision" clears it and
+  // the next question mints a fresh one; a follow-up keeps it. That single value
+  // is what tells the server which turns count as context, so it never has to
+  // guess from the wording whether "$125K" belongs to this question.
+  const [threadId, setThreadId] = useState<string | null>(null);
+  // Bumped when a decision is abandoned so a late answer cannot resurrect its
+  // thread after "New decision" lands during analysis.
+  const askEpochRef = useRef(0);
+  const prevSelectedTurnIdRef = useRef<string | null>(null);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
   const [streamingAnswer, setStreamingAnswer] = useState('');
   const [structuredResponse, setStructuredResponse] = useState<{
@@ -85,29 +104,92 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     fetchUserTier();
   }, [API_URL]);
 
+  /**
+   * Leave nothing of the last decision behind.
+   *
+   * The composer is pre-filled with a past question whenever a turn is opened,
+   * so without clearing it the previous question sits in the box waiting to be
+   * re-submitted. The placeholder rotation takes over again once it is empty.
+   * Dropping the thread is what makes the next question start clean instead of
+   * inheriting the last one's assumptions.
+   */
+  const startNewDecision = useCallback(() => {
+    askEpochRef.current += 1;
+    prevSelectedTurnIdRef.current = null;
+    setLoading(false);
+    setProgressMessage(null);
+    setQuestion('');
+    setAnswer('');
+    setStreamingAnswer('');
+    setStructuredResponse(null);
+    setShowTheMathData(null);
+    setShowTheMathError(null);
+    setConversationId(null);
+    setThreadId(null);
+    setError('');
+  }, []);
+
   // Update question and answer when selectedPrompt changes
   useEffect(() => {
     if (selectedPrompt) {
+      const turnId = selectedPrompt.id;
+      // Opening a different turn while an ask is in flight must not let that
+      // answer land on the turn the user just clicked. Bumping on every
+      // selectedPrompt change would also kill a new ask when a history reload
+      // re-selects the newest turn in the same thread after the prior answer.
+      if (
+        prevSelectedTurnIdRef.current !== null &&
+        prevSelectedTurnIdRef.current !== turnId
+      ) {
+        askEpochRef.current += 1;
+        setLoading(false);
+        setProgressMessage(null);
+      }
+      prevSelectedTurnIdRef.current = turnId;
       setQuestion(selectedPrompt.question);
       setAnswer(selectedPrompt.answer);
       setConversationId(selectedPrompt.id);
+      // Opening a past turn resumes its line of questioning, so a follow-up
+      // continues where that decision left off. Turns written before threads
+      // existed are back-filled to their own id, so resuming one still puts
+      // that turn in scope.
+      // Rows written before threads, or by a client that predates them, may still
+      // have no threadId in storage. The row's own id is the effective thread key.
+      setThreadId(selectedPrompt.threadId ?? selectedPrompt.id);
       setStructuredResponse(null);
       setShowTheMathData(null);
       setError('');
       setActiveView('answer');
       setSelectedSourceKey(null);
     } else {
-      setAnswer('');
-      setStreamingAnswer('');
-      setStructuredResponse(null);
-      setShowTheMathData(null);
-      setError('');
+      startNewDecision();
     }
-  }, [selectedPrompt]);
+  }, [selectedPrompt, startNewDecision]);
+
+  /**
+   * "New decision" clicked while nothing was selected.
+   *
+   * Clearing the selection is not enough on its own: when it is already null the
+   * prop never changes, the effect above never reruns, and the previous thread
+   * stays active — so the next supposedly fresh question inherits the old
+   * decision's context. Reachable whenever the post-answer history reload fails
+   * or is still in flight. The counter makes the reset an explicit signal rather
+   * than a side effect of a value transition.
+   */
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    startNewDecision();
+  }, [newDecisionNonce, startNewDecision]);
 
   const askQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     const questionToAsk = question.trim() || PLACEHOLDER_QUESTIONS[placeholderIndex];
+    const epoch = ++askEpochRef.current;
+    const isStale = () => epoch !== askEpochRef.current;
 
     setLoading(true);
     setProgressMessage(null);
@@ -138,7 +220,11 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       }
 
       const endpoint = '/ask/display-real';
-      const requestBody = { question: questionToAsk };
+      // Mint on the first question of a decision so even that turn is already in
+      // a thread; every follow-up reuses it until "New decision" clears it.
+      const activeThreadId = threadId ?? newThreadId();
+      if (activeThreadId !== threadId) setThreadId(activeThreadId);
+      const requestBody = { question: questionToAsk, threadId: activeThreadId };
 
       headers['Accept'] = 'text/event-stream';
 
@@ -176,7 +262,9 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
           } else if (line === '' && currentEvent && currentData) {
             try {
               const data = JSON.parse(currentData);
-              if (currentEvent === 'progress' && data.message) {
+              if (isStale()) {
+                // A newer decision started while this stream was in flight.
+              } else if (currentEvent === 'progress' && data.message) {
                 setProgressMessage(data.message);
               } else if (currentEvent === 'answerDelta' && typeof data.delta === 'string') {
                 setStreamingAnswer((prev) => prev + data.delta);
@@ -189,6 +277,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
                   setStreamingAnswer('');
                   if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
                   if (data.conversationId) setConversationId(data.conversationId);
+                  if (data.threadId) setThreadId(data.threadId);
                   if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
                   trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier });
                 } else {
@@ -224,6 +313,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
         // JSON response from a non-streaming backend configuration.
         const data = await res.json();
 
+        if (isStale()) return;
         if (!res.ok && data.error) {
           setError(data.error);
           return;
@@ -236,6 +326,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
           setAnswer(data.answer);
           if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
           if (data.conversationId) setConversationId(data.conversationId);
+          if (data.threadId) setThreadId(data.threadId);
           if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
           trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier });
         } else {
@@ -244,17 +335,21 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
         }
       }
     } catch (error) {
-      setError('Error contacting backend.');
-      console.error('Error:', error);
+      if (!isStale()) {
+        setError('Error contacting backend.');
+        console.error('Error:', error);
 
-      // Track error
-      trackEvent('question_error', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        user_tier: userTier
-      });
+        // Track error
+        trackEvent('question_error', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          user_tier: userTier
+        });
+      }
     } finally {
-      setLoading(false);
-      setProgressMessage(null);
+      if (!isStale()) {
+        setLoading(false);
+        setProgressMessage(null);
+      }
     }
   };
 

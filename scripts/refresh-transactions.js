@@ -134,6 +134,8 @@ if (!distPath) {
 
 const { TransactionSyncService } = require(path.join(distPath, 'services/transaction-sync-service'));
 const { SummaryCacheService } = require(path.join(distPath, 'services/summary-cache-service'));
+const { HomeValueRefreshService } = require(path.join(distPath, 'services/home-value-refresh'));
+const { FinancialRevisionService } = require(path.join(distPath, 'services/financial-revision-service'));
 require('dotenv').config({ path: '.env.local' });
 
 async function refreshTransactions() {
@@ -185,6 +187,28 @@ async function refreshTransactions() {
     process.exit(1);
   }
   
+  let homeRefreshedUserIds = [];
+
+  // Refresh home values before the summary rebuild below, so a new estimate
+  // lands in the same snapshot rather than waiting a day to show up. The
+  // service skips manual overrides and anything valued within 25 days, so
+  // this only reaches RentCast for estimates that have aged out.
+  try {
+    const homeTimestamp = new Date().toISOString();
+    console.log(`[${homeTimestamp}] 🏠 Refreshing home values...`);
+    const results = await new HomeValueRefreshService().refreshAllHomeValues();
+    homeRefreshedUserIds = results.refreshedUserIds;
+    const homeEndTimestamp = new Date().toISOString();
+    console.log(`[${homeEndTimestamp}] ✅ Home value refresh completed. Users: ${results.successful}/${results.total}, failed: ${results.failed}, values changed: ${homeRefreshedUserIds.length}`);
+    if (results.errors.length > 0) {
+      console.error(`[${homeEndTimestamp}] ⚠️ Home value refresh errors:`, results.errors);
+    }
+  } catch (error) {
+    const errorTimestamp = new Date().toISOString();
+    console.error(`[${errorTimestamp}] ⚠️ Home value refresh failed:`, error);
+    // Do not fail the entire cron; the summary rebuild is still worth running
+  }
+
   // After transactions sync, refresh cached summaries for all users
   try {
     const summaryTimestamp = new Date().toISOString();
@@ -192,6 +216,24 @@ async function refreshTransactions() {
     const result = await SummaryCacheService.refreshAllUsers();
     const summaryEndTimestamp = new Date().toISOString();
     console.log(`[${summaryEndTimestamp}] ✅ Summary cache refresh completed. Users processed: ${result.usersProcessed}`);
+
+    // refreshAllUsers only covers users with an active Plaid connection. A user
+    // who has a home value but no connection would otherwise keep a snapshot
+    // holding the old figure: the finances page reads the persisted snapshot
+    // and skips the live profile once meta.home exists.
+    const covered = new Set(result.processedUserIds || []);
+    const missed = homeRefreshedUserIds.filter((userId) => !covered.has(userId));
+    for (const userId of missed) {
+      try {
+        await FinancialRevisionService.recompute(userId, {
+          categorize: false,
+          history: { kind: 'material', reason: 'home-value-refreshed' },
+        });
+        console.log(`[${new Date().toISOString()}] ✅ Recomputed snapshot for home-only user ${userId}`);
+      } catch (error) {
+        console.error(`[${new Date().toISOString()}] ⚠️ Snapshot recompute failed for user ${userId}:`, error);
+      }
+    }
   } catch (error) {
     const errorTimestamp = new Date().toISOString();
     console.error(`[${errorTimestamp}] ⚠️ Summary cache refresh failed:`, error);

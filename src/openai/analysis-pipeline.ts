@@ -16,6 +16,7 @@ import { analyzeQuestionNeeds } from './question-analysis';
 import { gatherContextSnapshot } from './context-service';
 import { buildPromptInputFromSnapshot, buildFinancialReasoningPrompt } from './financial-reasoning-prompt';
 import { loadResponseToneConfig } from './prompt-config';
+import { loadModelConfig } from './model-config';
 import { askClaude, askClaudeStream } from './claude-client';
 import { parseStructuredResponse, toDisplayText, extractPartialSummary, AskLincResponse } from './structured-response';
 import { validateUserPrompt, getRejectionMessage } from '../security/prompt-validation';
@@ -23,9 +24,22 @@ import { validateLLMResponse } from '../security/output-validation';
 import { logRejectedPrompt, logFlaggedOutput } from '../security/security-logger';
 import { PromptValidationError } from './errors';
 import type { EvidenceManifest, ShowTheMathData } from './show-the-math-types';
-import { sanitizeUngroundedResponse } from './response-grounding';
-import { canonicalizeResponseNumbers, validateResponseFacts } from './response-facts';
+import {
+  appendNotice,
+  sanitizeUngroundedResponse,
+  SECONDARY_REVIEW_CAVEAT,
+  UNVERIFIABLE_SUMMARY,
+} from './response-grounding';
+import {
+  canonicalizeResponseNumbers,
+  hasUnsupportedValueIssue,
+  salvageUngroundedResponse,
+  validateResponseFacts,
+} from './response-facts';
 import { validateCanonicalFactPack } from './canonical-facts';
+import { describeMissingInputs } from './missing-inputs';
+import { describeRetirementAssumptions } from './retirement-assumptions';
+import { loadRoutingVocabulary } from './routing-vocabulary';
 import { askOpenAIWithPreparedPrompt } from './openai-fallback-client';
 import { createHash } from 'crypto';
 import { recordLlmAnalysisFailure } from '../observability/llm-metrics';
@@ -109,6 +123,47 @@ function contextDigest(value: string | undefined): string | undefined {
   return value ? createHash('sha256').update(value).digest('hex') : undefined;
 }
 
+/** Context tiers a retry can switch on; the rest is loaded for every question. */
+const ROUTED_NEEDS = [
+  'needsAccountDetails',
+  'needsTransactionDetails',
+  'needsInvestments',
+  'needsRetirement',
+] as const;
+
+/**
+ * Pick retry feedback that covers every kind of failure rather than the first N
+ * of one kind. Sending eight "usd value X is not present" lines teaches nothing
+ * about the percentage and bare-number failures further down the list, and the
+ * retry reproduces them.
+ */
+export function selectValidationFeedback(issues: string[], limit = 12): string[] {
+  const byKind = new Map<string, string[]>();
+  for (const issue of issues) {
+    const kind = issue.replace(/-?[\d,]+(?:\.\d+)?/g, 'N');
+    const group = byKind.get(kind);
+    if (group) group.push(issue);
+    else byKind.set(kind, [issue]);
+  }
+
+  const selected: string[] = [];
+  const groups = Array.from(byKind.values());
+  for (let round = 0; selected.length < limit; round++) {
+    const before = selected.length;
+    for (const group of groups) {
+      if (selected.length >= limit) break;
+      if (round < group.length) selected.push(group[round]);
+    }
+    if (selected.length === before) break;
+  }
+
+  const omitted = issues.length - selected.length;
+  if (omitted > 0) {
+    selected.push(`${omitted} further issue(s) of the same kinds were omitted — fix the whole class, not just the examples above.`);
+  }
+  return selected;
+}
+
 /**
  * Run the Ask Linc financial analysis pipeline.
  */
@@ -140,22 +195,39 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
 
   onProgress?.('Loading your financial snapshot');
 
-  const recentQuestions = conversationHistory
+  // Newest first. Routing looks at the questions; input extraction needs the
+  // answers too, since a short reply only means something beside what was asked.
+  const recentTurns = conversationHistory
     .slice()
     .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-    .map((entry) => entry.question);
+    .map((entry) => ({ question: entry.question, answer: entry.answer }));
+  const recentQuestions = recentTurns.map((turn) => turn.question);
+  // Routing vocabulary is admin-editable, so refresh it before matching. Never
+  // throws; a stale or default vocabulary still routes.
+  if (!evaluation) await loadRoutingVocabulary();
   const questionNeeds = analyzeQuestionNeeds(question, recentQuestions);
+
+  // Covers every model this request can reach: the input extractor that runs
+  // during context gathering, then the primary, fallback and second-review
+  // models. Loading it after context gathering left a cold process using the
+  // shipped default for the extractor on its first retirement question,
+  // ignoring an admin override that was set precisely to avoid that.
+  await loadModelConfig();
 
   // Step 1: Retrieve context (snapshot, profile, market summary, RAG)
   const contextGatherStartedAt = Date.now();
-  const snapshot = evaluation?.snapshot ?? await gatherContextSnapshot({
+  let snapshot = evaluation?.snapshot ?? await gatherContextSnapshot({
     userId,
     question,
     questionNeeds,
     tier,
+    recentTurns,
     onProgress
   });
-  const contextGatherMs = Date.now() - contextGatherStartedAt;
+  let contextGatherMs = Date.now() - contextGatherStartedAt;
+  // What routing chose, before any widening. Routing metrics have to score the
+  // prediction, not the correction it triggered.
+  const routedContextSelection = snapshot.contextSelection;
 
   // Step 2: Build the prompt directly from the persisted canonical snapshot.
   const promptBuildStartedAt = Date.now();
@@ -164,17 +236,17 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   const orderedConversationHistory = conversationHistory
     .slice()
     .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
-  const promptInput = buildPromptInputFromSnapshot(
-    question,
-    snapshot,
-    questionNeeds,
-    orderedConversationHistory.map(c => ({ question: c.question, answer: c.answer }))
-  );
-  const factPack = promptInput.canonicalFacts!;
-  const factPackIssues = validateCanonicalFactPack(factPack);
-  if (factPackIssues.length > 0) {
-    throw new Error(`Canonical fact validation failed: ${factPackIssues.join(' ')}`);
-  }
+  const historyForPrompt = orderedConversationHistory.map(c => ({ question: c.question, answer: c.answer }));
+  const buildPromptInput = (from: typeof snapshot, needs: typeof questionNeeds) => {
+    const input = buildPromptInputFromSnapshot(question, from, needs, historyForPrompt);
+    const issues = validateCanonicalFactPack(input.canonicalFacts!);
+    if (issues.length > 0) {
+      throw new Error(`Canonical fact validation failed: ${issues.join(' ')}`);
+    }
+    return input;
+  };
+  let promptInput = buildPromptInput(snapshot, questionNeeds);
+  let factPack = promptInput.canonicalFacts!;
 
   // Step 3: LLM financial reasoning (Claude Sonnet). Build the prompt once and
   // pass it through (avoids rebuilding the large reasoning prompt inside the client).
@@ -259,6 +331,9 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   const validationStartedAt = Date.now();
   let structuredResponse = canonicalizeResponseNumbers(parseStructuredResponse(rawResponse), factPack);
   let groundingResult = validateResponseFacts(structuredResponse, factPack);
+  let deterministicOutcome: 'passed' | 'salvaged' | 'replaced' = 'passed';
+  let contextEscalated = false;
+  let secondaryCaveat = false;
 
   let validationIssues = groundingResult.issues;
 
@@ -287,35 +362,108 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
 
   if (validationIssues.length > 0) {
     console.warn('Ask Linc: Response validation failed, regenerating with feedback:', validationIssues);
-    const retryPrompt = buildFinancialReasoningPrompt({
-      ...promptInput,
-      validationFeedback: validationIssues.slice(0, 8),
-    });
-    onAnswerReset?.();
-    firstAnswerTokenAt = undefined;
-    const retryResult = await callAnalysisModel(retryPrompt, 'retry', provider);
-    rawResponse = retryResult.rawResponse;
-    provider = retryResult.provider;
-    structuredResponse = canonicalizeResponseNumbers(parseStructuredResponse(rawResponse), factPack);
-    groundingResult = validateResponseFacts(structuredResponse, factPack);
-    if (!groundingResult.valid) {
-      console.error('Ask Linc: Retry was still not grounded:', groundingResult.issues);
-      structuredResponse = sanitizeUngroundedResponse(structuredResponse, groundingResult);
-    } else {
-      const postRetryIssues = await runSecondaryValidation('retry');
-      if (postRetryIssues.length > 0) {
-        console.error('Ask Linc: Retry passed grounding but secondary validation still flagged issues:', postRetryIssues);
-        structuredResponse = sanitizeUngroundedResponse(structuredResponse, {
-          valid: false,
-          issues: postRetryIssues,
-          invalidKeyNumbers: [],
-          invalidSummary: true,
-        });
+    // Secondary validation reports reasoning, not fact citations, so widening the
+    // context cannot resolve those issues the way it can resolve a missing fact.
+    const secondaryIssues = validationIssues.filter((issue) => !groundingResult.issues.includes(issue));
+
+    // The model reached for a number nobody gave it. Rather than re-prompting
+    // against the same fact pack and hoping for restraint, widen the context and
+    // let the retry answer the question it was actually asked. Routing predicts
+    // what a question needs; this reacts to what it turned out to need.
+    if (!evaluation && hasUnsupportedValueIssue(groundingResult.issues)) {
+      const escalatedNeeds = {
+        ...questionNeeds,
+        needsAccountDetails: true,
+        needsTransactionDetails: true,
+        needsInvestments: true,
+        needsRetirement: true,
+      };
+      const widens = ROUTED_NEEDS.some((need) => !questionNeeds[need]);
+      if (widens) {
+        try {
+          onProgress?.('Loading more of your financial data');
+          const escalationStartedAt = Date.now();
+          snapshot = await gatherContextSnapshot({ userId, question, questionNeeds: escalatedNeeds, tier, recentTurns, onProgress });
+          contextGatherMs += Date.now() - escalationStartedAt;
+          promptInput = buildPromptInput(snapshot, escalatedNeeds);
+          factPack = promptInput.canonicalFacts!;
+          contextEscalated = true;
+        } catch (error) {
+          // A failed widening must not cost the user the retry they were owed.
+          console.error('Ask Linc: Context escalation failed; retrying with the original context:', error);
+        }
+      }
+
+      // Re-judge the first answer against the wider pack. Skipping this would
+      // hand the retry a "Must Fix" telling it to drop the very number the
+      // widened context just supplied — and when every issue resolves, the
+      // answer was right all along and needs no second call at all.
+      if (contextEscalated) {
+        structuredResponse = canonicalizeResponseNumbers(parseStructuredResponse(rawResponse), factPack);
+        groundingResult = validateResponseFacts(structuredResponse, factPack);
+        validationIssues = Array.from(new Set([...groundingResult.issues, ...secondaryIssues]));
+        if (validationIssues.length === 0) {
+          console.warn('Ask Linc: Widened context grounded the original answer; skipping the retry.');
+        }
+      }
+    }
+
+    if (validationIssues.length > 0) {
+      const retryPrompt = buildFinancialReasoningPrompt({
+        ...promptInput,
+        validationFeedback: selectValidationFeedback(validationIssues),
+      });
+      onAnswerReset?.();
+      firstAnswerTokenAt = undefined;
+      const retryResult = await callAnalysisModel(retryPrompt, 'retry', provider);
+      rawResponse = retryResult.rawResponse;
+      provider = retryResult.provider;
+      structuredResponse = canonicalizeResponseNumbers(parseStructuredResponse(rawResponse), factPack);
+      groundingResult = validateResponseFacts(structuredResponse, factPack);
+      if (!groundingResult.valid) {
+        console.error('Ask Linc: Retry was still not grounded:', groundingResult.issues);
+        // Keep the grounded part of the answer; the placeholder is the last resort.
+        structuredResponse = salvageUngroundedResponse(structuredResponse, factPack, groundingResult);
+        deterministicOutcome = structuredResponse.summary === UNVERIFIABLE_SUMMARY ? 'replaced' : 'salvaged';
+      }
+
+      // Salvaged prose reaches the user, so it owes the same secondary check as a
+      // retry that passed outright. Only the placeholder has nothing left to check.
+      if (deterministicOutcome !== 'replaced') {
+        const postRetryIssues = await runSecondaryValidation('retry');
+        if (postRetryIssues.length > 0) {
+          console.error('Ask Linc: Retry passed grounding but secondary validation still flagged issues:', postRetryIssues);
+          // Every figure here has been checked against the snapshot; what the
+          // reviewer objects to is the reasoning around them. Discarding the
+          // answer for that spent the user's time and returned nothing, so it
+          // ships with the objection attached instead. The specific issues stay
+          // in the evidence manifest for review rather than going to the user,
+          // where internal QA phrasing would confuse more than it warns.
+          structuredResponse = appendNotice(structuredResponse, SECONDARY_REVIEW_CAVEAT);
+          secondaryCaveat = true;
+        }
       }
     }
   }
 
   onProgress?.('Formatting response');
+
+  // When something the question needed is missing and the user is the one who
+  // can supply it, ask for it. Appended after validation because it is
+  // server-authored: these values come from persisted state, not the model.
+  const missingInputsAsk = describeMissingInputs(snapshot, questionNeeds);
+  if (missingInputsAsk) {
+    structuredResponse = appendNotice(structuredResponse, missingInputsAsk);
+  }
+
+  // A projection is only as right as the inputs read out of the conversation.
+  // Stating them — with the user's own words where they are known — turns a
+  // misread from something found later in the math into something corrected in
+  // the next reply.
+  const retirementAssumptions = describeRetirementAssumptions(snapshot);
+  if (retirementAssumptions) {
+    structuredResponse = appendNotice(structuredResponse, retirementAssumptions);
+  }
 
   // Step 6: Output validation (security)
   const displayText = toDisplayText(structuredResponse);
@@ -342,6 +490,11 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
       },
       facts: factPack.facts,
       contextSelection: snapshot.contextSelection,
+      ...(contextEscalated && {
+        contextEscalated: true,
+        ...(routedContextSelection && { routedContextSelection }),
+      }),
+      ...(secondaryCaveat && { secondaryCaveat: true }),
       modelCalls,
       timings: {
         contextGatherMs,
@@ -352,7 +505,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         totalMs: Date.now() - pipelineStartedAt,
       },
       validation: {
-        deterministic: { valid: groundingResult.valid, issues: groundingResult.issues },
+        deterministic: { valid: groundingResult.valid, issues: groundingResult.issues, outcome: deterministicOutcome },
         ...(secondaryValidations.length > 0 && { secondary: secondaryValidations }),
       },
       evidenceRefs: {

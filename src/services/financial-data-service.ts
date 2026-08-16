@@ -10,6 +10,7 @@ import { cacheService } from '../data/cache';
 import { resolveCanonicalTransactionType } from './canonical-transaction-adapter';
 import { mergeFinancialSources } from './financial-calculations';
 import { loadPersistedPlaidData } from './financial-source-persistence';
+import { normalizeAssetType, resolveAssetTypeWithHeuristics } from './asset-class';
 
 const prisma = new PrismaClient();
 
@@ -1066,7 +1067,7 @@ export class FinancialDataService {
                     quantity: holding.quantity,
                     iso_currency_code: holding.iso_currency_code,
                     security_name: security?.name || 'Unknown Security',
-                    security_type: security?.type || 'Unknown',
+                    security_type: normalizeAssetType(security?.type || (holding as any).security_type),
                     ticker_symbol: security?.ticker_symbol || undefined
                   });
                 }
@@ -1491,24 +1492,11 @@ export class FinancialDataService {
                     }
                   }
                   
-                  // ✅ Normalize security type descriptions to standard categories
-                  // SnapTrade returns types like "Common Stock", "Preferred Stock", "ETF", etc.
-                  const typeNormalized = (securityType || '').toLowerCase();
-                  if (typeNormalized.includes('stock') || typeNormalized.includes('equity')) {
-                    securityType = 'Equity';
-                  } else if (typeNormalized.includes('bond') || typeNormalized.includes('treasury') || typeNormalized.includes('fixed income')) {
-                    securityType = 'Fixed Income';
-                  } else if (typeNormalized.includes('etf')) {
-                    securityType = 'ETF';
-                  } else if (typeNormalized.includes('mutual fund') || typeNormalized.includes('fund')) {
-                    securityType = 'Mutual Fund';
-                  } else if (typeNormalized.includes('option')) {
-                    securityType = 'Options';
-                  } else if (typeNormalized.includes('crypto')) {
-                    securityType = 'Cryptocurrency';
-                  }
-                  // If still Unknown after all checks, keep it as Unknown
-                  
+                  // SnapTrade descriptions like "Common Stock" or "Growth ETF" need
+                  // substring heuristics when there is no alias; alias hits (e.g.
+                  // "Money Market Fund" -> Cash) must run first.
+                  securityType = resolveAssetTypeWithHeuristics(securityType);
+
                   const positionPrice = typeof position.price === 'number' && Number.isFinite(position.price)
                     ? position.price
                     : null;

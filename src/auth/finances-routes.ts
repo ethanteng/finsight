@@ -3,6 +3,7 @@ import { requireAuth, type AuthenticatedRequest } from './middleware';
 import { getPrismaClient } from '../prisma-client';
 import { ProfileManager } from '../profile/manager';
 import { getLatestFinancialSnapshot } from '../services/financial-snapshot-persistence';
+import { FinancialRevisionService } from '../services/financial-revision-service';
 import {
   buildFinancesAccountDetails,
   buildFinancesOverview,
@@ -33,9 +34,12 @@ router.get('/overview', requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const userId = req.user!.id;
     const prisma = getPrismaClient();
-    const [snapshot, manualAccounts, user] = await Promise.all([
+    const [snapshot, manualAccounts, connectedAccounts, user] = await Promise.all([
       getLatestFinancialSnapshot(userId, 'finances'),
       prisma.manualAccount.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } }),
+      // Renaming an account writes here and only reaches the snapshot on the next rebuild,
+      // which re-reads every provider. Read the names live so a rename shows up at once.
+      prisma.account.findMany({ where: { userId }, select: { plaidAccountId: true, name: true } }),
       prisma.user.findUnique({
         where: { id: userId },
         select: { monthlyIncomeOverride: true, monthlyExpenseOverride: true, timeZone: true },
@@ -44,6 +48,16 @@ router.get('/overview', requireAuth, async (req: AuthenticatedRequest, res) => {
 
     if (!snapshot) return res.status(204).send();
     if (!user) return res.status(404).json({ error: 'User not found' });
+    // Connected accounts are keyed by plaidAccountId (SnapTrade rows use `snaptrade-{id}`);
+    // manual accounts have no Account row and appear in the snapshot as `manual-{id}`.
+    const accountNames = new Map<string, string>();
+    for (const account of connectedAccounts) {
+      if (account.plaidAccountId) accountNames.set(account.plaidAccountId, account.name);
+    }
+    for (const account of manualAccounts) {
+      accountNames.set(`manual-${account.id}`, account.name);
+    }
+
     const meta = snapshot.meta && typeof snapshot.meta === 'object' ? snapshot.meta as any : {};
     const currentHome = meta.home
       ? null
@@ -58,6 +72,8 @@ router.get('/overview', requireAuth, async (req: AuthenticatedRequest, res) => {
       },
       currentHome,
       userTimeZone: user.timeZone,
+      rebuildPending: FinancialRevisionService.isPending(userId),
+      accountNames,
     }));
   } catch (error) {
     console.error('Failed to build finances overview:', error);

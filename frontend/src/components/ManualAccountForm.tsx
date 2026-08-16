@@ -4,7 +4,8 @@ import type { ManualAccount } from '../types/manual-account';
 
 interface ManualAccountFormProps {
   account?: ManualAccount | null;
-  onSuccess: () => void;
+  /** `affectsTotals` is false when the edit only renamed the account. */
+  onSuccess: (result: { affectsTotals: boolean }) => void;
   onCancel: () => void;
 }
 
@@ -86,7 +87,11 @@ export default function ManualAccountForm({ account, onSuccess, onCancel }: Manu
       });
 
       if (response.ok) {
-        onSuccess();
+        // A new account always moves the totals; an edit only does when the amount or the
+        // type changed, so a rename does not have to wait on a snapshot rebuild.
+        onSuccess({
+          affectsTotals: !account || amountNum !== account.amount || type !== account.type,
+        });
       } else {
         const data = await response.json();
         setError(data.error || 'Failed to save account');

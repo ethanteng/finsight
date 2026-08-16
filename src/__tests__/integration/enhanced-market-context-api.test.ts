@@ -38,14 +38,12 @@ describe('Enhanced Market Context API Integration', () => {
    */
   const shouldSkipNetworkTests = !isActuallyInGitHubActions;
 
-  // Helper to skip network tests locally
-  const skipIfLocal = () => {
-    if (shouldSkipNetworkTests) {
-      console.log('⏭️ Skipping network test locally - will run in CI/CD');
-      return true;
-    }
-    return false;
-  };
+  // Network-gated tests are registered through this alias so they report as
+  // SKIPPED rather than PASSED when they cannot run. The previous pattern was an
+  // `if (skipIfLocal()) return;` guard inside the body, which exited before any
+  // assertion — so a test that never ran still counted as a passing test.
+  const itNetwork = shouldSkipNetworkTests ? it.skip : it;
+
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -59,9 +57,7 @@ describe('Enhanced Market Context API Integration', () => {
   });
 
   describe('GET /test/enhanced-market-context', () => {
-    it('should return enhanced market context for starter tier', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should return enhanced market context for starter tier', async () => {
       const mockContext = 'CURRENT MARKET CONTEXT (Updated: 7/31/2025, 10:57:33 PM):\n\nUse this current market context to provide informed financial advice. Always reference specific data points when making recommendations.';
 
       MockDataOrchestrator.getMarketContextSummary.mockResolvedValue(mockContext);
@@ -100,9 +96,7 @@ describe('Enhanced Market Context API Integration', () => {
       expect(MockDataOrchestrator.getMarketContextSummary).toHaveBeenCalledWith('starter');
     });
 
-    it('should return enhanced market context for standard tier', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should return enhanced market context for standard tier', async () => {
       const mockContext = 'CURRENT MARKET CONTEXT (Updated: 7/31/2025, 10:57:37 PM):\n\nECONOMIC INDICATORS:\n• Fed Funds Rate: 4.33%\n• CPI (YoY): 321.5%\n• Mortgage Rate: 6.72%\n• Credit Card APR: 24.59%\n\nKEY INSIGHTS:\n• Elevated inflation suggests TIPS and inflation-protected investments may be beneficial\n• High mortgage rates suggest waiting for refinancing opportunities\n\nUse this current market context to provide informed financial advice. Always reference specific data points when making recommendations.';
 
       MockDataOrchestrator.getMarketContextSummary.mockResolvedValue(mockContext);
@@ -128,9 +122,7 @@ describe('Enhanced Market Context API Integration', () => {
       expect(response.body.contextLength).toBeGreaterThan(400);
     });
 
-    it('should return enhanced market context for premium tier', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should return enhanced market context for premium tier', async () => {
       const mockContext = 'CURRENT MARKET CONTEXT (Updated: 7/31/2025, 10:57:41 PM):\n\nECONOMIC INDICATORS:\n• Fed Funds Rate: 4.33%\n• CPI (YoY): 321.5%\n• Mortgage Rate: 6.72%\n• Credit Card APR: 24.59%\n\nLIVE MARKET DATA:\n• CD Rates: 3-month: 5.25%, 6-month: 5.35%, 1-year: 5.45%\n• Treasury Yields: 1-month: 5.12%, 3-month: 5.18%, 6-month: 5.25%\n• Mortgage Rates: 30-year-fixed: 6.85%, 15-year-fixed: 6.25%\n\nKEY INSIGHTS:\n• Elevated inflation suggests TIPS and inflation-protected investments may be beneficial\n• High mortgage rates suggest waiting for refinancing opportunities\n• High-yield CD rates available - consider laddering CDs for steady income\n• Attractive Treasury yields available for conservative investors\n\nUse this current market context to provide informed financial advice. Always reference specific data points when making recommendations.';
 
       MockDataOrchestrator.getMarketContextSummary.mockResolvedValue(mockContext);
@@ -158,9 +150,7 @@ describe('Enhanced Market Context API Integration', () => {
       expect(response.body.contextLength).toBeGreaterThan(800);
     });
 
-    it('should handle missing query parameters', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should handle missing query parameters', async () => {
       const mockContext = 'CURRENT MARKET CONTEXT (Updated: 7/31/2025, 10:57:33 PM):\n\nUse this current market context to provide informed financial advice. Always reference specific data points when making recommendations.';
 
       MockDataOrchestrator.getMarketContextSummary.mockResolvedValue(mockContext);
@@ -197,9 +187,7 @@ describe('Enhanced Market Context API Integration', () => {
   });
 
   describe('POST /test/refresh-market-context', () => {
-    it('should force refresh market context for specific tier', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should force refresh market context for specific tier', async () => {
       MockDataOrchestrator.refreshMarketContext.mockResolvedValue();
       MockDataOrchestrator.getCacheStats.mockResolvedValue({
         size: 4,
@@ -235,9 +223,7 @@ describe('Enhanced Market Context API Integration', () => {
       expect(MockDataOrchestrator.refreshMarketContext).toHaveBeenCalledWith('premium');
     });
 
-    it('should handle missing request body parameters', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should handle missing request body parameters', async () => {
       const app = await getTestApp();
       const response = await request(app)
         .post('/test/refresh-market-context')
@@ -248,9 +234,7 @@ describe('Enhanced Market Context API Integration', () => {
       expect(MockDataOrchestrator.refreshMarketContext).toHaveBeenCalledWith('starter');
     });
 
-    it('should handle orchestrator errors gracefully', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should handle orchestrator errors gracefully', async () => {
       MockDataOrchestrator.refreshMarketContext.mockRejectedValue(new Error('Refresh failed'));
 
       const app = await getTestApp();
@@ -264,9 +248,7 @@ describe('Enhanced Market Context API Integration', () => {
   });
 
   describe('GET /test/current-tier', () => {
-    it('should return current tier configuration', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should return current tier configuration', async () => {
       const app = await getTestApp();
       const response = await request(app)
         .get('/test/current-tier')
@@ -284,9 +266,7 @@ describe('Enhanced Market Context API Integration', () => {
   });
 
   describe('Cache Management Endpoints', () => {
-    it('should return cache statistics', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should return cache statistics', async () => {
       MockDataOrchestrator.getCacheStats.mockResolvedValue({
         size: 5,
         keys: ['fred_MORTGAGE30US', 'fred_FEDFUNDS', 'fred_CPIAUCSL', 'economic_indicators', 'live_market_data'],
@@ -313,9 +293,7 @@ describe('Enhanced Market Context API Integration', () => {
       });
     });
 
-    it('should invalidate cache with pattern', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should invalidate cache with pattern', async () => {
       MockDataOrchestrator.invalidateCache.mockResolvedValue();
 
       const app = await getTestApp();
@@ -328,9 +306,7 @@ describe('Enhanced Market Context API Integration', () => {
       expect(MockDataOrchestrator.invalidateCache).toHaveBeenCalledWith('market');
     });
 
-    it('should use default pattern when none provided', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should use default pattern when none provided', async () => {
       MockDataOrchestrator.invalidateCache.mockResolvedValue();
 
       const app = await getTestApp();
@@ -345,9 +321,7 @@ describe('Enhanced Market Context API Integration', () => {
   });
 
   describe('Performance and Monitoring', () => {
-    it('should return response within reasonable time', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should return response within reasonable time', async () => {
       const mockContext = 'CURRENT MARKET CONTEXT (Updated: 7/31/2025, 10:57:33 PM):\n\nUse this current market context to provide informed financial advice. Always reference specific data points when making recommendations.';
 
       MockDataOrchestrator.getMarketContextSummary.mockResolvedValue(mockContext);
@@ -377,9 +351,7 @@ describe('Enhanced Market Context API Integration', () => {
       expect(response.body).toBeDefined();
     });
 
-    it('should handle concurrent requests', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should handle concurrent requests', async () => {
       const mockContext = 'CURRENT MARKET CONTEXT (Updated: 7/31/2025, 10:57:33 PM):\n\nUse this current market context to provide informed financial advice. Always reference specific data points when making recommendations.';
 
       MockDataOrchestrator.getMarketContextSummary.mockResolvedValue(mockContext);

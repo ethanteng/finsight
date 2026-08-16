@@ -10,9 +10,11 @@ import SiteFooter from './SiteFooter';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 import { FAQ_ITEMS } from '@/data/faq';
 import { PricingValueBadge } from './PricingOfferCallouts';
+import { useDialog } from '@/components/ui/dialog';
 
 export default function PricingPageContent() {
   const [isLoading, setIsLoading] = useState(false);
+  const { showError, dialog } = useDialog();
 
   const handleBuyClick = async () => {
     pushBeginCheckout();
@@ -34,11 +36,11 @@ export default function PricingPageContent() {
       } else {
         const error = await response.json();
         console.error('Failed to create checkout session:', error);
-        alert('Failed to create checkout session. Please try again.');
+        void showError('Failed to create checkout session. Please try again.');
       }
     } catch (error) {
       console.error('Error creating checkout session:', error);
-      alert('An error occurred. Please try again.');
+      void showError('An error occurred. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -134,6 +136,7 @@ export default function PricingPageContent() {
         </section>
       </main>
       <SiteFooter />
+      {dialog}
     </div>
   );
 }

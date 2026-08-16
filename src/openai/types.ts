@@ -164,6 +164,19 @@ export interface FinancialContextSnapshot {
       recordId: string;
       computedAt: string;
     };
+    /**
+     * The user's own words behind each input, when they were read from this
+     * decision's turns. A projection is only as right as its inputs, so the
+     * answer states which words it acted on and the user can correct a misread
+     * in one reply instead of finding it in the math.
+     */
+    _inputSources?: {
+      currentAge?: string;
+      retirementAge?: string;
+      annualWithdrawalAmount?: string;
+      withdrawalStartAge?: string;
+      lifeExpectancy?: string;
+    };
   };
   retirementAnalysisNeedsInfo?: {
     missingParams: Array<'currentAge' | 'retirementAge' | 'annualWithdrawalAmount' | 'withdrawalStartAge'>;
@@ -176,6 +189,8 @@ export interface FinancialContextSnapshot {
     confirmationRequiredParams?: Array<'annualWithdrawalAmount'>;
     /** When retirement analysis cannot run despite a retirement question (e.g. no holdings). */
     unavailableReason?: string;
+    /** Machine-readable form of unavailableReason: only some causes are the user's to fix. */
+    unavailableCode?: 'no_holdings' | 'service_error';
   };
   financialSummary?: {
     computedAt?: Date | string;

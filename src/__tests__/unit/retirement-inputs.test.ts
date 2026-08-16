@@ -128,3 +128,74 @@ describe('retirementPortfolioFingerprint', () => {
     );
   });
 });
+
+describe('retirement age phrasing', () => {
+  it('reads the retirement age from the way people actually write it', () => {
+    // "retiring by age 62" matched nothing, so a question that stated the
+    // retirement age plainly was reported as missing it.
+    const { parseRetirementQuestion } = require('../../retirement-analytics/retirement-question-parser');
+    for (const [question, expected] of [
+      ['my goal of retiring by age 62 or sooner', 62],
+      ['can I retire at 65?', 65],
+      ['planning to retire by age 60', 60],
+      ['what is my retirement age of 67 worth?', 67],
+      ['I want to retire around age 58', 58],
+    ] as Array<[string, number]>) {
+      expect(parseRetirementQuestion(question).retirementAge).toBe(expected);
+    }
+  });
+
+  it('reads the same phrasing out of the profile', () => {
+    const {
+      extractAgeFromProfile,
+      extractRetirementAgeFromProfile,
+    } = require('../../retirement-analytics/profile-age-extractor');
+    const profile = 'The user is a 48-year-old individual married to a 50-year-old husband. They plan on retiring by age 62.';
+
+    expect(extractAgeFromProfile(profile)).toBe(48);
+    expect(extractRetirementAgeFromProfile(profile)).toBe(62);
+  });
+});
+
+describe('describeMissingRetirementInputs', () => {
+  const { describeMissingRetirementInputs } = require('../../openai/retirement-inputs');
+
+  it('asks for exactly what is missing, in plain language', () => {
+    expect(describeMissingRetirementInputs({
+      missingParams: ['annualWithdrawalAmount'],
+      detectedParams: {},
+    })).toBe(
+      'I could not run a retirement projection because I am missing roughly how much you expect to ' +
+      'spend per year once retired, in today\'s dollars. Reply with that and I will work it into the next answer.'
+    );
+  });
+
+  it('lists several missing inputs', () => {
+    const ask = describeMissingRetirementInputs({
+      missingParams: ['retirementAge', 'annualWithdrawalAmount'],
+      detectedParams: {},
+    });
+    expect(ask).toContain('the age you plan to retire and roughly how much');
+    expect(ask).toContain('Reply with those');
+  });
+
+  it('asks to confirm a remembered amount rather than asking again', () => {
+    expect(describeMissingRetirementInputs({
+      missingParams: ['annualWithdrawalAmount'],
+      detectedParams: { annualWithdrawalAmount: 118_000 },
+      confirmationRequiredParams: ['annualWithdrawalAmount'],
+    })).toBe(
+      'To run the retirement projection I need to confirm one thing: are you still planning to spend ' +
+      'about $118,000 a year in retirement? Tell me either way and I will include the analysis.'
+    );
+  });
+
+  it('says nothing when there is nothing the user can supply', () => {
+    expect(describeMissingRetirementInputs(undefined)).toBeNull();
+    expect(describeMissingRetirementInputs({
+      missingParams: [],
+      detectedParams: {},
+      unavailableReason: 'No linked investment holdings are available.',
+    })).toBeNull();
+  });
+});

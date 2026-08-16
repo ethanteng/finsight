@@ -7,9 +7,11 @@ import SiteHeader from "./SiteHeader";
 import SiteFooter from "./SiteFooter";
 import { Button } from "./ui/button";
 import { pushBeginCheckout } from "@/lib/dataLayer";
+import { useDialog } from '@/components/ui/dialog';
 
 export default function AboutPageContent() {
   const [isLoading, setIsLoading] = useState(false);
+  const { showError, dialog } = useDialog();
 
   const handleBuyClick = async () => {
     pushBeginCheckout();
@@ -34,10 +36,10 @@ export default function AboutPageContent() {
       }
 
       const err = await response.json();
-      alert(err.error || "Failed to create checkout session. Please try again.");
+      void showError(err.error || "Failed to create checkout session. Please try again.");
     } catch (error) {
       console.error("Error creating checkout session:", error);
-      alert("An error occurred. Please try again.");
+      void showError("An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -128,6 +130,7 @@ export default function AboutPageContent() {
         </section>
       </main>
       <SiteFooter />
+      {dialog}
     </div>
   );
 }

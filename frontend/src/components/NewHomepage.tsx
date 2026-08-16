@@ -14,6 +14,7 @@ import { pushBeginCheckout } from '@/lib/dataLayer';
 import { USE_CASE_LINKS, COMPARE_LINKS } from '@/lib/site-nav';
 import { PricingValueBadge } from './PricingOfferCallouts';
 import SiteFooter from './SiteFooter';
+import { useDialog } from '@/components/ui/dialog';
 
 const HOW_LINC_STEPS = [
   { title: "Connect once", description: "Link your financial accounts securely via Plaid", icon: Target },
@@ -29,6 +30,7 @@ const INSTITUTIONS = [
 
 const NewHomepage = () => {
   const [isLoading, setIsLoading] = useState<string | null>(null);
+  const { showError, dialog } = useDialog();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUseCasesOpen, setIsUseCasesOpen] = useState(false);
   const [isCompareOpen, setIsCompareOpen] = useState(false);
@@ -99,11 +101,11 @@ const NewHomepage = () => {
       } else {
         const error = await response.json();
         console.error('Failed to create checkout session:', error);
-        alert('Failed to create checkout session. Please try again.');
+        void showError('Failed to create checkout session. Please try again.');
       }
     } catch (error) {
       console.error('Error creating checkout session:', error);
-      alert('An error occurred. Please try again.');
+      void showError('An error occurred. Please try again.');
     } finally {
       setIsLoading(null);
     }
@@ -705,6 +707,7 @@ const NewHomepage = () => {
       </section> */}
       <SiteFooter />
 
+      {dialog}
     </div>
   );
 };

@@ -11,6 +11,7 @@ import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { pushBeginCheckout } from '@/lib/dataLayer';
 import SiteFooter from './SiteFooter';
+import { useDialog } from '@/components/ui/dialog';
 
 const HOW_LINC_STEPS = [
   { title: "Connect your accounts", description: "Link your financial accounts securely via Plaid", icon: Target },
@@ -27,6 +28,7 @@ const USE_CASE_LINKS = [
 
 const BuyingAHousePage = () => {
   const [isLoading, setIsLoading] = useState<string | null>(null);
+  const { showError, dialog } = useDialog();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUseCasesOpen, setIsUseCasesOpen] = useState(false);
   const [howItWorksInView, setHowItWorksInView] = useState(false);
@@ -94,11 +96,11 @@ const BuyingAHousePage = () => {
       } else {
         const error = await response.json();
         console.error('Failed to create checkout session:', error);
-        alert('Failed to create checkout session. Please try again.');
+        void showError('Failed to create checkout session. Please try again.');
       }
     } catch (error) {
       console.error('Error creating checkout session:', error);
-      alert('An error occurred. Please try again.');
+      void showError('An error occurred. Please try again.');
     } finally {
       setIsLoading(null);
     }
@@ -575,6 +577,7 @@ const BuyingAHousePage = () => {
         </div>
       </section> */}
       <SiteFooter />
+      {dialog}
     </div>
   );
 };

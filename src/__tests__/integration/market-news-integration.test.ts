@@ -23,14 +23,12 @@ describe('Market News Context Integration Tests', () => {
    */
   const shouldSkipNetworkTests = !isActuallyInGitHubActions;
 
-  // Helper to skip network tests locally
-  const skipIfLocal = () => {
-    if (shouldSkipNetworkTests) {
-      console.log('⏭️ Skipping network test locally - will run in CI/CD');
-      return true;
-    }
-    return false;
-  };
+  // Network-gated tests are registered through this alias so they report as
+  // SKIPPED rather than PASSED when they cannot run. The previous pattern was an
+  // `if (skipIfLocal()) return;` guard inside the body, which exited before any
+  // assertion — so a test that never ran still counted as a passing test.
+  const itNetwork = shouldSkipNetworkTests ? it.skip : it;
+
   beforeAll(async () => {
     try {
       // Clean up any existing market news context data
@@ -85,9 +83,7 @@ describe('Market News Context Integration Tests', () => {
   });
 
   describe('Market News Context API', () => {
-    test('should get market context for Standard tier', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should get market context for Standard tier', async () => {
       const app = await getTestApp();
       const response = await request(app)
         .get('/market-news/context/standard')
@@ -102,9 +98,7 @@ describe('Market News Context Integration Tests', () => {
       expect(typeof response.body.contextText).toBe('string');
     });
 
-    test('should get market context for Starter tier', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should get market context for Starter tier', async () => {
       const app = await getTestApp();
       const response = await request(app)
         .get('/market-news/context/starter')
@@ -119,9 +113,7 @@ describe('Market News Context Integration Tests', () => {
       expect(typeof response.body.contextText).toBe('string');
     });
 
-    test('should update market context manually', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should update market context manually', async () => {
       const updateData = {
         contextText: 'Test market context update'
       };
@@ -135,9 +127,7 @@ describe('Market News Context Integration Tests', () => {
       expect(response.body).toHaveProperty('error');
     });
 
-    test('should get market context history', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should get market context history', async () => {
       const app = await getTestApp();
       const response = await request(app)
         .get('/admin/market-news/history/standard')
@@ -147,9 +137,7 @@ describe('Market News Context Integration Tests', () => {
       expect(response.body).toHaveProperty('error');
     });
 
-    test('should handle invalid tier gracefully', async () => {
-      if (skipIfLocal()) return;
-
+    itNetwork('should handle invalid tier gracefully', async () => {
       const app = await getTestApp();
       const response = await request(app)
         .get('/market-news/context/invalid_tier')
@@ -159,22 +147,11 @@ describe('Market News Context Integration Tests', () => {
     });
   });
 
+  // This was skipped in CI while the setup substituted an in-memory mock with no
+  // persistence. CI now runs against the real database, so the round trip is
+  // testable again and the skip is removed.
   describe('Market News Context Database Operations', () => {
     test('should store and retrieve market context from database', async () => {
-      // Skip this test locally if using mock database (common in local CI/CD testing)
-      // The mock database may not fully support all field retrievals
-      const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' &&
-                                         process.env.GITHUB_RUN_ID !== undefined;
-
-      // Check if we're using a real database (has TEST_DATABASE_URL) vs mock
-      const hasRealDatabase = !!process.env.TEST_DATABASE_URL;
-
-      if (!isActuallyInGitHubActions && !hasRealDatabase) {
-        console.log('⏭️ Skipping database operation test locally - requires real database connection');
-        expect(true).toBe(true); // Pass the test
-        return;
-      }
-
       try {
         // Create a test market context
         const testContext = await testPrisma.marketNewsContext.create({
@@ -197,33 +174,18 @@ describe('Market News Context Integration Tests', () => {
           where: { id: 'test-context-1' }
         });
 
-        expect(retrievedContext).toBeDefined();
-
-        // In CI/CD environment with mock database, the context text might be different
-        const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
-        if (isCI && retrievedContext?.contextText !== 'Test market context for database test') {
-          console.log('ℹ️ CI environment detected - accepting mock database response');
-          expect(retrievedContext).toBeDefined();
-        } else if (!retrievedContext?.contextText) {
-          // Handle case where mock database doesn't return contextText
-          console.log('ℹ️ Mock database detected - contextText may not be fully supported');
-          expect(retrievedContext).toBeDefined();
-        } else {
-          expect(retrievedContext.contextText).toBe('Test market context for database test');
-        }
-
-        // Clean up
-        await testPrisma.marketNewsContext.delete({
-          where: { id: 'test-context-1' }
-        });
-      } catch (error: any) {
-        // In CI/CD, the database might not be fully ready yet
-        if (error.message.includes('relation') && error.message.includes('does not exist')) {
-          console.log('ℹ️ Database tables not ready yet, skipping market context test');
-          expect(true).toBe(true); // Pass the test
-        } else {
-          throw error; // Re-throw other errors
-        }
+        // CI runs against the real postgres service container, so the round trip
+        // must be exact. The previous version had two branches that fell back to
+        // `toBeDefined()` when the text did not match, which meant a broken
+        // write/read round trip still passed.
+        expect(retrievedContext).not.toBeNull();
+        expect(retrievedContext?.contextText).toBe('Test market context for database test');
+        expect(retrievedContext?.dataSources).toEqual(['fred', 'brave_search']);
+      } finally {
+        // Best-effort cleanup if an assertion above threw before the delete.
+        await testPrisma.marketNewsContext
+          .delete({ where: { id: 'test-context-1' } })
+          .catch(() => undefined);
       }
     });
   });

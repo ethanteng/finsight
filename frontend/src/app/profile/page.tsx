@@ -9,6 +9,9 @@ import ManualAccountList from '../../components/ManualAccountList';
 import PageMeta from '../../components/PageMeta';
 import type { ManualAccount } from '../../types/manual-account';
 import { resetUserIdentity } from '../../lib/heycatch';
+import { resolveAccountBalance } from '../../lib/account-balance';
+import { normalizeAssetType } from '../../lib/asset-class';
+import { normalizeLabel } from '../../lib/label-normalization';
 import AuthenticatedPageHeader from '../../components/authenticated/AuthenticatedPageHeader';
 
 // (removed) local InvestmentHolding type - no longer used after snapshot refactor
@@ -19,11 +22,16 @@ interface Account {
   type: string;
   subtype: string;
   balance: {
-    current: number;
-    available: number;
+    // Null when the provider reported no balance — rendered as "—", never as $0.
+    current: number | null;
+    available: number | null;
     iso_currency_code: string;
   };
   institution?: string;
+  /** True when the provider no longer reports the account (closed at the institution). */
+  isClosed?: boolean;
+  /** Last time a provider refresh saw the account, when known. */
+  lastSeenAt?: string | null;
 }
 
 interface SnapTradeData {
@@ -550,10 +558,12 @@ export default function ProfilePage() {
 
     console.log('Calculated metrics:', { totalValue, holdingCount, securityCount });
 
-    // Group by security type for asset allocation
+    // Group by security type for asset allocation. Types are normalized first so
+    // the same asset class from different providers ("etf" from Plaid, "ETF" from
+    // SnapTrade) collapses into a single bucket.
     const assetAllocationMap = new Map<string, number>();
     combinedHoldings.forEach(holding => {
-      const type = holding.security_type || holding.type || 'Unknown';
+      const type = normalizeAssetType(holding.security_type || holding.type);
       const value = holding.institution_value || holding.value || 0;
       assetAllocationMap.set(type, (assetAllocationMap.get(type) || 0) + value);
     });
@@ -616,10 +626,12 @@ export default function ProfilePage() {
     const totalVolume = combinedTransactions.reduce((sum, tx) => sum + Math.abs(tx.institution_value || tx.value || 0), 0);
     const averageTransactionSize = totalTransactions > 0 ? totalVolume / totalTransactions : 0;
 
-    // Group transactions by type
+    // Group transactions by type. Types are normalized first: Plaid sends
+    // lowercase types ("buy") and SnapTrade uppercase activity types ("BUY"),
+    // which would otherwise count as two separate kinds of activity.
     const activityByType: Record<string, number> = {};
     combinedTransactions.forEach(tx => {
-      const type = (tx.snapTradeData?.activity_type as string) || 'UNKNOWN';
+      const type = normalizeLabel((tx.snapTradeData?.activity_type as string) || tx.type);
       activityByType[type] = (activityByType[type] || 0) + 1;
     });
 
@@ -1027,6 +1039,19 @@ export default function ProfilePage() {
     }).format(amount);
   };
 
+  const formatLastSeen = (value?: string | null) => {
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString();
+  };
+
+  // Closed accounts stay in the list for reference but sit below the ones that
+  // still count toward the Finances totals.
+  const sortedConnectedAccounts = [...connectedAccounts].sort(
+    (a, b) => Number(Boolean(a.isClosed)) - Number(Boolean(b.isClosed))
+  );
+  const closedAccountCount = connectedAccounts.filter(account => account.isClosed).length;
+
   const handleDisconnectAccounts = async () => {
     setIsDeleting(true);
     setDeleteMessage('');
@@ -1207,24 +1232,41 @@ export default function ProfilePage() {
                 </div>
               ) : (
                 <div className="space-y-3">
+                  {closedAccountCount > 0 && (
+                    <div className="text-xs text-gray-400 mb-1">
+                      {closedAccountCount === 1
+                        ? '1 account is closed and is not included in your Finances totals.'
+                        : `${closedAccountCount} accounts are closed and are not included in your Finances totals.`}
+                    </div>
+                  )}
                   {/* Display connected accounts */}
-                  {connectedAccounts.map((account) => {
+                  {sortedConnectedAccounts.map((account) => {
                     // Find token status for this account's institution
                     const tokenStatus = tokenStatuses.find(t =>
                       t.institutionName === account.institution
                     );
+                    const isClosed = Boolean(account.isClosed);
+                    const lastSeen = formatLastSeen(account.lastSeenAt);
 
                     return (
                       <div
                         key={account.id}
-                        className="bg-gray-700 rounded-lg p-4 border border-gray-600"
+                        className={`bg-gray-700 rounded-lg p-4 border border-gray-600${isClosed ? ' opacity-60' : ''}`}
                       >
                         <div className="flex justify-between items-start">
                           <div className="flex-1">
                             <div className="flex items-center gap-2">
                               <div className="font-medium text-white">{account.name}</div>
-                              {/* Token Status Indicator */}
-                              {tokenStatus && (
+                              {isClosed && (
+                                <span
+                                  className="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-900/20 text-yellow-300 border border-yellow-700"
+                                  title="This account is no longer reported by the institution"
+                                >
+                                  Closed
+                                </span>
+                              )}
+                              {/* Token Status Indicator - a closed account says nothing about the connection */}
+                              {tokenStatus && !isClosed && (
                                 <div className="flex items-center gap-1">
                                   {tokenStatus.isActive ? (
                                     <span className="text-green-400" title="Connection active">
@@ -1241,8 +1283,14 @@ export default function ProfilePage() {
                             <div className="text-sm text-gray-400">
                               {account.institution && `${account.institution} • `}{account.type} • {account.subtype}
                             </div>
+                            {isClosed && (
+                              <div className="text-xs text-yellow-300 mt-1">
+                                Closed — not included in your Finances totals
+                                {lastSeen ? ` • Last reported ${lastSeen}` : ''}
+                              </div>
+                            )}
                             {/* Show error message if token is inactive */}
-                            {tokenStatus && !tokenStatus.isActive && tokenStatus.lastError && (
+                            {tokenStatus && !isClosed && !tokenStatus.isActive && tokenStatus.lastError && (
                               <div className="text-xs text-red-400 mt-1">
                                 {tokenStatus.lastError === 'ITEM_LOGIN_REQUIRED' ?
                                   'Re-authentication required' :
@@ -1252,23 +1300,18 @@ export default function ProfilePage() {
                           </div>
                           <div className="text-right">
                             <div className="font-semibold text-white">
-                              {/* ✅ FIX: Use the correct balance field based on account type */}
+                              {/* Same rule as the Finances page: current is authoritative,
+                                  available is only a fallback. Preferring available for
+                                  depository accounts reported holds instead of the balance
+                                  and disagreed with the Finances totals. */}
                               {(() => {
-                                let balance;
-                                if (account.type === 'depository' ||
-                                    account.subtype === 'checking' ||
-                                    account.subtype === 'savings') {
-                                  // For checking/savings accounts, use available balance
-                                  balance = account.balance?.available !== undefined && account.balance?.available !== null
-                                    ? account.balance.available
-                                    : account.balance?.current || 0;
-                                } else {
-                                  // For investment/credit accounts, use current balance
-                                  balance = account.balance?.current || 0;
-                                }
-                                return formatCurrency(balance);
+                                const balance = resolveAccountBalance(account);
+                                return balance === null ? '—' : formatCurrency(balance);
                               })()}
                             </div>
+                            {isClosed && (
+                              <div className="text-xs text-gray-400">Last known balance</div>
+                            )}
                           </div>
                         </div>
                       </div>

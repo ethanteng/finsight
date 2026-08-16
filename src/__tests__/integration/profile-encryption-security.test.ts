@@ -134,17 +134,9 @@ describe('Profile Encryption Security Tests', () => {
     });
   });
 
-  describe('Profile Encryption API Security', () => {
-    test('should require authentication for profile operations', () => {
-      // This test validates that profile encryption endpoints require authentication
-      // The actual API endpoints will be implemented later
-      expect(true).toBe(true); // Placeholder for future API security tests
-    });
-    
-    test('should validate JWT tokens for profile operations', () => {
-      // This test validates JWT token validation for profile operations
-      // The actual JWT validation will be implemented later
-      expect(true).toBe(true); // Placeholder for future JWT security tests
-    });
-  });
+  // Removed: two placeholder tests ('should require authentication for profile
+  // operations' and 'should validate JWT tokens for profile operations') that
+  // asserted expect(true).toBe(true) against endpoints described as "implemented
+  // later". They reported as passing security tests while checking nothing, which
+  // is worse than an absent test. Add real ones when those endpoints exist.
 });
