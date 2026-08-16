@@ -7,6 +7,7 @@ import { PromptValidationError } from '../openai/errors';
 import { loadShowTheMathEvidence } from '../openai/show-the-math-db-service';
 import { aiRateLimitMiddleware } from '../security/ai-rate-limiter';
 import { recordLlmAnalysis, recordLlmAnalysisFailure } from '../observability/llm-metrics';
+import { updateProfileFromAnsweredTurn } from '../profile/conversation-updater';
 
 const router = Router();
 
@@ -99,6 +100,19 @@ router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req,
         res.set('X-AI-Mode', 'canonical');
         res.json(payload);
       }
+
+      // Keep the stored profile current from what this turn revealed. Deliberately
+      // not awaited: the answer is already sent, and extraction runs its own model call.
+      void updateProfileFromAnsweredTurn({
+        userId: user.id,
+        conversationId: conversation.id,
+        question,
+        answer: result.displayText,
+      }).catch(error => {
+        // updateProfileFromAnsweredTurn handles its own failures; this guards the
+        // unawaited promise so nothing can escape as an unhandled rejection.
+        console.warn('Profile update from conversation rejected:', error);
+      });
     });
   } catch (error) {
     const totalMs = Date.now() - startedAt;

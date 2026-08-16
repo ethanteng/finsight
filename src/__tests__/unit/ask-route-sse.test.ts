@@ -4,6 +4,7 @@ import { runAskLincAnalysis } from '../../openai/analysis-pipeline';
 import askRoutes from '../../routes/ask';
 import { getPrismaClient } from '../../prisma-client';
 import { PromptValidationError } from '../../openai/errors';
+import { updateProfileFromAnsweredTurn } from '../../profile/conversation-updater';
 
 jest.mock('../../auth/middleware', () => ({
   requireAuth: (req: any, _res: any, next: any) => {
@@ -22,6 +23,10 @@ jest.mock('../../prisma-client', () => ({
 
 jest.mock('../../openai/analysis-pipeline', () => ({
   runAskLincAnalysis: jest.fn(),
+}));
+
+jest.mock('../../profile/conversation-updater', () => ({
+  updateProfileFromAnsweredTurn: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('@sentry/node', () => ({
@@ -68,6 +73,39 @@ describe('Ask route SSE lifecycle', () => {
     expect(response.text).toContain('event: answerDelta');
     expect(response.text).toContain('event: result');
     expect(response.text).toContain('"conversationId":"conversation-1"');
+  });
+
+  it('refreshes the stored profile from each answered turn', async () => {
+    (runAskLincAnalysis as jest.Mock).mockResolvedValue({
+      displayText: 'You can retire around 62.',
+      structuredResponse: { summary: 'You can retire around 62.' },
+    });
+
+    await request(createApp())
+      .post('/ask/display-real')
+      .send({ question: 'When can I retire?' });
+
+    expect(updateProfileFromAnsweredTurn).toHaveBeenCalledWith({
+      userId: 'user-1',
+      conversationId: 'conversation-1',
+      question: 'When can I retire?',
+      answer: 'You can retire around 62.',
+    });
+  });
+
+  it('still answers when the profile refresh rejects', async () => {
+    (updateProfileFromAnsweredTurn as jest.Mock).mockRejectedValueOnce(new Error('profile down'));
+    (runAskLincAnalysis as jest.Mock).mockResolvedValue({
+      displayText: 'You can retire around 62.',
+      structuredResponse: { summary: 'You can retire around 62.' },
+    });
+
+    const response = await request(createApp())
+      .post('/ask/display-real')
+      .send({ question: 'When can I retire?' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.answer).toBe('You can retire around 62.');
   });
 
   it('delivers a streamed validation error without mutating flushed headers', async () => {
