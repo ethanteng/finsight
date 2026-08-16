@@ -35,11 +35,21 @@ function formatValue(field: ReportedField, value: number): string {
   return `$${Math.round(value).toLocaleString('en-US')} a year`;
 }
 
-/** A quote is only worth showing if it is short enough to read at a glance. */
+/**
+ * The quote is the user's own text going into an answer that the security
+ * output validator then scans — and a flag there replaces the whole answer, not
+ * the offending line. A phrase that merely looks like an injection would cost
+ * the user a good projection, so keep plain prose and the characters money is
+ * written with, and drop everything else. A quote is also only worth showing if
+ * it can be read at a glance.
+ */
 function formatQuote(quote: string): string | null {
-  const trimmed = quote.trim().replace(/\s+/g, ' ');
-  if (!trimmed || trimmed.length > 120) return null;
-  return trimmed;
+  const cleaned = quote
+    .replace(/[^\p{L}\p{N} $.,%'\-/]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned || cleaned.length > 120) return null;
+  return cleaned;
 }
 
 /**

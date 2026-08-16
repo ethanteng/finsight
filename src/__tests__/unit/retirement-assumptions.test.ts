@@ -59,6 +59,23 @@ describe('describeRetirementAssumptions', () => {
     expect(line).not.toContain('xxxx');
   });
 
+  it('reduces a quote to plain prose before it reaches output validation', () => {
+    // The quote is the user's own text, and a security flag on the finished
+    // answer replaces all of it — so a phrase that merely looks like an
+    // injection would cost them a good projection.
+    const line = describeRetirementAssumptions(
+      analysis(
+        { annualWithdrawalAmount: 125_000 },
+        { annualWithdrawalAmount: '$125k/yr <script>alert(1)</script>; DROP TABLE users;--' }
+      )
+    )!;
+
+    expect(line).toContain('spending $125,000 a year');
+    expect(line).toContain('$125k/yr');
+    expect(line).not.toContain('<');
+    expect(line).not.toContain(';');
+  });
+
   it('says nothing when no projection ran', () => {
     expect(describeRetirementAssumptions({} as any)).toBeNull();
     expect(describeRetirementAssumptions({ retirementAnalysis: {} } as any)).toBeNull();
