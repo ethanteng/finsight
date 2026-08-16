@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Landmark, LogOut, Menu, MessageSquareText, Newspaper, Plus, Settings, WalletCards, X } from 'lucide-react';
@@ -35,6 +35,7 @@ export default function AppPageClient() {
 
   /** Turns grouped into the decisions they belong to, newest decision first. */
   const decisionThreads = useMemo(() => groupTurnsIntoDecisions(promptHistory), [promptHistory]);
+  const isInitialHistoryLoad = useRef(true);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [historyError, setHistoryError] = useState(false);
@@ -85,7 +86,17 @@ export default function AppPageClient() {
         id: conversation.id, question: conversation.question, answer: conversation.answer, threadId: conversation.threadId ?? null, timestamp: conversation.timestamp,
       }));
       setPromptHistory(history);
-      setSelectedPrompt(history[0] || null);
+      setSelectedPrompt(prev => {
+        if (isInitialHistoryLoad.current) {
+          isInitialHistoryLoad.current = false;
+          return history[0] || null;
+        }
+        // "New decision" leaves selectedPrompt at null on purpose. A history
+        // reload that lands after that — including a stale fetch from the prior
+        // answer — must not re-adopt the old thread and overwrite the composer.
+        if (prev === null) return null;
+        return history[0] || null;
+      });
     } catch (error) {
       console.error('Failed to load conversation history:', error);
       setHistoryError(true);
