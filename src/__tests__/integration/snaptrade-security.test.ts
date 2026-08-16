@@ -30,8 +30,12 @@ describe('SnapTrade Security Tests', () => {
   // Note: Even if CI=true is set locally, we're still on macOS which has permission issues
   const isActuallyInGitHubActions = process.env.GITHUB_ACTIONS === 'true' &&
                                      process.env.GITHUB_RUN_ID !== undefined;
-  const isCiEnv = isActuallyInGitHubActions;
-  const expectedMissingSnapTradeStatus = isCiEnv ? 401 : 404;
+  // A user with no SnapTrade registration gets 404 — the same answer everywhere.
+  // This used to be `isCiEnv ? 401 : 404`: CI substituted a mock database in which
+  // the user did not exist, so the auth layer answered 401 and the test asserted
+  // the mock's behaviour rather than the product's. CI now uses the real database,
+  // so there is one expected status again.
+  const expectedMissingSnapTradeStatus = 404;
 
   /**
    * Skip network tests locally - these require special permissions on macOS
@@ -145,25 +149,42 @@ describe('SnapTrade Security Tests', () => {
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user1JWT}`);
 
-      // In CI the mock auth layer returns 401 because the user isn't in the mock DB
       expect(response.status).toBe(expectedMissingSnapTradeStatus);
     });
   });
 
   describe('User Data Isolation', () => {
     itNetwork('should prevent User A from seeing User B SnapTrade data', async () => {
-      // User1 should only see their own SnapTrade data
+      // Give user2 a SnapTrade registration and user1 none. Without this the test
+      // asserted that both users get 404 — true, but only because neither had any
+      // data, so it could not have detected a leak. Seeded here rather than in a
+      // hook because the shared setup deletes snapTradeUser before every test.
+      const user2SnapTrade = await testPrisma.snapTradeUser.create({
+        data: {
+          userId: user2.id,
+          snapTradeUserId: 'snaptrade-user-2-secret-id',
+          userSecret: 'user-2-secret-value',
+          status: 'registered'
+        }
+      });
+
       const user1Response = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user1JWT}`);
 
-      // User2 should only see their own SnapTrade data
       const user2Response = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user2JWT}`);
 
+      // user2 owns the registration and sees it.
+      expect(user2Response.status).toBe(200);
+      expect(user2Response.body).toHaveProperty('snapTradeUserId', user2SnapTrade.snapTradeUserId);
+
+      // user1 has none, and must not receive user2's.
       expect(user1Response.status).toBe(expectedMissingSnapTradeStatus);
-      expect(user2Response.status).toBe(expectedMissingSnapTradeStatus);
+      const user1Body = JSON.stringify(user1Response.body);
+      expect(user1Body).not.toContain(user2SnapTrade.snapTradeUserId);
+      expect(user1Body).not.toContain(user2SnapTrade.userSecret);
     });
 
     itNetwork('should only return SnapTrade data for authenticated user', async () => {
@@ -210,23 +231,43 @@ describe('SnapTrade Security Tests', () => {
   });
 
   describe('Cross-User Security Validation', () => {
+    // Both cases below seed a registration for user2 only. Asserting that two users
+    // with no data both get 404 is true but vacuous — it cannot distinguish correct
+    // scoping from a query that returns nothing to anyone, which is exactly what the
+    // old CI mock did.
+    const seedUser2SnapTrade = () => testPrisma.snapTradeUser.create({
+      data: {
+        userId: user2.id,
+        snapTradeUserId: 'snaptrade-user-2-cross-user-id',
+        userSecret: 'user-2-cross-user-secret',
+        status: 'registered'
+      }
+    });
+
     itNetwork('should validate that User A cannot access User B SnapTrade data through any endpoint', async () => {
-      // User1 tries to access their own data
+      const user2SnapTrade = await seedUser2SnapTrade();
+
       const user1OwnData = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user1JWT}`);
 
-      // User2 tries to access their own data
       const user2OwnData = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user2JWT}`);
 
+      // user2 owns the registration; user1 has none and must not receive it.
+      expect(user2OwnData.status).toBe(200);
+      expect(user2OwnData.body).toHaveProperty('snapTradeUserId', user2SnapTrade.snapTradeUserId);
+
       expect(user1OwnData.status).toBe(expectedMissingSnapTradeStatus);
-      expect(user2OwnData.status).toBe(expectedMissingSnapTradeStatus);
+      const user1Body = JSON.stringify(user1OwnData.body);
+      expect(user1Body).not.toContain(user2SnapTrade.snapTradeUserId);
+      expect(user1Body).not.toContain(user2SnapTrade.userSecret);
     });
 
     itNetwork('should prevent privilege escalation through SnapTrade endpoint manipulation', async () => {
-      // Test that users cannot manipulate endpoints to access other users' data
+      const user2SnapTrade = await seedUser2SnapTrade();
+
       const user1Response = await request(app)
         .get('/snaptrade/accounts')
         .set('Authorization', `Bearer ${user1JWT}`);
@@ -235,8 +276,15 @@ describe('SnapTrade Security Tests', () => {
         .get('/snaptrade/accounts')
         .set('Authorization', `Bearer ${user2JWT}`);
 
+      // Neither user has linked accounts, so neither gets data — but user1 must not
+      // pick up user2's credentials via the accounts path either.
       expect(user1Response.status).toBe(expectedMissingSnapTradeStatus);
-      expect(user2Response.status).toBe(expectedMissingSnapTradeStatus);
+      const user1AccountsBody = JSON.stringify(user1Response.body);
+      expect(user1AccountsBody).not.toContain(user2SnapTrade.snapTradeUserId);
+      expect(user1AccountsBody).not.toContain(user2SnapTrade.userSecret);
+
+      const user2AccountsBody = JSON.stringify(user2Response.body);
+      expect(user2AccountsBody).not.toContain(user2SnapTrade.userSecret);
     });
   });
 
@@ -278,11 +326,14 @@ describe('SnapTrade Security Tests', () => {
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user1JWT}`);
 
-      // A user with no SnapTrade registration is rejected with 401 and a generic
-      // message. The point of this test is that the error does not leak internals,
-      // so assert both the status and the shape of the message — the previous
-      // assertion accepted 200 as well, so it could not tell rejection from access.
-      expect(response.status).toBe(401);
+      // A user with no SnapTrade registration gets 404 and a generic message. The
+      // point of this test is that the error does not leak internals, so assert
+      // both the status and the shape of the message.
+      //
+      // This assertion previously said 401 — the status observed while CI still
+      // substituted a mock database in which the user did not exist. Hardcoding an
+      // observed value is exactly how the mock propagated into expectations.
+      expect(response.status).toBe(expectedMissingSnapTradeStatus);
       expect(response.body).toHaveProperty('error');
       expect(response.body.error).not.toMatch(/prisma|sql|stack|at \s|node_modules/i);
       expect(response.body).not.toHaveProperty('stack');

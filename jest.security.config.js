@@ -13,6 +13,12 @@ module.exports = {
     '<rootDir>/src/__tests__/setup/test-database.ts'
   ],
   testTimeout: 60000, // 60 seconds for security tests
+  // Serialized: these suites share one PostgreSQL database and their hooks call
+  // unscoped deleteMany(), so parallel workers would delete each other's fixtures
+  // between fixture creation and the request under test. This was harmless while CI
+  // substituted a per-worker in-memory mock whose deleteMany was a no-op; it is not
+  // now. Matches maxWorkers on the unit and integration configs.
+  maxWorkers: 1,
   verbose: true,
   collectCoverage: true, // Enable coverage for security tests
   globals: {
