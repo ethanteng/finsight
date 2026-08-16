@@ -38,6 +38,7 @@ const RETIREMENT_PHRASINGS = [
   'how long will my 401k last?',
   'how long will my 401(k) last?',
   'how long will my IRA last?',
+  'how long will my HSA last?',
   // The duration on the other side of the asset — how people ask it once they
   // already have a number in mind.
   'will my savings last 20 years?',

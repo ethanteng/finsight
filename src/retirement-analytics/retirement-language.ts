@@ -30,7 +30,7 @@ const DEBT_PAYOFF =
  * either order, with anything between them. Naming the assets is what keeps
  * "how long will my mortgage last" out; that one is a loan term.
  */
-const ASSET = String.raw`(?:money|savings|portfolio|nest\s+egg|assets?|investments?|funds?|cash|401\(?k\)?|403\(?b\)?|iras?|roth\s+iras?|brokerage(?:\s+account)?s?)`;
+const ASSET = String.raw`(?:money|savings|portfolio|nest\s+egg|assets?|investments?|funds?|cash|hsas?|401\(?k\)?|403\(?b\)?|iras?|roth\s+iras?|brokerage(?:\s+account)?s?)`;
 const DURATION = String.raw`(?:how\s+long|how\s+much\s+longer|how\s+many\s+(?:more\s+)?(?:years|months))`;
 /**
  * Running out. "last" has to refuse the time idiom: without this, "how many
