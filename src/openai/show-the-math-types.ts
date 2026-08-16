@@ -28,10 +28,13 @@ export type ContextSelection = Record<RoutedContextTier, boolean>;
 /**
  * Which tiers a retry's widening actually switched on.
  *
- * Escalation only reaches for the tiers that carry canonical facts, so an
- * escalated request is evidence about those tiers alone. Market and search
- * context are withheld from most questions and are never widened; charging them
- * with every escalation would invent a routing signal that isn't there.
+ * An escalated request is evidence about the tiers the widening reached for and
+ * no others. The personal tiers are switched on together, so an escalation is
+ * charged to all of them that were withheld. Market and search context are
+ * switched on only when the model reached for a percentage nobody supplied —
+ * the signature of a missing rate — so they are charged only by the escalations
+ * that actually implicate them. Widening them unconditionally would invent a
+ * routing signal that isn't there.
  */
 export function widenedContextTiers(manifest: {
   contextSelection?: ContextSelection;

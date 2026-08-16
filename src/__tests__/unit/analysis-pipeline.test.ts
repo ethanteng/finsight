@@ -254,6 +254,59 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
   });
 
+  it('reaches for outside context when the missing number was a rate', async () => {
+    // A percentage nobody supplied is the signature of a figure no connected
+    // account holds. The personal tiers cannot answer it, so the widening has
+    // to go outside or the retry is handed the same fact pack twice.
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Inflation is running at 3.1%, so your costs will climb.',
+        insights: [],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $100.',
+        insights: [],
+        suggested_actions: [],
+      }));
+
+    const result = await runAskLincAnalysis({ question: 'What is my net worth?', userId: 'user-1' });
+
+    expect(mockedGatherContext).toHaveBeenCalledTimes(2);
+    expect(mockedGatherContext.mock.calls[1][0].questionNeeds).toMatchObject({
+      needsMarketContext: true,
+      needsSearchContext: true,
+    });
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+  });
+
+  it('leaves outside context alone when the missing number was an amount', async () => {
+    // A missing dollar figure is personal — a balance, a transaction, a total.
+    // Widening to search for one would spend a third-party call on nearly every
+    // escalation, and would charge those tiers with a miss they had no part in.
+    mockedAskClaude
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your largest holding is worth $250,000.',
+        insights: [],
+        suggested_actions: [],
+      }))
+      .mockResolvedValueOnce(JSON.stringify({
+        summary: 'Your net worth is $100.',
+        insights: [],
+        suggested_actions: [],
+      }));
+
+    const result = await runAskLincAnalysis({ question: 'What is my net worth?', userId: 'user-1' });
+
+    expect(mockedGatherContext).toHaveBeenCalledTimes(2);
+    expect(mockedGatherContext.mock.calls[1][0].questionNeeds).toMatchObject({
+      needsAccountDetails: true,
+      needsMarketContext: false,
+      needsSearchContext: false,
+    });
+    expect(result.showTheMathData?.evidenceManifest.contextEscalated).toBe(true);
+  });
+
   it('keeps the first answer when widening the context grounds it', async () => {
     // $80 is total_cash, which the fact pack only gained on the widened read.
     // Re-judging against it means no second model call, and no feedback telling

@@ -251,9 +251,14 @@ function unsupportedClaims(prose: string, pack: CanonicalFactPack): ProseClaim[]
 
 const UNSUPPORTED_VALUE_SUFFIX = 'is not present in the canonical fact pack.';
 
+/** One format, written once, so a reader of these issues cannot drift from the writer. */
+function unsupportedValuePrefix(kind: string): string {
+  return `User-facing ${kind} value `;
+}
+
 function claimIssue(claim: ProseClaim): string {
   const kind = claim.unit ?? 'numeric';
-  return `User-facing ${kind} value ${claim.value} ${UNSUPPORTED_VALUE_SUFFIX}`;
+  return `${unsupportedValuePrefix(kind)}${claim.value} ${UNSUPPORTED_VALUE_SUFFIX}`;
 }
 
 /**
@@ -262,6 +267,22 @@ function claimIssue(claim: ProseClaim): string {
  */
 export function hasUnsupportedValueIssue(issues: readonly string[]): boolean {
   return issues.some((issue) => issue.endsWith(UNSUPPORTED_VALUE_SUFFIX));
+}
+
+/**
+ * True when one of the numbers nobody supplied was a percentage.
+ *
+ * Which tier could have supplied a missing number is not knowable from the
+ * number itself, but its unit narrows it usefully. Inflation, the fed funds
+ * rate, mortgage and CD yields, tax brackets, contribution limits expressed as
+ * rates — the figures the outside-context tiers carry — are percentages. A
+ * missing dollar amount is almost always personal: a balance, a transaction, a
+ * projection total. Widening the external tiers for one of those would spend a
+ * search call on nearly every escalation and teach the routing metrics nothing.
+ */
+export function hasUnsupportedPercentValue(issues: readonly string[]): boolean {
+  const prefix = unsupportedValuePrefix('percent');
+  return issues.some((issue) => issue.startsWith(prefix) && issue.endsWith(UNSUPPORTED_VALUE_SUFFIX));
 }
 
 function proseFields(response: AskLincResponse): string[] {
