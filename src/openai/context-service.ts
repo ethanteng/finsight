@@ -1038,3 +1038,17 @@ function deduplicateLiabilitySections(profileText: string): string {
 
   return deduplicated;
 }
+
+// Exported for unit testing. These are the pure helpers behind
+// gatherContextSnapshot — category derivation, transaction summarisation,
+// investment and home-value formatting, and profile deduplication. Exporting
+// them lets the tests exercise the logic directly rather than through the
+// orchestrator's network and database calls. Same convention as src/plaid.ts.
+export {
+  buildTransactionSummaries,
+  deriveTransactionTypeLabel,
+  deriveCategory,
+  deriveInvestmentSnapshot,
+  buildHomeValueSummary,
+  deduplicateLiabilitySections
+};
