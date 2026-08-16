@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowUp, Calculator, CheckCircle2, Database, Download, FileText, LoaderCircle, MessageSquarePlus, Sparkles } from 'lucide-react';
 import MarkdownRenderer from './MarkdownRenderer';
 import { useAnalytics } from './Analytics';
@@ -20,6 +20,8 @@ interface FinanceQAProps {
   onNewAnswer?: (question: string, answer: string) => void;
   selectedPrompt?: PromptHistory | null;
   onNewQuestion?: () => void;
+  /** Bumped every time "New decision" is clicked, including when nothing is selected. */
+  newDecisionNonce?: number;
 }
 
 /** randomUUID needs a secure context; the fallback keeps non-HTTPS dev working. */
@@ -43,7 +45,7 @@ const PLACEHOLDER_QUESTIONS = [
   "Given everything going on right now, am I actually doing okay?"
 ];
 
-export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: _onNewQuestion }: FinanceQAProps) {
+export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: _onNewQuestion, newDecisionNonce = 0 }: FinanceQAProps) {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(false);
@@ -99,6 +101,27 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
     fetchUserTier();
   }, [API_URL]);
 
+  /**
+   * Leave nothing of the last decision behind.
+   *
+   * The composer is pre-filled with a past question whenever a turn is opened,
+   * so without clearing it the previous question sits in the box waiting to be
+   * re-submitted. The placeholder rotation takes over again once it is empty.
+   * Dropping the thread is what makes the next question start clean instead of
+   * inheriting the last one's assumptions.
+   */
+  const startNewDecision = useCallback(() => {
+    setQuestion('');
+    setAnswer('');
+    setStreamingAnswer('');
+    setStructuredResponse(null);
+    setShowTheMathData(null);
+    setShowTheMathError(null);
+    setConversationId(null);
+    setThreadId(null);
+    setError('');
+  }, []);
+
   // Update question and answer when selectedPrompt changes
   useEffect(() => {
     if (selectedPrompt) {
@@ -107,7 +130,8 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       setConversationId(selectedPrompt.id);
       // Opening a past turn resumes its line of questioning, so a follow-up
       // continues where that decision left off. Turns written before threads
-      // existed carry no id and start a fresh one.
+      // existed are back-filled to their own id, so resuming one still puts
+      // that turn in scope.
       setThreadId(selectedPrompt.threadId ?? null);
       setStructuredResponse(null);
       setShowTheMathData(null);
@@ -115,16 +139,28 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       setActiveView('answer');
       setSelectedSourceKey(null);
     } else {
-      setAnswer('');
-      setStreamingAnswer('');
-      setStructuredResponse(null);
-      setShowTheMathData(null);
-      setError('');
-      // "New decision" lands here. Dropping the thread is what makes the next
-      // question start clean instead of inheriting the last one's assumptions.
-      setThreadId(null);
+      startNewDecision();
     }
-  }, [selectedPrompt]);
+  }, [selectedPrompt, startNewDecision]);
+
+  /**
+   * "New decision" clicked while nothing was selected.
+   *
+   * Clearing the selection is not enough on its own: when it is already null the
+   * prop never changes, the effect above never reruns, and the previous thread
+   * stays active — so the next supposedly fresh question inherits the old
+   * decision's context. Reachable whenever the post-answer history reload fails
+   * or is still in flight. The counter makes the reset an explicit signal rather
+   * than a side effect of a value transition.
+   */
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    startNewDecision();
+  }, [newDecisionNonce, startNewDecision]);
 
   const askQuestion = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -19,6 +19,9 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 export default function AppPageClient() {
   const [promptHistory, setPromptHistory] = useState<PromptHistory[]>([]);
   const [selectedPrompt, setSelectedPrompt] = useState<PromptHistory | null>(null);
+  // Clicking "New decision" when nothing is selected leaves selectedPrompt at
+  // null, so the composer would never hear about it. This counter always changes.
+  const [newDecisionNonce, setNewDecisionNonce] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [historyError, setHistoryError] = useState(false);
@@ -133,7 +136,7 @@ export default function AppPageClient() {
       <aside className={`${mobileNavOpen ? 'flex' : 'hidden'} fixed inset-y-16 left-0 z-30 w-full flex-col bg-[#102319] text-[#f8f4e9] lg:inset-y-0 lg:flex lg:w-72`}>
         <div className="hidden h-20 items-center border-b border-white/10 px-6 lg:flex"><span className="grid h-8 w-8 place-items-center rounded-[9px_9px_9px_2px] bg-[#d9ff6f] text-sm font-extrabold text-[#102319]">L</span><span className="ml-2 text-xl font-extrabold tracking-[-.04em]">Ask Linc</span><span className="ml-2 rounded-full border border-white/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white/65">{subscriptionStatus?.tier || 'member'}</span></div>
         <nav className="space-y-1 px-4 py-5" aria-label="Primary navigation">
-          <button onClick={() => { setSelectedPrompt(null); setMobileNavOpen(false); }} className="flex w-full items-center gap-3 rounded-xl bg-[#d9ff6f] px-4 py-3 font-semibold text-[#102319]"><Plus size={18} />New decision</button>
+          <button onClick={() => { setSelectedPrompt(null); setNewDecisionNonce(nonce => nonce + 1); setMobileNavOpen(false); }} className="flex w-full items-center gap-3 rounded-xl bg-[#d9ff6f] px-4 py-3 font-semibold text-[#102319]"><Plus size={18} />New decision</button>
           <Link href="/app" className="mt-4 flex items-center gap-3 rounded-xl bg-white/10 px-4 py-3 font-medium"><MessageSquareText size={18} />Decisions</Link>
           <Link href="/finances" className="flex items-center gap-3 rounded-xl px-4 py-3 text-white/70 hover:bg-white/10 hover:text-white"><WalletCards size={18} />Finances</Link>
           <Link href="/profile" className="flex items-center gap-3 rounded-xl px-4 py-3 text-white/70 hover:bg-white/10 hover:text-white"><Settings size={18} />Accounts & profile</Link>
@@ -155,7 +158,7 @@ export default function AppPageClient() {
             <Link href="/finances" className="inline-flex items-center gap-2 text-sm font-semibold text-[#102319] hover:underline">Review connected data <ChevronRight size={16} /></Link>
           </div>
           <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <FinanceQA onNewAnswer={loadConversationHistory} selectedPrompt={selectedPrompt} onNewQuestion={() => setSelectedPrompt(null)} />
+            <FinanceQA onNewAnswer={loadConversationHistory} selectedPrompt={selectedPrompt} onNewQuestion={() => setSelectedPrompt(null)} newDecisionNonce={newDecisionNonce} />
             <aside className="space-y-5 xl:sticky xl:top-8" aria-label="Financial context">
               <FinancialOverview tier={subscriptionStatus?.tier} />
               <div className="rounded-2xl border border-[#102319]/10 bg-white/60 p-5"><div className="mb-2 flex items-center gap-2 text-[#102319]"><Landmark size={18} /><h2 className="font-semibold">Data confidence</h2></div><p className="text-sm leading-6 text-[#48675e]">Answers use your connected financial data and available market context. Review accounts when balances are missing or stale.</p><button onClick={() => router.push('/profile')} className="mt-4 text-sm font-semibold text-[#397052] hover:underline">Inspect connected accounts</button></div>

@@ -169,8 +169,10 @@ model Conversation {
   userId             String?
   /// Which line of questioning this turn belongs to. The client mints a new one
   /// when the user clicks "New decision" and reuses it for follow-ups, so the
-  /// boundary is declared rather than guessed at from the wording. Null on rows
-  /// written before threads existed; those are each treated as their own thread.
+  /// boundary is declared rather than guessed at from the wording. Rows written
+  /// before threads existed were back-filled to their own id — a thread of one,
+  /// so that resuming such a turn still puts it in scope. Stays null only for
+  /// clients that predate threads and send none.
   threadId           String?
   showTheMathData    Json?
   user               User?      @relation(fields: [userId], references: [id])

@@ -57,4 +57,39 @@ describe('FinanceQA decision workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: /financial summaries/i }));
     expect(screen.getByText('Source detail for financial_summaries')).toBeInTheDocument();
   });
+
+  it('empties the composer when a new decision starts', () => {
+    // Opening a past turn pre-fills the composer with that question. "New
+    // decision" clears the selection, and the previous question used to stay
+    // sitting in the box waiting to be re-submitted.
+    const prompt = {
+      id: 'conversation-1',
+      question: 'Can I retire at 62?',
+      answer: 'You are on track with the current assumptions.',
+      timestamp: Date.now(),
+    };
+    const { rerender } = render(<FinanceQA selectedPrompt={prompt} />);
+    expect(screen.getByRole('textbox')).toHaveValue('Can I retire at 62?');
+
+    rerender(<FinanceQA selectedPrompt={null} />);
+
+    const composer = screen.getByRole('textbox');
+    expect(composer).toHaveValue('');
+    // The rotating examples still show; they are the placeholder, not a value.
+    expect(composer).toHaveAttribute('placeholder', expect.stringMatching(/\S/));
+    expect(screen.getByRole('button', { name: /Analyze decision/i })).toBeInTheDocument();
+  });
+
+  it('empties the composer on a repeated new decision, with nothing selected', () => {
+    // Clearing the selection is not enough on its own: with selectedPrompt
+    // already null the prop never changes, so a reset keyed only on that
+    // transition never runs and the previous decision's text and thread survive.
+    const { rerender } = render(<FinanceQA selectedPrompt={null} newDecisionNonce={1} />);
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Half-typed question' } });
+    expect(screen.getByRole('textbox')).toHaveValue('Half-typed question');
+
+    rerender(<FinanceQA selectedPrompt={null} newDecisionNonce={2} />);
+
+    expect(screen.getByRole('textbox')).toHaveValue('');
+  });
 });
