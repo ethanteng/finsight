@@ -14,8 +14,9 @@ describe('groupTurnsIntoDecisions', () => {
     timestamp,
   });
 
-  it('gathers a thread and reads it oldest turn first', () => {
-    // History arrives newest first; a decision is read in the order it happened.
+  it('gathers a thread and puts its newest turn first', () => {
+    // The turn a follow-up continues from is the one the user is looking for,
+    // so it leads — the same order the decisions themselves are listed in.
     const [decision] = groupTurnsIntoDecisions([
       turn('c3', 'thread-a', 300),
       turn('c2', 'thread-a', 200),
@@ -23,8 +24,18 @@ describe('groupTurnsIntoDecisions', () => {
     ]);
 
     expect(decision.threadId).toBe('thread-a');
-    expect(decision.turns.map(t => t.id)).toEqual(['c1', 'c2', 'c3']);
+    expect(decision.turns.map(t => t.id)).toEqual(['c3', 'c2', 'c1']);
     expect(decision.latestTimestamp).toBe(300);
+  });
+
+  it('orders a thread by time even when history arrives out of order', () => {
+    const [decision] = groupTurnsIntoDecisions([
+      turn('c1', 'thread-a', 100),
+      turn('c3', 'thread-a', 300),
+      turn('c2', 'thread-a', 200),
+    ]);
+
+    expect(decision.turns.map(t => t.id)).toEqual(['c3', 'c2', 'c1']);
   });
 
   it('keeps separate decisions apart and orders them by their newest turn', () => {
@@ -35,7 +46,7 @@ describe('groupTurnsIntoDecisions', () => {
     ]);
 
     expect(decisions.map(d => d.threadId)).toEqual(['thread-b', 'thread-a']);
-    expect(decisions[1].turns.map(t => t.id)).toEqual(['a1', 'a2']);
+    expect(decisions[1].turns.map(t => t.id)).toEqual(['a2', 'a1']);
   });
 
   it('stands a turn with no thread alone rather than pooling them together', () => {

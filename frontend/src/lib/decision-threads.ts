@@ -22,7 +22,7 @@ export interface DecisionThread<T extends DecisionTurn = DecisionTurn> {
 
 /**
  * @param turns the user's turns, newest first, as the history endpoint returns them
- * @returns decisions newest first, each reading oldest turn to newest
+ * @returns decisions newest first, each reading newest turn to oldest
  */
 export function groupTurnsIntoDecisions<T extends DecisionTurn>(turns: readonly T[]): DecisionThread<T>[] {
   const byThread = new Map<string, T[]>();
@@ -37,7 +37,12 @@ export function groupTurnsIntoDecisions<T extends DecisionTurn>(turns: readonly 
 
   return Array.from(byThread, ([threadId, threadTurns]) => ({
     threadId,
-    turns: [...threadTurns].reverse(),
+    // Newest turn first, matching how the decisions themselves are ordered: the
+    // turn a follow-up continues from is the one the user is looking for, and
+    // burying it at the bottom of a long thread makes them hunt for it. Sorting
+    // rather than trusting the caller's order keeps this true whatever the
+    // history endpoint hands back; ties keep the order they arrived in.
+    turns: [...threadTurns].sort((left, right) => right.timestamp - left.timestamp),
     latestTimestamp: Math.max(...threadTurns.map(turn => turn.timestamp)),
   })).sort((left, right) => right.latestTimestamp - left.latestTimestamp);
 }
