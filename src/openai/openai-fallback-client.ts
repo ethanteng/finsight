@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { resolveAskLincMaxOutputTokens } from './claude-client';
 import { ASK_LINC_RESPONSE_JSON_SCHEMA } from './structured-response';
 import { getActiveModel } from './model-config';
 
@@ -19,10 +20,7 @@ export async function askOpenAIWithPreparedPrompt(
   userMessage: string
 ): Promise<string> {
   const model = getActiveModel('fallback');
-  const configuredMaxTokens = Number.parseInt(process.env.ASK_LINC_MAX_OUTPUT_TOKENS || '8192', 10);
-  const maxTokens = Number.isFinite(configuredMaxTokens) && configuredMaxTokens > 0
-    ? configuredMaxTokens
-    : 8192;
+  const maxTokens = resolveAskLincMaxOutputTokens();
   const response = await getClient().chat.completions.create({
     model,
     temperature: 0.2,

@@ -19,7 +19,7 @@ describe('askOpenAIWithPreparedPrompt', () => {
     else process.env.ASK_LINC_MAX_OUTPUT_TOKENS = originalMaxTokens;
   });
 
-  it('reuses the prepared prompt with the strict schema and an 8192-token default', async () => {
+  it('reuses the prepared prompt with the strict schema and the shared output-token default', async () => {
     process.env.OPENAI_API_KEY = 'test-key';
     delete process.env.ASK_LINC_MAX_OUTPUT_TOKENS;
     const constructor = OpenAI as unknown as jest.Mock;
@@ -32,7 +32,7 @@ describe('askOpenAIWithPreparedPrompt', () => {
     await askOpenAIWithPreparedPrompt('system prompt', 'user message');
 
     expect(client.chat.completions.create).toHaveBeenCalledWith(expect.objectContaining({
-      max_tokens: 8192,
+      max_tokens: 16_000,
       response_format: expect.objectContaining({ type: 'json_schema' }),
       messages: [
         { role: 'system', content: 'system prompt' },

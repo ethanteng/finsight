@@ -27,9 +27,10 @@ export interface AskClaudeOptions {
   maxTokens?: number;
 }
 
-const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
+export const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
 
-function configuredMaxTokens(): number {
+/** Shared by the primary Claude path and the OpenAI fallback so both honor the same ceiling. */
+export function resolveAskLincMaxOutputTokens(): number {
   const value = Number.parseInt(
     process.env.ASK_LINC_MAX_OUTPUT_TOKENS || String(DEFAULT_MAX_OUTPUT_TOKENS),
     10
@@ -73,7 +74,7 @@ export async function askClaude(
 ): Promise<string> {
   const client = getClient();
   const model = options.model || getActiveModel('analysis');
-  const maxTokens = options.maxTokens ?? configuredMaxTokens();
+  const maxTokens = options.maxTokens ?? resolveAskLincMaxOutputTokens();
 
   const response = await client.messages.create({
     model,
@@ -103,7 +104,7 @@ export async function askClaudeStream(
 ): Promise<string> {
   const client = getClient();
   const model = options.model || getActiveModel('analysis');
-  const maxTokens = options.maxTokens ?? configuredMaxTokens();
+  const maxTokens = options.maxTokens ?? resolveAskLincMaxOutputTokens();
 
   const stream = client.messages.stream({
     model,
