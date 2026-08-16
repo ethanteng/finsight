@@ -240,7 +240,9 @@ A comprehensive CI/CD safety system that prevents production data loss through m
    ↓
 7. Migrations Applied with Safety Guards
    ↓
-8. Deployment Proceeds (Vercel + Render)
+8. Deployment Proceeds (Vercel and Render deploy in parallel)
+   ↓
+9. Deploy Summary (fails the run if either half failed)
 ```
 
 ### **Production Migration Safety Features:**
