@@ -50,6 +50,38 @@ const THINKING_CONFIG = { type: 'adaptive' } as const;
 const EFFORT_CONFIG = { effort: 'medium' } as const;
 
 /**
+ * Adaptive thinking and `output_config.effort` arrived with the 4.6 generation;
+ * Sonnet 4.5 and everything older reject both. The analysis slot is picked by an
+ * admin from the provider's live model list, which still serves those models, so
+ * sending the parameters unconditionally would couple this file to one model
+ * generation — the exact deploy-to-change-a-model problem the slot config exists
+ * to remove. A rejected request is also the worst possible failure here: the
+ * primary provider never runs, every answer silently comes from the OpenAI
+ * fallback, and the admin panel still reports the Claude model as the one in use.
+ *
+ * Ids that don't parse are treated as legacy. Omitting the parameters costs
+ * effort tuning and leaves the model's own default thinking behaviour in place,
+ * which the raised ceiling and the truncation report above already cover;
+ * sending them to a model that refuses them costs the entire call.
+ */
+export function supportsAdaptiveThinking(model: string): boolean {
+  const match = /^claude-(?:opus|sonnet|haiku|fable|mythos)-(\d+)(?:-(\d+))?(?:-|$)/.exec(model.trim());
+  if (!match) return false;
+  const major = Number(match[1]);
+  const minor = match[2] === undefined ? 0 : Number(match[2]);
+  return major >= 5 || (major === 4 && minor >= 6);
+}
+
+/** The reasoning parameters this model accepts — empty for pre-4.6 models. */
+function reasoningParams(model: string): {
+  thinking?: typeof THINKING_CONFIG;
+  output_config?: typeof EFFORT_CONFIG;
+} {
+  if (!supportsAdaptiveThinking(model)) return {};
+  return { thinking: THINKING_CONFIG, output_config: EFFORT_CONFIG };
+}
+
+/**
  * A response that stopped on `max_tokens` is a partial answer that still parses
  * far enough to look like a whole one, so nothing downstream notices. Report it
  * — the fix is a bigger budget or less thinking, and neither is discoverable
@@ -79,8 +111,7 @@ export async function askClaude(
   const response = await client.messages.create({
     model,
     max_tokens: maxTokens,
-    thinking: THINKING_CONFIG,
-    output_config: EFFORT_CONFIG,
+    ...reasoningParams(model),
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }]
   });
@@ -109,8 +140,7 @@ export async function askClaudeStream(
   const stream = client.messages.stream({
     model,
     max_tokens: maxTokens,
-    thinking: THINKING_CONFIG,
-    output_config: EFFORT_CONFIG,
+    ...reasoningParams(model),
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }]
   });

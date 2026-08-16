@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import * as Sentry from '@sentry/node';
 import { resolveAskLincMaxOutputTokens } from './claude-client';
 import { ASK_LINC_RESPONSE_JSON_SCHEMA } from './structured-response';
 import { getActiveModel } from './model-config';
@@ -38,5 +39,14 @@ export async function askOpenAIWithPreparedPrompt(
       { role: 'user', content: userMessage },
     ],
   });
+  // Same blind spot as the Claude path: a length-stopped completion is a partial
+  // answer that still reads like a whole one, and this path only runs when the
+  // primary provider is already down.
+  if (response.choices[0]?.finish_reason === 'length') {
+    const warning = `Ask Linc: OpenAI fallback response truncated at max_tokens (model=${model}). Raise ASK_LINC_MAX_OUTPUT_TOKENS.`;
+    console.warn(warning);
+    Sentry.captureMessage(warning, 'warning');
+  }
+
   return response.choices[0]?.message?.content || '';
 }

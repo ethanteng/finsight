@@ -185,7 +185,7 @@ The API returns:
 | `ENABLE_RESPONSE_VALIDATION` | No | Set to `true` for Gemini validation (default: `false`) |
 | `GOOGLE_AI_API_KEY` or `GEMINI_API_KEY` | No | For Gemini validation when enabled |
 | `GEMINI_VALIDATION_MODEL` | No | Override Gemini model (default: `gemini-3-flash-preview`) |
-| `ASK_LINC_MAX_OUTPUT_TOKENS` | No | Maximum primary and fallback output tokens (default: `8192`) |
+| `ASK_LINC_MAX_OUTPUT_TOKENS` | No | Maximum primary and fallback output tokens (default: `16000`). On models with adaptive thinking this budget covers reasoning and answer together. |
 
 ### Production path
 
