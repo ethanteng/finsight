@@ -93,6 +93,40 @@ describe('FinanceQA decision workspace', () => {
     expect(screen.getByRole('textbox')).toHaveValue('');
   });
 
+  it('renders an answer that nothing interrupted', async () => {
+    // The counterpart to the staleness test below. A guard that drops responses
+    // needs to be pinned on the ordinary path too, or it can start dropping
+    // every answer and only the negative test would still pass.
+    (global.fetch as jest.Mock).mockImplementation((url: string) => {
+      if (url.includes('/test/current-tier')) {
+        return Promise.resolve({ ok: true, json: async () => ({ backendTier: 'premium' }) });
+      }
+      if (url.includes('/ask/display-real')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({
+            answer: 'You are on track at $125K a year.',
+            threadId: 'thread-a',
+            conversationId: 'conversation-1',
+          }),
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, headers: new Headers(), json: async () => ({}) });
+    });
+
+    const onNewAnswer = jest.fn();
+    render(<FinanceQA onNewAnswer={onNewAnswer} newDecisionNonce={1} />);
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Can I retire at 62?' } });
+    fireEvent.submit(document.getElementById('finance-qa-form')!);
+
+    expect(await screen.findByText('You are on track at $125K a year.')).toBeInTheDocument();
+    expect(onNewAnswer).toHaveBeenCalledWith('Can I retire at 62?', 'You are on track at $125K a year.');
+    expect(screen.getByRole('button', { name: /Ask follow-up/i })).toBeInTheDocument();
+  });
+
   it('ignores a late answer after new decision during analysis', async () => {
     let resolveAsk: (value: Response) => void;
     const askPromise = new Promise<Response>(resolve => {
