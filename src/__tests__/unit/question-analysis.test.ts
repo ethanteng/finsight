@@ -116,6 +116,25 @@ describe('question-aware LLM context routing', () => {
     expect(analyzeQuestionNeeds('How much do I spend each month?')).toMatchObject({ needsTransactionDetails: false });
   });
 
+  it('loads the breakdown when spending is named against a category', () => {
+    // "spending on dining out" asks what the total is made of; "my monthly
+    // spending" asks for the total itself.
+    for (const question of [
+      'How much am I spending on dining out?',
+      'What do I spend on groceries?',
+      'How much am I spending at Costco?',
+    ]) {
+      expect(analyzeQuestionNeeds(question)).toMatchObject({ needsTransactionDetails: true });
+    }
+
+    for (const question of [
+      'What is my average monthly spending?',
+      'How much do I spend each month?',
+    ]) {
+      expect(analyzeQuestionNeeds(question)).toMatchObject({ needsTransactionDetails: false });
+    }
+  });
+
   it('does not load transactions for questions that merely say "money"', () => {
     // "money" plus a review verb is not a spending question; loading the raw
     // rows for these costs latency and puts unrelated detail in the prompt.

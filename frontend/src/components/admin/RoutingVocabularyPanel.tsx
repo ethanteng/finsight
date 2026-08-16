@@ -5,6 +5,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 interface CategoryMeta {
   id: string;
   label: string;
+  /** The routing decision this category feeds, matching a badge label below. */
+  feeds: string;
+  /** False when the category only has an effect combined with something else. */
+  standalone: boolean;
   description: string;
 }
 
@@ -186,13 +190,30 @@ export default function RoutingVocabularyPanel({
                 </span>
               ))}
             </div>
-            <div className="text-xs text-gray-400">
-              {Object.entries(preview.matches).filter(([, terms]) => terms.length > 0).length === 0
-                ? 'No configured terms matched — anything that fired above came from a built-in structural pattern.'
-                : Object.entries(preview.matches)
-                    .filter(([, terms]) => terms.length > 0)
-                    .map(([category, terms]) => `${category}: ${terms.join(', ')}`)
-                    .join(' · ')}
+            <div className="text-xs text-gray-400 space-y-1">
+              {Object.entries(preview.matches).filter(([, terms]) => terms.length > 0).length === 0 ? (
+                <div>
+                  No configured terms matched. Anything lit above came from a built-in structural pattern
+                  rather than from this vocabulary.
+                </div>
+              ) : (
+                Object.entries(preview.matches)
+                  .filter(([, terms]) => terms.length > 0)
+                  .map(([category, terms]) => {
+                    const meta = (data?.categories || []).find((entry) => entry.id === category);
+                    return (
+                      <div key={category}>
+                        <span className="text-gray-200">{meta?.label ?? category}</span>
+                        <span className="text-gray-500"> → {meta?.feeds ?? category}</span>
+                        {meta && !meta.standalone && (
+                          <span className="text-gray-500"> (only alongside a spending word)</span>
+                        )}
+                        <span className="text-gray-500">: </span>
+                        <code className="text-gray-300">{terms.join(', ')}</code>
+                      </div>
+                    );
+                  })
+              )}
             </div>
           </div>
         )}
@@ -204,6 +225,10 @@ export default function RoutingVocabularyPanel({
             <div className="flex items-baseline justify-between">
               <label className="text-sm font-medium text-white" htmlFor={`terms-${category.id}`}>
                 {category.label}
+                <span className="ml-2 text-xs font-normal text-gray-400">
+                  → {category.feeds}
+                  {!category.standalone && ' (only in combination)'}
+                </span>
               </label>
               <button
                 onClick={() => resetCategory(category.id)}

@@ -39,6 +39,14 @@ export type RoutingCategory = (typeof ROUTING_CATEGORIES)[number];
 export interface RoutingCategoryMeta {
   id: RoutingCategory;
   label: string;
+  /** The routing decision this category feeds, named as the tester labels it. */
+  feeds: string;
+  /**
+   * False when matching this category does nothing on its own. A modifier only
+   * changes a decision in combination with something else, so its terms firing
+   * with no visible effect is expected rather than a gap.
+   */
+  standalone: boolean;
   description: string;
 }
 
@@ -46,41 +54,60 @@ export const ROUTING_CATEGORY_META: RoutingCategoryMeta[] = [
   {
     id: 'retirement',
     label: 'Retirement',
-    description: 'Loads the retirement projection and its inputs. Also drives the secondary review.',
+    feeds: 'Retirement',
+    standalone: true,
+    description: 'Loads the retirement projection and its inputs. Also drives the second review.',
   },
   {
     id: 'investments',
     label: 'Investments',
-    description: 'Loads individual holdings and securities.',
+    feeds: 'Investments',
+    standalone: true,
+    description: 'Loads individual holdings and securities. Also switches on Accounts.',
   },
   {
     id: 'home',
     label: 'Home & property',
+    feeds: 'Home value',
+    standalone: true,
     description: 'Loads the home valuation.',
   },
   {
     id: 'accounts',
     label: 'Account detail',
+    feeds: 'Accounts',
+    standalone: true,
     description: 'Loads per-account balances.',
   },
   {
     id: 'transactions',
     label: 'Transaction detail',
+    feeds: 'Transactions',
+    standalone: true,
     description: 'Loads individual transactions and merchant totals.',
   },
   {
     id: 'spendingReview',
     label: 'Spending review',
-    description: 'Verbs that turn a spending mention into a request to analyze it, rather than to total it.',
+    feeds: 'Transactions',
+    standalone: false,
+    description: 'Loads nothing on its own. Next to a spending word (spending, expenses, budget, cash flow) ' +
+      'it switches on Transaction detail — the difference between "what did I spend?" and "review my spending". ' +
+      'Adding a term here that is itself a spending word, such as spend*, collapses that distinction and sends ' +
+      'every spending question for the full transaction list.',
   },
   {
     id: 'marketContext',
     label: 'Market context',
+    feeds: 'Market context',
+    standalone: true,
     description: 'Fetches outside market data. Kept narrow on purpose — a false match makes answers slower.',
   },
   {
     id: 'searchContext',
     label: 'Rates & rules lookup',
+    feeds: 'Rates & rules',
+    standalone: true,
     description: 'Fetches current rates, limits, and tax rules. Also kept narrow.',
   },
 ];
