@@ -33,20 +33,21 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
   // Set just under measured coverage so this gate can actually catch a regression.
-  // Measured on main at the time of writing (89 suites / 855 tests, PostgreSQL 16):
-  //   statements 48.77 · branches 38.24 · functions 57.93 · lines 48.38
+  // Measured on main at the time of writing (93 suites / 974 tests, PostgreSQL 16):
+  //   statements 50.88 · branches 40.46 · functions 60.24 · lines 50.47
   // The ~2-3 point gap absorbs normal drift without letting a real drop through.
-  // The previous values (10/21/20/20) sat at roughly half of actual coverage, so
+  // The original values (10/21/20/20) sat at roughly half of actual coverage, so
   // more than half the suite could have been deleted with CI still green.
   //
-  // Raise these as coverage improves — notably src/plaid.ts (2,003 lines, 0%) and
-  // src/openai/context-service.ts (1,037 lines, ~2%), the two largest gaps.
+  // Ratchet these up as coverage improves. src/plaid.ts is now at ~16% (its route
+  // handlers, lines 369-1996, are still untested); src/openai/context-service.ts
+  // (1,037 lines, ~2%) is the largest remaining gap.
   coverageThreshold: {
     global: {
-      branches: 35,
-      functions: 55,
-      lines: 46,
-      statements: 46
+      branches: 38,
+      functions: 58,
+      lines: 48,
+      statements: 48
     }
   }
 };
