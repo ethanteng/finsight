@@ -185,7 +185,10 @@ export default function ModelConfigPanel({
         setStatus({ kind: 'error', message: body.error || 'Failed to save' });
         return;
       }
-      setStatus({ kind: 'ok', message: 'Saved. New questions use these models within a minute.' });
+      setStatus({
+        kind: 'ok',
+        message: 'Saved. New questions use these models and parameters within a minute.',
+      });
       await load();
     } catch {
       setStatus({ kind: 'error', message: 'Failed to save model configuration' });

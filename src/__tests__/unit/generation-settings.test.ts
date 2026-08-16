@@ -6,19 +6,25 @@ import {
   getActiveNumericGenerationSetting,
   isGenerationSettingId,
   isValidGenerationSettingValue,
+  loadModelConfig,
   resetModelConfigCache,
   setActiveGenerationSettings,
+  setActiveModelOverrides,
 } from '../../openai/model-config';
 import { openAIGenerationParams } from '../../openai/openai-generation-params';
 
+const findUnique = jest.fn();
+
 jest.mock('../../prisma-client', () => ({
-  getPrismaClient: () => ({ aiPromptConfig: { findUnique: jest.fn() } }),
+  getPrismaClient: () => ({ aiPromptConfig: { findUnique } }),
 }));
 
 describe('generation settings', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
+    jest.clearAllMocks();
+    findUnique.mockResolvedValue(null);
     resetModelConfigCache();
     delete process.env.ASK_LINC_MAX_OUTPUT_TOKENS;
   });
@@ -135,6 +141,35 @@ describe('generation settings', () => {
       expect(isValidGenerationSettingValue(temperature, '2.1')).toBe(false);
       expect(isValidGenerationSettingValue(tokens, '4096.5')).toBe(false);
       expect(isValidGenerationSettingValue(tokens, '4096')).toBe(true);
+    });
+  });
+
+  describe('cache freshness', () => {
+    it('still loads settings after a save that carried only models', async () => {
+      // A client from before generation settings existed, or one mid-rolling
+      // deploy, PUTs models alone. That save must not mark the settings cache
+      // current: on a cold instance it is empty, and suppressing the reload
+      // would run every request on defaults while overrides sat in the row.
+      findUnique.mockResolvedValue({
+        models: {},
+        generationSettings: { analysis: { effort: 'xhigh' } },
+      });
+
+      setActiveModelOverrides({ analysis: 'claude-opus-5' });
+      await loadModelConfig();
+
+      expect(findUnique).toHaveBeenCalled();
+      expect(getActiveGenerationSetting('analysis', 'effort')).toBe('xhigh');
+    });
+
+    it('does not re-read the row when both halves are fresh', async () => {
+      findUnique.mockResolvedValue({ models: {}, generationSettings: {} });
+      await loadModelConfig(true);
+      findUnique.mockClear();
+
+      await loadModelConfig();
+
+      expect(findUnique).not.toHaveBeenCalled();
     });
   });
 

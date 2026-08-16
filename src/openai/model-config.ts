@@ -347,7 +347,18 @@ const CACHE_TTL_MS = 60_000;
 
 let cachedOverrides: ModelOverrides = {};
 let cachedGenerationSettings: GenerationSettingOverrides = {};
-let cacheLoadedAt = 0;
+
+/**
+ * Freshness is tracked per concern rather than once for the row, because the two
+ * are written independently. A save that carries only models — a client from
+ * before generation settings existed, or one mid-rolling-deploy — refreshes the
+ * model cache and must not thereby mark the settings cache current: on a cold
+ * instance that would leave it empty while suppressing the reload that would
+ * have filled it, so every request for the next minute would quietly run on
+ * defaults instead of the overrides sitting in the database.
+ */
+let overridesLoadedAt = 0;
+let generationSettingsLoadedAt = 0;
 
 /**
  * Keep only recognised slots with plausible values. A stored blob that predates
@@ -448,7 +459,7 @@ export function getActiveGenerationSettings(): Array<{
 /** Update the cache immediately after an admin edit. */
 export function setActiveGenerationSettings(raw: unknown): GenerationSettingOverrides {
   cachedGenerationSettings = normalizeGenerationSettings(raw);
-  cacheLoadedAt = Date.now();
+  generationSettingsLoadedAt = Date.now();
   return cachedGenerationSettings;
 }
 
@@ -482,7 +493,7 @@ export function getActiveModelConfig(): Array<
 /** Update the cache immediately after an admin edit. */
 export function setActiveModelOverrides(raw: unknown): ModelOverrides {
   cachedOverrides = normalizeOverrides(raw);
-  cacheLoadedAt = Date.now();
+  overridesLoadedAt = Date.now();
   return cachedOverrides;
 }
 
@@ -492,7 +503,11 @@ export function setActiveModelOverrides(raw: unknown): ModelOverrides {
  * pipeline always has a model to call.
  */
 export async function loadModelConfig(force = false): Promise<ModelOverrides> {
-  if (!force && Date.now() - cacheLoadedAt < CACHE_TTL_MS) {
+  // Whichever half is staler decides: one row and one query fill both, so
+  // reloading a still-fresh half costs nothing and leaving a stale one costs a
+  // minute of wrong config.
+  const loadedAt = Math.min(overridesLoadedAt, generationSettingsLoadedAt);
+  if (!force && Date.now() - loadedAt < CACHE_TTL_MS) {
     return cachedOverrides;
   }
 
@@ -508,7 +523,8 @@ export async function loadModelConfig(force = false): Promise<ModelOverrides> {
     console.warn('Failed to load model config; using cached/default values:', error);
   }
 
-  cacheLoadedAt = Date.now();
+  overridesLoadedAt = Date.now();
+  generationSettingsLoadedAt = overridesLoadedAt;
   return cachedOverrides;
 }
 
@@ -523,5 +539,6 @@ const AI_PROMPT_CONFIG_ID_FOR_MODELS = 'global';
 export function resetModelConfigCache(): void {
   cachedOverrides = {};
   cachedGenerationSettings = {};
-  cacheLoadedAt = 0;
+  overridesLoadedAt = 0;
+  generationSettingsLoadedAt = 0;
 }
