@@ -11,6 +11,7 @@ import { resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
 import { identifyUser, resetUserIdentity } from '../../lib/heycatch';
 import { syncStoredUserTimeZoneFromAuthUser } from '../../lib/browser-time-zone';
 import { groupTurnsIntoDecisions } from '../../lib/decision-threads';
+import { relativeTurnTime } from '../../lib/relative-time';
 
 interface PromptHistory { id: string; question: string; answer: string; threadId?: string | null; timestamp: number }
 interface SubscriptionStatus { status: string; tier: string; message: string; isActive: boolean; accessLevel: 'full' | 'none'; upgradeRequired: boolean; expiresAt?: string }
@@ -159,12 +160,6 @@ export default function AppPageClient() {
     router.push('/login');
   };
   const hasMarketNewsAccess = subscriptionStatus?.tier === 'standard' || subscriptionStatus?.tier === 'premium';
-  const relativeDate = (timestamp: number) => {
-    const hours = (Date.now() - new Date(timestamp).getTime()) / 3_600_000;
-    if (hours < 1) return 'Just now';
-    if (hours < 24) return `${Math.floor(hours)}h ago`;
-    return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  };
 
   if (isLoading) return (
     <main className="min-h-screen bg-[#f3f2e9] grid place-items-center text-[#102319]" aria-busy="true">
@@ -197,11 +192,15 @@ export default function AppPageClient() {
               {decisionThreads.map(thread => {
                 const isActive = thread.threadId === activeThreadId;
                 const isMultiTurn = thread.turns.length > 1;
+                // Turns list newest first, so the decision's opening question —
+                // the one that names it, and the only label that stays put as
+                // follow-ups accumulate — is the last of them.
+                const openingQuestion = thread.turns[thread.turns.length - 1].question;
                 return (
                   <div
                     key={thread.threadId}
                     role="group"
-                    aria-label={`Decision: ${thread.turns[0].question}`}
+                    aria-label={`Decision: ${openingQuestion}`}
                     className={`rounded-xl transition ${isActive ? 'bg-white/[0.06] ring-1 ring-[#d9ff6f]/35' : ''}`}
                   >
                     {/* A single turn needs no header — it would be chrome around one row. */}
@@ -224,7 +223,7 @@ export default function AppPageClient() {
                             className={`w-full rounded-xl px-3 py-3 text-left transition ${isSelected ? 'bg-white/12' : 'hover:bg-white/7'}`}
                           >
                             <span className="line-clamp-2 text-sm font-medium leading-5">{prompt.question}</span>
-                            <span className="mt-1 block text-xs text-white/40">{relativeDate(prompt.timestamp)}</span>
+                            <span className="mt-1 block text-xs text-white/40">{relativeTurnTime(prompt.timestamp)}</span>
                           </button>
                         );
                       })}

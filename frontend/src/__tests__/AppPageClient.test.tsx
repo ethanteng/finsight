@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import AppPageClient from '@/app/app/AppPageClient';
 
 const mockRouter = { push: jest.fn() };
@@ -99,6 +99,14 @@ describe('AppPageClient decision list', () => {
     expect(activeDecision).toHaveTextContent('Resuming');
     expect(activeDecision).toHaveTextContent('3 turns');
     expect(activeDecision).toHaveTextContent('A follow-up sees these turns.');
+
+    // The turn a follow-up continues from leads; the decision is still named by
+    // the question that opened it, which is the label that survives follow-ups.
+    const turnsListed = within(activeDecision)
+      .getAllByRole('button')
+      .map(button => button.textContent);
+    expect(turnsListed[0]).toContain('Confirm $125K as my target');
+    expect(turnsListed[2]).toContain('What about retiring at 58?');
 
     // A different decision is present but not presented as active.
     const otherDecision = screen.getByRole('group', { name: 'Decision: How is my cash position?' });
