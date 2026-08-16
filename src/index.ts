@@ -1,4 +1,4 @@
-import { config } from 'dotenv';
+import './instrument';
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import cron from 'node-cron';
@@ -37,12 +37,6 @@ function asString(v: string | string[] | undefined): string {
   return Array.isArray(v) ? v[0] ?? '' : v ?? '';
 }
 
-// Load environment variables from .env.local (for local development only)
-// In production, environment variables should come from Render's environment settings
-if (process.env.NODE_ENV !== 'production') {
-  config({ path: '.env.local' });
-}
-
 // DEBUG: Log environment configuration
 console.log('🔍 Environment Configuration:');
 console.log('  NODE_ENV:', process.env.NODE_ENV);
@@ -64,14 +58,6 @@ import { setupSnapTradeRoutes } from './auth/snaptrade-routes';
 import { getPrismaClient } from './prisma-client';
 
 const app: Application = express();
-
-// Initialize Sentry for backend monitoring
-Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  environment: process.env.NODE_ENV || 'development',
-  tracesSampleRate: 1.0, // Capture 100% of transactions for now
-  enableLogs: true,
-});
 
 // CORS setup with explicit configuration for preflight requests
 const allowedOrigins = [
@@ -3217,6 +3203,9 @@ app.delete('/admin/delete-user-account/:userId', adminAuth, async (req: Request,
     res.status(500).json({ error: 'Failed to delete user account' });
   }
 });
+
+// Register after every route so uncaught Express errors are reported consistently.
+Sentry.setupExpressErrorHandler(app);
 
 // Export app for testing
 export { app };

@@ -264,7 +264,9 @@ TIINGO_API_KEY="..."                    # For retirement analytics
 FMP_API_KEY="..."                      # For retirement analytics
 
 # Monitoring
-SENTRY_DSN="https://..."                # Optional: Sentry error tracking
+SENTRY_DSN="https://..."                # Optional: backend error tracking
+SENTRY_ENVIRONMENT="development"        # Use "production" in production
+SENTRY_TRACES_SAMPLE_RATE="0"           # Production default is 0.05; keep local tracing off
 ```
 
 Create `.env.local` file in the `frontend` directory:
@@ -283,9 +285,13 @@ NEXT_PUBLIC_GA_ID="G-..."
 
 # Sentry (optional - error tracking)
 NEXT_PUBLIC_SENTRY_DSN="https://..."
+NEXT_PUBLIC_SENTRY_ENVIRONMENT="development"
+NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE="0"
 
-# App Version (optional - for Sentry releases)
-NEXT_PUBLIC_APP_VERSION="1.0.0"
+# Build-only Sentry settings (set in CI/deployment, not exposed to the browser)
+SENTRY_ORG="your-sentry-organization"
+SENTRY_PROJECT="your-sentry-project"
+SENTRY_AUTH_TOKEN="..."
 
 # Ghost CMS (optional - for blog content)
 GHOST_URL="https://..."

@@ -67,10 +67,19 @@ const nextConfig: NextConfig = {
 };
 
 const sentryWebpackPluginOptions = {
-  // Additional config options for the Sentry Webpack plugin
-  silent: true, // Suppresses source map upload logs during build
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
+  widenClientFileUpload: true,
+  sourcemaps: {
+    deleteSourcemapsAfterUpload: true,
+  },
+  webpack: {
+    treeshake: {
+      removeDebugLogging: true,
+    },
+  },
 };
 
 // Make sure adding Sentry options is the last code change in this file
