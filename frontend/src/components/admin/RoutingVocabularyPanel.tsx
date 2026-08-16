@@ -84,6 +84,9 @@ export default function RoutingVocabularyPanel({
   const [status, setStatus] = useState<{ kind: 'error' | 'ok'; message: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [question, setQuestion] = useState('');
+  // A short follow-up inherits the previous turn's needs, so previewing one on
+  // its own shows routing production would never produce.
+  const [priorQuestion, setPriorQuestion] = useState('');
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const authHeadersRef = useRef(getAuthHeaders);
   authHeadersRef.current = getAuthHeaders;
@@ -143,7 +146,9 @@ export default function RoutingVocabularyPanel({
       const response = await fetch(`${apiUrl}/admin/ai/routing-preview`, {
         method: 'POST',
         headers: authHeadersRef.current(),
-        body: JSON.stringify({ question }),
+        body: JSON.stringify(
+          priorQuestion.trim() ? { question, recentQuestions: [priorQuestion.trim()] } : { question }
+        ),
       });
       if (!response.ok) {
         setStatus({ kind: 'error', message: 'Failed to preview routing' });
@@ -205,6 +210,22 @@ export default function RoutingVocabularyPanel({
             Check
           </button>
         </div>
+
+        <label className="block text-sm text-gray-300 mt-3 mb-2" htmlFor="routing-preview-prior-question">
+          Previous question <span className="text-gray-500">(optional)</span>
+        </label>
+        <input
+          id="routing-preview-prior-question"
+          value={priorQuestion}
+          onChange={(event) => setPriorQuestion(event.target.value)}
+          onKeyDown={(event) => { if (event.key === 'Enter') runPreview(); }}
+          placeholder="e.g. re-run my retirement analysis"
+          className="w-full bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm text-white"
+        />
+        <p className="mt-2 text-xs text-gray-500">
+          A short reply — &quot;yes&quot;, &quot;$125k a year&quot; — inherits what the previous question
+          loaded. Fill this in to see how a follow-up really routes.
+        </p>
 
         {preview && (
           <div className="mt-4 space-y-3">
