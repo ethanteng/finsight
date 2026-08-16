@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TextDecoder as NodeTextDecoder, TextEncoder as NodeTextEncoder } from 'util';
 import FinanceQA from '@/components/FinanceQA';
 
@@ -181,6 +181,71 @@ describe('FinanceQA decision workspace', () => {
 
     expect(await screen.findByText('You are on track at $125K a year.')).toBeInTheDocument();
     expect(onNewAnswer).toHaveBeenCalledWith('Can I retire at 62?', 'You are on track at $125K a year.');
+  });
+
+  it('drops a streamed result once the user opens a different turn', async () => {
+    // The staleness checks in the stream parser and the JSON branch are separate
+    // call sites of the same guard. The JSON one is pinned below; this pins the
+    // one that actually runs, mid-stream, which is where every race on this
+    // component has surfaced.
+    const encoder = new TextEncoder();
+    let releaseResult: (() => void) | null = null;
+    let step = 0;
+
+    (global.fetch as jest.Mock).mockImplementation((url: string) => {
+      if (url.includes('/test/current-tier')) {
+        return Promise.resolve({ ok: true, json: async () => ({ backendTier: 'premium' }) });
+      }
+      if (url.includes('/ask/display-real')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'text/event-stream' }),
+          body: {
+            getReader: () => ({
+              read: async () => {
+                if (step === 0) {
+                  step += 1;
+                  return { done: false, value: encoder.encode('event: progress\ndata: {"message":"Working"}\n\n') };
+                }
+                if (step === 1) {
+                  step += 1;
+                  // Hold the stream open so the turn can be switched mid-answer.
+                  await new Promise<void>(resolve => { releaseResult = resolve; });
+                  return {
+                    done: false,
+                    value: encoder.encode(
+                      'event: result\ndata: {"answer":"Stale streamed answer.","threadId":"thread-a","conversationId":"c9"}\n\n'
+                    ),
+                  };
+                }
+                return { done: true, value: undefined };
+              },
+            }),
+          },
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, headers: new Headers(), json: async () => ({}) });
+    });
+
+    const turnA = { id: 'turn-a', question: 'Can I retire at 62?', answer: 'Answer A', threadId: 'thread-a', timestamp: 1 };
+    const turnB = { id: 'turn-b', question: 'How is my cash?', answer: 'Answer B', threadId: 'thread-b', timestamp: 2 };
+
+    const onNewAnswer = jest.fn();
+    const { rerender } = render(<FinanceQA onNewAnswer={onNewAnswer} selectedPrompt={turnA} />);
+
+    fireEvent.submit(document.getElementById('finance-qa-form')!);
+    await waitFor(() => expect(releaseResult).not.toBeNull());
+
+    rerender(<FinanceQA onNewAnswer={onNewAnswer} selectedPrompt={turnB} />);
+    await act(async () => {
+      releaseResult!();
+    });
+
+    expect(screen.queryByText('Stale streamed answer.')).not.toBeInTheDocument();
+    expect(onNewAnswer).not.toHaveBeenCalled();
+    // The turn the user actually chose is what stays on screen.
+    expect(screen.getByText('Answer B')).toBeInTheDocument();
   });
 
   it('ignores a late answer after new decision during analysis', async () => {
