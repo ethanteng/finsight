@@ -132,7 +132,9 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       // continues where that decision left off. Turns written before threads
       // existed are back-filled to their own id, so resuming one still puts
       // that turn in scope.
-      setThreadId(selectedPrompt.threadId ?? null);
+      // Rows written before threads, or by a client that predates them, may still
+      // have no threadId in storage. The row's own id is the effective thread key.
+      setThreadId(selectedPrompt.threadId ?? selectedPrompt.id);
       setStructuredResponse(null);
       setShowTheMathData(null);
       setError('');

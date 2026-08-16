@@ -40,11 +40,13 @@ describe('Ask route conversation threading', () => {
   const conversation = {
     findMany: jest.fn(),
     create: jest.fn(),
+    updateMany: jest.fn(),
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
     conversation.findMany.mockResolvedValue([]);
+    conversation.updateMany.mockResolvedValue({ count: 0 });
     conversation.create.mockImplementation(async ({ data }: any) => ({
       id: 'conversation-1',
       threadId: data.threadId ?? null,
@@ -128,5 +130,16 @@ describe('Ask route conversation threading', () => {
 
     const stored = conversation.create.mock.calls[0][0].data.threadId;
     expect(stored).toHaveLength(64);
+  });
+
+  it('adopts a legacy row when the client resumes it by id', async () => {
+    await request(createApp())
+      .post('/ask/display-real')
+      .send({ question: 'Follow up on that.', threadId: 'legacy-turn-1' });
+
+    expect(conversation.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1', id: 'legacy-turn-1', threadId: null },
+      data: { threadId: 'legacy-turn-1' },
+    });
   });
 });

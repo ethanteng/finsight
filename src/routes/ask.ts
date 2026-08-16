@@ -50,6 +50,14 @@ router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req,
         id: string; question: string; answer: string; createdAt: Date;
       }> = [];
       try {
+        // A legacy row may still have threadId null while the client resumes it
+        // using the row id as the thread key. Adopt it once so follow-ups see it.
+        if (requestedThreadId) {
+          await getPrismaClient().conversation.updateMany({
+            where: { userId: user.id, id: requestedThreadId, threadId: null },
+            data: { threadId: requestedThreadId },
+          });
+        }
         conversationHistory = await getPrismaClient().conversation.findMany({
           // A declared thread answers "which turns belong to this question?"
           // exactly. A new decision still sends one — the client mints it — so
@@ -105,7 +113,7 @@ router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req,
       const payload = {
         answer: result.displayText,
         conversationId: conversation.id,
-        threadId: conversation.threadId,
+        threadId: conversation.threadId ?? conversation.id,
         structuredResponse: result.structuredResponse,
       };
       if (streaming) {
@@ -173,7 +181,7 @@ router.get('/conversations', requireAuth, async (req, res) => {
       answer: conversation.answer,
       // Lets the sidebar resume a line of questioning: picking a past turn
       // adopts its thread, so the next question continues from there.
-      threadId: conversation.threadId,
+      threadId: conversation.threadId ?? conversation.id,
       timestamp: conversation.createdAt.getTime(),
     })),
   });
