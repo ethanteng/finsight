@@ -386,9 +386,9 @@ beforeAll(async () => {
   // CI used to short-circuit to the mock database here, which meant the workflow
   // booted a PostgreSQL service container, ran `prisma migrate deploy` against it,
   // and then never used it. That is not a neutral substitution: the mock's
-  // findMany returns rows built from the `where` clause, so it filters by user by
-  // construction and a data-isolation test cannot fail against it. CI now uses the
-  // database it builds.
+  // findMany checks `where?.userId`, but Prisma calls `findMany({ where: { userId } })`,
+  // so correctly scoped queries return [] and isolation tests pass vacuously. CI now
+  // uses the database it builds.
   const databaseUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 
   if (!databaseUrl) {
