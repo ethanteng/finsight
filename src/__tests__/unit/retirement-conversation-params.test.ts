@@ -55,6 +55,18 @@ describe('annual spending wording', () => {
     );
   });
 
+  it('does not read a bare age reply as an annual spend', () => {
+    // "62" answers "what age do you plan to retire?" at least as often as it
+    // answers "how much per year?". Read as spending it would project a $62
+    // annual withdrawal — silently, since a parsed 62 clears the missing-input
+    // check. Below the floor the assistant asks instead.
+    for (const reply of ['62', '48', '95', 'about 62']) {
+      expect(
+        parseRetirementConversation(reply, ['Re-run my retirement analysis.']).annualWithdrawalAmount
+      ).toBeUndefined();
+    }
+  });
+
   it('does not read a monthly figure as the annual spend', () => {
     const result = parseRetirementQuestion(
       'What if we pay off our mortgage before retirement? That would drop our monthly expenses by around $2,100.'

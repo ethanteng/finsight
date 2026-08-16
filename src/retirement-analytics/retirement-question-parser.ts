@@ -128,6 +128,15 @@ function extractAnnualWithdrawalAmount(
 }
 
 /**
+ * Nobody retires on $62 a year — but "62" is exactly what an answer to "what
+ * age do you plan to retire?" looks like, and the two replies are
+ * indistinguishable as bare numbers. Below this floor the number is far more
+ * likely an age than a spending target, so it is left unparsed and the
+ * assistant asks rather than projecting on nonsense.
+ */
+const MIN_BARE_ANNUAL_AMOUNT = 1_000;
+
+/**
  * A reply whose whole content is the number the assistant just asked for:
  * "125,000", "125k", "about $125000". Routing already treats these as
  * contextual follow-ups; without this they still parse as missing amounts.
@@ -147,7 +156,8 @@ function extractBareSpendingAnswer(question: string): number | undefined {
   const suffix = match[2]?.toLowerCase();
   const multiplier =
     suffix === 'million' ? 1_000_000 : suffix === 'k' || suffix === 'thousand' ? 1_000 : 1;
-  return amount * multiplier;
+  const annual = amount * multiplier;
+  return annual >= MIN_BARE_ANNUAL_AMOUNT ? annual : undefined;
 }
 
 function firstNumber(qLower: string, patterns: readonly RegExp[]): number | undefined {
