@@ -150,14 +150,35 @@ export default function ModelConfigPanel({
     }
   };
 
+  /** Full slot -> setting -> value payload, or undefined when the GET did not expose settings. */
+  const generationSettingsPayload = (): Record<string, Record<string, string>> | undefined => {
+    if (data?.generationSettings === undefined) return undefined;
+    return Object.fromEntries(
+      data.generationSettings.map((entry) => [
+        entry.slotId,
+        Object.fromEntries(
+          entry.settings.map((setting) => [
+            setting.id,
+            settingsDraft[entry.slotId]?.[setting.id] ?? USE_DEFAULT,
+          ])
+        ),
+      ])
+    );
+  };
+
   const save = async (allowUnlisted = false) => {
     setSaving(true);
     setStatus(null);
     try {
+      const generationSettings = generationSettingsPayload();
       const response = await fetch(`${apiUrl}/admin/ai/models`, {
         method: 'PUT',
         headers: authHeadersRef.current(),
-        body: JSON.stringify({ models: draft, generationSettings: settingsDraft, allowUnlisted }),
+        body: JSON.stringify({
+          models: draft,
+          ...(generationSettings !== undefined ? { generationSettings } : {}),
+          allowUnlisted,
+        }),
       });
       const body = await response.json();
       if (!response.ok) {
