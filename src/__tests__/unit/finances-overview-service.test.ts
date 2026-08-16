@@ -160,6 +160,14 @@ describe('finances overview contract', () => {
     expect(overview.revision.newestSourceAsOf).toBe('2026-08-14T10:00:00.000Z');
   });
 
+  it('falls back when sourceObservations is an empty array, not only when absent', () => {
+    const overview = buildFinancesOverview({
+      snapshot: { ...snapshot, sourceObservations: [] },
+    });
+
+    expect(overview.revision.newestSourceAsOf).toBe('2026-08-14T10:00:00.000Z');
+  });
+
   it('filters heavy account details and calculates the investment portfolio on demand', () => {
     const details = buildFinancesAccountDetails(snapshot, 'brokerage');
 

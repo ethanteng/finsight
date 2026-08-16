@@ -387,7 +387,9 @@ export function buildFinancesOverview(input: FinancesOverviewInput): FinancesOve
   // A snapshot written before source observations were persisted has no per-source
   // times to reduce, so the oldest is the only source time it can offer. Falling back
   // keeps its timestamp on screen until the next rebuild replaces the row.
-  const observations = Array.isArray(snapshot.sourceObservations) ? snapshot.sourceObservations : null;
+  const observations = Array.isArray(snapshot.sourceObservations) && snapshot.sourceObservations.length > 0
+    ? snapshot.sourceObservations
+    : null;
   const newestSourceAsOf = observations
     ? iso(newestExpiringSourceAsOf(observations))
     : iso(snapshot.asOf);
