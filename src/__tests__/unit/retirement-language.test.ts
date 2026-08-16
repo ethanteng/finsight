@@ -43,6 +43,11 @@ const RETIREMENT_PHRASINGS = [
   // already have a number in mind.
   'will my savings last 20 years?',
   'will my savings last until I am 90?',
+  // The time-idiom exclusion on "last" is written without an article, so it
+  // only catches "the last few months". A forward-looking duration always has
+  // one — "last a few", "last a couple" — and still counts.
+  'will my money last a couple more years?',
+  'will my savings last a few more years?',
 ];
 
 const NON_RETIREMENT_PHRASINGS = [
@@ -59,6 +64,7 @@ const NON_RETIREMENT_PHRASINGS = [
   // word "last" appear here in the right order and mean nothing of the kind.
   'how many months of savings did I use last year?',
   'how much did I add to my savings last month?',
+  'how did my portfolio do the last couple of years?',
   // Living on an income is a question about that income. Requiring the asset
   // after "live off/on" is what separates it from living off a portfolio.
   'how long can I live on welfare?',
