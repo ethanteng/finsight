@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Landmark, LogOut, Menu, MessageSquareText, Newspaper, Plus, Settings, WalletCards, X } from 'lucide-react';
@@ -10,6 +10,7 @@ import MarketNewsModal from '../../components/MarketNewsModal';
 import { resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
 import { identifyUser, resetUserIdentity } from '../../lib/heycatch';
 import { syncStoredUserTimeZoneFromAuthUser } from '../../lib/browser-time-zone';
+import { groupTurnsIntoDecisions } from '../../lib/decision-threads';
 
 interface PromptHistory { id: string; question: string; answer: string; threadId?: string | null; timestamp: number }
 interface SubscriptionStatus { status: string; tier: string; message: string; isActive: boolean; accessLevel: 'full' | 'none'; upgradeRequired: boolean; expiresAt?: string }
@@ -22,6 +23,18 @@ export default function AppPageClient() {
   // Clicking "New decision" when nothing is selected leaves selectedPrompt at
   // null, so the composer would never hear about it. This counter always changes.
   const [newDecisionNonce, setNewDecisionNonce] = useState(0);
+
+  /**
+   * The thread a follow-up would continue.
+   *
+   * Opening a turn adopts its thread, so the selected turn names the active one.
+   * After "New decision" nothing is selected and nothing is active, which is the
+   * honest state: the next question starts its own thread.
+   */
+  const activeThreadId = selectedPrompt?.threadId ?? selectedPrompt?.id ?? null;
+
+  /** Turns grouped into the decisions they belong to, newest decision first. */
+  const decisionThreads = useMemo(() => groupTurnsIntoDecisions(promptHistory), [promptHistory]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [historyError, setHistoryError] = useState(false);
@@ -143,9 +156,53 @@ export default function AppPageClient() {
           {hasMarketNewsAccess && <button onClick={() => setShowMarketNewsModal(true)} className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-white/70 hover:bg-white/10 hover:text-white"><Newspaper size={18} />Market context</button>}
         </nav>
         <section className="min-h-0 flex-1 overflow-y-auto border-t border-white/10 px-4 py-5" aria-labelledby="recent-decisions">
-          <div className="mb-3 flex items-center justify-between px-2"><h2 id="recent-decisions" className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">Recent decisions</h2><span className="text-xs text-white/40">{promptHistory.length}</span></div>
-          {historyError ? <button onClick={loadConversationHistory} className="rounded-xl border border-white/15 p-3 text-left text-sm text-white/70">History couldn’t load. <span className="text-[#d9ff6f]">Try again</span></button> : promptHistory.length === 0 ? <p className="px-2 text-sm leading-6 text-white/50">Your completed questions will appear here.</p> : (
-            <div className="space-y-1">{promptHistory.map(prompt => <button key={prompt.id} onClick={() => { setSelectedPrompt(prompt); setMobileNavOpen(false); }} className={`w-full rounded-xl px-3 py-3 text-left transition ${selectedPrompt?.id === prompt.id ? 'bg-white/12' : 'hover:bg-white/7'}`}><span className="line-clamp-2 text-sm font-medium leading-5">{prompt.question}</span><span className="mt-1 block text-xs text-white/40">{relativeDate(prompt.timestamp)}</span></button>)}</div>
+          <div className="mb-3 flex items-center justify-between px-2"><h2 id="recent-decisions" className="text-xs font-bold uppercase tracking-[0.16em] text-white/45">Recent decisions</h2><span className="text-xs text-white/40">{decisionThreads.length}</span></div>
+          {historyError ? <button onClick={loadConversationHistory} className="rounded-xl border border-white/15 p-3 text-left text-sm text-white/70">History couldn’t load. <span className="text-[#d9ff6f]">Try again</span></button> : decisionThreads.length === 0 ? <p className="px-2 text-sm leading-6 text-white/50">Your completed questions will appear here.</p> : (
+            <div className="space-y-2">
+              {decisionThreads.map(thread => {
+                const isActive = thread.threadId === activeThreadId;
+                const isMultiTurn = thread.turns.length > 1;
+                return (
+                  <div
+                    key={thread.threadId}
+                    role="group"
+                    aria-label={`Decision: ${thread.turns[0].question}`}
+                    className={`rounded-xl transition ${isActive ? 'bg-white/[0.06] ring-1 ring-[#d9ff6f]/35' : ''}`}
+                  >
+                    {/* A single turn needs no header — it would be chrome around one row. */}
+                    {isMultiTurn && (
+                      <div className="flex items-center justify-between gap-2 px-3 pt-2">
+                        <span className={`text-[11px] font-semibold uppercase tracking-[0.12em] ${isActive ? 'text-[#d9ff6f]' : 'text-white/40'}`}>
+                          {isActive ? 'Resuming' : 'Decision'}
+                        </span>
+                        <span className="text-[11px] text-white/35">{thread.turns.length} turns</span>
+                      </div>
+                    )}
+                    <div className={isMultiTurn ? `ml-3 mt-1 space-y-1 border-l pl-2 ${isActive ? 'border-[#d9ff6f]/35' : 'border-white/12'}` : ''}>
+                      {thread.turns.map(prompt => {
+                        const isSelected = selectedPrompt?.id === prompt.id;
+                        return (
+                          <button
+                            key={prompt.id}
+                            onClick={() => { setSelectedPrompt(prompt); setMobileNavOpen(false); }}
+                            aria-current={isSelected ? 'true' : undefined}
+                            className={`w-full rounded-xl px-3 py-3 text-left transition ${isSelected ? 'bg-white/12' : 'hover:bg-white/7'}`}
+                          >
+                            <span className="line-clamp-2 text-sm font-medium leading-5">{prompt.question}</span>
+                            <span className="mt-1 block text-xs text-white/40">{relativeDate(prompt.timestamp)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {isActive && isMultiTurn && (
+                      <p className="px-3 pb-2 pt-1 text-[11px] leading-4 text-white/45">
+                        A follow-up sees these turns.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </section>
         <div className="border-t border-white/10 p-4"><div className="mb-3 truncate text-xs text-white/50">{userEmail}</div><button onClick={handleLogout} className="flex items-center gap-2 text-sm text-white/65 hover:text-white"><LogOut size={16} />Sign out</button></div>
