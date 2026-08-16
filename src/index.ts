@@ -2481,6 +2481,115 @@ app.post('/admin/ai/routing-preview', adminAuth, async (req: Request, res: Respo
   }
 });
 
+// Admin: Read the configured models, with each one checked against what the
+// provider actually serves right now.
+app.get('/admin/ai/models', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { getActiveModelConfig, loadModelConfig, MODEL_PROVIDERS } =
+      await import('./openai/model-config');
+    const { getAllProviderCatalogs, verifyAgainstCatalog } = await import('./openai/model-catalog');
+
+    await loadModelConfig(true);
+    const refresh = req.query.refresh === 'true';
+    const catalogs = await getAllProviderCatalogs(refresh);
+    const catalogByProvider = new Map(catalogs.map(catalog => [catalog.provider, catalog]));
+
+    res.json({
+      slots: getActiveModelConfig().map(slot => ({
+        ...slot,
+        verification: verifyAgainstCatalog(catalogByProvider.get(slot.provider)!, slot.model),
+      })),
+      providers: Object.values(MODEL_PROVIDERS).map(provider => ({
+        ...provider,
+        ...catalogByProvider.get(provider.id)!,
+      })),
+    });
+  } catch (error) {
+    console.error('Error reading model config:', error);
+    Sentry.captureException(error instanceof Error ? error : new Error(String(error)));
+    res.status(500).json({ error: 'Failed to read model config' });
+  }
+});
+
+// Admin: Update the model used in each pipeline slot
+app.put('/admin/ai/models', adminAuth, async (req: Request, res: Response) => {
+  try {
+    const { models, allowUnlisted } = req.body;
+    if (!models || typeof models !== 'object' || Array.isArray(models)) {
+      return res.status(400).json({ error: 'models must be an object of slot -> model id' });
+    }
+
+    const { MODEL_SLOTS, isModelSlotId, isPlausibleModelId, setActiveModelOverrides, slotDefault } =
+      await import('./openai/model-config');
+    const { AI_PROMPT_CONFIG_ID, DEFAULT_RESPONSE_TONE } = await import('./openai/prompt-config');
+    const { getProviderCatalog, verifyAgainstCatalog } = await import('./openai/model-catalog');
+    const { getPrismaClient } = await import('./prisma-client');
+
+    const submitted = models as Record<string, unknown>;
+    for (const key of Object.keys(submitted)) {
+      if (!isModelSlotId(key)) {
+        return res.status(400).json({ error: `Unknown model slot: ${key}` });
+      }
+    }
+
+    // An empty value clears the override so the slot falls back to its
+    // environment variable or shipped default.
+    const cleaned: Record<string, string> = {};
+    for (const slot of MODEL_SLOTS) {
+      const value = submitted[slot.id];
+      if (value === undefined) continue;
+      if (typeof value !== 'string') {
+        return res.status(400).json({ error: `${slot.id} must be a string` });
+      }
+      const trimmed = value.trim();
+      if (trimmed.length === 0) continue;
+      if (!isPlausibleModelId(trimmed)) {
+        return res.status(400).json({
+          error: `"${trimmed}" is not a model id. Enter the id exactly as the provider publishes it, e.g. claude-opus-4-8.`,
+        });
+      }
+      // Only reject against a catalog we could actually read: an unreachable
+      // provider must not look like a typo in the admin's input.
+      const verification = verifyAgainstCatalog(await getProviderCatalog(slot.provider), trimmed);
+      if (verification.status === 'not_served' && allowUnlisted !== true) {
+        return res.status(400).json({
+          error: `${slot.label}: "${trimmed}" is not a model your API key can call. Check the provider's model list, or save again with "use anyway" if you know it is valid.`,
+          slot: slot.id,
+          unlisted: true,
+        });
+      }
+      cleaned[slot.id] = trimmed;
+    }
+
+    const adminUser = req.user?.email || 'admin';
+    const prisma = getPrismaClient();
+    const saved = await prisma.aiPromptConfig.upsert({
+      where: { id: AI_PROMPT_CONFIG_ID },
+      update: { models: cleaned, lastEditedBy: adminUser },
+      create: {
+        id: AI_PROMPT_CONFIG_ID,
+        responseTone: DEFAULT_RESPONSE_TONE,
+        models: cleaned,
+        lastEditedBy: adminUser,
+      },
+    });
+
+    // Replace rather than merge: the panel always submits every slot, and a
+    // cleared field has to be able to remove an override.
+    const active = setActiveModelOverrides(cleaned);
+    res.json({
+      models: Object.fromEntries(
+        MODEL_SLOTS.map(slot => [slot.id, active[slot.id] ?? slotDefault(slot)])
+      ),
+      updatedAt: saved.updatedAt,
+    });
+  } catch (error) {
+    console.error('Error updating model config:', error);
+    Sentry.captureException(error instanceof Error ? error : new Error(String(error)));
+    res.status(500).json({ error: 'Failed to update model config' });
+  }
+});
+
 // Admin: Update the configurable AI response tone
 app.put('/admin/ai/response-tone', adminAuth, async (req: Request, res: Response) => {
   try {

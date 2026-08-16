@@ -25,6 +25,11 @@ export async function updateProfileFromAnsweredTurn(turn: AnsweredTurn): Promise
   }
 
   try {
+    // Extraction runs after the response is sent, outside the pipeline's own
+    // config load, so refresh the model selection here too.
+    const { loadModelConfig } = await import('../openai/model-config');
+    await loadModelConfig();
+
     const { ProfileManager } = await import('./manager');
     const profileManager = new ProfileManager();
     await profileManager.updateProfileFromConversation(turn.userId, {

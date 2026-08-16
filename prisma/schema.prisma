@@ -248,6 +248,7 @@ model AiPromptConfig {
   id           String   @id
   responseTone String
   routingTerms Json?
+  models       Json?
   lastEditedBy String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
