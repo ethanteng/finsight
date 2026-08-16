@@ -65,6 +65,13 @@ export default function FinancialOverview({ tier: _tier }: FinancialOverviewProp
     ? Object.values(finances.accountGroups).reduce((total, group) => total + group.accounts.length, 0)
     : 0;
   const hasAccounts = totalAccountCount > 0;
+  // When the newest source time is missing entirely the server predates the field, so fall
+  // back to the oldest one it does send rather than dropping the line mid-deploy.
+  const sourceDataAsOf = finances
+    ? (finances.revision.newestSourceAsOf !== undefined
+        ? finances.revision.newestSourceAsOf
+        : finances.revision.asOf)
+    : null;
   const homeData = finances?.home;
   const investmentPortfolio = finances?.investmentPortfolio as {
     holdingCount?: number;
@@ -179,10 +186,10 @@ export default function FinancialOverview({ tier: _tier }: FinancialOverviewProp
             </button>
           )}
         </div>
-        {(finances?.revision.asOf || (finances?.revision.status && finances.revision.status !== 'current')) && (
+        {(sourceDataAsOf || (finances?.revision.status && finances.revision.status !== 'current')) && (
           <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] text-[#5e6b63]">
-            {finances?.revision.asOf && (
-              <span>Data as of {new Date(finances.revision.asOf).toLocaleString()}</span>
+            {sourceDataAsOf && (
+              <span>Data as of {new Date(sourceDataAsOf).toLocaleString()}</span>
             )}
             {finances?.revision.status && finances.revision.status !== 'current' && (
               <span className="rounded-full bg-[#fff3ce] px-2 py-0.5 font-semibold text-[#76510f]">

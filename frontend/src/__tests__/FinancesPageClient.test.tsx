@@ -62,6 +62,52 @@ describe('FinancesPageClient', () => {
     expect(requestedUrls.some(url => url.includes('/auth/verify'))).toBe(false);
   });
 
+  it('dates the source line by the newest source observation, not the oldest', async () => {
+    const overview = {
+      userTimeZone: 'America/Los_Angeles',
+      revision: {
+        id: 'revision-1',
+        computedAt: '2026-08-14T12:00:00.000Z',
+        asOf: '2026-08-13T17:00:00.000Z',
+        newestSourceAsOf: '2026-08-14T11:45:00.000Z',
+        status: 'current',
+        reportingCurrency: 'USD',
+        rebuildPending: false,
+      },
+      warnings: [],
+      financialOverview: { netWorth: 10_000, totalCash: 10_000, totalInvestments: 0, totalDebt: 0, homeValue: null },
+      investmentPortfolio: { holdingCount: 0, securityCount: 0, assetAllocation: [] },
+      accountGroups: {
+        cash: { accounts: [], totalBalance: 10_000, unavailableBalanceCount: 0 },
+        investments: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+        debt: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+        other: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+      },
+      cashFlow: {},
+      home: null,
+      manualAccounts: [],
+    };
+
+    global.fetch = jest.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/finances/overview')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => overview });
+      }
+      if (url.includes('/api/financial-history')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => [] });
+      }
+      return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true, data: [] }) });
+    }) as jest.Mock;
+
+    render(<FinancesPageClient />);
+
+    const expected = new Date('2026-08-14T11:45:00.000Z').toLocaleString();
+    expect(await screen.findByText(`Source data as of ${expected}`)).toBeInTheDocument();
+    expect(screen.queryByText(
+      `Source data as of ${new Date('2026-08-13T17:00:00.000Z').toLocaleString()}`
+    )).not.toBeInTheDocument();
+  });
+
   it('shows an actionable message when live totals cannot be refreshed', async () => {
     const overview = {
       userTimeZone: 'America/Los_Angeles',

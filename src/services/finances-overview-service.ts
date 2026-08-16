@@ -1,4 +1,4 @@
-import { type SnapshotQuality } from '../domain/financial-truth';
+import { newestExpiringSourceAsOf, type SnapshotQuality } from '../domain/financial-truth';
 import { averageCanonicalTransactionSummary } from './transaction-summary-service';
 export { averageCanonicalTransactionSummary } from './transaction-summary-service';
 import { classifyAccount } from './account-classifier';
@@ -93,8 +93,16 @@ export interface FinancesOverview {
   userTimeZone: string | null;
   revision: {
     id: string;
-    computedAt: string;
+    /** Oldest expiring source observation — how old the oldest part of this snapshot is. */
     asOf: string | null;
+    computedAt: string;
+    /**
+     * Newest expiring source observation — when something in this snapshot last updated.
+     * What the UI shows, because a user reading a timestamp under their totals is asking
+     * when the numbers last moved. Staleness still comes from `status`, which is bounded
+     * by `asOf`, so this must not be read as "everything here is this fresh".
+     */
+    newestSourceAsOf: string | null;
     status: FinancesSnapshotStatus;
     reportingCurrency: string;
     /**
@@ -376,12 +384,21 @@ export function buildFinancesOverview(input: FinancesOverviewInput): FinancesOve
     warnings.push({ code: 'manual-accounts-out-of-sync', message: 'Manual accounts changed after this financial snapshot; refresh totals to align them.' });
   }
 
+  // A snapshot written before source observations were persisted has no per-source
+  // times to reduce, so the oldest is the only source time it can offer. Falling back
+  // keeps its timestamp on screen until the next rebuild replaces the row.
+  const observations = Array.isArray(snapshot.sourceObservations) ? snapshot.sourceObservations : null;
+  const newestSourceAsOf = observations
+    ? iso(newestExpiringSourceAsOf(observations))
+    : iso(snapshot.asOf);
+
   return {
     userTimeZone: input.userTimeZone?.trim() || null,
     revision: {
       id: computedAt,
-      computedAt,
       asOf: iso(snapshot.asOf),
+      computedAt,
+      newestSourceAsOf,
       status,
       reportingCurrency: typeof snapshot.reportingCurrency === 'string'
         ? snapshot.reportingCurrency

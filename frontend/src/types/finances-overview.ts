@@ -38,8 +38,15 @@ export interface FinancesOverview {
   userTimeZone: string | null;
   revision: {
     id: string;
-    computedAt: string;
+    /** Oldest expiring source observation — how old the oldest part of this snapshot is. */
     asOf: string | null;
+    computedAt: string;
+    /**
+     * Newest expiring source observation — when something in this snapshot last updated.
+     * Absent on responses from a server that predates the field. Staleness comes from
+     * `status`, never from this timestamp.
+     */
+    newestSourceAsOf?: string | null;
     status: 'current' | 'stale' | 'partial' | 'unavailable';
     reportingCurrency: string;
     /** A newer revision is already scheduled, running, or queued on the server. */
