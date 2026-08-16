@@ -16,6 +16,7 @@ import { analyzeQuestionNeeds } from './question-analysis';
 import { gatherContextSnapshot } from './context-service';
 import { buildPromptInputFromSnapshot, buildFinancialReasoningPrompt } from './financial-reasoning-prompt';
 import { loadResponseToneConfig } from './prompt-config';
+import { loadModelConfig } from './model-config';
 import { askClaude, askClaudeStream } from './claude-client';
 import { parseStructuredResponse, toDisplayText, extractPartialSummary, AskLincResponse } from './structured-response';
 import { validateUserPrompt, getRejectionMessage } from '../security/prompt-validation';
@@ -220,6 +221,9 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   const promptBuildStartedAt = Date.now();
   onProgress?.('Submitting to Claude for analysis');
   if (!evaluation?.skipToneConfig) await loadResponseToneConfig();
+  // Covers all three models this pipeline can reach: primary, fallback, and
+  // the second-review validator.
+  await loadModelConfig();
   const orderedConversationHistory = conversationHistory
     .slice()
     .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());

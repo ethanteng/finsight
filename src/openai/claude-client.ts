@@ -6,8 +6,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { buildFinancialReasoningPrompt, FinancialReasoningPromptInput } from './financial-reasoning-prompt';
-
-const DEFAULT_MODEL = 'claude-sonnet-4-5';
+import { getActiveModel } from './model-config';
 
 let anthropicClient: Anthropic | null = null;
 
@@ -43,7 +42,7 @@ export async function askClaude(
   options: AskClaudeOptions = {}
 ): Promise<string> {
   const client = getClient();
-  const model = options.model || DEFAULT_MODEL;
+  const model = options.model || getActiveModel('analysis');
   const maxTokens = options.maxTokens ?? configuredMaxTokens();
 
   const response = await client.messages.create({
@@ -69,7 +68,7 @@ export async function askClaudeStream(
   options: AskClaudeOptions = {}
 ): Promise<string> {
   const client = getClient();
-  const model = options.model || DEFAULT_MODEL;
+  const model = options.model || getActiveModel('analysis');
   const maxTokens = options.maxTokens ?? configuredMaxTokens();
 
   const stream = client.messages.stream({

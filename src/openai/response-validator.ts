@@ -11,9 +11,9 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { AskLincResponse } from './structured-response';
 import { FinancialContextSnapshot } from './types';
 import { mergeAssetAllocation } from '../services/asset-class';
+import { getActiveModel } from './model-config';
 
 const GOOGLE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '';
-const DEFAULT_MODEL = process.env.GEMINI_VALIDATION_MODEL || 'gemini-3-flash-preview';
 
 export interface ValidationResult {
   valid: boolean;
@@ -170,7 +170,7 @@ export async function validateWithGemini(
 
   try {
     const client = getClient();
-    const model = client.getGenerativeModel({ model: DEFAULT_MODEL });
+    const model = client.getGenerativeModel({ model: getActiveModel('validation') });
 
     const snapshotSummary = buildSnapshotSummaryForValidation(context.snapshot);
     console.log('Ask Linc: Gemini validation prompt includes snapshot summary, length:', snapshotSummary.length);

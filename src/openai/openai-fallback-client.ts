@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { ASK_LINC_RESPONSE_JSON_SCHEMA } from './structured-response';
+import { getActiveModel } from './model-config';
 
 let client: OpenAI | null = null;
 
@@ -17,7 +18,7 @@ export async function askOpenAIWithPreparedPrompt(
   systemPrompt: string,
   userMessage: string
 ): Promise<string> {
-  const model = process.env.OPENAI_FALLBACK_MODEL || 'gpt-4o';
+  const model = getActiveModel('fallback');
   const configuredMaxTokens = Number.parseInt(process.env.ASK_LINC_MAX_OUTPUT_TOKENS || '8192', 10);
   const maxTokens = Number.isFinite(configuredMaxTokens) && configuredMaxTokens > 0
     ? configuredMaxTokens
