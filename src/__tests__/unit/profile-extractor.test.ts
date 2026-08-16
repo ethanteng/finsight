@@ -13,7 +13,12 @@ jest.mock('openai', () => {
   }));
 });
 
+jest.mock('@sentry/node', () => ({
+  captureException: jest.fn()
+}));
+
 // Now import ProfileExtractor after mocking
+import * as Sentry from '@sentry/node';
 import { ProfileExtractor } from '../../profile/extractor';
 
 describe('ProfileExtractor Unit Tests', () => {
@@ -104,6 +109,8 @@ describe('ProfileExtractor Unit Tests', () => {
       );
 
       expect(result).toBe(existingProfile);
+      // The turn stays non-fatal, so this is the only signal that extraction broke.
+      expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error));
     });
 
     it('should handle empty OpenAI response', async () => {

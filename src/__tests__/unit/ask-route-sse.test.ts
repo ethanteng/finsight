@@ -93,6 +93,28 @@ describe('Ask route SSE lifecycle', () => {
     });
   });
 
+  it('refreshes the stored profile from a streamed turn as well', async () => {
+    (runAskLincAnalysis as jest.Mock).mockImplementation(async options => {
+      options.onAnswerDelta?.('You can retire around 62.');
+      return {
+        displayText: 'You can retire around 62.',
+        structuredResponse: { summary: 'You can retire around 62.' },
+      };
+    });
+
+    await request(createApp())
+      .post('/ask/display-real')
+      .set('Accept', 'text/event-stream')
+      .send({ question: 'When can I retire?' });
+
+    expect(updateProfileFromAnsweredTurn).toHaveBeenCalledWith({
+      userId: 'user-1',
+      conversationId: 'conversation-1',
+      question: 'When can I retire?',
+      answer: 'You can retire around 62.',
+    });
+  });
+
   it('still answers when the profile refresh rejects', async () => {
     (updateProfileFromAnsweredTurn as jest.Mock).mockRejectedValueOnce(new Error('profile down'));
     (runAskLincAnalysis as jest.Mock).mockResolvedValue({

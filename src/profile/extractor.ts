@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import * as Sentry from '@sentry/node';
 
 // Create a separate OpenAI client for profile extraction to avoid circular dependencies
 const openaiClient = new OpenAI({
@@ -83,7 +84,11 @@ export class ProfileExtractor {
       
       return extractedProfile;
     } catch (error) {
+      // Returning the existing profile keeps the turn non-fatal, but it also means
+      // callers see a normal resolution. Report here or extraction can stop working
+      // in production with nothing to show for it.
       console.error('Error extracting profile from conversation:', error);
+      Sentry.captureException(error);
       return existingProfile || '';
     }
   }
