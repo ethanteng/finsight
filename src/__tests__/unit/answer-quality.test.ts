@@ -138,11 +138,97 @@ describe('answer quality report', () => {
 
   it('returns nulls rather than zeros when there is nothing to compare', () => {
     const report = buildAnswerQualityReport([]);
+    expect(report.scorecard).toMatchObject({ score: null, status: 'unknown', answers: 0, reasons: [], trend: null });
     expect(report.quality.groundedRate).toBeNull();
     expect(report.quality.averageRating).toBeNull();
     expect(report.routing.accountsIncluded.excessMissWhenWithheld).toBeNull();
     expect(report.routing.accountsIncluded.ratingPenaltyWhenWithheld).toBeNull();
     expect(report.window).toEqual({ from: null, to: null, conversations: 0, withManifest: 0, rated: 0 });
+  });
+
+  describe('scorecard', () => {
+    it('greens a verified, well-rated answer and reds one that could not be backed up', () => {
+      const report = buildAnswerQualityReport([
+        conversation({ id: 'a', question: 'good', minute: 2, rating: 5 }),
+        conversation({ id: 'b', question: 'bad', minute: 1, rating: 5, valid: false, outcome: 'replaced' }),
+      ]);
+
+      expect(report.recent.map((observation) => observation.grade)).toEqual(['green', 'red']);
+      expect(report.scorecard).toMatchObject({
+        score: 50,
+        status: 'red',
+        counts: { green: 1, yellow: 0, red: 1 },
+      });
+    });
+
+    it('takes the worse of the two verdicts, so neither signal hides the other', () => {
+      // A five-star answer we could not verify, and a verified answer the user
+      // disliked. Both are problems; neither should read as green.
+      const report = buildAnswerQualityReport([
+        conversation({ id: 'a', question: 'liked but unverified', minute: 2, rating: 5, valid: false, outcome: 'salvaged' }),
+        conversation({ id: 'b', question: 'verified but disliked', minute: 1, rating: 1 }),
+      ]);
+
+      expect(report.recent[0]).toMatchObject({
+        grade: 'yellow',
+        gradeReason: 'Parts of the answer had to be trimmed to keep it verifiable',
+      });
+      expect(report.recent[1]).toMatchObject({ grade: 'red', gradeReason: 'The user rated it 1/5' });
+      expect(report.scorecard.counts).toEqual({ green: 0, yellow: 1, red: 1 });
+    });
+
+    it('grades an unrated but verified answer green rather than withholding a verdict', () => {
+      const report = buildAnswerQualityReport([
+        conversation({ id: 'a', question: 'q', minute: 1, rating: null }),
+      ]);
+
+      expect(report.scorecard).toMatchObject({ score: 100, status: 'green', answers: 1, reasons: [] });
+      expect(report.recent[0].gradeReason).toBe('Verified on the first attempt, not yet rated');
+    });
+
+    it('lands a run of retried answers on yellow, not red', () => {
+      const report = buildAnswerQualityReport(
+        [1, 2, 3, 4].map((minute) => conversation({
+          id: `a${minute}`, question: `q${minute}`, minute, rating: 5, escalated: true,
+          routed: { investmentDetailsIncluded: false },
+        }))
+      );
+
+      expect(report.scorecard).toMatchObject({ score: 60, status: 'yellow', counts: { green: 0, yellow: 4, red: 0 } });
+    });
+
+    it('ranks the reasons the score is down, worst first, with an example to read', () => {
+      const report = buildAnswerQualityReport([
+        conversation({ id: 'a', question: 'newest replaced', minute: 5, rating: 1, valid: false, outcome: 'replaced' }),
+        conversation({ id: 'b', question: 'older replaced', minute: 4, valid: false, outcome: 'replaced' }),
+        conversation({ id: 'c', question: 'retried', minute: 3, rating: 5, escalated: true, routed: { investmentDetailsIncluded: false } }),
+        conversation({ id: 'd', question: 'fine', minute: 2, rating: 5 }),
+      ]);
+
+      const reasons = report.scorecard.reasons;
+      expect(reasons[0]).toMatchObject({
+        id: 'replaced',
+        severity: 'red',
+        answers: 2,
+        share: 0.5,
+        example: { id: 'a', question: 'newest replaced' },
+      });
+      expect(reasons.map((reason) => reason.id)).toEqual(['replaced', 'lowRating', 'escalated']);
+      expect(reasons.find((reason) => reason.id === 'escalated')?.detail)
+        .toBe('usually went back for investment holdings');
+    });
+
+    it('compares the recent batch with the one before it once there is enough to compare', () => {
+      const older = [1, 2, 3, 4, 5].map((minute) => conversation({
+        id: `old${minute}`, question: 'q', minute, rating: 1, valid: false, outcome: 'replaced',
+      }));
+      const recent = [6, 7, 8, 9, 10].map((minute) => conversation({ id: `new${minute}`, question: 'q', minute, rating: 5 }));
+
+      expect(buildAnswerQualityReport([...older, ...recent]).scorecard.trend)
+        .toEqual({ previousScore: 0, delta: 100, comparedAnswers: 5 });
+      // Nine answers cannot be split into two batches of five.
+      expect(buildAnswerQualityReport([...older, ...recent.slice(1)]).scorecard.trend).toBeNull();
+    });
   });
 
   it('surfaces the questions behind a signal, newest first', () => {
