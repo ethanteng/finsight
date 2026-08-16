@@ -38,6 +38,18 @@ const ANNUAL_ADJECTIVE = String.raw`(?:annual|yearly)`;
 const SPEND_NOUN = String.raw`(?:spend(?:ing)?|budget|expenses?|withdrawals?|income|costs?|burn)`;
 
 /**
+ * Money coming in is not money going out. "$200k a year" reads as a spending
+ * target on its own, so an earnings sentence has to be ruled out explicitly —
+ * "annual income" in particular is the salary sense far more often than the
+ * retirement-paycheck sense in a turn that never mentions retiring.
+ *
+ * "make" only counts with a subject in front of it: "I make $200k" is earnings,
+ * "make it $125k annual spending" is the user setting the target.
+ */
+const EARNINGS_FRAMING =
+  /\b(?:income|earnings|salary|salaries|wages?|revenue|gross|pre-?tax|take-?home)\b|\b(?:earn|earns|earned|earning)\b|\b(?:i|we|he|she|they|you|it)\s+(?:make|makes|made)\b|\bbrings?\s+in\b/i;
+
+/**
  * Words allowed between an amount and its annual qualifier. An allowlist, not
  * `.{0,N}`, so two unrelated clauses can never be stapled into one match.
  */
@@ -54,19 +66,26 @@ const AMOUNT_TO_ANNUAL_FILLER =
  * asked the user for a number they had just given — repeatedly, in the same
  * conversation.
  */
-const WITHDRAWAL_AMOUNT_PATTERNS = [
-  // "$150k per year", "$100k annually", "$100,000 withdrawal"
-  new RegExp(`${AMOUNT}${MULTIPLIER}\\s*(?:${ANNUAL_PERIOD}|withdrawals?)`, 'i'),
+const WITHDRAWAL_AMOUNT_PATTERNS: ReadonlyArray<{ pattern: RegExp; framing: 'annualized' | 'spending' }> = [
+  // "$150k per year", "$100k annually", "$100,000 withdrawal". An amount and a
+  // period, with nothing saying which direction the money moves.
+  { pattern: new RegExp(`${AMOUNT}${MULTIPLIER}\\s*(?:${ANNUAL_PERIOD}|withdrawals?)`, 'i'), framing: 'annualized' },
   // "$125K annual spending", "$125K as my target annual spending"
-  new RegExp(`${AMOUNT}${MULTIPLIER}${AMOUNT_TO_ANNUAL_FILLER}\\s+${ANNUAL_ADJECTIVE}\\s+${SPEND_NOUN}`, 'i'),
+  {
+    pattern: new RegExp(`${AMOUNT}${MULTIPLIER}${AMOUNT_TO_ANNUAL_FILLER}\\s+${ANNUAL_ADJECTIVE}\\s+${SPEND_NOUN}`, 'i'),
+    framing: 'spending',
+  },
   // "annual spending of $125K", "yearly spending down to about $125K"
-  new RegExp(
-    `${ANNUAL_ADJECTIVE}\\s+(?:retirement\\s+)?${SPEND_NOUN}[^.$\\d]{0,30}${AMOUNT}${MULTIPLIER}`,
-    'i'
-  ),
-  // "withdraw $100k", "annual withdrawal of $80k"
-  new RegExp(`withdraw(?:al)?\\s+(?:of\\s+)?${AMOUNT}${MULTIPLIER}`, 'i'),
-  new RegExp(`annual\\s+withdrawal\\s+(?:of\\s+)?${AMOUNT}${MULTIPLIER}`, 'i'),
+  {
+    pattern: new RegExp(
+      `${ANNUAL_ADJECTIVE}\\s+(?:retirement\\s+)?${SPEND_NOUN}[^.$\\d]{0,30}${AMOUNT}${MULTIPLIER}`,
+      'i'
+    ),
+    framing: 'spending',
+  },
+  // "withdraw $100k" — could be an ATM trip, so it carries no spending framing.
+  { pattern: new RegExp(`withdraw(?:al)?\\s+(?:of\\s+)?${AMOUNT}${MULTIPLIER}`, 'i'), framing: 'annualized' },
+  { pattern: new RegExp(`annual\\s+withdrawal\\s+(?:of\\s+)?${AMOUNT}${MULTIPLIER}`, 'i'), framing: 'spending' },
 ];
 
 const WITHDRAWAL_START_PATTERNS = [
@@ -88,10 +107,19 @@ function parseWithdrawalMultiplier(matchedText: string): number {
   return 1;
 }
 
-function extractAnnualWithdrawalAmount(qLower: string): number | undefined {
-  for (const pattern of WITHDRAWAL_AMOUNT_PATTERNS) {
+/**
+ * @param requireSpendingFraming only accept an amount the sentence itself calls
+ *   spending. Used for turns that never mention retiring, where "$200k a year"
+ *   is as likely to be a salary as a retirement target.
+ */
+function extractAnnualWithdrawalAmount(
+  qLower: string,
+  requireSpendingFraming = false
+): number | undefined {
+  for (const { pattern, framing } of WITHDRAWAL_AMOUNT_PATTERNS) {
     const match = qLower.match(pattern);
     if (!match) continue;
+    if (requireSpendingFraming && (framing !== 'spending' || EARNINGS_FRAMING.test(qLower))) continue;
     const amount = parseFloat(match[1].replace(/,/g, ''));
     if (!Number.isFinite(amount) || amount <= 0) continue;
     return amount * parseWithdrawalMultiplier(match[0]);
@@ -113,12 +141,15 @@ function firstNumber(qLower: string, patterns: readonly RegExp[]): number | unde
  * yearly spending to $125K") rarely repeat the word "retirement"; the caller
  * decides whether the thread is about retirement.
  */
-function extractParams(question: string): Omit<RetirementQuestionParams, 'hasRetirementIntent'> {
+function extractParams(
+  question: string,
+  options: { requireSpendingFraming?: boolean } = {}
+): Omit<RetirementQuestionParams, 'hasRetirementIntent'> {
   const qLower = question.toLowerCase();
 
   const currentAge = extractCurrentAge(qLower) ?? undefined;
   const retirementAge = extractRetirementAge(qLower) ?? undefined;
-  const annualWithdrawalAmount = extractAnnualWithdrawalAmount(qLower);
+  const annualWithdrawalAmount = extractAnnualWithdrawalAmount(qLower, options.requireSpendingFraming);
 
   // Withdrawals start at retirement unless the question says otherwise.
   const withdrawalStartAge = firstNumber(qLower, WITHDRAWAL_START_PATTERNS) ?? retirementAge;
@@ -173,17 +204,25 @@ export function parseRetirementConversation(
     ...extractParams(question),
   };
   for (const previous of recentQuestions) {
+    // Only the four inputs the projection actually blocks on end the walk;
+    // life expectancy is optional and defaults downstream, so waiting for it
+    // would keep scanning turns that can no longer change the outcome.
     if (
       merged.currentAge != null &&
       merged.retirementAge != null &&
       merged.annualWithdrawalAmount != null &&
-      merged.withdrawalStartAge != null &&
-      merged.lifeExpectancy != null
+      merged.withdrawalStartAge != null
     ) {
       break;
     }
     if (!previous) continue;
-    const older = extractParams(previous);
+    // An earlier turn that never mentions retiring is only trusted for an
+    // amount it calls spending. Without that gate, "I earn $200k a year"
+    // three questions back becomes the retirement spending target for "can I
+    // retire at 65?" — a materially wrong projection, run silently.
+    const older = extractParams(previous, {
+      requireSpendingFraming: !mentionsRetirement(previous.toLowerCase()),
+    });
     merged.currentAge = merged.currentAge ?? older.currentAge;
     merged.retirementAge = merged.retirementAge ?? older.retirementAge;
     merged.annualWithdrawalAmount = merged.annualWithdrawalAmount ?? older.annualWithdrawalAmount;

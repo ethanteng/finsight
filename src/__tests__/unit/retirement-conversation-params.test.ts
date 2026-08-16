@@ -95,6 +95,42 @@ describe('parseRetirementConversation', () => {
     expect(result.annualWithdrawalAmount).toBe(125_000);
   });
 
+  it('does not turn an earlier earnings figure into a spending target', () => {
+    // The carry-forward reads the user's last ten questions. Without a topical
+    // gate, an unrelated salary sentence silently becomes the retirement
+    // spending target and the projection runs on it.
+    const result = parseRetirementConversation('Can I retire at 65?', [
+      'I earn $200k a year',
+      'How are my investments doing?',
+    ]);
+
+    expect(result.annualWithdrawalAmount).toBeUndefined();
+  });
+
+  it('does not carry an unrelated annual figure forward on period wording alone', () => {
+    const result = parseRetirementConversation('Can I retire at 65?', [
+      'My rental brings in $48,000 a year',
+    ]);
+
+    expect(result.annualWithdrawalAmount).toBeUndefined();
+  });
+
+  it('still carries a spending figure forward from a turn that never says "retirement"', () => {
+    const result = parseRetirementConversation('Can I retire at 65?', [
+      "Let's say it drops our yearly spending down to about $125K.",
+    ]);
+
+    expect(result.annualWithdrawalAmount).toBe(125_000);
+  });
+
+  it('trusts any wording from an earlier turn that is explicitly about retiring', () => {
+    const result = parseRetirementConversation('Re-run that analysis.', [
+      'I am planning on spending about $150K per year in retirement.',
+    ]);
+
+    expect(result.annualWithdrawalAmount).toBe(150_000);
+  });
+
   it('keeps the number from a confirmation that never says "retirement"', () => {
     // The turn that broke the loop in production. parseRetirementQuestion drops
     // it — no retirement word, so it returns nothing at all — and the projection

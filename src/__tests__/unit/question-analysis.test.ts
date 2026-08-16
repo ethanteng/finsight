@@ -58,9 +58,27 @@ describe('question-aware LLM context routing', () => {
     });
   });
 
+  it('inherits data needs for a bare value answer', () => {
+    // The reply to "how much do you expect to spend per year?" is often just
+    // the number. It names no topic, so on its own words it routes as a
+    // generic question and the analysis waiting on it never runs.
+    expect(analyzeQuestionNeeds('$125K a year', ['Re-run my retirement analysis.'])).toMatchObject({
+      needsRetirement: true,
+    });
+    expect(analyzeQuestionNeeds('125,000', ['Re-run my retirement analysis.'])).toMatchObject({
+      needsRetirement: true,
+    });
+  });
+
   it('does not inherit unrelated data needs for a standalone question', () => {
     expect(analyzeQuestionNeeds('What is my net worth?', ['Show all my accounts.'])).toMatchObject({
       needsAccountDetails: false,
+    });
+    // Carries an amount, but asks its own question — not an answer to the last one.
+    expect(
+      analyzeQuestionNeeds('Can I afford a $50k car?', ['Am I on track to retire at 68?'])
+    ).toMatchObject({
+      needsRetirement: false,
     });
   });
 
