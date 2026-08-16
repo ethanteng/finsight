@@ -38,12 +38,18 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   // Clean test data before each test
-  // Order matters: delete child tables before parent tables
+  // Order matters: delete child tables before parent tables.
+  //
+  // privacySettings is cleared here because comprehensive-security.test.ts runs
+  // in the same job and creates rows this file did not; without it the user
+  // delete below fails on PrivacySettings_userId_fkey. That never surfaced while
+  // this file was unreachable from CI and only ever ran on its own.
   await testPrisma.encryptedEmailVerificationCode.deleteMany();
   await testPrisma.encryptedUserData.deleteMany();
   await testPrisma.encrypted_profile_data.deleteMany();
   await testPrisma.accessToken.deleteMany();
   await testPrisma.userProfile.deleteMany();
+  await testPrisma.privacySettings.deleteMany();
   await testPrisma.user.deleteMany();
 });
 

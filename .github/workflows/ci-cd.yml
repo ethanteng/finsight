@@ -50,6 +50,9 @@ concurrency:
 jobs:
   # Code Quality & Security
   lint-and-test:
+    # Bounded so a hung job fails in minutes rather than burning the
+    # 360-minute default. Longest observed run of any job here is ~2.5 min.
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -171,6 +174,9 @@ jobs:
 
   # Backend Tests
   backend-tests:
+    # Bounded so a hung job fails in minutes rather than burning the
+    # 360-minute default. Longest observed run of any job here is ~2.5 min.
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -258,6 +264,9 @@ jobs:
 
   # Frontend Build
   frontend-build:
+    # Bounded so a hung job fails in minutes rather than burning the
+    # 360-minute default. Longest observed run of any job here is ~2.5 min.
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -295,6 +304,9 @@ jobs:
   # shares no artifact with the unit-test or frontend jobs. Running it in parallel
   # keeps a frontend build failure from masking integration results.
   integration-tests:
+    # Bounded so a hung job fails in minutes rather than burning the
+    # 360-minute default. Longest observed run of any job here is ~2.5 min.
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -406,6 +418,9 @@ jobs:
   # No `needs`: like integration-tests, this job is self-contained. build-verification
   # still gates on it, so nothing deploys until security tests pass.
   security-tests:
+    # Bounded so a hung job fails in minutes rather than burning the
+    # 360-minute default. Longest observed run of any job here is ~2.5 min.
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -541,6 +556,9 @@ jobs:
 
   # Build Verification
   build-verification:
+    # Bounded so a hung job fails in minutes rather than burning the
+    # 360-minute default. Longest observed run of any job here is ~2.5 min.
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     needs: [lint-and-test, backend-tests, frontend-build, integration-tests, security-tests]
     steps:
@@ -593,6 +611,9 @@ jobs:
 
   # Production Migration (only on main branch)
   migrate-prod:
+    # Generous: this job sits behind the production environment's manual approval,
+    # so the clock includes however long a human takes to click approve.
+    timeout-minutes: 30
     needs: [build-verification]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -624,6 +645,9 @@ jobs:
 
   # Deployment (only on main branch)
   deploy:
+    # Covers the Vercel build and the Render webhook round trip, which are slower
+    # and less predictable than anything in the test jobs.
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     needs: [migrate-prod]
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'

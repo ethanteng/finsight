@@ -63,7 +63,7 @@ describe('Authentication Integration', () => {
         .send(testUser);
 
       expect(response.status).toBe(201);
-      expect(response.body).toHaveProperty('message', 'User registered successfully');
+      expect(response.body).toHaveProperty('message', 'User registered successfully. Please check your email for verification code.');
       expect(response.body).toHaveProperty('user');
       expect(response.body).toHaveProperty('token');
       expect(response.body.user.email).toBe(testUser.email);
@@ -75,6 +75,16 @@ describe('Authentication Integration', () => {
     });
 
     it('should reject duplicate email registration', async () => {
+      // Registers its own user first. This used to depend on the preceding test
+      // having left one behind, which only held while the file ran in isolation —
+      // the shared per-test cleanup in the integration config removes it. A test
+      // that silently relies on a neighbour is one reordering away from passing
+      // for the wrong reason.
+      await request(app)
+        .post('/auth/register')
+        .send(testUser)
+        .expect(201);
+
       const response = await request(app)
         .post('/auth/register')
         .send(testUser);

@@ -3,7 +3,11 @@ module.exports = {
   testEnvironment: 'node',
   testMatch: [
     '<rootDir>/src/__tests__/integration/**/*.test.ts',
-    '<rootDir>/src/__tests__/integration/**/*.spec.ts'
+    '<rootDir>/src/__tests__/integration/**/*.spec.ts',
+    // src/__tests__/auth was excluded from every config, so 39 tests never ran
+    // anywhere and quietly rotted. They need a database and supertest, which this
+    // config already provides.
+    '<rootDir>/src/__tests__/auth/**/*.test.ts'
   ],
   // Security suites are owned by the security-tests job, which runs them without
   // this config's plaidClient stub. Running them here as well executed the same
@@ -11,7 +15,7 @@ module.exports = {
   // pipeline without testing anything the security job does not already cover.
   testPathIgnorePatterns: [
     'comprehensive-security.test.ts', // -> jest.security.config.js
-    'complete-security-suite.test.ts', // has its own setup; see jest.complete-security.config.js
+    'complete-security-suite.test.ts', // -> jest.security.config.js
     'plaid-security-integration.test.ts', // -> jest.real-security.config.js
     'privacy-security-integration.test.ts', // -> jest.real-security.config.js
     'profile-encryption-security.test.ts', // -> jest.real-security.config.js

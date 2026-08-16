@@ -8,7 +8,7 @@ module.exports = {
     '**/__tests__/integration/snaptrade-security.test.ts'
   ],
   setupFilesAfterEnv: [
-    '<rootDir>/src/__tests__/setup/test-database.ts'
+    '<rootDir>/src/__tests__/setup/test-database-ci.ts'
   ],
   setupFiles: ['<rootDir>/src/__tests__/setup/load-env.ts'],
   testTimeout: 60000,

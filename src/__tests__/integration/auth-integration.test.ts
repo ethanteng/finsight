@@ -134,7 +134,15 @@ describe('Authentication Integration', () => {
     });
 
     itNetwork('should reject duplicate email registration', async () => {
+      // Registers its own user first rather than relying on the preceding test
+      // having left one behind — the shared per-test cleanup removes it, so the
+      // old form only passed while nothing else ran in this job.
       const testApp = await getApp();
+      await request(testApp)
+        .post('/auth/register')
+        .send(testUser)
+        .expect(201);
+
       const response = await request(testApp)
         .post('/auth/register')
         .send(testUser);

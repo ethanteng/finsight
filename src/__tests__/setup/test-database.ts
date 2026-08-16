@@ -65,7 +65,15 @@ beforeEach(async () => {
     await testPrisma.conversation.deleteMany();
     await testPrisma.syncStatus.deleteMany();
     await testPrisma.userProfile.deleteMany();
+    await testPrisma.privacySettings.deleteMany();
     await testPrisma.user.deleteMany();
+    await testPrisma.encryptedEmailVerificationCode.deleteMany();
+    await testPrisma.encryptedUserData.deleteMany();
+    await testPrisma.passwordResetToken.deleteMany();
+    await testPrisma.emailVerificationCode.deleteMany();
+    await testPrisma.marketNewsHistory.deleteMany();
+    await testPrisma.marketNewsContext.deleteMany();
+    await testPrisma.snapTradeUser.deleteMany();
 
     console.log('🧹 Test data cleaned up');
   } catch (error: any) {

@@ -6,11 +6,18 @@ module.exports = {
   // security-tests job). Listing it here as well ran it twice inside a single
   // job, on top of a third execution in the integration suite.
   testMatch: [
-    '**/__tests__/integration/comprehensive-security.test.ts'
+    '**/__tests__/integration/comprehensive-security.test.ts',
+    // complete-security-suite was reachable only from jest.security.ci.config.js
+    // and the two complete-security configs, none of which the workflow invokes —
+    // so 23 passing security tests never ran in CI. Added here; those three
+    // configs are deleted.
+    '**/__tests__/integration/complete-security-suite.test.ts'
   ],
   setupFilesAfterEnv: [
     '<rootDir>/src/__tests__/integration/security-test-setup.ts',
-    '<rootDir>/src/__tests__/setup/test-database.ts'
+    // Security suites import testPrisma from test-database-ci; use the same module here
+    // so hooks register once and privacySettings is cleared before user deletes.
+    '<rootDir>/src/__tests__/setup/test-database-ci.ts'
   ],
   testTimeout: 60000, // 60 seconds for security tests
   // Serialized: these suites share one PostgreSQL database and their hooks call

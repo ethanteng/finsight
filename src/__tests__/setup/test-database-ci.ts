@@ -481,6 +481,11 @@ beforeEach(async () => {
       'conversation',
       'syncStatus',
       'userProfile',
+      // privacySettings has an FK to user and was missing from this list, so any
+      // file whose own cleanup deleted users after a suite that created settings
+      // hit PrivacySettings_userId_fkey. Cleaning it here fixes every such file
+      // at once rather than patching each one's hand-rolled teardown.
+      'privacySettings',
       'user',
       'encryptedEmailVerificationCode',
       'encryptedUserData',

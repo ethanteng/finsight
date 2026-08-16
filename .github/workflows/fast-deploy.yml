@@ -50,6 +50,9 @@ concurrency:
 jobs:
   # Quick validation for website pages and blog
   validate-website:
+    # Bounded so a hung job fails in minutes rather than burning the
+    # 360-minute default. Longest observed run of any job here is ~2.5 min.
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     outputs:
       marketing_only: ${{ steps.scope.outputs.marketing_only }}
@@ -105,6 +108,8 @@ jobs:
 
   # Fast deployment to Vercel
   deploy-frontend:
+    # Covers the Vercel production deploy round trip.
+    timeout-minutes: 20
     needs: [validate-website]
     runs-on: ubuntu-latest
     # Deploy only a genuinely marketing-only push. Anything mixed is left to
@@ -132,6 +137,8 @@ jobs:
 
   # Optional: Quick backend restart (if needed)
   restart-backend:
+    # A single webhook POST; anything approaching this is a hang.
+    timeout-minutes: 10
     needs: [validate-website, deploy-frontend]
     runs-on: ubuntu-latest
     # Same scope gate as deploy-frontend: the Render hook redeploys the backend

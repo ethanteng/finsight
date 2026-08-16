@@ -219,31 +219,36 @@ npm run test:coverage:all
 
 # Watch mode
 npm run test:watch
-npm run test:integration:watch
 ```
 
-### 🔒 NEW: Comprehensive Security Testing Commands
+### 🔒 Security Testing Commands
+
+These are the two commands `ci-cd.yml`'s `security-tests` job runs, in this order.
+Everything security-related is reachable from one of them — the former
+`test:profile-encryption`, `test:complete-security` and `test:security:ci` aliases
+pointed at jest configs the workflow never invoked, so the suites behind them were
+never executed in CI. Those configs and aliases are gone; their tests now run here.
+
 ```bash
-# Complete security test suite (33/33 tests)
+# Both security suites
 npm run test:security:all
 
-# Individual security test categories
-npm run test:real-security          # Real Plaid security tests (15/15)
-npm run test:profile-encryption     # Profile encryption security (9/9)
-npm run test:complete-security      # Complete security suite (33/33)
+# Individually
+npm run test:real-security          # Unmocked Plaid client: plaid / privacy /
+                                    # profile-encryption / snaptrade security
+npm run test:security               # Comprehensive + complete security suites
 
 # CI/CD security simulation
 npm run test:cicd:security          # Test like CI/CD environment
-npm run test:security:ci            # Security tests with CI environment
 ```
+
+Test counts are deliberately not quoted here — read them from jest's own summary,
+which is the only figure that cannot go stale.
 
 ### CI/CD Commands
 ```bash
 # CI-specific integration tests
 npm run test:integration:ci
-
-# CI-specific security tests
-npm run test:security:ci
 
 # Specific test suites
 npm run test:enhanced-market-context
@@ -508,9 +513,9 @@ A comprehensive security testing system that prevents security vulnerabilities t
 - **Safety**: Real security validation prevents production security issues
 
 #### **2. Comprehensive Security Test Suite** 🧪
-- **Real Plaid Security Tests**: 15/15 tests passing - Validates actual Plaid endpoint security
-- **Profile Encryption Security**: 9/9 tests passing - Validates encryption/decryption logic
-- **Complete Security Suite**: 33/33 tests passing - 100% security coverage
+- **Real Plaid Security Tests**: validates actual Plaid endpoint security
+- **Profile Encryption Security**: validates encryption/decryption logic
+- **Complete Security Suite**: cross-cutting auth, tier and isolation checks
 - **Cross-Service Security**: User isolation validated across all services
 
 #### **3. CI/CD Security Integration** 🔒
@@ -555,7 +560,7 @@ A comprehensive security testing system that prevents security vulnerabilities t
 - **Profile Encryption Security**: AES-256-GCM encryption with proper key management
 
 #### **CI/CD Security Gates** 🔒
-- **Security Tests Required**: All 33 security tests must pass before deployment
+- **Security Tests Required**: both security suites must pass before deployment
 - **Automated Validation**: Security testing integrated into deployment pipeline
 - **Production Safety**: Security validation required before every deployment
 - **Real Security Confidence**: No more false confidence from mocked tests
@@ -565,7 +570,7 @@ A comprehensive security testing system that prevents security vulnerabilities t
 #### **For Developers:**
 ```bash
 # 1. Test security locally before pushing
-npm run test:security:all          # All security tests (33/33)
+npm run test:security:all          # Both security suites
 npm run test:cicd:security         # CI/CD security simulation
 
 # 2. Push with confidence
@@ -573,7 +578,7 @@ git push origin main               # Security tests will pass in CI/CD
 
 # 3. CI/CD handles the rest
 # - Security tests run automatically
-# - All 33 tests must pass
+# - Both security suites must pass
 # - Deployment only happens after security validation
 ```
 
@@ -595,7 +600,7 @@ git push origin main               # Security tests will pass in CI/CD
 
 ### **Verification Checklist:**
 
-- [ ] **Real Security Tests**: 33/33 tests passing ✅
+- [ ] **Real Security Tests**: both suites green ✅
 - [ ] **No Mocked Security**: All tests validate actual implementation ✅
 - [ ] **User Data Isolation**: Users cannot access each other's data ✅
 - [ ] **Authentication Enforcement**: All endpoints require valid JWT ✅
@@ -813,25 +818,27 @@ describe('Mock Tests', () => {
 - **CI/CD**: Automated testing on all deployments ✅ **Pipeline working**
 
 ### 🔒 NEW: Comprehensive Security Testing Status
-- **Total Security Tests**: 33/33 tests ✅ **100% passing**
-- **Real Plaid Security**: 15/15 tests passing ✅ **Actual implementation validated**
-- **Profile Encryption Security**: 9/9 tests passing ✅ **Encryption logic validated**
-- **Complete Security Suite**: 33/33 tests passing ✅ **100% security coverage**
+- **Total Security Tests**: read the count from jest's summary — it differs
+  between local (network tests skipped) and CI (all suites run)
+- **Real Plaid Security**: ✅ **Actual implementation validated**
+- **Profile Encryption Security**: ✅ **Encryption logic validated**
+- **Complete Security Suite**: ✅ **Runs in CI as of the pipeline audit** — it was
+  previously reachable only from jest configs no workflow job invoked
 - **CI/CD Integration**: Security tests required before deployment ✅ **Automated gates**
 
 ### Recent Achievements
-- **Profile Encryption Tests**: ✅ **9/9 tests passing** - Complete encryption workflow validation
+- **Profile Encryption Tests**: ✅ Complete encryption workflow validation
 - **Admin Endpoint Tests**: ✅ **17 tests passing** - Admin system fully tested
 - **Email System Tests**: ✅ **Resend integration working** - No more SMTP errors
 - **Profile Manager Tests**: ✅ **10 tests passing** - Intelligent profile building validated
-- **🔒 Real Security Tests**: ✅ **33/33 tests passing** - Actual security implementation validated
+- **🔒 Real Security Tests**: ✅ Actual security implementation validated
 
 ### Quality Indicators
 - **Zero Failing Tests**: ✅ All tests passing
 - **High Coverage**: ✅ 80%+ coverage maintained
 - **Fast Execution**: ✅ Tests complete quickly
 - **Reliable CI/CD**: ✅ Automated pipeline working
-- **🔒 Real Security Validation**: ✅ **33/33 security tests passing** - No mocked security logic
+- **🔒 Real Security Validation**: ✅ No mocked security logic
 - **Admin System**: ✅ Complete admin functionality tested
 - **🔒 User Data Isolation**: ✅ Users cannot access each other's data
 - **🔒 Authentication Enforcement**: ✅ All endpoints require valid JWT tokens
