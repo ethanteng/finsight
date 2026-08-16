@@ -35,7 +35,10 @@ export default function AppPageClient() {
 
   /** Turns grouped into the decisions they belong to, newest decision first. */
   const decisionThreads = useMemo(() => groupTurnsIntoDecisions(promptHistory), [promptHistory]);
-  const isInitialHistoryLoad = useRef(true);
+  // Read inside the history reload without making it a dependency: rebuilding
+  // that callback on every "New decision" would retrigger the load itself.
+  const newDecisionNonceRef = useRef(newDecisionNonce);
+  useEffect(() => { newDecisionNonceRef.current = newDecisionNonce; }, [newDecisionNonce]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [historyError, setHistoryError] = useState(false);
@@ -77,6 +80,11 @@ export default function AppPageClient() {
     const token = localStorage.getItem('auth_token');
     if (!token) return;
     setHistoryError(false);
+    // A reload started before the user asked for a fresh start must not land on
+    // top of it. Answering kicks off this fetch, and clicking "New decision"
+    // while it is in flight would otherwise re-select the turn that was just
+    // answered — resurrecting the thread and refilling the composer.
+    const nonceWhenStarted = newDecisionNonceRef.current;
     try {
       const res = await fetch(`${API_URL}/conversations`, { headers: { Authorization: `Bearer ${token}` } });
       if (res.status === 401) return expireSession();
@@ -86,17 +94,14 @@ export default function AppPageClient() {
         id: conversation.id, question: conversation.question, answer: conversation.answer, threadId: conversation.threadId ?? null, timestamp: conversation.timestamp,
       }));
       setPromptHistory(history);
-      setSelectedPrompt(prev => {
-        if (isInitialHistoryLoad.current) {
-          isInitialHistoryLoad.current = false;
-          return history[0] || null;
-        }
-        // "New decision" leaves selectedPrompt at null on purpose. A history
-        // reload that lands after that — including a stale fetch from the prior
-        // answer — must not re-adopt the old thread and overwrite the composer.
-        if (prev === null) return null;
-        return history[0] || null;
-      });
+      // Only the user starting a new decision mid-flight blocks the selection.
+      // Refusing to select whenever nothing is selected would be simpler and
+      // wrong: a first question in a fresh decision leaves selectedPrompt null,
+      // so the sidebar would show no active thread even though the composer is
+      // holding one — the feature failing in the case it exists for.
+      if (newDecisionNonceRef.current === nonceWhenStarted) {
+        setSelectedPrompt(history[0] || null);
+      }
     } catch (error) {
       console.error('Failed to load conversation history:', error);
       setHistoryError(true);
