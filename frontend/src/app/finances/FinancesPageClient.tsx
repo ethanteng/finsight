@@ -412,6 +412,12 @@ export default function FinancesPageClient() {
       )
     : overview.warnings;
 
+  // When the newest source time is missing entirely the server predates the field, so fall
+  // back to the oldest one it does send rather than dropping the line mid-deploy.
+  const sourceDataAsOf = overview.revision.newestSourceAsOf !== undefined
+    ? overview.revision.newestSourceAsOf
+    : overview.revision.asOf;
+
   const findAccountById = (accountId: string): FinancesAccount | null => {
     const allAccounts = [
       ...overview.accountGroups.cash.accounts,
@@ -441,8 +447,8 @@ export default function FinancesPageClient() {
           netWorth={Math.round(overview.financialOverview.netWorth)}
           footer={
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white/55">
-              {overview.revision.asOf && (
-                <span>Source data as of {new Date(overview.revision.asOf).toLocaleString()}</span>
+              {sourceDataAsOf && (
+                <span>Source data as of {new Date(sourceDataAsOf).toLocaleString()}</span>
               )}
               <span>Snapshot computed {new Date(overview.revision.computedAt).toLocaleString()}</span>
               {awaitingRevision && (

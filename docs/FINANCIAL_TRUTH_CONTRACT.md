@@ -78,6 +78,8 @@ Recomputing a snapshot does not make its inputs fresher. Required unavailable so
 
 Optional sources do not make a snapshot partial when absent. If present but stale, they make the values that use them stale.
 
+`newestExpiringSourceAsOf` derives the opposite bound — the newest source observation, meaning when anything in the snapshot last updated. The finances and dashboard views display it, because a timestamp under a set of totals reads as "when did these last move". It is presentation only: freshness is bounded by the oldest source, so `status` and the stale-source list stay derived from `asOf` and per-source maximum ages, never from this value. Both bounds exclude non-expiring sources, whose timestamps record a user edit rather than a provider observation.
+
 ## 5. Invariants for every consumer
 
 1. The backend computes financial metrics; the frontend only formats and displays them.

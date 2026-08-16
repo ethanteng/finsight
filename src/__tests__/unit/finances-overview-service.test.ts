@@ -108,6 +108,7 @@ describe('finances overview contract', () => {
     });
 
     expect(overview.revision.id).toBe('2026-08-14T12:00:00.000Z');
+    expect(overview.revision.asOf).toBe('2026-08-14T10:00:00.000Z');
     expect(overview.accountGroups.cash.totalBalance).toBe(5000);
     expect(overview.accountGroups.cash.accounts.map(account => account.account_id)).toEqual([
       'cash',
@@ -133,6 +134,38 @@ describe('finances overview contract', () => {
       isSnapshotAligned: true,
     });
     expect(overview.warnings).toEqual([]);
+  });
+
+  it('reports the newest expiring source observation alongside the oldest', () => {
+    const oneDay = 24 * 60 * 60 * 1000;
+    const overview = buildFinancesOverview({
+      snapshot: {
+        ...snapshot,
+        sourceObservations: [
+          { id: 'account:cash', required: true, status: 'available', asOf: '2026-08-14T10:00:00.000Z', maxAgeMs: oneDay },
+          { id: 'holding:holding', required: true, status: 'available', asOf: '2026-08-14T11:45:00.000Z', maxAgeMs: oneDay },
+          // A hand-entered value cannot stand in for a provider fetch, in either direction.
+          { id: 'account:manual-manual-cash', required: true, status: 'available', asOf: '2026-08-14T11:59:00.000Z', maxAgeMs: null },
+        ],
+      },
+    });
+
+    expect(overview.revision.newestSourceAsOf).toBe('2026-08-14T11:45:00.000Z');
+    expect(overview.revision.asOf).toBe('2026-08-14T10:00:00.000Z');
+  });
+
+  it('falls back to the oldest observation when a snapshot persisted no per-source times', () => {
+    const overview = buildFinancesOverview({ snapshot });
+
+    expect(overview.revision.newestSourceAsOf).toBe('2026-08-14T10:00:00.000Z');
+  });
+
+  it('falls back when sourceObservations is an empty array, not only when absent', () => {
+    const overview = buildFinancesOverview({
+      snapshot: { ...snapshot, sourceObservations: [] },
+    });
+
+    expect(overview.revision.newestSourceAsOf).toBe('2026-08-14T10:00:00.000Z');
   });
 
   it('filters heavy account details and calculates the investment portfolio on demand', () => {

@@ -53,6 +53,9 @@ export async function getLatestFinancialSnapshot(userId: string, view: Financial
       computedAt: true, asOf: true, status: true, reportingCurrency: true,
       financialOverview: true, investmentPortfolio: true, accounts: true,
       transactionsSummary: true, meta: true, quality: true,
+      // Carries each source's own observation time, which the overview reduces
+      // to the newest one it displays.
+      sourceObservations: true,
     } as const;
     const snapshot = await prisma.financialSummarySnapshot.findUnique({ where: { userId }, select });
     if (!snapshot || hasAccountDisplayBalances(snapshot as any)) return snapshot;
@@ -78,6 +81,7 @@ export async function getLatestFinancialSnapshot(userId: string, view: Financial
       transactionsSummary: fullSnapshot.transactionsSummary,
       meta: upgraded.meta,
       quality: fullSnapshot.quality,
+      sourceObservations: fullSnapshot.sourceObservations,
     };
   }
 

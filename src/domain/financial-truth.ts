@@ -463,3 +463,42 @@ export function evaluateSnapshotQuality(
     errors,
   };
 }
+
+/**
+ * Newest expiring source observation — when something in the snapshot last
+ * updated, as opposed to `asOf`, which is how old the oldest part of it is.
+ *
+ * This is a display value only. Freshness is bounded by the oldest source, so
+ * staleness must keep coming from `status`/`staleSourceIds` and never from
+ * this. Non-expiring sources are excluded for the same reason `asOf` excludes
+ * them: a user-entered figure's timestamp records an edit, not a provider
+ * observation, so it must not make the snapshot look freshly fetched.
+ *
+ * Input is persisted JSON rather than a validated in-memory snapshot, so
+ * unreadable entries are skipped instead of throwing — a timestamp shown under
+ * a total must not be able to break the page it sits on.
+ */
+export function newestExpiringSourceAsOf(sources: readonly unknown[]): Date | null {
+  let newest: Date | null = null;
+
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue;
+    const { status, asOf: rawAsOf, maxAgeMs } = source as Partial<SnapshotSourceObservation>;
+    if (status === 'unavailable') continue;
+    // Null maxAgeMs marks a non-expiring source; a missing one is unreadable.
+    // Neither can be dated against a provider, so neither counts here.
+    if (typeof maxAgeMs !== 'number' || !Number.isFinite(maxAgeMs)) continue;
+    if (rawAsOf === null || rawAsOf === undefined) continue;
+    if (typeof rawAsOf !== 'string' && !(rawAsOf instanceof Date)) continue;
+
+    let asOf: Date;
+    try {
+      asOf = parseDate(rawAsOf, 'asOf');
+    } catch {
+      continue;
+    }
+    if (newest === null || asOf > newest) newest = asOf;
+  }
+
+  return newest;
+}

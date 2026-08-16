@@ -91,6 +91,52 @@ describe('FinancialOverview', () => {
     });
   });
 
+  it('dates the overview by the newest source observation, not the oldest', async () => {
+    (global.fetch as jest.Mock).mockImplementation((url: string) => {
+      if (!url.includes('/api/finances/overview')) {
+        return Promise.resolve({ ok: false, status: 404, json: async () => ({ error: 'Not found' }) });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          revision: {
+            id: 'revision-1',
+            computedAt: '2026-08-14T12:00:00.000Z',
+            asOf: '2026-08-13T17:00:00.000Z',
+            newestSourceAsOf: '2026-08-14T11:45:00.000Z',
+            status: 'current',
+            reportingCurrency: 'USD',
+          },
+          warnings: [],
+          financialOverview: { netWorth: 10_000, totalCash: 10_000, totalInvestments: 0, totalDebt: 0, homeValue: null },
+          investmentPortfolio: { totalValue: 0, holdingCount: 0, securityCount: 0, assetAllocation: [] },
+          accountGroups: {
+            cash: {
+              accounts: [{ id: 'checking_1', name: 'Checking', type: 'depository', subtype: 'checking', balance: { current: 10_000, iso_currency_code: 'USD' } }],
+              totalBalance: 10_000,
+              unavailableBalanceCount: 0,
+            },
+            investments: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+            debt: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+            other: { accounts: [], totalBalance: 0, unavailableBalanceCount: 0 },
+          },
+          cashFlow: {},
+          home: null,
+          manualAccounts: [],
+        }),
+      });
+    });
+
+    render(<FinancialOverview />);
+
+    const expected = new Date('2026-08-14T11:45:00.000Z').toLocaleString();
+    expect(await screen.findByText(`Data as of ${expected}`)).toBeInTheDocument();
+    expect(screen.queryByText(
+      `Data as of ${new Date('2026-08-13T17:00:00.000Z').toLocaleString()}`
+    )).not.toBeInTheDocument();
+  });
+
   it('renders without crashing', async () => {
     mockFinancialOverviewFetch({ accounts: [], summaryOk: false });
     render(<FinancialOverview />);

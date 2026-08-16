@@ -6,6 +6,7 @@ import {
   computeFinancialOverview,
   evaluateSnapshotQuality,
   isCanonicalTransactionType,
+  newestExpiringSourceAsOf,
   summarizeCashFlow,
   type CanonicalTransaction,
 } from '../../domain/financial-truth';
@@ -307,6 +308,42 @@ describe('financial truth contract', () => {
       // provider age to report.
       expect(quality.asOf).toBeNull();
       expect(quality.status).toBe('current');
+    });
+
+    describe('newest source observation', () => {
+      it('reports the newest expiring observation, not the oldest', () => {
+        expect(newestExpiringSourceAsOf([
+          { id: 'balances', required: true, status: 'available', asOf: '2026-05-10T10:00:00.000Z', maxAgeMs: oneDay },
+          { id: 'holdings', required: true, status: 'available', asOf: '2026-05-10T08:00:00.000Z', maxAgeMs: oneDay },
+        ])?.toISOString()).toBe('2026-05-10T10:00:00.000Z');
+      });
+
+      it('excludes non-expiring sources so a user edit cannot pass for a provider fetch', () => {
+        expect(newestExpiringSourceAsOf([
+          { id: 'balances', required: true, status: 'available', asOf: '2026-05-10T08:00:00.000Z', maxAgeMs: oneDay },
+          // Entered by hand minutes ago; it says nothing about provider freshness.
+          { id: 'account:manual-1', required: true, status: 'available', asOf: '2026-05-10T11:59:00.000Z', maxAgeMs: null },
+        ])?.toISOString()).toBe('2026-05-10T08:00:00.000Z');
+      });
+
+      it('ignores unavailable sources and reports null when nothing can age', () => {
+        expect(newestExpiringSourceAsOf([
+          { id: 'holdings', required: true, status: 'unavailable', asOf: null, maxAgeMs: oneDay },
+          { id: 'account:manual-1', required: true, status: 'available', asOf: '2026-05-10T11:00:00.000Z', maxAgeMs: null },
+        ])).toBeNull();
+      });
+
+      it('skips unreadable persisted entries instead of throwing', () => {
+        expect(newestExpiringSourceAsOf([
+          null,
+          'not an observation',
+          { id: 'broken', status: 'available', asOf: 'never', maxAgeMs: oneDay },
+          { id: 'no-max-age', status: 'available', asOf: '2026-05-10T11:00:00.000Z' },
+          { id: 'balances', status: 'available', asOf: '2026-05-10T09:00:00.000Z', maxAgeMs: oneDay },
+        ])?.toISOString()).toBe('2026-05-10T09:00:00.000Z');
+
+        expect(newestExpiringSourceAsOf([])).toBeNull();
+      });
     });
 
     it('rejects a negative max age but accepts an explicit null', () => {
