@@ -644,18 +644,27 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL_PROD }}
 
   # Deployment (only on main branch)
-  deploy:
-    # Covers the Vercel build and the Render webhook round trip, which are slower
-    # and less predictable than anything in the test jobs.
+  #
+  # Frontend (Vercel) and backend (Render) deploy as two independent jobs so they
+  # run at the same time instead of the Vercel build gating the Render webhook.
+  # They are safe to overlap: schema changes are already applied by migrate-prod,
+  # which both jobs gate on, and neither deploy target reads the other's output.
+  # `deploy-summary` below fails the run if either half fails, so a partial deploy
+  # is never reported as green.
+  deploy-frontend:
+    # Covers the Vercel production build, which is slower and less predictable
+    # than anything in the test jobs.
     timeout-minutes: 20
     runs-on: ubuntu-latest
     needs: [migrate-prod]
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-    # Shared with fast-deploy.yml's deploy job: both target the same Vercel project
-    # and Render service, so they must queue rather than overlap. Never cancelled —
-    # aborting mid-deploy is worse than waiting.
+    # Shared with fast-deploy.yml's deploy-frontend job: both target the same
+    # Vercel project, so they must queue rather than overlap. Scoped to the
+    # frontend only — queueing behind a backend deploy would undo the
+    # parallelism above. Never cancelled: aborting mid-deploy is worse than
+    # waiting.
     concurrency:
-      group: production-deploy
+      group: production-deploy-frontend
       cancel-in-progress: false
     steps:
       - name: Checkout code
@@ -670,10 +679,26 @@ jobs:
           target: production
           root-directory: frontend
 
+  deploy-backend:
+    # Covers the Render webhook round trip.
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    needs: [migrate-prod]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    # Shared with fast-deploy.yml's restart-backend job: both hit the same Render
+    # service, so they must queue rather than overlap. See the note on
+    # deploy-frontend for why the group is split by target.
+    concurrency:
+      group: production-deploy-backend
+      cancel-in-progress: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Deploy to Render
         run: |
           echo "Deploying to Render..."
-          
+
           # Option 1: Use Render webhook (requires RENDER_DEPLOY_HOOK secret)
           if [ -n "${{ secrets.RENDER_DEPLOY_HOOK }}" ]; then
             echo "Triggering Render deployment via webhook..."
@@ -682,7 +707,7 @@ jobs:
           else
             echo "No RENDER_DEPLOY_HOOK secret found"
           fi
-          
+
           # Option 2: Direct deployment with Render CLI (alternative approach)
           # if [ -n "${{ secrets.RENDER_API_KEY }}" ]; then
           #   echo "Installing Render CLI..."
@@ -691,4 +716,35 @@ jobs:
           #   render deploy --service-id ${{ secrets.RENDER_SERVICE_ID }}
           # else
           #   echo "No RENDER_API_KEY secret found, skipping CLI deployment"
-          # fi 
+          # fi
+
+  # Single gate for "production is deployed". With the two halves running in
+  # parallel, either can fail on its own and leave frontend and backend on
+  # different commits — this job makes that loud instead of leaving a green run
+  # with one red job buried in it.
+  deploy-summary:
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    needs: [deploy-frontend, deploy-backend]
+    # `always()` so this still reports when one half failed or was skipped;
+    # without it the job would simply be skipped alongside its failed dependency.
+    if: always() && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
+    steps:
+      - name: Report deployment result
+        run: |
+          FRONTEND="${{ needs.deploy-frontend.result }}"
+          BACKEND="${{ needs.deploy-backend.result }}"
+          echo "Frontend (Vercel): $FRONTEND"
+          echo "Backend (Render):  $BACKEND"
+
+          if [ "$FRONTEND" = "skipped" ] && [ "$BACKEND" = "skipped" ]; then
+            echo "No deployment ran for this event."
+            exit 0
+          fi
+
+          if [ "$FRONTEND" != "success" ] || [ "$BACKEND" != "success" ]; then
+            echo "::error::Partial production deploy — frontend and backend may now be on different commits. Re-run the failed job."
+            exit 1
+          fi
+
+          echo "✅ Frontend and backend both deployed from this commit."

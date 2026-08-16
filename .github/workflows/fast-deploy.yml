@@ -118,9 +118,10 @@ jobs:
     if: |
       github.event.inputs.force_deploy == 'true' ||
       (github.ref == 'refs/heads/main' && needs.validate-website.outputs.marketing_only == 'true')
-    # Shared with ci-cd.yml's deploy job — see the note there.
+    # Shared with ci-cd.yml's deploy-frontend job — see the note there. Scoped to
+    # the Vercel target so it does not queue behind a backend deploy.
     concurrency:
-      group: production-deploy
+      group: production-deploy-frontend
       cancel-in-progress: false
     steps:
       - name: Checkout code
@@ -136,10 +137,13 @@ jobs:
           root-directory: frontend
 
   # Optional: Quick backend restart (if needed)
+  # Runs alongside deploy-frontend rather than after it: both are gated on the
+  # same validation job and the same marketing-only scope check, and the Render
+  # hook does not depend on the Vercel deploy having landed.
   restart-backend:
     # A single webhook POST; anything approaching this is a hang.
     timeout-minutes: 10
-    needs: [validate-website, deploy-frontend]
+    needs: [validate-website]
     runs-on: ubuntu-latest
     # Same scope gate as deploy-frontend: the Render hook redeploys the backend
     # from branch HEAD, so it must never fire for a commit carrying untested
@@ -147,9 +151,9 @@ jobs:
     if: |
       github.event.inputs.force_deploy == 'true' ||
       (github.ref == 'refs/heads/main' && needs.validate-website.outputs.marketing_only == 'true')
-    # Same Render webhook as ci-cd.yml deploy — must not overlap that job.
+    # Same Render webhook as ci-cd.yml's deploy-backend — must not overlap it.
     concurrency:
-      group: production-deploy
+      group: production-deploy-backend
       cancel-in-progress: false
     steps:
       - name: Restart Render backend
