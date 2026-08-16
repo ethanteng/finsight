@@ -94,7 +94,7 @@ function analyzeSingleQuestion(question: string): QuestionNeeds {
 function isContextualFollowUp(question: string): boolean {
   const normalized = question.trim().toLowerCase();
   if (normalized.length > 100) return false;
-  return /^(?:and\b|also\b|so\b|then\b|but\b|what if\b|what about\b|how about\b|which (?:one|ones|of)\b|why (?:is|are|did|does) (?:that|it|this)\b|can you (?:explain|compare) (?:that|them|those|it)\b)|\b(?:same|instead|that one|those|them|it)\b/.test(normalized);
+  return /^(?:and\b|also\b|so\b|then\b|but\b|yes\b|yeah\b|yep\b|correct\b|confirm(?:ed)?\b|i\s+(?:can\s+)?confirm\b|what if\b|what about\b|how about\b|which (?:one|ones|of)\b|why (?:is|are|did|does) (?:that|it|this)\b|can you (?:explain|compare) (?:that|them|those|it)\b)|\b(?:same|instead|that one|those|them|it)\b/.test(normalized);
 }
 
 /** Route a short contextual follow-up using the most recent user question. */

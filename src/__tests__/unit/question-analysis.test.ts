@@ -48,6 +48,14 @@ describe('question-aware LLM context routing', () => {
       needsRetirement: true,
       needsSecondaryValidation: true,
     });
+    expect(
+      analyzeQuestionNeeds('Yes, I can confirm $125K as my target annual spending', [
+        'Re-run my retirement analysis.',
+      ])
+    ).toMatchObject({
+      needsRetirement: true,
+      needsSecondaryValidation: true,
+    });
   });
 
   it('does not inherit unrelated data needs for a standalone question', () => {
