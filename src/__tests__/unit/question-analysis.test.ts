@@ -115,7 +115,7 @@ describe('question-aware LLM context routing', () => {
     // 77-year-old it lacked the assumptions the projection needed.
     for (const question of [
       'I am already retired, turning 77 this year. And I plan to withdrawal approximately $36K per year.',
-      'Assess my entire financial portfolio. Determine how long my money will last in retirement.',
+      'At my current rate of spend, how long will my money last?',
       'Am I on track to retire at 68?',
     ]) {
       expect(analyzeQuestionNeeds(question)).toMatchObject({

@@ -25,12 +25,28 @@ const RETIREMENT_PHRASINGS = [
   'is my nest egg big enough?',
   'when can I stop working?',
   'am I on track for financial independence?',
+  // Runway questions. These name no retirement word at all, so the projection
+  // engine never ran on the one question it exists to answer and the reply was
+  // assembled from aggregates instead.
+  'at my current rate of spend, how long will my money last?',
+  'how long will my savings last?',
+  'how many more years will the portfolio last?',
+  'how much longer will my cash hold out?',
+  'will I run out of money?',
+  'am I going to outlive my savings?',
+  'how long can I live off my investments?',
 ];
 
 const NON_RETIREMENT_PHRASINGS = [
   'what is my net worth?',
   'how much did I spend on groceries?',
   'should I retire my mortgage early?',
+  // A loan term, not a runway. Naming the assets is what separates these.
+  'how long will my mortgage last?',
+  'how long will my car loan last?',
+  // Same shape, different question: an emergency fund is drawn down by a job
+  // loss, and the projection would answer by asking for a retirement age.
+  'how long will my emergency fund last if I lose my job?',
 ];
 
 describe('retirement language', () => {

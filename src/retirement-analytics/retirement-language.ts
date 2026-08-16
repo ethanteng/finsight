@@ -20,6 +20,46 @@ const DEBT_PAYOFF =
   /\bretir\w+\s+(?:my|our|the|this|that|their)\s+(?:mortgage|loans?|debts?|note|card|balance)\b/gi;
 
 /**
+ * Runway questions: the thing a projection answers, asked without the word for
+ * it. "At my current rate of spend, how long will my money last?" matched none
+ * of the vocabulary, so the engine that exists to answer exactly that question
+ * never ran and the answer was assembled from aggregates instead.
+ *
+ * Matched by shape rather than by word list, for the same reason the spending
+ * patterns are: it is a duration, an asset, and a word for running out — in
+ * either order, with anything between them. Naming the assets is what keeps
+ * "how long will my mortgage last" out; that one is a loan term.
+ */
+const ASSET = String.raw`(?:money|savings|portfolio|nest\s+egg|assets?|investments?|funds?|cash)`;
+const DURATION = String.raw`(?:how\s+long|how\s+much\s+longer|how\s+many\s+(?:more\s+)?(?:years|months))`;
+/** Bounded, and stops at sentence punctuation so it cannot span two questions. */
+const GAP = String.raw`[^?!.]{0,60}?`;
+
+const RUNWAY_PATTERNS = [
+  // "how long will my money last", "how many years will the portfolio hold out"
+  new RegExp(String.raw`\b${DURATION}\b${GAP}\b${ASSET}\b${GAP}\b(?:last|lasts|hold\s+out|hold\s+up|stretch)\b`, 'i'),
+  // "how long can I live off my savings"
+  new RegExp(String.raw`\b${DURATION}\b${GAP}\blive\s+(?:off|on)\b`, 'i'),
+  // "will I run out of money?", "am I going to outlive my savings?"
+  new RegExp(String.raw`\brun(?:ning)?\s+out\s+of\s+(?:my\s+|our\s+|the\s+)?${ASSET}\b`, 'i'),
+  new RegExp(String.raw`\boutliv\w*\s+(?:my|our|the)\s+${ASSET}\b`, 'i'),
+];
+
+/**
+ * An emergency fund is drawn down by a job loss, not by a retirement plan, so
+ * "how long will my emergency fund last" is the same shape asking a different
+ * question. Removing the phrase leaves the rest of the sentence to match on its
+ * own: "how long will my emergency fund and my portfolio last" is still a
+ * runway question.
+ */
+const EMERGENCY_RESERVE = /\bemergency\s+(?:funds?|savings|cash|reserves?)\b/gi;
+
+function mentionsRunway(text: string): boolean {
+  const scoped = text.replace(EMERGENCY_RESERVE, ' ');
+  return RUNWAY_PATTERNS.some((pattern) => pattern.test(scoped));
+}
+
+/**
  * The words themselves are admin-configurable (routing-vocabulary), because
  * every gap in them has cost an answer. This module owns how they are applied:
  * the debt-payoff exclusion, and the age patterns below.
@@ -54,10 +94,17 @@ function withoutDebtPayoff(text: string): string {
   return text.replace(DEBT_PAYOFF, ' ');
 }
 
-/** Does this text talk about retiring, in any of the ways people phrase it? */
+/**
+ * Does this text talk about retiring, in any of the ways people phrase it?
+ *
+ * Including the ways that never say so. A runway question is a retirement
+ * question whatever words it uses, and it is the one shape the vocabulary can
+ * never be edited into covering: there is no term to add, only a shape.
+ */
 export function mentionsRetirement(text: string): boolean {
   if (!text) return false;
-  return matchesCategory('retirement', withoutDebtPayoff(text));
+  const stripped = withoutDebtPayoff(text);
+  return matchesCategory('retirement', stripped) || mentionsRunway(stripped);
 }
 
 function firstMatchInRange(

@@ -56,7 +56,9 @@ export const ROUTING_CATEGORY_META: RoutingCategoryMeta[] = [
     label: 'Retirement',
     feeds: 'Retirement',
     standalone: true,
-    description: 'Loads the retirement projection and its inputs. Also drives the second review.',
+    description: 'Loads the retirement projection and its inputs. Also drives the second review. ' +
+      'Runway questions ("how long will my money last", "will I run out of money") are matched by shape ' +
+      'in code, so they load it regardless of these terms.',
   },
   {
     id: 'investments',
