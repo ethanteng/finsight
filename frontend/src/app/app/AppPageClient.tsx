@@ -39,6 +39,8 @@ export default function AppPageClient() {
   // that callback on every "New decision" would retrigger the load itself.
   const newDecisionNonceRef = useRef(newDecisionNonce);
   useEffect(() => { newDecisionNonceRef.current = newDecisionNonce; }, [newDecisionNonce]);
+  const selectedPromptRef = useRef(selectedPrompt);
+  useEffect(() => { selectedPromptRef.current = selectedPrompt; }, [selectedPrompt]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [historyError, setHistoryError] = useState(false);
@@ -85,6 +87,10 @@ export default function AppPageClient() {
     // while it is in flight would otherwise re-select the turn that was just
     // answered — resurrecting the thread and refilling the composer.
     const nonceWhenStarted = newDecisionNonceRef.current;
+    const selectedWhenStarted = selectedPromptRef.current;
+    const selectedIdWhenStarted = selectedWhenStarted?.id ?? null;
+    const selectedThreadWhenStarted =
+      selectedWhenStarted?.threadId ?? selectedWhenStarted?.id ?? null;
     try {
       const res = await fetch(`${API_URL}/conversations`, { headers: { Authorization: `Bearer ${token}` } });
       if (res.status === 401) return expireSession();
@@ -99,7 +105,20 @@ export default function AppPageClient() {
       // wrong: a first question in a fresh decision leaves selectedPrompt null,
       // so the sidebar would show no active thread even though the composer is
       // holding one — the feature failing in the case it exists for.
-      if (newDecisionNonceRef.current === nonceWhenStarted) {
+      if (newDecisionNonceRef.current !== nonceWhenStarted) return;
+
+      const currentSelection = selectedPromptRef.current;
+      const selectionChanged = (currentSelection?.id ?? null) !== selectedIdWhenStarted;
+      const currentThread =
+        currentSelection?.threadId ?? currentSelection?.id ?? null;
+      const stayedInSameThread =
+        selectedThreadWhenStarted !== null &&
+        currentThread === selectedThreadWhenStarted;
+
+      // Adopt the newest turn when the user is still in the thread that was
+      // answered, including browsing older turns in it mid-reload. If they opened
+      // a different decision while this fetch was in flight, leave that choice.
+      if (!selectionChanged || stayedInSameThread) {
         setSelectedPrompt(history[0] || null);
       }
     } catch (error) {

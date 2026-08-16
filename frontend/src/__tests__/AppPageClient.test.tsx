@@ -34,7 +34,15 @@ describe('AppPageClient decision list', () => {
 
   function mockApi(
     conversations: ReturnType<typeof turn>[],
-    { holdHistory = false, laterConversations }: { holdHistory?: boolean; laterConversations?: ReturnType<typeof turn>[] } = {}
+    {
+      holdHistory = false,
+      holdHistoryAfterAnswer = false,
+      laterConversations,
+    }: {
+      holdHistory?: boolean;
+      holdHistoryAfterAnswer?: boolean;
+      laterConversations?: ReturnType<typeof turn>[];
+    } = {}
   ) {
     let historyCalls = 0;
     global.fetch = jest.fn().mockImplementation((input: RequestInfo | URL) => {
@@ -52,7 +60,10 @@ describe('AppPageClient decision list', () => {
         historyCalls += 1;
         const body = historyCalls > 1 && laterConversations ? laterConversations : conversations;
         const payload = { ok: true, status: 200, json: async () => ({ conversations: body }) };
-        if (!holdHistory) return Promise.resolve(payload);
+        const shouldHold =
+          (holdHistory && historyCalls === 1) ||
+          (holdHistoryAfterAnswer && historyCalls > 1);
+        if (!shouldHold) return Promise.resolve(payload);
         return new Promise(resolve => {
           releaseHistory = () => resolve(payload);
         });
@@ -142,5 +153,42 @@ describe('AppPageClient decision list', () => {
       expect(decision).toHaveTextContent('Resuming');
       expect(decision).toHaveTextContent('A follow-up sees these turns.');
     })();
+  });
+
+  it('keeps a sidebar choice in another decision when a reload lands after it', async () => {
+    mockApi(
+      [
+        turn('c2', 'thread-a', 'Re-run my retirement analysis', 200),
+        turn('c1', 'thread-a', 'What about retiring at 58?', 100),
+        turn('other', 'thread-b', 'How is my cash position?', 50),
+      ],
+      {
+        holdHistoryAfterAnswer: true,
+        laterConversations: [
+          turn('c3', 'thread-a', 'Confirm $125K as my target', 300),
+          turn('c2', 'thread-a', 'Re-run my retirement analysis', 200),
+          turn('c1', 'thread-a', 'What about retiring at 58?', 100),
+          turn('other', 'thread-b', 'How is my cash position?', 50),
+        ],
+      }
+    );
+
+    render(<AppPageClient />);
+    await screen.findByRole('group', { name: 'Decision: What about retiring at 58?' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'simulate answer' }));
+    await waitFor(() => expect(releaseHistory).not.toBeNull());
+
+    fireEvent.click(screen.getByRole('button', { name: /How is my cash position/i }));
+    await act(async () => {
+      releaseHistory!();
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /How is my cash position/i })).toHaveAttribute(
+        'aria-current',
+        'true'
+      )
+    );
   });
 });
