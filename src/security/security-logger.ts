@@ -115,9 +115,9 @@ export function logRejectedPrompt(
   writeLog(entry);
   Sentry.addBreadcrumb({
     category: 'security',
-    message: `Rejected prompt: ${reason}`,
+    message: 'Rejected prompt',
     level: 'warning',
-    data: { reason, hasUserId: !!options?.userId },
+    data: { hasUserId: !!options?.userId },
   });
 }
 
@@ -137,9 +137,9 @@ export function logFlaggedOutput(
     timestamp: new Date().toISOString(),
   };
   writeLog(entry);
-  Sentry.captureMessage(`Flagged LLM output: ${reason}`, {
+  Sentry.captureMessage('Flagged LLM output', {
     level: 'warning',
-    tags: { security: 'llm_output_filter', reason },
+    tags: { security: 'llm_output_filter' },
   });
 }
 

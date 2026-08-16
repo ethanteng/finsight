@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "Sentry": {
+      "url": "https://mcp.sentry.dev/mcp/ethan-teng-consulting-llc/ask-linc-sentry",
+      "type": "http"
+    }
+  }
+}
