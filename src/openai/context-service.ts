@@ -13,10 +13,14 @@ interface GatherContextArgs {
   questionNeeds: QuestionNeeds;
   tier: UserTier;
   /**
-   * The user's previous questions, most recent first. Analysis inputs stated a
-   * turn or two ago belong to the question being asked now.
+   * Earlier turns of this decision, most recent first. Inputs stated a turn or
+   * two ago belong to the question being asked now.
+   *
+   * The answers travel with the questions because a short reply only means
+   * something next to what was asked: "62" is an age or a dollar figure
+   * depending entirely on the question above it.
    */
-  recentQuestions?: string[];
+  recentTurns?: Array<{ question: string; answer?: string }>;
   /** Optional callback for progress updates (e.g. for SSE streaming) */
   onProgress?: (message: string) => void;
 }
@@ -58,7 +62,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     question,
     questionNeeds,
     tier,
-    recentQuestions = [],
+    recentTurns = [],
     onProgress
   } = args;
 
@@ -350,7 +354,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       const result = await fetchOrCreateRetirementAnalysis({
         userId,
         question,
-        recentQuestions,
+        recentTurns,
         userProfile: userProfile || '',
         holdings: investmentsSnapshot.holdings,
         securities: investmentsSnapshot.securities || [],
@@ -429,25 +433,40 @@ interface RetirementAnalysisResolution {
 async function fetchOrCreateRetirementAnalysis(args: {
   userId: string;
   question: string;
-  recentQuestions?: string[];
+  recentTurns?: Array<{ question: string; answer?: string }>;
   userProfile: string;
   holdings: any[];
   securities: any[];
 }): Promise<RetirementAnalysisResolution> {
-  const { userId, question, recentQuestions = [], userProfile, holdings, securities } = args;
+  const { userId, question, recentTurns = [], userProfile, holdings, securities } = args;
 
   // Parse retirement parameters from the question and the turns that set it up.
   // A number the user gave two messages ago is an answer to this question, not
   // a reason to ask them for it again.
   const { parseRetirementConversation } = await import('../retirement-analytics/retirement-question-parser');
-  const questionParams = parseRetirementConversation(question, recentQuestions);
+  const { extractRetirementInputs } = await import('./retirement-input-extraction');
 
-  console.log('📋 Retirement question parser result:', {
-    hasRetirementIntent: questionParams.hasRetirementIntent,
+  // The model reads the inputs out of this decision's turns from what they
+  // mean; the pattern matcher is what runs when that call cannot.
+  const extracted = await extractRetirementInputs(question, recentTurns);
+  const questionParams = extracted
+    ? {
+        hasRetirementIntent: true,
+        currentAge: extracted.currentAge,
+        retirementAge: extracted.retirementAge,
+        annualWithdrawalAmount: extracted.annualWithdrawalAmount,
+        withdrawalStartAge: extracted.withdrawalStartAge,
+        lifeExpectancy: extracted.lifeExpectancy,
+      }
+    : parseRetirementConversation(question, recentTurns.map(turn => turn.question));
+
+  console.log('📋 Retirement inputs:', {
+    source: extracted ? 'extraction' : 'patterns',
     currentAge: questionParams.currentAge,
     retirementAge: questionParams.retirementAge,
     annualWithdrawalAmount: questionParams.annualWithdrawalAmount,
-    withdrawalStartAge: questionParams.withdrawalStartAge
+    withdrawalStartAge: questionParams.withdrawalStartAge,
+    quotedFrom: extracted?.sources,
   });
 
   // Note: We already check for retirement keywords at the trigger level,

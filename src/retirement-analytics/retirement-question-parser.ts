@@ -38,13 +38,11 @@ const ANNUAL_ADJECTIVE = String.raw`(?:annual|yearly)`;
 const SPEND_NOUN = String.raw`(?:spend(?:ing)?|budget|expenses?|withdrawals?|income|costs?|burn)`;
 
 /**
- * Money coming in is not money going out. "$200k a year" reads as a spending
- * target on its own, so an earnings sentence has to be ruled out explicitly —
- * "annual income" in particular is the salary sense far more often than the
- * retirement-paycheck sense in a turn that never mentions retiring.
- *
- * "make" only counts with a subject in front of it: "I make $200k" is earnings,
- * "make it $125k annual spending" is the user setting the target.
+ * Money coming in is not money going out, and no pattern can tell them apart:
+ * the difference lives in the sentence's meaning, not its words. This rejects
+ * the obvious earnings phrasings so the fallback errs toward reporting the
+ * amount missing — which asks the user — rather than toward a salary becoming
+ * a spending target.
  */
 const EARNINGS_FRAMING =
   /\b(?:income|earnings|salary|salaries|wages?|revenue|gross|pre-?tax|take-?home)\b|\b(?:earn|earns|earned|earning)\b|\b(?:i|we|he|she|they|you|it)\s+(?:make|makes|made)\b|\bbrings?\s+in\b/i;
@@ -66,26 +64,16 @@ const AMOUNT_TO_ANNUAL_FILLER =
  * asked the user for a number they had just given — repeatedly, in the same
  * conversation.
  */
-const WITHDRAWAL_AMOUNT_PATTERNS: ReadonlyArray<{ pattern: RegExp; framing: 'annualized' | 'spending' }> = [
-  // "$150k per year", "$100k annually", "$100,000 withdrawal". An amount and a
-  // period, with nothing saying which direction the money moves.
-  { pattern: new RegExp(`${AMOUNT}${MULTIPLIER}\\s*(?:${ANNUAL_PERIOD}|withdrawals?)`, 'i'), framing: 'annualized' },
+const WITHDRAWAL_AMOUNT_PATTERNS: readonly RegExp[] = [
+  // "$150k per year", "$100k annually", "$100,000 withdrawal"
+  new RegExp(`${AMOUNT}${MULTIPLIER}\\s*(?:${ANNUAL_PERIOD}|withdrawals?)`, 'i'),
   // "$125K annual spending", "$125K as my target annual spending"
-  {
-    pattern: new RegExp(`${AMOUNT}${MULTIPLIER}${AMOUNT_TO_ANNUAL_FILLER}\\s+${ANNUAL_ADJECTIVE}\\s+${SPEND_NOUN}`, 'i'),
-    framing: 'spending',
-  },
+  new RegExp(`${AMOUNT}${MULTIPLIER}${AMOUNT_TO_ANNUAL_FILLER}\\s+${ANNUAL_ADJECTIVE}\\s+${SPEND_NOUN}`, 'i'),
   // "annual spending of $125K", "yearly spending down to about $125K"
-  {
-    pattern: new RegExp(
-      `${ANNUAL_ADJECTIVE}\\s+(?:retirement\\s+)?${SPEND_NOUN}[^.$\\d]{0,30}${AMOUNT}${MULTIPLIER}`,
-      'i'
-    ),
-    framing: 'spending',
-  },
-  // "withdraw $100k" — could be an ATM trip, so it carries no spending framing.
-  { pattern: new RegExp(`withdraw(?:al)?\\s+(?:of\\s+)?${AMOUNT}${MULTIPLIER}`, 'i'), framing: 'annualized' },
-  { pattern: new RegExp(`annual\\s+withdrawal\\s+(?:of\\s+)?${AMOUNT}${MULTIPLIER}`, 'i'), framing: 'spending' },
+  new RegExp(`${ANNUAL_ADJECTIVE}\\s+(?:retirement\\s+)?${SPEND_NOUN}[^.$\\d]{0,30}${AMOUNT}${MULTIPLIER}`, 'i'),
+  // "withdraw $100k", "annual withdrawal of $80k"
+  new RegExp(`withdraw(?:al)?\\s+(?:of\\s+)?${AMOUNT}${MULTIPLIER}`, 'i'),
+  new RegExp(`annual\\s+withdrawal\\s+(?:of\\s+)?${AMOUNT}${MULTIPLIER}`, 'i'),
 ];
 
 const WITHDRAWAL_START_PATTERNS = [
@@ -107,23 +95,13 @@ function parseWithdrawalMultiplier(matchedText: string): number {
   return 1;
 }
 
-/**
- * @param requireSpendingFraming only accept an amount the sentence itself calls
- *   spending. Used for turns that never mention retiring, where "$200k a year"
- *   is as likely to be a salary as a retirement target.
- */
-function extractAnnualWithdrawalAmount(
-  qLower: string,
-  requireSpendingFraming = false
-): number | undefined {
-  for (const { pattern, framing } of WITHDRAWAL_AMOUNT_PATTERNS) {
+function extractAnnualWithdrawalAmount(qLower: string): number | undefined {
+  // An earnings sentence never yields a spending target here. The extractor
+  // reads the difference from context; this fallback can only refuse.
+  if (EARNINGS_FRAMING.test(qLower)) return undefined;
+  for (const pattern of WITHDRAWAL_AMOUNT_PATTERNS) {
     const match = qLower.match(pattern);
     if (!match) continue;
-    // "$200k a year" after "I earn" is a salary even when the same sentence asks
-    // about retiring. The carry-forward gate already rejected that wording on
-    // non-retirement turns; apply the same rule to the current message too.
-    if (EARNINGS_FRAMING.test(qLower) && (framing === 'annualized' || requireSpendingFraming)) continue;
-    if (requireSpendingFraming && framing !== 'spending') continue;
     const amount = parseFloat(match[1].replace(/,/g, ''));
     if (!Number.isFinite(amount) || amount <= 0) continue;
     return amount * parseWithdrawalMultiplier(match[0]);
@@ -167,35 +145,6 @@ function extractBareSpendingAnswer(question: string): number | undefined {
   return annual >= MIN_BARE_ANNUAL_AMOUNT ? annual : undefined;
 }
 
-/**
- * Amount-only replies from an earlier turn: "$125k a year", "125,000". The
- * topical gate blocks period-only wording from unrelated salary sentences, but
- * a short reply whose whole content is the number should still carry into a
- * later "re-run my retirement analysis".
- */
-function extractPriorTurnSpendingAmount(question: string): number | undefined {
-  const trimmed = question.trim();
-  if (!trimmed || trimmed.length > 60 || /\?\s*$/.test(trimmed)) return undefined;
-  if (EARNINGS_FRAMING.test(trimmed)) return undefined;
-
-  const bare = extractBareSpendingAnswer(trimmed);
-  if (bare != null) return bare;
-
-  const match = trimmed.match(
-    /^(?:yes[,.\s!]*|yeah[,.\s!]*|correct[,.\s!]*|confirm(?:ed)?[,.\s!]*|i\s+(?:can\s+)?confirm[,.\s!]*)*(?:about\s+)?(?:\$?\s*)?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*(k|thousand|million)?\s*(?:\/\s*(?:yr|year)|per\s+year|a\s+year|each\s+year|annually|yearly)?\s*[.]?\s*$/i
-  );
-  if (!match) return undefined;
-
-  const amount = parseFloat(match[1].replace(/,/g, ''));
-  if (!Number.isFinite(amount) || amount <= 0) return undefined;
-
-  const suffix = match[2]?.toLowerCase();
-  const multiplier =
-    suffix === 'million' ? 1_000_000 : suffix === 'k' || suffix === 'thousand' ? 1_000 : 1;
-  const annual = amount * multiplier;
-  return annual >= MIN_BARE_ANNUAL_AMOUNT ? annual : undefined;
-}
-
 function firstNumber(qLower: string, patterns: readonly RegExp[]): number | undefined {
   for (const pattern of patterns) {
     const match = qLower.match(pattern);
@@ -210,18 +159,13 @@ function firstNumber(qLower: string, patterns: readonly RegExp[]): number | unde
  * yearly spending to $125K") rarely repeat the word "retirement"; the caller
  * decides whether the thread is about retirement.
  */
-function extractParams(
-  question: string,
-  options: { requireSpendingFraming?: boolean } = {}
-): Omit<RetirementQuestionParams, 'hasRetirementIntent'> {
+function extractParams(question: string): Omit<RetirementQuestionParams, 'hasRetirementIntent'> {
   const qLower = question.toLowerCase();
 
   const currentAge = extractCurrentAge(qLower) ?? undefined;
   const retirementAge = extractRetirementAge(qLower) ?? undefined;
-  let annualWithdrawalAmount = extractAnnualWithdrawalAmount(qLower, options.requireSpendingFraming);
-  if (!annualWithdrawalAmount && !options.requireSpendingFraming) {
-    annualWithdrawalAmount = extractBareSpendingAnswer(question);
-  }
+  const annualWithdrawalAmount =
+    extractAnnualWithdrawalAmount(qLower) ?? extractBareSpendingAnswer(question);
 
   // Withdrawals start at retirement unless the question says otherwise.
   const withdrawalStartAge = firstNumber(qLower, WITHDRAWAL_START_PATTERNS) ?? retirementAge;
@@ -288,16 +232,12 @@ export function parseRetirementConversation(
       break;
     }
     if (!previous) continue;
-    // An earlier turn that never mentions retiring is only trusted for an
-    // amount it calls spending. Without that gate, "I earn $200k a year"
-    // three questions back becomes the retirement spending target for "can I
-    // retire at 65?" — a materially wrong projection, run silently.
-    const older = extractParams(previous, {
-      requireSpendingFraming: !mentionsRetirement(previous.toLowerCase()),
-    });
-    if (!older.annualWithdrawalAmount && !mentionsRetirement(previous.toLowerCase())) {
-      older.annualWithdrawalAmount = extractPriorTurnSpendingAmount(previous);
-    }
+    // Every turn here belongs to one declared decision, so an unrelated salary
+    // sentence from another line of questioning cannot reach this loop. The
+    // topical gate that used to stand here — and the second extractor added to
+    // rescue what it over-blocked — were both guarding against cross-decision
+    // bleed that the thread boundary now prevents outright.
+    const older = extractParams(previous);
     merged.currentAge = merged.currentAge ?? older.currentAge;
     merged.retirementAge = merged.retirementAge ?? older.retirementAge;
     merged.annualWithdrawalAmount = merged.annualWithdrawalAmount ?? older.annualWithdrawalAmount;

@@ -194,10 +194,13 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
 
   onProgress?.('Loading your financial snapshot');
 
-  const recentQuestions = conversationHistory
+  // Newest first. Routing looks at the questions; input extraction needs the
+  // answers too, since a short reply only means something beside what was asked.
+  const recentTurns = conversationHistory
     .slice()
     .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-    .map((entry) => entry.question);
+    .map((entry) => ({ question: entry.question, answer: entry.answer }));
+  const recentQuestions = recentTurns.map((turn) => turn.question);
   // Routing vocabulary is admin-editable, so refresh it before matching. Never
   // throws; a stale or default vocabulary still routes.
   if (!evaluation) await loadRoutingVocabulary();
@@ -210,7 +213,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     question,
     questionNeeds,
     tier,
-    recentQuestions,
+    recentTurns,
     onProgress
   });
   let contextGatherMs = Date.now() - contextGatherStartedAt;
@@ -375,7 +378,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         try {
           onProgress?.('Loading more of your financial data');
           const escalationStartedAt = Date.now();
-          snapshot = await gatherContextSnapshot({ userId, question, questionNeeds: escalatedNeeds, tier, recentQuestions, onProgress });
+          snapshot = await gatherContextSnapshot({ userId, question, questionNeeds: escalatedNeeds, tier, recentTurns, onProgress });
           contextGatherMs += Date.now() - escalationStartedAt;
           promptInput = buildPromptInput(snapshot, escalatedNeeds);
           factPack = promptInput.canonicalFacts!;

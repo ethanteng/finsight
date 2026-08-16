@@ -16,7 +16,7 @@ import { getPrismaClient } from '../prisma-client';
 
 export type ModelProvider = 'anthropic' | 'openai' | 'google';
 
-export type ModelSlotId = 'analysis' | 'fallback' | 'validation' | 'profile';
+export type ModelSlotId = 'analysis' | 'fallback' | 'validation' | 'profile' | 'retirementInputs';
 
 export interface ModelSlotMeta {
   id: ModelSlotId;
@@ -93,6 +93,14 @@ export const MODEL_SLOTS: ModelSlotMeta[] = [
     provider: 'openai',
     description:
       'Reads each answered question and updates the stored financial profile with anything new it reveals.',
+    shippedDefault: 'gpt-4o',
+  },
+  {
+    id: 'retirementInputs',
+    label: 'Retirement inputs',
+    provider: 'openai',
+    description:
+      'Reads a decision\'s turns for the age and spending figures a retirement projection needs. Proposes inputs only — the projection itself stays deterministic. Must support JSON schema structured output.',
     shippedDefault: 'gpt-4o',
   },
 ];
