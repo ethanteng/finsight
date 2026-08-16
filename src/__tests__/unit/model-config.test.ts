@@ -32,7 +32,7 @@ describe('model config', () => {
 
   describe('resolution order', () => {
     it('falls back to the shipped default with no override and no env var', () => {
-      expect(getActiveModel('analysis')).toBe('claude-sonnet-4-5');
+      expect(getActiveModel('analysis')).toBe('claude-sonnet-5');
       expect(getActiveModel('profile')).toBe('gpt-4o');
     });
 
@@ -109,7 +109,7 @@ describe('model config', () => {
       findUnique.mockRejectedValue(new Error('database down'));
 
       await expect(loadModelConfig(true)).resolves.toEqual({});
-      expect(getActiveModel('analysis')).toBe('claude-sonnet-4-5');
+      expect(getActiveModel('analysis')).toBe('claude-sonnet-5');
     });
 
     it('treats a null models column as no overrides', async () => {

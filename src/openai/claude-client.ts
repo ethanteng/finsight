@@ -5,6 +5,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import * as Sentry from '@sentry/node';
 import { buildFinancialReasoningPrompt, FinancialReasoningPromptInput } from './financial-reasoning-prompt';
 import { getActiveModel } from './model-config';
 
@@ -26,9 +27,38 @@ export interface AskClaudeOptions {
   maxTokens?: number;
 }
 
+const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
+
 function configuredMaxTokens(): number {
-  const value = Number.parseInt(process.env.ASK_LINC_MAX_OUTPUT_TOKENS || '8192', 10);
-  return Number.isFinite(value) && value > 0 ? value : 8192;
+  const value = Number.parseInt(
+    process.env.ASK_LINC_MAX_OUTPUT_TOKENS || String(DEFAULT_MAX_OUTPUT_TOKENS),
+    10
+  );
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_MAX_OUTPUT_TOKENS;
+}
+
+/**
+ * Thinking is stated rather than left to the model default, because the default
+ * moved underneath us: omitting it meant "no thinking" on Sonnet 4.5 and means
+ * adaptive thinking on Sonnet 5. Since `max_tokens` bounds thinking and answer
+ * together, that silently shortened the answer budget the day the analysis slot
+ * changed. Medium effort pulls the spend back below the `high` default while
+ * keeping the reasoning that grounds a numbers-heavy answer.
+ */
+const THINKING_CONFIG = { type: 'adaptive' } as const;
+const EFFORT_CONFIG = { effort: 'medium' } as const;
+
+/**
+ * A response that stopped on `max_tokens` is a partial answer that still parses
+ * far enough to look like a whole one, so nothing downstream notices. Report it
+ * — the fix is a bigger budget or less thinking, and neither is discoverable
+ * from the truncated text alone.
+ */
+function reportIfTruncated(stopReason: string | null | undefined, model: string): void {
+  if (stopReason !== 'max_tokens') return;
+  const message = `Ask Linc: Claude response truncated at max_tokens (model=${model}). Raise ASK_LINC_MAX_OUTPUT_TOKENS or lower thinking effort.`;
+  console.warn(message);
+  Sentry.captureMessage(message, 'warning');
 }
 
 /**
@@ -48,11 +78,15 @@ export async function askClaude(
   const response = await client.messages.create({
     model,
     max_tokens: maxTokens,
+    thinking: THINKING_CONFIG,
+    output_config: EFFORT_CONFIG,
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }]
   });
 
-  const textBlock = response.content.find((block): block is { type: 'text'; text: string } => block.type === 'text');
+  reportIfTruncated(response.stop_reason, model);
+
+  const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === 'text');
   return textBlock?.text ?? '';
 }
 
@@ -74,6 +108,8 @@ export async function askClaudeStream(
   const stream = client.messages.stream({
     model,
     max_tokens: maxTokens,
+    thinking: THINKING_CONFIG,
+    output_config: EFFORT_CONFIG,
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }]
   });
@@ -87,7 +123,9 @@ export async function askClaudeStream(
   });
 
   const finalMessage = await stream.finalMessage();
-  const textBlock = finalMessage.content.find((block): block is { type: 'text'; text: string } => block.type === 'text');
+  reportIfTruncated(finalMessage.stop_reason, model);
+
+  const textBlock = finalMessage.content.find((block): block is Anthropic.TextBlock => block.type === 'text');
   return textBlock?.text ?? '';
 }
 
