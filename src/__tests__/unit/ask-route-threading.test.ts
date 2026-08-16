@@ -71,7 +71,12 @@ describe('Ask route conversation threading', () => {
       .send({ question: 'Re-run my retirement analysis.', threadId: 'thread-a' });
 
     expect(conversation.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { userId: 'user-1', threadId: 'thread-a' } })
+      expect.objectContaining({
+        where: {
+          userId: 'user-1',
+          OR: [{ threadId: 'thread-a' }, { id: 'thread-a', threadId: null }],
+        },
+      })
     );
   });
 
@@ -94,8 +99,11 @@ describe('Ask route conversation threading', () => {
       .send({ question: 'Can I retire at 65?', threadId: 'thread-b' });
 
     const where = conversation.findMany.mock.calls[0][0].where;
-    expect(where).toEqual({ userId: 'user-1', threadId: 'thread-b' });
-    expect(where.threadId).not.toBe('thread-a');
+    expect(where).toEqual({
+      userId: 'user-1',
+      OR: [{ threadId: 'thread-b' }, { id: 'thread-b', threadId: null }],
+    });
+    expect(JSON.stringify(where)).not.toContain('thread-a');
   });
 
   it('keeps the whole-history window for a client that predates threads', async () => {
@@ -132,14 +140,32 @@ describe('Ask route conversation threading', () => {
     expect(stored).toHaveLength(64);
   });
 
-  it('adopts a legacy row when the client resumes it by id', async () => {
+  it('sees a turn that carries no thread of its own when resuming it by id', async () => {
+    // A turn written by a pre-thread client after the migration ran has a null
+    // threadId. The sidebar resumes it under its own id, so the follow-up has to
+    // find it — otherwise the answer the user just clicked on is out of scope.
     await request(createApp())
       .post('/ask/display-real')
       .send({ question: 'Follow up on that.', threadId: 'legacy-turn-1' });
 
-    expect(conversation.updateMany).toHaveBeenCalledWith({
-      where: { userId: 'user-1', id: 'legacy-turn-1', threadId: null },
-      data: { threadId: 'legacy-turn-1' },
-    });
+    expect(conversation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId: 'user-1',
+          OR: [{ threadId: 'legacy-turn-1' }, { id: 'legacy-turn-1', threadId: null }],
+        },
+      })
+    );
+  });
+
+  it('reads history without writing to it', async () => {
+    // Resuming is a read. Normalising rows on the way past would put a write on
+    // every question forever to serve a population that stops growing once the
+    // new client ships.
+    await request(createApp())
+      .post('/ask/display-real')
+      .send({ question: 'Follow up on that.', threadId: 'legacy-turn-1' });
+
+    expect(conversation.updateMany).not.toHaveBeenCalled();
   });
 });

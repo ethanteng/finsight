@@ -215,7 +215,7 @@ export default function AppPageClient() {
             <Link href="/finances" className="inline-flex items-center gap-2 text-sm font-semibold text-[#102319] hover:underline">Review connected data <ChevronRight size={16} /></Link>
           </div>
           <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <FinanceQA onNewAnswer={loadConversationHistory} selectedPrompt={selectedPrompt} onNewQuestion={() => setSelectedPrompt(null)} newDecisionNonce={newDecisionNonce} />
+            <FinanceQA onNewAnswer={loadConversationHistory} selectedPrompt={selectedPrompt} newDecisionNonce={newDecisionNonce} />
             <aside className="space-y-5 xl:sticky xl:top-8" aria-label="Financial context">
               <FinancialOverview tier={subscriptionStatus?.tier} />
               <div className="rounded-2xl border border-[#102319]/10 bg-white/60 p-5"><div className="mb-2 flex items-center gap-2 text-[#102319]"><Landmark size={18} /><h2 className="font-semibold">Data confidence</h2></div><p className="text-sm leading-6 text-[#48675e]">Answers use your connected financial data and available market context. Review accounts when balances are missing or stale.</p><button onClick={() => router.push('/profile')} className="mt-4 text-sm font-semibold text-[#397052] hover:underline">Inspect connected accounts</button></div>

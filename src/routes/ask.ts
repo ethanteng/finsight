@@ -50,14 +50,6 @@ router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req,
         id: string; question: string; answer: string; createdAt: Date;
       }> = [];
       try {
-        // A legacy row may still have threadId null while the client resumes it
-        // using the row id as the thread key. Adopt it once so follow-ups see it.
-        if (requestedThreadId) {
-          await getPrismaClient().conversation.updateMany({
-            where: { userId: user.id, id: requestedThreadId, threadId: null },
-            data: { threadId: requestedThreadId },
-          });
-        }
         conversationHistory = await getPrismaClient().conversation.findMany({
           // A declared thread answers "which turns belong to this question?"
           // exactly. A new decision still sends one — the client mints it — so
@@ -65,7 +57,18 @@ router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req,
           // fresh line of questioning. Only a client that predates threads sends
           // none, and it keeps the old whole-history window so that a backend
           // deploy landing before a frontend deploy changes nothing for it.
-          where: requestedThreadId ? { userId: user.id, threadId: requestedThreadId } : { userId: user.id },
+          //
+          // A turn written with no thread of its own is resumed under its own id,
+          // which is how the sidebar groups it, so match that row too. Reading it
+          // beats back-filling it on the way past: the rows that need this only
+          // exist between the backend and frontend deploys, and a write on every
+          // question is a permanent cost for a temporary population.
+          where: requestedThreadId
+            ? {
+                userId: user.id,
+                OR: [{ threadId: requestedThreadId }, { id: requestedThreadId, threadId: null }],
+              }
+            : { userId: user.id },
           orderBy: { createdAt: 'desc' },
           take: 10,
           select: { id: true, question: true, answer: true, createdAt: true },

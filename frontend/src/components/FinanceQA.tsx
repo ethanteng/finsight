@@ -19,7 +19,6 @@ interface PromptHistory {
 interface FinanceQAProps {
   onNewAnswer?: (question: string, answer: string) => void;
   selectedPrompt?: PromptHistory | null;
-  onNewQuestion?: () => void;
   /** Bumped every time "New decision" is clicked, including when nothing is selected. */
   newDecisionNonce?: number;
 }
@@ -45,7 +44,7 @@ const PLACEHOLDER_QUESTIONS = [
   "Given everything going on right now, am I actually doing okay?"
 ];
 
-export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: _onNewQuestion, newDecisionNonce = 0 }: FinanceQAProps) {
+export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonce = 0 }: FinanceQAProps) {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
   const [loading, setLoading] = useState(false);
