@@ -33,20 +33,22 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
   // Set just under measured coverage so this gate can actually catch a regression.
-  // Measured on main at the time of writing (89 suites / 855 tests, PostgreSQL 16):
-  //   statements 48.77 · branches 38.24 · functions 57.93 · lines 48.38
-  // The ~2-3 point gap absorbs normal drift without letting a real drop through.
-  // The previous values (10/21/20/20) sat at roughly half of actual coverage, so
+  // Measured on main at the time of writing (94 suites / 1039 tests, PostgreSQL 16):
+  //   statements 52.32 · branches 42.09 · functions 61.84 · lines 51.92
+  // The ~2 point gap absorbs normal drift without letting a real drop through.
+  // The original values (10/21/20/20) sat at roughly half of actual coverage, so
   // more than half the suite could have been deleted with CI still green.
   //
-  // Raise these as coverage improves — notably src/plaid.ts (2,003 lines, 0%) and
-  // src/openai/context-service.ts (1,037 lines, ~2%), the two largest gaps.
+  // Ratchet these up as coverage improves. What is left in the two big files is
+  // the I/O-shaped half: src/plaid.ts route handlers (369-1996) and
+  // context-service's gatherContextSnapshot orchestrator (57-662). Both need
+  // supertest and a database, so they belong in the integration suite.
   coverageThreshold: {
     global: {
-      branches: 35,
-      functions: 55,
-      lines: 46,
-      statements: 46
+      branches: 40,
+      functions: 60,
+      lines: 50,
+      statements: 50
     }
   }
 };
