@@ -144,6 +144,22 @@ describe('ModelConfigPanel', () => {
     expect(await screen.findByText(/Saved\./)).toBeInTheDocument();
   });
 
+  it('omits generationSettings from save when the GET response did not include them', async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch();
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    render(<ModelConfigPanel apiUrl="http://api.test" getAuthHeaders={() => ({})} />);
+
+    await screen.findByLabelText(/Primary analysis/);
+    await user.click(screen.getByRole('button', { name: /Save models/ }));
+
+    await waitFor(() => {
+      const put = fetchMock.mock.calls.find(([, init]) => (init as RequestInit)?.method === 'PUT');
+      expect(JSON.parse((put?.[1] as RequestInit).body as string).generationSettings).toBeUndefined();
+    });
+  });
+
   it('offers "use anyway" only when the server rejected the model as unlisted', async () => {
     const user = userEvent.setup();
     global.fetch = jest.fn(async (url: string, init?: RequestInit) => {

@@ -31,10 +31,35 @@ interface SlotInfo {
   verification: { status: 'served' | 'not_served' | 'unverified'; reason?: string };
 }
 
+interface GenerationSettingInfo {
+  id: string;
+  label: string;
+  description: string;
+  kind: 'enum' | 'integer' | 'decimal';
+  options?: string[];
+  min?: number;
+  max?: number;
+  omittable: boolean;
+  envVar?: string;
+  shippedDefault: string;
+  defaultValue: string;
+  value: string;
+  isOverridden: boolean;
+}
+
+interface SlotGenerationSettings {
+  slotId: string;
+  settings: GenerationSettingInfo[];
+}
+
 interface ModelConfigResponse {
   slots: SlotInfo[];
   providers: ProviderInfo[];
+  generationSettings?: SlotGenerationSettings[];
 }
+
+/** The value that leaves a parameter out of the request entirely. */
+const OMIT_SETTING = 'off';
 
 /** Sentinel for "no override" — distinct from any real model id. */
 const USE_DEFAULT = '';
@@ -73,6 +98,8 @@ export default function ModelConfigPanel({
 }) {
   const [data, setData] = useState<ModelConfigResponse | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
+  /** slot id -> setting id -> value, mirroring what the save endpoint takes. */
+  const [settingsDraft, setSettingsDraft] = useState<Record<string, Record<string, string>>>({});
   const [status, setStatus] = useState<{ kind: 'error' | 'ok'; message: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -93,6 +120,19 @@ export default function ModelConfigPanel({
       setDraft(
         Object.fromEntries(body.slots.map((slot) => [slot.id, slot.isOverridden ? slot.model : USE_DEFAULT]))
       );
+      setSettingsDraft(
+        Object.fromEntries(
+          (body.generationSettings ?? []).map((entry) => [
+            entry.slotId,
+            Object.fromEntries(
+              entry.settings.map((setting) => [
+                setting.id,
+                setting.isOverridden ? setting.value : USE_DEFAULT,
+              ])
+            ),
+          ])
+        )
+      );
     } catch {
       setStatus({ kind: 'error', message: 'Failed to load model configuration' });
     }
@@ -110,21 +150,45 @@ export default function ModelConfigPanel({
     }
   };
 
+  /** Full slot -> setting -> value payload, or undefined when the GET did not expose settings. */
+  const generationSettingsPayload = (): Record<string, Record<string, string>> | undefined => {
+    if (data?.generationSettings === undefined) return undefined;
+    return Object.fromEntries(
+      data.generationSettings.map((entry) => [
+        entry.slotId,
+        Object.fromEntries(
+          entry.settings.map((setting) => [
+            setting.id,
+            settingsDraft[entry.slotId]?.[setting.id] ?? USE_DEFAULT,
+          ])
+        ),
+      ])
+    );
+  };
+
   const save = async (allowUnlisted = false) => {
     setSaving(true);
     setStatus(null);
     try {
+      const generationSettings = generationSettingsPayload();
       const response = await fetch(`${apiUrl}/admin/ai/models`, {
         method: 'PUT',
         headers: authHeadersRef.current(),
-        body: JSON.stringify({ models: draft, allowUnlisted }),
+        body: JSON.stringify({
+          models: draft,
+          ...(generationSettings !== undefined ? { generationSettings } : {}),
+          allowUnlisted,
+        }),
       });
       const body = await response.json();
       if (!response.ok) {
         setStatus({ kind: 'error', message: body.error || 'Failed to save' });
         return;
       }
-      setStatus({ kind: 'ok', message: 'Saved. New questions use these models within a minute.' });
+      setStatus({
+        kind: 'ok',
+        message: 'Saved. New questions use these models and parameters within a minute.',
+      });
       await load();
     } catch {
       setStatus({ kind: 'error', message: 'Failed to save model configuration' });
@@ -134,6 +198,94 @@ export default function ModelConfigPanel({
   };
 
   const providerFor = (id: string) => data?.providers.find((provider) => provider.id === id);
+  const settingsFor = (slotId: string) =>
+    data?.generationSettings?.find((entry) => entry.slotId === slotId)?.settings ?? [];
+
+  const setSetting = (slotId: string, settingId: string, value: string) =>
+    setSettingsDraft((current) => ({
+      ...current,
+      [slotId]: { ...(current[slotId] ?? {}), [settingId]: value },
+    }));
+
+  /**
+   * How a setting reads when no override is set. Spelling out `off` as "not
+   * sent" matters more than the raw value: it is the difference between the
+   * provider choosing and us choosing, and it is what an admin needs to reach
+   * for when a model rejects a parameter.
+   */
+  const describeDefault = (setting: GenerationSettingInfo) =>
+    setting.defaultValue === OMIT_SETTING
+      ? 'Use default (not sent)'
+      : `Use default (${setting.defaultValue})`;
+
+  const renderSetting = (slotId: string, setting: GenerationSettingInfo) => {
+    const value = settingsDraft[slotId]?.[setting.id] ?? USE_DEFAULT;
+    const controlId = `setting-${slotId}-${setting.id}`;
+    const omitted = value === OMIT_SETTING;
+
+    return (
+      <div key={setting.id} className="min-w-0">
+        <label className="block text-xs font-medium text-gray-300" htmlFor={controlId}>
+          {setting.label}
+        </label>
+
+        {setting.kind === 'enum' ? (
+          <select
+            id={controlId}
+            value={value}
+            onChange={(event) => setSetting(slotId, setting.id, event.target.value)}
+            className="mt-1 w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-xs text-white font-mono"
+          >
+            <option value={USE_DEFAULT}>{describeDefault(setting)}</option>
+            {(setting.options ?? []).map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        ) : (
+          <input
+            id={controlId}
+            type="number"
+            inputMode="decimal"
+            step={setting.kind === 'integer' ? 1 : 0.1}
+            min={setting.min}
+            max={setting.max}
+            value={omitted ? '' : value}
+            disabled={omitted}
+            placeholder={omitted ? 'not sent' : describeDefault(setting)}
+            onChange={(event) => setSetting(slotId, setting.id, event.target.value)}
+            className="mt-1 w-full bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-xs text-white font-mono disabled:opacity-40"
+          />
+        )}
+
+        {setting.omittable && (
+          <label className="mt-1 flex items-center gap-1.5 text-[11px] text-gray-400">
+            <input
+              type="checkbox"
+              checked={omitted}
+              onChange={(event) =>
+                setSetting(slotId, setting.id, event.target.checked ? OMIT_SETTING : USE_DEFAULT)
+              }
+              className="accent-green-600"
+            />
+            Do not send this parameter
+          </label>
+        )}
+
+        <p className="text-[11px] text-gray-500 mt-1">{setting.description}</p>
+        <p className="text-[11px] text-gray-500">
+          Sending{' '}
+          <code className="text-gray-300">
+            {setting.value === OMIT_SETTING ? 'nothing' : setting.value}
+          </code>
+          {setting.isOverridden
+            ? ' (set here)'
+            : setting.envVar
+              ? ` (from ${setting.envVar} or shipped default)`
+              : ' (shipped default)'}
+        </p>
+      </div>
+    );
+  };
 
   return (
     <div className="bg-gray-800 rounded-lg p-6 mb-6">
@@ -152,6 +304,12 @@ export default function ModelConfigPanel({
         it only offers models your API key can actually call — there is nothing to type and no id to
         get wrong. Choosing <span className="text-gray-200">Use default</span> hands the slot back to
         its environment variable, or to the value the app ships with.
+      </p>
+      <p className="text-sm text-gray-400 mb-4">
+        Each step also carries the generation parameters its provider accepts. Where a parameter can
+        be left out, <span className="text-gray-200">Do not send this parameter</span> hands the
+        decision back to the provider — which is the way out if a model rejects one, as several
+        newer OpenAI models do with <code className="text-gray-300">temperature</code>.
       </p>
 
       {status && (
@@ -239,6 +397,14 @@ export default function ModelConfigPanel({
                   <span className="text-yellow-400"> — could not be verified</span>
                 )}
               </p>
+
+              {settingsFor(slot.id).length > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-700">
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {settingsFor(slot.id).map((setting) => renderSetting(slot.id, setting))}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}

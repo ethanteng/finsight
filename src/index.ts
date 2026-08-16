@@ -2509,7 +2509,7 @@ function modelConfigErrorMessage(error: unknown, fallback: string): string {
     message.includes('ai_prompt_config') ||
     message.includes('does not exist');
   return missingSchema
-    ? 'Database migration missing (ai_prompt_config.models column). Run prisma migrate deploy on production, then retry.'
+    ? 'Database migration missing (ai_prompt_config schema). Run prisma migrate deploy on production, then retry.'
     : fallback;
 }
 
@@ -2517,7 +2517,7 @@ function modelConfigErrorMessage(error: unknown, fallback: string): string {
 // provider actually serves right now.
 app.get('/admin/ai/models', adminAuth, async (req: Request, res: Response) => {
   try {
-    const { getActiveModelConfig, loadModelConfig, MODEL_PROVIDERS } =
+    const { getActiveGenerationSettings, getActiveModelConfig, loadModelConfig, MODEL_PROVIDERS } =
       await import('./openai/model-config');
     const { getAllProviderCatalogs, verifyAgainstCatalog } = await import('./openai/model-catalog');
 
@@ -2531,6 +2531,7 @@ app.get('/admin/ai/models', adminAuth, async (req: Request, res: Response) => {
         ...slot,
         verification: verifyAgainstCatalog(catalogByProvider.get(slot.provider)!, slot.model),
       })),
+      generationSettings: getActiveGenerationSettings(),
       providers: Object.values(MODEL_PROVIDERS).map(provider => ({
         ...provider,
         ...catalogByProvider.get(provider.id)!,
@@ -2546,13 +2547,32 @@ app.get('/admin/ai/models', adminAuth, async (req: Request, res: Response) => {
 // Admin: Update the model used in each pipeline slot
 app.put('/admin/ai/models', adminAuth, async (req: Request, res: Response) => {
   try {
-    const { models, allowUnlisted } = req.body;
+    const { models, generationSettings, allowUnlisted } = req.body;
     if (!models || typeof models !== 'object' || Array.isArray(models)) {
       return res.status(400).json({ error: 'models must be an object of slot -> model id' });
     }
+    // Optional so a client that predates generation settings keeps working; an
+    // omitted key leaves the stored settings alone rather than clearing them.
+    if (
+      generationSettings !== undefined &&
+      (!generationSettings || typeof generationSettings !== 'object' || Array.isArray(generationSettings))
+    ) {
+      return res
+        .status(400)
+        .json({ error: 'generationSettings must be an object of setting -> value' });
+    }
 
-    const { MODEL_SLOTS, isModelSlotId, isPlausibleModelId, setActiveModelOverrides, slotDefault } =
-      await import('./openai/model-config');
+    const {
+      MODEL_SLOTS,
+      generationSettingsForSlot,
+      isGenerationSettingId,
+      isModelSlotId,
+      isPlausibleModelId,
+      isValidGenerationSettingValue,
+      setActiveGenerationSettings,
+      setActiveModelOverrides,
+      slotDefault,
+    } = await import('./openai/model-config');
     const { AI_PROMPT_CONFIG_ID, DEFAULT_RESPONSE_TONE } = await import('./openai/prompt-config');
     const { getProviderCatalog, verifyAgainstCatalog } = await import('./openai/model-catalog');
     const { getPrismaClient } = await import('./prisma-client');
@@ -2593,15 +2613,68 @@ app.put('/admin/ai/models', adminAuth, async (req: Request, res: Response) => {
       cleaned[slot.id] = trimmed;
     }
 
+    // slot -> setting -> value, matching how the panel groups them.
+    const submittedSettings = (generationSettings ?? {}) as Record<string, unknown>;
+    for (const key of Object.keys(submittedSettings)) {
+      if (!isModelSlotId(key)) {
+        return res.status(400).json({ error: `Unknown model slot in generationSettings: ${key}` });
+      }
+    }
+
+    const cleanedSettings: Record<string, Record<string, string>> = {};
+    for (const slot of MODEL_SLOTS) {
+      const submittedForSlot = submittedSettings[slot.id];
+      if (submittedForSlot === undefined) continue;
+      if (!submittedForSlot || typeof submittedForSlot !== 'object' || Array.isArray(submittedForSlot)) {
+        return res.status(400).json({ error: `generationSettings.${slot.id} must be an object` });
+      }
+      const perSlotSubmitted = submittedForSlot as Record<string, unknown>;
+      for (const key of Object.keys(perSlotSubmitted)) {
+        if (!isGenerationSettingId(key)) {
+          return res.status(400).json({ error: `Unknown generation setting: ${slot.id}.${key}` });
+        }
+      }
+
+      const perSlot: Record<string, string> = {};
+      for (const setting of generationSettingsForSlot(slot.id)) {
+        const value = perSlotSubmitted[setting.id];
+        if (value === undefined) continue;
+        if (typeof value !== 'string') {
+          return res.status(400).json({ error: `${slot.id}.${setting.id} must be a string` });
+        }
+        const trimmed = value.trim();
+        // Empty clears the override, exactly as it does for a model slot.
+        if (trimmed.length === 0) continue;
+        if (!isValidGenerationSettingValue(setting, trimmed)) {
+          const allowed =
+            setting.kind === 'enum'
+              ? `one of ${(setting.options ?? []).join(', ')}`
+              : `${setting.kind === 'integer' ? 'a whole number' : 'a number'} between ${setting.min} and ${setting.max}`;
+          return res.status(400).json({
+            error: `${slot.label} — ${setting.label}: "${trimmed}" is not valid. Expected ${allowed}${setting.omittable ? ', or off to leave the parameter out of the request' : ''}.`,
+            slot: slot.id,
+            setting: setting.id,
+          });
+        }
+        perSlot[setting.id] = trimmed;
+      }
+      if (Object.keys(perSlot).length > 0) cleanedSettings[slot.id] = perSlot;
+    }
+
     const adminUser = req.user?.email || 'admin';
     const prisma = getPrismaClient();
     const saved = await prisma.aiPromptConfig.upsert({
       where: { id: AI_PROMPT_CONFIG_ID },
-      update: { models: cleaned, lastEditedBy: adminUser },
+      update: {
+        models: cleaned,
+        lastEditedBy: adminUser,
+        ...(generationSettings === undefined ? {} : { generationSettings: cleanedSettings }),
+      },
       create: {
         id: AI_PROMPT_CONFIG_ID,
         responseTone: DEFAULT_RESPONSE_TONE,
         models: cleaned,
+        generationSettings: cleanedSettings,
         lastEditedBy: adminUser,
       },
     });
@@ -2609,10 +2682,12 @@ app.put('/admin/ai/models', adminAuth, async (req: Request, res: Response) => {
     // Replace rather than merge: the panel always submits every slot, and a
     // cleared field has to be able to remove an override.
     const active = setActiveModelOverrides(cleaned);
+    if (generationSettings !== undefined) setActiveGenerationSettings(cleanedSettings);
     res.json({
       models: Object.fromEntries(
         MODEL_SLOTS.map(slot => [slot.id, active[slot.id] ?? slotDefault(slot)])
       ),
+      ...(generationSettings === undefined ? {} : { generationSettings: cleanedSettings }),
       updatedAt: saved.updatedAt,
     });
   } catch (error) {

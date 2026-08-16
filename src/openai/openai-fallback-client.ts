@@ -1,8 +1,8 @@
 import OpenAI from 'openai';
 import * as Sentry from '@sentry/node';
-import { resolveAskLincMaxOutputTokens } from './claude-client';
 import { ASK_LINC_RESPONSE_JSON_SCHEMA } from './structured-response';
 import { getActiveModel } from './model-config';
+import { openAIGenerationParams } from './openai-generation-params';
 
 let client: OpenAI | null = null;
 
@@ -21,11 +21,9 @@ export async function askOpenAIWithPreparedPrompt(
   userMessage: string
 ): Promise<string> {
   const model = getActiveModel('fallback');
-  const maxTokens = resolveAskLincMaxOutputTokens();
   const response = await getClient().chat.completions.create({
     model,
-    temperature: 0.2,
-    max_tokens: maxTokens,
+    ...openAIGenerationParams('fallback'),
     response_format: {
       type: 'json_schema',
       json_schema: {

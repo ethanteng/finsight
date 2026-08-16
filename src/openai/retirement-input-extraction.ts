@@ -22,6 +22,7 @@
 import OpenAI from 'openai';
 import * as Sentry from '@sentry/node';
 import { getActiveModel } from './model-config';
+import { openAIGenerationParams } from './openai-generation-params';
 
 export interface RetirementInputTurn {
   question: string;
@@ -178,8 +179,10 @@ export async function extractRetirementInputs(
     const response = await getClient().chat.completions.create({
       model: getActiveModel('retirementInputs'),
       // The inputs to a financial projection should not vary between identical
-      // conversations; the analysis is also cached by exact parameters.
-      temperature: 0,
+      // conversations; the analysis is also cached by exact parameters. That is
+      // why this slot's temperature ships at 0 — see SLOT_GENERATION_SETTINGS,
+      // which carries the reasoning to anyone about to change it in the panel.
+      ...openAIGenerationParams('retirementInputs'),
       response_format: {
         type: 'json_schema',
         json_schema: { name: 'retirement_inputs', strict: true, schema: EXTRACTION_SCHEMA },

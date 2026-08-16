@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import * as Sentry from '@sentry/node';
 import { getActiveModel } from '../openai/model-config';
+import { openAIGenerationParams } from '../openai/openai-generation-params';
 
 // Create a separate OpenAI client for profile extraction to avoid circular dependencies
 const openaiClient = new OpenAI({
@@ -69,7 +70,7 @@ export class ProfileExtractor {
       const response = await openaiClient.chat.completions.create({
         model: getActiveModel('profile'),
         messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1
+        ...openAIGenerationParams('profile')
       });
       
       const extractedProfile = response.choices[0].message.content || existingProfile || '';
