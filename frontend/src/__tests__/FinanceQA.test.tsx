@@ -92,4 +92,47 @@ describe('FinanceQA decision workspace', () => {
 
     expect(screen.getByRole('textbox')).toHaveValue('');
   });
+
+  it('ignores a late answer after new decision during analysis', async () => {
+    let resolveAsk: (value: Response) => void;
+    const askPromise = new Promise<Response>(resolve => {
+      resolveAsk = resolve;
+    });
+
+    (global.fetch as jest.Mock).mockImplementation((url: string) => {
+      if (url.includes('/test/current-tier')) {
+        return Promise.resolve({ ok: true, json: async () => ({ backendTier: 'premium' }) });
+      }
+      if (url.includes('/ask/display-real')) {
+        return askPromise;
+      }
+      return Promise.resolve({ ok: false, status: 404, headers: new Headers(), json: async () => ({}) });
+    });
+
+    const onNewAnswer = jest.fn();
+    const { rerender } = render(<FinanceQA onNewAnswer={onNewAnswer} newDecisionNonce={1} />);
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Can I retire at 62?' } });
+    fireEvent.submit(document.getElementById('finance-qa-form')!);
+
+    expect(await screen.findByRole('button', { name: /Analyzing/i })).toBeInTheDocument();
+
+    rerender(<FinanceQA onNewAnswer={onNewAnswer} newDecisionNonce={2} />);
+
+    resolveAsk!({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({
+        answer: 'Stale answer from the abandoned decision.',
+        threadId: 'thread-a',
+        conversationId: 'conversation-1',
+      }),
+    } as Response);
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    expect(screen.queryByText('Stale answer from the abandoned decision.')).not.toBeInTheDocument();
+    expect(onNewAnswer).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /Analyze decision/i })).toBeInTheDocument();
+  });
 });

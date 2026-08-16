@@ -57,6 +57,9 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
   // is what tells the server which turns count as context, so it never has to
   // guess from the wording whether "$125K" belongs to this question.
   const [threadId, setThreadId] = useState<string | null>(null);
+  // Bumped when a decision is abandoned so a late answer cannot resurrect its
+  // thread after "New decision" lands during analysis.
+  const askEpochRef = useRef(0);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
   const [streamingAnswer, setStreamingAnswer] = useState('');
   const [structuredResponse, setStructuredResponse] = useState<{
@@ -110,6 +113,9 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
    * inheriting the last one's assumptions.
    */
   const startNewDecision = useCallback(() => {
+    askEpochRef.current += 1;
+    setLoading(false);
+    setProgressMessage(null);
     setQuestion('');
     setAnswer('');
     setStreamingAnswer('');
@@ -166,6 +172,8 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
   const askQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     const questionToAsk = question.trim() || PLACEHOLDER_QUESTIONS[placeholderIndex];
+    const epoch = ++askEpochRef.current;
+    const isStale = () => epoch !== askEpochRef.current;
 
     setLoading(true);
     setProgressMessage(null);
@@ -238,7 +246,9 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
           } else if (line === '' && currentEvent && currentData) {
             try {
               const data = JSON.parse(currentData);
-              if (currentEvent === 'progress' && data.message) {
+              if (isStale()) {
+                // A newer decision started while this stream was in flight.
+              } else if (currentEvent === 'progress' && data.message) {
                 setProgressMessage(data.message);
               } else if (currentEvent === 'answerDelta' && typeof data.delta === 'string') {
                 setStreamingAnswer((prev) => prev + data.delta);
@@ -287,6 +297,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
         // JSON response from a non-streaming backend configuration.
         const data = await res.json();
 
+        if (isStale()) return;
         if (!res.ok && data.error) {
           setError(data.error);
           return;
@@ -308,17 +319,21 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
         }
       }
     } catch (error) {
-      setError('Error contacting backend.');
-      console.error('Error:', error);
+      if (!isStale()) {
+        setError('Error contacting backend.');
+        console.error('Error:', error);
 
-      // Track error
-      trackEvent('question_error', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        user_tier: userTier
-      });
+        // Track error
+        trackEvent('question_error', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          user_tier: userTier
+        });
+      }
     } finally {
-      setLoading(false);
-      setProgressMessage(null);
+      if (!isStale()) {
+        setLoading(false);
+        setProgressMessage(null);
+      }
     }
   };
 
