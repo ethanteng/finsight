@@ -63,11 +63,16 @@ describe('Real Plaid Security Tests', () => {
     "test:real-security": "jest --config jest.real-security.config.js",
     "test:security:real": "npm run test:real-security",
     "test:security:all": "npm run test:security && npm run test:real-security",
-    "test:cicd:security": "./scripts/test-cicd-security.sh",
-    "test:complete-security": "jest --config jest.complete-security.config.js"
+    "test:cicd:security": "./scripts/test-cicd-security.sh"
   }
 }
 ```
+
+> Historical note: this list originally also carried
+> `"test:complete-security": "jest --config jest.complete-security.config.js"`.
+> No workflow job ever invoked that config, so the complete-security suite never
+> ran in CI despite being listed here as delivered. The config and its alias were
+> removed in the CI/CD pipeline audit; the suite now runs under `test:security`.
 
 ### **4. ✅ Test Real Security Implementation Locally - COMPLETED**
 **Status**: ✅ **COMPLETED - All tests passing locally**

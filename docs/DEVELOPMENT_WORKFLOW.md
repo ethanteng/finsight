@@ -92,9 +92,9 @@ A comprehensive CI/CD security system that prevents security vulnerabilities thr
 - **Safety**: Real security validation prevents production security issues
 
 #### **2. Comprehensive Security Test Suite** 🧪
-- **Real Plaid Security Tests**: 15/15 tests passing - Validates actual Plaid endpoint security
-- **Profile Encryption Security**: 9/9 tests passing - Validates encryption/decryption logic
-- **Complete Security Suite**: 33/33 tests passing - 100% security coverage
+- **Real Plaid Security Tests**: validates actual Plaid endpoint security
+- **Profile Encryption Security**: validates encryption/decryption logic
+- **Complete Security Suite**: cross-cutting auth, tier and isolation checks
 - **Cross-Service Security**: User isolation validated across all services
 
 #### **3. CI/CD Security Integration** 🔒
@@ -139,7 +139,7 @@ A comprehensive CI/CD security system that prevents security vulnerabilities thr
 - **Profile Encryption Security**: AES-256-GCM encryption with proper key management
 
 #### **CI/CD Security Gates** 🔒
-- **Security Tests Required**: All 33 security tests must pass before deployment
+- **Security Tests Required**: both security suites must pass before deployment
 - **Automated Validation**: Security testing integrated into deployment pipeline
 - **Production Safety**: Security validation required before every deployment
 - **Real Security Confidence**: No more false confidence from mocked tests
@@ -149,7 +149,7 @@ A comprehensive CI/CD security system that prevents security vulnerabilities thr
 #### **For Developers:**
 ```bash
 # 1. Test security locally before pushing
-npm run test:security:all          # All security tests (33/33)
+npm run test:security:all          # Both security suites
 npm run test:cicd:security         # CI/CD security simulation
 
 # 2. Push with confidence
@@ -157,7 +157,7 @@ git push origin main               # Security tests will pass in CI/CD
 
 # 3. CI/CD handles the rest
 # - Security tests run automatically
-# - All 33 tests must pass
+# - Both security suites must pass
 # - Deployment only happens after security validation
 ```
 
@@ -179,7 +179,7 @@ git push origin main               # Security tests will pass in CI/CD
 
 ### **Verification Checklist:**
 
-- [ ] **Real Security Tests**: 33/33 tests passing ✅
+- [ ] **Real Security Tests**: both suites green ✅
 - [ ] **No Mocked Security**: All tests validate actual implementation ✅
 - [ ] **User Data Isolation**: Users cannot access each other's data ✅
 - [ ] **Authentication Enforcement**: All endpoints require valid JWT ✅
@@ -557,8 +557,8 @@ git push origin feature/your-feature-name
 ### 4. Before Merging
 ```bash
 # 🚀 NEW: Test like CI/CD (MANDATORY)
-npm run test:like-cicd          # ← Tests integration + security like CI/CD
-npm run test:security:like-cicd # ← Dedicated security testing
+npm run test:like-cicd                 # ← Tests integration + security like CI/CD
+npm run test:security:like-cicd:script # ← Dedicated security testing
 
 # Traditional testing
 npm run test:all
@@ -662,15 +662,11 @@ npm run test:coverage:all
 npm run test:like-cicd
 
 # Test only security aspects like CI/CD
-npm run test:security:like-cicd
-
-# Test security with dedicated script
 npm run test:security:like-cicd:script
 
-# NEW: Comprehensive security testing
+# Comprehensive security testing
 npm run test:cicd:security          # CI/CD security simulation
-npm run test:security:all           # All security tests (33/33)
-npm run test:complete-security      # Complete security suite
+npm run test:security:all           # Both security suites
 ```
 
 #### **2. Individual Test Categories**
@@ -678,14 +674,16 @@ npm run test:complete-security      # Complete security suite
 # Integration tests with CI environment
 npm run test:integration:ci
 
-# Security tests with CI environment
-npm run test:security:ci
-
-# NEW: Dedicated security testing
-npm run test:real-security          # Real Plaid security tests (15/15)
-npm run test:profile-encryption     # Profile encryption security (9/9)
-npm run test:complete-security      # Complete security suite (33/33)
+# Security testing — these two are exactly what the security-tests job runs
+npm run test:real-security          # Unmocked Plaid client: plaid / privacy /
+                                    # profile-encryption / snaptrade security
+npm run test:security               # Comprehensive + complete security suites
 ```
+
+> The `test:profile-encryption`, `test:complete-security` and `test:security:ci`
+> aliases were removed. Each pointed at a jest config no workflow job invoked, so
+> the suites behind them never ran in CI. Their tests are now reachable from the
+> two commands above.
 
 ### **🔧 How It Works**
 
@@ -702,10 +700,9 @@ npm run test:complete-security      # Complete security suite (33/33)
 2. ✅ CI environment variables (should pass)
 3. ✅ Database fallback scenarios (should pass)
 4. ✅ Previously problematic tests (should pass)
-5. 🔒 Real Security Tests (15/15 passing) - CRITICAL for CI/CD
-6. 🔒 Profile Encryption Security (9/9 passing)
-7. 🔒 Complete Security Suite (33/33 passing)
-8. 🔒 Plaid Security Integration (8/8 passing)
+5. 🔒 Real security suites (`test:real-security`) - CRITICAL for CI/CD
+6. 🔒 Core security suites (`test:security`)
+7. 🔒 An unreachable database is fatal (the mock fallback must stay gone)
 ```
 
 ### **💡 Your New Development Workflow**
@@ -747,15 +744,14 @@ git push                   # ← Confident it will pass CI/CD
 - ✅ **Mock Database Issues**: Missing methods like `deleteMany`
 - ✅ **Integration Problems**: Endpoint authentication requirements
 - 🚨 **Security Failures**: Would have definitely failed in CI/CD
-- ✅ **Real Security Validation**: All 33 security tests passing locally
+- ✅ **Real Security Validation**: both security suites passing locally
 
 ### **📋 Pre-Push Checklist**
 
 ```bash
 # ✅ ALWAYS run before pushing:
 npm run test:cicd:security          # ← Tests CI/CD security integration
-npm run test:security:all           # ← All security tests (33/33)
-npm run test:complete-security      # ← Complete security suite
+npm run test:security:all           # ← Both security suites
 
 # ✅ Only push when ALL pass:
 git push  # ← Now confident it will pass CI/CD
@@ -800,7 +796,7 @@ git push  # ← Now confident it will pass CI/CD
 4. **Cost Reduction**: Fewer failed GitHub Actions runs
 5. **Better Code Quality**: Issues caught and fixed locally
 6. **Security Validation**: Critical security issues caught before deployment
-7. **Real Security Testing**: All 33 security tests validated locally
+7. **Real Security Testing**: both security suites validated locally
 
 ### **📚 Related Documentation**
 

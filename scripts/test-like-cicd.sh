@@ -74,7 +74,16 @@ run_test "Local Environment" "" "pass" || exit 1
 # Test 3: An unreachable database must FAIL in CI mode. This used to assert the
 # opposite — that the suite stayed green by falling back to an in-memory mock —
 # which is exactly the behaviour that made the security tests unable to fail.
-run_test "Unreachable database is fatal in CI" "DATABASE_URL=postgresql://invalid:invalid@localhost:9999/invalid CI=true" "fail" || exit 1
+#
+# Both URLs are overridden. test-database-ci.ts resolves TEST_DATABASE_URL before
+# DATABASE_URL, and ci-cd.yml sets TEST_DATABASE_URL in every test job — so for a
+# caller mirroring the CI environment (this script's whole purpose) overriding only
+# DATABASE_URL left the harness connected to the real database: measured, it logged
+# "Connected to real database" in all 9 running suites and 25 tests passed against
+# it. The run still exited non-zero, but only because unmanaged `new PrismaClient()`
+# call sites picked up the bogus DATABASE_URL — so the probe returned the right
+# verdict for the wrong reason and never exercised the guard it names.
+run_test "Unreachable database is fatal in CI" "DATABASE_URL=postgresql://invalid:invalid@localhost:9999/invalid TEST_DATABASE_URL=postgresql://invalid:invalid@localhost:9999/invalid CI=true" "fail" || exit 1
 
 # Test 4: Run specific problematic tests
 echo -e "\n${YELLOW}🎯 Running previously problematic tests...${NC}"

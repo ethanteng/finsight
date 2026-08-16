@@ -29,7 +29,7 @@ npm run test:integration:ci
 #### In package.json Scripts:
 Already configured in `package.json`:
 ```json
-"test:security:like-cicd": "CI=true GITHUB_ACTIONS=true npm run test:security:ci ..."
+"test:security:like-cicd:script": "./scripts/test-security-like-cicd.sh"
 ```
 
 ### Option 3: Use a .env File (Not Recommended)
@@ -76,7 +76,7 @@ npm run test:unit                  # Unit tests
 ### CI/CD Simulation (Network Tests Still Skipped Locally)
 ```bash
 npm run test:like-cicd            # Full CI/CD simulation
-npm run test:security:like-cicd  # Security tests with CI variables
+npm run test:security:like-cicd:script  # Security tests with CI variables
 ```
 
 ### Actual CI/CD (GitHub Actions)

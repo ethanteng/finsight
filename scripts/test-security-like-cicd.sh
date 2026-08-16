@@ -41,17 +41,26 @@ run_security_test "Real security suites" "npm run test:real-security" "CI=true G
 
 run_security_test "Core security suites" "npm run test:security" "CI=true GITHUB_ACTIONS=true" || exit 1
 
-# Test 3: Plaid Security Integration
-run_security_test "Plaid Security Integration" "npm run test:integration:ci -- --testPathPattern=plaid-security" "CI=true GITHUB_ACTIONS=true" || exit 1
+# The plaid-security and privacy-security integration patterns used to be re-run
+# here. ci-cd.yml's security-tests job runs only the two commands above; those two
+# patterns belong to the integration-tests job and are already covered there, so
+# invoking them again made this script diverge from the workflow it simulates and
+# re-introduced the duplicate execution the audit removed.
 
-# Test 4: Privacy Security Integration
-run_security_test "Privacy Security Integration" "npm run test:integration:ci -- --testPathPattern=privacy-security" "CI=true GITHUB_ACTIONS=true" || exit 1
-
-# Test 5: An unreachable database must FAIL in CI mode. This block used to assert
+# Test 3: An unreachable database must FAIL in CI mode. This block used to assert
 # that the security suite stayed green against a broken database by falling back
 # to an in-memory mock — the behaviour that made these tests unable to fail.
+#
+# Both URLs are overridden — see the equivalent note in test-like-cicd.sh. Without
+# the TEST_DATABASE_URL override this probe only exercised security-test-setup.ts's
+# own bare `new PrismaClient()` (Prisma reads DATABASE_URL, never TEST_DATABASE_URL).
+# The guard it actually names lives in test-database-ci.ts, which prefers
+# TEST_DATABASE_URL and so kept reaching the real database.
 echo -e "\n${YELLOW}🔒 Verifying an unreachable database is fatal...${NC}"
-if CI=true GITHUB_ACTIONS=true DATABASE_URL=postgresql://invalid:invalid@localhost:9999/invalid npm run test:security >/dev/null 2>&1; then
+if CI=true GITHUB_ACTIONS=true \
+   DATABASE_URL=postgresql://invalid:invalid@localhost:9999/invalid \
+   TEST_DATABASE_URL=postgresql://invalid:invalid@localhost:9999/invalid \
+   npm run test:security >/dev/null 2>&1; then
     echo -e "${RED}❌ Security suite passed against an unreachable database — the mock fallback is back${NC}"
     exit 1
 fi
