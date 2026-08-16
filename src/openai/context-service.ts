@@ -818,11 +818,30 @@ function deriveCategory(transaction: Transaction): string | undefined {
   const transactionName = (transaction.name || '').toLowerCase();
   const merchantName = ((transaction as any).merchant_name || (transaction as any).merchantName || '').toLowerCase();
 
+  // "gas" is ambiguous: it matches both a gas utility bill and a filling station.
+  // The utility rule below used to match a bare "gas" and runs first, which made
+  // the transportation rule's own 'gas' keyword unreachable — "Shell Gas Station"
+  // and "Costco Gas" were filed as housing/utilities, so fuel spending reached the
+  // model as a housing cost. Only utility phrasing counts as a gas bill now; a
+  // bare "gas" falls through to transportation.
+  //
+  // Every phrase here can actually decide a match. 'gas & electric' and
+  // 'gas utility' are deliberately absent: any name containing them also contains
+  // "electric" or "utility", which the rule already matches on its own, so they
+  // could be deleted with every test still green.
+  const gasUtilityPhrases = [
+    'natural gas',
+    'gas bill',
+    'gas company',
+    'gas service'
+  ];
+  const looksLikeGasUtility = gasUtilityPhrases.some(phrase => transactionName.includes(phrase));
+
   // Common patterns to infer category
   if (transactionName.includes('rent') || transactionName.includes('apartment') || transactionName.includes('housing')) {
     return 'RENT_AND_UTILITIES';
   }
-  if (transactionName.includes('electric') || transactionName.includes('gas') || transactionName.includes('water') || transactionName.includes('utility')) {
+  if (transactionName.includes('electric') || looksLikeGasUtility || transactionName.includes('water') || transactionName.includes('utility')) {
     return 'RENT_AND_UTILITIES';
   }
   if (transactionName.includes('grocery') || transactionName.includes('supermarket') || transactionName.includes('food') || transactionName.includes('restaurant') || transactionName.includes('cafe')) {

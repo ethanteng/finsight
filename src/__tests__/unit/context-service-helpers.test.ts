@@ -150,21 +150,42 @@ describe('deriveCategory', () => {
       expect(deriveCategory({ name })).toBe(expected);
     });
 
-    it.each(['Shell Gas Station', 'Costco Gas', 'BP Gas'])(
-      'KNOWN DEFECT: files %s as RENT_AND_UTILITIES rather than TRANSPORTATION',
-      (name) => {
-        // The utilities rule tests for 'gas' (meaning a gas utility bill) and runs
-        // before the transportation rule, so the transportation rule's own 'gas'
-        // keyword is unreachable. Any fuel purchase whose name contains "gas" —
-        // which is most of them — is filed as a utility bill, and that flows into
-        // the spending breakdown the model is given.
-        //
-        // Pinned rather than fixed: correcting it changes how real transactions
-        // categorize, which is a product decision, not a test cleanup. When it is
-        // fixed, this expectation should flip to TRANSPORTATION.
+    describe('the ambiguous word "gas"', () => {
+      // "gas" matches both a gas utility bill and a filling station. The utility
+      // rule used to match a bare "gas" and runs first, which made the
+      // transportation rule's own 'gas' keyword unreachable — every fuel purchase
+      // named "... Gas ..." was filed as housing/utilities and reported to the
+      // model as a housing cost. Both directions are pinned here so a future edit
+      // to either rule cannot quietly reintroduce that.
+
+      it.each(['Shell Gas Station', 'Costco Gas', 'BP Gas', 'Gas N Go'])(
+        'files %s as TRANSPORTATION',
+        (name) => {
+          expect(deriveCategory({ name })).toBe('TRANSPORTATION');
+        }
+      );
+
+      // One case per utility phrase, each chosen so that phrase is the only reason
+      // it matches — otherwise a phrase can be deleted with every test still
+      // green, which is how two dead entries were found while writing these.
+      it.each([
+        ['Natural Gas Payment', 'natural gas'],
+        ['Gas Bill March', 'gas bill'],
+        ['City Gas Company', 'gas company'],
+        ['Gas Service Charge', 'gas service']
+      ])('files %s as RENT_AND_UTILITIES via "%s"', (name) => {
         expect(deriveCategory({ name })).toBe('RENT_AND_UTILITIES');
-      }
-    );
+      });
+
+      it.each(['PG&E Gas & Electric', 'Gas Utility Payment'])(
+        'still files %s as RENT_AND_UTILITIES via the plain electric/utility keywords',
+        (name) => {
+          // These need no gas-specific phrase: the rule already matches "electric"
+          // and "utility" on their own.
+          expect(deriveCategory({ name })).toBe('RENT_AND_UTILITIES');
+        }
+      );
+    });
 
     it('falls back to the merchant name when nothing else matches', () => {
       expect(deriveCategory({ name: 'POS 4429', merchant_name: 'Blue Bottle' })).toBe('MERCHANT: blue bottle');
