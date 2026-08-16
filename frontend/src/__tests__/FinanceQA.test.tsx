@@ -169,4 +169,63 @@ describe('FinanceQA decision workspace', () => {
     expect(onNewAnswer).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: /Analyze decision/i })).toBeInTheDocument();
   });
+
+  it('ignores a late answer after opening a different turn during analysis', async () => {
+    let resolveAsk: (value: Response) => void;
+    const askPromise = new Promise<Response>(resolve => {
+      resolveAsk = resolve;
+    });
+
+    (global.fetch as jest.Mock).mockImplementation((url: string) => {
+      if (url.includes('/test/current-tier')) {
+        return Promise.resolve({ ok: true, json: async () => ({ backendTier: 'premium' }) });
+      }
+      if (url.includes('/ask/display-real')) {
+        return askPromise;
+      }
+      return Promise.resolve({ ok: false, status: 404, headers: new Headers(), json: async () => ({}) });
+    });
+
+    const turnA = {
+      id: 'conversation-a',
+      threadId: 'thread-a',
+      question: 'What about retiring at 58?',
+      answer: 'You could retire at 58 with adjustments.',
+      timestamp: Date.now(),
+    };
+    const turnB = {
+      id: 'conversation-b',
+      threadId: 'thread-b',
+      question: 'How is my cash position?',
+      answer: 'Cash covers roughly six months of spending.',
+      timestamp: Date.now() - 1000,
+    };
+
+    const onNewAnswer = jest.fn();
+    const { rerender } = render(
+      <FinanceQA onNewAnswer={onNewAnswer} selectedPrompt={turnA} />
+    );
+
+    fireEvent.submit(document.getElementById('finance-qa-form')!);
+    expect(await screen.findByRole('button', { name: /Analyzing/i })).toBeInTheDocument();
+
+    rerender(<FinanceQA onNewAnswer={onNewAnswer} selectedPrompt={turnB} />);
+    expect(screen.getByText('Cash covers roughly six months of spending.')).toBeInTheDocument();
+
+    resolveAsk!({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({
+        answer: 'Stale follow-up for the abandoned turn.',
+        threadId: 'thread-a',
+        conversationId: 'conversation-a2',
+      }),
+    } as Response);
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled());
+    expect(screen.queryByText('Stale follow-up for the abandoned turn.')).not.toBeInTheDocument();
+    expect(onNewAnswer).not.toHaveBeenCalled();
+    expect(screen.getByText('Cash covers roughly six months of spending.')).toBeInTheDocument();
+  });
 });

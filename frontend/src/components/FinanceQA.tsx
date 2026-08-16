@@ -60,6 +60,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
   // Bumped when a decision is abandoned so a late answer cannot resurrect its
   // thread after "New decision" lands during analysis.
   const askEpochRef = useRef(0);
+  const prevSelectedTurnIdRef = useRef<string | null>(null);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
   const [streamingAnswer, setStreamingAnswer] = useState('');
   const [structuredResponse, setStructuredResponse] = useState<{
@@ -114,6 +115,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
    */
   const startNewDecision = useCallback(() => {
     askEpochRef.current += 1;
+    prevSelectedTurnIdRef.current = null;
     setLoading(false);
     setProgressMessage(null);
     setQuestion('');
@@ -130,6 +132,20 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, newDecisionNonc
   // Update question and answer when selectedPrompt changes
   useEffect(() => {
     if (selectedPrompt) {
+      const turnId = selectedPrompt.id;
+      // Opening a different turn while an ask is in flight must not let that
+      // answer land on the turn the user just clicked. Bumping on every
+      // selectedPrompt change would also kill a new ask when a history reload
+      // re-selects the newest turn in the same thread after the prior answer.
+      if (
+        prevSelectedTurnIdRef.current !== null &&
+        prevSelectedTurnIdRef.current !== turnId
+      ) {
+        askEpochRef.current += 1;
+        setLoading(false);
+        setProgressMessage(null);
+      }
+      prevSelectedTurnIdRef.current = turnId;
       setQuestion(selectedPrompt.question);
       setAnswer(selectedPrompt.answer);
       setConversationId(selectedPrompt.id);
