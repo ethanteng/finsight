@@ -26,6 +26,28 @@ interface PreviewResponse {
   matches: Record<string, string[]>;
 }
 
+/**
+ * Whether a category's terms firing actually changed the routing decision.
+ *
+ * A match is not the same as an effect. Structural rules can override one — a
+ * "stock market" question matches `stock*` but deliberately does not load
+ * holdings — and a modifier only counts alongside a companion word. Showing an
+ * unconditional arrow in either case tells the admin something untrue exactly
+ * where the routing is subtlest.
+ */
+export type MatchOutcome = 'applied' | 'awaiting-companion' | 'overridden';
+
+export function matchOutcome(
+  meta: { feeds: string; standalone: boolean } | undefined,
+  needs: Record<string, boolean>,
+  needKeyByLabel: Record<string, string>
+): MatchOutcome {
+  if (!meta) return 'applied';
+  const needKey = needKeyByLabel[meta.feeds];
+  if (!needKey || needs[needKey]) return 'applied';
+  return meta.standalone ? 'overridden' : 'awaiting-companion';
+}
+
 /** The needs an admin can act on, in the order they affect an answer. */
 const NEED_LABELS: Array<[string, string]> = [
   ['needsRetirement', 'Retirement'],
@@ -39,6 +61,16 @@ const NEED_LABELS: Array<[string, string]> = [
   ['needsUserProfile', 'Profile'],
   ['needsSecondaryValidation', 'Second review'],
 ];
+
+const NEED_KEY_BY_LABEL: Record<string, string> = Object.fromEntries(
+  NEED_LABELS.map(([need, label]) => [label, need])
+);
+
+const OUTCOME_NOTE: Record<MatchOutcome, string> = {
+  applied: '',
+  'awaiting-companion': ' — matched, but needs a companion word to take effect',
+  overridden: ' — matched, but a built-in rule overrode it',
+};
 
 export default function RoutingVocabularyPanel({
   apiUrl,
@@ -201,13 +233,15 @@ export default function RoutingVocabularyPanel({
                   .filter(([, terms]) => terms.length > 0)
                   .map(([category, terms]) => {
                     const meta = (data?.categories || []).find((entry) => entry.id === category);
+                    const outcome = matchOutcome(meta, preview.needs, NEED_KEY_BY_LABEL);
                     return (
                       <div key={category}>
                         <span className="text-gray-200">{meta?.label ?? category}</span>
-                        <span className="text-gray-500"> → {meta?.feeds ?? category}</span>
-                        {meta && !meta.standalone && (
-                          <span className="text-gray-500"> (only alongside a spending word)</span>
-                        )}
+                        <span className={outcome === 'applied' ? 'text-gray-500' : 'text-yellow-500/80'}>
+                          {' '}
+                          {outcome === 'applied' ? '→' : '↛'} {meta?.feeds ?? category}
+                          {OUTCOME_NOTE[outcome]}
+                        </span>
                         <span className="text-gray-500">: </span>
                         <code className="text-gray-300">{terms.join(', ')}</code>
                       </div>

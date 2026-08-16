@@ -141,6 +141,11 @@ describe('question-aware LLM context routing', () => {
     ]) {
       expect(analyzeQuestionNeeds(question)).toMatchObject({ needsTransactionDetails: false });
     }
+
+    // Past tense asks the same question of the same data.
+    expect(analyzeQuestionNeeds('What did I spent on groceries?')).toMatchObject({
+      needsTransactionDetails: true,
+    });
   });
 
   it('does not load transactions for questions that merely say "money"', () => {
