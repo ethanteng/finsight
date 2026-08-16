@@ -143,6 +143,7 @@ describe('question-aware LLM context routing', () => {
     // A lookup phrasing aimed at the user's own data is not an outside lookup.
     for (const question of [
       'Look up my Amazon charges from last month.',
+      'Look up your bank transactions from last week.',
       'How much Google stock do I own?',
     ]) {
       expect(analyzeQuestionNeeds(question)).toMatchObject({ needsSearchContext: false });

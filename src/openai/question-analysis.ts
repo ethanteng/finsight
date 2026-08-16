@@ -45,7 +45,7 @@ function analyzeSingleQuestion(question: string): QuestionNeeds {
     /\b(?:web|internet|online)\s+search\b/.test(qLower) ||
     /\bsearch\s+(?:the\s+)?(?:web|internet|online)\b/.test(qLower) ||
     /\blook\s+(?:it|this|that|those|them)\s+up\b/.test(qLower) ||
-    /\blook\s+up\b(?!\s+(?:my|our)\b)/.test(qLower) ||
+    /\blook\s+up\b(?!\s+(?:my|our|your|their)\b)/.test(qLower) ||
     /\bgoogle\s+(?:it|this|that)\b/.test(qLower);
 
   const needsSearchContext =
