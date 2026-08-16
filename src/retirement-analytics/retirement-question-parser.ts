@@ -119,7 +119,11 @@ function extractAnnualWithdrawalAmount(
   for (const { pattern, framing } of WITHDRAWAL_AMOUNT_PATTERNS) {
     const match = qLower.match(pattern);
     if (!match) continue;
-    if (requireSpendingFraming && (framing !== 'spending' || EARNINGS_FRAMING.test(qLower))) continue;
+    // "$200k a year" after "I earn" is a salary even when the same sentence asks
+    // about retiring. The carry-forward gate already rejected that wording on
+    // non-retirement turns; apply the same rule to the current message too.
+    if (EARNINGS_FRAMING.test(qLower) && (framing === 'annualized' || requireSpendingFraming)) continue;
+    if (requireSpendingFraming && framing !== 'spending') continue;
     const amount = parseFloat(match[1].replace(/,/g, ''));
     if (!Number.isFinite(amount) || amount <= 0) continue;
     return amount * parseWithdrawalMultiplier(match[0]);

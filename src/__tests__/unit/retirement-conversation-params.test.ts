@@ -80,6 +80,16 @@ describe('annual spending wording', () => {
     );
     expect(result.annualWithdrawalAmount).toBeUndefined();
   });
+
+  it('does not treat earnings in a retirement question as the spending target', () => {
+    for (const question of [
+      'I earn $200k a year, can I retire at 65?',
+      'My salary is $200k annually — am I on track to retire?',
+      'I make $150k per year. When can I retire?',
+    ]) {
+      expect(parseRetirementQuestion(question).annualWithdrawalAmount).toBeUndefined();
+    }
+  });
 });
 
 describe('parseRetirementConversation', () => {
