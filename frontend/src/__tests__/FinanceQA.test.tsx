@@ -1,5 +1,16 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { TextDecoder as NodeTextDecoder, TextEncoder as NodeTextEncoder } from 'util';
 import FinanceQA from '@/components/FinanceQA';
+
+// jsdom ships neither, and the SSE parser needs TextDecoder to read the stream.
+// Their absence is why the streaming path — the one production actually uses —
+// had no coverage until now.
+if (typeof globalThis.TextEncoder === 'undefined') {
+  globalThis.TextEncoder = NodeTextEncoder as unknown as typeof globalThis.TextEncoder;
+}
+if (typeof globalThis.TextDecoder === 'undefined') {
+  globalThis.TextDecoder = NodeTextDecoder as unknown as typeof globalThis.TextDecoder;
+}
 
 jest.mock('@/components/MarkdownRenderer', () => ({
   __esModule: true,
@@ -125,6 +136,51 @@ describe('FinanceQA decision workspace', () => {
     expect(await screen.findByText('You are on track at $125K a year.')).toBeInTheDocument();
     expect(onNewAnswer).toHaveBeenCalledWith('Can I retire at 62?', 'You are on track at $125K a year.');
     expect(screen.getByRole('button', { name: /Ask follow-up/i })).toBeInTheDocument();
+  });
+
+  it('delivers a streamed answer, which is the path production takes', async () => {
+    // The client always sends Accept: text/event-stream, so SSE is the real
+    // path and the JSON branch is the fallback. The staleness guard sits inside
+    // the stream parser, where a mid-stream reload could trip it — worth
+    // pinning here rather than only on the branch production does not use.
+    const chunks = [
+      'event: progress\ndata: {"message":"Building your retirement snapshot"}\n\n',
+      'event: answerDelta\ndata: {"delta":"You are on track"}\n\n',
+      'event: result\ndata: {"answer":"You are on track at $125K a year.","threadId":"thread-a","conversationId":"conversation-1"}\n\n',
+    ];
+    let chunkIndex = 0;
+    const encoder = new TextEncoder();
+
+    (global.fetch as jest.Mock).mockImplementation((url: string) => {
+      if (url.includes('/test/current-tier')) {
+        return Promise.resolve({ ok: true, json: async () => ({ backendTier: 'premium' }) });
+      }
+      if (url.includes('/ask/display-real')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'text/event-stream' }),
+          body: {
+            getReader: () => ({
+              read: async () =>
+                chunkIndex < chunks.length
+                  ? { done: false, value: encoder.encode(chunks[chunkIndex++]) }
+                  : { done: true, value: undefined },
+            }),
+          },
+        });
+      }
+      return Promise.resolve({ ok: false, status: 404, headers: new Headers(), json: async () => ({}) });
+    });
+
+    const onNewAnswer = jest.fn();
+    render(<FinanceQA onNewAnswer={onNewAnswer} newDecisionNonce={1} />);
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Can I retire at 62?' } });
+    fireEvent.submit(document.getElementById('finance-qa-form')!);
+
+    expect(await screen.findByText('You are on track at $125K a year.')).toBeInTheDocument();
+    expect(onNewAnswer).toHaveBeenCalledWith('Can I retire at 62?', 'You are on track at $125K a year.');
   });
 
   it('ignores a late answer after new decision during analysis', async () => {
