@@ -81,7 +81,7 @@ interface MarketNewsContext {
 }
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState<'production' | 'users' | 'market-news' | 'ai-tone'>('production');
+  const [activeTab, setActiveTab] = useState<'production' | 'users' | 'market-news' | 'ai-settings'>('production');
 
   // Production data state
   const [productionUsers, setProductionUsers] = useState<ProductionUser[]>([]);
@@ -1284,7 +1284,7 @@ export default function AdminPage() {
     );
   };
 
-  const renderAiToneTab = () => {
+  const renderAiSettingsTab = () => {
     const isCustomized = !toneMeta.isDefault;
 
     return (
@@ -1614,14 +1614,14 @@ export default function AdminPage() {
             Market News
           </button>
           <button
-            onClick={() => setActiveTab('ai-tone')}
+            onClick={() => setActiveTab('ai-settings')}
             className={`flex-1 px-4 py-2 rounded text-sm font-medium transition-colors ${
-              activeTab === 'ai-tone'
+              activeTab === 'ai-settings'
                 ? 'bg-[#102319] text-white shadow-sm'
                 : 'text-[#5e6b63] hover:bg-white/65 hover:text-[#102319]'
             }`}
           >
-            AI Tone
+            AI Settings
           </button>
         </div>
 
@@ -1629,7 +1629,7 @@ export default function AdminPage() {
         {activeTab === 'production' && renderProductionTab()}
         {activeTab === 'users' && renderUsersTab()}
         {activeTab === 'market-news' && renderMarketNewsTab()}
-        {activeTab === 'ai-tone' && renderAiToneTab()}
+        {activeTab === 'ai-settings' && renderAiSettingsTab()}
         </div>
       </div>
     </>

@@ -212,10 +212,10 @@ export default function RoutingVocabularyPanel({
               {NEED_LABELS.map(([need, label]) => (
                 <span
                   key={need}
-                  className={`text-xs px-2 py-1 rounded ${
+                  className={`text-xs px-2 py-1 rounded border ${
                     preview.needs[need]
-                      ? 'bg-green-900/60 text-green-300'
-                      : 'bg-gray-800 text-gray-500'
+                      ? 'bg-green-900/60 border-green-700 text-green-300'
+                      : 'bg-gray-800 border-gray-700 text-gray-400'
                   }`}
                 >
                   {label}

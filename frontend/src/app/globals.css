@@ -322,15 +322,19 @@
 .authenticated-site button[class*="bg-[#102319]"] { color: white; }
 .authenticated-site .hover\:bg-blue-700:hover,
 .authenticated-site .hover\:bg-green-700:hover { background-color: var(--auth-forest); }
-.authenticated-site .bg-blue-900,
-.authenticated-site .bg-blue-900\/20,
-.authenticated-site .bg-blue-900\/30 { background-color: rgb(198 219 255 / .45); }
+/* Matched on substring rather than exact class so every opacity variant is
+   covered. Listing them one by one left bg-*-900/50 and /60 unmapped, which
+   rendered a dark Tailwind background under text this block had already
+   remapped to a dark ink — dark on dark, in the admin badges and routing chips.
+   Note this matches the class string, not the applied state: a state-prefixed
+   utility like hover:bg-green-900 would take the light value unconditionally,
+   so give those an explicit rule if one is ever added. */
+.authenticated-site [class*="bg-blue-900"] { background-color: rgb(198 219 255 / .45); }
 .authenticated-site .text-blue-100,
 .authenticated-site .text-blue-200,
 .authenticated-site .text-blue-300,
 .authenticated-site .text-blue-400 { color: #365d49; }
-.authenticated-site .bg-green-900,
-.authenticated-site .bg-green-900\/20 { background-color: rgb(201 242 223 / .6); }
+.authenticated-site [class*="bg-green-900"] { background-color: rgb(201 242 223 / .6); }
 .authenticated-site .text-green-200,
 .authenticated-site .text-green-300,
 .authenticated-site .text-green-400 { color: #28704d; }
@@ -338,13 +342,10 @@
 .authenticated-site .text-orange-300,
 .authenticated-site .text-orange-400 { color: #8a5f28; }
 .authenticated-site .bg-yellow-800,
-.authenticated-site .bg-yellow-900,
-.authenticated-site .bg-yellow-900\/20 { background-color: #f4ead0; }
+.authenticated-site [class*="bg-yellow-900"] { background-color: #f4ead0; }
 .authenticated-site .text-yellow-300,
 .authenticated-site .text-yellow-400 { color: #76510f; }
-.authenticated-site .bg-red-900,
-.authenticated-site .bg-red-900\/20,
-.authenticated-site .bg-red-900\/30 { background-color: #f8e8e3; }
+.authenticated-site [class*="bg-red-900"] { background-color: #f8e8e3; }
 .authenticated-site .text-red-200,
 .authenticated-site .text-red-300,
 .authenticated-site .text-red-400 { color: #8b3027; }
@@ -356,7 +357,7 @@
 .authenticated-site .bg-slate-600 { background-color: #64746b; color: white; }
 .authenticated-site .bg-indigo-600,
 .authenticated-site .bg-yellow-600 { background-color: #486657; color: white; }
-.authenticated-site .bg-orange-900\/20 { background-color: #f4ead0; }
+.authenticated-site [class*="bg-orange-900"] { background-color: #f4ead0; }
 .authenticated-site .border-orange-700 { border-color: rgb(157 106 22 / .25); }
 .authenticated-site .bg-rose-600,
 .authenticated-site .bg-red-600 { background-color: #9b4137; color: white; }
