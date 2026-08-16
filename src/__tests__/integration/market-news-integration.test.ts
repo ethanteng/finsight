@@ -147,17 +147,11 @@ describe('Market News Context Integration Tests', () => {
     });
   });
 
-  // The CI test-database setup swaps in an in-memory mock (see
-  // src/__tests__/setup/test-database-ci.ts, which returns a mock whenever
-  // CI/GITHUB_ACTIONS is set), and that mock does not implement persistence — a
-  // write/read round trip cannot be asserted against it. Skipping explicitly in
-  // that environment makes the missing coverage visible in the CI report instead
-  // of hiding it behind assertions that accept any result.
-  const usingMockDatabase = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
-  const testPersistence = usingMockDatabase ? test.skip : test;
-
+  // This was skipped in CI while the setup substituted an in-memory mock with no
+  // persistence. CI now runs against the real database, so the round trip is
+  // testable again and the skip is removed.
   describe('Market News Context Database Operations', () => {
-    testPersistence('should store and retrieve market context from database', async () => {
+    test('should store and retrieve market context from database', async () => {
       try {
         // Create a test market context
         const testContext = await testPrisma.marketNewsContext.create({

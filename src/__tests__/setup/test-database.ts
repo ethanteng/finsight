@@ -3,13 +3,18 @@ import { PrismaClient } from '@prisma/client';
 let testPrisma: PrismaClient;
 
 beforeAll(async () => {
-  // Check if we're in CI/CD environment
   const isCI = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
 
   // Connect to test database
   const databaseUrl = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL;
 
   if (!databaseUrl) {
+    if (isCI) {
+      throw new Error(
+        'No TEST_DATABASE_URL/DATABASE_URL in CI. These suites must run against the ' +
+        'real database; falling back to a mock would report false confidence.'
+      );
+    }
     console.log('⚠️ No database URL found - using mock database');
     const { createEnhancedMockDatabase } = await import('./enhanced-mock-database');
     testPrisma = createEnhancedMockDatabase();
@@ -27,8 +32,13 @@ beforeAll(async () => {
   try {
     await testPrisma.$connect();
     console.log('✅ Connected to test database:', databaseUrl);
-  } catch (error) {
-    // Fall back to mock database when connection fails (local CI simulation or DB unavailable)
+  } catch (error: any) {
+    // Never silently degrade to a mock in CI — an unreachable database must fail the
+    // run, not turn it green against fabricated data. Mirrors the guard in
+    // test-database-ci.ts, which is where these suites actually get testPrisma from.
+    if (isCI) {
+      throw new Error(`Could not reach the test database: ${error?.message ?? error}`);
+    }
     console.log('⚠️ Database connection failed - using mock database');
     const { createEnhancedMockDatabase } = await import('./enhanced-mock-database');
     testPrisma = createEnhancedMockDatabase();

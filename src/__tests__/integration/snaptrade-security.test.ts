@@ -231,23 +231,43 @@ describe('SnapTrade Security Tests', () => {
   });
 
   describe('Cross-User Security Validation', () => {
+    // Both cases below seed a registration for user2 only. Asserting that two users
+    // with no data both get 404 is true but vacuous — it cannot distinguish correct
+    // scoping from a query that returns nothing to anyone, which is exactly what the
+    // old CI mock did.
+    const seedUser2SnapTrade = () => testPrisma.snapTradeUser.create({
+      data: {
+        userId: user2.id,
+        snapTradeUserId: 'snaptrade-user-2-cross-user-id',
+        userSecret: 'user-2-cross-user-secret',
+        status: 'registered'
+      }
+    });
+
     itNetwork('should validate that User A cannot access User B SnapTrade data through any endpoint', async () => {
-      // User1 tries to access their own data
+      const user2SnapTrade = await seedUser2SnapTrade();
+
       const user1OwnData = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user1JWT}`);
 
-      // User2 tries to access their own data
       const user2OwnData = await request(app)
         .get('/snaptrade/status/user')
         .set('Authorization', `Bearer ${user2JWT}`);
 
+      // user2 owns the registration; user1 has none and must not receive it.
+      expect(user2OwnData.status).toBe(200);
+      expect(user2OwnData.body).toHaveProperty('snapTradeUserId', user2SnapTrade.snapTradeUserId);
+
       expect(user1OwnData.status).toBe(expectedMissingSnapTradeStatus);
-      expect(user2OwnData.status).toBe(expectedMissingSnapTradeStatus);
+      const user1Body = JSON.stringify(user1OwnData.body);
+      expect(user1Body).not.toContain(user2SnapTrade.snapTradeUserId);
+      expect(user1Body).not.toContain(user2SnapTrade.userSecret);
     });
 
     itNetwork('should prevent privilege escalation through SnapTrade endpoint manipulation', async () => {
-      // Test that users cannot manipulate endpoints to access other users' data
+      const user2SnapTrade = await seedUser2SnapTrade();
+
       const user1Response = await request(app)
         .get('/snaptrade/accounts')
         .set('Authorization', `Bearer ${user1JWT}`);
@@ -256,8 +276,15 @@ describe('SnapTrade Security Tests', () => {
         .get('/snaptrade/accounts')
         .set('Authorization', `Bearer ${user2JWT}`);
 
+      // Neither user has linked accounts, so neither gets data — but user1 must not
+      // pick up user2's credentials via the accounts path either.
       expect(user1Response.status).toBe(expectedMissingSnapTradeStatus);
-      expect(user2Response.status).toBe(expectedMissingSnapTradeStatus);
+      const user1AccountsBody = JSON.stringify(user1Response.body);
+      expect(user1AccountsBody).not.toContain(user2SnapTrade.snapTradeUserId);
+      expect(user1AccountsBody).not.toContain(user2SnapTrade.userSecret);
+
+      const user2AccountsBody = JSON.stringify(user2Response.body);
+      expect(user2AccountsBody).not.toContain(user2SnapTrade.userSecret);
     });
   });
 
