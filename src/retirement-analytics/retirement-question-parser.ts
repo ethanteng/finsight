@@ -132,13 +132,16 @@ function extractAnnualWithdrawalAmount(
 }
 
 /**
- * Nobody retires on $62 a year — but "62" is exactly what an answer to "what
- * age do you plan to retire?" looks like, and the two replies are
- * indistinguishable as bare numbers. Below this floor the number is far more
- * likely an age than a spending target, so it is left unparsed and the
- * assistant asks rather than projecting on nonsense.
+ * A bare number is only read as an annual spend when it is big enough to be
+ * one. "62" answers "what age do you plan to retire?"; "2,100" is a monthly
+ * figure or a single bill. Both clear the missing-input check once parsed, so
+ * without a floor the projection runs on them silently instead of asking.
+ *
+ * This bounds only bare numeric replies. A sentence that says what the number
+ * is — "spend $8,000 per year in retirement" — is read by the patterns above
+ * at any size, so a genuinely frugal plan is never rejected for being small.
  */
-const MIN_BARE_ANNUAL_AMOUNT = 1_000;
+const MIN_BARE_ANNUAL_AMOUNT = 10_000;
 
 /**
  * A reply whose whole content is the number the assistant just asked for:

@@ -67,6 +67,21 @@ describe('annual spending wording', () => {
     }
   });
 
+  it('does not read a bare monthly-sized figure as the annual spend', () => {
+    // "$2,100" is a mortgage payment or a month of expenses, not a year of
+    // retirement. Parsed, it clears the missing-input check and the projection
+    // runs on $2,100/year without ever asking.
+    for (const reply of ['$2,100', '2100', '5,000']) {
+      expect(
+        parseRetirementConversation(reply, ['Re-run my retirement analysis.']).annualWithdrawalAmount
+      ).toBeUndefined();
+    }
+    // A sentence that says what the number is stays readable at any size.
+    expect(
+      parseRetirementQuestion('I plan to spend $8,000 per year in retirement').annualWithdrawalAmount
+    ).toBe(8_000);
+  });
+
   it('does not read a monthly figure as the annual spend', () => {
     const result = parseRetirementQuestion(
       'What if we pay off our mortgage before retirement? That would drop our monthly expenses by around $2,100.'
