@@ -64,16 +64,22 @@ const AMOUNT_TO_ANNUAL_FILLER =
  * asked the user for a number they had just given — repeatedly, in the same
  * conversation.
  */
-const WITHDRAWAL_AMOUNT_PATTERNS: readonly RegExp[] = [
-  // "$150k per year", "$100k annually", "$100,000 withdrawal"
-  new RegExp(`${AMOUNT}${MULTIPLIER}\\s*(?:${ANNUAL_PERIOD}|withdrawals?)`, 'i'),
+/** The amount is attached to a word meaning outflow, so an earnings clause elsewhere in the sentence does not cloud it. */
+const SPENDING_ANCHORED_PATTERNS: readonly RegExp[] = [
   // "$125K annual spending", "$125K as my target annual spending"
   new RegExp(`${AMOUNT}${MULTIPLIER}${AMOUNT_TO_ANNUAL_FILLER}\\s+${ANNUAL_ADJECTIVE}\\s+${SPEND_NOUN}`, 'i'),
   // "annual spending of $125K", "yearly spending down to about $125K"
   new RegExp(`${ANNUAL_ADJECTIVE}\\s+(?:retirement\\s+)?${SPEND_NOUN}[^.$\\d]{0,30}${AMOUNT}${MULTIPLIER}`, 'i'),
-  // "withdraw $100k", "annual withdrawal of $80k"
-  new RegExp(`withdraw(?:al)?\\s+(?:of\\s+)?${AMOUNT}${MULTIPLIER}`, 'i'),
+  // "annual withdrawal of $80k"
   new RegExp(`annual\\s+withdrawal\\s+(?:of\\s+)?${AMOUNT}${MULTIPLIER}`, 'i'),
+];
+
+/** An amount and a period, with nothing saying which direction the money moves. */
+const PERIOD_ONLY_PATTERNS: readonly RegExp[] = [
+  // "$150k per year", "$100k annually", "$100,000 withdrawal"
+  new RegExp(`${AMOUNT}${MULTIPLIER}\\s*(?:${ANNUAL_PERIOD}|withdrawals?)`, 'i'),
+  // "withdraw $100k" — could equally be an ATM trip
+  new RegExp(`withdraw(?:al)?\\s+(?:of\\s+)?${AMOUNT}${MULTIPLIER}`, 'i'),
 ];
 
 const WITHDRAWAL_START_PATTERNS = [
@@ -95,11 +101,8 @@ function parseWithdrawalMultiplier(matchedText: string): number {
   return 1;
 }
 
-function extractAnnualWithdrawalAmount(qLower: string): number | undefined {
-  // An earnings sentence never yields a spending target here. The extractor
-  // reads the difference from context; this fallback can only refuse.
-  if (EARNINGS_FRAMING.test(qLower)) return undefined;
-  for (const pattern of WITHDRAWAL_AMOUNT_PATTERNS) {
+function firstAmountMatch(qLower: string, patterns: readonly RegExp[]): number | undefined {
+  for (const pattern of patterns) {
     const match = qLower.match(pattern);
     if (!match) continue;
     const amount = parseFloat(match[1].replace(/,/g, ''));
@@ -107,6 +110,20 @@ function extractAnnualWithdrawalAmount(qLower: string): number | undefined {
     return amount * parseWithdrawalMultiplier(match[0]);
   }
   return undefined;
+}
+
+function extractAnnualWithdrawalAmount(qLower: string): number | undefined {
+  // An amount the sentence itself calls spending is safe even alongside a
+  // salary: "I earn $200k a year and plan annual retirement spending of $80k"
+  // states both, and only one of them is the projection's input.
+  const anchored = firstAmountMatch(qLower, SPENDING_ANCHORED_PATTERNS);
+  if (anchored != null) return anchored;
+
+  // A bare amount-and-period in an earnings sentence is the salary far more
+  // often than the target. The extractor reads which from context; this
+  // fallback can only refuse, and refusing asks the user.
+  if (EARNINGS_FRAMING.test(qLower)) return undefined;
+  return firstAmountMatch(qLower, PERIOD_ONLY_PATTERNS);
 }
 
 /**

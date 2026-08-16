@@ -466,7 +466,9 @@ async function fetchOrCreateRetirementAnalysis(args: {
     retirementAge: questionParams.retirementAge,
     annualWithdrawalAmount: questionParams.annualWithdrawalAmount,
     withdrawalStartAge: questionParams.withdrawalStartAge,
-    quotedFrom: extracted?.sources,
+    // Which inputs were quoted, not the quotes: those are the user's own words
+    // about their finances and do not belong in server logs.
+    quotedFields: extracted ? Object.keys(extracted.sources) : undefined,
   });
 
   // Note: We already check for retirement keywords at the trigger level,

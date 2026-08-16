@@ -7,7 +7,6 @@
 
 import {
   buildExtractionTranscript,
-  hasExtractedRetirementValues,
   validateExtractedInputs,
 } from '../../openai/retirement-input-extraction';
 
@@ -39,6 +38,17 @@ describe('buildExtractionTranscript', () => {
 
     expect(transcript).toContain('Assistant: What age do you plan to retire?');
     expect(transcript.trim().endsWith('User: 62')).toBe(true);
+  });
+
+  it('truncates a long answer, which only has to establish what was asked', () => {
+    const transcript = buildExtractionTranscript('62', [
+      { question: 'When can I retire?', answer: `What age do you plan to retire? ${'x'.repeat(5000)}` },
+    ]);
+
+    const assistantLine = transcript.split('\n').find(line => line.startsWith('Assistant:'))!;
+    expect(assistantLine.length).toBeLessThan(1600);
+    // The part that disambiguates the reply is the part that survives.
+    expect(assistantLine).toContain('What age do you plan to retire?');
   });
 
   it('handles a first question with no history and turns with no answer yet', () => {
@@ -112,33 +122,5 @@ describe('validateExtractedInputs', () => {
       expect(result.annualWithdrawalAmount).toBeUndefined();
       expect(result.sources).toEqual({});
     }
-  });
-});
-
-describe('hasExtractedRetirementValues', () => {
-  it('is false when every field is missing so the caller can fall back to patterns', () => {
-    expect(hasExtractedRetirementValues(validateExtractedInputs({ sources: {} }))).toBe(false);
-    expect(
-      hasExtractedRetirementValues(
-        validateExtractedInputs({
-          currentAge: null,
-          retirementAge: null,
-          annualWithdrawalAmount: null,
-          withdrawalStartAge: null,
-          lifeExpectancy: null,
-          sources: {
-            currentAge: null,
-            retirementAge: null,
-            annualWithdrawalAmount: null,
-            withdrawalStartAge: null,
-            lifeExpectancy: null,
-          },
-        })
-      )
-    ).toBe(false);
-  });
-
-  it('is true when at least one value survived validation', () => {
-    expect(hasExtractedRetirementValues(validateExtractedInputs({ retirementAge: 62 }))).toBe(true);
   });
 });

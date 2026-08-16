@@ -116,12 +116,25 @@ function getClient(): OpenAI {
   return client;
 }
 
+/**
+ * An answer only has to establish what was being asked, and the opening of one
+ * does that. Full answers run long, and paying for the tail of each of them on
+ * every retirement question buys nothing. Matches the cap the main reasoning
+ * prompt already applies to conversation history.
+ */
+const MAX_ANSWER_CHARS = 1500;
+
 /** Render the decision as a transcript, oldest turn first, so "the last question" is unambiguous. */
 export function buildExtractionTranscript(question: string, priorTurns: readonly RetirementInputTurn[]): string {
   const lines: string[] = [];
   for (const turn of [...priorTurns].reverse()) {
     lines.push(`User: ${turn.question}`);
-    if (turn.answer?.trim()) lines.push(`Assistant: ${turn.answer.trim()}`);
+    const answer = turn.answer?.trim();
+    if (answer) {
+      lines.push(
+        `Assistant: ${answer.length > MAX_ANSWER_CHARS ? `${answer.slice(0, MAX_ANSWER_CHARS)}…` : answer}`
+      );
+    }
   }
   lines.push(`User: ${question}`);
   return lines.join('\n');
@@ -149,11 +162,6 @@ export function validateExtractedInputs(raw: unknown): ExtractedRetirementInputs
     result.withdrawalStartAge = result.retirementAge;
   }
   return result;
-}
-
-/** True when the model reported at least one input value (not just empty sources). */
-export function hasExtractedRetirementValues(inputs: ExtractedRetirementInputs): boolean {
-  return FIELDS.some((field) => inputs[field] != null);
 }
 
 /**
@@ -184,10 +192,13 @@ export async function extractRetirementInputs(
 
     const content = response.choices[0]?.message?.content;
     if (!content) return null;
-    const validated = validateExtractedInputs(JSON.parse(content));
-    // An all-null payload is still a successful API call but carries no inputs;
-    // treat it like a failed extraction so the pattern matcher can run.
-    return hasExtractedRetirementValues(validated) ? validated : null;
+    // An all-null result is an answer, not an absence of one: the model read the
+    // turns and reports that the user has not stated these inputs. Falling back
+    // to patterns here would hand the final say to wording rules in exactly the
+    // cases where a reader with the full conversation declined to find a number
+    // — which is where every one of the four wrong values came from. A missing
+    // input asks the user, which is the outcome worth protecting.
+    return validateExtractedInputs(JSON.parse(content));
   } catch (error) {
     // Never fatal: the pattern matcher still runs, and a missing input is
     // reported to the user as missing rather than surfacing as a failed answer.

@@ -206,6 +206,13 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   if (!evaluation) await loadRoutingVocabulary();
   const questionNeeds = analyzeQuestionNeeds(question, recentQuestions);
 
+  // Covers every model this request can reach: the input extractor that runs
+  // during context gathering, then the primary, fallback and second-review
+  // models. Loading it after context gathering left a cold process using the
+  // shipped default for the extractor on its first retirement question,
+  // ignoring an admin override that was set precisely to avoid that.
+  await loadModelConfig();
+
   // Step 1: Retrieve context (snapshot, profile, market summary, RAG)
   const contextGatherStartedAt = Date.now();
   let snapshot = evaluation?.snapshot ?? await gatherContextSnapshot({
@@ -225,9 +232,6 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   const promptBuildStartedAt = Date.now();
   onProgress?.('Submitting to Claude for analysis');
   if (!evaluation?.skipToneConfig) await loadResponseToneConfig();
-  // Covers all three models this pipeline can reach: primary, fallback, and
-  // the second-review validator.
-  await loadModelConfig();
   const orderedConversationHistory = conversationHistory
     .slice()
     .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
