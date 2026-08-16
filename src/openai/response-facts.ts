@@ -197,6 +197,7 @@ function scanProseClaims(prose: string): ProseClaim[] {
     let unit: 'usd' | 'percent' | undefined;
     if (hasDollar) unit = 'usd';
     if (/^\s*%/.test(after)) unit = 'percent';
+    else if (/^\s*percent(?:age)?\b/i.test(after)) unit = 'percent';
     else if (/^\s*dollars?\b/i.test(after)) unit = 'usd';
 
     const written = Number(digits.replace(/,/g, ''));

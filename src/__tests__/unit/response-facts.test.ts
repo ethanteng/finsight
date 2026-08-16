@@ -2,6 +2,7 @@ import { buildCanonicalFactPack } from '../../openai/canonical-facts';
 import { analyzeQuestionNeeds } from '../../openai/question-analysis';
 import {
   canonicalizeResponseNumbers,
+  hasUnsupportedPercentValue,
   salvageUngroundedResponse,
   validateResponseFacts,
   UNVERIFIED_PROSE_NOTICE,
@@ -64,6 +65,13 @@ describe('canonical response facts', () => {
     // The same small numbers stay prose when they measure time or count things.
     expect(validateResponseFacts({ summary: 'You could save 3 years of expenses.' }, pack).valid).toBe(true);
     expect(validateResponseFacts({ summary: 'You pay into 4 accounts.' }, pack).valid).toBe(true);
+  });
+
+  it('reads a written percent without a % sign as a rate claim', () => {
+    const result = validateResponseFacts({ summary: 'Inflation is running at 3.1 percent.' }, pack);
+    expect(result.valid).toBe(false);
+    expect(result.issues).toContain('User-facing percent value 3.1 is not present in the canonical fact pack.');
+    expect(hasUnsupportedPercentValue(result.issues)).toBe(true);
   });
 
   it('checks both ends of a money range', () => {
