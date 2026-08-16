@@ -210,6 +210,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     question,
     questionNeeds,
     tier,
+    recentQuestions,
     onProgress
   });
   let contextGatherMs = Date.now() - contextGatherStartedAt;
@@ -374,7 +375,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         try {
           onProgress?.('Loading more of your financial data');
           const escalationStartedAt = Date.now();
-          snapshot = await gatherContextSnapshot({ userId, question, questionNeeds: escalatedNeeds, tier, onProgress });
+          snapshot = await gatherContextSnapshot({ userId, question, questionNeeds: escalatedNeeds, tier, recentQuestions, onProgress });
           contextGatherMs += Date.now() - escalationStartedAt;
           promptInput = buildPromptInput(snapshot, escalatedNeeds);
           factPack = promptInput.canonicalFacts!;

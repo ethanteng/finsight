@@ -484,6 +484,28 @@ describe('runAskLincAnalysis validation routing', () => {
     expect(userMessage.indexOf('Question 3')).toBeLessThan(userMessage.indexOf('Question 4'));
     expect(userMessage.indexOf('Question 4')).toBeLessThan(userMessage.indexOf('Question 5'));
   });
+
+  it('hands the earlier turns to context gathering, newest first', async () => {
+    // Analysis inputs arrive a turn or two before the question that needs them
+    // ("drop our spending to $125K" … "re-run my retirement analysis"). Context
+    // gathering only ever saw the last message, so it asked for numbers the
+    // user had already given.
+    mockedAskClaude.mockResolvedValue(JSON.stringify({ summary: 'Current answer.' }));
+    const history = [1, 2, 3].map((day) => ({
+      id: String(day),
+      question: `Question ${day}`,
+      answer: `Answer ${day}`,
+      createdAt: new Date(`2026-08-0${day}T00:00:00.000Z`),
+    }));
+
+    await runAskLincAnalysis({ question: 'Re-run it.', userId: 'user-1', conversationHistory: history });
+
+    expect(mockedGatherContext.mock.calls[0][0].recentQuestions).toEqual([
+      'Question 3',
+      'Question 2',
+      'Question 1',
+    ]);
+  });
 });
 
 describe('selectValidationFeedback', () => {

@@ -1,0 +1,114 @@
+/**
+ * The four-turn failure this covers: the user said "$125K annual spending",
+ * then "re-run my retirement analysis", then confirmed the number outright, and
+ * every turn came back asking for the spending figure they had just given.
+ * Two defects stacked — the amount wording never parsed, and each turn was
+ * parsed in isolation from the thread it belonged to.
+ */
+
+import {
+  parseRetirementConversation,
+  parseRetirementQuestion,
+} from '../../retirement-analytics/retirement-question-parser';
+
+describe('annual spending wording', () => {
+  const cases: Array<[string, number]> = [
+    ['Re-run my retirement analysis based on $125K annual spending.', 125_000],
+    ['Let me retire on $125,000 a year', 125_000],
+    ['I want to retire spending $125k/yr', 125_000],
+    ['Plan my retirement around annual spending of $125,000', 125_000],
+    ['For retirement, our yearly budget is going to be $125k', 125_000],
+    ['Can I retire with a $9,500 monthly budget — $114,000 each year?', 114_000],
+  ];
+
+  it.each(cases)('reads the annual amount from %j', (question, expected) => {
+    expect(parseRetirementQuestion(question).annualWithdrawalAmount).toBe(expected);
+  });
+
+  it('still reads the older withdrawal wording', () => {
+    expect(
+      parseRetirementQuestion('Can I withdraw $100k annually in retirement?').annualWithdrawalAmount
+    ).toBe(100_000);
+    expect(
+      parseRetirementQuestion('Retirement plan with $1.5 million per year in withdrawals')
+        .annualWithdrawalAmount
+    ).toBe(1_500_000);
+  });
+
+  it('reads an unformatted six-figure amount as itself, not as its last digit', () => {
+    // "spend 150000 per year" used to match the trailing "0" — the only digit
+    // run followed by " per year" — and the projection ran on a $0 withdrawal.
+    expect(
+      parseRetirementQuestion('In retirement I plan to spend 150000 per year').annualWithdrawalAmount
+    ).toBe(150_000);
+  });
+
+  it('does not read a monthly figure as the annual spend', () => {
+    const result = parseRetirementQuestion(
+      'What if we pay off our mortgage before retirement? That would drop our monthly expenses by around $2,100.'
+    );
+    expect(result.annualWithdrawalAmount).toBeUndefined();
+  });
+
+  it('does not read an incidental annual charge as the retirement spend', () => {
+    const result = parseRetirementQuestion(
+      'Does the $500 annual fee on that card matter for my retirement plan?'
+    );
+    expect(result.annualWithdrawalAmount).toBeUndefined();
+  });
+});
+
+describe('parseRetirementConversation', () => {
+  it('carries an amount from an earlier turn into a bare re-run request', () => {
+    const result = parseRetirementConversation('Re-run my retirement analysis.', [
+      "Let's say it drops our yearly spending down to about $125K.",
+      'What if we pay off our mortgage in 10 years?',
+    ]);
+
+    expect(result.annualWithdrawalAmount).toBe(125_000);
+  });
+
+  it('lets the current message override an amount from an earlier turn', () => {
+    const result = parseRetirementConversation(
+      'Actually re-run my retirement analysis at $110k a year.',
+      ["Let's say our yearly spending drops to about $125K."]
+    );
+
+    expect(result.annualWithdrawalAmount).toBe(110_000);
+  });
+
+  it('carries a retirement age forward and derives the withdrawal start from it', () => {
+    const result = parseRetirementConversation('Re-run my retirement analysis at $125k a year.', [
+      'What about retiring at 58?',
+    ]);
+
+    expect(result.retirementAge).toBe(58);
+    expect(result.withdrawalStartAge).toBe(58);
+  });
+
+  it('takes the most recent statement when turns disagree', () => {
+    const result = parseRetirementConversation('Re-run my retirement analysis.', [
+      'Make it $125k annual spending.',
+      'I am planning on spending about $150K per year in retirement.',
+    ]);
+
+    expect(result.annualWithdrawalAmount).toBe(125_000);
+  });
+
+  it('keeps the number from a confirmation that never says "retirement"', () => {
+    // The turn that broke the loop in production. parseRetirementQuestion drops
+    // it — no retirement word, so it returns nothing at all — and the projection
+    // went on asking for a figure the user had just confirmed.
+    const confirmation = 'Yes, I can confirm $125K as my target annual spending';
+    expect(parseRetirementQuestion(confirmation).annualWithdrawalAmount).toBeUndefined();
+
+    const result = parseRetirementConversation(confirmation, [
+      'Re-run my retirement analysis.',
+      'What about retiring at 58?',
+    ]);
+
+    expect(result.hasRetirementIntent).toBe(false);
+    expect(result.annualWithdrawalAmount).toBe(125_000);
+    expect(result.retirementAge).toBe(58);
+  });
+});
