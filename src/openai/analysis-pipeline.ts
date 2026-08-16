@@ -32,6 +32,7 @@ import {
 } from './response-grounding';
 import {
   canonicalizeResponseNumbers,
+  hasUnsupportedPercentValue,
   hasUnsupportedValueIssue,
   salvageUngroundedResponse,
   validateResponseFacts,
@@ -43,7 +44,7 @@ import { loadRoutingVocabulary } from './routing-vocabulary';
 import { askOpenAIWithPreparedPrompt } from './openai-fallback-client';
 import { createHash } from 'crypto';
 import { recordLlmAnalysisFailure } from '../observability/llm-metrics';
-import type { FinancialContextSnapshot } from './types';
+import type { FinancialContextSnapshot, QuestionNeeds } from './types';
 
 export interface RunAskLincAnalysisOptions {
   question: string;
@@ -122,14 +123,6 @@ function evidenceTickers(
 function contextDigest(value: string | undefined): string | undefined {
   return value ? createHash('sha256').update(value).digest('hex') : undefined;
 }
-
-/** Context tiers a retry can switch on; the rest is loaded for every question. */
-const ROUTED_NEEDS = [
-  'needsAccountDetails',
-  'needsTransactionDetails',
-  'needsInvestments',
-  'needsRetirement',
-] as const;
 
 /**
  * Pick retry feedback that covers every kind of failure rather than the first N
@@ -371,14 +364,33 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     // let the retry answer the question it was actually asked. Routing predicts
     // what a question needs; this reacts to what it turned out to need.
     if (!evaluation && hasUnsupportedValueIssue(groundingResult.issues)) {
+      // The personal tiers are switched on together: they are database reads
+      // already gathered for this request, and which of them held the missing
+      // number is not worth guessing at.
+      //
+      // The outside tiers are not free — search is a live call to a third party
+      // — so they are switched on only when the evidence points at them. A
+      // percentage nobody supplied is that evidence: rates, inflation and tax
+      // brackets are what the model reaches for when it needs a figure no
+      // connected account holds. This is also what keeps the routing metrics
+      // readable, since a widened tier is charged with a miss: without the
+      // gate, an escalation over a missing transaction total would count
+      // against market and search context every time.
+      const reachedForRate = hasUnsupportedPercentValue(groundingResult.issues);
       const escalatedNeeds = {
         ...questionNeeds,
         needsAccountDetails: true,
         needsTransactionDetails: true,
         needsInvestments: true,
         needsRetirement: true,
+        needsMarketContext: questionNeeds.needsMarketContext || reachedForRate,
+        needsSearchContext: questionNeeds.needsSearchContext || reachedForRate,
       };
-      const widens = ROUTED_NEEDS.some((need) => !questionNeeds[need]);
+      // Whether re-gathering can add anything, asked of the needs themselves —
+      // a list of tiers here would silently stop covering a newly added one.
+      const widens = (Object.keys(escalatedNeeds) as Array<keyof QuestionNeeds>).some(
+        (need) => Boolean(escalatedNeeds[need]) !== Boolean(questionNeeds[need])
+      );
       if (widens) {
         try {
           onProgress?.('Loading more of your financial data');

@@ -56,7 +56,9 @@ export const ROUTING_CATEGORY_META: RoutingCategoryMeta[] = [
     label: 'Retirement',
     feeds: 'Retirement',
     standalone: true,
-    description: 'Loads the retirement projection and its inputs. Also drives the second review.',
+    description: 'Loads the retirement projection and its inputs. Also drives the second review. ' +
+      'Runway questions ("how long will my money last", "will I run out of money") are matched by shape ' +
+      'in code, so they load it regardless of these terms.',
   },
   {
     id: 'investments',
@@ -101,14 +103,17 @@ export const ROUTING_CATEGORY_META: RoutingCategoryMeta[] = [
     label: 'Market context',
     feeds: 'Market context',
     standalone: true,
-    description: 'Fetches outside market data. Kept narrow on purpose — a false match makes answers slower.',
+    description: 'Fetches outside market data. Kept narrow on purpose — a false match makes answers slower. ' +
+      'Retirement questions load it regardless of these terms: a projection is stated against inflation ' +
+      'and rates the user never names, so removing every term here will not switch it off for those.',
   },
   {
     id: 'searchContext',
     label: 'Rates & rules lookup',
     feeds: 'Rates & rules',
     standalone: true,
-    description: 'Fetches current rates, limits, and tax rules. Also kept narrow.',
+    description: 'Fetches current rates, limits, and tax rules. Also kept narrow. An explicit ask to search ' +
+      '("look it up", "do a web search") switches it on regardless of these terms.',
   },
 ];
 
@@ -153,6 +158,13 @@ export const DEFAULT_ROUTING_TERMS: Record<RoutingCategory, string[]> = {
     'apr', 'apy', 'refinance', 'yield', 'tax law', 'tax limit',
     'contribution limit', 'standard deduction',
     'required minimum distribution', 'rmd',
+    // Benefit programs are outside rules with figures that change yearly. A user
+    // asking to factor Social Security or Medicare into a plan is asking for
+    // numbers no connected account holds.
+    // Not bare "cola": \b sees the hyphen, so it fires on "coca-cola" and would
+    // send a holdings question out to search.
+    'social security', 'medicare', 'medicaid',
+    'cost of living adjustment', 'cost-of-living adjustment',
   ],
 };
 

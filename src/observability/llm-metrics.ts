@@ -119,8 +119,9 @@ export function recordLlmAnalysisFailure(totalMs: number): void {
  * counts as a miss even when the widened retry went on to succeed — the recovery
  * is the evidence that the prediction was wrong, and letting a successful
  * recovery erase it would hide exactly what this measures. It counts only
- * against the tiers the widening actually switched on: escalation never reaches
- * for market or search context, so charging those with it would invent a signal.
+ * against the tiers the widening actually switched on: escalation reaches for
+ * market and search context only when the model went looking for a rate, so
+ * those are charged by the escalations that implicate them and not by the rest.
  *
  * This is a correlation, not a diagnosis — a tier can be withheld correctly and
  * still sit next to failures. Treat a persistent positive gap as a prompt to go

@@ -25,12 +25,49 @@ const RETIREMENT_PHRASINGS = [
   'is my nest egg big enough?',
   'when can I stop working?',
   'am I on track for financial independence?',
+  // Runway questions. These name no retirement word at all, so the projection
+  // engine never ran on the one question it exists to answer and the reply was
+  // assembled from aggregates instead.
+  'at my current rate of spend, how long will my money last?',
+  'how long will my savings last?',
+  'how many more years will the portfolio last?',
+  'how much longer will my cash hold out?',
+  'will I run out of money?',
+  'am I going to outlive my savings?',
+  'how long can I live off my investments?',
+  'how long will my 401k last?',
+  'how long will my 401(k) last?',
+  'how long will my IRA last?',
+  'how long will my HSA last?',
+  // The duration on the other side of the asset — how people ask it once they
+  // already have a number in mind.
+  'will my savings last 20 years?',
+  'will my savings last until I am 90?',
+  // The time-idiom exclusion on "last" is written without an article, so it
+  // only catches "the last few months". A forward-looking duration always has
+  // one — "last a few", "last a couple" — and still counts.
+  'will my money last a couple more years?',
+  'will my savings last a few more years?',
 ];
 
 const NON_RETIREMENT_PHRASINGS = [
   'what is my net worth?',
   'how much did I spend on groceries?',
   'should I retire my mortgage early?',
+  // A loan term, not a runway. Naming the assets is what separates these.
+  'how long will my mortgage last?',
+  'how long will my car loan last?',
+  // Same shape, different question: an emergency fund is drawn down by a job
+  // loss, and the projection would answer by asking for a retirement age.
+  'how long will my emergency fund last if I lose my job?',
+  // "last" as the time idiom, not as running out. A duration, an asset and the
+  // word "last" appear here in the right order and mean nothing of the kind.
+  'how many months of savings did I use last year?',
+  'how much did I add to my savings last month?',
+  'how did my portfolio do the last couple of years?',
+  // Living on an income is a question about that income. Requiring the asset
+  // after "live off/on" is what separates it from living off a portfolio.
+  'how long can I live on welfare?',
 ];
 
 describe('retirement language', () => {
