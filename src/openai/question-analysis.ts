@@ -5,18 +5,52 @@ import { QuestionNeeds } from './types';
 function analyzeSingleQuestion(question: string): QuestionNeeds {
   const qLower = question.toLowerCase();
 
-  // External context is intentionally narrow. Personal balance, portfolio, and
-  // retirement questions should use the persisted financial snapshot unless the
-  // user explicitly asks about current markets, rates, or outside rules.
+  // Match the word family, not two fixed spellings: substring checks for
+  // "retire"/"retirement" miss "retiring", "retires", "retired", and "retiree",
+  // which silently withheld the retirement analysis from questions that were
+  // plainly about retiring.
+  // Shared with the retirement parser and the profile extractor, so routing a
+  // question and reading its parameters can never disagree about the phrasing.
+  const needsRetirement = mentionsRetirement(qLower);
+
+  // External context is intentionally narrow. Personal balance and portfolio
+  // questions should use the persisted financial snapshot unless the user
+  // explicitly asks about current markets, rates, or outside rules.
   // Vocabulary lives in the admin-configurable routing terms; the shapes that
   // are not word lists stay here.
+  //
+  // Retirement is the exception, and it is not a vocabulary case. "How long will
+  // my money last" is a question about purchasing power over decades, so the
+  // answer is stated against inflation and rates whether or not the user names
+  // them — and withholding that context produced answers saying they lacked the
+  // assumptions a runway projection needs while those figures sat one cached
+  // read away. The market summary is a database read, not a network fetch, so
+  // this costs the slowest question shape we have almost nothing.
   const needsMarketContext =
     matchesCategory('marketContext', qLower) ||
+    Boolean(needsRetirement) ||
     /\b(stock|bond|treasury) market\b/.test(qLower) ||
     /\bmarket (outlook|conditions|performance|trend|forecast)\b/.test(qLower);
 
+  // Asking for a lookup is the least ambiguous signal there is, and none of the
+  // rates-and-rules vocabulary fired on "can you do a web search to find some
+  // good numbers for my Social Security benefit" — the request named no rate, so
+  // the one question that explicitly asked to search was answered without it.
+  //
+  // Kept to phrasings that can only mean "go outside". A possessive after "look
+  // up" points at the user's own data ("look up my Amazon charges"), and "how
+  // much Google do I own" is a holdings question, so a bare "google" is not the
+  // signal either.
+  const asksForLookup =
+    /\b(?:web|internet|online)\s+search\b/.test(qLower) ||
+    /\bsearch\s+(?:the\s+)?(?:web|internet|online)\b/.test(qLower) ||
+    /\blook\s+(?:it|this|that|those|them)\s+up\b/.test(qLower) ||
+    /\blook\s+up\b(?!\s+(?:my|our)\b)/.test(qLower) ||
+    /\bgoogle\s+(?:it|this|that)\b/.test(qLower);
+
   const needsSearchContext =
     matchesCategory('searchContext', qLower) ||
+    asksForLookup ||
     /\b(current|latest|today(?:'s)?)\s+(rate|rates|price|prices|yield|law|limit|limits)\b/.test(qLower) ||
     /\b(mortgage|cd|treasury|savings)\s+(rate|rates|yield|yields)\b/.test(qLower) ||
     /\b(tax|capital gains?)\s+(rate|rates|bracket|brackets|deduction|deductions)\b/.test(qLower);
@@ -26,14 +60,6 @@ function analyzeSingleQuestion(question: string): QuestionNeeds {
   const mentionsStockMarket = /\b(stock|bond|treasury) market\b/.test(qLower);
 
   const needsInvestments = !mentionsStockMarket && matchesCategory('investments', qLower);
-
-  // Match the word family, not two fixed spellings: substring checks for
-  // "retire"/"retirement" miss "retiring", "retires", "retired", and "retiree",
-  // which silently withheld the retirement analysis from questions that were
-  // plainly about retiring.
-  // Shared with the retirement parser and the profile extractor, so routing a
-  // question and reading its parameters can never disagree about the phrasing.
-  const needsRetirement = mentionsRetirement(qLower);
 
   const needsAccountDetails = matchesCategory('accounts', qLower) || needsInvestments;
 

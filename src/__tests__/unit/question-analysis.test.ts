@@ -109,6 +109,46 @@ describe('question-aware LLM context routing', () => {
     });
   });
 
+  it('loads market context for retirement questions that never say "inflation"', () => {
+    // A runway projection is stated against inflation and rates whichever words
+    // the user used. Withholding that context produced an answer telling a
+    // 77-year-old it lacked the assumptions the projection needed.
+    for (const question of [
+      'I am already retired, turning 77 this year. And I plan to withdrawal approximately $36K per year.',
+      'Assess my entire financial portfolio. Determine how long my money will last in retirement.',
+      'Am I on track to retire at 68?',
+    ]) {
+      expect(analyzeQuestionNeeds(question)).toMatchObject({
+        needsRetirement: true,
+        needsMarketContext: true,
+      });
+    }
+
+    // Still off for the questions that have no projection behind them.
+    expect(analyzeQuestionNeeds('What is my current net worth?')).toMatchObject({
+      needsMarketContext: false,
+    });
+  });
+
+  it('loads rates-and-rules context when the user asks for a lookup or names a benefit program', () => {
+    for (const question of [
+      "Can't you do a web search to find some good numbers to plug in for my Social Security benefit and Medicare costs?",
+      'Factor in Social Security and Medicare into my retirement plan.',
+      'Can you look up the current Medicare Part B premium?',
+      'I do not know the figure — look it up.',
+    ]) {
+      expect(analyzeQuestionNeeds(question)).toMatchObject({ needsSearchContext: true });
+    }
+
+    // A lookup phrasing aimed at the user's own data is not an outside lookup.
+    for (const question of [
+      'Look up my Amazon charges from last month.',
+      'How much Google stock do I own?',
+    ]) {
+      expect(analyzeQuestionNeeds(question)).toMatchObject({ needsSearchContext: false });
+    }
+  });
+
   it('recognizes every form of the word "retire"', () => {
     // "retiring" contains neither "retire" nor "retirement", so the substring
     // checks this replaced withheld the retirement analysis from the question
