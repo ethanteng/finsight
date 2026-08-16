@@ -96,6 +96,16 @@ describe('annual spending wording', () => {
     expect(result.annualWithdrawalAmount).toBeUndefined();
   });
 
+  it('keeps an explicitly framed spend stated alongside a salary', () => {
+    // One sentence can state both. Refusing the whole sentence because it
+    // mentions earnings throws away the number the user actually gave, and
+    // asks them for it again.
+    expect(
+      parseRetirementQuestion('I earn $200k a year and plan annual retirement spending of $80k')
+        .annualWithdrawalAmount
+    ).toBe(80_000);
+  });
+
   it('does not treat earnings in a retirement question as the spending target', () => {
     for (const question of [
       'I earn $200k a year, can I retire at 65?',

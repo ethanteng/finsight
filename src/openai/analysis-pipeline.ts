@@ -38,6 +38,7 @@ import {
 } from './response-facts';
 import { validateCanonicalFactPack } from './canonical-facts';
 import { describeMissingInputs } from './missing-inputs';
+import { describeRetirementAssumptions } from './retirement-assumptions';
 import { loadRoutingVocabulary } from './routing-vocabulary';
 import { askOpenAIWithPreparedPrompt } from './openai-fallback-client';
 import { createHash } from 'crypto';
@@ -194,14 +195,24 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
 
   onProgress?.('Loading your financial snapshot');
 
-  const recentQuestions = conversationHistory
+  // Newest first. Routing looks at the questions; input extraction needs the
+  // answers too, since a short reply only means something beside what was asked.
+  const recentTurns = conversationHistory
     .slice()
     .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
-    .map((entry) => entry.question);
+    .map((entry) => ({ question: entry.question, answer: entry.answer }));
+  const recentQuestions = recentTurns.map((turn) => turn.question);
   // Routing vocabulary is admin-editable, so refresh it before matching. Never
   // throws; a stale or default vocabulary still routes.
   if (!evaluation) await loadRoutingVocabulary();
   const questionNeeds = analyzeQuestionNeeds(question, recentQuestions);
+
+  // Covers every model this request can reach: the input extractor that runs
+  // during context gathering, then the primary, fallback and second-review
+  // models. Loading it after context gathering left a cold process using the
+  // shipped default for the extractor on its first retirement question,
+  // ignoring an admin override that was set precisely to avoid that.
+  await loadModelConfig();
 
   // Step 1: Retrieve context (snapshot, profile, market summary, RAG)
   const contextGatherStartedAt = Date.now();
@@ -210,7 +221,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
     question,
     questionNeeds,
     tier,
-    recentQuestions,
+    recentTurns,
     onProgress
   });
   let contextGatherMs = Date.now() - contextGatherStartedAt;
@@ -222,9 +233,6 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   const promptBuildStartedAt = Date.now();
   onProgress?.('Submitting to Claude for analysis');
   if (!evaluation?.skipToneConfig) await loadResponseToneConfig();
-  // Covers all three models this pipeline can reach: primary, fallback, and
-  // the second-review validator.
-  await loadModelConfig();
   const orderedConversationHistory = conversationHistory
     .slice()
     .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
@@ -375,7 +383,7 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
         try {
           onProgress?.('Loading more of your financial data');
           const escalationStartedAt = Date.now();
-          snapshot = await gatherContextSnapshot({ userId, question, questionNeeds: escalatedNeeds, tier, recentQuestions, onProgress });
+          snapshot = await gatherContextSnapshot({ userId, question, questionNeeds: escalatedNeeds, tier, recentTurns, onProgress });
           contextGatherMs += Date.now() - escalationStartedAt;
           promptInput = buildPromptInput(snapshot, escalatedNeeds);
           factPack = promptInput.canonicalFacts!;
@@ -446,6 +454,15 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   const missingInputsAsk = describeMissingInputs(snapshot, questionNeeds);
   if (missingInputsAsk) {
     structuredResponse = appendNotice(structuredResponse, missingInputsAsk);
+  }
+
+  // A projection is only as right as the inputs read out of the conversation.
+  // Stating them — with the user's own words where they are known — turns a
+  // misread from something found later in the math into something corrected in
+  // the next reply.
+  const retirementAssumptions = describeRetirementAssumptions(snapshot);
+  if (retirementAssumptions) {
+    structuredResponse = appendNotice(structuredResponse, retirementAssumptions);
   }
 
   // Step 6: Output validation (security)

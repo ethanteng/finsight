@@ -500,10 +500,12 @@ describe('runAskLincAnalysis validation routing', () => {
 
     await runAskLincAnalysis({ question: 'Re-run it.', userId: 'user-1', conversationHistory: history });
 
-    expect(mockedGatherContext.mock.calls[0][0].recentQuestions).toEqual([
-      'Question 3',
-      'Question 2',
-      'Question 1',
+    // The answers travel with the questions: a reply like "62" only has a
+    // meaning next to the question it answered.
+    expect(mockedGatherContext.mock.calls[0][0].recentTurns).toEqual([
+      { question: 'Question 3', answer: 'Answer 3' },
+      { question: 'Question 2', answer: 'Answer 2' },
+      { question: 'Question 1', answer: 'Answer 1' },
     ]);
   });
 });
