@@ -12,6 +12,7 @@ interface PromptHistory {
   id: string;
   question: string;
   answer: string;
+  threadId?: string | null;
   timestamp: number;
 }
 
@@ -19,6 +20,14 @@ interface FinanceQAProps {
   onNewAnswer?: (question: string, answer: string) => void;
   selectedPrompt?: PromptHistory | null;
   onNewQuestion?: () => void;
+}
+
+/** randomUUID needs a secure context; the fallback keeps non-HTTPS dev working. */
+function newThreadId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 const PLACEHOLDER_QUESTIONS = [
@@ -42,6 +51,11 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
   const [userTier, setUserTier] = useState<string>('starter');
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  // The line of questioning this composer is in. "New decision" clears it and
+  // the next question mints a fresh one; a follow-up keeps it. That single value
+  // is what tells the server which turns count as context, so it never has to
+  // guess from the wording whether "$125K" belongs to this question.
+  const [threadId, setThreadId] = useState<string | null>(null);
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
   const [streamingAnswer, setStreamingAnswer] = useState('');
   const [structuredResponse, setStructuredResponse] = useState<{
@@ -91,6 +105,10 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       setQuestion(selectedPrompt.question);
       setAnswer(selectedPrompt.answer);
       setConversationId(selectedPrompt.id);
+      // Opening a past turn resumes its line of questioning, so a follow-up
+      // continues where that decision left off. Turns written before threads
+      // existed carry no id and start a fresh one.
+      setThreadId(selectedPrompt.threadId ?? null);
       setStructuredResponse(null);
       setShowTheMathData(null);
       setError('');
@@ -102,6 +120,9 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       setStructuredResponse(null);
       setShowTheMathData(null);
       setError('');
+      // "New decision" lands here. Dropping the thread is what makes the next
+      // question start clean instead of inheriting the last one's assumptions.
+      setThreadId(null);
     }
   }, [selectedPrompt]);
 
@@ -138,7 +159,11 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
       }
 
       const endpoint = '/ask/display-real';
-      const requestBody = { question: questionToAsk };
+      // Mint on the first question of a decision so even that turn is already in
+      // a thread; every follow-up reuses it until "New decision" clears it.
+      const activeThreadId = threadId ?? newThreadId();
+      if (activeThreadId !== threadId) setThreadId(activeThreadId);
+      const requestBody = { question: questionToAsk, threadId: activeThreadId };
 
       headers['Accept'] = 'text/event-stream';
 
@@ -189,6 +214,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
                   setStreamingAnswer('');
                   if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
                   if (data.conversationId) setConversationId(data.conversationId);
+                  if (data.threadId) setThreadId(data.threadId);
                   if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
                   trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier });
                 } else {
@@ -236,6 +262,7 @@ export default function FinanceQA({ onNewAnswer, selectedPrompt, onNewQuestion: 
           setAnswer(data.answer);
           if (data.structuredResponse) setStructuredResponse(data.structuredResponse);
           if (data.conversationId) setConversationId(data.conversationId);
+          if (data.threadId) setThreadId(data.threadId);
           if (onNewAnswer) onNewAnswer(questionToAsk, data.answer);
           trackEvent('answer_received', { answer_length: data.answer.length, user_tier: userTier });
         } else {

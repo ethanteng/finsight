@@ -11,7 +11,7 @@ import { resetPlaidLinkInitialization } from '../../components/PlaidLinkButton';
 import { identifyUser, resetUserIdentity } from '../../lib/heycatch';
 import { syncStoredUserTimeZoneFromAuthUser } from '../../lib/browser-time-zone';
 
-interface PromptHistory { id: string; question: string; answer: string; timestamp: number }
+interface PromptHistory { id: string; question: string; answer: string; threadId?: string | null; timestamp: number }
 interface SubscriptionStatus { status: string; tier: string; message: string; isActive: boolean; accessLevel: 'full' | 'none'; upgradeRequired: boolean; expiresAt?: string }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -66,7 +66,7 @@ export default function AppPageClient() {
       if (!res.ok) throw new Error(`History request failed (${res.status})`);
       const data = await res.json();
       const history: PromptHistory[] = data.conversations.map((conversation: PromptHistory) => ({
-        id: conversation.id, question: conversation.question, answer: conversation.answer, timestamp: conversation.timestamp,
+        id: conversation.id, question: conversation.question, answer: conversation.answer, threadId: conversation.threadId ?? null, timestamp: conversation.timestamp,
       }));
       setPromptHistory(history);
       setSelectedPrompt(history[0] || null);

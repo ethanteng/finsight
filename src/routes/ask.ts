@@ -21,6 +21,14 @@ router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req,
   const streaming = req.headers.accept?.includes('text/event-stream') === true;
   const question = typeof req.body?.question === 'string' ? req.body.question.trim() : '';
   if (!question) return res.status(400).json({ error: 'Question is required' });
+  // The client sends the thread it is continuing, and omits it when the user
+  // starts a new decision. This is the one signal about conversation boundaries
+  // that is stated rather than inferred, so it is worth more than any amount of
+  // reading the wording.
+  const requestedThreadId =
+    typeof req.body?.threadId === 'string' && req.body.threadId.trim()
+      ? req.body.threadId.trim().slice(0, 64)
+      : null;
 
   if (streaming) {
     res.setHeader('Content-Type', 'text/event-stream');
@@ -43,7 +51,13 @@ router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req,
       }> = [];
       try {
         conversationHistory = await getPrismaClient().conversation.findMany({
-          where: { userId: user.id },
+          // A declared thread answers "which turns belong to this question?"
+          // exactly. A new decision still sends one — the client mints it — so
+          // it simply matches nothing yet, which is the correct history for a
+          // fresh line of questioning. Only a client that predates threads sends
+          // none, and it keeps the old whole-history window so that a backend
+          // deploy landing before a frontend deploy changes nothing for it.
+          where: requestedThreadId ? { userId: user.id, threadId: requestedThreadId } : { userId: user.id },
           orderBy: { createdAt: 'desc' },
           take: 10,
           select: { id: true, question: true, answer: true, createdAt: true },
@@ -80,9 +94,10 @@ router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req,
           userId: user.id,
           question,
           answer: result.displayText,
+          threadId: requestedThreadId,
           showTheMathData: result.showTheMathData as object,
         },
-        select: { id: true },
+        select: { id: true, threadId: true },
       });
       if (result.showTheMathData?.evidenceManifest) {
         recordLlmAnalysis(result.showTheMathData.evidenceManifest);
@@ -90,6 +105,7 @@ router.post('/ask/display-real', aiRateLimitMiddleware, requireAuth, async (req,
       const payload = {
         answer: result.displayText,
         conversationId: conversation.id,
+        threadId: conversation.threadId,
         structuredResponse: result.structuredResponse,
       };
       if (streaming) {
@@ -155,6 +171,9 @@ router.get('/conversations', requireAuth, async (req, res) => {
       id: conversation.id,
       question: conversation.question,
       answer: conversation.answer,
+      // Lets the sidebar resume a line of questioning: picking a past turn
+      // adopts its thread, so the next question continues from there.
+      threadId: conversation.threadId,
       timestamp: conversation.createdAt.getTime(),
     })),
   });
