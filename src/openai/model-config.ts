@@ -2,9 +2,9 @@
  * Admin-configurable LLM model selection.
  *
  * Every model the pipeline calls used to be pinned either in source or in a
- * Render environment variable, so changing one meant a deploy. The four slots
- * below are stored as a JSON blob on the singleton `ai_prompt_config` row and
- * cached in memory, mirroring the response-tone and routing-vocabulary configs.
+ * Render environment variable, so changing one meant a deploy. The slots below
+ * are stored as a JSON blob on the singleton `ai_prompt_config` row and cached
+ * in memory, mirroring the response-tone and routing-vocabulary configs.
  *
  * Resolution order per slot is admin setting → environment variable → shipped
  * default, so an existing deploy keeps its env-configured model until an admin
@@ -67,7 +67,10 @@ export const MODEL_SLOTS: ModelSlotMeta[] = [
     provider: 'anthropic',
     description:
       'Writes every Ask Linc answer. Changing this changes the voice and reasoning quality of the whole product.',
-    shippedDefault: 'claude-sonnet-4-5',
+    // Matches the model the admin override has been pointing at; a cold process
+    // that fails to read the config now falls back to the same model the
+    // request code is tuned for rather than to the previous generation.
+    shippedDefault: 'claude-sonnet-5',
   },
   {
     id: 'fallback',

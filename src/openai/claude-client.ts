@@ -5,6 +5,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import * as Sentry from '@sentry/node';
 import { buildFinancialReasoningPrompt, FinancialReasoningPromptInput } from './financial-reasoning-prompt';
 import { getActiveModel } from './model-config';
 
@@ -26,9 +27,71 @@ export interface AskClaudeOptions {
   maxTokens?: number;
 }
 
-function configuredMaxTokens(): number {
-  const value = Number.parseInt(process.env.ASK_LINC_MAX_OUTPUT_TOKENS || '8192', 10);
-  return Number.isFinite(value) && value > 0 ? value : 8192;
+export const DEFAULT_MAX_OUTPUT_TOKENS = 16_000;
+
+/** Shared by the primary Claude path and the OpenAI fallback so both honor the same ceiling. */
+export function resolveAskLincMaxOutputTokens(): number {
+  const value = Number.parseInt(
+    process.env.ASK_LINC_MAX_OUTPUT_TOKENS || String(DEFAULT_MAX_OUTPUT_TOKENS),
+    10
+  );
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_MAX_OUTPUT_TOKENS;
+}
+
+/**
+ * Thinking is stated rather than left to the model default, because the default
+ * moved underneath us: omitting it meant "no thinking" on Sonnet 4.5 and means
+ * adaptive thinking on Sonnet 5. Since `max_tokens` bounds thinking and answer
+ * together, that silently shortened the answer budget the day the analysis slot
+ * changed. Medium effort pulls the spend back below the `high` default while
+ * keeping the reasoning that grounds a numbers-heavy answer.
+ */
+const THINKING_CONFIG = { type: 'adaptive' } as const;
+const EFFORT_CONFIG = { effort: 'medium' } as const;
+
+/**
+ * Adaptive thinking and `output_config.effort` arrived with the 4.6 generation;
+ * Sonnet 4.5 and everything older reject both. The analysis slot is picked by an
+ * admin from the provider's live model list, which still serves those models, so
+ * sending the parameters unconditionally would couple this file to one model
+ * generation — the exact deploy-to-change-a-model problem the slot config exists
+ * to remove. A rejected request is also the worst possible failure here: the
+ * primary provider never runs, every answer silently comes from the OpenAI
+ * fallback, and the admin panel still reports the Claude model as the one in use.
+ *
+ * Ids that don't parse are treated as legacy. Omitting the parameters costs
+ * effort tuning and leaves the model's own default thinking behaviour in place,
+ * which the raised ceiling and the truncation report above already cover;
+ * sending them to a model that refuses them costs the entire call.
+ */
+export function supportsAdaptiveThinking(model: string): boolean {
+  const match = /^claude-(?:opus|sonnet|haiku|fable|mythos)-(\d+)(?:-(\d+))?(?:-|$)/.exec(model.trim());
+  if (!match) return false;
+  const major = Number(match[1]);
+  const minor = match[2] === undefined ? 0 : Number(match[2]);
+  return major >= 5 || (major === 4 && minor >= 6);
+}
+
+/** The reasoning parameters this model accepts — empty for pre-4.6 models. */
+function reasoningParams(model: string): {
+  thinking?: typeof THINKING_CONFIG;
+  output_config?: typeof EFFORT_CONFIG;
+} {
+  if (!supportsAdaptiveThinking(model)) return {};
+  return { thinking: THINKING_CONFIG, output_config: EFFORT_CONFIG };
+}
+
+/**
+ * A response that stopped on `max_tokens` is a partial answer that still parses
+ * far enough to look like a whole one, so nothing downstream notices. Report it
+ * — the fix is a bigger budget or less thinking, and neither is discoverable
+ * from the truncated text alone.
+ */
+function reportIfTruncated(stopReason: string | null | undefined, model: string): void {
+  if (stopReason !== 'max_tokens') return;
+  const message = `Ask Linc: Claude response truncated at max_tokens (model=${model}). Raise ASK_LINC_MAX_OUTPUT_TOKENS or lower thinking effort.`;
+  console.warn(message);
+  Sentry.captureMessage(message, 'warning');
 }
 
 /**
@@ -43,16 +106,19 @@ export async function askClaude(
 ): Promise<string> {
   const client = getClient();
   const model = options.model || getActiveModel('analysis');
-  const maxTokens = options.maxTokens ?? configuredMaxTokens();
+  const maxTokens = options.maxTokens ?? resolveAskLincMaxOutputTokens();
 
   const response = await client.messages.create({
     model,
     max_tokens: maxTokens,
+    ...reasoningParams(model),
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }]
   });
 
-  const textBlock = response.content.find((block): block is { type: 'text'; text: string } => block.type === 'text');
+  reportIfTruncated(response.stop_reason, model);
+
+  const textBlock = response.content.find((block): block is Anthropic.TextBlock => block.type === 'text');
   return textBlock?.text ?? '';
 }
 
@@ -69,11 +135,12 @@ export async function askClaudeStream(
 ): Promise<string> {
   const client = getClient();
   const model = options.model || getActiveModel('analysis');
-  const maxTokens = options.maxTokens ?? configuredMaxTokens();
+  const maxTokens = options.maxTokens ?? resolveAskLincMaxOutputTokens();
 
   const stream = client.messages.stream({
     model,
     max_tokens: maxTokens,
+    ...reasoningParams(model),
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }]
   });
@@ -87,7 +154,9 @@ export async function askClaudeStream(
   });
 
   const finalMessage = await stream.finalMessage();
-  const textBlock = finalMessage.content.find((block): block is { type: 'text'; text: string } => block.type === 'text');
+  reportIfTruncated(finalMessage.stop_reason, model);
+
+  const textBlock = finalMessage.content.find((block): block is Anthropic.TextBlock => block.type === 'text');
   return textBlock?.text ?? '';
 }
 
