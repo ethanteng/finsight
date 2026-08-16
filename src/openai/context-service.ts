@@ -12,6 +12,11 @@ interface GatherContextArgs {
   question: string;
   questionNeeds: QuestionNeeds;
   tier: UserTier;
+  /**
+   * The user's previous questions, most recent first. Analysis inputs stated a
+   * turn or two ago belong to the question being asked now.
+   */
+  recentQuestions?: string[];
   /** Optional callback for progress updates (e.g. for SSE streaming) */
   onProgress?: (message: string) => void;
 }
@@ -53,6 +58,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
     question,
     questionNeeds,
     tier,
+    recentQuestions = [],
     onProgress
   } = args;
 
@@ -344,6 +350,7 @@ export async function gatherContextSnapshot(args: GatherContextArgs): Promise<Fi
       const result = await fetchOrCreateRetirementAnalysis({
         userId,
         question,
+        recentQuestions,
         userProfile: userProfile || '',
         holdings: investmentsSnapshot.holdings,
         securities: investmentsSnapshot.securities || [],
@@ -422,15 +429,18 @@ interface RetirementAnalysisResolution {
 async function fetchOrCreateRetirementAnalysis(args: {
   userId: string;
   question: string;
+  recentQuestions?: string[];
   userProfile: string;
   holdings: any[];
   securities: any[];
 }): Promise<RetirementAnalysisResolution> {
-  const { userId, question, userProfile, holdings, securities } = args;
+  const { userId, question, recentQuestions = [], userProfile, holdings, securities } = args;
 
-  // Parse retirement parameters from question
-  const { parseRetirementQuestion } = await import('../retirement-analytics/retirement-question-parser');
-  const questionParams = parseRetirementQuestion(question);
+  // Parse retirement parameters from the question and the turns that set it up.
+  // A number the user gave two messages ago is an answer to this question, not
+  // a reason to ask them for it again.
+  const { parseRetirementConversation } = await import('../retirement-analytics/retirement-question-parser');
+  const questionParams = parseRetirementConversation(question, recentQuestions);
 
   console.log('📋 Retirement question parser result:', {
     hasRetirementIntent: questionParams.hasRetirementIntent,

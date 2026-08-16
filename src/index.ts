@@ -2456,10 +2456,20 @@ app.put('/admin/ai/routing-vocabulary', adminAuth, async (req: Request, res: Res
 // Admin: See how a question routes, and which terms matched
 app.post('/admin/ai/routing-preview', adminAuth, async (req: Request, res: Response) => {
   try {
-    const { question } = req.body;
+    const { question, recentQuestions } = req.body;
     if (typeof question !== 'string' || !question.trim()) {
       return res.status(400).json({ error: 'question must be a non-empty string' });
     }
+    // Optional, and optional on purpose: a short follow-up ("$125k a year",
+    // "yes") inherits the previous turn's needs, so previewing it alone shows
+    // routing that production would never produce. Callers that do not send
+    // history keep the old single-question behaviour.
+    if (recentQuestions !== undefined && !Array.isArray(recentQuestions)) {
+      return res.status(400).json({ error: 'recentQuestions must be an array of strings' });
+    }
+    const priorQuestions: string[] = Array.isArray(recentQuestions)
+      ? recentQuestions.filter((entry: unknown): entry is string => typeof entry === 'string')
+      : [];
 
     const { ROUTING_CATEGORIES, loadRoutingVocabulary, matchingTerms } =
       await import('./openai/routing-vocabulary');
@@ -2469,7 +2479,7 @@ app.post('/admin/ai/routing-preview', adminAuth, async (req: Request, res: Respo
     const lowered = question.toLowerCase();
 
     res.json({
-      needs: analyzeQuestionNeeds(question),
+      needs: analyzeQuestionNeeds(question, priorQuestions),
       matches: Object.fromEntries(
         ROUTING_CATEGORIES.map((category) => [category, matchingTerms(category, lowered)])
       ),

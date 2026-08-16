@@ -91,10 +91,32 @@ function analyzeSingleQuestion(question: string): QuestionNeeds {
   };
 }
 
+/**
+ * A short reply whose whole content is the value the last question asked for:
+ * "$125k a year", "125,000", "at 62". These name no topic of their own, so
+ * routing them on their own words drops them out of the thread they answer —
+ * and the analysis waiting on that number never runs.
+ *
+ * A trailing question mark disqualifies: "can I afford a $50k car?" carries an
+ * amount but is a new question, not an answer to the old one.
+ */
+function isValueAnswer(normalized: string): boolean {
+  if (/\?\s*$/.test(normalized)) return false;
+  if (/^(?:at\s+|age\s+)?\d{2}\b/.test(normalized)) return true;
+  if (
+    /^(?:about\s+)?(?:\$?\s*)?\d{1,3}(?:,\d{3})+(?:\.\d+)?\s*(?:k|thousand|million)?\s*$/.test(normalized) ||
+    /^(?:about\s+)?(?:\$?\s*)?\d{4,7}(?:\.\d+)?\s*(?:k|thousand|million)?\s*$/.test(normalized)
+  ) {
+    return true;
+  }
+  return /\$\s?\d|\b\d{1,3}(?:,\d{3})+\b|\b\d+\s*k\b/.test(normalized);
+}
+
 function isContextualFollowUp(question: string): boolean {
   const normalized = question.trim().toLowerCase();
   if (normalized.length > 100) return false;
-  return /^(?:and\b|also\b|so\b|then\b|but\b|what if\b|what about\b|how about\b|which (?:one|ones|of)\b|why (?:is|are|did|does) (?:that|it|this)\b|can you (?:explain|compare) (?:that|them|those|it)\b)|\b(?:same|instead|that one|those|them|it)\b/.test(normalized);
+  if (isValueAnswer(normalized)) return true;
+  return /^(?:and\b|also\b|so\b|then\b|but\b|yes\b|yeah\b|yep\b|correct\b|confirm(?:ed)?\b|i\s+(?:can\s+)?confirm\b|what if\b|what about\b|how about\b|which (?:one|ones|of)\b|why (?:is|are|did|does) (?:that|it|this)\b|can you (?:explain|compare) (?:that|them|those|it)\b)|\b(?:same|instead|that one|those|them|it)\b/.test(normalized);
 }
 
 /** Route a short contextual follow-up using the most recent user question. */
