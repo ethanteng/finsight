@@ -2509,7 +2509,7 @@ function modelConfigErrorMessage(error: unknown, fallback: string): string {
     message.includes('ai_prompt_config') ||
     message.includes('does not exist');
   return missingSchema
-    ? 'Database migration missing (ai_prompt_config.models column). Run prisma migrate deploy on production, then retry.'
+    ? 'Database migration missing (ai_prompt_config schema). Run prisma migrate deploy on production, then retry.'
     : fallback;
 }
 
