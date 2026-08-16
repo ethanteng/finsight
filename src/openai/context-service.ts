@@ -474,6 +474,14 @@ async function fetchOrCreateRetirementAnalysis(args: {
   // Note: We already check for retirement keywords at the trigger level,
   // so we proceed with parameter extraction even if parser doesn't detect intent
 
+  // Attach the words each input came from, so the answer can state what it
+  // acted on. Only present when the extractor read them from this decision.
+  const inputSources = extracted?.sources && Object.keys(extracted.sources).length > 0
+    ? extracted.sources
+    : undefined;
+  const withSources = (analysis: RetirementAnalysis): RetirementAnalysisResolution =>
+    inputSources ? { analysis: { ...analysis, _inputSources: inputSources } } : { analysis };
+
   // Extract age from profile if not in question
   const { extractAgeFromProfile, extractRetirementAgeFromProfile } = await import('../retirement-analytics/profile-age-extractor');
   const profileAge = extractAgeFromProfile(userProfile);
@@ -552,16 +560,14 @@ async function fetchOrCreateRetirementAnalysis(args: {
       console.log('📦 Using cached retirement analysis from database');
       const cachedAnalysis = recentAnalysis.historicalImplications as any;
       if (cachedAnalysis && cachedAnalysis.summary) {
-        return {
-          analysis: {
-            ...cachedAnalysis,
-            _storedInputParams: storedInput,
-            _evidence: {
-              recordId: recentAnalysis.id,
-              computedAt: recentAnalysis.computedAt.toISOString(),
-            },
+        return withSources({
+          ...cachedAnalysis,
+          _storedInputParams: storedInput,
+          _evidence: {
+            recordId: recentAnalysis.id,
+            computedAt: recentAnalysis.computedAt.toISOString(),
           },
-        };
+        });
       }
       const reconstructed: RetirementAnalysis = {
         summary: {
@@ -600,7 +606,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
           computedAt: recentAnalysis.computedAt.toISOString(),
         },
       };
-      return { analysis: reconstructed };
+      return withSources(reconstructed);
     }
   }
 
@@ -668,7 +674,7 @@ async function fetchOrCreateRetirementAnalysis(args: {
       recordId: createdAnalysis.id,
       computedAt: createdAnalysis.computedAt.toISOString(),
     };
-    return { analysis: resultWithInputs };
+    return withSources(resultWithInputs);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : 'No stack trace';

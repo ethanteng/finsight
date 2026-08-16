@@ -38,6 +38,7 @@ import {
 } from './response-facts';
 import { validateCanonicalFactPack } from './canonical-facts';
 import { describeMissingInputs } from './missing-inputs';
+import { describeRetirementAssumptions } from './retirement-assumptions';
 import { loadRoutingVocabulary } from './routing-vocabulary';
 import { askOpenAIWithPreparedPrompt } from './openai-fallback-client';
 import { createHash } from 'crypto';
@@ -453,6 +454,15 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
   const missingInputsAsk = describeMissingInputs(snapshot, questionNeeds);
   if (missingInputsAsk) {
     structuredResponse = appendNotice(structuredResponse, missingInputsAsk);
+  }
+
+  // A projection is only as right as the inputs read out of the conversation.
+  // Stating them — with the user's own words where they are known — turns a
+  // misread from something found later in the math into something corrected in
+  // the next reply.
+  const retirementAssumptions = describeRetirementAssumptions(snapshot);
+  if (retirementAssumptions) {
+    structuredResponse = appendNotice(structuredResponse, retirementAssumptions);
   }
 
   // Step 6: Output validation (security)
