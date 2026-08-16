@@ -15,7 +15,7 @@ module.exports = {
   // pipeline without testing anything the security job does not already cover.
   testPathIgnorePatterns: [
     'comprehensive-security.test.ts', // -> jest.security.config.js
-    'complete-security-suite.test.ts', // has its own setup; see jest.complete-security.config.js
+    'complete-security-suite.test.ts', // -> jest.security.config.js
     'plaid-security-integration.test.ts', // -> jest.real-security.config.js
     'privacy-security-integration.test.ts', // -> jest.real-security.config.js
     'profile-encryption-security.test.ts', // -> jest.real-security.config.js
