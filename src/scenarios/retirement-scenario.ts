@@ -223,7 +223,7 @@ function parseVariant(value: unknown): PlannedRetirementVariant | undefined {
   // The planner contract uses decimals. A malformed or implausible value is
   // dropped so the deterministic resolver can use its named default instead of
   // letting a model-supplied typo drive a projection.
-  const annualRate = rawRate !== undefined && rawRate > -0.2 && rawRate <= 0.5
+  const annualRate = rawRate !== undefined && rawRate >= -0.2 && rawRate <= 0.5
     ? rawRate
     : undefined;
   const overrides = parseOverrides(record.overrides);
