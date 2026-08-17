@@ -152,6 +152,42 @@ describe('context planner', () => {
     });
     expect(plan.retirementInputs?.retirementAge).toBeUndefined();
     expect(plan.retirementInputs?.withdrawalStartAge).toBeUndefined();
+    expect(plan.retirementScenario).toEqual(plan.scenarioPlans.retirement);
+  });
+
+  it('still parses the legacy singular retirementScenario planner field', () => {
+    const raw = rawPlan();
+    delete raw.scenarios;
+    raw.retirementScenario = {
+      requested: true,
+      primary: {
+        type: 'flat_nominal',
+        annualRate: null,
+        source: 'flat-dollar version',
+        overrides: {
+          annualWithdrawalAmount: null,
+          annualContributionAmount: null,
+          retirementAge: null,
+          withdrawalStartAge: null,
+          lifeExpectancy: null,
+          sources: {
+            annualWithdrawalAmount: null,
+            annualContributionAmount: null,
+            retirementAge: null,
+            withdrawalStartAge: null,
+            lifeExpectancy: null,
+          },
+        },
+      },
+      comparison: { type: 'none', annualRate: null, source: null, overrides: null },
+    };
+    const plan = parseContextPlan(raw);
+    expect(plan.scenarioPlans.retirement).toMatchObject({
+      requested: true,
+      primary: { type: 'flat_nominal', source: 'flat-dollar version' },
+    });
+    expect(plan.retirementScenario).toEqual(plan.scenarioPlans.retirement);
+    expect(plan.selectedPacks).toContain('retirement_analysis');
   });
 
   it('does not let hypothetical inputs rebuild the baseline they are meant to compare with', () => {

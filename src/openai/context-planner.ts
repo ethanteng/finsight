@@ -43,6 +43,8 @@ export interface ContextPlan {
   needsSecondaryValidation: boolean;
   retirementInputs?: ExtractedRetirementInputs;
   scenarioPlans: ScenarioPlanRecord;
+  /** @deprecated Compatibility mirror for admin clients that still read retirementScenario. */
+  retirementScenario?: RetirementScenarioPlan;
   summary: string;
   model?: string;
   durationMs: number;
@@ -212,7 +214,14 @@ export function parseContextPlan(raw: unknown, durationMs = 0, model?: string): 
   }
   const record = raw as Record<string, unknown>;
   const requestedPacks = getRequestedPacks(record.packs);
-  const scenarioPlans = scenarioCalculatorRegistry.parsePlans(record.scenarios);
+  // Prefer the registry-keyed scenarios object; accept the legacy singular field
+  // so transitional fixtures and older planner payloads still parse.
+  const scenarioPlans = scenarioCalculatorRegistry.parsePlans(
+    record.scenarios
+      ?? (record.retirementScenario
+        ? { [RETIREMENT_CALCULATOR_ID]: record.retirementScenario }
+        : undefined)
+  );
   const retirementScenario = scenarioCalculatorRegistry.getPlan<RetirementScenarioPlan>(
     scenarioPlans,
     RETIREMENT_CALCULATOR_ID
@@ -237,6 +246,7 @@ export function parseContextPlan(raw: unknown, durationMs = 0, model?: string): 
     needsSecondaryValidation,
     retirementInputs,
     scenarioPlans,
+    ...(retirementScenario && { retirementScenario }),
     summary,
     model,
     durationMs,
