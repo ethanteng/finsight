@@ -16,6 +16,7 @@ export const USE_CASE_LINKS = [
 ];
 
 export const COMPARE_LINKS = [
+  { href: '/vs/chatgpt', label: 'vs ChatGPT' },
   { href: '/vs/origin', label: 'vs Origin' },
   { href: '/vs/portfoliopilot', label: 'vs PortfolioPilot' },
   { href: '/vs/monarch', label: 'vs Monarch' },

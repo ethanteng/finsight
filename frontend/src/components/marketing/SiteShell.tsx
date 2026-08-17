@@ -48,6 +48,7 @@ export function SiteFooter() {
         </div>
         <div className="footer-column">
           <b>COMPARE</b>
+          <Link href="/vs/chatgpt">vs ChatGPT</Link>
           <Link href="/vs/origin">vs Origin</Link>
           <Link href="/vs/portfoliopilot">vs PortfolioPilot</Link>
           <Link href="/vs/monarch">vs Monarch</Link>
