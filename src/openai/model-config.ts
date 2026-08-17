@@ -361,19 +361,39 @@ let overridesLoadedAt = 0;
 let generationSettingsLoadedAt = 0;
 
 /**
+ * Slot ids that were renamed in place. Stored admin overrides keep the old key
+ * until the next save, so reads must map them or the deploy silently falls back
+ * to the shipped default.
+ */
+const LEGACY_SLOT_IDS: Record<string, ModelSlotId> = {
+  retirementInputs: 'contextPlanner',
+};
+
+function readModelOverride(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || !isPlausibleModelId(trimmed)) return null;
+  return trimmed;
+}
+
+/**
  * Keep only recognised slots with plausible values. A stored blob that predates
  * a slot rename, or that someone edited in the database, must not be able to
  * push an unusable model ID into a provider call.
  */
 function normalizeOverrides(raw: unknown): ModelOverrides {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const record = raw as Record<string, unknown>;
   const result: ModelOverrides = {};
-  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+  for (const [key, value] of Object.entries(record)) {
     if (!isModelSlotId(key)) continue;
-    if (typeof value !== 'string') continue;
-    const trimmed = value.trim();
-    if (trimmed.length === 0 || !isPlausibleModelId(trimmed)) continue;
-    result[key] = trimmed;
+    const model = readModelOverride(value);
+    if (model) result[key] = model;
+  }
+  for (const [legacyKey, slotId] of Object.entries(LEGACY_SLOT_IDS)) {
+    if (result[slotId] !== undefined) continue;
+    const model = readModelOverride(record[legacyKey]);
+    if (model) result[slotId] = model;
   }
   return result;
 }
@@ -384,23 +404,33 @@ function normalizeOverrides(raw: unknown): ModelOverrides {
  */
 function normalizeGenerationSettings(raw: unknown): GenerationSettingOverrides {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const record = raw as Record<string, unknown>;
   const result: GenerationSettingOverrides = {};
-  for (const [slotKey, slotValue] of Object.entries(raw as Record<string, unknown>)) {
-    if (!isModelSlotId(slotKey)) continue;
-    if (!slotValue || typeof slotValue !== 'object' || Array.isArray(slotValue)) continue;
+
+  const readSlotSettings = (slotId: ModelSlotId, slotValue: unknown) => {
+    if (!slotValue || typeof slotValue !== 'object' || Array.isArray(slotValue)) return;
     const perSlot: Partial<Record<GenerationSettingId, string>> = {};
     for (const [settingKey, value] of Object.entries(slotValue as Record<string, unknown>)) {
       if (!isGenerationSettingId(settingKey)) continue;
       if (typeof value !== 'string') continue;
       // A setting this slot does not expose has no call site to reach, so a
       // stored value for it is stale config rather than an instruction.
-      const setting = findSetting(slotKey, settingKey);
+      const setting = findSetting(slotId, settingKey);
       if (!setting) continue;
       const trimmed = value.trim();
       if (!isValidGenerationSettingValue(setting, trimmed)) continue;
       perSlot[settingKey] = trimmed;
     }
-    if (Object.keys(perSlot).length > 0) result[slotKey] = perSlot;
+    if (Object.keys(perSlot).length > 0) result[slotId] = perSlot;
+  };
+
+  for (const [slotKey, slotValue] of Object.entries(record)) {
+    if (!isModelSlotId(slotKey)) continue;
+    readSlotSettings(slotKey, slotValue);
+  }
+  for (const [legacyKey, slotId] of Object.entries(LEGACY_SLOT_IDS)) {
+    if (result[slotId] !== undefined) continue;
+    readSlotSettings(slotId, record[legacyKey]);
   }
   return result;
 }

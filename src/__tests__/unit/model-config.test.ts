@@ -91,6 +91,19 @@ describe('model config', () => {
       const slot = MODEL_SLOTS.find(entry => entry.id === 'contextPlanner');
       expect(slot).toMatchObject({ provider: 'openai', shippedDefault: 'gpt-4o' });
     });
+
+    it('maps a legacy retirementInputs override onto contextPlanner', () => {
+      setActiveModelOverrides({ retirementInputs: 'gpt-4.1-mini' } as Record<string, string>);
+      expect(getActiveModel('contextPlanner')).toBe('gpt-4.1-mini');
+    });
+
+    it('prefers an explicit contextPlanner override over a legacy alias', () => {
+      setActiveModelOverrides({
+        retirementInputs: 'gpt-4.1-mini',
+        contextPlanner: 'gpt-4.1',
+      } as Record<string, string>);
+      expect(getActiveModel('contextPlanner')).toBe('gpt-4.1');
+    });
   });
 
   describe('loadModelConfig', () => {
