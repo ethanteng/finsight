@@ -10,18 +10,20 @@ describe("comparison pages", () => {
     expect(chatgpt).toMatchObject({
       competitorName: "ChatGPT",
       headline: "Ask Linc vs ChatGPT",
-      relatedLink: {
-        href: "/blog/why-ai-apps-should-stop-using-a-single-model",
-      },
+      relatedLinks: [
+        { href: "/blog/show-the-math-how-ask-linc-makes-ai-financial-analysis-transparent" },
+        { href: "/blog/why-ai-apps-should-stop-using-a-single-model" },
+      ],
     });
     expect(chatgpt?.rows.map((row) => row.dimension)).toEqual([
       "AI approach",
+      "Show the Math",
       "Financial ecosystem",
       "Privacy and security",
       "Purpose",
       "Price",
     ]);
-    expect(chatgpt?.faqs).toHaveLength(5);
+    expect(chatgpt?.faqs).toHaveLength(6);
     expect(generateStaticParams()).toContainEqual({ slug: "chatgpt" });
 
     await expect(
@@ -34,7 +36,7 @@ describe("comparison pages", () => {
     });
   });
 
-  it("renders ChatGPT in the comparison template with the multi-model article", async () => {
+  it("renders ChatGPT in the comparison template with its transparency articles", async () => {
     render(
       await MarketingSubpage({
         params: Promise.resolve({ slug: ["vs", "chatgpt"] }),
@@ -44,7 +46,13 @@ describe("comparison pages", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Ask Linc vs ChatGPT");
     const comparison = screen.getByRole("table");
     expect(within(comparison).getByText("AI approach")).toBeInTheDocument();
+    expect(within(comparison).getByText("Show the Math")).toBeInTheDocument();
+    expect(within(comparison).getByText(/step-by-step calculations, validation checks/i)).toBeInTheDocument();
     expect(within(comparison).getByText(/never used to train AI models/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "See how Show the Math works" })).toHaveAttribute(
+      "href",
+      "/blog/show-the-math-how-ask-linc-makes-ai-financial-analysis-transparent",
+    );
     expect(screen.getByRole("link", { name: "Why Ask Linc uses multiple models" })).toHaveAttribute(
       "href",
       "/blog/why-ai-apps-should-stop-using-a-single-model",
