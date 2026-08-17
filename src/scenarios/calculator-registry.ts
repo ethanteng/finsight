@@ -176,8 +176,10 @@ export class ScenarioCalculatorRegistry {
   }
 
   requiredPacksForPlans(plans: ScenarioPlanRecord): ContextPackId[] {
+    // Only registered calculator ids are authoritative. Ignore unknown keys so a
+    // malformed plan object cannot take down pack selection with require().
     return Array.from(new Set(
-      Object.keys(plans).flatMap((id) => this.requiredPacks(id))
+      this.ids().flatMap((id) => (plans[id] === undefined ? [] : this.requiredPacks(id)))
     ));
   }
 
@@ -238,17 +240,19 @@ export class ScenarioCalculatorRegistry {
   }
 
   compactEvidenceRecord(executions: ScenarioExecutionRecord): ScenarioEvidenceRecord {
-    return Object.fromEntries(Object.entries(executions).map(([id, execution]) => [
-      id,
-      this.compactEvidence(id, execution),
-    ]));
+    return Object.fromEntries(this.ids().flatMap((id) => {
+      const execution = executions[id];
+      return execution === undefined ? [] : [[id, this.compactEvidence(id, execution)]];
+    }));
   }
 
   canonicalFacts(executions: ScenarioExecutionRecord | undefined): CanonicalFact[] {
     if (!executions) return [];
-    return Object.entries(executions).flatMap(([id, execution]) =>
-      this.require<unknown, ScenarioExecutionBase, ScenarioExecutionBase>(id).canonicalFacts(execution)
-    );
+    return this.ids().flatMap((id) => {
+      const execution = executions[id];
+      if (!execution) return [];
+      return this.require<unknown, ScenarioExecutionBase, ScenarioExecutionBase>(id).canonicalFacts(execution);
+    });
   }
 
   assumptionDisclosures(executions: ScenarioExecutionRecord | undefined): string[] {

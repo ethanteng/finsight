@@ -163,4 +163,49 @@ describe('scenario calculator registry', () => {
     expect(executions.fake.status).toBe('completed');
     expect(executions.failing.status).toBe('unavailable');
   });
+
+  it('ignores unknown calculator keys instead of throwing during pack and evidence projection', () => {
+    const registry = new ScenarioCalculatorRegistry([fakeCalculator]);
+    const plans = {
+      fake: { value: 3 },
+      not_registered: { value: 9 },
+    };
+    expect(registry.requiredPacksForPlans(plans)).toEqual(['monthly_cash_flow']);
+    expect(registry.compactEvidenceRecord({
+      fake: {
+        version: 1,
+        calculator: 'fake',
+        status: 'completed',
+        computedAt: '2026-08-17T00:00:00.000Z',
+        durationMs: 1,
+        value: 3,
+      } as any,
+      not_registered: {
+        version: 1,
+        calculator: 'not_registered',
+        status: 'completed',
+        computedAt: '2026-08-17T00:00:00.000Z',
+        durationMs: 1,
+      },
+    })).toEqual({
+      fake: expect.objectContaining({ calculator: 'fake', value: 3 }),
+    });
+    expect(registry.canonicalFacts({
+      fake: {
+        version: 1,
+        calculator: 'fake',
+        status: 'completed',
+        computedAt: '2026-08-17T00:00:00.000Z',
+        durationMs: 1,
+        value: 3,
+      } as any,
+      not_registered: {
+        version: 1,
+        calculator: 'not_registered',
+        status: 'completed',
+        computedAt: '2026-08-17T00:00:00.000Z',
+        durationMs: 1,
+      },
+    })).toEqual([expect.objectContaining({ id: 'fake_value', value: 3 })]);
+  });
 });
