@@ -512,6 +512,12 @@ export async function runAskLincAnalysis(options: RunAskLincAnalysisOptions): Pr
             plannedRetirementInputs: contextPlan.retirementInputs,
             onProgress,
           });
+          // Scenario results are answer-scoped and never persisted into the
+          // financial snapshot. Reattach them after any late gather so the
+          // retry keeps the same deterministic facts and disclosures.
+          if (retirementScenarioExecution) {
+            snapshot = { ...snapshot, retirementScenarioExecution };
+          }
           contextGatherMs += Date.now() - escalationStartedAt;
           selectedPacks = escalatedPacks;
           questionNeeds = escalatedNeeds;
