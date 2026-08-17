@@ -6,6 +6,10 @@ import {
   scrubSentryEvent,
   scrubSentrySpan,
 } from './observability/sentry-privacy';
+import {
+  installExternalProviderAxiosMonitoring,
+  installExternalProviderFetchMonitoring,
+} from './observability/external-provider-monitoring';
 
 if (process.env.NODE_ENV !== 'production') {
   config({ path: '.env.local', quiet: true });
@@ -64,3 +68,6 @@ Sentry.init({
   beforeSendTransaction: scrubSentryEvent,
   beforeSendSpan: scrubSentrySpan,
 });
+
+installExternalProviderFetchMonitoring();
+installExternalProviderAxiosMonitoring();
